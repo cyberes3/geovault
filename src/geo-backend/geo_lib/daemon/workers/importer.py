@@ -35,7 +35,7 @@ def _process_item(item, lock_manager: DBLockManager, worker_id: str):
         _logger.debug(f'Skip locked item #{item["id"]} -- {worker_id}')
         return False
 
-    _logger.info(f'Acquired lock for item #{item["id"]} -- {worker_id}')
+    _logger.debug(f'Acquired lock for item #{item["id"]} -- {worker_id}')
     start_ms = get_time_ms()
     success = False
     import_log = ImportLog()
@@ -78,8 +78,6 @@ def import_worker():
         processed_one = False
         import_queue_items = _fetch_candidate_items()
         total_candidates = len(import_queue_items)
-        if total_candidates == 0:
-            _logger.info(f'No items to process -- {worker_id}')
         for item in import_queue_items:
             if _process_item(item, lock_manager, worker_id):
                 processed_one = True

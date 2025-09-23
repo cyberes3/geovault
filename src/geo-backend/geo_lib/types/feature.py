@@ -19,6 +19,7 @@ class Rendering(BaseModel):
     stroke_width: int = Field(2, alias='strokeWidth')
     stroke_color: Tuple[int, int, int, float] = Field((255, 0, 0, 1.0), alias='strokeColor')
     fill_color: Optional[Tuple[int, int, int, float]] = Field((255, 0, 0, 0.2), alias='fillColor')
+    fill_opacity: float = Field(0.101960786, alias='fillOpacity')
 
 
 class Properties(BaseModel):
@@ -84,6 +85,9 @@ def geojson_to_geofeature(geojson: dict) -> Tuple[List[GeoFeatureSupported], Imp
         f = c(**item)
         if isinstance(f, (PointFeature, LineStringFeature)):
             del f.properties.rendering.fill_color
+            # Remove fill_opacity from non-polygon features since they don't have fill areas
+            if hasattr(f.properties.rendering, 'fill_opacity'):
+                del f.properties.rendering.fill_opacity
 
         # TODO: do this shit
         f.properties.id = -1  # This will be updated after it's added to the main data store.

@@ -49,6 +49,48 @@ def process_feature(converted_kml) -> Tuple[list, ImportLog]:
                     feature['geometry']['coordinates'][i].append(timestamp)
             feature['properties'] = GeojsonRawProperty(**feature['properties']).model_dump()
             features.append(feature)
+        elif feature['geometry']['type'] == 'GeometryCollection':
+            # Handle GeometryCollection by extracting supported geometry types
+            # For polygons, prioritize Polygon geometry over Point (which are often just labels)
+            supported_geometries = []
+            polygon_geometries = []
+
+            for geom in feature['geometry']['geometries']:
+                if geom['type'] == 'Polygon':
+                    polygon_geometries.append(geom)
+                elif geom['type'] in ['Point', 'LineString']:
+                    supported_geometries.append(geom)
+
+            # If we have polygons, use those instead of other geometries
+            if polygon_geometries:
+                for geom in polygon_geometries:
+                    new_feature = {
+                        'type': 'Feature',
+                        'geometry': geom,
+                        'properties': feature['properties'].copy()
+                    }
+                    if new_feature['properties'].get('times'):
+                        for i, timestamp_str in enumerate(new_feature['properties']['times']):
+                            timestamp = int(parse(timestamp_str).timestamp() * 1000)
+                            new_feature['geometry']['coordinates'][i].append(timestamp)
+                    new_feature['properties'] = GeojsonRawProperty(**new_feature['properties']).model_dump()
+                    features.append(new_feature)
+            elif supported_geometries:
+                # Create separate features for each supported geometry (no polygons found)
+                for geom in supported_geometries:
+                    new_feature = {
+                        'type': 'Feature',
+                        'geometry': geom,
+                        'properties': feature['properties'].copy()
+                    }
+                    if new_feature['properties'].get('times'):
+                        for i, timestamp_str in enumerate(new_feature['properties']['times']):
+                            timestamp = int(parse(timestamp_str).timestamp() * 1000)
+                            new_feature['geometry']['coordinates'][i].append(timestamp)
+                    new_feature['properties'] = GeojsonRawProperty(**new_feature['properties']).model_dump()
+                    features.append(new_feature)
+            else:
+                import_log.add(f'GeometryCollection contains no supported geometry types, skipping')
         else:
             # Log the error
             if feature['properties'].get('type'):

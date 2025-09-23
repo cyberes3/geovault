@@ -49,13 +49,21 @@
                     })
                 });
             } else if (geometryType === 'Polygon') {
+                // Apply fill_opacity to the fill color if available
+                let fillColor = rendering.fillColor;
+                if (rendering.fillOpacity !== undefined) {
+                    // Extract RGB values and apply the fill_opacity
+                    const rgb = fillColor.slice(0, 3);
+                    fillColor = [...rgb, rendering.fillOpacity];
+                }
+                
                 return new ol.style.Style({
                     stroke: new ol.style.Stroke({
                         color: rendering.strokeColor,
                         width: rendering.strokeWidth
                     }),
                     fill: new ol.style.Fill({
-                        color: rendering.fillColor
+                        color: fillColor
                     })
                 });
             }
