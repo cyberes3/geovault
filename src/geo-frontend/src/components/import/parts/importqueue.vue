@@ -18,7 +18,7 @@
         </span>
       </td>
       <td class="px-4 py-2 text-center">
-        {{ item.processing === true ? "processing" : item.feature_count }}
+        {{ item.processing === true || (item.processing === false && item.feature_count === -1) ? "processing" : item.feature_count }}
       </td>
       <td class="px-4 py-2 w-[10%]">
         <button class="px-4 py-2 bg-red-500 text-white rounded hover:bg-red-600" @click="deleteItem(item, index)">

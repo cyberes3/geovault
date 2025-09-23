@@ -56,52 +56,52 @@ def upload_item(request):
 
             # Check for duplicates more comprehensively
             kml_hash = _hash_kml(kml_doc)
-            
+
             # Check if this exact KML content already exists for this user (regardless of filename)
             existing_by_content = ImportQueue.objects.filter(
-                raw_kml_hash=kml_hash, 
+                raw_kml_hash=kml_hash,
                 user=request.user
             ).first()
-            
+
             if existing_by_content:
                 if existing_by_content.imported:
                     return JsonResponse({
-                        'success': False, 
-                        'msg': f'This KML file has already been imported to the feature store (originally as "{existing_by_content.original_filename}")', 
+                        'success': False,
+                        'msg': f'This KML file has already been imported to the feature store (originally as "{existing_by_content.original_filename}")',
                         'id': None
                     }, status=400)
                 else:
                     return JsonResponse({
-                        'success': False, 
-                        'msg': f'This KML file is already in your import queue (originally as "{existing_by_content.original_filename}")', 
+                        'success': False,
+                        'msg': f'This KML file is already in your import queue (originally as "{existing_by_content.original_filename}")',
                         'id': None
                     }, status=400)
-            
+
             # Check if this exact filename already exists for this user (regardless of content)
             existing_by_filename = ImportQueue.objects.filter(
                 original_filename=file_name,
                 user=request.user
             ).first()
-            
+
             if existing_by_filename:
                 if existing_by_filename.imported:
                     return JsonResponse({
-                        'success': False, 
-                        'msg': f'A file with the name "{file_name}" has already been imported to the feature store', 
+                        'success': False,
+                        'msg': f'A file with the name "{file_name}" has already been imported to the feature store',
                         'id': None
                     }, status=400)
                 else:
                     return JsonResponse({
-                        'success': False, 
-                        'msg': f'A file with the name "{file_name}" is already in your import queue', 
+                        'success': False,
+                        'msg': f'A file with the name "{file_name}" is already in your import queue',
                         'id': None
                     }, status=400)
 
             try:
                 import_queue = ImportQueue.objects.create(
-                    raw_kml=kml_doc, 
-                    raw_kml_hash=kml_hash, 
-                    original_filename=file_name, 
+                    raw_kml=kml_doc,
+                    raw_kml_hash=kml_hash,
+                    original_filename=file_name,
                     user=request.user
                 )
                 import_queue.save()
@@ -109,8 +109,8 @@ def upload_item(request):
                 return JsonResponse({'success': True, 'msg': msg, 'id': import_queue.id}, status=200)
             except IntegrityError:
                 return JsonResponse({
-                    'success': False, 
-                    'msg': 'An unexpected error occurred while creating the import item', 
+                    'success': False,
+                    'msg': 'An unexpected error occurred while creating the import item',
                     'id': None
                 }, status=500)
 
@@ -153,11 +153,16 @@ def fetch_import_waiting(request):
         count = len(item['geofeatures'])
         logs = _get_logs_by_log_id(str(item['log_id']))
         item['processing'] = not (len(item['geofeatures']) and len(logs)) and lock_manager.is_locked('data_importqueue', item['id'])
-        item['feature_count'] = count
 
-        # TODO: why is this here?
-        # del item['geofeatures']
-        # del item['log_id']  # Remove log_id from response as it's not needed by frontend
+        if item['processing'] or (not item['processing'] and count == 0):
+            # Show a dummy value since the true value isn't know yet as it's still processing.
+            item['feature_count'] = -1
+        else:
+            item['feature_count'] = count
+
+        # Remove keys from response as they're not needed by frontend.
+        del item['geofeatures']
+        del item['log_id']
     return JsonResponse({'data': data, 'msg': None})
 
 
@@ -205,12 +210,12 @@ def update_import_item(request, item_id):
         return JsonResponse({'success': False, 'msg': 'ID does not exist', 'code': 404}, status=400)
     if queue.user_id != request.user.id:
         return JsonResponse({'success': False, 'msg': 'not authorized to edit this item', 'code': 403}, status=403)
-    
+
     # Prevent updating items that have already been imported to the feature store
     if queue.imported:
         return JsonResponse({
-            'success': False, 
-            'msg': 'Cannot update items that have already been imported to the feature store', 
+            'success': False,
+            'msg': 'Cannot update items that have already been imported to the feature store',
             'code': 400
         }, status=400)
 
@@ -253,12 +258,12 @@ def import_to_featurestore(request, item_id):
         return JsonResponse({'success': False, 'msg': 'ID does not exist', 'code': 404}, status=400)
     if import_item.user_id != request.user.id:
         return JsonResponse({'success': False, 'msg': 'not authorized to edit this item', 'code': 403}, status=403)
-    
+
     # Prevent importing items that have already been imported to the feature store
     if import_item.imported:
         return JsonResponse({
-            'success': False, 
-            'msg': 'This item has already been imported to the feature store', 
+            'success': False,
+            'msg': 'This item has already been imported to the feature store',
             'code': 400
         }, status=400)
 
