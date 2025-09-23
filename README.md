@@ -13,3 +13,5 @@ This project is similar to [GeoNetwork](https://www.geonetwork-opensource.org): 
 
 
 Name is pending.
+
+https://trac.osgeo.org/postgis/wiki/UsersWikiPostGIS3UbuntuPGSQLApt

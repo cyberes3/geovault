@@ -33,20 +33,20 @@
         <div class="mb-4">
           <label class="block text-gray-700 font-bold mb-2">Name:</label>
           <div class="flex items-center">
-            <input v-model="item.name" :placeholder="originalItems[index].name"
+            <input v-model="item.properties.name" :placeholder="originalItems[index].properties.name"
                    class="border border-gray-300 rounded-md px-3 py-2 w-full"/>
             <button class="ml-2 bg-gray-200 hover:bg-gray-300 text-gray-700 font-bold py-2 px-4 rounded"
-                    @click="resetField(index, 'name')">Reset
+                    @click="resetNestedField(index, 'properties', 'name')">Reset
             </button>
           </div>
         </div>
         <div class="mb-4">
           <label class="block text-gray-700 font-bold mb-2">Description:</label>
           <div class="flex items-center">
-            <input v-model="item.description" :placeholder="originalItems[index].description"
+            <input v-model="item.properties.description" :placeholder="originalItems[index].properties.description"
                    class="border border-gray-300 rounded-md px-3 py-2 w-full"/>
             <button class="ml-2 bg-gray-200 hover:bg-gray-300 text-gray-700 font-bold py-2 px-4 rounded"
-                    @click="resetField(index, 'description')">Reset
+                    @click="resetNestedField(index, 'properties', 'description')">Reset
             </button>
           </div>
         </div>
@@ -150,7 +150,7 @@ export default {
       this.msg = capitalizeFirstLetter(responseMsg).trim(".") + "."
     },
     parseGeoJson(item) {
-      switch (item.type) {
+      switch (item.geometry.type) {
         case GeoFeatureTypeStrings.Point:
           return new GeoPoint(item);
         case GeoFeatureTypeStrings.LineString:
@@ -169,22 +169,22 @@ export default {
     },
     addTag(index) {
       if (!this.isLastTagEmpty(index)) {
-        this.itemsForUser[index].tags.push('');
+        this.itemsForUser[index].properties.tags.push('');
       }
     },
     getTagPlaceholder(index, tag) {
-      const originalTagIndex = this.originalItems[index].tags.indexOf(tag);
-      return originalTagIndex !== -1 ? this.originalItems[index].tags[originalTagIndex] : '';
+      const originalTagIndex = this.originalItems[index].properties.tags.indexOf(tag);
+      return originalTagIndex !== -1 ? this.originalItems[index].properties.tags[originalTagIndex] : '';
     },
     isLastTagEmpty(index) {
-      const tags = this.itemsForUser[index].tags;
+      const tags = this.itemsForUser[index].properties.tags;
       return tags.length > 0 && tags[tags.length - 1].trim().length === 0;
     },
     resetTags(index) {
-      this.itemsForUser[index].tags = [...this.originalItems[index].tags];
+      this.itemsForUser[index].properties.tags = [...this.originalItems[index].properties.tags];
     },
     removeTag(index, tagIndex) {
-      this.itemsForUser[index].tags.splice(tagIndex, 1);
+      this.itemsForUser[index].properties.tags.splice(tagIndex, 1);
     },
     updateDate(index, selectedDates) {
       this.itemsForUser[index].properties.created = selectedDates[0];
@@ -199,6 +199,16 @@ export default {
       }).then(response => {
         if (response.data.success) {
           window.alert(response.data.msg);
+          // Refresh data from server to reflect persisted values (e.g., regenerated tags)
+          axios.get('/api/data/item/import/get/' + this.id).then(res => {
+            if (res.data.success) {
+              this.itemsForUser = []
+              res.data.geofeatures.forEach((item) => {
+                this.itemsForUser.push(this.parseGeoJson(item))
+              })
+              this.originalItems = JSON.parse(JSON.stringify(this.itemsForUser))
+            }
+          })
         } else {
           this.msg = 'Error saving changes: ' + response.data.msg;
           window.alert(this.msg);

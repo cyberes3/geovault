@@ -5,7 +5,9 @@ enum GeoFeatureType {
 }
 
 interface GeoFeatureProperties {
-    created: Date;
+    name: string;
+    description?: string;
+    created?: Date;
     software: string;
     software_version: string;
     tags: string[];
@@ -21,19 +23,14 @@ interface GeoFeatureProps {
 }
 
 class GeoFeature {
-    name: string;
     id: number;
     type: GeoFeatureType;
-    description?: string;
-    tags: string[] = [];
     geometry: any[];
     properties: GeoFeatureProperties;
 
     constructor(props: GeoFeatureProps) {
-        this.name = props.name;
         this.id = props.id;
         this.type = props.type;
-        this.description = props.description;
         this.geometry = props.geometry || [];
         this.properties = props.properties;
     }
@@ -42,14 +39,26 @@ class GeoFeature {
 export class GeoPoint extends GeoFeature {
     type: GeoFeatureType = GeoFeatureType.POINT;
     geometry: number[];
+
+    constructor(props: GeoFeatureProps) {
+        super(props)
+    }
 }
 
 export class GeoLineString extends GeoFeature {
     type: GeoFeatureType = GeoFeatureType.LINESTRING;
     geometry: number[][];
+
+    constructor(props: GeoFeatureProps) {
+        super(props)
+    }
 }
 
 export class GeoPolygon extends GeoFeature {
     type: GeoFeatureType = GeoFeatureType.POLYGON;
     geometry: number[][][];
+
+    constructor(props: GeoFeatureProps) {
+        super(props)
+    }
 }

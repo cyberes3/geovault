@@ -2,6 +2,7 @@ import json
 from enum import Enum
 from typing import List, Tuple, Optional, Type
 from typing import Union
+from datetime import datetime
 
 from pydantic import BaseModel, Field
 
@@ -24,6 +25,7 @@ class Properties(BaseModel):
     name: str
     id: Optional[int] = -1
     description: Optional[str] = None
+    created: Optional[datetime] = None
     tags: Optional[List[str]] = Field(default_factory=list)
     rendering: Optional[Rendering] = Field(default_factory=Rendering)
 

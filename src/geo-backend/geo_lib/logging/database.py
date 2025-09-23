@@ -1,10 +1,8 @@
 import logging
+import os
 from enum import Enum
 
-from psycopg2.extras import RealDictCursor
 from pydantic import BaseModel
-
-from geo_lib.daemon.database.connection import CursorFromConnectionFromPool
 
 _logger = logging.getLogger("MAIN").getChild("DBLOG")
 
@@ -27,10 +25,24 @@ class DatabaseLogItem(BaseModel):
     level: DatabaseLogLevel
 
 
-_SQL_INSERT_LOG_ITEM = "INSERT INTO public.geologs (user_id, level, text, source) VALUES (%s, %s, %s, %s)"
+_django_ready = False
+
+
+def _ensure_django():
+    global _django_ready
+    if _django_ready:
+        return
+
+    # Ensure settings module is configured before importing Django
+    if 'DJANGO_SETTINGS_MODULE' not in os.environ:
+        os.environ['DJANGO_SETTINGS_MODULE'] = 'website.settings'
+    import django
+    django.setup()
+    _django_ready = True
 
 
 def log_to_db(msg: str, level: DatabaseLogLevel, user_id: int, source: DatabaseLogSource):
     _logger.log(level.value, msg)
-    with CursorFromConnectionFromPool(cursor_factory=RealDictCursor) as cursor:
-        cursor.execute(_SQL_INSERT_LOG_ITEM, (user_id, level.value, msg, source.value))
+    _ensure_django()
+    from data.models import GeoLog  # Imported lazily after Django setup
+    GeoLog.objects.create(user_id=user_id, level=level.value, text=msg, source=source.value, type=source.value)

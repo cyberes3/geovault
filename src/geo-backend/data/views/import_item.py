@@ -86,7 +86,7 @@ def fetch_import_queue(request, item_id):
 
 @login_required_401
 def fetch_import_waiting(request):
-    user_items = ImportQueue.objects.exclude(data__contains='[]').filter(user=request.user, imported=False).values('id', 'geofeatures', 'original_filename', 'raw_kml_hash', 'data', 'log', 'timestamp', 'imported')
+    user_items = ImportQueue.objects.filter(user=request.user, imported=False).values('id', 'geofeatures', 'original_filename', 'raw_kml_hash', 'log', 'timestamp', 'imported')
     data = json.loads(json.dumps(list(user_items), cls=DjangoJSONEncoder))
     lock_manager = DBLockManager()
     for i, item in enumerate(data):
@@ -99,7 +99,7 @@ def fetch_import_waiting(request):
 
 @login_required_401
 def fetch_import_history(request):
-    user_items = ImportQueue.objects.filter(imported=True).values('id', 'original_filename', 'timestamp')
+    user_items = ImportQueue.objects.filter(user=request.user, imported=True).values('id', 'original_filename', 'timestamp')
     data = json.loads(json.dumps(list(user_items), cls=DjangoJSONEncoder))
     return JsonResponse({'data': data})
 
@@ -147,6 +147,7 @@ def update_import_item(request, item_id):
 
     parsed_data = []
     for feature in data:
+        c = None
         match feature['type'].lower():
             case 'point':
                 c = PointFeature
@@ -156,15 +157,13 @@ def update_import_item(request, item_id):
                 c = PolygonFeature
             case _:
                 continue
+        assert c is not None
+        parsed_data.append(json.loads(c(**feature).model_dump_json()))
 
-        # Generate the tags after the user has made their changes.
-        c.properties.tags = generate_auto_tags(c)
-        parsed_data.append(json.loads(c.model_dump_json()))
-
-    # Update the data column with the new data
-    queue.data = parsed_data
-
+    # Update the geofeatures column with the new data
+    queue.geofeatures = parsed_data
     queue.save()
+
     return JsonResponse({'success': True, 'msg': 'Item updated successfully'})
 
 
@@ -183,22 +182,26 @@ def import_to_featurestore(request, item_id):
 
     i = 0
     for feature in import_item.geofeatures:
+        c = None
         match feature['type'].lower():
             case 'point':
-                c = PointFeature(**feature)
+                c = PointFeature
             case 'linestring':
-                c = LineStringFeature(**feature)
+                c = LineStringFeature
             case 'polygon':
-                c = PolygonFeature(**feature)
+                c = PolygonFeature
             case _:
                 continue
-        data = json.loads(c.model_dump_json())
-        feature = FeatureStore.objects.create(geojson=data, source=import_item, user=request.user)
+        assert c is not None
+
+        feature_instance = c(**feature)
+        feature_instance.properties.tags = generate_auto_tags(feature_instance)  # Generate the tags after the user has made their changes.
+        feature = FeatureStore.objects.create(geojson=json.loads(c(**feature).model_dump_json()), source=import_item, user=request.user)
         feature.save()
         i += 1
 
     # Erase the geofeatures column
-    import_item.geofeatures = []
+    # import_item.geofeatures = []
 
     import_item.save()
 

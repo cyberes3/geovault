@@ -51,7 +51,10 @@ def process_feature(converted_kml) -> Tuple[list, ImportLog]:
             features.append(feature)
         else:
             # Log the error
-            import_log.add(f'Feature type {feature["properties"]["type"]} not supported')
+            if feature['properties'].get('type'):
+                import_log.add(f'Feature type {feature["properties"]["type"]} not supported, skipping')
+            else:
+                import_log.add(f'Encountered unknown feature type, skipping')
     return features, import_log
 
 
