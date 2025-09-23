@@ -9,13 +9,12 @@ from psycopg2.extras import RealDictCursor
 from geo_lib.daemon.database.connection import CursorFromConnectionFromPool
 from geo_lib.daemon.database.locking import DBLockManager
 from geo_lib.daemon.workers.workers_lib.importer.kml import kml_to_geojson
-from geo_lib.daemon.workers.workers_lib.importer.logging import ImportLog
 from geo_lib.logging.database import log_to_db, DatabaseLogLevel, DatabaseLogSource
 from geo_lib.time import get_time_ms
 from geo_lib.types.feature import geojson_to_geofeature
 
 _SQL_GET_UNPROCESSED_ITEMS = "SELECT * FROM public.data_importqueue WHERE geofeatures = '[]'::jsonb AND imported = false ORDER BY id ASC LIMIT 25"
-_SQL_INSERT_PROCESSED_ITEM = "UPDATE public.data_importqueue SET geofeatures = %s, log = %s WHERE id = %s"
+_SQL_INSERT_PROCESSED_ITEM = "UPDATE public.data_importqueue SET geofeatures = %s WHERE id = %s"
 _SQL_DELETE_ITEM = "DELETE FROM public.data_importqueue WHERE id = %s"
 
 _logger = logging.getLogger("DAEMON").getChild("IMPORTER")
@@ -38,22 +37,30 @@ def _process_item(item, lock_manager: DBLockManager, worker_id: str):
     _logger.debug(f'Acquired lock for item #{item["id"]} -- {worker_id}')
     start_ms = get_time_ms()
     success = False
-    import_log = ImportLog()
-    import_log.add('Processing start')
+    log_id = str(item['log_id'])
+    
+    # Log processing start
+    log_to_db('Processing start', level=DatabaseLogLevel.INFO, user_id=item['user_id'], source=DatabaseLogSource.IMPORT, log_id=log_id)
     _logger.info(f'Start processing item #{item["id"]} -- {worker_id}')
 
     try:
         geojson_data, kml_conv_messages = kml_to_geojson(item['raw_kml'])
-        import_log.extend(kml_conv_messages)
+        # Log KML conversion messages
+        for msg in kml_conv_messages.get():
+            log_to_db(msg.msg, level=DatabaseLogLevel.INFO, user_id=item['user_id'], source=DatabaseLogSource.IMPORT, log_id=log_id)
+        
         geo_features, typing_messages = geojson_to_geofeature(geojson_data)
-        import_log.extend(typing_messages)
+        # Log typing messages
+        for msg in typing_messages.get():
+            log_to_db(msg.msg, level=DatabaseLogLevel.INFO, user_id=item['user_id'], source=DatabaseLogSource.IMPORT, log_id=log_id)
+        
         success = True
     except Exception as e:
         err_name = e.__class__.__name__
         err_msg = str(e) if not hasattr(e, 'message') else e.message
         msg = f'Failed to import item #{item["id"]} "{item["original_filename"]}", encountered {err_name}. {err_msg}'
-        import_log.add(f'{err_name}: {err_msg}')
-        log_to_db(msg, level=DatabaseLogLevel.ERROR, user_id=item['user_id'], source=DatabaseLogSource.IMPORT)
+        log_to_db(f'{err_name}: {err_msg}', level=DatabaseLogLevel.ERROR, user_id=item['user_id'], source=DatabaseLogSource.IMPORT, log_id=log_id)
+        log_to_db(msg, level=DatabaseLogLevel.ERROR, user_id=item['user_id'], source=DatabaseLogSource.IMPORT, log_id=log_id)
         traceback.print_exc()
         time.sleep(2)
 
@@ -61,10 +68,12 @@ def _process_item(item, lock_manager: DBLockManager, worker_id: str):
     if success:
         features_json = [json.loads(x.model_dump_json()) for x in geo_features]
 
-    import_log.add(f'Processing finished {"un" if not success else ""}successfully')
+    # Log processing completion
+    log_to_db(f'Processing finished {"un" if not success else ""}successfully', level=DatabaseLogLevel.INFO, user_id=item['user_id'], source=DatabaseLogSource.IMPORT, log_id=log_id)
+    
     with CursorFromConnectionFromPool(cursor_factory=RealDictCursor) as cursor:
         data = json.dumps(features_json)
-        cursor.execute(_SQL_INSERT_PROCESSED_ITEM, (data, import_log.json(), item['id']))
+        cursor.execute(_SQL_INSERT_PROCESSED_ITEM, (data, item['id']))
 
     lock_manager.unlock_row('data_importqueue', item['id'])
     _logger.info(f'Finished item #{item["id"]} success={success} in {round((get_time_ms() - start_ms) / 1000, 2)}s -- {worker_id}')

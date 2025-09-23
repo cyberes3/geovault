@@ -41,8 +41,20 @@ def _ensure_django():
     _django_ready = True
 
 
-def log_to_db(msg: str, level: DatabaseLogLevel, user_id: int, source: DatabaseLogSource):
+def log_to_db(msg: str, level: DatabaseLogLevel, user_id: int, source: DatabaseLogSource, log_id: str = None):
     _logger.log(level.value, msg)
     _ensure_django()
     from data.models import GeoLog  # Imported lazily after Django setup
-    GeoLog.objects.create(user_id=user_id, level=level.value, text=msg, source=source.value, type=source.value)
+    
+    attributes = {}
+    if log_id:
+        attributes['log_id'] = log_id
+    
+    GeoLog.objects.create(
+        user_id=user_id, 
+        level=level.value, 
+        text=msg, 
+        source=source.value, 
+        type=source.value,
+        attributes=attributes
+    )

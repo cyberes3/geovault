@@ -1,3 +1,5 @@
+import uuid
+
 from django.contrib.auth import get_user_model
 from django.db import models
 
@@ -10,7 +12,7 @@ class ImportQueue(models.Model):
     original_filename = models.TextField()
     raw_kml = models.TextField()
     raw_kml_hash = models.CharField(max_length=64, unique=True)
-    log = models.JSONField(default=list)
+    log_id = models.UUIDField(default=uuid.uuid4, unique=True, help_text="UUID to group related log entries", null=True)
     timestamp = models.DateTimeField(auto_now_add=True)
 
 
@@ -29,4 +31,5 @@ class GeoLog(models.Model):
     text = models.TextField()
     source = models.CharField(max_length=64)
     type = models.CharField(max_length=64)
+    attributes = models.JSONField(default=dict, help_text="Key:value pairs for arbitrary attributes")
     timestamp = models.DateTimeField(auto_now_add=True)

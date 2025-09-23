@@ -9,12 +9,24 @@ from django.http import HttpResponse, JsonResponse
 from django.views.decorators.csrf import csrf_protect
 from django.views.decorators.http import require_http_methods
 
-from data.models import ImportQueue, FeatureStore
+from data.models import ImportQueue, FeatureStore, GeoLog
 from geo_lib.daemon.database.locking import DBLockManager
 from geo_lib.daemon.workers.workers_lib.importer.kml import kmz_to_kml
 from geo_lib.daemon.workers.workers_lib.importer.tagging import generate_auto_tags
 from geo_lib.types.feature import PointFeature, PolygonFeature, LineStringFeature
 from geo_lib.website.auth import login_required_401
+
+
+def _get_logs_by_log_id(log_id):
+    """Fetch logs from GeoLog table by log_id"""
+    logs = GeoLog.objects.filter(attributes__log_id=log_id).order_by('timestamp')
+    return [{'timestamp': log.timestamp.isoformat(), 'msg': log.text} for log in logs]
+
+
+def _delete_logs_by_log_id(log_id):
+    """Delete all logs from GeoLog table by log_id"""
+    deleted_count = GeoLog.objects.filter(attributes__log_id=log_id).delete()[0]
+    return deleted_count
 
 
 class DocumentForm(forms.Form):
@@ -77,8 +89,9 @@ def fetch_import_queue(request, item_id):
             return JsonResponse({'success': False, 'processing': False, 'msg': 'not authorized to view this item', 'code': 403}, status=400)
         if item.imported:
             return JsonResponse({'success': False, 'processing': False, 'msg': 'item already imported', 'code': 400}, status=400)
-        if not lock_manager.is_locked('data_importqueue', item.id) and (len(item.geofeatures) or len(item.log)):
-            return JsonResponse({'success': True, 'processing': False, 'geofeatures': item.geofeatures, 'log': item.log, 'msg': None, 'original_filename': item.original_filename}, status=200)
+        logs = _get_logs_by_log_id(str(item.log_id))
+        if not lock_manager.is_locked('data_importqueue', item.id) and (len(item.geofeatures) or len(logs)):
+            return JsonResponse({'success': True, 'processing': False, 'geofeatures': item.geofeatures, 'log': logs, 'msg': None, 'original_filename': item.original_filename}, status=200)
         return JsonResponse({'success': True, 'processing': True, 'geofeatures': [], 'log': [], 'msg': 'uploaded data still processing'}, status=200)
     except ImportQueue.DoesNotExist:
         return JsonResponse({'success': False, 'msg': 'ID does not exist', 'code': 404}, status=400)
@@ -86,14 +99,18 @@ def fetch_import_queue(request, item_id):
 
 @login_required_401
 def fetch_import_waiting(request):
-    user_items = ImportQueue.objects.filter(user=request.user, imported=False).values('id', 'geofeatures', 'original_filename', 'raw_kml_hash', 'log', 'timestamp', 'imported')
+    user_items = ImportQueue.objects.filter(user=request.user, imported=False).values('id', 'geofeatures', 'original_filename', 'raw_kml_hash', 'log_id', 'timestamp', 'imported')
     data = json.loads(json.dumps(list(user_items), cls=DjangoJSONEncoder))
     lock_manager = DBLockManager()
     for i, item in enumerate(data):
         count = len(item['geofeatures'])
-        item['processing'] = not (len(item['geofeatures']) and len(item['log'])) and lock_manager.is_locked('data_importqueue', item['id'])
+        logs = _get_logs_by_log_id(str(item['log_id']))
+        item['processing'] = not (len(item['geofeatures']) and len(logs)) and lock_manager.is_locked('data_importqueue', item['id'])
         item['feature_count'] = count
-        del item['geofeatures']
+
+        # TODO: why is this here?
+        # del item['geofeatures']
+        # del item['log_id']  # Remove log_id from response as it's not needed by frontend
     return JsonResponse({'data': data, 'msg': None})
 
 
@@ -122,6 +139,10 @@ def delete_import_item(request, id):
             queue = ImportQueue.objects.get(id=id)
         except ImportQueue.DoesNotExist:
             return JsonResponse({'success': False, 'msg': 'ID does not exist', 'code': 404}, status=400)
+
+        # Delete logs associated with this import item before deleting the item
+        _delete_logs_by_log_id(str(queue.log_id))
+
         queue.delete()
         return JsonResponse({'success': True})
     return HttpResponse(status=405)
@@ -200,8 +221,12 @@ def import_to_featurestore(request, item_id):
         feature.save()
         i += 1
 
-    # Erase the geofeatures column
-    # import_item.geofeatures = []
+    # Erase some unneded data since it's not needed anymore now that it's in the feature store.
+    import_item.geofeatures = []
+    import_item.log_id = None
+
+    # Delete logs associated with this import since it's now successfully imported.
+    _delete_logs_by_log_id(str(import_item.log_id))
 
     import_item.save()
 
