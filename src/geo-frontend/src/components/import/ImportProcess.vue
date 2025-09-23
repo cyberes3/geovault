@@ -33,9 +33,10 @@
         <div class="mb-4">
           <label class="block text-gray-700 font-bold mb-2">Name:</label>
           <div class="flex items-center">
-            <input v-model="item.properties.name" :placeholder="originalItems[index].properties.name"
-                   class="border border-gray-300 rounded-md px-3 py-2 w-full"/>
-            <button class="ml-2 bg-gray-200 hover:bg-gray-300 text-gray-700 font-bold py-2 px-4 rounded"
+            <input v-model="item.properties.name" :class="isImported ? 'border border-gray-300 rounded-md px-3 py-2 w-full bg-gray-100 cursor-not-allowed' : 'border border-gray-300 rounded-md px-3 py-2 w-full'"
+                   :disabled="isImported"
+                   :placeholder="originalItems[index].properties.name"/>
+            <button v-if="!isImported" class="ml-2 bg-gray-200 hover:bg-gray-300 text-gray-700 font-bold py-2 px-4 rounded"
                     @click="resetNestedField(index, 'properties', 'name')">Reset
             </button>
           </div>
@@ -43,9 +44,10 @@
         <div class="mb-4">
           <label class="block text-gray-700 font-bold mb-2">Description:</label>
           <div class="flex items-center">
-            <input v-model="item.properties.description" :placeholder="originalItems[index].properties.description"
-                   class="border border-gray-300 rounded-md px-3 py-2 w-full"/>
-            <button class="ml-2 bg-gray-200 hover:bg-gray-300 text-gray-700 font-bold py-2 px-4 rounded"
+            <input v-model="item.properties.description" :class="isImported ? 'border border-gray-300 rounded-md px-3 py-2 w-full bg-gray-100 cursor-not-allowed' : 'border border-gray-300 rounded-md px-3 py-2 w-full'"
+                   :disabled="isImported"
+                   :placeholder="originalItems[index].properties.description"/>
+            <button v-if="!isImported" class="ml-2 bg-gray-200 hover:bg-gray-300 text-gray-700 font-bold py-2 px-4 rounded"
                     @click="resetNestedField(index, 'properties', 'description')">Reset
             </button>
           </div>
@@ -53,10 +55,11 @@
         <div>
           <label class="block text-gray-700 font-bold mb-2">Created:</label>
           <div class="flex items-center">
-            <flat-pickr :config="flatpickrConfig" :value="item.properties.created"
-                        class="border border-gray-300 rounded-md px-3 py-2 w-full"
+            <flat-pickr :class="isImported ? 'border border-gray-300 rounded-md px-3 py-2 w-full bg-gray-100 cursor-not-allowed' : 'border border-gray-300 rounded-md px-3 py-2 w-full'" :config="flatpickrConfig"
+                        :disabled="isImported"
+                        :value="item.properties.created"
                         @on-change="updateDate(index, $event)"></flat-pickr>
-            <button class="ml-2 bg-gray-200 hover:bg-gray-300 text-gray-700 font-bold py-2 px-4 rounded"
+            <button v-if="!isImported" class="ml-2 bg-gray-200 hover:bg-gray-300 text-gray-700 font-bold py-2 px-4 rounded"
                     @click="resetNestedField(index, 'properties', 'created')">Reset
             </button>
           </div>
@@ -64,15 +67,16 @@
             <label class="block text-gray-700 font-bold mb-2">Tags:</label>
             <div v-for="(tag, tagIndex) in item.properties.tags" :key="`tag-${tagIndex}`" class="mb-2">
               <div class="flex items-center">
-                <input v-model="item.properties.tags[tagIndex]" :placeholder="getTagPlaceholder(index, tag)"
-                       class="border rounded-md px-3 py-2 w-full bg-white"/>
-                <button class="ml-2 bg-red-500 hover:bg-red-600 text-white font-bold py-2 px-4 rounded"
+                <input v-model="item.properties.tags[tagIndex]" :class="isImported ? 'border rounded-md px-3 py-2 w-full bg-gray-100 cursor-not-allowed' : 'border rounded-md px-3 py-2 w-full bg-white'"
+                       :disabled="isImported"
+                       :placeholder="getTagPlaceholder(index, tag)"/>
+                <button v-if="!isImported" class="ml-2 bg-red-500 hover:bg-red-600 text-white font-bold py-2 px-4 rounded"
                         @click="removeTag(index, tagIndex)">Remove
                 </button>
               </div>
             </div>
           </div>
-          <div class="flex items-center mt-2">
+          <div v-if="!isImported" class="flex items-center mt-2">
             <button :class="{ 'opacity-50 cursor-not-allowed': isLastTagEmpty(index) }"
                     :disabled="isLastTagEmpty(index)"
                     class="bg-blue-500 hover:bg-blue-600 text-white font-bold py-2 px-4 rounded"
@@ -88,11 +92,14 @@
   </div>
 
   <div v-if="itemsForUser.length > 0">
-    <button :disabled="lockButtons"
+    <div v-if="isImported" class="m-2 p-4 bg-yellow-100 border border-yellow-400 rounded-md">
+      <p class="text-yellow-800 font-semibold">This item has already been imported to the feature store and cannot be modified.</p>
+    </div>
+    <button v-if="!isImported" :disabled="lockButtons"
             class="m-2 bg-green-500 hover:bg-green-600 disabled:bg-green-300 text-white font-bold py-2 px-4 rounded"
             @click="saveChanges">Save
     </button>
-    <button :disabled="lockButtons"
+    <button v-if="!isImported" :disabled="lockButtons"
             class="m-2 bg-blue-500 hover:bg-blue-600 disabled:bg-blue-300 text-white font-bold py-2 px-4 rounded"
             @click="performImport">Import
     </button>
@@ -135,6 +142,7 @@ export default {
       originalItems: [],
       workerLog: [],
       lockButtons: false,
+      isImported: false, // Track if this item has been imported
       flatpickrConfig: {
         enableTime: true,
         time_24hr: true,
@@ -145,10 +153,6 @@ export default {
   mixins: [authMixin],
   props: ['id'],
   methods: {
-    handleError(responseMsg) {
-      console.log(responseMsg)
-      this.msg = capitalizeFirstLetter(responseMsg).trim(".") + "."
-    },
     parseGeoJson(item) {
       switch (item.geometry.type) {
         case GeoFeatureTypeStrings.Point:
@@ -238,6 +242,8 @@ export default {
         if (response.data.success) {
           this.$store.dispatch('refreshImportQueue')
           window.alert(response.data.msg);
+          // Redirect to import page after successful import
+          this.$router.replace('/import');
         } else {
           this.msg = 'Error performing import: ' + response.data.msg;
           window.alert(this.msg);
@@ -262,15 +268,24 @@ export default {
         vm.originalItems = []
         vm.workerLog = []
         vm.lockButtons = false
+        vm.isImported = false
         while (!ready) {
           try {
             const response = await axios.get('/api/data/item/import/get/' + vm.id)
             if (!response.data.success) {
-              vm.handleError(response.data.msg)
+              vm.msg = capitalizeFirstLetter(response.data.msg).trim(".") + "."
             } else {
               vm.currentId = vm.id
               if (Object.keys(response.data).length > 0) {
                 vm.originalFilename = response.data.original_filename
+                vm.isImported = response.data.imported || false
+
+                // If the item is already imported, redirect to import page
+                if (vm.isImported) {
+                  vm.$router.replace('/import');
+                  return;
+                }
+
                 response.data.geofeatures.forEach((item) => {
                   vm.itemsForUser.push(vm.parseGeoJson(item))
                 })
@@ -288,7 +303,12 @@ export default {
               }
             }
           } catch (error) {
-            vm.handleError(error.message)
+            if (error.response.data.code === 404) {
+              // Import ID does not exist.
+              vm.$router.replace('/import');
+              return;
+            }
+            vm.msg = capitalizeFirstLetter(error.message).trim(".") + "."
           }
         }
       }

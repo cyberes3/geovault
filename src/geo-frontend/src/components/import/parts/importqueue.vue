@@ -13,6 +13,9 @@
         <a :href="`/#/import/process/${item.id}`" class="text-blue-500 hover:text-blue-700">{{
             item.original_filename
           }}</a>
+        <span v-if="item.imported" class="ml-2 px-2 py-1 text-xs bg-green-100 text-green-800 rounded-full">
+          Imported
+        </span>
       </td>
       <td class="px-4 py-2 text-center">
         {{ item.processing === true ? "processing" : item.feature_count }}

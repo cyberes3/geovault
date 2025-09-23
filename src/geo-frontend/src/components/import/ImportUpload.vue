@@ -5,12 +5,15 @@
 
   <div class="mb-10">
     <p class="mb-2">Only KML/KMZ files supported.</p>
-    <p class="">
-      Be careful not to upload duplicate files of the opposite type. For example, do not upload both
-      <kbd class="bg-gray-200 text-gray-800 px-2 py-1 rounded">example.kml</kbd>
-      and <kbd class="bg-gray-200 text-gray-800 px-2 py-1 rounded">example.kmz</kbd>. Currently, the system can't detect
-      duplicate cross-file types.
-    </p>
+    <div class="p-4 bg-blue-50 border border-blue-200 rounded-md">
+      <p class="text-blue-800 font-semibold mb-2">Important:</p>
+      <ul class="text-blue-700 text-sm space-y-1">
+        <li>• Each KML/KMZ file can only be imported once</li>
+        <li>• Files with the same content (regardless of filename) are considered duplicates</li>
+        <li>• Files with the same filename (regardless of content) are considered duplicates</li>
+        <li>• Once imported, items cannot be modified</li>
+      </ul>
+    </div>
   </div>
 
   <div class="relative w-[90%] mx-auto">
@@ -95,6 +98,7 @@ export default {
     async upload() {
       this.uploadProgress = 0
       this.uploadMsg = ""
+      this.uploadResponse = ""
       if (this.file == null) {
         return
       }
@@ -126,8 +130,10 @@ export default {
     },
     handleError(error) {
       console.error("Upload failed:", error)
-      if (error.response.data.msg != null) {
+      if (error.response && error.response.data && error.response.data.msg != null) {
         this.uploadMsg = error.response.data.msg
+      } else {
+        this.uploadMsg = "Upload failed. Please try again."
       }
     },
   },

@@ -7,6 +7,7 @@ export class ImportQueueItem {
     timestamp: string;
     processing: boolean;
     feature_count: number;
+    imported: boolean;
 
     constructor(data: any) {
         this.id = data.id;
@@ -17,5 +18,6 @@ export class ImportQueueItem {
         this.timestamp = data.timestamp;
         this.processing = data.processing;
         this.feature_count = data.feature_count;
+        this.imported = data.imported || false;
     }
 }
