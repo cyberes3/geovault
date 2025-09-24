@@ -40,7 +40,7 @@
               </div>
               <h3 class="text-lg font-medium text-gray-900 mb-2">No files uploaded yet</h3>
               <p class="text-gray-500 mb-6 max-w-sm">
-                Get started by uploading your first geospatial data file. Supported formats include GeoJSON, KML, and Shapefiles.
+                Get started by uploading your first geospatial data file. Supported formats include KMZ/KML and GeoJSON.
               </p>
               <router-link
                 to="/import/upload"

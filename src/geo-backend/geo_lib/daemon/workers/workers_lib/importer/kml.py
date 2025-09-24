@@ -3,6 +3,7 @@ import json
 import subprocess
 import tempfile
 import zipfile
+import re
 from typing import Union, Tuple, Dict, Optional
 from pathlib import Path
 
@@ -17,12 +18,68 @@ def kmz_to_kml(kml_bytes: Union[str, bytes]) -> str:
     try:
         # Try to open as a zipfile (KMZ)
         with zipfile.ZipFile(io.BytesIO(kml_bytes), 'r') as kmz:
-            # Find the first .kml file in the zipfile
-            kml_file = [name for name in kmz.namelist() if name.endswith('.kml')][0]
+            # Look for doc.kml first (standard KMZ structure), then any .kml file
+            kml_files = [name for name in kmz.namelist() if name.endswith('.kml')]
+            if not kml_files:
+                raise Exception("No KML file found in KMZ archive")
+            
+            # Prefer doc.kml if it exists, otherwise use the first .kml file
+            kml_file = 'doc.kml' if 'doc.kml' in kml_files else kml_files[0]
             return kmz.read(kml_file).decode('utf-8')
     except zipfile.BadZipFile:
         # If not a zipfile, assume it's a KML file
         return kml_bytes.decode('utf-8')
+
+
+def normalize_kml_for_comparison(kml_content: str) -> str:
+    """
+    Normalize KML content for comparison by removing differences that don't affect the actual data.
+    
+    This function handles the differences between KML and KMZ files:
+    1. Normalizes document names (removes .kml/.kmz extensions)
+    2. Normalizes icon paths (converts both :/ and files/ paths to a standard format)
+    3. Removes whitespace differences
+    4. Standardizes XML formatting
+    """
+    if not kml_content:
+        return ""
+    
+    # Parse the KML content
+    try:
+        import xml.etree.ElementTree as ET
+        root = ET.fromstring(kml_content)
+    except ET.ParseError:
+        # If XML parsing fails, return the original content
+        return kml_content
+    
+    # Normalize document name - remove .kml/.kmz extensions
+    for name_elem in root.iter():
+        if name_elem.tag.endswith('name') and name_elem.text:
+            # Remove .kml or .kmz extensions from document names
+            name_elem.text = re.sub(r'\.(kml|kmz)$', '', name_elem.text, flags=re.IGNORECASE)
+    
+    # Normalize icon paths - convert both :/ and files/ paths to a standard format
+    for href_elem in root.iter():
+        if href_elem.tag.endswith('href') and href_elem.text:
+            href = href_elem.text
+            # Convert :/ paths to standard format
+            if href.startswith(':/'):
+                href_elem.text = href[2:]  # Remove :/ prefix
+            # Convert files/ paths to standard format  
+            elif href.startswith('files/'):
+                href_elem.text = href[6:]  # Remove files/ prefix
+    
+    # Convert back to string with consistent formatting
+    try:
+        # Use a consistent XML declaration and formatting
+        normalized = ET.tostring(root, encoding='unicode', xml_declaration=True)
+        # Normalize whitespace
+        normalized = re.sub(r'\s+', ' ', normalized)
+        normalized = re.sub(r'>\s+<', '><', normalized)
+        return normalized.strip()
+    except Exception:
+        # If normalization fails, return the original content
+        return kml_content
 
 
 def hex_to_rgba(hex_color: str, opacity: float = 1.0) -> list:

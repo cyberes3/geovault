@@ -12,7 +12,7 @@ from django.contrib.gis.geos import GEOSGeometry
 
 from data.models import ImportQueue, FeatureStore, GeoLog
 from geo_lib.daemon.database.locking import DBLockManager
-from geo_lib.daemon.workers.workers_lib.importer.kml import kmz_to_kml
+from geo_lib.daemon.workers.workers_lib.importer.kml import kmz_to_kml, normalize_kml_for_comparison
 from geo_lib.daemon.workers.workers_lib.importer.tagging import generate_auto_tags
 from geo_lib.types.feature import PointFeature, PolygonFeature, LineStringFeature
 from geo_lib.website.auth import login_required_401
@@ -57,8 +57,11 @@ def upload_item(request):
                 print(traceback.format_exc())  # TODO: logging
                 return JsonResponse({'success': False, 'msg': 'failed to parse KML/KMZ', 'id': None}, status=400)
 
-            # Check for duplicates more comprehensively
-            kml_hash = _hash_kml(kml_doc)
+            # Normalize KML content for comparison (handles KML vs KMZ differences)
+            normalized_kml = normalize_kml_for_comparison(kml_doc)
+            
+            # Check for duplicates more comprehensively using normalized content
+            kml_hash = _hash_kml(normalized_kml)
 
             # Check if this exact KML content already exists for this user (regardless of filename)
             existing_by_content = ImportQueue.objects.filter(
@@ -70,13 +73,13 @@ def upload_item(request):
                 if existing_by_content.imported:
                     return JsonResponse({
                         'success': False,
-                        'msg': f'This KML file has already been imported to the feature store (originally as "{existing_by_content.original_filename}")',
+                        'msg': f'This KML/KMZ file has already been imported to the feature store (originally as "{existing_by_content.original_filename}")',
                         'id': None
                     }, status=400)
                 else:
                     return JsonResponse({
                         'success': False,
-                        'msg': f'This KML file is already in your import queue (originally as "{existing_by_content.original_filename}")',
+                        'msg': f'This KML/KMZ file is already in your import queue (originally as "{existing_by_content.original_filename}")',
                         'id': None
                     }, status=400)
 
