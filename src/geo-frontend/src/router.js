@@ -26,6 +26,11 @@ const routes = [
         name: 'Process Data',
         component: () => import('./components/import/ImportProcess.vue'),
         props: true
+    },
+    {
+        path: '/map',
+        name: 'Map',
+        component: () => import('./components/map/GeoJsonMap.vue'),
     }
 ]
 

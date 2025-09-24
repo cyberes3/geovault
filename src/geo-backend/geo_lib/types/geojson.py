@@ -1,11 +1,13 @@
-from typing import Optional, List
+from typing import Optional, List, Any
 from datetime import datetime, timezone
 import logging
 
-from pydantic import BaseModel, Field, field_validator
+from pydantic import BaseModel, Field, field_validator, ConfigDict
 
 
 class GeojsonRawProperty(BaseModel):
+    model_config = ConfigDict(extra='allow')  # Allow additional properties from togeojson
+    
     # A class to whitelist these properties.
     name: str
     description: Optional[str] = None

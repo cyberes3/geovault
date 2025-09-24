@@ -30,6 +30,13 @@
               >
                 Import
               </router-link>
+              <router-link 
+                to="/map" 
+                class="inline-flex items-center px-1 pt-1 text-sm font-medium text-gray-500 hover:text-gray-700 hover:border-gray-300 border-b-2 border-transparent transition-colors duration-200"
+                :class="{ 'text-gray-900 border-gray-500': $route.path === '/map' }"
+              >
+                Map
+              </router-link>
             </div>
           </div>
           <div class="flex items-center">

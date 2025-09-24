@@ -1,10 +1,10 @@
 import json
+from datetime import datetime
 from enum import Enum
 from typing import List, Tuple, Optional, Type
 from typing import Union
-from datetime import datetime
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, ConfigDict
 
 from geo_lib.daemon.workers.workers_lib.importer.logging import ImportLog
 
@@ -15,20 +15,14 @@ class GeoFeatureType(str, Enum):
     POLYGON = 'Polygon'
 
 
-class Rendering(BaseModel):
-    stroke_width: int = Field(2, alias='strokeWidth')
-    stroke_color: Tuple[int, int, int, float] = Field((255, 0, 0, 1.0), alias='strokeColor')
-    fill_color: Optional[Tuple[int, int, int, float]] = Field((255, 0, 0, 0.2), alias='fillColor')
-    fill_opacity: float = Field(0.101960786, alias='fillOpacity')
-
-
 class Properties(BaseModel):
+    model_config = ConfigDict(extra='allow')  # Allow additional properties from togeojson
+    
     name: str
     id: Optional[int] = -1
     description: Optional[str] = None
     created: Optional[datetime] = None
     tags: Optional[List[str]] = Field(default_factory=list)
-    rendering: Optional[Rendering] = Field(default_factory=Rendering)
 
 
 class PointFeatureGeometry(BaseModel):
@@ -83,11 +77,7 @@ def geojson_to_geofeature(geojson: dict) -> Tuple[List[GeoFeatureSupported], Imp
                 continue
 
         f = c(**item)
-        if isinstance(f, (PointFeature, LineStringFeature)):
-            del f.properties.rendering.fill_color
-            # Remove fill_opacity from non-polygon features since they don't have fill areas
-            if hasattr(f.properties.rendering, 'fill_opacity'):
-                del f.properties.rendering.fill_opacity
+        # No need to process rendering since we're not using it anymore
 
         # TODO: do this shit
         f.properties.id = -1  # This will be updated after it's added to the main data store.

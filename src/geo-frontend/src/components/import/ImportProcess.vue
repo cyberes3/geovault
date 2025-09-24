@@ -117,13 +117,13 @@
           <div>
             <label class="block text-sm font-medium text-gray-700 mb-2">Created Date</label>
             <div class="flex items-center space-x-2">
-              <flat-pickr 
+              <input 
+                type="datetime-local"
                 :class="isImported ? 'block w-full px-3 py-2 border border-gray-300 rounded-md bg-gray-100 cursor-not-allowed' : 'block w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-blue-500 focus:border-blue-500'" 
-                :config="flatpickrConfig"
                 :disabled="isImported"
-                :value="item.properties.created"
-                @on-change="updateDate(index, $event)"
-              ></flat-pickr>
+                :value="formatDateForInput(item.properties.created)"
+                @change="updateDate(index, $event)"
+              />
               <button 
                 v-if="!isImported" 
                 class="inline-flex items-center px-3 py-2 border border-gray-300 shadow-sm text-sm leading-4 font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500"
@@ -244,8 +244,7 @@ import Importqueue from "@/components/import/parts/importqueue.vue";
 import {GeoFeatureTypeStrings} from "@/assets/js/types/geofeature-strings";
 import {GeoPoint, GeoLineString, GeoPolygon} from "@/assets/js/types/geofeature-types";
 import {getCookie} from "@/assets/js/auth.js";
-import flatPickr from 'vue-flatpickr-component';
-import 'flatpickr/dist/flatpickr.css';
+// Removed flatpickr dependency - using native HTML5 date input
 import Loader from "@/components/parts/Loader.vue";
 
 // TODO: for each feature, query the DB and check if there is a duplicate. For points that's duplicate coords, for linestrings and polygons that's duplicate points
@@ -255,7 +254,7 @@ export default {
   computed: {
     ...mapState(["userInfo"]),
   },
-  components: {Loader, Importqueue, flatPickr},
+  components: {Loader, Importqueue},
   data() {
     return {
       msg: "",
@@ -266,11 +265,7 @@ export default {
       workerLog: [],
       lockButtons: false,
       isImported: false, // Track if this item has been imported
-      flatpickrConfig: {
-        enableTime: true,
-        time_24hr: true,
-        dateFormat: 'Y-m-d H:i',
-      },
+      // Removed flatpickrConfig - using native HTML5 datetime-local input
     }
   },
   mixins: [authMixin],
@@ -313,8 +308,15 @@ export default {
     removeTag(index, tagIndex) {
       this.itemsForUser[index].properties.tags.splice(tagIndex, 1);
     },
-    updateDate(index, selectedDates) {
-      this.itemsForUser[index].properties.created = selectedDates[0];
+    updateDate(index, event) {
+      this.itemsForUser[index].properties.created = event.target.value;
+    },
+    formatDateForInput(dateString) {
+      if (!dateString) return '';
+      // Convert date string to datetime-local format (YYYY-MM-DDTHH:MM)
+      const date = new Date(dateString);
+      if (isNaN(date.getTime())) return '';
+      return date.toISOString().slice(0, 16);
     },
     saveChanges() {
       this.lockButtons = true

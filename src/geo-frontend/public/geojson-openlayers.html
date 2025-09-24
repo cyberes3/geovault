@@ -1,0 +1,271 @@
+<!DOCTYPE html>
+<html style="width: 100%; height: 100%;">
+<head>
+    <title>GeoJSON Dynamic Map</title>
+    <script src="https://cdn.jsdelivr.net/npm/ol@v10.6.0/dist/ol.js"></script>
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/ol@v10.6.0/ol.css">
+    <style>
+        .loading-indicator {
+            position: absolute;
+            top: 10px;
+            right: 10px;
+            background: rgba(255, 255, 255, 0.9);
+            padding: 10px;
+            border-radius: 5px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.2);
+            z-index: 1000;
+            display: none;
+        }
+        .cache-stats {
+            position: absolute;
+            bottom: 10px;
+            left: 10px;
+            background: rgba(255, 255, 255, 0.9);
+            padding: 10px;
+            border-radius: 5px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.2);
+            z-index: 1000;
+            font-size: 12px;
+        }
+    </style>
+</head>
+<body style="width: 100%; height: 100%; margin:0">
+<div id="map" style="width: 100%; height: 100%;"></div>
+<div id="loading" class="loading-indicator">Loading data...</div>
+<div id="cache-stats" class="cache-stats">
+    <div>Cache: <span id="cache-size">-</span> MB</div>
+    <div>Features: <span id="feature-count">0</span></div>
+    <div>Last update: <span id="last-update">-</span></div>
+</div>
+
+<script>
+    // Configuration
+    const API_BASE_URL = 'http://localhost:8000/api/data/geojson/';
+    const CACHE_STATS_URL = 'http://localhost:8000/api/data/geojson/cache/stats';
+    const CACHE_CLEAR_URL = 'http://localhost:8000/api/data/geojson/cache/clear';
+
+    // State management
+    let isLoading = false;
+    let loadedBounds = new Set(); // Track loaded bounding boxes to avoid duplicates
+    let lastUpdateTime = null;
+
+    // Create vector source and layer
+    const vectorSource = new ol.source.Vector();
+
+    const vectorLayer = new ol.layer.Vector({
+        source: vectorSource,
+        style: function (feature) {
+            const properties = feature.get('properties') || {};
+            const geometryType = feature.getGeometry().getType();
+
+            if (geometryType === 'Point') {
+                return new ol.style.Style({
+                    image: new ol.style.Circle({
+                        radius: 6,
+                        fill: new ol.style.Fill({
+                            color: properties['marker-color'] || '#ff0000'
+                        }),
+                        stroke: new ol.style.Stroke({
+                            color: properties['marker-color'] || '#ff0000',
+                            width: 2
+                        })
+                    })
+                });
+            } else if (geometryType === 'LineString') {
+                return new ol.style.Style({
+                    stroke: new ol.style.Stroke({
+                        color: properties.stroke || '#ff0000',
+                        width: properties['stroke-width'] || 2
+                    })
+                });
+            } else if (geometryType === 'Polygon') {
+                // Apply fill-opacity to the fill color if available
+                let fillColor = properties.fill || '#ff0000';
+                if (properties['fill-opacity'] !== undefined) {
+                    // Convert hex to RGB and apply opacity
+                    const hex = fillColor.replace('#', '');
+                    const r = parseInt(hex.substr(0, 2), 16);
+                    const g = parseInt(hex.substr(2, 2), 16);
+                    const b = parseInt(hex.substr(4, 2), 16);
+                    fillColor = `rgba(${r}, ${g}, ${b}, ${properties['fill-opacity']})`;
+                }
+
+                return new ol.style.Style({
+                    stroke: new ol.style.Stroke({
+                        color: properties.stroke || '#ff0000',
+                        width: properties['stroke-width'] || 2
+                    }),
+                    fill: new ol.style.Fill({
+                        color: fillColor
+                    })
+                });
+            }
+
+            // Default style for unknown geometry types
+            return new ol.style.Style({
+                stroke: new ol.style.Stroke({
+                    color: '#ff0000',
+                    width: 2
+                }),
+                fill: new ol.style.Fill({
+                    color: 'rgba(255, 0, 0, 0.3)'
+                })
+            });
+        }
+    });
+
+    // Create map
+    const map = new ol.Map({
+        target: 'map',
+        layers: [
+            new ol.layer.Tile({
+                source: new ol.source.OSM()
+            }),
+            vectorLayer
+        ],
+        view: new ol.View({
+            center: ol.proj.fromLonLat([-104.692626, 38.881215]),
+            zoom: 10
+        })
+    });
+
+    // Utility functions
+    function getBoundingBoxKey(extent, zoom) {
+        // Create a key for the bounding box to track loaded areas
+        const rounded = extent.map(coord => Math.round(coord * 1000) / 1000);
+        return `${rounded.join(',')}_${Math.round(zoom)}`;
+    }
+
+    function getBoundingBoxString(extent) {
+        // Convert extent to min_lon,min_lat,max_lon,max_lat format
+        const [minX, minY, maxX, maxY] = extent;
+        return `${minX},${minY},${maxX},${maxY}`;
+    }
+
+    function showLoading() {
+        isLoading = true;
+        document.getElementById('loading').style.display = 'block';
+    }
+
+    function hideLoading() {
+        isLoading = false;
+        document.getElementById('loading').style.display = 'none';
+    }
+
+    function updateCacheStats() {
+        fetch(CACHE_STATS_URL)
+            .then(response => response.json())
+            .then(data => {
+                if (data.success) {
+                    document.getElementById('cache-size').textContent = data.cache_size_mb;
+                }
+            })
+            .catch(error => {
+                console.error('Error fetching cache stats:', error);
+            });
+    }
+
+    function updateFeatureCount() {
+        const featureCount = vectorSource.getFeatures().length;
+        document.getElementById('feature-count').textContent = featureCount;
+    }
+
+    function updateLastUpdateTime() {
+        lastUpdateTime = new Date();
+        document.getElementById('last-update').textContent = lastUpdateTime.toLocaleTimeString();
+    }
+
+    // Load data for current view
+    async function loadDataForCurrentView() {
+        if (isLoading) return;
+
+        const view = map.getView();
+        const extent = view.calculateExtent();
+        const zoom = view.getZoom();
+
+        // Check if we already loaded data for this area
+        const bboxKey = getBoundingBoxKey(extent, zoom);
+        if (loadedBounds.has(bboxKey)) {
+            return;
+        }
+
+        showLoading();
+
+        try {
+            const bboxString = getBoundingBoxString(extent);
+            const url = `${API_BASE_URL}?bbox=${bboxString}&zoom=${zoom}&use_cache=true`;
+
+            const response = await fetch(url);
+            const data = await response.json();
+
+            if (data.success && data.data.features) {
+                // Add new features to the vector source
+                const features = new ol.format.GeoJSON().readFeatures(data.data, {
+                    featureProjection: 'EPSG:3857',
+                    dataProjection: 'EPSG:4326'
+                });
+
+                vectorSource.addFeatures(features);
+                loadedBounds.add(bboxKey);
+
+                updateFeatureCount();
+                updateLastUpdateTime();
+
+                console.log(`Loaded ${features.length} features for bbox: ${bboxString}`);
+            } else {
+                console.error('Error loading data:', data.error);
+            }
+        } catch (error) {
+            console.error('Error fetching data:', error);
+        } finally {
+            hideLoading();
+        }
+    }
+
+    // Debounced load function to avoid too many requests
+    let loadTimeout;
+    function debouncedLoadData() {
+        clearTimeout(loadTimeout);
+        loadTimeout = setTimeout(loadDataForCurrentView, 500);
+    }
+
+    // Event listeners
+    map.getView().on('change:center', debouncedLoadData);
+    map.getView().on('change:resolution', debouncedLoadData);
+
+    // Clear cache function (for debugging)
+    function clearCache() {
+        fetch(CACHE_CLEAR_URL, { method: 'POST' })
+            .then(response => response.json())
+            .then(data => {
+                if (data.success) {
+                    console.log('Cache cleared:', data.message);
+                    updateCacheStats();
+                }
+            })
+            .catch(error => {
+                console.error('Error clearing cache:', error);
+            });
+    }
+
+    // Add keyboard shortcut for cache clearing (Ctrl+Shift+C)
+    document.addEventListener('keydown', function(event) {
+        if (event.ctrlKey && event.shiftKey && event.key === 'C') {
+            clearCache();
+        }
+    });
+
+    // Initial data load
+    loadDataForCurrentView();
+
+    // Update cache stats periodically
+    updateCacheStats();
+    setInterval(updateCacheStats, 30000); // Update every 30 seconds
+</script>
+<style>
+    .ol-attribution {
+        display: none;
+    }
+</style>
+</body>
+</html>

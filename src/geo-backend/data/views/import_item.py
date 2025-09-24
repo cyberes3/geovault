@@ -8,6 +8,7 @@ from django.db import IntegrityError
 from django.http import HttpResponse, JsonResponse
 from django.views.decorators.csrf import csrf_protect
 from django.views.decorators.http import require_http_methods
+from django.contrib.gis.geos import GEOSGeometry
 
 from data.models import ImportQueue, FeatureStore, GeoLog
 from geo_lib.daemon.database.locking import DBLockManager
@@ -16,6 +17,8 @@ from geo_lib.daemon.workers.workers_lib.importer.tagging import generate_auto_ta
 from geo_lib.types.feature import PointFeature, PolygonFeature, LineStringFeature
 from geo_lib.website.auth import login_required_401
 
+# TODO: deduplicate identical features
+# TODO: allow re-import of old previously uploaded by re-uploading it
 
 def _get_logs_by_log_id(log_id):
     """Fetch logs from GeoLog table by log_id"""
@@ -285,7 +288,56 @@ def import_to_featurestore(request, item_id):
 
         feature_instance = c(**feature)
         feature_instance.properties.tags = generate_auto_tags(feature_instance)  # Generate the tags after the user has made their changes.
-        feature = FeatureStore.objects.create(geojson=json.loads(c(**feature).model_dump_json()), source=import_item, user=request.user)
+        
+        # Create the GeoJSON data
+        geojson_data = json.loads(feature_instance.model_dump_json())
+        
+        # Create geometry object for spatial queries
+        geometry = None
+        if 'geometry' in geojson_data and geojson_data['geometry']:
+            try:
+                # Ensure coordinates are properly formatted for GEOSGeometry
+                geom_data = geojson_data['geometry'].copy()
+                
+                # Handle 3D coordinates by ensuring they're properly structured
+                if geom_data['type'] == 'Point':
+                    coords = geom_data['coordinates']
+                    # Ensure Point has exactly 3 coordinates (x, y, z) or 2 (x, y)
+                    if len(coords) == 2:
+                        coords = [coords[0], coords[1], 0.0]  # Add Z=0 for 2D points
+                    elif len(coords) == 3:
+                        coords = [coords[0], coords[1], coords[2]]  # Keep 3D
+                    geom_data['coordinates'] = coords
+                
+                elif geom_data['type'] == 'LineString':
+                    coords = geom_data['coordinates']
+                    # Ensure each coordinate in LineString has 3 dimensions
+                    geom_data['coordinates'] = [
+                        [coord[0], coord[1], coord[2] if len(coord) > 2 else 0.0] 
+                        for coord in coords
+                    ]
+                
+                elif geom_data['type'] == 'Polygon':
+                    coords = geom_data['coordinates']
+                    # Ensure each coordinate in Polygon has 3 dimensions
+                    geom_data['coordinates'] = [
+                        [
+                            [coord[0], coord[1], coord[2] if len(coord) > 2 else 0.0] 
+                            for coord in ring
+                        ] 
+                        for ring in coords
+                    ]
+                
+                geometry = GEOSGeometry(json.dumps(geom_data))
+            except Exception as e:
+                print(f"Error creating geometry for feature {i}: {e}")
+        
+        feature = FeatureStore.objects.create(
+            geojson=geojson_data, 
+            geometry=geometry,
+            source=import_item, 
+            user=request.user
+        )
         feature.save()
         i += 1
 
