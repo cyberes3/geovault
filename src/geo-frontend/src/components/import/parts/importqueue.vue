@@ -1,46 +1,122 @@
 <template>
-  <table class="mt-6 w-full border-collapse">
-    <thead>
-    <tr class="bg-gray-100">
-      <th class="px-4 py-2 text-left w-[50%]">File Name</th>
-      <th class="px-4 py-2 text-center">Features</th>
-      <th class="px-4 py-2 w-[10%]"></th>
-    </tr>
-    </thead>
-    <tbody>
-    <tr v-for="(item, index) in importQueue" :key="`item-${index}`" class="border-t">
-      <td class="px-4 py-2 w-[50%]">
-        <a :href="`/#/import/process/${item.id}`" class="text-blue-500 hover:text-blue-700">{{
-            item.original_filename
-          }}</a>
-        <span v-if="item.imported" class="ml-2 px-2 py-1 text-xs bg-green-100 text-green-800 rounded-full">
-          Imported
-        </span>
-      </td>
-      <td class="px-4 py-2 text-center">
-        {{ item.processing === true || (item.processing === false && item.feature_count === -1) ? "processing" : item.feature_count }}
-      </td>
-      <td class="px-4 py-2 w-[10%]">
-        <button class="px-4 py-2 bg-red-500 text-white rounded hover:bg-red-600" @click="deleteItem(item, index)">
-          Delete
-        </button>
-      </td>
-    </tr>
-    <tr v-if="isLoading && importQueue.length === 0" class="animate-pulse border-t">
-      <td class="px-4 py-2 text-left w-[50%]">
-        <div class="w-32 h-8 bg-gray-200 rounded-s"></div>
-      </td>
-      <td class="px-4 py-2 text-center">
-        <div class="w-32 h-8 bg-gray-200 rounded-s mx-auto"></div>
-      </td>
-      <td class="px-4 py-2 invisible w-[10%]">
-        <button class="px-4 py-2 bg-red-500 text-white rounded hover:bg-red-600">
-          Delete
-        </button>
-      </td>
-    </tr>
-    </tbody>
-  </table>
+  <div class="overflow-hidden">
+    <table class="min-w-full divide-y divide-gray-200">
+      <thead class="bg-gray-50">
+        <tr>
+          <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">File Name</th>
+          <th class="px-6 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">Features</th>
+          <th class="px-6 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">Status</th>
+          <th class="px-6 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">Actions</th>
+        </tr>
+      </thead>
+      <tbody class="bg-white divide-y divide-gray-200">
+        <!-- Loading placeholders -->
+        <tr v-for="n in 5" v-if="combinedLoading" :key="`loading-${n}`" class="animate-pulse">
+          <td class="px-6 py-4 whitespace-nowrap">
+            <div class="flex items-center">
+              <div class="w-8 h-8 bg-gray-200 rounded-lg"></div>
+              <div class="ml-4 w-32 h-4 bg-gray-200 rounded"></div>
+            </div>
+          </td>
+          <td class="px-6 py-4 whitespace-nowrap text-center">
+            <div class="w-16 h-4 bg-gray-200 rounded mx-auto"></div>
+          </td>
+          <td class="px-6 py-4 whitespace-nowrap text-center">
+            <div class="w-20 h-6 bg-gray-200 rounded mx-auto"></div>
+          </td>
+          <td class="px-6 py-4 whitespace-nowrap text-center">
+            <div class="w-16 h-6 bg-gray-200 rounded mx-auto"></div>
+          </td>
+        </tr>
+
+        <!-- Empty state when no files are uploaded -->
+        <tr v-if="!combinedLoading && importQueue.length === 0 && hasInitiallyLoaded">
+          <td colspan="4" class="px-6 py-12 text-center">
+            <div class="flex flex-col items-center">
+              <div class="w-16 h-16 bg-gray-100 rounded-full flex items-center justify-center mb-4">
+                <svg class="w-8 h-8 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12"></path>
+                </svg>
+              </div>
+              <h3 class="text-lg font-medium text-gray-900 mb-2">No files uploaded yet</h3>
+              <p class="text-gray-500 mb-6 max-w-sm">
+                Get started by uploading your first geospatial data file. Supported formats include GeoJSON, KML, and Shapefiles.
+              </p>
+              <router-link
+                to="/import/upload"
+                class="inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md text-white bg-blue-600 hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 transition-colors duration-200"
+              >
+                <svg class="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12"></path>
+                </svg>
+                Upload Your First File
+              </router-link>
+            </div>
+          </td>
+        </tr>
+
+        <!-- Actual data rows -->
+        <tr v-for="(item, index) in importQueue" :key="`item-${index}`" class="hover:bg-gray-50">
+          <td class="px-6 py-4 whitespace-nowrap">
+            <div class="flex items-center">
+              <div class="flex-shrink-0">
+                <div class="w-8 h-8 bg-blue-100 rounded-lg flex items-center justify-center">
+                  <svg class="w-4 h-4 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"></path>
+                  </svg>
+                </div>
+              </div>
+              <div class="ml-4">
+                <div class="text-sm font-medium text-gray-900">
+                  <a :href="`/#/import/process/${item.id}`" class="text-blue-600 hover:text-blue-900">
+                    {{ item.original_filename }}
+                  </a>
+                </div>
+              </div>
+            </div>
+          </td>
+          <td class="px-6 py-4 whitespace-nowrap text-center text-sm text-gray-900">
+            <span v-if="item.processing === true || (item.processing === false && item.feature_count === -1)" class="text-gray-400">
+              -
+            </span>
+            <span v-else class="font-medium">{{ item.feature_count }}</span>
+          </td>
+          <td class="px-6 py-4 whitespace-nowrap text-center">
+            <span v-if="item.imported" class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-800">
+              <svg class="w-3 h-3 mr-1" fill="currentColor" viewBox="0 0 20 20">
+                <path fill-rule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clip-rule="evenodd"></path>
+              </svg>
+              Imported
+            </span>
+            <span v-else-if="item.processing === true || (item.processing === false && item.feature_count === -1)" class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-yellow-100 text-yellow-800">
+              <svg class="animate-spin -ml-1 mr-1 h-3 w-3" fill="none" viewBox="0 0 24 24">
+                <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+                <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+              </svg>
+              Processing
+            </span>
+            <span v-else class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-blue-100 text-blue-800">
+              <svg class="w-3 h-3 mr-1" fill="currentColor" viewBox="0 0 20 20">
+                <path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clip-rule="evenodd"></path>
+              </svg>
+              Ready
+            </span>
+          </td>
+          <td class="px-6 py-4 whitespace-nowrap text-center text-sm font-medium">
+            <button
+              class="inline-flex items-center px-3 py-1.5 border border-transparent text-xs font-medium rounded-md text-white bg-red-600 hover:bg-red-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-red-500 transition-colors duration-200"
+              @click="deleteItem(item, index)"
+            >
+              <svg class="w-3 h-3 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"></path>
+              </svg>
+              Delete
+            </button>
+          </td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
 </template>
 
 <script>
@@ -52,14 +128,24 @@ import {ImportQueueItem} from "@/assets/js/types/import-types";
 import {getCookie} from "@/assets/js/auth.js";
 
 export default {
+  props: {
+    isLoading: {
+      type: Boolean,
+      default: false
+    }
+  },
   computed: {
     ...mapState(["userInfo", "importQueue"]),
+    combinedLoading() {
+      return (this.isLoading || this.internalLoading) && !this.hasInitiallyLoaded;
+    }
   },
   components: {},
   mixins: [authMixin],
   data() {
     return {
-      isLoading: true,
+      internalLoading: true,
+      hasInitiallyLoaded: false,
     }
   },
   methods: {
@@ -75,11 +161,12 @@ export default {
       await this.fetchQueueList()
     },
     async fetchQueueList() {
-      this.isLoading = true
+      this.internalLoading = true
       const response = await axios.get(IMPORT_QUEUE_LIST_URL)
       const ourImportQueue = response.data.data.map((item) => new ImportQueueItem(item))
       this.$store.commit('setImportQueue', ourImportQueue)
-      this.isLoading = false
+      this.internalLoading = false
+      this.hasInitiallyLoaded = true
     },
     async deleteItem(item, index) {
       if (window.confirm(`Delete "${item.original_filename}" (#${item.id})`)) {
