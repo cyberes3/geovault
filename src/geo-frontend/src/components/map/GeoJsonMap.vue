@@ -23,12 +23,9 @@
         <!-- Feature Stats -->
         <div class="absolute bottom-4 left-4 bg-white bg-opacity-90 px-4 py-2 rounded-lg shadow-md z-10 text-xs">
           <div class="space-y-1">
-            <div>Features: <span class="font-medium">{{ featureCount }}</span></div>
-            <div>Last update: <span class="font-medium">{{ lastUpdateTime }}</span></div>
+            <div>Features: <span class="font-medium">{{ featureCount }}</span> / <span class="font-medium">{{ MAX_FEATURES }}</span></div>
           </div>
         </div>
-
-        <!-- Map Controls removed - cache functionality eliminated -->
       </div>
     </div>
   </div>
@@ -58,7 +55,9 @@ export default {
       featureCount: 0,
       loadTimeout: null,
       // Configuration
-      API_BASE_URL: '/api/data/geojson/'
+      API_BASE_URL: '/api/data/geojson/',
+      MAX_FEATURES: 1000, // Maximum number of features to keep on the map
+      featureTimestamps: new Map() // Track when features were added
     }
   },
   methods: {
@@ -168,10 +167,20 @@ export default {
     },
 
     getBoundingBoxKey(extent, zoom) {
-      // Create a key for the bounding box to track loaded areas
-      const rounded = extent.map(coord => Math.round(coord * 1000) / 1000)
-      const roundedZoom = Math.round(zoom) // Round to integer for consistency
-      return `${rounded.join(',')}_${roundedZoom}`
+      // Create a grid-based key for the bounding box to track loaded areas
+      // This prevents overlapping areas from being treated as separate
+      const [minX, minY, maxX, maxY] = extent
+      const roundedZoom = Math.round(zoom)
+
+      // Create a grid system - divide the world into grid cells
+      // Use a larger grid size to reduce precision issues and overlap
+      const gridSize = Math.pow(2, 15 - roundedZoom) // Adjust grid size based on zoom
+      const gridMinX = Math.floor(minX / gridSize) * gridSize
+      const gridMinY = Math.floor(minY / gridSize) * gridSize
+      const gridMaxX = Math.ceil(maxX / gridSize) * gridSize
+      const gridMaxY = Math.ceil(maxY / gridSize) * gridSize
+
+      return `${gridMinX},${gridMinY},${gridMaxX},${gridMaxY}_${roundedZoom}`
     },
 
     getBoundingBoxString(extent) {
@@ -231,7 +240,50 @@ export default {
             const props = feature.getProperties()
           })
 
-          this.vectorSource.addFeatures(features)
+          // Filter out features that already exist in the vector source
+          const existingFeatures = this.vectorSource.getFeatures()
+          const newFeatures = features.filter(newFeature => {
+            const newGeometry = newFeature.getGeometry()
+            if (!newGeometry) return true // Keep features without geometry
+
+            // Check if a feature with the same geometry already exists
+            return !existingFeatures.some(existingFeature => {
+              const existingGeometry = existingFeature.getGeometry()
+              if (!existingGeometry) return false
+
+              // Compare geometries using their extent and type
+              const newExtent = newGeometry.getExtent()
+              const existingExtent = existingGeometry.getExtent()
+
+              // Check if extents are the same (within tolerance)
+              const tolerance = 0.001
+              const extentsMatch = Math.abs(newExtent[0] - existingExtent[0]) < tolerance &&
+                  Math.abs(newExtent[1] - existingExtent[1]) < tolerance &&
+                  Math.abs(newExtent[2] - existingExtent[2]) < tolerance &&
+                  Math.abs(newExtent[3] - existingExtent[3]) < tolerance
+
+              // Also check geometry type
+              const typesMatch = newGeometry.getType() === existingGeometry.getType()
+
+              return extentsMatch && typesMatch
+            })
+          })
+
+          if (newFeatures.length > 0) {
+            // Add timestamps to new features before adding them to the map
+            newFeatures.forEach(feature => {
+              this.addFeatureTimestamp(feature)
+            })
+
+            this.vectorSource.addFeatures(newFeatures)
+            console.log(`Added ${newFeatures.length} new features (filtered ${features.length - newFeatures.length} duplicates)`)
+
+            // Enforce feature limit after adding new features
+            this.enforceFeatureLimit()
+          } else {
+            console.log(`No new features to add (all ${features.length} were duplicates)`)
+          }
+
           this.loadedBounds.add(bboxKey)
 
           this.updateFeatureCount()
@@ -261,6 +313,45 @@ export default {
       this.lastUpdateTime = new Date().toLocaleTimeString()
     },
 
+    enforceFeatureLimit() {
+      const features = this.vectorSource.getFeatures()
+      if (features.length <= this.MAX_FEATURES) {
+        return
+      }
+
+      // Sort features by timestamp (oldest first)
+      const featuresWithTimestamps = features.map(feature => ({
+        feature,
+        timestamp: this.featureTimestamps.get(feature) || 0
+      })).sort((a, b) => a.timestamp - b.timestamp)
+
+      // Calculate how many features to remove
+      const featuresToRemove = features.length - this.MAX_FEATURES
+
+      // Remove oldest features
+      for (let i = 0; i < featuresToRemove; i++) {
+        const {feature} = featuresWithTimestamps[i]
+        this.vectorSource.removeFeature(feature)
+        this.featureTimestamps.delete(feature)
+      }
+
+      console.log(`Removed ${featuresToRemove} oldest features to maintain limit of ${this.MAX_FEATURES}`)
+      this.updateFeatureCount()
+    },
+
+    addFeatureTimestamp(feature) {
+      this.featureTimestamps.set(feature, Date.now())
+    },
+
+    clearAllFeatures() {
+      // Clear all features and their timestamps
+      this.vectorSource.clear()
+      this.featureTimestamps.clear()
+      this.loadedBounds.clear()
+      this.updateFeatureCount()
+      console.log('Cleared all features from the map')
+    },
+
     // Cache functionality removed
   },
 
@@ -276,6 +367,8 @@ export default {
     if (this.loadTimeout) {
       clearTimeout(this.loadTimeout)
     }
+    // Clear feature timestamps
+    this.featureTimestamps.clear()
   }
 }
 </script>
