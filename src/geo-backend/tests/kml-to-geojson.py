@@ -3,7 +3,7 @@ import sys
 from pathlib import Path
 
 sys.path.append(str(list(Path(__file__).parents)[1]))
-from geo_lib.daemon.workers.workers_lib.importer.kml import kml_to_geojson
+from geo_lib.daemon.workers.workers_lib.importer.kml_new import kml_to_geojson
 from geo_lib.types.feature import geojson_to_geofeature, geofeature_to_geojson
 
 parser = argparse.ArgumentParser()
