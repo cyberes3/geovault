@@ -20,25 +20,15 @@
           </div>
         </div>
 
-        <!-- Cache Stats -->
+        <!-- Feature Stats -->
         <div class="absolute bottom-4 left-4 bg-white bg-opacity-90 px-4 py-2 rounded-lg shadow-md z-10 text-xs">
           <div class="space-y-1">
-            <div>Cache: <span class="font-medium">{{ cacheSize }} MB</span></div>
             <div>Features: <span class="font-medium">{{ featureCount }}</span></div>
             <div>Last update: <span class="font-medium">{{ lastUpdateTime }}</span></div>
           </div>
         </div>
 
-        <!-- Map Controls -->
-        <div class="absolute top-4 left-4 bg-white bg-opacity-90 px-4 py-2 rounded-lg shadow-md z-10">
-          <button
-              class="text-sm text-red-600 hover:text-red-800 font-medium"
-              title="Clear cache (Ctrl+Shift+C)"
-              @click="clearCache"
-          >
-            Clear Cache
-          </button>
-        </div>
+        <!-- Map Controls removed - cache functionality eliminated -->
       </div>
     </div>
   </div>
@@ -65,13 +55,10 @@ export default {
       isLoading: false,
       loadedBounds: new Set(),
       lastUpdateTime: null,
-      cacheSize: '-',
       featureCount: 0,
       loadTimeout: null,
       // Configuration
-      API_BASE_URL: '/api/data/geojson/',
-      CACHE_STATS_URL: '/api/data/geojson/cache/stats',
-      CACHE_CLEAR_URL: '/api/data/geojson/cache/clear'
+      API_BASE_URL: '/api/data/geojson/'
     }
   },
   methods: {
@@ -103,8 +90,7 @@ export default {
       this.map.getView().on('change:center', this.debouncedLoadData)
       this.map.getView().on('change:resolution', this.debouncedLoadData)
 
-      // Add keyboard shortcut for cache clearing
-      document.addEventListener('keydown', this.handleKeydown)
+      // Event listeners removed - cache functionality eliminated
     },
 
     getFeatureStyle(feature) {
@@ -217,7 +203,7 @@ export default {
       try {
         const bboxString = this.getBoundingBoxString(extent)
         const roundedZoom = Math.round(zoom) // Round to integer for API compatibility
-        const url = `${this.API_BASE_URL}?bbox=${bboxString}&zoom=${roundedZoom}&use_cache=true`
+        const url = `${this.API_BASE_URL}?bbox=${bboxString}&zoom=${roundedZoom}`
 
         const response = await fetch(url)
         const data = await response.json()
@@ -275,38 +261,7 @@ export default {
       this.lastUpdateTime = new Date().toLocaleTimeString()
     },
 
-    async updateCacheStats() {
-      try {
-        const response = await fetch(this.CACHE_STATS_URL)
-        const data = await response.json()
-
-        if (data.success) {
-          this.cacheSize = data.cache_size_mb
-        }
-      } catch (error) {
-        console.error('Error fetching cache stats:', error)
-      }
-    },
-
-    async clearCache() {
-      try {
-        const response = await fetch(this.CACHE_CLEAR_URL, {method: 'POST'})
-        const data = await response.json()
-
-        if (data.success) {
-          console.log('Cache cleared:', data.message)
-          this.updateCacheStats()
-        }
-      } catch (error) {
-        console.error('Error clearing cache:', error)
-      }
-    },
-
-    handleKeydown(event) {
-      if (event.ctrlKey && event.shiftKey && event.key === 'C') {
-        this.clearCache()
-      }
-    }
+    // Cache functionality removed
   },
 
   async mounted() {
@@ -314,15 +269,10 @@ export default {
 
     // Initial data load
     this.loadDataForCurrentView()
-
-    // Update cache stats periodically
-    this.updateCacheStats()
-    setInterval(this.updateCacheStats, 30000) // Update every 30 seconds
   },
 
   beforeUnmount() {
-    // Clean up event listeners
-    document.removeEventListener('keydown', this.handleKeydown)
+    // Clean up
     if (this.loadTimeout) {
       clearTimeout(this.loadTimeout)
     }

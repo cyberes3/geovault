@@ -5,14 +5,12 @@ import time
 
 from geo_lib.daemon.database.connection import Database
 from geo_lib.daemon.workers.importer import import_worker
-from geo_lib.redis import flush_redis
 
 logging.basicConfig(level=logging.INFO)  # TODO: config level
 _logger = logging.getLogger("DAEMON")
 
 if __name__ == "__main__":
-    _logger.debug('Flushing Redis...')
-    flush_redis()
+    _logger.debug('Starting daemon...')
 
     # TODO: config
     _logger.info('Connecting to database...')

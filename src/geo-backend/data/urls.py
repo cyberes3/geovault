@@ -1,7 +1,7 @@
 from django.urls import path
 
 from data.views.import_item import upload_item, fetch_import_queue, fetch_import_waiting, delete_import_item, update_import_item, fetch_import_history, fetch_import_history_item, import_to_featurestore
-from data.views.geojson_api import get_geojson_data, get_cache_stats, clear_cache
+from data.views.geojson_api import get_geojson_data
 
 urlpatterns = [
     path('item/import/upload', upload_item),
@@ -14,6 +14,4 @@ urlpatterns = [
     path('item/import/perform/<int:item_id>', import_to_featurestore),
     # GeoJSON API endpoints
     path('geojson/', get_geojson_data),
-    path('geojson/cache/stats', get_cache_stats),
-    path('geojson/cache/clear', clear_cache),
 ]

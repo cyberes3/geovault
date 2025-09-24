@@ -16,7 +16,7 @@
             z-index: 1000;
             display: none;
         }
-        .cache-stats {
+        .feature-stats {
             position: absolute;
             bottom: 10px;
             left: 10px;
@@ -32,8 +32,7 @@
 <body style="width: 100%; height: 100%; margin:0">
 <div id="map" style="width: 100%; height: 100%;"></div>
 <div id="loading" class="loading-indicator">Loading data...</div>
-<div id="cache-stats" class="cache-stats">
-    <div>Cache: <span id="cache-size">-</span> MB</div>
+<div id="feature-stats" class="feature-stats">
     <div>Features: <span id="feature-count">0</span></div>
     <div>Last update: <span id="last-update">-</span></div>
 </div>
@@ -41,8 +40,6 @@
 <script>
     // Configuration
     const API_BASE_URL = 'http://localhost:8000/api/data/geojson/';
-    const CACHE_STATS_URL = 'http://localhost:8000/api/data/geojson/cache/stats';
-    const CACHE_CLEAR_URL = 'http://localhost:8000/api/data/geojson/cache/clear';
 
     // State management
     let isLoading = false;
@@ -152,18 +149,7 @@
         document.getElementById('loading').style.display = 'none';
     }
 
-    function updateCacheStats() {
-        fetch(CACHE_STATS_URL)
-            .then(response => response.json())
-            .then(data => {
-                if (data.success) {
-                    document.getElementById('cache-size').textContent = data.cache_size_mb;
-                }
-            })
-            .catch(error => {
-                console.error('Error fetching cache stats:', error);
-            });
-    }
+    // Cache functionality removed
 
     function updateFeatureCount() {
         const featureCount = vectorSource.getFeatures().length;
@@ -193,7 +179,7 @@
 
         try {
             const bboxString = getBoundingBoxString(extent);
-            const url = `${API_BASE_URL}?bbox=${bboxString}&zoom=${zoom}&use_cache=true`;
+            const url = `${API_BASE_URL}?bbox=${bboxString}&zoom=${zoom}`;
 
             const response = await fetch(url);
             const data = await response.json();
@@ -233,34 +219,12 @@
     map.getView().on('change:center', debouncedLoadData);
     map.getView().on('change:resolution', debouncedLoadData);
 
-    // Clear cache function (for debugging)
-    function clearCache() {
-        fetch(CACHE_CLEAR_URL, { method: 'POST' })
-            .then(response => response.json())
-            .then(data => {
-                if (data.success) {
-                    console.log('Cache cleared:', data.message);
-                    updateCacheStats();
-                }
-            })
-            .catch(error => {
-                console.error('Error clearing cache:', error);
-            });
-    }
-
-    // Add keyboard shortcut for cache clearing (Ctrl+Shift+C)
-    document.addEventListener('keydown', function(event) {
-        if (event.ctrlKey && event.shiftKey && event.key === 'C') {
-            clearCache();
-        }
-    });
+    // Cache functionality removed
 
     // Initial data load
     loadDataForCurrentView();
 
-    // Update cache stats periodically
-    updateCacheStats();
-    setInterval(updateCacheStats, 30000); // Update every 30 seconds
+    // Cache functionality removed
 </script>
 <style>
     .ol-attribution {

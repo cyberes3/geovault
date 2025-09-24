@@ -1,12 +1,11 @@
+# Core Django and database
 django==5.0.6
 psycopg2-binary==2.9.9
+
+# Geospatial data processing
 fastkml==0.12
 lxml==5.2.2
-kml2geojson==5.1.0
-dateparser==1.2.0
 geojson==3.1.0
+
+# Data validation
 pydantic==2.7.3
-sqlalchemy==2.0.30
-redis==5.0.5
-async_timeout==4.0.3
-pytz

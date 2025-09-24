@@ -110,39 +110,46 @@ def process_togeojson_features(features: list) -> Tuple[list, ImportLog]:
 
 
 def kml_to_geojson(kml_bytes) -> Tuple[dict, ImportLog]:
-    """Convert KML/KMZ to GeoJSON using togeojson library via Node.js."""
-    # Get the path to the togeojson converter
-    togeojson_path = Path(__file__).parent / 'togeojson'
-    converter_script = togeojson_path / 'index.js'
+    """Convert KML/KMZ to GeoJSON using pure Python fastkml library."""
+    import zipfile
+    from fastkml import kml
+    from fastkml.geometry import Point, LineString, Polygon, MultiGeometry
+    import geojson
     
-    if not converter_script.exists():
-        raise Exception(f"KML converter not found at {converter_script}. Run install.sh first.")
-    
-    # Create a temporary file for the KML/KMZ content
-    with tempfile.NamedTemporaryFile(mode='wb', suffix='.kml', delete=False) as temp_file:
-        if isinstance(kml_bytes, str):
-            temp_file.write(kml_bytes.encode('utf-8'))
-        else:
-            temp_file.write(kml_bytes)
-        temp_file_path = temp_file.name
+    import_log = ImportLog()
     
     try:
-        # Run the Node.js converter
-        result = subprocess.run(
-            ['node', str(converter_script), temp_file_path],
-            capture_output=True,
-            text=True,
-            cwd=str(togeojson_path)
-        )
+        # Handle KMZ files (ZIP archives)
+        if isinstance(kml_bytes, bytes) and kml_bytes.startswith(b'PK'):
+            # It's a KMZ file
+            with zipfile.ZipFile(io.BytesIO(kml_bytes)) as kmz:
+                kml_files = [f for f in kmz.namelist() if f.endswith('.kml')]
+                if not kml_files:
+                    raise Exception("No KML file found in KMZ archive")
+                
+                # Use the first KML file
+                kml_content = kmz.read(kml_files[0]).decode('utf-8')
+        else:
+            # It's a regular KML file
+            if isinstance(kml_bytes, str):
+                kml_content = kml_bytes
+            else:
+                kml_content = kml_bytes.decode('utf-8')
         
-        if result.returncode != 0:
-            raise Exception(f"KML conversion failed: {result.stderr}")
+        # Parse KML
+        k = kml.KML()
+        k.from_string(kml_content)
         
-        # Parse the GeoJSON output
-        geojson_data = json.loads(result.stdout)
+        features = []
+        
+        # Extract features from KML
+        for document in k.features():
+            for feature in document.features():
+                features.extend(_extract_features_from_kml_feature(feature))
         
         # Process the features
-        processed_features, import_log = process_togeojson_features(geojson_data['features'])
+        processed_features, processing_log = process_togeojson_features(features)
+        import_log.extend(processing_log)
         
         # Create the final GeoJSON structure
         final_geojson = {
@@ -152,9 +159,68 @@ def kml_to_geojson(kml_bytes) -> Tuple[dict, ImportLog]:
         
         return final_geojson, import_log
         
-    finally:
-        # Clean up the temporary file
-        Path(temp_file_path).unlink(missing_ok=True)
+    except Exception as e:
+        import_log.add_error(f"KML conversion failed: {str(e)}")
+        raise
+
+
+def _extract_features_from_kml_feature(kml_feature):
+    """Extract GeoJSON features from a KML feature."""
+    features = []
+    
+    if hasattr(kml_feature, 'geometry'):
+        geometry = kml_feature.geometry
+        
+        # Convert KML geometry to GeoJSON
+        if isinstance(geometry, Point):
+            geojson_geom = {
+                'type': 'Point',
+                'coordinates': [geometry.x, geometry.y, geometry.z or 0]
+            }
+        elif isinstance(geometry, LineString):
+            coords = [[coord.x, coord.y, coord.z or 0] for coord in geometry.coords]
+            geojson_geom = {
+                'type': 'LineString',
+                'coordinates': coords
+            }
+        elif isinstance(geometry, Polygon):
+            coords = []
+            for ring in geometry.exterior.coords:
+                coords.append([ring.x, ring.y, ring.z or 0])
+            geojson_geom = {
+                'type': 'Polygon',
+                'coordinates': [coords]
+            }
+        elif isinstance(geometry, MultiGeometry):
+            # Handle MultiGeometry by creating separate features
+            for geom in geometry.geoms:
+                sub_features = _extract_features_from_kml_feature(type('Feature', (), {'geometry': geom, 'name': kml_feature.name, 'description': getattr(kml_feature, 'description', '')})())
+                features.extend(sub_features)
+            return features
+        else:
+            return features  # Skip unsupported geometry types
+        
+        # Create properties from KML feature
+        properties = {}
+        if hasattr(kml_feature, 'name') and kml_feature.name:
+            properties['name'] = kml_feature.name
+        if hasattr(kml_feature, 'description') and kml_feature.description:
+            properties['description'] = kml_feature.description
+        
+        # Add styling information
+        if hasattr(kml_feature, 'styleUrl') and kml_feature.styleUrl:
+            properties['styleUrl'] = kml_feature.styleUrl
+        
+        # Create GeoJSON feature
+        feature = {
+            'type': 'Feature',
+            'geometry': geojson_geom,
+            'properties': properties
+        }
+        
+        features.append(feature)
+    
+    return features
 
 
 def load_geojson_type(data: dict) -> dict:
