@@ -10,6 +10,9 @@ from pathlib import Path
 from geo_lib.daemon.workers.workers_lib.importer.logging import ImportLog
 from geo_lib.types.geojson import GeojsonRawProperty
 
+# Import fastkml geometry classes at module level
+from fastkml.geometry import Point, LineString, Polygon, GeometryCollection, MultiPoint, MultiLineString, MultiPolygon
+
 
 def kmz_to_kml(kml_bytes: Union[str, bytes]) -> str:
     """Convert KMZ (zip) to KML string."""
@@ -170,7 +173,6 @@ def kml_to_geojson(kml_bytes) -> Tuple[dict, ImportLog]:
     """Convert KML/KMZ to GeoJSON using pure Python fastkml library."""
     import zipfile
     from fastkml import kml
-    from fastkml.geometry import Point, LineString, Polygon, MultiGeometry
     import geojson
     
     import_log = ImportLog()
@@ -195,14 +197,17 @@ def kml_to_geojson(kml_bytes) -> Tuple[dict, ImportLog]:
         
         # Parse KML
         k = kml.KML()
-        k.from_string(kml_content)
+        # Convert to bytes if there's an XML declaration, otherwise use string
+        if kml_content.strip().startswith('<?xml'):
+            k.from_string(kml_content.encode('utf-8'))
+        else:
+            k.from_string(kml_content)
         
         features = []
         
         # Extract features from KML
         for document in k.features():
-            for feature in document.features():
-                features.extend(_extract_features_from_kml_feature(feature))
+            features.extend(_extract_features_from_kml_feature(document))
         
         # Process the features
         processed_features, processing_log = process_togeojson_features(features)
@@ -217,7 +222,7 @@ def kml_to_geojson(kml_bytes) -> Tuple[dict, ImportLog]:
         return final_geojson, import_log
         
     except Exception as e:
-        import_log.add_error(f"KML conversion failed: {str(e)}")
+        import_log.add(f"KML conversion failed: {str(e)}")
         raise
 
 
@@ -225,32 +230,48 @@ def _extract_features_from_kml_feature(kml_feature):
     """Extract GeoJSON features from a KML feature."""
     features = []
     
-    if hasattr(kml_feature, 'geometry'):
+    # If this feature has sub-features (like a Folder), process them recursively
+    if hasattr(kml_feature, 'features'):
+        for sub_feature in kml_feature.features():
+            features.extend(_extract_features_from_kml_feature(sub_feature))
+    
+    # If this feature has geometry, process it
+    if hasattr(kml_feature, 'geometry') and kml_feature.geometry:
         geometry = kml_feature.geometry
         
         # Convert KML geometry to GeoJSON
         if isinstance(geometry, Point):
+            # Point coordinates are accessed as a tuple (x, y, z)
+            coords = geometry.coords[0] if geometry.coords else (0, 0, 0)
             geojson_geom = {
                 'type': 'Point',
-                'coordinates': [geometry.x, geometry.y, geometry.z or 0]
+                'coordinates': [coords[0], coords[1], coords[2] if len(coords) > 2 else 0]
             }
         elif isinstance(geometry, LineString):
-            coords = [[coord.x, coord.y, coord.z or 0] for coord in geometry.coords]
+            # LineString coordinates are accessed as a list of tuples
+            coords = [[coord[0], coord[1], coord[2] if len(coord) > 2 else 0] for coord in geometry.coords]
             geojson_geom = {
                 'type': 'LineString',
                 'coordinates': coords
             }
         elif isinstance(geometry, Polygon):
+            # Polygon coordinates are accessed through exterior and interior rings
             coords = []
             for ring in geometry.exterior.coords:
-                coords.append([ring.x, ring.y, ring.z or 0])
+                coords.append([ring[0], ring[1], ring[2] if len(ring) > 2 else 0])
             geojson_geom = {
                 'type': 'Polygon',
                 'coordinates': [coords]
             }
-        elif isinstance(geometry, MultiGeometry):
-            # Handle MultiGeometry by creating separate features
-            for geom in geometry.geoms:
+        elif isinstance(geometry, (GeometryCollection, MultiPoint, MultiLineString, MultiPolygon)):
+            # Handle multi-geometry types by creating separate features
+            if isinstance(geometry, GeometryCollection):
+                geoms = geometry.geoms
+            else:
+                # MultiPoint, MultiLineString, MultiPolygon have different attribute names
+                geoms = geometry.geoms if hasattr(geometry, 'geoms') else [geometry]
+            
+            for geom in geoms:
                 sub_features = _extract_features_from_kml_feature(type('Feature', (), {'geometry': geom, 'name': kml_feature.name, 'description': getattr(kml_feature, 'description', '')})())
                 features.extend(sub_features)
             return features
