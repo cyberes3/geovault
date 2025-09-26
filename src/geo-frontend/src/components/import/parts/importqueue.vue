@@ -146,6 +146,7 @@ export default {
     return {
       internalLoading: true,
       hasInitiallyLoaded: false,
+      isRefreshing: false,
     }
   },
   methods: {
@@ -161,12 +162,25 @@ export default {
       await this.fetchQueueList()
     },
     async fetchQueueList() {
+      // Prevent overlapping requests
+      if (this.isRefreshing) {
+        return
+      }
+      
+      this.isRefreshing = true
       this.internalLoading = true
-      const response = await axios.get(IMPORT_QUEUE_LIST_URL)
-      const ourImportQueue = response.data.data.map((item) => new ImportQueueItem(item))
-      this.$store.commit('setImportQueue', ourImportQueue)
-      this.internalLoading = false
-      this.hasInitiallyLoaded = true
+      
+      try {
+        const response = await axios.get(IMPORT_QUEUE_LIST_URL)
+        const ourImportQueue = response.data.data.map((item) => new ImportQueueItem(item))
+        this.$store.commit('setImportQueue', ourImportQueue)
+        this.hasInitiallyLoaded = true
+      } catch (error) {
+        console.error('Error fetching queue list:', error)
+      } finally {
+        this.internalLoading = false
+        this.isRefreshing = false
+      }
     },
     async deleteItem(item, index) {
       if (window.confirm(`Delete "${item.original_filename}" (#${item.id})`)) {
