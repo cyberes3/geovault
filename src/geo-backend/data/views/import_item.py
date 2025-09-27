@@ -12,11 +12,11 @@ from django.views.decorators.csrf import csrf_protect
 from django.views.decorators.http import require_http_methods
 
 from data.models import ImportQueue, FeatureStore, GeoLog
-from geo_lib.daemon.database.locking import DBLockManager
-from geo_lib.daemon.workers.workers_lib.importer.kml import normalize_kml_for_comparison
-from geo_lib.daemon.workers.workers_lib.importer.tagging import generate_auto_tags
+from geo_lib.processing.kml.kml import normalize_kml_for_comparison, kml_to_geojson
+from geo_lib.processing.tagging import generate_auto_tags
+from geo_lib.types.feature import geojson_to_geofeature
 from geo_lib.security.file_validation import SecureFileValidator, secure_kmz_to_kml, FileValidationError, SecurityError
-from geo_lib.security.file_validation import sanitize_kml_content
+from geo_lib.security.file_validation import validate_kml_content
 from geo_lib.types.feature import PointFeature, PolygonFeature, LineStringFeature
 from geo_lib.website.auth import login_required_401
 
@@ -73,13 +73,15 @@ def upload_item(request):
                     # It's a KMZ file - use secure KMZ to KML conversion
                     kml_doc = secure_kmz_to_kml(file_data)
                 else:
-                    # It's a KML file - decode and sanitize directly
+                    # It's a KML file - decode and validate directly
                     if isinstance(file_data, bytes):
                         kml_content = file_data.decode('utf-8')
                     else:
                         kml_content = file_data
 
-                    kml_doc = sanitize_kml_content(kml_content)
+                    # Validate KML content (don't modify it)
+                    validate_kml_content(kml_content)
+                    kml_doc = kml_content
 
             except (SecurityError, FileValidationError) as e:
                 logger.error(f"Secure file processing failed for {file_name}: {str(e)}")
@@ -169,15 +171,42 @@ def upload_item(request):
 
             # If we get here, there are no existing records with this hash, so create a new one
             try:
-                import_queue = ImportQueue.objects.create(
-                    raw_kml=kml_doc,
-                    raw_kml_hash=kml_hash,
-                    original_filename=file_name,
-                    user=request.user
-                )
-                import_queue.save()
-                msg = 'upload successful'
-                return JsonResponse({'success': True, 'msg': msg, 'id': import_queue.id}, status=200)
+                # Process the KML/KMZ file synchronously
+                try:
+                    geojson_data, kml_conv_messages = kml_to_geojson(kml_doc)
+                    geo_features, typing_messages = geojson_to_geofeature(geojson_data)
+                    
+                    # Convert features to JSON format
+                    features_json = [json.loads(x.model_dump_json()) for x in geo_features]
+                    
+                    # Create import queue item with processed data
+                    import_queue = ImportQueue.objects.create(
+                        raw_kml=kml_doc,
+                        raw_kml_hash=kml_hash,
+                        original_filename=file_name,
+                        user=request.user,
+                        geofeatures=features_json
+                    )
+                    
+                    msg = f'upload and processing successful - {len(features_json)} features processed'
+                    return JsonResponse({'success': True, 'msg': msg, 'id': import_queue.id}, status=200)
+                    
+                except Exception as processing_error:
+                    # If processing fails, still create the queue item but without processed data
+                    # This allows the user to see the file was uploaded but processing failed
+                    logger.error(f"Processing failed for {file_name}: {str(processing_error)}")
+                    
+                    import_queue = ImportQueue.objects.create(
+                        raw_kml=kml_doc,
+                        raw_kml_hash=kml_hash,
+                        original_filename=file_name,
+                        user=request.user,
+                        geofeatures=[{"error": "processing_failed", "message": str(processing_error)}]
+                    )
+                    
+                    msg = f'upload successful but processing failed: {str(processing_error)}'
+                    return JsonResponse({'success': True, 'msg': msg, 'id': import_queue.id}, status=200)
+                    
             except IntegrityError:
                 error_msg = f'An unexpected error occurred while creating the import item for file "{file_name}"'
                 # Raise exception in server process
@@ -199,7 +228,6 @@ def upload_item(request):
 def fetch_import_queue(request, item_id):
     if item_id is None:
         return JsonResponse({'success': False, 'msg': 'ID not provided', 'code': 400}, status=400)
-    lock_manager = DBLockManager()
     try:
         item = ImportQueue.objects.get(id=item_id)
 
@@ -209,10 +237,8 @@ def fetch_import_queue(request, item_id):
         if item.imported:
             return JsonResponse({'success': True, 'processing': False, 'geofeatures': None, 'log': None, 'msg': None, 'original_filename': None, 'imported': item.imported}, status=200)
 
-        logs = _get_logs_by_log_id(str(item.log_id))
-        if not lock_manager.is_locked('data_importqueue', item.id) and (len(item.geofeatures) or len(logs)):
-            return JsonResponse({'success': True, 'processing': False, 'geofeatures': item.geofeatures, 'log': logs, 'msg': None, 'original_filename': item.original_filename, 'imported': item.imported}, status=200)
-        return JsonResponse({'success': True, 'processing': True, 'geofeatures': [], 'log': [], 'msg': 'uploaded data still processing', 'imported': item.imported}, status=200)
+        # Since processing is now synchronous, items are always ready
+        return JsonResponse({'success': True, 'processing': False, 'geofeatures': item.geofeatures, 'log': [], 'msg': None, 'original_filename': item.original_filename, 'imported': item.imported}, status=200)
     except ImportQueue.DoesNotExist:
         return JsonResponse({'success': False, 'msg': 'ID does not exist', 'code': 404}, status=400)
 
@@ -221,17 +247,19 @@ def fetch_import_queue(request, item_id):
 def fetch_import_waiting(request):
     user_items = ImportQueue.objects.filter(user=request.user, imported=False).values('id', 'geofeatures', 'original_filename', 'raw_kml_hash', 'log_id', 'timestamp', 'imported')
     data = json.loads(json.dumps(list(user_items), cls=DjangoJSONEncoder))
-    lock_manager = DBLockManager()
     for i, item in enumerate(data):
         count = len(item['geofeatures'])
-        logs = _get_logs_by_log_id(str(item['log_id']))
-        item['processing'] = not (len(item['geofeatures']) and len(logs)) and lock_manager.is_locked('data_importqueue', item['id'])
+        # Since processing is now synchronous, items are never processing
+        item['processing'] = False
 
-        if item['processing'] or (not item['processing'] and count == 0):
-            # Show a dummy value since the true value isn't know yet as it's still processing.
-            item['feature_count'] = -1
+        # Check if there's an error in the geofeatures
+        if count == 1 and item['geofeatures'] and isinstance(item['geofeatures'][0], dict) and 'error' in item['geofeatures'][0]:
+            # This is an error case from failed processing
+            item['feature_count'] = 0
+            item['processing_failed'] = True
         else:
             item['feature_count'] = count
+            item['processing_failed'] = False
 
         # Remove keys from response as they're not needed by frontend.
         del item['geofeatures']
@@ -272,6 +300,62 @@ def delete_import_item(request, id):
         queue.delete()
         return JsonResponse({'success': True})
     return HttpResponse(status=405)
+
+
+@login_required_401
+@csrf_protect
+@require_http_methods(["DELETE"])
+def bulk_delete_import_items(request):
+    """Bulk delete multiple import queue items"""
+    try:
+        data = json.loads(request.body)
+        if not isinstance(data, dict) or 'ids' not in data:
+            return JsonResponse({'success': False, 'msg': 'Invalid data format. Expected {"ids": [1, 2, 3]}', 'code': 400}, status=400)
+        
+        item_ids = data['ids']
+        if not isinstance(item_ids, list):
+            return JsonResponse({'success': False, 'msg': 'ids must be a list', 'code': 400}, status=400)
+        
+        if not item_ids:
+            return JsonResponse({'success': False, 'msg': 'No items to delete', 'code': 400}, status=400)
+        
+        # Validate that all IDs are integers
+        try:
+            item_ids = [int(id) for id in item_ids]
+        except (ValueError, TypeError):
+            return JsonResponse({'success': False, 'msg': 'All IDs must be integers', 'code': 400}, status=400)
+        
+        # Get all items that belong to the current user
+        items = ImportQueue.objects.filter(id__in=item_ids, user=request.user)
+        found_ids = list(items.values_list('id', flat=True))
+        
+        # Check if any requested IDs were not found or don't belong to the user
+        missing_ids = set(item_ids) - set(found_ids)
+        if missing_ids:
+            return JsonResponse({
+                'success': False, 
+                'msg': f'Items not found or not authorized: {list(missing_ids)}', 
+                'code': 404
+            }, status=400)
+        
+        # Delete logs associated with each import item before deleting the items
+        for item in items:
+            _delete_logs_by_log_id(str(item.log_id))
+        
+        # Delete the items
+        deleted_count, _ = items.delete()
+        
+        return JsonResponse({
+            'success': True, 
+            'msg': f'Successfully deleted {deleted_count} item{"s" if deleted_count != 1 else ""}',
+            'deleted_count': deleted_count
+        })
+        
+    except json.JSONDecodeError:
+        return JsonResponse({'success': False, 'msg': 'Invalid JSON data', 'code': 400}, status=400)
+    except Exception as e:
+        logger.error(f'Bulk delete error: {str(e)}')
+        return JsonResponse({'success': False, 'msg': f'Internal server error: {str(e)}', 'code': 500}, status=500)
 
 
 @login_required_401

@@ -525,7 +525,6 @@ export default {
   },
   beforeRouteEnter(to, from, next) {
     const now = new Date().toISOString()
-    let ready = false
     next(async vm => {
       if (vm.currentId !== vm.id) {
         vm.msg = ""
@@ -536,66 +535,61 @@ export default {
         vm.workerLog = []
         vm.lockButtons = false
         vm.isImported = false
-        while (!ready) {
-          try {
-            const response = await axios.get('/api/data/item/import/get/' + vm.id)
-            if (!response.data.success) {
-              vm.msg = capitalizeFirstLetter(response.data.msg).trim(".") + "."
-            } else {
-              vm.currentId = vm.id
-              if (Object.keys(response.data).length > 0) {
-                vm.originalFilename = response.data.original_filename
-                vm.isImported = response.data.imported || false
+        
+        try {
+          const response = await axios.get('/api/data/item/import/get/' + vm.id)
+          if (!response.data.success) {
+            vm.msg = capitalizeFirstLetter(response.data.msg).trim(".") + "."
+          } else {
+            vm.currentId = vm.id
+            if (Object.keys(response.data).length > 0) {
+              vm.originalFilename = response.data.original_filename
+              vm.isImported = response.data.imported || false
 
-                // If the item is already imported, redirect to import page
-                if (vm.isImported) {
-                  // Remove the beforeunload handler before redirecting
-                  if (vm.beforeUnloadHandler) {
-                    window.removeEventListener('beforeunload', vm.beforeUnloadHandler);
-                  }
-                  vm.isRedirectingDueToInvalidId = true;
-                  vm.$router.replace('/import');
-                  return;
+              // If the item is already imported, redirect to import page
+              if (vm.isImported) {
+                // Remove the beforeunload handler before redirecting
+                if (vm.beforeUnloadHandler) {
+                  window.removeEventListener('beforeunload', vm.beforeUnloadHandler);
                 }
-
-                // Check if this is an error response (unprocessable file)
-                if (response.data.geofeatures.length > 0 && response.data.geofeatures[0].error) {
-                  // This is an unprocessable file, show the error message
-                  const errorItem = response.data.geofeatures[0];
-                  vm.msg = `File processing failed: ${errorItem.message}`;
-                  vm.workerLog = [{timestamp: now, msg: errorItem.message}];
-                } else {
-                  // Normal processing - parse the geofeatures
-                  response.data.geofeatures.forEach((item) => {
-                    vm.itemsForUser.push(vm.parseGeoJson(item))
-                  })
-                  vm.originalItems = JSON.parse(JSON.stringify(vm.itemsForUser))
-                }
+                vm.isRedirectingDueToInvalidId = true;
+                vm.$router.replace('/import');
+                return;
               }
-              if (!response.data.processing) {
-                vm.workerLog = vm.workerLog.concat(response.data.log)
-                if (response.data.msg != null && response.data.msg.length > 0) {
-                  vm.workerLog.push({timestamp: now, msg: response.data.msg})
-                }
-                ready = true
+
+              // Check if this is an error response (unprocessable file)
+              if (response.data.geofeatures.length > 0 && response.data.geofeatures[0].error) {
+                // This is an unprocessable file, show a simple error message
+                const errorItem = response.data.geofeatures[0];
+                vm.msg = "File processing failed. Please check the processing logs below for details.";
+                vm.workerLog = [{timestamp: now, msg: errorItem.message}];
               } else {
-                vm.workerLog = [{timestamp: now, msg: "uploaded data still processing"}]
-                await new Promise(r => setTimeout(r, 1000));
+                // Normal processing - parse the geofeatures
+                response.data.geofeatures.forEach((item) => {
+                  vm.itemsForUser.push(vm.parseGeoJson(item))
+                })
+                vm.originalItems = JSON.parse(JSON.stringify(vm.itemsForUser))
               }
             }
-          } catch (error) {
-            if (error.response && error.response.data && error.response.data.code === 404) {
-              // Import ID does not exist.
-              // Remove the beforeunload handler before redirecting
-              if (vm.beforeUnloadHandler) {
-                window.removeEventListener('beforeunload', vm.beforeUnloadHandler);
-              }
-              vm.isRedirectingDueToInvalidId = true;
-              vm.$router.replace('/import');
-              return;
+            
+            // Since processing is now synchronous, we don't need to check processing status
+            vm.workerLog = vm.workerLog.concat(response.data.log || [])
+            if (response.data.msg != null && response.data.msg.length > 0) {
+              vm.workerLog.push({timestamp: now, msg: response.data.msg})
             }
-            vm.msg = capitalizeFirstLetter(error.message).trim(".") + "."
           }
+        } catch (error) {
+          if (error.response && error.response.data && error.response.data.code === 404) {
+            // Import ID does not exist.
+            // Remove the beforeunload handler before redirecting
+            if (vm.beforeUnloadHandler) {
+              window.removeEventListener('beforeunload', vm.beforeUnloadHandler);
+            }
+            vm.isRedirectingDueToInvalidId = true;
+            vm.$router.replace('/import');
+            return;
+          }
+          vm.msg = capitalizeFirstLetter(error.message).trim(".") + "."
         }
       }
     })

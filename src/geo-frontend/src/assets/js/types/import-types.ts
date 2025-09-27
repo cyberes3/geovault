@@ -8,6 +8,7 @@ export class ImportQueueItem {
     processing: boolean;
     feature_count: number;
     imported: boolean;
+    processing_failed: boolean;
 
     constructor(data: any) {
         this.id = data.id;
@@ -19,5 +20,6 @@ export class ImportQueueItem {
         this.processing = data.processing;
         this.feature_count = data.feature_count;
         this.imported = data.imported || false;
+        this.processing_failed = data.processing_failed || false;
     }
 }

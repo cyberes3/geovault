@@ -8,7 +8,7 @@ from typing import Tuple
 
 import markdownify
 
-from geo_lib.daemon.workers.workers_lib.importer.logging import ImportLog
+from geo_lib.processing.logging import ImportLog
 from geo_lib.types.geojson import GeojsonRawProperty
 
 
@@ -201,7 +201,9 @@ def kml_to_geojson(kml_bytes) -> Tuple[dict, ImportLog]:
     try:
         # Get the path to the togeojson converter
         current_dir = os.path.dirname(os.path.abspath(__file__))
-        togeojson_path = os.path.join(current_dir, 'togeojson', 'index.js')
+        # togeojson is in the parent processing directory, not in the kml subdirectory
+        processing_dir = os.path.dirname(current_dir)
+        togeojson_path = os.path.join(processing_dir, 'togeojson', 'index.js')
 
         # Handle KMZ files (ZIP archives)
         if isinstance(kml_bytes, bytes) and kml_bytes.startswith(b'PK'):

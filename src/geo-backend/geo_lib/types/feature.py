@@ -6,7 +6,7 @@ from typing import Union
 
 from pydantic import BaseModel, Field, ConfigDict
 
-from geo_lib.daemon.workers.workers_lib.importer.logging import ImportLog
+from geo_lib.processing.logging import ImportLog
 
 
 class GeoFeatureType(str, Enum):

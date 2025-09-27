@@ -8,7 +8,7 @@ import sys
 
 sys.path.append(os.path.join(os.path.dirname(__file__), '..'))
 
-from geo_lib.daemon.workers.workers_lib.importer.kml import kmz_to_kml, normalize_kml_for_comparison
+from geo_lib.processing.kml.kml import kmz_to_kml, normalize_kml_for_comparison
 import hashlib
 
 

@@ -4,7 +4,7 @@ from data.models import ImportQueue
 
 
 class Command(BaseCommand):
-    help = 'Fix unparsable files that still have empty geofeatures to show they are finished processing'
+    help = 'Fix unparsable files that still have empty geofeatures to show they failed processing'
 
     def handle(self, *args, **options):
         # Find unparsable files that still have empty geofeatures

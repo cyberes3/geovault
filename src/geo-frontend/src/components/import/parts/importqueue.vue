@@ -2,20 +2,36 @@
   <div class="overflow-hidden">
     <!-- Bulk Import Controls -->
     <div v-if="filteredImportQueue.length > 0 && !combinedLoading" class="mb-4 flex items-center justify-between">
-      <button
-        @click="bulkImport"
-        :disabled="selectedItems.size === 0 || isBulkImporting"
-        class="inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md text-white bg-green-600 hover:bg-green-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-green-500 transition-colors duration-200 disabled:opacity-50 disabled:cursor-not-allowed"
-      >
-        <svg v-if="isBulkImporting" class="animate-spin -ml-1 mr-2 h-4 w-4" fill="none" viewBox="0 0 24 24">
-          <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
-          <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
-        </svg>
-        <svg v-else class="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12"></path>
-        </svg>
-        {{ isBulkImporting ? 'Importing...' : `Import ${selectedItems.size} Item${selectedItems.size === 1 ? '' : 's'}` }}
-      </button>
+      <div class="flex items-center space-x-3">
+        <button
+          @click="bulkImport"
+          :disabled="selectedItems.size === 0 || isBulkImporting"
+          class="inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md text-white bg-green-600 hover:bg-green-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-green-500 transition-colors duration-200 disabled:opacity-50 disabled:cursor-not-allowed"
+        >
+          <svg v-if="isBulkImporting" class="animate-spin -ml-1 mr-2 h-4 w-4" fill="none" viewBox="0 0 24 24">
+            <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+            <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+          </svg>
+          <svg v-else class="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12"></path>
+          </svg>
+          {{ isBulkImporting ? 'Importing...' : `Import ${selectedItems.size} Item${selectedItems.size === 1 ? '' : 's'}` }}
+        </button>
+        <button
+          @click="bulkDelete"
+          :disabled="selectedItems.size === 0 || isBulkDeleting"
+          class="inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md text-white bg-red-600 hover:bg-red-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-red-500 transition-colors duration-200 disabled:opacity-50 disabled:cursor-not-allowed"
+        >
+          <svg v-if="isBulkDeleting" class="animate-spin -ml-1 mr-2 h-4 w-4" fill="none" viewBox="0 0 24 24">
+            <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+            <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+          </svg>
+          <svg v-else class="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"></path>
+          </svg>
+          {{ isBulkDeleting ? 'Deleting...' : `Delete ${selectedItems.size} Item${selectedItems.size === 1 ? '' : 's'}` }}
+        </button>
+      </div>
     </div>
 
     <table class="min-w-full divide-y divide-gray-200">
@@ -127,6 +143,12 @@
               </svg>
               Imported
             </span>
+            <span v-else-if="item.processing_failed" class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-red-100 text-red-800">
+              <svg class="w-3 h-3 mr-1" fill="currentColor" viewBox="0 0 20 20">
+                <path fill-rule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7 4a1 1 0 11-2 0 1 1 0 012 0zm-1-9a1 1 0 00-1 1v4a1 1 0 102 0V6a1 1 0 00-1-1z" clip-rule="evenodd"></path>
+              </svg>
+              Processing Failed
+            </span>
             <span v-else-if="item.processing === true || (item.processing === false && item.feature_count === -1)" class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-yellow-100 text-yellow-800">
               <svg class="animate-spin -ml-1 mr-1 h-3 w-3" fill="none" viewBox="0 0 24 24">
                 <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
@@ -162,7 +184,7 @@
 import {mapState} from "vuex";
 import {authMixin} from "@/assets/js/authMixin.js";
 import axios from "axios";
-import {IMPORT_QUEUE_LIST_URL} from "@/assets/js/import/url.js";
+import {IMPORT_QUEUE_LIST_URL, IMPORT_BULK_DELETE_URL} from "@/assets/js/import/url.js";
 import {ImportQueueItem} from "@/assets/js/types/import-types";
 import {getCookie} from "@/assets/js/auth.js";
 
@@ -201,6 +223,7 @@ export default {
       deletedItemTimeouts: new Map(), // Track how many refresh cycles each deleted item has been gone
       selectedItems: new Set(), // Track selected items for bulk import
       isBulkImporting: false, // Track bulk import state
+      isBulkDeleting: false, // Track bulk delete state
     }
   },
   watch: {
@@ -332,7 +355,7 @@ export default {
     },
     selectAll() {
       this.filteredImportQueue.forEach(item => {
-        // Only select items that are ready for import (not imported, not processing)
+        // Select items that are not imported and not currently processing
         if (!item.imported && !(item.processing === true || (item.processing === false && item.feature_count === -1))) {
           this.selectedItems.add(item.id);
         }
@@ -348,13 +371,13 @@ export default {
         return;
       }
 
-      // Double-check that we're not trying to import processing or already imported items
+      // Double-check that we're not trying to import processing, already imported, or failed items
       const validItems = [];
       const invalidItems = [];
 
       this.selectedItems.forEach(itemId => {
         const item = this.filteredImportQueue.find(i => i.id === itemId);
-        if (item && !item.imported && !(item.processing === true || (item.processing === false && item.feature_count === -1))) {
+        if (item && !item.imported && !item.processing_failed && !(item.processing === true || (item.processing === false && item.feature_count === -1))) {
           validItems.push(itemId);
         } else {
           invalidItems.push(itemId);
@@ -367,7 +390,7 @@ export default {
       });
 
       if (this.selectedItems.size === 0) {
-        alert('No valid items selected for import. Processing or already imported items cannot be bulk imported.');
+        alert('No valid items selected for import. Processing, already imported, or failed items cannot be bulk imported.');
         this.updateSelectAllCheckbox();
         return;
       }
@@ -423,6 +446,76 @@ export default {
         alert(`Bulk import failed: ${error.message}`);
       } finally {
         this.isBulkImporting = false;
+      }
+    },
+    async bulkDelete() {
+      if (this.selectedItems.size === 0) {
+        return;
+      }
+
+      // Check for items that cannot be deleted (imported items)
+      const invalidItems = [];
+      this.selectedItems.forEach(itemId => {
+        const item = this.filteredImportQueue.find(i => i.id === itemId);
+        if (item && item.imported) {
+          invalidItems.push(itemId);
+        }
+      });
+
+      // Remove invalid items from selection
+      invalidItems.forEach(itemId => {
+        this.selectedItems.delete(itemId);
+      });
+
+      if (this.selectedItems.size === 0) {
+        alert('No valid items selected for deletion. Imported items cannot be deleted.');
+        this.updateSelectAllCheckbox();
+        return;
+      }
+
+      const selectedCount = this.selectedItems.size;
+      const confirmMessage = `Are you sure you want to delete ${selectedCount} item${selectedCount === 1 ? '' : 's'}? This action cannot be undone.`;
+
+      if (!window.confirm(confirmMessage)) {
+        return;
+      }
+
+      this.isBulkDeleting = true;
+      const csrftoken = getCookie('csrftoken');
+      const itemIds = Array.from(this.selectedItems);
+
+      try {
+        const response = await axios.delete(IMPORT_BULK_DELETE_URL, {
+          data: { ids: itemIds },
+          headers: {
+            'X-CSRFToken': csrftoken
+          }
+        });
+
+        if (response.data.success) {
+          // Add all deleted items to the deletedItems set to prevent flicker
+          itemIds.forEach(itemId => {
+            this.deletedItems.add(itemId);
+            this.deletedItemTimeouts.set(itemId, 0);
+          });
+
+          // Clear selection
+          this.clearSelection();
+
+          // Show success message
+          alert(`Successfully deleted ${response.data.deleted_count} item${response.data.deleted_count === 1 ? '' : 's'}!`);
+
+          // Refresh the queue
+          this.$store.dispatch('refreshImportQueue');
+        } else {
+          throw new Error(response.data.msg || 'Unknown error occurred');
+        }
+
+      } catch (error) {
+        console.error('Bulk delete error:', error);
+        alert(`Bulk delete failed: ${error.response?.data?.msg || error.message}`);
+      } finally {
+        this.isBulkDeleting = false;
       }
     },
   },

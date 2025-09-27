@@ -73,7 +73,12 @@ class SecureFileValidator:
     # Dangerous XML elements/attributes to remove
     DANGEROUS_ELEMENTS = [
         'script', 'iframe', 'object', 'embed', 'applet', 'form', 'input',
-        'button', 'link', 'meta'
+        'button', 'meta'
+    ]
+    
+    # HTML-specific dangerous elements (not KML elements)
+    HTML_DANGEROUS_ELEMENTS = [
+        'link'  # HTML link elements, but KML link elements are allowed
     ]
     
     # KML-specific elements that are allowed (including style and metadata elements)
@@ -325,54 +330,61 @@ class SecureFileValidator:
         return has_required
 
 
-def sanitize_kml_content(kml_content: str) -> str:
+def validate_kml_content(kml_content: str) -> bool:
     """
-    Sanitize KML content by removing dangerous elements and attributes.
+    Validate KML content by checking for dangerous elements and attributes.
+    Does NOT modify the content - only validates and rejects if dangerous.
     
     Args:
         kml_content: Raw KML content string
         
     Returns:
-        Sanitized KML content
+        True if content is safe, False if dangerous elements found
+        
+    Raises:
+        SecurityError: If dangerous content is found
     """
     try:
         # Parse with secure settings
         validator = SecureFileValidator()
         root = validator._secure_xml_parse(kml_content)
 
-        # Build parent mapping for element removal
-        parent_map = {c: p for p in root.iter() for c in p}
-
-        # Remove dangerous elements
-        elements_to_remove = []
+        # Check for dangerous elements
         for elem in root.iter():
-            tag_name = elem.tag.lower()
-            if any(dangerous in tag_name for dangerous in validator.DANGEROUS_ELEMENTS):
-                elements_to_remove.append(elem)
+            # Only check elements in the default namespace (no namespace prefix)
+            # Namespaced elements like {http://www.w3.org/2005/atom}link are generally safe
+            if '}' not in elem.tag:
+                local_name = elem.tag.lower()
+                
+                # Check for dangerous elements only in default namespace
+                if local_name in [dangerous.lower() for dangerous in validator.DANGEROUS_ELEMENTS]:
+                    raise SecurityError(f"Dangerous element found: {local_name}")
+                
+                # Check for HTML-specific dangerous elements in default namespace
+                if local_name in [dangerous.lower() for dangerous in validator.HTML_DANGEROUS_ELEMENTS]:
+                    raise SecurityError(f"HTML dangerous element found: {local_name}")
 
-        # Remove elements (doing this after iteration to avoid modifying during iteration)
-        for elem in elements_to_remove:
-            parent = parent_map.get(elem)
-            if parent is not None:
-                parent.remove(elem)
-
-        # Remove dangerous attributes
+        # Check for dangerous attributes
         for elem in root.iter():
-            attrs_to_remove = []
             for attr_name in elem.attrib:
-                if any(dangerous in attr_name.lower() for dangerous in validator.DANGEROUS_ATTRIBUTES):
-                    attrs_to_remove.append(attr_name)
+                # Extract local name from namespaced attributes
+                if '}' in attr_name:
+                    local_attr_name = attr_name.split('}')[-1].lower()
+                else:
+                    local_attr_name = attr_name.lower()
+                
+                # Only check for exact matches of dangerous attributes
+                if local_attr_name in [dangerous.lower() for dangerous in validator.DANGEROUS_ATTRIBUTES]:
+                    raise SecurityError(f"Dangerous attribute found: {local_attr_name}")
 
-            for attr in attrs_to_remove:
-                del elem.attrib[attr]
+        return True
 
-        # Convert back to string
-        return ET.tostring(root, encoding='unicode')
-
+    except SecurityError:
+        # Re-raise security errors
+        raise
     except Exception as e:
-        logger.error(f"KML sanitization failed: {traceback.format_exc()}")
-        # Return original content if sanitization fails
-        return kml_content
+        logger.error(f"KML validation failed: {traceback.format_exc()}")
+        raise SecurityError(f"Invalid KML content: {str(e)}")
 
 
 def secure_kmz_to_kml(kmz_data: Union[str, bytes]) -> str:
@@ -410,10 +422,10 @@ def secure_kmz_to_kml(kmz_data: Union[str, bytes]) -> str:
             # Read and decode KML content
             kml_content = kmz.read(kml_file).decode('utf-8')
 
-            # Sanitize the content
-            sanitized_content = sanitize_kml_content(kml_content)
+            # Validate the content (don't modify it)
+            validate_kml_content(kml_content)
 
-            return sanitized_content
+            return kml_content
 
     except zipfile.BadZipFile:
         raise SecurityError("Invalid ZIP file structure")
