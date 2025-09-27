@@ -307,7 +307,21 @@ def _extract_features_from_kml_feature(kml_feature):
                 # MultiPoint, MultiLineString, MultiPolygon have different attribute names
                 geoms = geometry.geoms if hasattr(geometry, 'geoms') else [geometry]
             
-            for geom in geoms:
+            # Prioritize certain geometry types to avoid duplicates
+            # For polygons, prefer Polygon over Point (which is usually just for labeling)
+            polygon_geoms = [g for g in geoms if isinstance(g, Polygon)]
+            linestring_geoms = [g for g in geoms if isinstance(g, LineString)]
+            point_geoms = [g for g in geoms if isinstance(g, Point)]
+            
+            # Use the most appropriate geometry type
+            if polygon_geoms:
+                geoms_to_process = polygon_geoms
+            elif linestring_geoms:
+                geoms_to_process = linestring_geoms
+            else:
+                geoms_to_process = point_geoms
+            
+            for geom in geoms_to_process:
                 sub_features = _extract_features_from_kml_feature(type('Feature', (), {'geometry': geom, 'name': kml_feature.name, 'description': getattr(kml_feature, 'description', '')})())
                 features.extend(sub_features)
             return features

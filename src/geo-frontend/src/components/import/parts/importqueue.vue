@@ -189,18 +189,24 @@ export default {
     async deleteItem(item, index) {
       if (window.confirm(`Delete "${item.original_filename}" (#${item.id})`)) {
         try {
+          // Remove item from local state immediately for better UX
           this.importQueue.splice(index, 1);
+          
           const response = await axios.delete('/api/data/item/import/delete/' + item.id, {
             headers: {
               'X-CSRFToken': getCookie('csrftoken')
             }
           });
+          
           if (!response.data.success) {
             throw new Error("server reported failure");
           }
-          await this.refreshData(); // Refresh the data after deleting an item
+          
+          // No need to refresh since we already removed the item from local state
+          // The auto-refresh will eventually sync with the server state
         } catch (error) {
           alert(`Failed to delete ${item.id}: ${error.message}`);
+          // Restore the item to the local state if deletion failed
           this.importQueue.splice(index, 0, item);
         }
       }
