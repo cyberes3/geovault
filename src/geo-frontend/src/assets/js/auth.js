@@ -1,8 +1,9 @@
 class UserStatus {
-    constructor(authorized, username, id) {
+    constructor(authorized, username, id, featureCount = 0) {
         this.authorized = authorized;
         this.username = username;
         this.id = id;
+        this.featureCount = featureCount;
     }
 }
 
@@ -13,7 +14,7 @@ export async function getUserInfo() {
             throw new Error(`HTTP error! status: ${response.status}`)
         }
         const userStatusData = await response.json()
-        return new UserStatus(userStatusData.authorized, userStatusData.username, userStatusData.id)
+        return new UserStatus(userStatusData.authorized, userStatusData.username, userStatusData.id, userStatusData.featureCount)
     } catch (error) {
         console.error(error)
         return null
