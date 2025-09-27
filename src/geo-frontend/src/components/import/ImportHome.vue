@@ -73,7 +73,7 @@
                 {{ item.timestamp }}
               </td>
             </tr>
-            <tr v-for="n in 3" v-if="historyIsLoading" :key="`history-loading-${n}`" class="animate-pulse">
+            <tr v-for="n in 3" v-if="combinedHistoryLoading" :key="`history-loading-${n}`" class="animate-pulse">
               <td class="px-6 py-4 whitespace-nowrap">
                 <div class="flex items-center">
                   <div class="w-8 h-8 bg-gray-200 rounded-lg"></div>
@@ -84,7 +84,7 @@
                 <div class="w-24 h-4 bg-gray-200 rounded mx-auto"></div>
               </td>
             </tr>
-            <tr v-if="!historyIsLoading && history.length === 0">
+            <tr v-if="!combinedHistoryLoading && history.length === 0">
               <td colspan="3" class="px-6 py-12 text-center">
                 <div class="flex flex-col items-center">
                   <div class="w-12 h-12 bg-gray-100 rounded-full flex items-center justify-center mb-3">
@@ -114,6 +114,13 @@ import Importqueue from "@/components/import/parts/importqueue.vue";
 export default {
   computed: {
     ...mapState(["userInfo", "importQueue"]),
+    combinedHistoryLoading() {
+      // Show loading placeholders only when:
+      // 1. We're actually loading (historyIsLoading is true)
+      // 2. We haven't initially loaded yet (hasHistoryInitiallyLoaded is false)
+      // 3. AND we don't have any data yet
+      return this.historyIsLoading && !this.hasHistoryInitiallyLoaded && this.history.length === 0;
+    }
   },
   components: {ImportQueue: Importqueue},
   mixins: [authMixin],
@@ -121,6 +128,7 @@ export default {
     return {
       history: [],
       historyIsLoading: true,
+      hasHistoryInitiallyLoaded: false,
       importQueueIsLoading: true,
       hasImportQueueLoaded: false,
       refreshInterval: null,
@@ -138,6 +146,7 @@ export default {
       try {
         const response = await axios.get(IMPORT_HISTORY_URL)
         this.history = response.data.data
+        this.hasHistoryInitiallyLoaded = true
       } catch (error) {
         console.error('Error fetching import history:', error)
       } finally {
@@ -192,6 +201,13 @@ export default {
     },
   },
   async created() {
+    // If we already have data, mark as initially loaded
+    // This prevents showing loading placeholders when navigating back with browser buttons
+    if (this.history && this.history.length > 0) {
+      this.hasHistoryInitiallyLoaded = true;
+      this.historyIsLoading = false;
+    }
+    
     await Promise.all([
       this.fetchHistory(),
       this.fetchImportQueue()
