@@ -101,6 +101,14 @@ export default {
       this.map.getView().on('change:resolution', this.debouncedLoadData)
 
       // Event listeners removed - cache functionality eliminated
+      
+      // Return a promise that resolves when the map is ready
+      return new Promise((resolve) => {
+        // Wait for the map to be fully rendered
+        this.map.once('rendercomplete', () => {
+          resolve()
+        })
+      })
     },
 
     async getUserLocation() {
@@ -451,9 +459,10 @@ export default {
   },
 
   async mounted() {
-    this.initializeMap()
+    // Wait for map to be fully initialized before loading data
+    await this.initializeMap()
 
-    // Initial data load
+    // Initial data load - now the map is ready
     this.loadDataForCurrentView()
   },
 
