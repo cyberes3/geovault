@@ -1,6 +1,5 @@
 import json
 import logging
-import signal
 import threading
 import time
 import traceback
@@ -116,17 +115,8 @@ class ImportWorker:
         self.worker_id = str(uuid4())
         self.lock_manager = DBLockManager(self.worker_id)
         self.shutdown_requested = threading.Event()
-        self._setup_signal_handlers()
+        self.shutdown_completed = threading.Event()
         _logger.info(f'Import worker {self.worker_id} initialized')
-
-    def _setup_signal_handlers(self):
-        """Setup signal handlers for graceful shutdown."""
-        def signal_handler(signum, frame):
-            _logger.info(f'Received signal {signum}, initiating graceful shutdown -- {self.worker_id}')
-            self.shutdown_requested.set()
-        
-        signal.signal(signal.SIGTERM, signal_handler)
-        signal.signal(signal.SIGINT, signal_handler)
 
     def _graceful_shutdown(self):
         """Perform graceful shutdown with lock cleanup."""
@@ -140,6 +130,9 @@ class ImportWorker:
         # Close the lock manager
         self.lock_manager.close()
         _logger.info(f'Graceful shutdown completed -- {self.worker_id}')
+        
+        # Signal that shutdown is complete
+        self.shutdown_completed.set()
 
     def run(self):
         """Main worker loop with improved race condition handling."""

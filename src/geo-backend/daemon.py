@@ -42,14 +42,14 @@ class DaemonManager:
         
         for worker in self.workers:
             thread = threading.Thread(target=worker.run, name=f"Worker-{worker.worker_id}")
-            thread.daemon = True  # Allow main process to exit even if workers are running
+            thread.daemon = False  # Don't allow main process to exit until workers finish
             thread.start()
             worker_threads.append(thread)
             _logger.info(f'Started worker thread: {thread.name}')
         
         return worker_threads
 
-    def graceful_shutdown(self):
+    def graceful_shutdown(self, worker_threads=None):
         """Perform graceful shutdown of all workers."""
         _logger.info('Starting graceful shutdown of all workers...')
         
@@ -58,20 +58,30 @@ class DaemonManager:
             if hasattr(worker, 'shutdown_requested'):
                 worker.shutdown_requested.set()
         
-        # Wait for workers to finish (with timeout)
-        shutdown_timeout = 30  # seconds
-        start_time = time.time()
-        
-        for worker in self.workers:
-            if hasattr(worker, 'shutdown_requested'):
+        # Wait for worker threads to finish (with timeout)
+        if worker_threads:
+            shutdown_timeout = 30  # seconds
+            start_time = time.time()
+            
+            for i, thread in enumerate(worker_threads):
                 remaining_time = shutdown_timeout - (time.time() - start_time)
                 if remaining_time > 0:
-                    if worker.shutdown_requested.wait(timeout=remaining_time):
-                        _logger.info(f'Worker {worker.worker_id} shutdown completed')
+                    # First wait for the worker to signal shutdown completion
+                    worker = self.workers[i] if i < len(self.workers) else None
+                    if worker and hasattr(worker, 'shutdown_completed'):
+                        if worker.shutdown_completed.wait(timeout=min(remaining_time, 5.0)):
+                            _logger.info(f'Worker {worker.worker_id} shutdown completed')
+                        else:
+                            _logger.warning(f'Worker {worker.worker_id} shutdown completion timeout')
+                    
+                    # Then wait for the thread to actually finish
+                    thread.join(timeout=remaining_time)
+                    if thread.is_alive():
+                        _logger.warning(f'Worker thread {thread.name} shutdown timeout')
                     else:
-                        _logger.warning(f'Worker {worker.worker_id} shutdown timeout')
+                        _logger.info(f'Worker thread {thread.name} shutdown completed')
                 else:
-                    _logger.warning(f'Worker {worker.worker_id} shutdown timeout (global)')
+                    _logger.warning(f'Worker thread {thread.name} shutdown timeout (global)')
         
         _logger.info('All workers shutdown completed')
 
@@ -106,7 +116,7 @@ class DaemonManager:
         except Exception as e:
             _logger.error(f'Unexpected error in daemon main loop: {e}')
         finally:
-            self.graceful_shutdown()
+            self.graceful_shutdown(worker_threads)
             _logger.info('Daemon shutdown completed')
 
 
