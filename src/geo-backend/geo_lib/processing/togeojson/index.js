@@ -17,6 +17,11 @@ const { DOMParser } = require('@xmldom/xmldom');
  */
 function convertKmlContent(kmlContent) {
     try {
+        // Remove BOM (Byte Order Mark) if present
+        if (kmlContent.charCodeAt(0) === 0xFEFF) {
+            kmlContent = kmlContent.slice(1);
+        }
+        
         // Parse the KML content
         const parser = new DOMParser();
         const kmlDoc = parser.parseFromString(kmlContent, 'text/xml');

@@ -36,9 +36,15 @@ function convertKmlToGeojson(inputPath) {
         // Read and convert KMZ to KML if needed
         const kmlContent = kmzToKml(inputPath);
         
+        // Remove BOM (Byte Order Mark) if present
+        let cleanKmlContent = kmlContent;
+        if (kmlContent && kmlContent.charCodeAt(0) === 0xFEFF) {
+            cleanKmlContent = kmlContent.slice(1);
+        }
+        
         // Parse the KML content
         const parser = new DOMParser();
-        const kmlDoc = parser.parseFromString(kmlContent, 'text/xml');
+        const kmlDoc = parser.parseFromString(cleanKmlContent, 'text/xml');
         
         // Check for parsing errors
         const parseError = kmlDoc.getElementsByTagName('parsererror');

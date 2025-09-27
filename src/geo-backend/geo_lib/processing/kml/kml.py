@@ -12,16 +12,28 @@ from geo_lib.processing.logging import ImportLog
 from geo_lib.types.geojson import GeojsonRawProperty
 
 
-def html_to_markdown(html_content: str) -> str:
+def html_to_markdown(html_content) -> str:
     """
     Convert HTML content to markdown format.
     
     Args:
-        html_content: HTML string to convert
+        html_content: HTML string or dict with @type and value keys to convert
         
     Returns:
         Markdown formatted string
     """
+    # Handle dictionary format from togeojson
+    if isinstance(html_content, dict):
+        if '@type' in html_content and html_content['@type'] == 'html' and 'value' in html_content:
+            html_content = html_content['value']
+        else:
+            # If it's a dict but not the expected format, convert to string
+            html_content = str(html_content)
+    
+    # Ensure we have a string
+    if not isinstance(html_content, str):
+        html_content = str(html_content)
+    
     if not html_content or not html_content.strip():
         return ""
 
