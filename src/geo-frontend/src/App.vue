@@ -1,5 +1,5 @@
 <template>
-  <div class="min-h-screen bg-gray-50">
+  <div :class="isMapRoute ? 'h-screen bg-gray-50 overflow-hidden' : 'min-h-screen bg-gray-50'">
     <!-- Navigation Header -->
     <nav class="bg-white shadow-sm border-b border-gray-200">
       <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
@@ -49,7 +49,7 @@
     </nav>
 
     <!-- Main Content -->
-    <main class="max-w-7xl mx-auto py-6 px-4 sm:px-6 lg:px-8">
+    <main :class="isMapRoute ? 'w-full h-[calc(100vh-4rem)] overflow-hidden' : 'max-w-7xl mx-auto py-6 px-4 sm:px-6 lg:px-8'">
       <router-view v-slot="{ Component }">
         <keep-alive>
           <component :is="Component"/>
@@ -66,6 +66,9 @@ export default {
   name: 'App',
   computed: {
     ...mapState(["userInfo"]),
+    isMapRoute() {
+      return this.$route.path === '/map'
+    }
   },
   methods: {},
   async created() {

@@ -1,16 +1,10 @@
 <template>
-  <div class="space-y-6">
-    <!-- Page Header -->
-    <div class="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
-      <h1 class="text-2xl font-bold text-gray-900 mb-2">GeoJSON Map</h1>
-      <p class="text-gray-600">Interactive map displaying your imported geospatial data with real-time updates.</p>
-    </div>
-
+  <div class="w-full h-full">
     <!-- Map Container -->
-    <div class="bg-white rounded-lg shadow-sm border border-gray-200 overflow-hidden">
-      <div class="relative">
+    <div class="w-full h-full">
+      <div class="relative w-full h-full">
         <!-- Map -->
-        <div ref="mapContainer" class="w-full h-96 md:h-[600px]"></div>
+        <div ref="mapContainer" class="w-full h-full"></div>
 
         <!-- Loading Indicator -->
         <div v-show="isLoading" class="absolute top-4 right-4 bg-white bg-opacity-90 px-4 py-2 rounded-lg shadow-md z-10">
