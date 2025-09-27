@@ -30,7 +30,7 @@
         </tr>
 
         <!-- Empty state when no files are uploaded -->
-        <tr v-if="!combinedLoading && importQueue.length === 0 && hasInitiallyLoaded">
+        <tr v-if="!combinedLoading && filteredImportQueue.length === 0 && hasInitiallyLoaded">
           <td colspan="4" class="px-6 py-12 text-center">
             <div class="flex flex-col items-center">
               <div class="w-16 h-16 bg-gray-100 rounded-full flex items-center justify-center mb-4">
@@ -56,7 +56,7 @@
         </tr>
 
         <!-- Actual data rows -->
-        <tr v-for="(item, index) in importQueue" :key="`item-${index}`" class="hover:bg-gray-50">
+        <tr v-for="(item, index) in filteredImportQueue" :key="`item-${index}`" class="hover:bg-gray-50">
           <td class="px-6 py-4 whitespace-nowrap">
             <div class="flex items-center">
               <div class="flex-shrink-0">
@@ -136,6 +136,10 @@ export default {
   },
   computed: {
     ...mapState(["userInfo", "importQueue"]),
+    filteredImportQueue() {
+      // Filter out items that have been locally deleted
+      return this.importQueue.filter(item => !this.deletedItems.has(item.id));
+    },
     combinedLoading() {
       // Show loading placeholders only when:
       // 1. We're actually loading (isLoading or internalLoading is true)
@@ -151,6 +155,8 @@ export default {
       internalLoading: true,
       hasInitiallyLoaded: false,
       isRefreshing: false,
+      deletedItems: new Set(), // Track locally deleted items to prevent flicker
+      deletedItemTimeouts: new Map(), // Track how many refresh cycles each deleted item has been gone
     }
   },
   methods: {
@@ -177,6 +183,10 @@ export default {
       try {
         const response = await axios.get(IMPORT_QUEUE_LIST_URL)
         const ourImportQueue = response.data.data.map((item) => new ImportQueueItem(item))
+        
+        // Check for items that should be restored (still exist on server after 3 refresh cycles)
+        this.checkForRestoreItems(ourImportQueue);
+        
         this.$store.commit('setImportQueue', ourImportQueue)
         this.hasInitiallyLoaded = true
       } catch (error) {
@@ -186,12 +196,34 @@ export default {
         this.isRefreshing = false
       }
     },
+    checkForRestoreItems(serverQueue) {
+      // Increment timeout counters for all deleted items
+      for (const [itemId, timeoutCount] of this.deletedItemTimeouts.entries()) {
+        this.deletedItemTimeouts.set(itemId, timeoutCount + 1);
+        
+        // Check if this item still exists on the server
+        const stillExistsOnServer = serverQueue.some(item => item.id === itemId);
+        
+        if (stillExistsOnServer && timeoutCount >= 2) { // 3 refresh cycles (0, 1, 2)
+          // Item still exists on server after 3 refresh cycles, restore it
+          console.log(`Restoring item ${itemId} - still exists on server after 3 refresh cycles`);
+          this.deletedItems.delete(itemId);
+          this.deletedItemTimeouts.delete(itemId);
+        } else if (!stillExistsOnServer) {
+          // Item was successfully deleted from server, clean up tracking
+          this.deletedItems.delete(itemId);
+          this.deletedItemTimeouts.delete(itemId);
+        }
+      }
+    },
     async deleteItem(item, index) {
       if (window.confirm(`Delete "${item.original_filename}" (#${item.id})`)) {
+        // Add to deleted items set to prevent flicker during auto-refresh
+        this.deletedItems.add(item.id);
+        // Initialize timeout counter for this item
+        this.deletedItemTimeouts.set(item.id, 0);
+        
         try {
-          // Remove item from local state immediately for better UX
-          this.importQueue.splice(index, 1);
-          
           const response = await axios.delete('/api/data/item/import/delete/' + item.id, {
             headers: {
               'X-CSRFToken': getCookie('csrftoken')
@@ -202,14 +234,19 @@ export default {
             throw new Error("server reported failure");
           }
           
-          // No need to refresh since we already removed the item from local state
-          // The auto-refresh will eventually sync with the server state
+          // Keep the item in deletedItems set - it will be filtered out until auto-refresh removes it from server
         } catch (error) {
           alert(`Failed to delete ${item.id}: ${error.message}`);
-          // Restore the item to the local state if deletion failed
-          this.importQueue.splice(index, 0, item);
+          // Remove from deleted items set to restore the item if deletion failed
+          this.deletedItems.delete(item.id);
+          this.deletedItemTimeouts.delete(item.id);
         }
       }
+    },
+    clearDeletedItems() {
+      // Clear the deleted items list when navigating away
+      this.deletedItems.clear();
+      this.deletedItemTimeouts.clear();
     },
   },
   async created() {
@@ -222,6 +259,10 @@ export default {
     
     await this.fetchQueueList()
     this.subscribeToRefreshMutation()
+  },
+  beforeDestroy() {
+    // Clear deleted items when component is destroyed (user navigates away)
+    this.clearDeletedItems();
   },
 }
 </script>
