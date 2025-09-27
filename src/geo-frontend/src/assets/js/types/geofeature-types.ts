@@ -15,7 +15,7 @@ interface GeoFeatureProperties {
 
 interface GeoFeatureProps {
     name: string;
-    id: number;
+    id: string;
     type: GeoFeatureType;
     description?: string;
     geometry: any[];
@@ -23,7 +23,7 @@ interface GeoFeatureProps {
 }
 
 class GeoFeature {
-    id: number;
+    id: string;
     type: GeoFeatureType;
     geometry: any[];
     properties: GeoFeatureProperties;

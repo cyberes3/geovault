@@ -23,6 +23,7 @@ class FeatureStore(models.Model):
     user = models.ForeignKey(get_user_model(), on_delete=models.CASCADE)
     source = models.ForeignKey(ImportQueue, on_delete=models.SET_NULL, null=True)
     geojson = models.JSONField(null=False)
+    geojson_hash = models.CharField(max_length=64, unique=True, null=True, blank=True, help_text="SHA-256 hash of the feature's GeoJSON content")
     geometry = models.GeometryField(null=True, blank=True, dim=3)  # Spatial field for efficient queries, supports 3D
     timestamp = models.DateTimeField(auto_now_add=True)
     
@@ -30,6 +31,7 @@ class FeatureStore(models.Model):
         indexes = [
             models.Index(fields=['user', 'timestamp']),
             models.Index(fields=['geometry']),  # Spatial index
+            models.Index(fields=['geojson_hash']),  # Index for hash-based lookups
         ]
 
 

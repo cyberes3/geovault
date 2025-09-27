@@ -19,11 +19,64 @@ from geo_lib.security.file_validation import SecureFileValidator, secure_kmz_to_
 from geo_lib.security.file_validation import validate_kml_content
 from geo_lib.types.feature import PointFeature, PolygonFeature, LineStringFeature
 from geo_lib.website.auth import login_required_401
+from geo_lib.feature_id import generate_feature_hash
+from geo_lib.logging.database import log_to_db, DatabaseLogLevel, DatabaseLogSource
 
 logger = logging.getLogger(__name__)
 
 
-# TODO: deduplicate identical features
+def _strip_duplicate_features(features, user_id, log_id):
+    """Remove 100% duplicate features and log the process."""
+    if not features:
+        return features, 0
+    
+    # Track features by hash
+    seen_hashes = set()
+    unique_features = []
+    duplicates_removed = 0
+    
+    for feature in features:
+        # Generate hash for this feature
+        feature_hash = generate_feature_hash(feature)
+        
+        if feature_hash in seen_hashes:
+            # This is a duplicate
+            duplicates_removed += 1
+            feature_name = feature.get('properties', {}).get('name', 'Unnamed')
+            feature_type = feature.get('geometry', {}).get('type', 'Unknown')
+            
+            # Log the duplicate removal
+            try:
+                log_to_db(
+                    f"Removed duplicate feature: '{feature_name}' ({feature_type})",
+                    DatabaseLogLevel.INFO,
+                    user_id,
+                    DatabaseLogSource.IMPORT,
+                    log_id
+                )
+            except Exception as e:
+                logger.error(f"Failed to log duplicate removal: {e}")
+        else:
+            # This is a unique feature
+            seen_hashes.add(feature_hash)
+            unique_features.append(feature)
+    
+    # Log summary
+    if duplicates_removed > 0:
+        try:
+            log_to_db(
+                f"Removed {duplicates_removed} duplicate features. Processing {len(unique_features)} unique features.",
+                DatabaseLogLevel.INFO,
+                user_id,
+                DatabaseLogSource.IMPORT,
+                log_id
+            )
+        except Exception as e:
+            logger.error(f"Failed to log duplicate summary: {e}")
+    
+    return unique_features, duplicates_removed
+
+
 # TODO: allow re-import of old previously uploaded by re-uploading it
 
 def _get_logs_by_log_id(log_id):
@@ -179,7 +232,7 @@ def upload_item(request):
                     # Convert features to JSON format
                     features_json = [json.loads(x.model_dump_json()) for x in geo_features]
                     
-                    # Create import queue item with processed data
+                    # Create import queue item first to get log_id
                     import_queue = ImportQueue.objects.create(
                         raw_kml=kml_doc,
                         raw_kml_hash=kml_hash,
@@ -188,7 +241,33 @@ def upload_item(request):
                         geofeatures=features_json
                     )
                     
-                    msg = f'upload and processing successful - {len(features_json)} features processed'
+                    # Strip duplicate features and log the process
+                    unique_features, duplicates_removed = _strip_duplicate_features(
+                        features_json, 
+                        request.user.id, 
+                        str(import_queue.log_id)
+                    )
+                    
+                    # Update the import queue with deduplicated features
+                    import_queue.geofeatures = unique_features
+                    import_queue.save()
+                    
+                    # Log upload completion
+                    try:
+                        log_to_db(
+                            f"Upload and processing successful - {len(features_json)} features found, {duplicates_removed} duplicates removed, {len(unique_features)} unique features ready for import",
+                            DatabaseLogLevel.INFO,
+                            request.user.id,
+                            DatabaseLogSource.IMPORT,
+                            str(import_queue.log_id)
+                        )
+                    except Exception as e:
+                        logger.error(f"Failed to log upload completion: {e}")
+                    
+                    msg = f'upload and processing successful - {len(unique_features)} unique features ready for import'
+                    if duplicates_removed > 0:
+                        msg += f' ({duplicates_removed} duplicates removed)'
+                    
                     return JsonResponse({'success': True, 'msg': msg, 'id': import_queue.id}, status=200)
                     
                 except Exception as processing_error:
@@ -238,7 +317,12 @@ def fetch_import_queue(request, item_id):
             return JsonResponse({'success': True, 'processing': False, 'geofeatures': None, 'log': None, 'msg': None, 'original_filename': None, 'imported': item.imported}, status=200)
 
         # Since processing is now synchronous, items are always ready
-        return JsonResponse({'success': True, 'processing': False, 'geofeatures': item.geofeatures, 'log': [], 'msg': None, 'original_filename': item.original_filename, 'imported': item.imported}, status=200)
+        # Fetch logs from database if log_id exists
+        logs = []
+        if item.log_id:
+            logs = _get_logs_by_log_id(str(item.log_id))
+        
+        return JsonResponse({'success': True, 'processing': False, 'geofeatures': item.geofeatures, 'log': logs, 'msg': None, 'original_filename': item.original_filename, 'imported': item.imported}, status=200)
     except ImportQueue.DoesNotExist:
         return JsonResponse({'success': False, 'msg': 'ID does not exist', 'code': 404}, status=400)
 
@@ -427,6 +511,18 @@ def import_to_featurestore(request, item_id):
 
     import_item.imported = True
 
+    # Log import start
+    logger.info(f"Starting import of {len(import_item.geofeatures)} features from '{import_item.original_filename}' for user {request.user.id}")
+
+    # Prepare features for bulk import
+    features_to_create = []
+    existing_hashes = set()
+    current_batch_hashes = set()  # Track hashes in current import batch
+    
+    # Get existing feature hashes for this user to avoid duplicates
+    existing_features = FeatureStore.objects.filter(user=request.user).values_list('geojson_hash', flat=True)
+    existing_hashes.update(existing_features)
+    
     i = 0
     for feature in import_item.geofeatures:
         c = None
@@ -446,6 +542,23 @@ def import_to_featurestore(request, item_id):
 
         # Create the GeoJSON data
         geojson_data = json.loads(feature_instance.model_dump_json())
+        
+        # Generate hash-based ID for the feature
+        feature_hash = generate_feature_hash(geojson_data)
+        
+        # Check if this feature already exists for this user or in current batch
+        if feature_hash in existing_hashes or feature_hash in current_batch_hashes:
+            # Skip importing duplicate features
+            feature_name = geojson_data.get('properties', {}).get('name', 'Unnamed')
+            logger.info(f"Skipping duplicate feature '{feature_name}' with hash {feature_hash[:16]}... for user {request.user.id}")
+            i += 1
+            continue
+        
+        # Add to current batch hashes to prevent duplicates within the same import
+        current_batch_hashes.add(feature_hash)
+        
+        # Update the feature's ID in the GeoJSON data
+        geojson_data['properties']['id'] = feature_hash
 
         # Create geometry object for spatial queries
         geometry = None
@@ -487,25 +600,54 @@ def import_to_featurestore(request, item_id):
             except Exception as e:
                 print(f"Error creating geometry for feature {i}: {e}")
 
-        feature = FeatureStore.objects.create(
+        # Add to bulk creation list
+        features_to_create.append(FeatureStore(
             geojson=geojson_data,
+            geojson_hash=feature_hash,
             geometry=geometry,
             source=import_item,
             user=request.user
-        )
-        feature.save()
+        ))
         i += 1
+
+    # Bulk create all features at once for better performance
+    if features_to_create:
+        try:
+            logger.info(f"Importing {len(features_to_create)} unique features to database for user {request.user.id}")
+            
+            FeatureStore.objects.bulk_create(features_to_create, batch_size=1000)
+            logger.info(f"Successfully imported {len(features_to_create)} features in bulk for user {request.user.id}")
+        except Exception as e:
+            logger.warning(f"Bulk import failed for user {request.user.id}, falling back to individual imports: {str(e)}")
+            # Fallback to individual creation if bulk fails
+            successful_imports = 0
+            for feature in features_to_create:
+                try:
+                    feature.save()
+                    successful_imports += 1
+                except Exception as individual_error:
+                    logger.error(f"Error creating individual feature for user {request.user.id}: {individual_error}")
+                    # If it's a duplicate key error, that's expected and we can continue
+                    if "duplicate key" not in str(individual_error).lower():
+                        logger.error(f"Unexpected error creating feature for user {request.user.id}: {individual_error}")
+            
+            logger.info(f"Fallback import completed for user {request.user.id}: {successful_imports}/{len(features_to_create)} features imported")
+
+    # Log final summary
+    total_processed = len(import_item.geofeatures)
+    total_imported = len(features_to_create)
+    total_skipped = total_processed - total_imported
+    
+    logger.info(f"Import completed for user {request.user.id}: {total_imported} features imported, {total_skipped} skipped (already exist)")
 
     # Erase some unneded data since it's not needed anymore now that it's in the feature store.
     import_item.geofeatures = []
     import_item.log_id = None
-
-    # Delete logs associated with this import since it's now successfully imported.
     _delete_logs_by_log_id(str(import_item.log_id))
 
     import_item.save()
 
-    return JsonResponse({'success': True, 'msg': f'Successfully imported {i} items'})
+    return JsonResponse({'success': True, 'msg': f'Successfully imported {total_imported} features ({total_skipped} already existed)'})
 
 
 def _hash_kml(b: str):

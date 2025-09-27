@@ -7,6 +7,7 @@ from typing import Union
 from pydantic import BaseModel, Field, ConfigDict
 
 from geo_lib.processing.logging import ImportLog
+from geo_lib.feature_id import generate_feature_hash
 
 
 class GeoFeatureType(str, Enum):
@@ -19,7 +20,7 @@ class Properties(BaseModel):
     model_config = ConfigDict(extra='allow')  # Allow additional properties from togeojson
     
     name: str
-    id: Optional[int] = -1
+    id: Optional[str] = None
     description: Optional[str] = None
     created: Optional[datetime] = None
     tags: Optional[List[str]] = Field(default_factory=list)
@@ -79,8 +80,10 @@ def geojson_to_geofeature(geojson: dict) -> Tuple[List[GeoFeatureSupported], Imp
         f = c(**item)
         # No need to process rendering since we're not using it anymore
 
-        # TODO: do this shit
-        f.properties.id = -1  # This will be updated after it's added to the main data store.
+        # Generate hash-based ID for the feature
+        feature_dict = f.model_dump()
+        feature_hash = generate_feature_hash(feature_dict)
+        f.properties.id = feature_hash
 
         result.append(f)
 
