@@ -1,11 +1,7 @@
-# Core Django and database
-django==5.0.6
+django==6.0a1
 psycopg2-binary==2.9.9
-
-# Geospatial data processing
 fastkml==0.12
 lxml==5.2.2
 geojson==3.1.0
-
-# Data validation
 pydantic==2.7.3
+markdownify==1.2.0

@@ -43,7 +43,7 @@
         <div class="h-32 overflow-auto">
           <ul class="space-y-2">
             <li v-for="(item, index) in workerLog" :key="`logitem-${index}`" class="flex items-start space-x-2">
-              <span class="text-xs text-gray-500 font-mono">{{ item.timestamp }}</span>
+              <span class="text-sm text-gray-500">{{ item.timestamp }}</span>
               <span class="text-sm text-gray-700">{{ item.msg }}</span>
             </li>
             <li v-if="workerLog.length === 0" class="text-sm text-gray-500 italic">
@@ -73,14 +73,14 @@
           <div>
             <label class="block text-sm font-medium text-gray-700 mb-2">Name</label>
             <div class="flex items-center space-x-2">
-              <input 
-                v-model="item.properties.name" 
+              <input
+                v-model="item.properties.name"
                 :class="isImported ? 'block w-full px-3 py-2 border border-gray-300 rounded-md bg-gray-100 cursor-not-allowed' : 'block w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-blue-500 focus:border-blue-500'"
                 :disabled="isImported"
                 :placeholder="originalItems[index].properties.name"
               />
-              <button 
-                v-if="!isImported" 
+              <button
+                v-if="!isImported"
                 class="inline-flex items-center px-3 py-2 border border-gray-300 shadow-sm text-sm leading-4 font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500"
                 @click="resetNestedField(index, 'properties', 'name')"
               >
@@ -92,18 +92,20 @@
           </div>
 
           <!-- Description Field -->
-          <div>
+          <div class="md:col-span-2">
             <label class="block text-sm font-medium text-gray-700 mb-2">Description</label>
-            <div class="flex items-center space-x-2">
-              <input 
-                v-model="item.properties.description" 
-                :class="isImported ? 'block w-full px-3 py-2 border border-gray-300 rounded-md bg-gray-100 cursor-not-allowed' : 'block w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-blue-500 focus:border-blue-500'"
+            <div class="flex items-start space-x-2">
+              <textarea
+                v-model="item.properties.description"
+                :class="isImported ? 'block w-full px-3 py-2 border border-gray-300 rounded-md bg-gray-100 cursor-not-allowed resize-none' : 'block w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-blue-500 focus:border-blue-500 resize-none'"
                 :disabled="isImported"
                 :placeholder="originalItems[index].properties.description"
-              />
-              <button 
-                v-if="!isImported" 
-                class="inline-flex items-center px-3 py-2 border border-gray-300 shadow-sm text-sm leading-4 font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500"
+                rows="4"
+                class="text-sm"
+              ></textarea>
+              <button
+                v-if="!isImported"
+                class="inline-flex items-center px-3 py-2 border border-gray-300 shadow-sm text-sm leading-4 font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 mt-1"
                 @click="resetNestedField(index, 'properties', 'description')"
               >
                 <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -117,15 +119,15 @@
           <div>
             <label class="block text-sm font-medium text-gray-700 mb-2">Created Date</label>
             <div class="flex items-center space-x-2">
-              <input 
+              <input
                 type="datetime-local"
-                :class="isImported ? 'block w-full px-3 py-2 border border-gray-300 rounded-md bg-gray-100 cursor-not-allowed' : 'block w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-blue-500 focus:border-blue-500'" 
+                :class="isImported ? 'block w-full px-3 py-2 border border-gray-300 rounded-md bg-gray-100 cursor-not-allowed' : 'block w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-blue-500 focus:border-blue-500'"
                 :disabled="isImported"
                 :value="formatDateForInput(item.properties.created)"
                 @change="updateDate(index, $event)"
               />
-              <button 
-                v-if="!isImported" 
+              <button
+                v-if="!isImported"
                 class="inline-flex items-center px-3 py-2 border border-gray-300 shadow-sm text-sm leading-4 font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500"
                 @click="resetNestedField(index, 'properties', 'created')"
               >
@@ -141,14 +143,14 @@
             <label class="block text-sm font-medium text-gray-700 mb-2">Tags</label>
             <div class="space-y-2">
               <div v-for="(tag, tagIndex) in item.properties.tags" :key="`tag-${tagIndex}`" class="flex items-center space-x-2">
-                <input 
-                  v-model="item.properties.tags[tagIndex]" 
+                <input
+                  v-model="item.properties.tags[tagIndex]"
                   :class="isImported ? 'block w-full px-3 py-2 border border-gray-300 rounded-md bg-gray-100 cursor-not-allowed' : 'block w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-blue-500 focus:border-blue-500'"
                   :disabled="isImported"
                   :placeholder="getTagPlaceholder(index, tag)"
                 />
-                <button 
-                  v-if="!isImported" 
+                <button
+                  v-if="!isImported"
                   class="inline-flex items-center px-3 py-2 border border-transparent text-sm font-medium rounded-md text-white bg-red-600 hover:bg-red-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-red-500"
                   @click="removeTag(index, tagIndex)"
                 >
@@ -159,7 +161,7 @@
               </div>
             </div>
             <div v-if="!isImported" class="flex items-center space-x-2 mt-3">
-              <button 
+              <button
                 :class="{ 'opacity-50 cursor-not-allowed': isLastTagEmpty(index) }"
                 :disabled="isLastTagEmpty(index)"
                 class="inline-flex items-center px-3 py-2 border border-transparent text-sm font-medium rounded-md text-white bg-blue-600 hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 disabled:bg-gray-400"
@@ -170,7 +172,7 @@
                 </svg>
                 Add Tag
               </button>
-              <button 
+              <button
                 class="inline-flex items-center px-3 py-2 border border-gray-300 shadow-sm text-sm font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500"
                 @click="resetTags(index)"
               >
@@ -202,9 +204,9 @@
           </div>
         </div>
       </div>
-      
+
       <div v-if="!isImported" class="flex items-center space-x-4">
-        <button 
+        <button
           :disabled="lockButtons"
           class="inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md text-white bg-green-600 hover:bg-green-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-green-500 disabled:bg-gray-400 disabled:cursor-not-allowed transition-colors duration-200"
           @click="saveChanges"
@@ -214,7 +216,7 @@
           </svg>
           Save Changes
         </button>
-        <button 
+        <button
           :disabled="lockButtons"
           class="inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md text-white bg-blue-600 hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 disabled:bg-gray-400 disabled:cursor-not-allowed transition-colors duration-200"
           @click="performImport"
@@ -411,10 +413,19 @@ export default {
                   return;
                 }
 
-                response.data.geofeatures.forEach((item) => {
-                  vm.itemsForUser.push(vm.parseGeoJson(item))
-                })
-                vm.originalItems = JSON.parse(JSON.stringify(vm.itemsForUser))
+                // Check if this is an error response (unprocessable file)
+                if (response.data.geofeatures.length > 0 && response.data.geofeatures[0].error) {
+                  // This is an unprocessable file, show the error message
+                  const errorItem = response.data.geofeatures[0];
+                  vm.msg = `File processing failed: ${errorItem.message}`;
+                  vm.workerLog = [{timestamp: now, msg: errorItem.message}];
+                } else {
+                  // Normal processing - parse the geofeatures
+                  response.data.geofeatures.forEach((item) => {
+                    vm.itemsForUser.push(vm.parseGeoJson(item))
+                  })
+                  vm.originalItems = JSON.parse(JSON.stringify(vm.itemsForUser))
+                }
               }
               if (!response.data.processing) {
                 vm.workerLog = vm.workerLog.concat(response.data.log)
@@ -428,7 +439,7 @@ export default {
               }
             }
           } catch (error) {
-            if (error.response.data.code === 404) {
+            if (error.response && error.response.data && error.response.data.code === 404) {
               // Import ID does not exist.
               vm.$router.replace('/import');
               return;

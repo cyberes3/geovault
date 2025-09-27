@@ -7,11 +7,41 @@ import re
 from typing import Union, Tuple, Dict, Optional
 from pathlib import Path
 
+import markdownify
+
 from geo_lib.daemon.workers.workers_lib.importer.logging import ImportLog
 from geo_lib.types.geojson import GeojsonRawProperty
 
 # Import fastkml geometry classes at module level
 from fastkml.geometry import Point, LineString, Polygon, GeometryCollection, MultiPoint, MultiLineString, MultiPolygon
+
+
+def html_to_markdown(html_content: str) -> str:
+    """
+    Convert HTML content to markdown format.
+    
+    Args:
+        html_content: HTML string to convert
+        
+    Returns:
+        Markdown formatted string
+    """
+    if not html_content or not html_content.strip():
+        return ""
+    
+    # Convert HTML to markdown using markdownify
+    markdown_content = markdownify.markdownify(
+        html_content,
+        heading_style="ATX",  # Use # for headings
+        bullets="-",          # Use - for bullet points
+        strip=['script', 'style']  # Remove script and style tags
+    )
+    
+    # Clean up extra whitespace and newlines
+    markdown_content = re.sub(r'\n\s*\n\s*\n', '\n\n', markdown_content)
+    markdown_content = markdown_content.strip()
+    
+    return markdown_content
 
 
 def kmz_to_kml(kml_bytes: Union[str, bytes]) -> str:
@@ -197,11 +227,17 @@ def kml_to_geojson(kml_bytes) -> Tuple[dict, ImportLog]:
         
         # Parse KML
         k = kml.KML()
-        # Convert to bytes if there's an XML declaration, otherwise use string
-        if kml_content.strip().startswith('<?xml'):
-            k.from_string(kml_content.encode('utf-8'))
-        else:
-            k.from_string(kml_content)
+
+        try:
+            # Convert to bytes if there's an XML declaration, otherwise use string
+            if kml_content.strip().startswith('<?xml'):
+                k.from_string(kml_content.encode('utf-8'))
+            else:
+                k.from_string(kml_content)
+        except Exception as e:
+            # Mark as unparsable and log the error
+            import_log.add(f"Failed to parse KML content: {str(e)}")
+            raise Exception(f"KML parsing failed: {str(e)}")
         
         features = []
         
@@ -283,7 +319,8 @@ def _extract_features_from_kml_feature(kml_feature):
         if hasattr(kml_feature, 'name') and kml_feature.name:
             properties['name'] = kml_feature.name
         if hasattr(kml_feature, 'description') and kml_feature.description:
-            properties['description'] = kml_feature.description
+            # Convert HTML description to markdown
+            properties['description'] = html_to_markdown(kml_feature.description)
         
         # Add styling information
         if hasattr(kml_feature, 'styleUrl') and kml_feature.styleUrl:

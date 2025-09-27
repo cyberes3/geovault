@@ -9,6 +9,7 @@ class ImportQueue(django_models.Model):
     id = django_models.AutoField(primary_key=True)
     user = django_models.ForeignKey(get_user_model(), on_delete=django_models.CASCADE)
     imported = django_models.BooleanField(default=False)
+    unparsable = django_models.BooleanField(default=False, help_text="True if the file failed to parse and should not be retried")
     geofeatures = django_models.JSONField(default=list)
     original_filename = django_models.TextField()
     raw_kml = django_models.TextField()

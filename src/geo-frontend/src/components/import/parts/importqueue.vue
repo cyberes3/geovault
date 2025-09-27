@@ -137,7 +137,11 @@ export default {
   computed: {
     ...mapState(["userInfo", "importQueue"]),
     combinedLoading() {
-      return (this.isLoading || this.internalLoading) && !this.hasInitiallyLoaded;
+      // Show loading placeholders only when:
+      // 1. We're actually loading (isLoading or internalLoading is true)
+      // 2. We haven't initially loaded yet (hasInitiallyLoaded is false)
+      // 3. AND we don't have any data in the store yet
+      return (this.isLoading || this.internalLoading) && !this.hasInitiallyLoaded && (!this.importQueue || this.importQueue.length === 0);
     }
   },
   components: {},
@@ -203,6 +207,13 @@ export default {
     },
   },
   async created() {
+    // If we already have data in the store, mark as initially loaded
+    // This prevents showing loading placeholders when navigating back with browser buttons
+    if (this.importQueue && this.importQueue.length > 0) {
+      this.hasInitiallyLoaded = true;
+      this.internalLoading = false;
+    }
+    
     await this.fetchQueueList()
     this.subscribeToRefreshMutation()
   },

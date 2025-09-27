@@ -13,8 +13,9 @@ from geo_lib.logging.database import log_to_db, DatabaseLogLevel, DatabaseLogSou
 from geo_lib.time import get_time_ms
 from geo_lib.types.feature import geojson_to_geofeature
 
-_SQL_GET_UNPROCESSED_ITEMS = "SELECT * FROM public.data_importqueue WHERE geofeatures = '[]'::jsonb AND imported = false ORDER BY id ASC LIMIT 25"
+_SQL_GET_UNPROCESSED_ITEMS = "SELECT * FROM public.data_importqueue WHERE geofeatures = '[]'::jsonb AND imported = false AND unparsable = false ORDER BY id ASC LIMIT 25"
 _SQL_INSERT_PROCESSED_ITEM = "UPDATE public.data_importqueue SET geofeatures = %s WHERE id = %s"
+_SQL_MARK_UNPARSABLE = "UPDATE public.data_importqueue SET unparsable = true WHERE id = %s"
 _SQL_DELETE_ITEM = "DELETE FROM public.data_importqueue WHERE id = %s"
 
 _logger = logging.getLogger("DAEMON").getChild("IMPORTER")
@@ -61,19 +62,34 @@ def _process_item(item, lock_manager: DBLockManager, worker_id: str):
         msg = f'Failed to import item #{item["id"]} "{item["original_filename"]}", encountered {err_name}. {err_msg}'
         log_to_db(f'{err_name}: {err_msg}', level=DatabaseLogLevel.ERROR, user_id=item['user_id'], source=DatabaseLogSource.IMPORT, log_id=log_id)
         log_to_db(msg, level=DatabaseLogLevel.ERROR, user_id=item['user_id'], source=DatabaseLogSource.IMPORT, log_id=log_id)
+        
+        # Check if this is a KML parsing error and mark as unparsable
+        if "KML parsing failed" in err_msg or "Failed to parse KML content" in err_msg:
+            log_to_db(f'Marking file as unparsable to prevent future retries', level=DatabaseLogLevel.WARNING, user_id=item['user_id'], source=DatabaseLogSource.IMPORT, log_id=log_id)
+            with CursorFromConnectionFromPool(cursor_factory=RealDictCursor) as cursor:
+                cursor.execute(_SQL_MARK_UNPARSABLE, (item['id'],))
+                # Also mark as processed with error indicator to show it's finished
+                error_geofeatures = json.dumps([{"error": "unparsable", "message": err_msg}])
+                cursor.execute(_SQL_INSERT_PROCESSED_ITEM, (error_geofeatures, item['id']))
+        else:
+            # For other types of errors, still mark as processed to show it's finished
+            # but don't mark as unparsable (might be retryable)
+            with CursorFromConnectionFromPool(cursor_factory=RealDictCursor) as cursor:
+                error_geofeatures = json.dumps([{"error": "processing_failed", "message": err_msg}])
+                cursor.execute(_SQL_INSERT_PROCESSED_ITEM, (error_geofeatures, item['id']))
+        
         traceback.print_exc()
         time.sleep(2)
-
-    features_json = []
-    if success:
-        features_json = [json.loads(x.model_dump_json()) for x in geo_features]
 
     # Log processing completion
     log_to_db(f'Processing finished {"un" if not success else ""}successfully', level=DatabaseLogLevel.INFO, user_id=item['user_id'], source=DatabaseLogSource.IMPORT, log_id=log_id)
     
-    with CursorFromConnectionFromPool(cursor_factory=RealDictCursor) as cursor:
-        data = json.dumps(features_json)
-        cursor.execute(_SQL_INSERT_PROCESSED_ITEM, (data, item['id']))
+    # Only update geofeatures if we haven't already done so in the error handling
+    if success:
+        features_json = [json.loads(x.model_dump_json()) for x in geo_features]
+        with CursorFromConnectionFromPool(cursor_factory=RealDictCursor) as cursor:
+            data = json.dumps(features_json)
+            cursor.execute(_SQL_INSERT_PROCESSED_ITEM, (data, item['id']))
 
     lock_manager.unlock_row('data_importqueue', item['id'])
     _logger.info(f'Finished item #{item["id"]} success={success} in {round((get_time_ms() - start_ms) / 1000, 2)}s -- {worker_id}')

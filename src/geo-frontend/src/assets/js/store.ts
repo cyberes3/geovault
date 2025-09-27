@@ -6,7 +6,7 @@ import {ImportQueueItem} from "@/assets/js/types/import-types";
 export default createStore({
     state: {
         userInfo: UserInfo,
-        importQueue: ImportQueueItem,
+        importQueue: [],
         importQueueRefreshTrigger: false,
 
     }, mutations: {

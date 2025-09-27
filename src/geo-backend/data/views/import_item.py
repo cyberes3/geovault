@@ -46,7 +46,7 @@ def upload_item(request):
             # Check file size
             # TODO: config??
             if uploaded_file.size > 100 * 1024 * 1024:  # file size limit 100MB
-                return JsonResponse({'success': False, 'msg': 'File size must be less than 100MB', 'id': None}, status=400)
+                return JsonResponse({'success': False, 'msg': f'File "{uploaded_file.name}" size must be less than 100MB', 'id': None}, status=400)
 
             file_data = uploaded_file.read()
             file_name = uploaded_file.name
@@ -55,7 +55,7 @@ def upload_item(request):
                 kml_doc = kmz_to_kml(file_data)
             except:
                 print(traceback.format_exc())  # TODO: logging
-                return JsonResponse({'success': False, 'msg': 'failed to parse KML/KMZ', 'id': None}, status=400)
+                return JsonResponse({'success': False, 'msg': f'Failed to parse KML/KMZ file "{file_name}"', 'id': None}, status=400)
 
             # Normalize KML content for comparison (handles KML vs KMZ differences)
             normalized_kml = normalize_kml_for_comparison(kml_doc)
@@ -64,9 +64,11 @@ def upload_item(request):
             kml_hash = _hash_kml(normalized_kml)
 
             # Check if this exact KML content already exists for this user (regardless of filename)
+            # First check for non-unparsable files
             existing_by_content = ImportQueue.objects.filter(
                 raw_kml_hash=kml_hash,
-                user=request.user
+                user=request.user,
+                unparsable=False
             ).first()
 
             if existing_by_content:
@@ -75,18 +77,41 @@ def upload_item(request):
                         'success': False,
                         'msg': f'This KML/KMZ file has already been imported to the feature store (originally as "{existing_by_content.original_filename}")',
                         'id': None
-                    }, status=400)
+                    }, status=200)  # Changed to 200 for benign duplicate content
                 else:
                     return JsonResponse({
                         'success': False,
                         'msg': f'This KML/KMZ file is already in your import queue (originally as "{existing_by_content.original_filename}")',
                         'id': None
-                    }, status=400)
+                    }, status=200)  # Changed to 200 for benign duplicate content
+            
+            # Check for unparsable files with the same hash
+            existing_unparsable = ImportQueue.objects.filter(
+                raw_kml_hash=kml_hash,
+                user=request.user,
+                unparsable=True
+            ).first()
+            
+            if existing_unparsable:
+                # If there's an unparsable record, we need to handle the unique constraint
+                # We'll update the existing record instead of creating a new one
+                existing_unparsable.raw_kml = kml_doc
+                existing_unparsable.original_filename = file_name
+                existing_unparsable.imported = False
+                existing_unparsable.unparsable = False
+                existing_unparsable.geofeatures = []
+                existing_unparsable.save()
+                
+                # Return success with the existing record's ID
+                msg = 'upload successful (replaced previous unparsable record)'
+                return JsonResponse({'success': True, 'msg': msg, 'id': existing_unparsable.id}, status=200)
 
             # Check if this exact filename already exists for this user (regardless of content)
+            # Exclude unparsable files from duplicate checking
             existing_by_filename = ImportQueue.objects.filter(
                 original_filename=file_name,
-                user=request.user
+                user=request.user,
+                unparsable=False
             ).first()
 
             if existing_by_filename:
@@ -95,14 +120,15 @@ def upload_item(request):
                         'success': False,
                         'msg': f'A file with the name "{file_name}" has already been imported to the feature store',
                         'id': None
-                    }, status=400)
+                    }, status=200)  # Changed to 200 for benign duplicate filename
                 else:
                     return JsonResponse({
                         'success': False,
                         'msg': f'A file with the name "{file_name}" is already in your import queue',
                         'id': None
-                    }, status=400)
+                    }, status=200)  # Changed to 200 for benign duplicate filename
 
+            # If we get here, there are no existing records with this hash, so create a new one
             try:
                 import_queue = ImportQueue.objects.create(
                     raw_kml=kml_doc,
@@ -114,15 +140,17 @@ def upload_item(request):
                 msg = 'upload successful'
                 return JsonResponse({'success': True, 'msg': msg, 'id': import_queue.id}, status=200)
             except IntegrityError:
-                return JsonResponse({
-                    'success': False,
-                    'msg': 'An unexpected error occurred while creating the import item',
-                    'id': None
-                }, status=500)
+                error_msg = f'An unexpected error occurred while creating the import item for file "{file_name}"'
+                # Raise exception in server process
+                raise Exception(error_msg)
 
             # TODO: put the processed data into the database and then return the ID so the frontend can go to the import page and use the ID to start the import
         else:
-            return JsonResponse({'success': False, 'msg': 'invalid upload structure', 'id': None}, status=400)
+            # Try to get filename even if form validation failed
+            filename = "unknown file"
+            if 'file' in request.FILES:
+                filename = request.FILES['file'].name
+            return JsonResponse({'success': False, 'msg': f'Invalid upload structure for file "{filename}"', 'id': None}, status=400)
 
     else:
         return HttpResponse(status=405)
