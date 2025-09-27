@@ -4,6 +4,7 @@ import subprocess
 import tempfile
 import zipfile
 import re
+import os
 from typing import Union, Tuple, Dict, Optional
 from pathlib import Path
 
@@ -11,9 +12,6 @@ import markdownify
 
 from geo_lib.daemon.workers.workers_lib.importer.logging import ImportLog
 from geo_lib.types.geojson import GeojsonRawProperty
-
-# Import fastkml geometry classes at module level
-from fastkml.geometry import Point, LineString, Polygon, GeometryCollection, MultiPoint, MultiLineString, MultiPolygon
 
 
 def html_to_markdown(html_content: str) -> str:
@@ -135,16 +133,21 @@ def hex_to_rgba(hex_color: str, opacity: float = 1.0) -> list:
 
 def preserve_togeojson_styling(properties: dict) -> dict:
     """Preserve togeojson styling and replace KML icons with red circles for points."""
+    properties = properties.copy()
+    
     # If this is a point feature with an icon, replace it with red circle styling
     if 'icon' in properties:
         # Remove the icon URL and add red circle styling
-        properties = properties.copy()
         del properties['icon']
         
         # Add red circle styling
         properties['marker-color'] = '#FF0000'
         properties['marker-size'] = 'medium'
         properties['marker-symbol'] = 'circle'
+    
+    # Convert HTML descriptions to markdown
+    if 'description' in properties and properties['description']:
+        properties['description'] = html_to_markdown(properties['description'])
     
     # Keep all other togeojson properties (stroke, fill, stroke-width, etc.)
     return properties
@@ -200,53 +203,66 @@ def process_togeojson_features(features: list) -> Tuple[list, ImportLog]:
 
 
 def kml_to_geojson(kml_bytes) -> Tuple[dict, ImportLog]:
-    """Convert KML/KMZ to GeoJSON using pure Python fastkml library."""
-    import zipfile
-    from fastkml import kml
-    import geojson
+    """Convert KML/KMZ to GeoJSON using JavaScript togeojson library for proper styling support."""
+    import subprocess
+    import json
+    import os
     
     import_log = ImportLog()
     
     try:
+        # Get the path to the togeojson converter
+        current_dir = os.path.dirname(os.path.abspath(__file__))
+        togeojson_path = os.path.join(current_dir, 'togeojson', 'index.js')
+        
         # Handle KMZ files (ZIP archives)
         if isinstance(kml_bytes, bytes) and kml_bytes.startswith(b'PK'):
-            # It's a KMZ file
-            with zipfile.ZipFile(io.BytesIO(kml_bytes)) as kmz:
-                kml_files = [f for f in kmz.namelist() if f.endswith('.kml')]
-                if not kml_files:
-                    raise Exception("No KML file found in KMZ archive")
+            # It's a KMZ file - write to temporary file for JavaScript converter
+            import tempfile
+            with tempfile.NamedTemporaryFile(suffix='.kmz', delete=False) as temp_file:
+                temp_file.write(kml_bytes)
+                temp_file_path = temp_file.name
+            
+            try:
+                # Use the JavaScript converter with file path
+                result = subprocess.run(
+                    ['node', togeojson_path, temp_file_path],
+                    capture_output=True,
+                    text=True,
+                    timeout=30
+                )
                 
-                # Use the first KML file
-                kml_content = kmz.read(kml_files[0]).decode('utf-8')
+                if result.returncode != 0:
+                    raise Exception(f"JavaScript converter failed: {result.stderr}")
+                
+                geojson_data = json.loads(result.stdout)
+                
+            finally:
+                # Clean up temporary file
+                os.unlink(temp_file_path)
         else:
             # It's a regular KML file
             if isinstance(kml_bytes, str):
                 kml_content = kml_bytes
             else:
                 kml_content = kml_bytes.decode('utf-8')
+            
+            # Use the JavaScript converter with stdin
+            result = subprocess.run(
+                ['node', togeojson_path],
+                input=kml_content,
+                capture_output=True,
+                text=True,
+                timeout=30
+            )
+            
+            if result.returncode != 0:
+                raise Exception(f"JavaScript converter failed: {result.stderr}")
+            
+            geojson_data = json.loads(result.stdout)
         
-        # Parse KML
-        k = kml.KML()
-
-        try:
-            # Convert to bytes if there's an XML declaration, otherwise use string
-            if kml_content.strip().startswith('<?xml'):
-                k.from_string(kml_content.encode('utf-8'))
-            else:
-                k.from_string(kml_content)
-        except Exception as e:
-            # Mark as unparsable and log the error
-            import_log.add(f"Failed to parse KML content: {str(e)}")
-            raise Exception(f"KML parsing failed: {str(e)}")
-        
-        features = []
-        
-        # Extract features from KML
-        for document in k.features():
-            features.extend(_extract_features_from_kml_feature(document))
-        
-        # Process the features
-        processed_features, processing_log = process_togeojson_features(features)
+        # Process the features using the existing processing logic
+        processed_features, processing_log = process_togeojson_features(geojson_data['features'])
         import_log.extend(processing_log)
         
         # Create the final GeoJSON structure
@@ -262,94 +278,6 @@ def kml_to_geojson(kml_bytes) -> Tuple[dict, ImportLog]:
         raise
 
 
-def _extract_features_from_kml_feature(kml_feature):
-    """Extract GeoJSON features from a KML feature."""
-    features = []
-    
-    # If this feature has sub-features (like a Folder), process them recursively
-    if hasattr(kml_feature, 'features'):
-        for sub_feature in kml_feature.features():
-            features.extend(_extract_features_from_kml_feature(sub_feature))
-    
-    # If this feature has geometry, process it
-    if hasattr(kml_feature, 'geometry') and kml_feature.geometry:
-        geometry = kml_feature.geometry
-        
-        # Convert KML geometry to GeoJSON
-        if isinstance(geometry, Point):
-            # Point coordinates are accessed as a tuple (x, y, z)
-            coords = geometry.coords[0] if geometry.coords else (0, 0, 0)
-            geojson_geom = {
-                'type': 'Point',
-                'coordinates': [coords[0], coords[1], coords[2] if len(coords) > 2 else 0]
-            }
-        elif isinstance(geometry, LineString):
-            # LineString coordinates are accessed as a list of tuples
-            coords = [[coord[0], coord[1], coord[2] if len(coord) > 2 else 0] for coord in geometry.coords]
-            geojson_geom = {
-                'type': 'LineString',
-                'coordinates': coords
-            }
-        elif isinstance(geometry, Polygon):
-            # Polygon coordinates are accessed through exterior and interior rings
-            coords = []
-            for ring in geometry.exterior.coords:
-                coords.append([ring[0], ring[1], ring[2] if len(ring) > 2 else 0])
-            geojson_geom = {
-                'type': 'Polygon',
-                'coordinates': [coords]
-            }
-        elif isinstance(geometry, (GeometryCollection, MultiPoint, MultiLineString, MultiPolygon)):
-            # Handle multi-geometry types by creating separate features
-            if isinstance(geometry, GeometryCollection):
-                geoms = geometry.geoms
-            else:
-                # MultiPoint, MultiLineString, MultiPolygon have different attribute names
-                geoms = geometry.geoms if hasattr(geometry, 'geoms') else [geometry]
-            
-            # Prioritize certain geometry types to avoid duplicates
-            # For polygons, prefer Polygon over Point (which is usually just for labeling)
-            polygon_geoms = [g for g in geoms if isinstance(g, Polygon)]
-            linestring_geoms = [g for g in geoms if isinstance(g, LineString)]
-            point_geoms = [g for g in geoms if isinstance(g, Point)]
-            
-            # Use the most appropriate geometry type
-            if polygon_geoms:
-                geoms_to_process = polygon_geoms
-            elif linestring_geoms:
-                geoms_to_process = linestring_geoms
-            else:
-                geoms_to_process = point_geoms
-            
-            for geom in geoms_to_process:
-                sub_features = _extract_features_from_kml_feature(type('Feature', (), {'geometry': geom, 'name': kml_feature.name, 'description': getattr(kml_feature, 'description', '')})())
-                features.extend(sub_features)
-            return features
-        else:
-            return features  # Skip unsupported geometry types
-        
-        # Create properties from KML feature
-        properties = {}
-        if hasattr(kml_feature, 'name') and kml_feature.name:
-            properties['name'] = kml_feature.name
-        if hasattr(kml_feature, 'description') and kml_feature.description:
-            # Convert HTML description to markdown
-            properties['description'] = html_to_markdown(kml_feature.description)
-        
-        # Add styling information
-        if hasattr(kml_feature, 'styleUrl') and kml_feature.styleUrl:
-            properties['styleUrl'] = kml_feature.styleUrl
-        
-        # Create GeoJSON feature
-        feature = {
-            'type': 'Feature',
-            'geometry': geojson_geom,
-            'properties': properties
-        }
-        
-        features.append(feature)
-    
-    return features
 
 
 def load_geojson_type(data: dict) -> dict:

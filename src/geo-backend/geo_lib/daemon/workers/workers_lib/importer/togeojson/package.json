@@ -9,7 +9,8 @@
   },
   "dependencies": {
     "@tmcw/togeojson": "^7.1.2",
-    "@xmldom/xmldom": "^0.9.7"
+    "@xmldom/xmldom": "^0.9.7",
+    "adm-zip": "^0.5.10"
   },
   "engines": {
     "node": ">=16.0.0"
