@@ -73,7 +73,7 @@ def geojson_to_geofeature(geojson: dict) -> Tuple[List[GeoFeatureSupported], Imp
             case 'polygon':
                 c = PolygonFeature
             case _:
-                import_log.add(f'Feature named "{item["properties"]["title"]}" had unsupported type "{item["geometry"]["type"]}".')
+                import_log.add(f'Feature named "{item["properties"].get("name", "unnamed")}" had unsupported type "{item["geometry"]["type"]}".')
                 continue
 
         f = c(**item)
