@@ -73,7 +73,13 @@ class SecureFileValidator:
     # Dangerous XML elements/attributes to remove
     DANGEROUS_ELEMENTS = [
         'script', 'iframe', 'object', 'embed', 'applet', 'form', 'input',
-        'button', 'link', 'meta', 'style'
+        'button', 'link', 'meta'
+    ]
+    
+    # KML-specific elements that are allowed (including style and metadata elements)
+    ALLOWED_KML_ELEMENTS = [
+        'style', 'iconstyle', 'linestyle', 'polystyle', 'labelstyle', 'balloonstyle',
+        'liststyle', 'itemicon', 'pair', 'hotspot', 'link'
     ]
 
     DANGEROUS_ATTRIBUTES = [
@@ -265,9 +271,15 @@ class SecureFileValidator:
         """Parse XML with security measures against XXE attacks."""
         # Create a secure parser that disables external entities
         parser = ET.XMLParser()
-
-        # Disable entity processing to prevent XXE
-        parser.entity = {}
+        
+        # Disable entity processing to prevent XXE attacks
+        # Note: In newer Python versions, parser.entity is readonly, so we use a different approach
+        try:
+            # Try to disable entity processing (works in older Python versions)
+            parser.entity = {}
+        except (AttributeError, TypeError):
+            # In newer versions, we rely on the default secure behavior
+            pass
 
         # Parse the XML
         try:
@@ -279,8 +291,15 @@ class SecureFileValidator:
     def _check_dangerous_elements(self, root: ET.Element):
         """Check for dangerous XML elements."""
         for elem in root.iter():
-            tag_name = elem.tag.lower()
-            if any(dangerous in tag_name for dangerous in self.DANGEROUS_ELEMENTS):
+            # Extract the local name from namespaced tags (e.g., {namespace}tag -> tag)
+            tag_name = elem.tag.split('}')[-1].lower() if '}' in elem.tag else elem.tag.lower()
+            
+            # Allow KML-specific elements
+            if tag_name in self.ALLOWED_KML_ELEMENTS:
+                continue
+                
+            # Check for dangerous elements
+            if tag_name in self.DANGEROUS_ELEMENTS:
                 raise SecurityError("Invalid file content")
 
     def _check_dangerous_attributes(self, root: ET.Element):
@@ -296,9 +315,12 @@ class SecureFileValidator:
         if 'kml' not in root.tag.lower():
             return False
 
-        # Check for required KML elements
+        # Check for required KML elements (handle namespaced tags)
         required_elements = ['document', 'folder', 'placemark', 'groundoverlay', 'screenoverlay']
-        has_required = any(elem.tag.lower().endswith(req) for req in required_elements for elem in root.iter())
+        has_required = any(
+            any(req in elem.tag.lower() for req in required_elements) 
+            for elem in root.iter()
+        )
 
         return has_required
 

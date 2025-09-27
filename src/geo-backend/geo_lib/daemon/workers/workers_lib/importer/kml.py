@@ -57,7 +57,16 @@ def normalize_kml_for_comparison(kml_content: str) -> str:
     try:
         # Use secure parser to prevent XXE attacks
         parser = ET.XMLParser()
-        parser.entity = {}  # Disable entity processing
+        
+        # Disable entity processing to prevent XXE attacks
+        # Note: In newer Python versions, parser.entity is readonly, so we use a different approach
+        try:
+            # Try to disable entity processing (works in older Python versions)
+            parser.entity = {}
+        except (AttributeError, TypeError):
+            # In newer versions, we rely on the default secure behavior
+            pass
+            
         root = ET.fromstring(kml_content, parser=parser)
     except ET.ParseError:
         # If XML parsing fails, return the original content
