@@ -37,6 +37,7 @@ class DocumentForm(forms.Form):
 
 
 @login_required_401
+@csrf_protect
 def upload_item(request):
     if request.method == 'POST':
         form = DocumentForm(request.POST, request.FILES)
@@ -219,6 +220,7 @@ def fetch_import_history_item(request, item_id: int):
 
 
 @login_required_401
+@csrf_protect
 def delete_import_item(request, id):
     if request.method == 'DELETE':
         try:
@@ -235,7 +237,7 @@ def delete_import_item(request, id):
 
 
 @login_required_401
-@csrf_protect  # TODO: put this on all routes
+@csrf_protect
 @require_http_methods(["PUT"])
 def update_import_item(request, item_id):
     try:
@@ -283,7 +285,7 @@ def update_import_item(request, item_id):
 
 
 @login_required_401
-@csrf_protect  # TODO: put this on all routes
+@csrf_protect
 @require_http_methods(["POST"])
 def import_to_featurestore(request, item_id):
     try:

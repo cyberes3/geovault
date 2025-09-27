@@ -1,9 +1,11 @@
 from django.contrib.auth import login
 from django.shortcuts import render, redirect
+from django.views.decorators.csrf import csrf_protect
 
 from users.forms import CustomUserCreationForm
 
 
+@csrf_protect
 def register(request):
     if request.method == "GET":
         return render(
