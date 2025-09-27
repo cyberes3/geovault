@@ -426,6 +426,10 @@ export default {
       }).then(response => {
         if (response.data.success) {
           this.$store.dispatch('refreshImportQueue')
+          // Remove the beforeunload handler before redirecting
+          if (this.beforeUnloadHandler) {
+            window.removeEventListener('beforeunload', this.beforeUnloadHandler);
+          }
           // Redirect to import page after successful import
           this.isRedirectingDueToInvalidId = true;
           this.$router.replace('/import');
@@ -476,9 +480,12 @@ export default {
   mounted() {
     // Add navigation warning when user tries to leave the page
     this.beforeUnloadHandler = (event) => {
-      event.preventDefault();
-      event.returnValue = '';
-      return '';
+      // Only warn if we're not redirecting due to import completion
+      if (!this.isRedirectingDueToInvalidId) {
+        event.preventDefault();
+        event.returnValue = '';
+        return '';
+      }
     };
     window.addEventListener('beforeunload', this.beforeUnloadHandler);
   },
@@ -534,6 +541,10 @@ export default {
 
                 // If the item is already imported, redirect to import page
                 if (vm.isImported) {
+                  // Remove the beforeunload handler before redirecting
+                  if (vm.beforeUnloadHandler) {
+                    window.removeEventListener('beforeunload', vm.beforeUnloadHandler);
+                  }
                   vm.isRedirectingDueToInvalidId = true;
                   vm.$router.replace('/import');
                   return;
@@ -567,6 +578,10 @@ export default {
           } catch (error) {
             if (error.response && error.response.data && error.response.data.code === 404) {
               // Import ID does not exist.
+              // Remove the beforeunload handler before redirecting
+              if (vm.beforeUnloadHandler) {
+                window.removeEventListener('beforeunload', vm.beforeUnloadHandler);
+              }
               vm.isRedirectingDueToInvalidId = true;
               vm.$router.replace('/import');
               return;
