@@ -70,7 +70,8 @@
 
     <!-- Feature Items -->
     <div v-if="itemsForUser.length > 0" class="space-y-6">
-      <div v-for="(item, index) in itemsForUser" :key="`item-${index}`" class="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
+      <div v-for="(item, index) in itemsForUser" :key="`item-${index}`" 
+           :class="item.isDuplicate ? 'bg-gray-100 rounded-lg shadow-sm border border-gray-300 p-6 opacity-75' : 'bg-white rounded-lg shadow-sm border border-gray-200 p-6'">
         <div class="flex items-center justify-between mb-6">
           <h3 class="text-lg font-semibold text-gray-900">Feature {{ index + 1 }}</h3>
           <div class="flex items-center space-x-2">
@@ -89,6 +90,34 @@
           </div>
         </div>
 
+        <!-- Duplicate Warning -->
+        <div v-if="item.isDuplicate" class="mb-4 p-4 bg-yellow-50 border border-yellow-200 rounded-md">
+          <div class="flex items-start">
+            <div class="flex-shrink-0">
+              <svg class="h-5 w-5 text-yellow-400" fill="currentColor" viewBox="0 0 20 20">
+                <path fill-rule="evenodd" d="M8.257 3.099c.765-1.36 2.722-1.36 3.486 0l5.58 9.92c.75 1.334-.213 2.98-1.742 2.98H4.42c-1.53 0-2.493-1.646-1.743-2.98l5.58-9.92zM11 13a1 1 0 11-2 0 1 1 0 012 0zm-1-8a1 1 0 00-1 1v3a1 1 0 002 0V6a1 1 0 00-1-1z" clip-rule="evenodd"></path>
+              </svg>
+            </div>
+            <div class="ml-3 flex-1">
+              <h3 class="text-sm font-medium text-yellow-800">Duplicate Feature Detected</h3>
+              <div class="mt-2 text-sm text-yellow-700">
+                <p>This feature has the same coordinates as an existing feature in your feature store.</p>
+                <div class="mt-2">
+                  <button
+                    @click="editOriginalFeature(item.duplicateInfo)"
+                    class="inline-flex items-center px-3 py-1.5 border border-transparent text-xs font-medium rounded-md text-white bg-yellow-600 hover:bg-yellow-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-yellow-500"
+                  >
+                    <svg class="w-3 h-3 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"></path>
+                    </svg>
+                    Edit Original Feature
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+
         <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
           <!-- Name Field -->
           <div>
@@ -96,12 +125,12 @@
             <div class="flex items-center space-x-2">
               <input
                 v-model="item.properties.name"
-                :class="isImported ? 'block w-full px-3 py-2 border border-gray-300 rounded-md bg-gray-100 cursor-not-allowed' : 'block w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-blue-500 focus:border-blue-500'"
-                :disabled="isImported"
+                :class="isImported || item.isDuplicate ? 'block w-full px-3 py-2 border border-gray-300 rounded-md bg-gray-100 cursor-not-allowed' : 'block w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-blue-500 focus:border-blue-500'"
+                :disabled="isImported || item.isDuplicate"
                 :placeholder="originalItems[index].properties.name"
               />
               <button
-                v-if="!isImported"
+                v-if="!isImported && !item.isDuplicate"
                 class="inline-flex items-center px-3 py-2 border border-gray-300 shadow-sm text-sm leading-4 font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500"
                 @click="resetNestedField(index, 'properties', 'name')"
               >
@@ -118,14 +147,14 @@
             <div class="flex items-start space-x-2">
               <textarea
                 v-model="item.properties.description"
-                :class="isImported ? 'block w-full px-3 py-2 border border-gray-300 rounded-md bg-gray-100 cursor-not-allowed resize-none' : 'block w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-blue-500 focus:border-blue-500 resize-none'"
-                :disabled="isImported"
+                :class="isImported || item.isDuplicate ? 'block w-full px-3 py-2 border border-gray-300 rounded-md bg-gray-100 cursor-not-allowed resize-none' : 'block w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-blue-500 focus:border-blue-500 resize-none'"
+                :disabled="isImported || item.isDuplicate"
                 :placeholder="originalItems[index].properties.description"
                 rows="4"
                 class="text-sm"
               ></textarea>
               <button
-                v-if="!isImported"
+                v-if="!isImported && !item.isDuplicate"
                 class="inline-flex items-center px-3 py-2 border border-gray-300 shadow-sm text-sm leading-4 font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 mt-1"
                 @click="resetNestedField(index, 'properties', 'description')"
               >
@@ -142,13 +171,13 @@
             <div class="flex items-center space-x-2">
               <input
                 type="datetime-local"
-                :class="isImported ? 'block w-full px-3 py-2 border border-gray-300 rounded-md bg-gray-100 cursor-not-allowed' : 'block w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-blue-500 focus:border-blue-500'"
-                :disabled="isImported"
+                :class="isImported || item.isDuplicate ? 'block w-full px-3 py-2 border border-gray-300 rounded-md bg-gray-100 cursor-not-allowed' : 'block w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-blue-500 focus:border-blue-500'"
+                :disabled="isImported || item.isDuplicate"
                 :value="formatDateForInput(item.properties.created)"
                 @change="updateDate(index, $event)"
               />
               <button
-                v-if="!isImported"
+                v-if="!isImported && !item.isDuplicate"
                 class="inline-flex items-center px-3 py-2 border border-gray-300 shadow-sm text-sm leading-4 font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500"
                 @click="resetNestedField(index, 'properties', 'created')"
               >
@@ -166,12 +195,12 @@
               <div v-for="(tag, tagIndex) in item.properties.tags" :key="`tag-${tagIndex}`" class="flex items-center space-x-2">
                 <input
                   v-model="item.properties.tags[tagIndex]"
-                  :class="isImported ? 'block w-full px-3 py-2 border border-gray-300 rounded-md bg-gray-100 cursor-not-allowed' : 'block w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-blue-500 focus:border-blue-500'"
-                  :disabled="isImported"
+                  :class="isImported || item.isDuplicate ? 'block w-full px-3 py-2 border border-gray-300 rounded-md bg-gray-100 cursor-not-allowed' : 'block w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-blue-500 focus:border-blue-500'"
+                  :disabled="isImported || item.isDuplicate"
                   :placeholder="getTagPlaceholder(index, tag)"
                 />
                 <button
-                  v-if="!isImported"
+                  v-if="!isImported && !item.isDuplicate"
                   class="inline-flex items-center px-3 py-2 border border-transparent text-sm font-medium rounded-md text-white bg-red-600 hover:bg-red-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-red-500"
                   @click="removeTag(index, tagIndex)"
                 >
@@ -181,7 +210,7 @@
                 </button>
               </div>
             </div>
-            <div v-if="!isImported" class="flex items-center space-x-2 mt-3">
+            <div v-if="!isImported && !item.isDuplicate" class="flex items-center space-x-2 mt-3">
               <button
                 :class="{ 'opacity-50 cursor-not-allowed': isLastTagEmpty(index) }"
                 :disabled="isLastTagEmpty(index)"
@@ -202,6 +231,54 @@
                 </svg>
                 Reset Tags
               </button>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Import Summary -->
+    <div v-if="itemsForUser.length > 0" class="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
+      <h3 class="text-lg font-semibold text-gray-900 mb-4">Import Summary</h3>
+      <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+        <div class="bg-blue-50 border border-blue-200 rounded-lg p-4">
+          <div class="flex items-center">
+            <div class="flex-shrink-0">
+              <svg class="h-8 w-8 text-blue-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"></path>
+              </svg>
+            </div>
+            <div class="ml-3">
+              <p class="text-sm font-medium text-blue-800">Total Features</p>
+              <p class="text-2xl font-bold text-blue-900">{{ itemsForUser.length }}</p>
+            </div>
+          </div>
+        </div>
+        
+        <div class="bg-green-50 border border-green-200 rounded-lg p-4">
+          <div class="flex items-center">
+            <div class="flex-shrink-0">
+              <svg class="h-8 w-8 text-green-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"></path>
+              </svg>
+            </div>
+            <div class="ml-3">
+              <p class="text-sm font-medium text-green-800">Ready to Import</p>
+              <p class="text-2xl font-bold text-green-900">{{ itemsForUser.filter(item => !item.isDuplicate).length }}</p>
+            </div>
+          </div>
+        </div>
+        
+        <div class="bg-yellow-50 border border-yellow-200 rounded-lg p-4">
+          <div class="flex items-center">
+            <div class="flex-shrink-0">
+              <svg class="h-8 w-8 text-yellow-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-2.5L13.732 4c-.77-.833-1.964-.833-2.732 0L3.732 16.5c-.77.833.192 2.5 1.732 2.5z"></path>
+              </svg>
+            </div>
+            <div class="ml-3">
+              <p class="text-sm font-medium text-yellow-800">Duplicates (Skipped)</p>
+              <p class="text-2xl font-bold text-yellow-900">{{ itemsForUser.filter(item => item.isDuplicate).length }}</p>
             </div>
           </div>
         </div>
@@ -242,7 +319,7 @@
           {{ isSaving ? 'Saving...' : 'Save Changes' }}
         </button>
         <button
-          :disabled="lockButtons || isImporting"
+          :disabled="lockButtons || isImporting || itemsForUser.filter(item => !item.isDuplicate).length === 0"
           class="inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md text-white bg-blue-600 hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 disabled:bg-gray-400 disabled:cursor-not-allowed transition-colors duration-200"
           @click="performImport"
         >
@@ -253,7 +330,7 @@
           <svg v-else class="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12"></path>
           </svg>
-          {{ isImporting ? 'Importing...' : 'Import to Feature Store' }}
+          {{ isImporting ? 'Importing...' : `Import ${itemsForUser.filter(item => !item.isDuplicate).length} Features` }}
         </button>
       </div>
     </div>
@@ -280,6 +357,14 @@
       :filename="originalFilename"
       @close="closeFeatureMap"
     />
+
+    <!-- Edit Original Feature Dialog -->
+    <EditOriginalFeatureDialog
+      :is-open="showEditOriginalDialog"
+      :original-feature="selectedOriginalFeature"
+      @close="closeEditOriginalDialog"
+      @saved="onOriginalFeatureSaved"
+    />
   </div>
 </template>
 
@@ -296,6 +381,8 @@ import {getCookie} from "@/assets/js/auth.js";
 import Loader from "@/components/parts/Loader.vue";
 import MapPreviewDialog from "@/components/import/MapPreviewDialog.vue";
 import FeatureMapDialog from "@/components/import/FeatureMapDialog.vue";
+import EditOriginalFeatureDialog from "@/components/import/EditOriginalFeatureDialog.vue";
+import {featuresMatch} from "@/assets/js/coordinate-utils.js";
 
 // TODO: for each feature, query the DB and check if there is a duplicate. For points that's duplicate coords, for linestrings and polygons that's duplicate points
 // TODO: redo the entire log feature to include local timestamps
@@ -304,7 +391,7 @@ export default {
   computed: {
     ...mapState(["userInfo"]),
   },
-  components: {Loader, Importqueue, MapPreviewDialog, FeatureMapDialog},
+  components: {Loader, Importqueue, MapPreviewDialog, FeatureMapDialog, EditOriginalFeatureDialog},
   data() {
     return {
       msg: "",
@@ -321,6 +408,9 @@ export default {
       isSaving: false, // Track save operation loading state
       isImporting: false, // Track import operation loading state
       isRedirectingDueToInvalidId: false, // Track if we're redirecting due to invalid import ID
+      duplicateFeatures: [], // Track features that are duplicates
+      showEditOriginalDialog: false, // Track edit original feature dialog state
+      selectedOriginalFeature: null, // Track which original feature is being edited
       // Removed flatpickrConfig - using native HTML5 datetime-local input
     }
   },
@@ -378,7 +468,11 @@ export default {
       this.lockButtons = true
       this.isSaving = true
       const csrftoken = getCookie('csrftoken')
-      axios.put('/api/data/item/import/update/' + this.id, this.itemsForUser, {
+      
+      // Filter out duplicate features before saving
+      const nonDuplicateFeatures = this.itemsForUser.filter(item => !item.isDuplicate)
+      
+      axios.put('/api/data/item/import/update/' + this.id, nonDuplicateFeatures, {
         headers: {
           'X-CSRFToken': csrftoken
         }
@@ -412,8 +506,11 @@ export default {
       this.isImporting = true
       const csrftoken = getCookie('csrftoken')
 
-      // Save changes first.
-      await axios.put('/api/data/item/import/update/' + this.id, this.itemsForUser, {
+      // Filter out duplicate features before saving
+      const nonDuplicateFeatures = this.itemsForUser.filter(item => !item.isDuplicate)
+      
+      // Save changes first (only non-duplicate features).
+      await axios.put('/api/data/item/import/update/' + this.id, nonDuplicateFeatures, {
         headers: {
           'X-CSRFToken': csrftoken
         }
@@ -459,6 +556,60 @@ export default {
     closeFeatureMap() {
       this.showFeatureMapDialog = false;
     },
+    markDuplicateFeatures() {
+      // Reset all features to not be duplicates
+      this.itemsForUser.forEach((item, index) => {
+        item.isDuplicate = false;
+        item.duplicateInfo = null;
+      });
+      
+      // Mark duplicate features using tolerance-based coordinate comparison
+      // This matches the backend's coordinate matching logic (1e-6 tolerance)
+      this.duplicateFeatures.forEach(duplicateInfo => {
+        const duplicateFeature = duplicateInfo.feature;
+        const index = this.itemsForUser.findIndex(item => 
+          featuresMatch(item, duplicateFeature)
+        );
+        
+        if (index !== -1) {
+          this.itemsForUser[index].isDuplicate = true;
+          this.itemsForUser[index].duplicateInfo = duplicateInfo;
+        }
+      });
+    },
+    editOriginalFeature(duplicateInfo) {
+      // Show the edit dialog for the original feature
+      this.selectedOriginalFeature = duplicateInfo.existing_features[0];
+      this.showEditOriginalDialog = true;
+    },
+    closeEditOriginalDialog() {
+      this.showEditOriginalDialog = false;
+      this.selectedOriginalFeature = null;
+    },
+    async onOriginalFeatureSaved(featureId) {
+      // Handle when the original feature is saved
+      console.log(`Original feature ${featureId} was updated`);
+      
+      // Refresh the original feature data to reflect the changes
+      try {
+        const response = await axios.get(`/api/data/feature/${featureId}/`);
+        if (response.data.success) {
+          // Update the selectedOriginalFeature with the fresh data
+          this.selectedOriginalFeature = response.data.feature;
+          
+          // Also update the duplicate info in the itemsForUser array
+          this.itemsForUser.forEach((item, index) => {
+            if (item.isDuplicate && item.duplicateInfo && 
+                item.duplicateInfo.existing_features[0].id === featureId) {
+              // Update the duplicate info with the fresh feature data
+              item.duplicateInfo.existing_features[0] = response.data.feature;
+            }
+          });
+        }
+      } catch (error) {
+        console.error('Error refreshing original feature data:', error);
+      }
+    },
     clearComponentState() {
       // Clear all component data to reset state
       this.msg = "";
@@ -475,6 +626,9 @@ export default {
       this.isSaving = false;
       this.isImporting = false;
       this.isRedirectingDueToInvalidId = false;
+      this.duplicateFeatures = [];
+      this.showEditOriginalDialog = false;
+      this.selectedOriginalFeature = null;
     },
   },
   mounted() {
@@ -569,6 +723,10 @@ export default {
                   vm.itemsForUser.push(vm.parseGeoJson(item))
                 })
                 vm.originalItems = JSON.parse(JSON.stringify(vm.itemsForUser))
+                
+                // Process duplicates from the API response
+                vm.duplicateFeatures = response.data.duplicates || []
+                vm.markDuplicateFeatures()
               }
             }
             

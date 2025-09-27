@@ -2,6 +2,7 @@ import hashlib
 import json
 import logging
 import traceback
+from typing import List, Dict, Tuple, Optional
 
 from django import forms
 from django.contrib.gis.geos import GEOSGeometry
@@ -75,6 +76,128 @@ def _strip_duplicate_features(features, user_id, log_id):
             logger.error(f"Failed to log duplicate summary: {e}")
     
     return unique_features, duplicates_removed
+
+
+def _normalize_coordinates(coords: List, tolerance: float = 1e-6) -> List:
+    """Normalize coordinates by rounding to specified tolerance."""
+    if isinstance(coords[0], (int, float)):
+        # Single coordinate pair
+        return [round(coord, 6) for coord in coords]
+    else:
+        # Nested coordinates (LineString or Polygon)
+        return [_normalize_coordinates(coord, tolerance) for coord in coords]
+
+
+def _coordinates_match(coord1: List, coord2: List, tolerance: float = 1e-6) -> bool:
+    """Check if two coordinate sets match within tolerance."""
+    norm1 = _normalize_coordinates(coord1, tolerance)
+    norm2 = _normalize_coordinates(coord2, tolerance)
+    return norm1 == norm2
+
+
+def _find_coordinate_duplicates(features: List[Dict], user_id: int) -> Tuple[List[Dict], List[Dict]]:
+    """
+    Find features that have duplicate coordinates in the existing featurestore.
+    Returns (unique_features, duplicate_features_with_originals)
+    """
+    if not features:
+        return features, []
+    
+    unique_features = []
+    duplicate_features = []
+    
+    for feature in features:
+        geometry = feature.get('geometry', {})
+        geom_type = geometry.get('type', '').lower()
+        coordinates = geometry.get('coordinates', [])
+        
+        if not coordinates:
+            # Skip features without coordinates
+            unique_features.append(feature)
+            continue
+        
+        # Check for existing features with matching coordinates
+        existing_features = _find_existing_features_by_coordinates(
+            coordinates, geom_type, user_id
+        )
+        
+        if existing_features:
+            # This is a duplicate - add original feature info
+            duplicate_info = {
+                'feature': feature,
+                'existing_features': existing_features
+            }
+            duplicate_features.append(duplicate_info)
+        else:
+            unique_features.append(feature)
+    
+    return unique_features, duplicate_features
+
+
+def _find_existing_features_by_coordinates(coordinates: List, geom_type: str, user_id: int) -> List[Dict]:
+    """Find existing features in the database with matching coordinates."""
+    try:
+        # Create a GEOSGeometry object for spatial queries
+        if geom_type == 'point':
+            # For points, use exact coordinate matching
+            geom_data = {
+                'type': 'Point',
+                'coordinates': coordinates
+            }
+            geometry = GEOSGeometry(json.dumps(geom_data))
+            
+            # Find features with the same point coordinates
+            existing_features = FeatureStore.objects.filter(
+                user_id=user_id,
+                geometry__equals=geometry
+            ).values('id', 'geojson', 'timestamp')
+            
+        elif geom_type == 'linestring':
+            # For linestrings, check if coordinates match exactly
+            geom_data = {
+                'type': 'LineString',
+                'coordinates': coordinates
+            }
+            geometry = GEOSGeometry(json.dumps(geom_data))
+            
+            existing_features = FeatureStore.objects.filter(
+                user_id=user_id,
+                geometry__equals=geometry
+            ).values('id', 'geojson', 'timestamp')
+            
+        elif geom_type == 'polygon':
+            # For polygons, check if coordinates match exactly
+            geom_data = {
+                'type': 'Polygon',
+                'coordinates': coordinates
+            }
+            geometry = GEOSGeometry(json.dumps(geom_data))
+            
+            existing_features = FeatureStore.objects.filter(
+                user_id=user_id,
+                geometry__equals=geometry
+            ).values('id', 'geojson', 'timestamp')
+            
+        else:
+            return []
+        
+        # Convert to list and add feature info
+        result = []
+        for feature in existing_features:
+            geojson_data = feature['geojson']
+            result.append({
+                'id': feature['id'],
+                'name': geojson_data.get('properties', {}).get('name', 'Unnamed'),
+                'type': geojson_data.get('geometry', {}).get('type', 'Unknown'),
+                'timestamp': feature['timestamp'].isoformat(),
+                'geojson': geojson_data
+            })
+        
+        return result
+        
+    except Exception as e:
+        logger.error(f"Error finding existing features by coordinates: {e}")
+        return []
 
 
 # TODO: allow re-import of old previously uploaded by re-uploading it
@@ -322,7 +445,24 @@ def fetch_import_queue(request, item_id):
         if item.log_id:
             logs = _get_logs_by_log_id(str(item.log_id))
         
-        return JsonResponse({'success': True, 'processing': False, 'geofeatures': item.geofeatures, 'log': logs, 'msg': None, 'original_filename': item.original_filename, 'imported': item.imported}, status=200)
+        # Check for coordinate-based duplicates
+        duplicates = []
+        if item.geofeatures:
+            unique_features, duplicate_features = _find_coordinate_duplicates(
+                item.geofeatures, request.user.id
+            )
+            duplicates = duplicate_features
+        
+        return JsonResponse({
+            'success': True, 
+            'processing': False, 
+            'geofeatures': item.geofeatures, 
+            'log': logs, 
+            'msg': None, 
+            'original_filename': item.original_filename, 
+            'imported': item.imported,
+            'duplicates': duplicates
+        }, status=200)
     except ImportQueue.DoesNotExist:
         return JsonResponse({'success': False, 'msg': 'ID does not exist', 'code': 404}, status=400)
 

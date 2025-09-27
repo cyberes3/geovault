@@ -1,14 +1,17 @@
 import time
 import logging
 import traceback
+import json
 from typing import List, Tuple, Dict
 
-from django.contrib.gis.geos import Polygon
+from django.contrib.gis.geos import Polygon, GEOSGeometry
 from django.http import JsonResponse
 from django.views.decorators.http import require_http_methods
+from django.views.decorators.csrf import csrf_protect
 
 from data.models import FeatureStore
 from geo_lib.website.auth import login_required_401
+from geo_lib.feature_id import generate_feature_hash
 
 logger = logging.getLogger(__name__)
 
@@ -131,5 +134,153 @@ def get_geojson_data(request):
         return JsonResponse({
             'success': False,
             'error': 'Failed to get features in bounding box',
+            'code': 500
+        }, status=500)
+
+
+@login_required_401
+@require_http_methods(["GET"])
+def get_feature(request, feature_id):
+    """
+    API endpoint to get a specific feature by ID.
+    
+    URL parameter:
+    - feature_id: ID of the feature to retrieve
+    """
+    try:
+        # Get the feature from database
+        feature = FeatureStore.objects.get(id=feature_id, user=request.user)
+        
+        # Return the feature data
+        return JsonResponse({
+            'success': True,
+            'feature': {
+                'id': feature.id,
+                'geojson': feature.geojson,
+                'timestamp': feature.timestamp.isoformat() if feature.timestamp else None
+            }
+        })
+        
+    except FeatureStore.DoesNotExist:
+        return JsonResponse({
+            'success': False,
+            'error': 'Feature not found or access denied',
+            'code': 404
+        }, status=404)
+    except Exception as e:
+        logger.error(f"Error getting feature {feature_id}: {traceback.format_exc()}")
+        return JsonResponse({
+            'success': False,
+            'error': 'Failed to get feature',
+            'code': 500
+        }, status=500)
+
+
+@login_required_401
+@csrf_protect
+@require_http_methods(["PUT"])
+def update_feature(request, feature_id):
+    """
+    API endpoint to update a specific feature.
+    
+    URL parameter:
+    - feature_id: ID of the feature to update
+    
+    Request body: GeoJSON feature object
+    """
+    try:
+        # Get the feature from database
+        feature = FeatureStore.objects.get(id=feature_id, user=request.user)
+        
+        # Parse request body
+        try:
+            feature_data = json.loads(request.body)
+        except json.JSONDecodeError:
+            return JsonResponse({
+                'success': False,
+                'error': 'Invalid JSON in request body',
+                'code': 400
+            }, status=400)
+        
+        # Validate that it's a proper GeoJSON feature or geometry
+        if not isinstance(feature_data, dict):
+            return JsonResponse({
+                'success': False,
+                'error': 'Request body must be a valid GeoJSON object',
+                'code': 400
+            }, status=400)
+        
+        # Handle both Feature objects and geometry objects
+        if feature_data.get('type') == 'Feature':
+            # It's already a Feature object, use it as-is
+            pass
+        elif feature_data.get('type') in ['Point', 'LineString', 'Polygon', 'MultiPoint', 'MultiLineString', 'MultiPolygon']:
+            # It's a geometry object, wrap it in a Feature object
+            feature_data = {
+                'type': 'Feature',
+                'geometry': feature_data,
+                'properties': feature_data.get('properties', {})
+            }
+        else:
+            return JsonResponse({
+                'success': False,
+                'error': 'Request body must be a valid GeoJSON Feature or geometry object',
+                'code': 400
+            }, status=400)
+        
+        # Update the feature data
+        feature.geojson = feature_data
+        
+        # Regenerate the hash for the updated feature
+        feature.geojson_hash = generate_feature_hash(feature_data)
+        
+        # Update the geometry field if coordinates changed
+        try:
+            geom_data = feature_data.get('geometry', {})
+            if geom_data and geom_data.get('type') and geom_data.get('coordinates'):
+                # Ensure coordinates have 3 dimensions for consistency
+                coords = geom_data['coordinates']
+                if geom_data['type'] == 'Point':
+                    if len(coords) == 2:
+                        coords = [coords[0], coords[1], 0.0]
+                elif geom_data['type'] == 'LineString':
+                    geom_data['coordinates'] = [
+                        [coord[0], coord[1], coord[2] if len(coord) > 2 else 0.0]
+                        for coord in coords
+                    ]
+                elif geom_data['type'] == 'Polygon':
+                    geom_data['coordinates'] = [
+                        [
+                            [coord[0], coord[1], coord[2] if len(coord) > 2 else 0.0]
+                            for coord in ring
+                        ]
+                        for ring in coords
+                    ]
+                
+                feature.geometry = GEOSGeometry(json.dumps(geom_data))
+        except Exception as e:
+            logger.warning(f"Error updating geometry for feature {feature_id}: {e}")
+            # Continue without updating geometry if there's an error
+        
+        # Save the updated feature
+        feature.save()
+        
+        return JsonResponse({
+            'success': True,
+            'message': 'Feature updated successfully',
+            'feature_id': feature.id
+        })
+        
+    except FeatureStore.DoesNotExist:
+        return JsonResponse({
+            'success': False,
+            'error': 'Feature not found or access denied',
+            'code': 404
+        }, status=404)
+    except Exception as e:
+        logger.error(f"Error updating feature {feature_id}: {traceback.format_exc()}")
+        return JsonResponse({
+            'success': False,
+            'error': 'Failed to update feature',
             'code': 500
         }, status=500)
