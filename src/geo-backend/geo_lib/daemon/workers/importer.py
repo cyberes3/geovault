@@ -7,7 +7,7 @@ from uuid import uuid4
 
 from psycopg2.extras import RealDictCursor
 
-from geo_lib.daemon.database.connection import CursorFromConnectionFromPool
+from geo_lib.daemon.database.connection import CursorFromConnectionFromPool, Database
 from geo_lib.daemon.database.locking import DBLockManager
 from geo_lib.daemon.workers.workers_lib.importer.kml import kml_to_geojson
 from geo_lib.logging.database import log_to_db, DatabaseLogLevel, DatabaseLogSource
@@ -27,6 +27,7 @@ _SQL_CLAIM_AND_LOCK_ITEM = """
 _SQL_INSERT_PROCESSED_ITEM = "UPDATE public.data_importqueue SET geofeatures = %s WHERE id = %s"
 _SQL_MARK_UNPARSABLE = "UPDATE public.data_importqueue SET unparsable = true WHERE id = %s"
 _SQL_DELETE_ITEM = "DELETE FROM public.data_importqueue WHERE id = %s"
+_SQL_RELEASE_LOCK = "SELECT pg_advisory_unlock('public.data_importqueue'::regclass::oid::int4, %s::int4)"
 
 _logger = logging.getLogger("DAEMON").getChild("IMPORTER")
 
@@ -35,13 +36,26 @@ def _claim_and_lock_item():
     """
     Atomically claim and lock a single item for processing.
     This prevents race conditions where multiple workers try to process the same item.
+    Returns a tuple of (item_data, connection) where connection must be kept alive
+    until processing is complete to maintain the lock.
     """
-    with CursorFromConnectionFromPool(cursor_factory=RealDictCursor) as cursor:
-        cursor.execute(_SQL_CLAIM_AND_LOCK_ITEM)
-        return cursor.fetchone()
+    conn = Database.get_connection()
+    conn.autocommit = True
+    try:
+        with conn.cursor(cursor_factory=RealDictCursor) as cursor:
+            cursor.execute(_SQL_CLAIM_AND_LOCK_ITEM)
+            item = cursor.fetchone()
+            if item:
+                return item, conn
+            else:
+                Database.return_connection(conn)
+                return None, None
+    except Exception:
+        Database.return_connection(conn)
+        raise
 
 
-def _process_item(item, worker_id: str):
+def _process_item(item, connection, worker_id: str):
     """
     Process a single item that has already been locked.
     The lock is automatically released when the database connection closes.
@@ -77,7 +91,7 @@ def _process_item(item, worker_id: str):
         # Check if this is a KML parsing error and mark as unparsable
         if "KML parsing failed" in err_msg or "Failed to parse KML content" in err_msg:
             log_to_db(f'Marking file as unparsable to prevent future retries', level=DatabaseLogLevel.WARNING, user_id=item['user_id'], source=DatabaseLogSource.IMPORT, log_id=log_id)
-            with CursorFromConnectionFromPool(cursor_factory=RealDictCursor) as cursor:
+            with connection.cursor(cursor_factory=RealDictCursor) as cursor:
                 cursor.execute(_SQL_MARK_UNPARSABLE, (item['id'],))
                 # Also mark as processed with error indicator to show it's finished
                 error_geofeatures = json.dumps([{"error": "unparsable", "message": err_msg}])
@@ -85,7 +99,7 @@ def _process_item(item, worker_id: str):
         else:
             # For other types of errors, still mark as processed to show it's finished
             # but don't mark as unparsable (might be retryable)
-            with CursorFromConnectionFromPool(cursor_factory=RealDictCursor) as cursor:
+            with connection.cursor(cursor_factory=RealDictCursor) as cursor:
                 error_geofeatures = json.dumps([{"error": "processing_failed", "message": err_msg}])
                 cursor.execute(_SQL_INSERT_PROCESSED_ITEM, (error_geofeatures, item['id']))
         
@@ -98,10 +112,11 @@ def _process_item(item, worker_id: str):
     # Only update geofeatures if we haven't already done so in the error handling
     if success:
         features_json = [json.loads(x.model_dump_json()) for x in geo_features]
-        with CursorFromConnectionFromPool(cursor_factory=RealDictCursor) as cursor:
+        with connection.cursor(cursor_factory=RealDictCursor) as cursor:
             data = json.dumps(features_json)
             cursor.execute(_SQL_INSERT_PROCESSED_ITEM, (data, item['id']))
 
+    # The lock will be automatically released when the connection is returned to the pool
     _logger.info(f'Finished item #{item["id"]} success={success} in {round((get_time_ms() - start_ms) / 1000, 2)}s -- {worker_id}')
     return True
 
@@ -140,13 +155,16 @@ class ImportWorker:
         
         try:
             while not self.shutdown_requested.is_set():
-                # Try to claim and process one item atomically
-                item = _claim_and_lock_item()
+                # Try to claim and lock one item atomically
+                item, connection = _claim_and_lock_item()
                 
-                if item:
+                if item and connection:
                     # We successfully claimed and locked an item
-                    _process_item(item, self.worker_id)
-                    # Lock is automatically released when the connection closes
+                    try:
+                        _process_item(item, connection, self.worker_id)
+                    finally:
+                        # Always return the connection to the pool to release the lock
+                        Database.return_connection(connection)
                 else:
                     # No items available, wait before trying again
                     if self.shutdown_requested.wait(timeout=5.0):
