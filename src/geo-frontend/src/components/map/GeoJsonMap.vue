@@ -24,6 +24,9 @@
         <div class="absolute bottom-4 left-4 bg-white bg-opacity-90 px-4 py-2 rounded-lg shadow-md z-10 text-xs">
           <div class="space-y-1">
             <div>Features: <span class="font-medium">{{ featureCount }}</span> / <span class="font-medium">{{ MAX_FEATURES }}</span></div>
+            <div v-if="userLocation" class="text-gray-600">
+              📍 {{ getLocationDisplayName() }}
+            </div>
           </div>
         </div>
       </div>
@@ -54,14 +57,19 @@ export default {
       lastUpdateTime: null,
       featureCount: 0,
       loadTimeout: null,
+      userLocation: null,
       // Configuration
       API_BASE_URL: '/api/data/geojson/',
+      LOCATION_API_URL: '/api/data/location/user/',
       MAX_FEATURES: 1000, // Maximum number of features to keep on the map
       featureTimestamps: new Map() // Track when features were added
     }
   },
   methods: {
-    initializeMap() {
+    async initializeMap() {
+      // Get user location first
+      await this.getUserLocation()
+
       // Create vector source and layer
       this.vectorSource = new VectorSource()
 
@@ -69,6 +77,9 @@ export default {
         source: this.vectorSource,
         style: (feature) => this.getFeatureStyle(feature)
       })
+
+      // Determine initial map center and zoom based on user location
+      const mapConfig = this.getInitialMapConfig()
 
       // Create map
       this.map = new Map({
@@ -80,8 +91,8 @@ export default {
           this.vectorLayer
         ],
         view: new View({
-          center: fromLonLat([-104.692626, 38.881215]),
-          zoom: 10
+          center: fromLonLat(mapConfig.center),
+          zoom: mapConfig.zoom
         })
       })
 
@@ -90,6 +101,90 @@ export default {
       this.map.getView().on('change:resolution', this.debouncedLoadData)
 
       // Event listeners removed - cache functionality eliminated
+    },
+
+    async getUserLocation() {
+      try {
+        const response = await fetch(this.LOCATION_API_URL)
+        const data = await response.json()
+        
+        if (data.success && data.location) {
+          this.userLocation = data.location
+          console.log('User location detected:', this.userLocation)
+        } else {
+          console.warn('Failed to get user location:', data.error || 'Unknown error')
+          console.log('Using default location: Denver, Colorado')
+          this.userLocation = null
+        }
+      } catch (error) {
+        console.error('Error fetching user location:', error)
+        this.userLocation = null
+      }
+    },
+
+    getInitialMapConfig() {
+      // Use user location if available, otherwise default to Colorado state extent
+      if (this.userLocation && this.userLocation.longitude && this.userLocation.latitude) {
+        return this.getStateExtentConfig(this.userLocation)
+      }
+      // Default to Colorado state extent (geolocation failure fallback)
+      return this.getStateExtentConfig({
+        state: 'Colorado',
+        state_code: 'CO',
+        country: 'United States',
+        country_code: 'US',
+        latitude: 39.0, // Center of Colorado
+        longitude: -105.5 // Center of Colorado
+      })
+    },
+
+    getStateExtentConfig(location) {
+      // Calculate appropriate zoom level based on location type and country
+      const zoomLevel = this.calculateZoomLevel(location)
+      
+      return {
+        center: [location.longitude, location.latitude],
+        zoom: zoomLevel
+      }
+    },
+
+    calculateZoomLevel(location) {
+      // Base zoom levels for different administrative levels
+      const baseZooms = {
+        'city': 10,      // City level - close up
+        'state': 6,      // State/province level - shows entire state
+        'country': 4     // Country level - shows entire country
+      }
+
+      // If we have city data, we're likely in a state/province
+      if (location.city) {
+        return baseZooms.state
+      }
+      
+      // If we only have country data, show the country
+      if (location.country && !location.state) {
+        return baseZooms.country
+      }
+      
+      // Default to state level if we have state data
+      if (location.state) {
+        return baseZooms.state
+      }
+      
+      // Fallback to moderate zoom
+      return 6
+    },
+
+    getLocationDisplayName() {
+      // Create a display name for the user's location
+      if (!this.userLocation) return 'Unknown Location'
+      
+      const parts = []
+      if (this.userLocation.city) parts.push(this.userLocation.city)
+      if (this.userLocation.state) parts.push(this.userLocation.state)
+      if (this.userLocation.country) parts.push(this.userLocation.country)
+      
+      return parts.length > 0 ? parts.join(', ') : this.userLocation.country || 'Unknown Location'
     },
 
     getFeatureStyle(feature) {

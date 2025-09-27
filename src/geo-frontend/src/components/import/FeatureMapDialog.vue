@@ -172,7 +172,7 @@ export default {
           this.vectorLayer
         ],
         view: new View({
-          center: fromLonLat([-104.692626, 38.881215]),
+          center: fromLonLat([-104.692626, 38.881215]), // Default to Denver, CO
           zoom: 10
         })
       })
