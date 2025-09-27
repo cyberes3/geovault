@@ -35,7 +35,7 @@ class FeatureStore(models.Model):
         ]
 
 
-class GeoLog(django_models.Model):
+class DatabaseLogging(django_models.Model):
     id = django_models.AutoField(primary_key=True)
     user = django_models.ForeignKey(get_user_model(), on_delete=django_models.CASCADE)
     level = django_models.IntegerField()

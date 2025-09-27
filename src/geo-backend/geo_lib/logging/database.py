@@ -44,13 +44,13 @@ def _ensure_django():
 def log_to_db(msg: str, level: DatabaseLogLevel, user_id: int, source: DatabaseLogSource, log_id: str = None):
     _logger.log(level.value, msg)
     _ensure_django()
-    from data.models import GeoLog
+    from data.models import DatabaseLogging
     
     attributes = {}
     if log_id:
         attributes['log_id'] = log_id
     
-    GeoLog.objects.create(
+    DatabaseLogging.objects.create(
         user_id=user_id, 
         level=level.value, 
         text=msg, 

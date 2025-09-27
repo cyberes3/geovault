@@ -1,6 +1,6 @@
 from django.core.management.base import BaseCommand, CommandError
 from django.db import transaction
-from data.models import ImportQueue, FeatureStore, GeoLog
+from data.models import ImportQueue, FeatureStore, DatabaseLogging
 
 
 class Command(BaseCommand):
@@ -82,12 +82,12 @@ class Command(BaseCommand):
 
             # Reset Logs
             if 'logs' in components:
-                log_count = GeoLog.objects.count()
+                log_count = DatabaseLogging.objects.count()
                 if log_count > 0:
                     if dry_run:
                         self.stdout.write(f'Would delete {log_count} log entries')
                     else:
-                        deleted_count, _ = GeoLog.objects.all().delete()
+                        deleted_count, _ = DatabaseLogging.objects.all().delete()
                         self.stdout.write(
                             self.style.SUCCESS(
                                 f'Successfully deleted {deleted_count} log entries'

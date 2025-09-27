@@ -12,7 +12,7 @@ from django.http import HttpResponse, JsonResponse
 from django.views.decorators.csrf import csrf_protect
 from django.views.decorators.http import require_http_methods
 
-from data.models import ImportQueue, FeatureStore, GeoLog
+from data.models import ImportQueue, FeatureStore, DatabaseLogging
 from geo_lib.processing.kml.kml import normalize_kml_for_comparison, kml_to_geojson
 from geo_lib.processing.tagging import generate_auto_tags
 from geo_lib.types.feature import geojson_to_geofeature
@@ -203,14 +203,14 @@ def _find_existing_features_by_coordinates(coordinates: List, geom_type: str, us
 # TODO: allow re-import of old previously uploaded by re-uploading it
 
 def _get_logs_by_log_id(log_id):
-    """Fetch logs from GeoLog table by log_id"""
-    logs = GeoLog.objects.filter(attributes__log_id=log_id).order_by('timestamp')
+    """Fetch logs from DatabaseLogging table by log_id"""
+    logs = DatabaseLogging.objects.filter(attributes__log_id=log_id).order_by('timestamp')
     return [{'timestamp': log.timestamp.isoformat(), 'msg': log.text} for log in logs]
 
 
 def _delete_logs_by_log_id(log_id):
-    """Delete all logs from GeoLog table by log_id"""
-    deleted_count = GeoLog.objects.filter(attributes__log_id=log_id).delete()[0]
+    """Delete all logs from DatabaseLogging table by log_id"""
+    deleted_count = DatabaseLogging.objects.filter(attributes__log_id=log_id).delete()[0]
     return deleted_count
 
 
