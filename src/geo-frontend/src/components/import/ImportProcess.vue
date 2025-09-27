@@ -320,6 +320,7 @@ export default {
       selectedFeatureIndex: 0, // Track which feature is selected for the feature map
       isSaving: false, // Track save operation loading state
       isImporting: false, // Track import operation loading state
+      isRedirectingDueToInvalidId: false, // Track if we're redirecting due to invalid import ID
       // Removed flatpickrConfig - using native HTML5 datetime-local input
     }
   },
@@ -426,6 +427,7 @@ export default {
         if (response.data.success) {
           this.$store.dispatch('refreshImportQueue')
           // Redirect to import page after successful import
+          this.isRedirectingDueToInvalidId = true;
           this.$router.replace('/import');
         } else {
           this.msg = 'Error performing import: ' + response.data.msg;
@@ -468,6 +470,7 @@ export default {
       this.selectedFeatureIndex = 0;
       this.isSaving = false;
       this.isImporting = false;
+      this.isRedirectingDueToInvalidId = false;
     },
   },
   mounted() {
@@ -488,6 +491,13 @@ export default {
     this.clearComponentState();
   },
   beforeRouteLeave(to, from, next) {
+    // Skip warning if we're redirecting due to invalid import ID
+    if (this.isRedirectingDueToInvalidId) {
+      this.clearComponentState();
+      next();
+      return;
+    }
+    
     // Warn user before leaving this route
     const answer = window.confirm('Are you sure you want to leave this page? Your changes may not be saved.');
     if (answer) {
@@ -524,6 +534,7 @@ export default {
 
                 // If the item is already imported, redirect to import page
                 if (vm.isImported) {
+                  vm.isRedirectingDueToInvalidId = true;
                   vm.$router.replace('/import');
                   return;
                 }
@@ -556,6 +567,7 @@ export default {
           } catch (error) {
             if (error.response && error.response.data && error.response.data.code === 404) {
               // Import ID does not exist.
+              vm.isRedirectingDueToInvalidId = true;
               vm.$router.replace('/import');
               return;
             }
