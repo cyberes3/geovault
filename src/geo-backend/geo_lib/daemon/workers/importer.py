@@ -114,7 +114,10 @@ def _process_item(item, connection, worker_id: str):
         features_json = [json.loads(x.model_dump_json()) for x in geo_features]
         with connection.cursor(cursor_factory=RealDictCursor) as cursor:
             data = json.dumps(features_json)
+            _logger.info(f'Updating geofeatures for item #{item["id"]} with {len(features_json)} features -- {worker_id}')
+            _logger.debug(f'Geofeatures data: {data[:200]}...' if len(data) > 200 else f'Geofeatures data: {data}')
             cursor.execute(_SQL_INSERT_PROCESSED_ITEM, (data, item['id']))
+            _logger.info(f'Successfully updated geofeatures for item #{item["id"]} -- {worker_id}')
 
     # The lock will be automatically released when the connection is returned to the pool
     _logger.info(f'Finished item #{item["id"]} success={success} in {round((get_time_ms() - start_ms) / 1000, 2)}s -- {worker_id}')

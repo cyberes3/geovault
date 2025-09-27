@@ -340,13 +340,21 @@ def sanitize_kml_content(kml_content: str) -> str:
         validator = SecureFileValidator()
         root = validator._secure_xml_parse(kml_content)
 
+        # Build parent mapping for element removal
+        parent_map = {c: p for p in root.iter() for c in p}
+
         # Remove dangerous elements
-        for elem in list(root.iter()):
+        elements_to_remove = []
+        for elem in root.iter():
             tag_name = elem.tag.lower()
             if any(dangerous in tag_name for dangerous in validator.DANGEROUS_ELEMENTS):
-                parent = elem.getparent()
-                if parent is not None:
-                    parent.remove(elem)
+                elements_to_remove.append(elem)
+
+        # Remove elements (doing this after iteration to avoid modifying during iteration)
+        for elem in elements_to_remove:
+            parent = parent_map.get(elem)
+            if parent is not None:
+                parent.remove(elem)
 
         # Remove dangerous attributes
         for elem in root.iter():

@@ -172,19 +172,22 @@ def process_togeojson_features(features: list) -> Tuple[list, ImportLog]:
     """Process features from togeojson output."""
     processed_features = []
     import_log = ImportLog()
-
+    
     for feature in features:
         # Split GeometryCollection into separate features
         split_features = split_geometry_collection(feature)
 
         for split_feature in split_features:
             if split_feature['geometry']['type'] in ['Point', 'LineString', 'Polygon']:
-                # Replace KML icons with red circles for points
-                split_feature['properties'] = preserve_togeojson_styling(split_feature['properties'])
+                try:
+                    # Replace KML icons with red circles for points
+                    split_feature['properties'] = preserve_togeojson_styling(split_feature['properties'])
 
-                # Convert to our property format
-                split_feature['properties'] = GeojsonRawProperty(**split_feature['properties']).model_dump()
-                processed_features.append(split_feature)
+                    # Convert to our property format
+                    split_feature['properties'] = GeojsonRawProperty(**split_feature['properties']).model_dump()
+                    processed_features.append(split_feature)
+                except Exception as e:
+                    import_log.add(f'Failed to process feature properties: {str(e)}, skipping feature')
             else:
                 import_log.add(f'Unsupported geometry type: {split_feature["geometry"]["type"]}, skipping')
 
@@ -231,14 +234,30 @@ def kml_to_geojson(kml_bytes) -> Tuple[dict, ImportLog]:
             else:
                 kml_content = kml_bytes.decode('utf-8')
 
-            # Use the JavaScript converter with stdin
-            result = subprocess.run(
-                ['node', togeojson_path],
-                input=kml_content,
-                capture_output=True,
-                text=True,
-                timeout=30
-            )
+            # Remove namespaces from KML content to make it compatible with togeojson
+            # The togeojson library doesn't handle namespaced KML well
+            import re
+            # Remove namespace declarations
+            kml_content = re.sub(r'xmlns:ns\d+="[^"]*"', '', kml_content)
+            # Remove namespace prefixes from tags
+            kml_content = re.sub(r'ns\d+:', '', kml_content)
+            
+            # Write KML content to temporary file to avoid stdin issues
+            with tempfile.NamedTemporaryFile(mode='w', suffix='.kml', delete=False, encoding='utf-8') as temp_file:
+                temp_file.write(kml_content)
+                temp_file_path = temp_file.name
+
+            try:
+                # Use the JavaScript converter with file path
+                result = subprocess.run(
+                    ['node', togeojson_path, temp_file_path],
+                    capture_output=True,
+                    text=True,
+                    timeout=30
+                )
+            finally:
+                # Clean up temporary file
+                os.unlink(temp_file_path)
 
             if result.returncode != 0:
                 raise Exception(f"JavaScript converter failed: {result.stderr}")
