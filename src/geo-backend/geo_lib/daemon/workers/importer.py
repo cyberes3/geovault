@@ -1,5 +1,7 @@
 import json
 import logging
+import signal
+import threading
 import time
 import traceback
 from uuid import uuid4
@@ -13,7 +15,16 @@ from geo_lib.logging.database import log_to_db, DatabaseLogLevel, DatabaseLogSou
 from geo_lib.time import get_time_ms
 from geo_lib.types.feature import geojson_to_geofeature
 
-_SQL_GET_UNPROCESSED_ITEMS = "SELECT * FROM public.data_importqueue WHERE geofeatures = '[]'::jsonb AND imported = false AND unparsable = false ORDER BY id ASC LIMIT 25"
+# SQL queries for atomic claim-and-process pattern
+_SQL_CLAIM_AND_LOCK_ITEM = """
+    SELECT * FROM public.data_importqueue 
+    WHERE geofeatures = '[]'::jsonb 
+    AND imported = false 
+    AND unparsable = false 
+    AND pg_try_advisory_lock('public.data_importqueue'::regclass::oid::int4, id::int4)
+    ORDER BY id ASC 
+    LIMIT 1
+"""
 _SQL_INSERT_PROCESSED_ITEM = "UPDATE public.data_importqueue SET geofeatures = %s WHERE id = %s"
 _SQL_MARK_UNPARSABLE = "UPDATE public.data_importqueue SET unparsable = true WHERE id = %s"
 _SQL_DELETE_ITEM = "DELETE FROM public.data_importqueue WHERE id = %s"
@@ -21,21 +32,22 @@ _SQL_DELETE_ITEM = "DELETE FROM public.data_importqueue WHERE id = %s"
 _logger = logging.getLogger("DAEMON").getChild("IMPORTER")
 
 
-# TODO: support multiple workers
-
-
-def _fetch_candidate_items():
+def _claim_and_lock_item():
+    """
+    Atomically claim and lock a single item for processing.
+    This prevents race conditions where multiple workers try to process the same item.
+    """
     with CursorFromConnectionFromPool(cursor_factory=RealDictCursor) as cursor:
-        cursor.execute(_SQL_GET_UNPROCESSED_ITEMS)
-        return cursor.fetchall()
+        cursor.execute(_SQL_CLAIM_AND_LOCK_ITEM)
+        return cursor.fetchone()
 
 
-def _process_item(item, lock_manager: DBLockManager, worker_id: str):
-    if not lock_manager.lock_row('data_importqueue', item['id']):
-        _logger.debug(f'Skip locked item #{item["id"]} -- {worker_id}')
-        return False
-
-    _logger.debug(f'Acquired lock for item #{item["id"]} -- {worker_id}')
+def _process_item(item, worker_id: str):
+    """
+    Process a single item that has already been locked.
+    The lock is automatically released when the database connection closes.
+    """
+    _logger.debug(f'Processing locked item #{item["id"]} -- {worker_id}')
     start_ms = get_time_ms()
     success = False
     log_id = str(item['log_id'])
@@ -91,24 +103,72 @@ def _process_item(item, lock_manager: DBLockManager, worker_id: str):
             data = json.dumps(features_json)
             cursor.execute(_SQL_INSERT_PROCESSED_ITEM, (data, item['id']))
 
-    lock_manager.unlock_row('data_importqueue', item['id'])
     _logger.info(f'Finished item #{item["id"]} success={success} in {round((get_time_ms() - start_ms) / 1000, 2)}s -- {worker_id}')
     return True
 
 
-def import_worker():
-    worker_id = str(uuid4())
-    lock_manager = DBLockManager(worker_id)
-    while True:
-        processed_one = False
-        import_queue_items = _fetch_candidate_items()
-        total_candidates = len(import_queue_items)
-        for item in import_queue_items:
-            if _process_item(item, lock_manager, worker_id):
-                processed_one = True
-                break
+class ImportWorker:
+    """
+    Improved import worker with proper shutdown handling and race condition prevention.
+    """
+    
+    def __init__(self):
+        self.worker_id = str(uuid4())
+        self.lock_manager = DBLockManager(self.worker_id)
+        self.shutdown_requested = threading.Event()
+        self._setup_signal_handlers()
+        _logger.info(f'Import worker {self.worker_id} initialized')
 
-        if not processed_one:
-            if total_candidates:
-                _logger.info(f'No lock acquired from {total_candidates} candidates; retrying after backoff -- {worker_id}')
-            time.sleep(5)
+    def _setup_signal_handlers(self):
+        """Setup signal handlers for graceful shutdown."""
+        def signal_handler(signum, frame):
+            _logger.info(f'Received signal {signum}, initiating graceful shutdown -- {self.worker_id}')
+            self.shutdown_requested.set()
+        
+        signal.signal(signal.SIGTERM, signal_handler)
+        signal.signal(signal.SIGINT, signal_handler)
+
+    def _graceful_shutdown(self):
+        """Perform graceful shutdown with lock cleanup."""
+        _logger.info(f'Starting graceful shutdown -- {self.worker_id}')
+        
+        # Release any remaining locks
+        released_count = self.lock_manager.release_all_locks()
+        if released_count > 0:
+            _logger.warning(f'Released {released_count} locks during shutdown -- {self.worker_id}')
+        
+        # Close the lock manager
+        self.lock_manager.close()
+        _logger.info(f'Graceful shutdown completed -- {self.worker_id}')
+
+    def run(self):
+        """Main worker loop with improved race condition handling."""
+        _logger.info(f'Import worker {self.worker_id} started')
+        
+        try:
+            while not self.shutdown_requested.is_set():
+                # Try to claim and process one item atomically
+                item = _claim_and_lock_item()
+                
+                if item:
+                    # We successfully claimed and locked an item
+                    _process_item(item, self.worker_id)
+                    # Lock is automatically released when the connection closes
+                else:
+                    # No items available, wait before trying again
+                    if self.shutdown_requested.wait(timeout=5.0):
+                        break  # Shutdown requested during wait
+                    
+        except Exception as e:
+            _logger.error(f'Unexpected error in worker loop -- {self.worker_id}: {e}')
+            traceback.print_exc()
+        finally:
+            self._graceful_shutdown()
+
+
+def create_import_worker():
+    """
+    Factory function to create a new import worker.
+    Returns the worker instance for external management.
+    """
+    return ImportWorker()
