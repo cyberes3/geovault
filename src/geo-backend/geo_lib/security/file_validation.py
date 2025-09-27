@@ -9,6 +9,7 @@ and XML security measures.
 import io
 import logging
 import os
+import traceback
 import xml.etree.ElementTree as ET
 import zipfile
 from typing import Union, Tuple
@@ -115,7 +116,7 @@ class SecureFileValidator:
             logger.warning(f"File validation failed for {uploaded_file.name}: {str(e)}")
             return False, "Invalid file format"
         except Exception as e:
-            logger.error(f"File validation error for {uploaded_file.name}: {str(e)}")
+            logger.error(f"File validation error for {uploaded_file.name}: {traceback.format_exc()}")
             return False, "Invalid file format"
 
     def _validate_basic_properties(self, uploaded_file: UploadedFile):
@@ -339,7 +340,7 @@ def sanitize_kml_content(kml_content: str) -> str:
         return ET.tostring(root, encoding='unicode')
 
     except Exception as e:
-        logger.error(f"KML sanitization failed: {str(e)}")
+        logger.error(f"KML sanitization failed: {traceback.format_exc()}")
         # Return original content if sanitization fails
         return kml_content
 

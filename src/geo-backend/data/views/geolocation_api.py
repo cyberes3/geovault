@@ -2,6 +2,7 @@
 API endpoints for IP-based geolocation services.
 """
 import logging
+import traceback
 from django.http import JsonResponse
 from django.views.decorators.http import require_http_methods
 from geo_lib.website.auth import login_required_401
@@ -68,10 +69,10 @@ def get_user_location(request):
         return JsonResponse(response_data)
         
     except Exception as e:
-        logger.error(f"Error in get_user_location API: {e}")
+        logger.error(f"Error in get_user_location API: {traceback.format_exc()}")
         return JsonResponse({
             'success': False,
-            'error': f'Internal server error: {str(e)}',
+            'error': 'Internal server error occurred',
             'code': 500
         }, status=500)
 
@@ -144,9 +145,9 @@ def get_location_by_ip(request):
         return JsonResponse(response_data)
         
     except Exception as e:
-        logger.error(f"Error in get_location_by_ip API: {e}")
+        logger.error(f"Error in get_location_by_ip API: {traceback.format_exc()}")
         return JsonResponse({
             'success': False,
-            'error': f'Internal server error: {str(e)}',
+            'error': 'Internal server error occurred',
             'code': 500
         }, status=500)

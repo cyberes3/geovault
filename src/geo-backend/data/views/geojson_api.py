@@ -1,4 +1,6 @@
 import time
+import logging
+import traceback
 from typing import List, Tuple, Dict
 
 from django.contrib.gis.geos import Polygon
@@ -7,6 +9,8 @@ from django.views.decorators.http import require_http_methods
 
 from data.models import FeatureStore
 from geo_lib.website.auth import login_required_401
+
+logger = logging.getLogger(__name__)
 
 
 def _parse_bbox(bbox_str: str) -> tuple[float, ...] | None:
@@ -123,11 +127,9 @@ def get_geojson_data(request):
         })
 
     except Exception as e:
+        logger.error(f"Error in get_geojson_data API: {traceback.format_exc()}")
         return JsonResponse({
             'success': False,
-            'error': f'Database error: {str(e)}',
+            'error': 'Failed to get features in bounding box',
             'code': 500
         }, status=500)
-
-
-# Cache functionality removed - no longer needed
