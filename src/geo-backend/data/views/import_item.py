@@ -1,25 +1,27 @@
 import hashlib
 import json
-import traceback
 import logging
+import traceback
 
 from django import forms
+from django.contrib.gis.geos import GEOSGeometry
 from django.core.serializers.json import DjangoJSONEncoder
 from django.db import IntegrityError
 from django.http import HttpResponse, JsonResponse
 from django.views.decorators.csrf import csrf_protect
 from django.views.decorators.http import require_http_methods
-from django.contrib.gis.geos import GEOSGeometry
 
 from data.models import ImportQueue, FeatureStore, GeoLog
 from geo_lib.daemon.database.locking import DBLockManager
 from geo_lib.daemon.workers.workers_lib.importer.kml import normalize_kml_for_comparison
 from geo_lib.daemon.workers.workers_lib.importer.tagging import generate_auto_tags
+from geo_lib.security.file_validation import SecureFileValidator, secure_kmz_to_kml, FileValidationError, SecurityError
+from geo_lib.security.file_validation import sanitize_kml_content
 from geo_lib.types.feature import PointFeature, PolygonFeature, LineStringFeature
 from geo_lib.website.auth import login_required_401
-from geo_lib.security.file_validation import SecureFileValidator, secure_kmz_to_kml, FileValidationError, SecurityError
 
 logger = logging.getLogger(__name__)
+
 
 # TODO: deduplicate identical features
 # TODO: allow re-import of old previously uploaded by re-uploading it
@@ -52,12 +54,12 @@ def upload_item(request):
             # Comprehensive file validation using security module
             validator = SecureFileValidator()
             is_valid, validation_message = validator.validate_file(uploaded_file)
-            
+
             if not is_valid:
                 logger.warning(f"File validation failed for {file_name}: {validation_message}")
                 return JsonResponse({
-                    'success': False, 
-                    'msg': f'File validation failed: {validation_message}', 
+                    'success': False,
+                    'msg': f'File validation failed: {validation_message}',
                     'id': None
                 }, status=400)
 
@@ -65,26 +67,38 @@ def upload_item(request):
             file_data = uploaded_file.read()
 
             try:
-                # Use secure KMZ to KML conversion
-                kml_doc = secure_kmz_to_kml(file_data)
+                # Determine file type and process accordingly
+                filename_lower = file_name.lower()
+                if filename_lower.endswith('.kmz') or (isinstance(file_data, bytes) and file_data.startswith(b'PK')):
+                    # It's a KMZ file - use secure KMZ to KML conversion
+                    kml_doc = secure_kmz_to_kml(file_data)
+                else:
+                    # It's a KML file - decode and sanitize directly
+                    if isinstance(file_data, bytes):
+                        kml_content = file_data.decode('utf-8')
+                    else:
+                        kml_content = file_data
+
+                    kml_doc = sanitize_kml_content(kml_content)
+
             except (SecurityError, FileValidationError) as e:
                 logger.error(f"Secure file processing failed for {file_name}: {str(e)}")
                 return JsonResponse({
-                    'success': False, 
-                    'msg': f'Secure file processing failed: {str(e)}', 
+                    'success': False,
+                    'msg': f'Secure file processing failed: {str(e)}',
                     'id': None
                 }, status=400)
             except Exception as e:
                 logger.error(f"Unexpected error processing file {file_name}: {traceback.format_exc()}")
                 return JsonResponse({
-                    'success': False, 
-                    'msg': f'Failed to process KML/KMZ file "{file_name}"', 
+                    'success': False,
+                    'msg': f'Failed to process KML/KMZ file "{file_name}"',
                     'id': None
                 }, status=400)
 
             # Normalize KML content for comparison (handles KML vs KMZ differences)
             normalized_kml = normalize_kml_for_comparison(kml_doc)
-            
+
             # Check for duplicates more comprehensively using normalized content
             kml_hash = _hash_kml(normalized_kml)
 
@@ -109,14 +123,14 @@ def upload_item(request):
                         'msg': f'This KML/KMZ file is already in your import queue (originally as "{existing_by_content.original_filename}")',
                         'id': None
                     }, status=200)  # Changed to 200 for benign duplicate content
-            
+
             # Check for unparsable files with the same hash
             existing_unparsable = ImportQueue.objects.filter(
                 raw_kml_hash=kml_hash,
                 user=request.user,
                 unparsable=True
             ).first()
-            
+
             if existing_unparsable:
                 # If there's an unparsable record, we need to handle the unique constraint
                 # We'll update the existing record instead of creating a new one
@@ -126,7 +140,7 @@ def upload_item(request):
                 existing_unparsable.unparsable = False
                 existing_unparsable.geofeatures = []
                 existing_unparsable.save()
-                
+
                 # Return success with the existing record's ID
                 msg = 'upload successful (replaced previous unparsable record)'
                 return JsonResponse({'success': True, 'msg': msg, 'id': existing_unparsable.id}, status=200)
@@ -345,17 +359,17 @@ def import_to_featurestore(request, item_id):
 
         feature_instance = c(**feature)
         feature_instance.properties.tags = generate_auto_tags(feature_instance)  # Generate the tags after the user has made their changes.
-        
+
         # Create the GeoJSON data
         geojson_data = json.loads(feature_instance.model_dump_json())
-        
+
         # Create geometry object for spatial queries
         geometry = None
         if 'geometry' in geojson_data and geojson_data['geometry']:
             try:
                 # Ensure coordinates are properly formatted for GEOSGeometry
                 geom_data = geojson_data['geometry'].copy()
-                
+
                 # Handle 3D coordinates by ensuring they're properly structured
                 if geom_data['type'] == 'Point':
                     coords = geom_data['coordinates']
@@ -365,34 +379,34 @@ def import_to_featurestore(request, item_id):
                     elif len(coords) == 3:
                         coords = [coords[0], coords[1], coords[2]]  # Keep 3D
                     geom_data['coordinates'] = coords
-                
+
                 elif geom_data['type'] == 'LineString':
                     coords = geom_data['coordinates']
                     # Ensure each coordinate in LineString has 3 dimensions
                     geom_data['coordinates'] = [
-                        [coord[0], coord[1], coord[2] if len(coord) > 2 else 0.0] 
+                        [coord[0], coord[1], coord[2] if len(coord) > 2 else 0.0]
                         for coord in coords
                     ]
-                
+
                 elif geom_data['type'] == 'Polygon':
                     coords = geom_data['coordinates']
                     # Ensure each coordinate in Polygon has 3 dimensions
                     geom_data['coordinates'] = [
                         [
-                            [coord[0], coord[1], coord[2] if len(coord) > 2 else 0.0] 
+                            [coord[0], coord[1], coord[2] if len(coord) > 2 else 0.0]
                             for coord in ring
-                        ] 
+                        ]
                         for ring in coords
                     ]
-                
+
                 geometry = GEOSGeometry(json.dumps(geom_data))
             except Exception as e:
                 print(f"Error creating geometry for feature {i}: {e}")
-        
+
         feature = FeatureStore.objects.create(
-            geojson=geojson_data, 
+            geojson=geojson_data,
             geometry=geometry,
-            source=import_item, 
+            source=import_item,
             user=request.user
         )
         feature.save()
