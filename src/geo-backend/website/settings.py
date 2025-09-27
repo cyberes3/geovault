@@ -25,7 +25,7 @@ SECRET_KEY = 'django-insecure-f(1zo%f)wm*rl97q0^3!9exd%(s8mz92nagf4q7c2cno&bmyx=
 # SECURITY WARNING: don't run with debug turned on in production!
 DEBUG = True
 
-ALLOWED_HOSTS = []
+ALLOWED_HOSTS = ['localhost', '127.0.0.1']  # Configure for production
 
 # Application definition
 
@@ -147,3 +147,74 @@ APPEND_SLASH = True
 LOGIN_URL = '/account/login'
 
 CSRF_TRUSTED_ORIGINS = ['http://localhost:5173']
+
+# Security Settings
+SECURE_BROWSER_XSS_FILTER = True
+SECURE_CONTENT_TYPE_NOSNIFF = True
+X_FRAME_OPTIONS = 'DENY'
+SECURE_HSTS_SECONDS = 31536000  # 1 year
+SECURE_HSTS_INCLUDE_SUBDOMAINS = True
+SECURE_HSTS_PRELOAD = True
+
+# File Upload Security Settings
+MAX_KML_FILE_SIZE = 5 * 1024 * 1024  # 5MB
+MAX_KMZ_FILE_SIZE = 10 * 1024 * 1024  # 10MB
+FILE_UPLOAD_MAX_MEMORY_SIZE = 2 * 1024 * 1024  # 2MB
+DATA_UPLOAD_MAX_MEMORY_SIZE = 2 * 1024 * 1024  # 2MB
+
+# Allowed file types for validation
+ALLOWED_FILE_TYPES = {
+    'kml': [
+        'text/xml', 
+        'application/xml', 
+        'text/plain',
+        'application/vnd.google-earth.kml+xml',
+        'application/vnd.google-earth.kml'
+    ],
+    'kmz': [
+        'application/zip', 
+        'application/x-zip-compressed',
+        'application/vnd.google-earth.kmz',
+        'application/vnd.google-earth.kmz+xml'
+    ]
+}
+
+# Security validation settings
+SECURE_XML_PARSING = True
+ENABLE_FILE_SIGNATURE_VALIDATION = True
+ENABLE_MIME_TYPE_VALIDATION = True
+
+# Logging configuration for security events
+LOGGING = {
+    'version': 1,
+    'disable_existing_loggers': False,
+    'formatters': {
+        'verbose': {
+            'format': '{levelname} {asctime} {module} {process:d} {thread:d} {message}',
+            'style': '{',
+        },
+        'simple': {
+            'format': '{levelname} {message}',
+            'style': '{',
+        },
+    },
+    'handlers': {
+        'console': {
+            'level': 'INFO',
+            'class': 'logging.StreamHandler',
+            'formatter': 'simple',
+        },
+    },
+    'loggers': {
+        'geo_lib.security': {
+            'handlers': ['console'],
+            'level': 'WARNING',
+            'propagate': True,
+        },
+        'django.security': {
+            'handlers': ['console'],
+            'level': 'WARNING',
+            'propagate': True,
+        },
+    },
+}

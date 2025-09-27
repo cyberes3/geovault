@@ -2,6 +2,7 @@ import logging
 import os
 from enum import Enum
 
+import django
 from pydantic import BaseModel
 
 _logger = logging.getLogger("MAIN").getChild("DBLOG")
@@ -36,7 +37,6 @@ def _ensure_django():
     # Ensure settings module is configured before importing Django
     if 'DJANGO_SETTINGS_MODULE' not in os.environ:
         os.environ['DJANGO_SETTINGS_MODULE'] = 'website.settings'
-    import django
     django.setup()
     _django_ready = True
 
@@ -44,7 +44,7 @@ def _ensure_django():
 def log_to_db(msg: str, level: DatabaseLogLevel, user_id: int, source: DatabaseLogSource, log_id: str = None):
     _logger.log(level.value, msg)
     _ensure_django()
-    from data.models import GeoLog  # Imported lazily after Django setup
+    from data.models import GeoLog
     
     attributes = {}
     if log_id:

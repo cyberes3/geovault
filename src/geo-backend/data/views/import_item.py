@@ -1,6 +1,7 @@
 import hashlib
 import json
 import traceback
+import logging
 
 from django import forms
 from django.core.serializers.json import DjangoJSONEncoder
@@ -12,10 +13,13 @@ from django.contrib.gis.geos import GEOSGeometry
 
 from data.models import ImportQueue, FeatureStore, GeoLog
 from geo_lib.daemon.database.locking import DBLockManager
-from geo_lib.daemon.workers.workers_lib.importer.kml import kmz_to_kml, normalize_kml_for_comparison
+from geo_lib.daemon.workers.workers_lib.importer.kml import normalize_kml_for_comparison
 from geo_lib.daemon.workers.workers_lib.importer.tagging import generate_auto_tags
 from geo_lib.types.feature import PointFeature, PolygonFeature, LineStringFeature
 from geo_lib.website.auth import login_required_401
+from geo_lib.security.file_validation import SecureFileValidator, secure_kmz_to_kml, FileValidationError, SecurityError
+
+logger = logging.getLogger(__name__)
 
 # TODO: deduplicate identical features
 # TODO: allow re-import of old previously uploaded by re-uploading it
@@ -43,20 +47,40 @@ def upload_item(request):
         form = DocumentForm(request.POST, request.FILES)
         if form.is_valid():
             uploaded_file = request.FILES['file']
-
-            # Check file size
-            # TODO: config??
-            if uploaded_file.size > 100 * 1024 * 1024:  # file size limit 100MB
-                return JsonResponse({'success': False, 'msg': f'File "{uploaded_file.name}" size must be less than 100MB', 'id': None}, status=400)
-
-            file_data = uploaded_file.read()
             file_name = uploaded_file.name
 
+            # Comprehensive file validation using security module
+            validator = SecureFileValidator()
+            is_valid, validation_message = validator.validate_file(uploaded_file)
+            
+            if not is_valid:
+                logger.warning(f"File validation failed for {file_name}: {validation_message}")
+                return JsonResponse({
+                    'success': False, 
+                    'msg': f'File validation failed: {validation_message}', 
+                    'id': None
+                }, status=400)
+
+            # Read file data after validation
+            file_data = uploaded_file.read()
+
             try:
-                kml_doc = kmz_to_kml(file_data)
-            except:
-                print(traceback.format_exc())  # TODO: logging
-                return JsonResponse({'success': False, 'msg': f'Failed to parse KML/KMZ file "{file_name}"', 'id': None}, status=400)
+                # Use secure KMZ to KML conversion
+                kml_doc = secure_kmz_to_kml(file_data)
+            except (SecurityError, FileValidationError) as e:
+                logger.error(f"Secure file processing failed for {file_name}: {str(e)}")
+                return JsonResponse({
+                    'success': False, 
+                    'msg': f'Secure file processing failed: {str(e)}', 
+                    'id': None
+                }, status=400)
+            except Exception as e:
+                logger.error(f"Unexpected error processing file {file_name}: {traceback.format_exc()}")
+                return JsonResponse({
+                    'success': False, 
+                    'msg': f'Failed to process KML/KMZ file "{file_name}"', 
+                    'id': None
+                }, status=400)
 
             # Normalize KML content for comparison (handles KML vs KMZ differences)
             normalized_kml = normalize_kml_for_comparison(kml_doc)

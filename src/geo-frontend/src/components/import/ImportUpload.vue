@@ -29,6 +29,7 @@
       </div>
     </div>
 
+
     <!-- Upload Section -->
     <div class="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
       <h2 class="text-lg font-semibold text-gray-900 mb-4">Upload Files</h2>
@@ -222,12 +223,16 @@ import {IMPORT_QUEUE_LIST_URL} from "@/assets/js/import/url.js";
 import {ImportQueueItem} from "@/assets/js/types/import-types"
 import Importqueue from "@/components/import/parts/importqueue.vue";
 import {getCookie} from "@/assets/js/auth.js";
+import {SECURITY_CONFIG} from "@/config.js";
 
 // TODO: after import, don't disable the upload, instead add the new item to a table at the button and then prompt the user to continue
 
 export default {
   computed: {
     ...mapState(["userInfo", "importQueue"]),
+    SECURITY_CONFIG() {
+      return SECURITY_CONFIG
+    },
     progressStatusText() {
       if (this.uploadProgress === 0 && this.files.length === 0) {
         return "Select files to upload"
@@ -376,6 +381,7 @@ export default {
     },
     addFiles(selectedFiles) {
       const validFiles = []
+      const errors = []
 
       // Reset progress bar and messages when new files are chosen
       this.uploadProgress = 0
@@ -383,19 +389,85 @@ export default {
       this.uploadMsg = ""
       this.currentFileIndex = 0
 
-      // Validate each file
+      // Enhanced file validation
       for (const file of selectedFiles) {
-        const fileType = file.name.split('.').pop().toLowerCase()
-        if (fileType !== 'kmz' && fileType !== 'kml') {
-          alert(`Invalid file type: ${file.name}. Only KMZ and KML files are allowed.`)
-          return
+        const validationResult = this.validateFile(file)
+        if (validationResult.isValid) {
+          validFiles.push(file)
+        } else {
+          errors.push(`${file.name}: ${validationResult.error}`)
         }
-        validFiles.push(file)
+      }
+
+      // Show errors if any
+      if (errors.length > 0) {
+        alert(`File validation errors:\n${errors.join('\n')}`)
+        return
       }
 
       // Add new files to existing ones (don't replace)
       this.files = [...this.files, ...validFiles]
       this.totalFiles = this.files.length
+    },
+    validateFile(file) {
+      // Skip frontend validation if disabled (for testing backend validation)
+      if (!SECURITY_CONFIG.ENABLE_FRONTEND_VALIDATION) {
+        console.log('Frontend validation disabled - file will be validated by backend only')
+        return { isValid: true, error: null }
+      }
+
+      // Check file extension
+      const fileType = file.name.split('.').pop().toLowerCase()
+      if (fileType !== 'kmz' && fileType !== 'kml') {
+        return { isValid: false, error: 'Only KMZ and KML files are allowed' }
+      }
+
+      // Check file size using config values
+      const maxKmlSize = SECURITY_CONFIG.MAX_KML_SIZE
+      const maxKmzSize = SECURITY_CONFIG.MAX_KMZ_SIZE
+      
+      if (fileType === 'kml' && file.size > maxKmlSize) {
+        return { isValid: false, error: `KML file too large. Maximum size: ${maxKmlSize / (1024 * 1024)}MB` }
+      }
+      
+      if (fileType === 'kmz' && file.size > maxKmzSize) {
+        return { isValid: false, error: `KMZ file too large. Maximum size: ${maxKmzSize / (1024 * 1024)}MB` }
+      }
+
+      // Check for empty files
+      if (file.size === 0) {
+        return { isValid: false, error: 'File is empty' }
+      }
+
+      // Basic MIME type validation
+      const allowedMimeTypes = {
+        'kml': [
+          'text/xml', 
+          'application/xml', 
+          'text/plain', 
+          'application/octet-stream',
+          'application/vnd.google-earth.kml+xml',
+          'application/vnd.google-earth.kml'
+        ],
+        'kmz': [
+          'application/zip', 
+          'application/x-zip-compressed', 
+          'application/octet-stream',
+          'application/vnd.google-earth.kmz',
+          'application/vnd.google-earth.kmz+xml'
+        ]
+      }
+
+      if (file.type && !allowedMimeTypes[fileType].includes(file.type)) {
+        return { isValid: false, error: `Invalid MIME type: ${file.type}` }
+      }
+
+      // Check filename for suspicious characters
+      if (/[<>:"/\\|?*]/.test(file.name)) {
+        return { isValid: false, error: 'Filename contains invalid characters' }
+      }
+
+      return { isValid: true, error: null }
     },
     onDrop(e) {
       e.preventDefault()
