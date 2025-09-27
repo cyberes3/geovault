@@ -500,6 +500,10 @@ export default {
   beforeRouteLeave(to, from, next) {
     // Skip warning if we're redirecting due to invalid import ID
     if (this.isRedirectingDueToInvalidId) {
+      // Remove the beforeunload handler before redirecting
+      if (this.beforeUnloadHandler) {
+        window.removeEventListener('beforeunload', this.beforeUnloadHandler);
+      }
       this.clearComponentState();
       next();
       return;
@@ -508,6 +512,10 @@ export default {
     // Warn user before leaving this route
     const answer = window.confirm('Are you sure you want to leave this page? Your changes may not be saved.');
     if (answer) {
+      // Remove the beforeunload handler before navigating away
+      if (this.beforeUnloadHandler) {
+        window.removeEventListener('beforeunload', this.beforeUnloadHandler);
+      }
       // Clear component state when user confirms they want to leave
       this.clearComponentState();
       next();

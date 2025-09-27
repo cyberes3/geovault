@@ -691,6 +691,9 @@ export default {
       }
     }
     
+    // Remove beforeunload event listener before navigating away
+    window.removeEventListener('beforeunload', this.handleBeforeUnload)
+    
     next()
   },
   watch: {},
