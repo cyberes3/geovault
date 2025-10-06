@@ -9,7 +9,7 @@ class GeojsonRawProperty(BaseModel):
     model_config = ConfigDict(extra='allow')  # Allow additional properties from togeojson
     
     # A class to whitelist these properties.
-    name: str
+    name: str = "Unnamed Feature"  # Default name for features without explicit names
     description: Optional[str] = None
     created: Optional[datetime] = None
     tags: List[str] = Field(default_factory=list, alias='feature_tags')  # kml2geojson calls this field `feature_tags`
