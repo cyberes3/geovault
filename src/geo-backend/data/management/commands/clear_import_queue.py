@@ -1,16 +1,16 @@
 from django.core.management.base import BaseCommand, CommandError
 from django.db import transaction
-from data.models import ImportQueue, FeatureStore
+from data.models import ImportQueue, FeatureStore, DatabaseLogging
 
 
 class Command(BaseCommand):
-    help = 'Clear the import queue table, handling foreign key constraints properly'
+    help = 'Clear the import queue table, handling foreign key constraints properly. With --force, also clears the database log table.'
 
     def add_arguments(self, parser):
         parser.add_argument(
             '--force',
             action='store_true',
-            help='Force clear all import queue items, even those referenced by feature store',
+            help='Force clear all import queue items, even those referenced by feature store, and also clear the database log table',
         )
         parser.add_argument(
             '--only-unimported',
@@ -38,9 +38,9 @@ class Command(BaseCommand):
             
             if total_count == 0:
                 self.stdout.write(self.style.SUCCESS('Import queue is already empty'))
-                return
-
-            self.stdout.write(f'Found {total_count} items in import queue')
+                # return
+            else:
+                self.stdout.write(f'Found {total_count} items in import queue')
 
             if only_unimported:
                 # Only delete items that haven't been imported
@@ -92,3 +92,19 @@ class Command(BaseCommand):
                         f'Updated {updated_count} feature store items to remove source references'
                     )
                 )
+
+            # Clear database log table if --force is used
+            if force:
+                log_count = DatabaseLogging.objects.count()
+                if log_count > 0:
+                    if dry_run:
+                        self.stdout.write(f'Would delete {log_count} entries from database log table')
+                    else:
+                        DatabaseLogging.objects.all().delete()
+                        self.stdout.write(
+                            self.style.SUCCESS(
+                                f'Successfully deleted {log_count} entries from database log table'
+                            )
+                        )
+                else:
+                    self.stdout.write('Database log table is already empty')

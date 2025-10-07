@@ -8,7 +8,7 @@ from typing import Tuple
 
 import markdownify
 
-from geo_lib.processing.logging import ImportLog
+from geo_lib.processing.logging import ImportLog, DatabaseLogLevel
 from geo_lib.types.geojson import GeojsonRawProperty
 
 
@@ -199,9 +199,9 @@ def process_togeojson_features(features: list) -> Tuple[list, ImportLog]:
                     split_feature['properties'] = GeojsonRawProperty(**split_feature['properties']).model_dump()
                     processed_features.append(split_feature)
                 except Exception as e:
-                    import_log.add(f'Failed to process feature properties: {str(e)}, skipping feature')
+                    import_log.add(f'Failed to process feature properties: {str(e)}, skipping feature', 'ToGeoJSON Process', DatabaseLogLevel.ERROR)
             else:
-                import_log.add(f'Unsupported geometry type: {split_feature["geometry"]["type"]}, skipping')
+                import_log.add(f'Unsupported geometry type: {split_feature["geometry"]["type"]}, skipping', 'ToGeoJSON Process', DatabaseLogLevel.WARNING)
 
     return processed_features, import_log
 
@@ -291,7 +291,7 @@ def kml_to_geojson(kml_bytes) -> Tuple[dict, ImportLog]:
         return final_geojson, import_log
 
     except Exception as e:
-        import_log.add(f"KML conversion failed: {str(e)}")
+        import_log.add(f"KML conversion failed: {str(e)}", 'KML to GeoJSON', DatabaseLogLevel.ERROR)
         raise
 
 

@@ -6,8 +6,8 @@ from typing import Union
 
 from pydantic import BaseModel, Field, ConfigDict
 
-from geo_lib.processing.logging import ImportLog
 from geo_lib.feature_id import generate_feature_hash
+from geo_lib.processing.logging import ImportLog, DatabaseLogLevel
 
 
 class GeoFeatureType(str, Enum):
@@ -18,7 +18,7 @@ class GeoFeatureType(str, Enum):
 
 class Properties(BaseModel):
     model_config = ConfigDict(extra='allow')  # Allow additional properties from togeojson
-    
+
     name: str
     id: Optional[str] = None
     description: Optional[str] = None
@@ -65,6 +65,7 @@ GeoFeatureSupported = Type[PolygonFeature | LineStringFeature | PointFeature]
 def geojson_to_geofeature(geojson: dict) -> Tuple[List[GeoFeatureSupported], ImportLog]:
     result = []
     import_log = ImportLog()
+
     for item in geojson['features']:
         match item['geometry']['type'].lower():
             case 'point':
@@ -74,7 +75,7 @@ def geojson_to_geofeature(geojson: dict) -> Tuple[List[GeoFeatureSupported], Imp
             case 'polygon':
                 c = PolygonFeature
             case _:
-                import_log.add(f'Feature named "{item["properties"].get("name", "unnamed")}" had unsupported type "{item["geometry"]["type"]}".')
+                import_log.add(f'Feature named "{item["properties"].get("name", "unnamed")}" had unsupported type "{item["geometry"]["type"]}".', 'GeoJSON to GeoFeature', DatabaseLogLevel.WARNING)
                 continue
 
         f = c(**item)

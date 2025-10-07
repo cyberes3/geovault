@@ -11,6 +11,7 @@ class ImportQueue(django_models.Model):
     imported = django_models.BooleanField(default=False)
     unparsable = django_models.BooleanField(default=False, help_text="True if the file failed to parse and should not be retried")
     geofeatures = django_models.JSONField(default=list)
+    duplicate_features = django_models.JSONField(default=list, help_text="Features that are duplicates of existing features in the feature store")
     original_filename = django_models.TextField()
     raw_kml = django_models.TextField()
     raw_kml_hash = django_models.CharField(max_length=64, unique=True)
@@ -26,7 +27,7 @@ class FeatureStore(models.Model):
     geojson_hash = models.CharField(max_length=64, unique=True, null=True, blank=True, help_text="SHA-256 hash of the feature's GeoJSON content")
     geometry = models.GeometryField(null=True, blank=True, dim=3)  # Spatial field for efficient queries, supports 3D
     timestamp = models.DateTimeField(auto_now_add=True)
-    
+
     class Meta:
         indexes = [
             models.Index(fields=['user', 'timestamp']),
@@ -41,6 +42,12 @@ class DatabaseLogging(django_models.Model):
     level = django_models.IntegerField()
     text = django_models.TextField()
     source = django_models.CharField(max_length=64)
-    type = django_models.CharField(max_length=64)
     attributes = django_models.JSONField(default=dict, help_text="Key:value pairs for arbitrary attributes")
-    timestamp = django_models.DateTimeField(auto_now_add=True)
+    timestamp = django_models.DateTimeField()
+
+    class Meta:
+        indexes = [
+            models.Index(fields=['user', 'timestamp']),
+            models.Index(fields=['source']),
+            models.Index(fields=['level']),
+        ]
