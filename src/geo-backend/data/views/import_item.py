@@ -994,10 +994,13 @@ def import_to_featurestore(request, item_id):
 
     logger.info(f"Import completed for user {request.user.id}: {total_imported} features imported, {total_skipped} skipped (already exist)")
 
-    # Erase some unneded data since it's not needed anymore now that it's in the feature store.
+    # Delete logs before clearing the log_id
+    if import_item.log_id:
+        _delete_logs_by_log_id(str(import_item.log_id))
+
+    # Erase some unneeded data since it's not needed anymore now that it's in the feature store.
     import_item.geofeatures = []
     import_item.log_id = None
-    _delete_logs_by_log_id(str(import_item.log_id))
 
     import_item.save()
 

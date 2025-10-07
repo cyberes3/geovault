@@ -66,7 +66,7 @@
               <span class="text-sm text-gray-700">{{ item.msg }}</span>
             </li>
             <li v-if="workerLog.length === 0" class="text-sm text-gray-500 italic">
-              No logs available yet...
+              {{ isLoadingLogs ? 'Fetching logs...' : 'No logs available yet...' }}
             </li>
           </ul>
         </div>
@@ -283,12 +283,12 @@
             <div class="flex items-center space-x-2">
               <input
                   v-model="item.properties.name"
-                  :class="isImported || item.isDuplicate ? 'block w-full px-3 py-2 border border-gray-300 rounded-md bg-gray-100 cursor-not-allowed' : 'block w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-blue-500 focus:border-blue-500'"
-                  :disabled="isImported || item.isDuplicate"
+                  :class="isImported || item.isDuplicate || isImporting ? 'block w-full px-3 py-2 border border-gray-300 rounded-md bg-gray-100 cursor-not-allowed' : 'block w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-blue-500 focus:border-blue-500'"
+                  :disabled="isImported || item.isDuplicate || isImporting"
                   :placeholder="originalItems[index].properties.name"
               />
               <button
-                  v-if="!isImported && !item.isDuplicate"
+                  v-if="!isImported && !item.isDuplicate && !isImporting"
                   class="inline-flex items-center px-3 py-2 border border-gray-300 shadow-sm text-sm leading-4 font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500"
                   @click="resetNestedField(index, 'properties', 'name')"
               >
@@ -305,14 +305,14 @@
             <div class="flex items-start space-x-2">
               <textarea
                   v-model="item.properties.description"
-                  :class="isImported || item.isDuplicate ? 'block w-full px-3 py-2 border border-gray-300 rounded-md bg-gray-100 cursor-not-allowed resize-none' : 'block w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-blue-500 focus:border-blue-500 resize-none'"
-                  :disabled="isImported || item.isDuplicate"
+                  :class="isImported || item.isDuplicate || isImporting ? 'block w-full px-3 py-2 border border-gray-300 rounded-md bg-gray-100 cursor-not-allowed resize-none' : 'block w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-blue-500 focus:border-blue-500 resize-none'"
+                  :disabled="isImported || item.isDuplicate || isImporting"
                   :placeholder="originalItems[index].properties.description"
                   class="text-sm"
                   rows="4"
               ></textarea>
               <button
-                  v-if="!isImported && !item.isDuplicate"
+                  v-if="!isImported && !item.isDuplicate && !isImporting"
                   class="inline-flex items-center px-3 py-2 border border-gray-300 shadow-sm text-sm leading-4 font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 mt-1"
                   @click="resetNestedField(index, 'properties', 'description')"
               >
@@ -328,14 +328,14 @@
             <label class="block text-sm font-medium text-gray-700 mb-2">Created Date</label>
             <div class="flex items-center space-x-2">
               <input
-                  :class="isImported || item.isDuplicate ? 'block w-full px-3 py-2 border border-gray-300 rounded-md bg-gray-100 cursor-not-allowed' : 'block w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-blue-500 focus:border-blue-500'"
-                  :disabled="isImported || item.isDuplicate"
+                  :class="isImported || item.isDuplicate || isImporting ? 'block w-full px-3 py-2 border border-gray-300 rounded-md bg-gray-100 cursor-not-allowed' : 'block w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-blue-500 focus:border-blue-500'"
+                  :disabled="isImported || item.isDuplicate || isImporting"
                   :value="formatDateForInput(item.properties.created)"
                   type="datetime-local"
                   @change="updateDate(index, $event)"
               />
               <button
-                  v-if="!isImported && !item.isDuplicate"
+                  v-if="!isImported && !item.isDuplicate && !isImporting"
                   class="inline-flex items-center px-3 py-2 border border-gray-300 shadow-sm text-sm leading-4 font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500"
                   @click="resetNestedField(index, 'properties', 'created')"
               >
@@ -353,12 +353,12 @@
               <div v-for="(tag, tagIndex) in item.properties.tags" :key="`tag-${tagIndex}`" class="flex items-center space-x-2">
                 <input
                     v-model="item.properties.tags[tagIndex]"
-                    :class="isImported || item.isDuplicate ? 'block w-full px-3 py-2 border border-gray-300 rounded-md bg-gray-100 cursor-not-allowed' : 'block w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-blue-500 focus:border-blue-500'"
-                    :disabled="isImported || item.isDuplicate"
+                    :class="isImported || item.isDuplicate || isImporting ? 'block w-full px-3 py-2 border border-gray-300 rounded-md bg-gray-100 cursor-not-allowed' : 'block w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-blue-500 focus:border-blue-500'"
+                    :disabled="isImported || item.isDuplicate || isImporting"
                     :placeholder="getTagPlaceholder(index, tag)"
                 />
                 <button
-                    v-if="!isImported && !item.isDuplicate"
+                    v-if="!isImported && !item.isDuplicate && !isImporting"
                     class="inline-flex items-center px-3 py-2 border border-transparent text-sm font-medium rounded-md text-white bg-red-600 hover:bg-red-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-red-500"
                     @click="removeTag(index, tagIndex)"
                 >
@@ -368,7 +368,7 @@
                 </button>
               </div>
             </div>
-            <div v-if="!isImported && !item.isDuplicate" class="flex items-center space-x-2 mt-3">
+            <div v-if="!isImported && !item.isDuplicate && !isImporting" class="flex items-center space-x-2 mt-3">
               <button
                   :class="{ 'opacity-50 cursor-not-allowed': isLastTagEmpty(index) }"
                   :disabled="isLastTagEmpty(index)"
@@ -500,6 +500,7 @@ export default {
       itemsForUser: [],
       originalItems: [],
       workerLog: [],
+      isLoadingLogs: true, // Track if logs are being loaded
       lockButtons: false,
       isImported: false, // Track if this item has been imported
       showMapPreviewDialog: false, // Track map preview dialog state
@@ -602,91 +603,113 @@ export default {
       if (isNaN(date.getTime())) return '';
       return date.toISOString().slice(0, 16);
     },
-    async saveChanges() {
-      this.lockButtons = true;
-      this.isSaving = true;
+    async _saveChangesInternal() {
+      // Internal save function that doesn't manage locks
+      // This can be called by both saveChanges() and performImport()
+      
+      // Cache current page changes first
+      this.cacheCurrentPageChanges();
+
+      // Collect only changed features from current page and cached pages
+      const changedFeatures = [];
+
+      // Helper function to get comparable feature data (excluding UI-only properties)
+      const getComparableFeature = (feature) => {
+        return {
+          type: feature.type,
+          geometry: feature.geometry,
+          properties: feature.properties
+        };
+      };
+
+      // Helper function to check if a feature has changed
+      const hasChanged = (current, original) => {
+        const currentComparable = getComparableFeature(current);
+        const originalComparable = getComparableFeature(original);
+        return JSON.stringify(currentComparable) !== JSON.stringify(originalComparable);
+      };
+
+      // Check current page for changes
+      this.itemsForUser.forEach((feature, idx) => {
+        if (!feature.isDuplicate && hasChanged(feature, this.originalItems[idx])) {
+          // Only include features that have changed (but send the full feature with ID)
+          changedFeatures.push(getComparableFeature(feature));
+        }
+      });
+
+      // Check cached pages for changes
+      Object.entries(this.allPagesCache).forEach(([page, cachedFeatures]) => {
+        const pageNum = parseInt(page);
+        if (pageNum !== this.currentPage) {
+          const originalForPage = this.allPagesOriginalCache[pageNum] || [];
+          cachedFeatures.forEach((feature, idx) => {
+            const globalIdx = (pageNum - 1) * this.pageSize + idx;
+            // Skip duplicates
+            if (!this.duplicateIndices.includes(globalIdx) && !feature.isDuplicate) {
+              // Compare with original if we have it
+              const original = originalForPage[idx];
+              if (!original || hasChanged(feature, original)) {
+                changedFeatures.push(getComparableFeature(feature));
+              }
+            }
+          });
+        }
+      });
+
+      if (changedFeatures.length === 0) {
+        // No changes to save
+        return { success: true, changedCount: 0 };
+      }
+
       const csrftoken = getCookie('csrftoken');
 
-      try {
-        // Cache current page changes first
-        this.cacheCurrentPageChanges();
+      // Save only changed features using the new API format
+      const response = await axios.put('/api/data/item/import/update/' + this.id, {
+        features: changedFeatures
+      }, {
+        headers: {
+          'X-CSRFToken': csrftoken
+        }
+      });
 
-        // Collect only changed features from current page and cached pages
-        const changedFeatures = [];
-
-        // Helper function to get comparable feature data (excluding UI-only properties)
-        const getComparableFeature = (feature) => {
-          return {
-            type: feature.type,
-            geometry: feature.geometry,
-            properties: feature.properties
-          };
-        };
-
-        // Helper function to check if a feature has changed
-        const hasChanged = (current, original) => {
-          const currentComparable = getComparableFeature(current);
-          const originalComparable = getComparableFeature(original);
-          return JSON.stringify(currentComparable) !== JSON.stringify(originalComparable);
-        };
-
-        // Check current page for changes
+      if (response.data.success) {
+        // Update original items to reflect saved state for current page
         this.itemsForUser.forEach((feature, idx) => {
-          if (!feature.isDuplicate && hasChanged(feature, this.originalItems[idx])) {
-            // Only include features that have changed (but send the full feature with ID)
-            changedFeatures.push(getComparableFeature(feature));
-          }
+          this.originalItems[idx] = JSON.parse(JSON.stringify(feature));
         });
-
-        // Check cached pages for changes
-        Object.entries(this.allPagesCache).forEach(([page, cachedFeatures]) => {
+        
+        // Also update the cached original items for current page
+        if (this.currentPage) {
+          this.allPagesOriginalCache[this.currentPage] = JSON.parse(JSON.stringify(this.originalItems));
+        }
+        
+        // For cached pages, update their original state to match the current state
+        // since we just saved those changes
+        Object.keys(this.allPagesCache).forEach(page => {
           const pageNum = parseInt(page);
           if (pageNum !== this.currentPage) {
-            const originalForPage = this.allPagesOriginalCache[pageNum] || [];
-            cachedFeatures.forEach((feature, idx) => {
-              const globalIdx = (pageNum - 1) * this.pageSize + idx;
-              // Skip duplicates
-              if (!this.duplicateIndices.includes(globalIdx) && !feature.isDuplicate) {
-                // Compare with original if we have it
-                const original = originalForPage[idx];
-                if (!original || hasChanged(feature, original)) {
-                  changedFeatures.push(getComparableFeature(feature));
-                }
-              }
-            });
+            // Update original to match current since we saved
+            this.allPagesOriginalCache[pageNum] = JSON.parse(JSON.stringify(this.allPagesCache[pageNum]));
           }
         });
 
-        if (changedFeatures.length === 0) {
-          // No changes to save
-          this.lockButtons = false;
-          this.isSaving = false;
-          return;
+        // Show success message
+        if (response.data.updated_count > 0) {
+          console.log(`Successfully saved ${response.data.updated_count} feature(s)`);
         }
+        
+        return { success: true, changedCount: response.data.updated_count };
+      } else {
+        throw new Error(response.data.msg);
+      }
+    },
+    async saveChanges() {
+      // User-facing save function that manages locks and error handling
+      this.lockButtons = true;
+      this.isSaving = true;
 
-        // Save only changed features using the new API format
-        const response = await axios.put('/api/data/item/import/update/' + this.id, {
-          features: changedFeatures
-        }, {
-          headers: {
-            'X-CSRFToken': csrftoken
-          }
-        });
-
-        if (response.data.success) {
-          // Update original items to reflect saved state
-          this.itemsForUser.forEach((feature, idx) => {
-            this.originalItems[idx] = JSON.parse(JSON.stringify(feature));
-          });
-
-          // Show success message
-          if (response.data.updated_count > 0) {
-            console.log(`Successfully saved ${response.data.updated_count} feature(s)`);
-          }
-        } else {
-          this.msg = 'Error saving changes: ' + response.data.msg;
-          window.alert(this.msg);
-        }
+      try {
+        await this._saveChangesInternal();
       } catch (error) {
         this.msg = 'Error saving changes: ' + (error.response?.data?.msg || error.message);
         window.alert(this.msg);
@@ -701,11 +724,21 @@ export default {
       const csrftoken = getCookie('csrftoken');
 
       try {
-        // Save changes first (handles all pages and duplicates)
-        await this.saveChanges();
+        // Save any pending changes first before importing
+        try {
+          const saveResult = await this._saveChangesInternal();
+          if (saveResult.changedCount > 0) {
+            console.log(`Saved ${saveResult.changedCount} change(s) before import`);
+          }
+        } catch (saveError) {
+          this.msg = 'Error saving changes before import: ' + (saveError.response?.data?.msg || saveError.message);
+          window.alert(this.msg);
+          return; // Don't proceed with import if save fails
+        }
 
-        // Perform the import
-        const response = await axios.post('/api/data/item/import/perform/' + this.id, [], {
+        // Perform the import - server will use the stored features in the database
+        // No need to send the feature collection, it's already saved
+        const response = await axios.post('/api/data/item/import/perform/' + this.id, {}, {
           headers: {
             'X-CSRFToken': csrftoken
           }
@@ -725,7 +758,7 @@ export default {
           window.alert(this.msg);
         }
       } catch (error) {
-        this.msg = 'Error performing import: ' + error.message;
+        this.msg = 'Error performing import: ' + (error.response?.data?.msg || error.message);
         window.alert(this.msg);
       } finally {
         this.lockButtons = false;
@@ -810,6 +843,7 @@ export default {
       this.itemsForUser = [];
       this.originalItems = [];
       this.workerLog = [];
+      this.isLoadingLogs = true;
       this.lockButtons = false;
       this.isImported = false;
       this.showMapPreviewDialog = false;
@@ -874,6 +908,7 @@ export default {
     },
     async loadLogs() {
       // Load logs independently from main data
+      this.isLoadingLogs = true;
       try {
         const response = await axios.get(`/api/data/item/import/get/${this.id}/logs`);
         if (response.data.success) {
@@ -882,6 +917,8 @@ export default {
       } catch (error) {
         console.error('Error loading logs:', error);
         // Don't set error message as logs are not critical
+      } finally {
+        this.isLoadingLogs = false;
       }
     },
     cacheCurrentPageChanges() {
