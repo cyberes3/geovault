@@ -9,16 +9,6 @@
           <div v-else class="h-6 w-48 bg-gray-200 rounded animate-pulse"></div>
         </div>
         <div class="flex items-center space-x-2">
-          <button
-              :class="originalFilename == null ? 'inline-flex items-center px-3 py-2 border border-gray-300 shadow-sm text-sm leading-4 font-medium rounded-md text-gray-400 bg-gray-100 cursor-not-allowed' : 'inline-flex items-center px-3 py-2 border border-gray-300 shadow-sm text-sm leading-4 font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500'"
-              :disabled="originalFilename == null"
-              @click="showMapPreview"
-          >
-            <svg class="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path d="M9 20l-5.447-2.724A1 1 0 013 16.382V5.618a1 1 0 011.447-.894L9 7m0 13l6-3m-6 3V7m6 10l4.553 2.276A1 1 0 0021 18.382V7.618a1 1 0 00-.553-.894L15 4m0 13V4m0 0L9 7" stroke-linecap="round" stroke-linejoin="round" stroke-width="2"></path>
-            </svg>
-            Map Preview
-          </button>
           <span v-if="isImported" class="inline-flex items-center px-3 py-1 rounded-full text-sm font-medium bg-green-100 text-green-800">
             <svg class="w-4 h-4 mr-1" fill="currentColor" viewBox="0 0 20 20">
               <path clip-rule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" fill-rule="evenodd"></path>
@@ -66,8 +56,8 @@
             <li v-for="(item, index) in workerLog" :key="`logitem-${index}`" class="flex items-start space-x-2">
               <span class="text-sm text-gray-500">{{ formatTimestamp(item.timestamp) }}</span>
               <span v-if="item.source" class="text-xs text-gray-400 bg-gray-100 px-2 py-1 rounded">{{ item.source }}</span>
-              <span 
-                v-if="item.level !== undefined" 
+              <span
+                v-if="item.level !== undefined"
                 class="text-xs px-2 py-1 rounded font-medium"
                 :class="getLevelClass(item.level)"
               >
@@ -83,16 +73,165 @@
       </div>
     </div>
 
-    <!-- Loading State -->
-    <Loader v-if="originalFilename == null"/>
+    <!-- Import Summary -->
+    <div v-if="itemsForUser.length > 0 || isLoadingPage" class="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
+      <h3 class="text-lg font-semibold text-gray-900 mb-4">Import Summary</h3>
+      <div v-if="isLoadingPage" class="text-center py-8">
+        <span class="text-blue-600 font-medium">Loading...</span>
+      </div>
+      <div v-else class="grid grid-cols-1 md:grid-cols-3 gap-4">
+        <div class="bg-blue-50 border border-blue-200 rounded-lg p-4">
+          <div class="flex items-center">
+            <div class="flex-shrink-0">
+              <svg class="h-8 w-8 text-blue-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" stroke-linecap="round" stroke-linejoin="round" stroke-width="2"></path>
+              </svg>
+            </div>
+            <div class="ml-3">
+              <p class="text-sm font-medium text-blue-800">Total Features</p>
+              <p class="text-2xl font-bold text-blue-900">{{ totalFeatures || itemsForUser.length }}</p>
+            </div>
+          </div>
+        </div>
 
+        <div class="bg-green-50 border border-green-200 rounded-lg p-4">
+          <div class="flex items-center">
+            <div class="flex-shrink-0">
+              <svg class="h-8 w-8 text-green-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path d="M5 13l4 4L19 7" stroke-linecap="round" stroke-linejoin="round" stroke-width="2"></path>
+              </svg>
+            </div>
+            <div class="ml-3">
+              <p class="text-sm font-medium text-green-800">Ready to Import</p>
+              <p class="text-2xl font-bold text-green-900">{{ totalFeatures - duplicateIndices.length }}</p>
+            </div>
+          </div>
+        </div>
+
+        <div class="bg-yellow-50 border border-yellow-200 rounded-lg p-4">
+          <div class="flex items-center">
+            <div class="flex-shrink-0">
+              <svg class="h-8 w-8 text-yellow-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-2.5L13.732 4c-.77-.833-1.964-.833-2.732 0L3.732 16.5c-.77.833.192 2.5 1.732 2.5z" stroke-linecap="round" stroke-linejoin="round" stroke-width="2"></path>
+              </svg>
+            </div>
+            <div class="ml-3">
+              <p class="text-sm font-medium text-yellow-800">Exact Duplicates (Skipped)</p>
+              <p class="text-2xl font-bold text-yellow-900">{{ duplicateIndices.length }}</p>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Loading State for Initial Page Load -->
+    <Loader v-if="originalFilename == null && !isLoadingPage"/>
+
+    <!-- Import Controls (Top) -->
+    <ImportControls
+        :has-features="itemsForUser.length > 0"
+        :is-loading-page="isLoadingPage"
+        :current-page="currentPage"
+        :page-size="pageSize"
+        :total-features="totalFeatures"
+        :total-pages="totalPages"
+        :has-next-page="hasNextPage"
+        :has-previous-page="hasPreviousPage"
+        :duplicate-count="duplicateIndices.length"
+        :is-imported="isImported"
+        :lock-buttons="lockButtons"
+        :is-saving="isSaving"
+        :is-importing="isImporting"
+        :importable-count="totalFeatures - duplicateIndices.length"
+        :goto-page-input="gotoPageInput"
+        @previous-page="previousPage"
+        @next-page="nextPage"
+        @jump-to-page="goToPage"
+        @show-map-preview="showMapPreview"
+        @save-changes="saveChanges"
+        @perform-import="performImport"
+    />
+
+    <!-- Loading Skeleton for Pagination Changes -->
+    <div v-if="isLoadingPage" class="space-y-6">
+      <!-- Feature Item Skeletons -->
+      <div v-for="i in Math.min(3, pageSize)" :key="`skeleton-${i}`" class="bg-white rounded-lg shadow-sm border border-gray-200 p-6 animate-pulse">
+        <div class="flex items-center justify-between mb-6">
+          <div class="h-6 w-48 bg-gray-200 rounded"></div>
+          <div class="flex items-center space-x-2">
+            <div class="h-8 w-24 bg-gray-200 rounded"></div>
+            <div class="h-6 w-16 bg-gray-200 rounded-full"></div>
+          </div>
+        </div>
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+          <div>
+            <div class="h-4 w-16 bg-gray-200 rounded mb-2"></div>
+            <div class="h-10 w-full bg-gray-200 rounded"></div>
+          </div>
+          <div class="md:col-span-2">
+            <div class="h-4 w-24 bg-gray-200 rounded mb-2"></div>
+            <div class="h-24 w-full bg-gray-200 rounded"></div>
+          </div>
+          <div>
+            <div class="h-4 w-24 bg-gray-200 rounded mb-2"></div>
+            <div class="h-10 w-full bg-gray-200 rounded"></div>
+          </div>
+          <div>
+            <div class="h-4 w-12 bg-gray-200 rounded mb-2"></div>
+            <div class="h-10 w-full bg-gray-200 rounded"></div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Import Summary Skeleton -->
+      <div class="bg-white rounded-lg shadow-sm border border-gray-200 p-6 animate-pulse">
+        <div class="h-6 w-40 bg-gray-200 rounded mb-4"></div>
+        <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+          <div class="bg-gray-50 border border-gray-200 rounded-lg p-4">
+            <div class="flex items-center">
+              <div class="h-8 w-8 bg-gray-200 rounded mr-3"></div>
+              <div class="flex-1 space-y-2">
+                <div class="h-4 w-24 bg-gray-200 rounded"></div>
+                <div class="h-8 w-16 bg-gray-200 rounded"></div>
+              </div>
+            </div>
+          </div>
+          <div class="bg-gray-50 border border-gray-200 rounded-lg p-4">
+            <div class="flex items-center">
+              <div class="h-8 w-8 bg-gray-200 rounded mr-3"></div>
+              <div class="flex-1 space-y-2">
+                <div class="h-4 w-24 bg-gray-200 rounded"></div>
+                <div class="h-8 w-16 bg-gray-200 rounded"></div>
+              </div>
+            </div>
+          </div>
+          <div class="bg-gray-50 border border-gray-200 rounded-lg p-4">
+            <div class="flex items-center">
+              <div class="h-8 w-8 bg-gray-200 rounded mr-3"></div>
+              <div class="flex-1 space-y-2">
+                <div class="h-4 w-32 bg-gray-200 rounded"></div>
+                <div class="h-8 w-16 bg-gray-200 rounded"></div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Action Buttons Skeleton -->
+      <div class="bg-white rounded-lg shadow-sm border border-gray-200 p-6 animate-pulse">
+        <div class="flex items-center space-x-4">
+          <div class="h-10 w-32 bg-gray-200 rounded"></div>
+          <div class="h-10 w-40 bg-gray-200 rounded"></div>
+        </div>
+      </div>
+    </div>
 
     <!-- Feature Items -->
-    <div v-if="itemsForUser.length > 0" class="space-y-6">
+    <div v-if="itemsForUser.length > 0 && !isLoadingPage" class="space-y-6">
       <div v-for="(item, index) in itemsForUser" :key="`item-${index}`"
            :class="item.isDuplicate ? 'bg-gray-100 rounded-lg shadow-sm border border-gray-300 p-6 opacity-75' : 'bg-white rounded-lg shadow-sm border border-gray-200 p-6'">
         <div class="flex items-center justify-between mb-6">
-          <h3 class="text-lg font-semibold text-gray-900">Feature {{ index + 1 }}</h3>
+          <h3 class="text-lg font-semibold text-gray-900">Feature {{ (currentPage - 1) * pageSize + index + 1 }} (of {{ totalFeatures }})</h3>
           <div class="flex items-center space-x-2">
             <button
                 class="inline-flex items-center px-3 py-1.5 border border-gray-300 shadow-sm text-xs font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500"
@@ -256,104 +395,30 @@
       </div>
     </div>
 
-    <!-- Import Summary -->
-    <div v-if="itemsForUser.length > 0" class="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
-      <h3 class="text-lg font-semibold text-gray-900 mb-4">Import Summary</h3>
-      <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
-        <div class="bg-blue-50 border border-blue-200 rounded-lg p-4">
-          <div class="flex items-center">
-            <div class="flex-shrink-0">
-              <svg class="h-8 w-8 text-blue-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" stroke-linecap="round" stroke-linejoin="round" stroke-width="2"></path>
-              </svg>
-            </div>
-            <div class="ml-3">
-              <p class="text-sm font-medium text-blue-800">Total Features</p>
-              <p class="text-2xl font-bold text-blue-900">{{ itemsForUser.length }}</p>
-            </div>
-          </div>
-        </div>
-
-        <div class="bg-green-50 border border-green-200 rounded-lg p-4">
-          <div class="flex items-center">
-            <div class="flex-shrink-0">
-              <svg class="h-8 w-8 text-green-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path d="M5 13l4 4L19 7" stroke-linecap="round" stroke-linejoin="round" stroke-width="2"></path>
-              </svg>
-            </div>
-            <div class="ml-3">
-              <p class="text-sm font-medium text-green-800">Ready to Import</p>
-              <p class="text-2xl font-bold text-green-900">{{ itemsForUser.filter(item => !item.isDuplicate).length }}</p>
-            </div>
-          </div>
-        </div>
-
-        <div class="bg-yellow-50 border border-yellow-200 rounded-lg p-4">
-          <div class="flex items-center">
-            <div class="flex-shrink-0">
-              <svg class="h-8 w-8 text-yellow-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-2.5L13.732 4c-.77-.833-1.964-.833-2.732 0L3.732 16.5c-.77.833.192 2.5 1.732 2.5z" stroke-linecap="round" stroke-linejoin="round" stroke-width="2"></path>
-              </svg>
-            </div>
-            <div class="ml-3">
-              <p class="text-sm font-medium text-yellow-800">Exact Duplicates (Skipped)</p>
-              <p class="text-2xl font-bold text-yellow-900">{{ itemsForUser.filter(item => item.isDuplicate).length }}</p>
-            </div>
-          </div>
-        </div>
-      </div>
-    </div>
-
-    <!-- Action Buttons -->
-    <div v-if="itemsForUser.length > 0" class="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
-      <div v-if="isImported" class="mb-4 p-4 bg-yellow-50 border border-yellow-200 rounded-md">
-        <div class="flex">
-          <div class="flex-shrink-0">
-            <svg class="h-5 w-5 text-yellow-400" fill="currentColor" viewBox="0 0 20 20">
-              <path clip-rule="evenodd" d="M8.257 3.099c.765-1.36 2.722-1.36 3.486 0l5.58 9.92c.75 1.334-.213 2.98-1.742 2.98H4.42c-1.53 0-2.493-1.646-1.743-2.98l5.58-9.92zM11 13a1 1 0 11-2 0 1 1 0 012 0zm-1-8a1 1 0 00-1 1v3a1 1 0 002 0V6a1 1 0 00-1-1z" fill-rule="evenodd"></path>
-            </svg>
-          </div>
-          <div class="ml-3">
-            <h3 class="text-sm font-medium text-yellow-800">Already Imported</h3>
-            <div class="mt-2 text-sm text-yellow-700">
-              <p>This item has already been imported to the feature store and cannot be modified.</p>
-            </div>
-          </div>
-        </div>
-      </div>
-
-      <div v-if="!isImported" class="flex items-center space-x-4">
-        <button
-            :disabled="lockButtons || isSaving"
-            class="inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md text-white bg-green-600 hover:bg-green-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-green-500 disabled:bg-gray-400 disabled:cursor-not-allowed transition-colors duration-200"
-            @click="saveChanges"
-        >
-          <svg v-if="isSaving" class="animate-spin -ml-1 mr-2 h-4 w-4 text-white" fill="none" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
-            <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
-            <path class="opacity-75" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" fill="currentColor"></path>
-          </svg>
-          <svg v-else class="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path d="M8 7H5a2 2 0 00-2 2v9a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-3m-1 4l-3 3m0 0l-3-3m3 3V4" stroke-linecap="round" stroke-linejoin="round" stroke-width="2"></path>
-          </svg>
-          {{ isSaving ? 'Saving...' : 'Save Changes' }}
-        </button>
-        <button
-            :disabled="lockButtons || isImporting || itemsForUser.filter(item => !item.isDuplicate).length === 0"
-            class="inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md text-white bg-blue-600 hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 disabled:bg-gray-400 disabled:cursor-not-allowed transition-colors duration-200"
-            @click="performImport"
-        >
-          <svg v-if="isImporting" class="animate-spin -ml-1 mr-2 h-4 w-4 text-white" fill="none" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
-            <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
-            <path class="opacity-75" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" fill="currentColor"></path>
-          </svg>
-          <svg v-else class="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12" stroke-linecap="round" stroke-linejoin="round" stroke-width="2"></path>
-          </svg>
-          {{ isImporting ? 'Importing...' : `Import ${itemsForUser.filter(item => !item.isDuplicate).length} Features` }}
-        </button>
-      </div>
-    </div>
-
+    <!-- Import Controls (Bottom) -->
+    <ImportControls
+        :has-features="itemsForUser.length > 0"
+        :is-loading-page="isLoadingPage"
+        :current-page="currentPage"
+        :page-size="pageSize"
+        :total-features="totalFeatures"
+        :total-pages="totalPages"
+        :has-next-page="hasNextPage"
+        :has-previous-page="hasPreviousPage"
+        :duplicate-count="duplicateIndices.length"
+        :is-imported="isImported"
+        :lock-buttons="lockButtons"
+        :is-saving="isSaving"
+        :is-importing="isImporting"
+        :importable-count="totalFeatures - duplicateIndices.length"
+        :goto-page-input="gotoPageInput"
+        @previous-page="previousPage"
+        @next-page="nextPage"
+        @jump-to-page="goToPage"
+        @show-map-preview="showMapPreview"
+        @save-changes="saveChanges"
+        @perform-import="performImport"
+    />
 
     <div class="hidden">
       <!-- Load the queue to populate it. -->
@@ -400,16 +465,17 @@ import {authMixin} from "@/assets/js/authMixin.js";
 import axios from "axios";
 import moment from "moment";
 import {capitalizeFirstLetter} from "@/assets/js/string.js";
-import Importqueue from "@/components/import/parts/importqueue.vue";
+import ImportQueue from "@/components/import/parts/ImportQueue.vue";
 import {GeoFeatureTypeStrings} from "@/assets/js/types/geofeature-strings";
 import {GeoPoint, GeoLineString, GeoPolygon} from "@/assets/js/types/geofeature-types";
 import {getCookie} from "@/assets/js/auth.js";
 // Removed flatpickr dependency - using native HTML5 date input
 import Loader from "@/components/parts/Loader.vue";
-import MapPreviewDialog from "@/components/import/MapPreviewDialog.vue";
-import FeatureMapDialog from "@/components/import/FeatureMapDialog.vue";
-import EditOriginalFeatureDialog from "@/components/import/EditOriginalFeatureDialog.vue";
-import LogViewModal from "@/components/import/LogViewModal.vue";
+import MapPreviewDialog from "@/components/import/parts/MapPreviewDialog.vue";
+import FeatureMapDialog from "@/components/import/parts/FeatureMapDialog.vue";
+import EditOriginalFeatureDialog from "@/components/import/parts/EditOriginalFeatureDialog.vue";
+import LogViewModal from "@/components/import/parts/LogViewModal.vue";
+import ImportControls from "@/components/import/parts/ImportControls.vue";
 import {featuresMatch} from "@/assets/js/coordinate-utils.js";
 
 // TODO: for each feature, query the DB and check if there is a duplicate. For points that's duplicate coords, for linestrings and polygons that's duplicate points
@@ -418,8 +484,14 @@ import {featuresMatch} from "@/assets/js/coordinate-utils.js";
 export default {
   computed: {
     ...mapState(["userInfo"]),
+    isValidPageNumber() {
+      return this.gotoPageInput &&
+             this.gotoPageInput >= 1 &&
+             this.gotoPageInput <= this.totalPages &&
+             this.gotoPageInput !== this.currentPage;
+    }
   },
-  components: {Loader, Importqueue, MapPreviewDialog, FeatureMapDialog, EditOriginalFeatureDialog, LogViewModal},
+  components: {Loader, Importqueue: ImportQueue, MapPreviewDialog, FeatureMapDialog, EditOriginalFeatureDialog, LogViewModal, ImportControls},
   data() {
     return {
       msg: "",
@@ -440,6 +512,18 @@ export default {
       showEditOriginalDialog: false, // Track edit original feature dialog state
       selectedOriginalFeature: null, // Track which original feature is being edited
       showLogModal: false, // Track log modal state
+      // Pagination state
+      currentPage: 1,
+      pageSize: 50,
+      totalFeatures: 0,
+      totalPages: 0,
+      hasNextPage: false,
+      hasPreviousPage: false,
+      duplicateIndices: [], // All duplicate indices across all pages
+      allPagesCache: {}, // Cache edited features from all pages
+      allPagesOriginalCache: {}, // Cache original features from all pages for change detection
+      isLoadingPage: false, // Track loading state for pagination changes
+      gotoPageInput: null, // Input value for jump to page feature
       // Removed flatpickrConfig - using native HTML5 datetime-local input
     }
   },
@@ -449,7 +533,7 @@ export default {
     getLevelName(level) {
       const levelMap = {
         10: 'DEBUG',
-        20: 'INFO', 
+        20: 'INFO',
         30: 'WARNING',
         40: 'ERROR',
         50: 'CRITICAL'
@@ -518,65 +602,117 @@ export default {
       if (isNaN(date.getTime())) return '';
       return date.toISOString().slice(0, 16);
     },
-    saveChanges() {
-      this.lockButtons = true
-      this.isSaving = true
-      const csrftoken = getCookie('csrftoken')
+    async saveChanges() {
+      this.lockButtons = true;
+      this.isSaving = true;
+      const csrftoken = getCookie('csrftoken');
 
-      // Filter out duplicate features before saving
-      const nonDuplicateFeatures = this.itemsForUser.filter(item => !item.isDuplicate)
+      try {
+        // Cache current page changes first
+        this.cacheCurrentPageChanges();
 
-      axios.put('/api/data/item/import/update/' + this.id, nonDuplicateFeatures, {
-        headers: {
-          'X-CSRFToken': csrftoken
+        // Collect only changed features from current page and cached pages
+        const changedFeatures = [];
+
+        // Helper function to get comparable feature data (excluding UI-only properties)
+        const getComparableFeature = (feature) => {
+          return {
+            type: feature.type,
+            geometry: feature.geometry,
+            properties: feature.properties
+          };
+        };
+
+        // Helper function to check if a feature has changed
+        const hasChanged = (current, original) => {
+          const currentComparable = getComparableFeature(current);
+          const originalComparable = getComparableFeature(original);
+          return JSON.stringify(currentComparable) !== JSON.stringify(originalComparable);
+        };
+
+        // Check current page for changes
+        this.itemsForUser.forEach((feature, idx) => {
+          if (!feature.isDuplicate && hasChanged(feature, this.originalItems[idx])) {
+            // Only include features that have changed (but send the full feature with ID)
+            changedFeatures.push(getComparableFeature(feature));
+          }
+        });
+
+        // Check cached pages for changes
+        Object.entries(this.allPagesCache).forEach(([page, cachedFeatures]) => {
+          const pageNum = parseInt(page);
+          if (pageNum !== this.currentPage) {
+            const originalForPage = this.allPagesOriginalCache[pageNum] || [];
+            cachedFeatures.forEach((feature, idx) => {
+              const globalIdx = (pageNum - 1) * this.pageSize + idx;
+              // Skip duplicates
+              if (!this.duplicateIndices.includes(globalIdx) && !feature.isDuplicate) {
+                // Compare with original if we have it
+                const original = originalForPage[idx];
+                if (!original || hasChanged(feature, original)) {
+                  changedFeatures.push(getComparableFeature(feature));
+                }
+              }
+            });
+          }
+        });
+
+        if (changedFeatures.length === 0) {
+          // No changes to save
+          this.lockButtons = false;
+          this.isSaving = false;
+          return;
         }
-      }).then(response => {
+
+        // Save only changed features using the new API format
+        const response = await axios.put('/api/data/item/import/update/' + this.id, {
+          features: changedFeatures
+        }, {
+          headers: {
+            'X-CSRFToken': csrftoken
+          }
+        });
+
         if (response.data.success) {
-          // Refresh data from server to reflect persisted values (e.g., regenerated tags)
-          axios.get('/api/data/item/import/get/' + this.id).then(res => {
-            if (res.data.success) {
-              this.itemsForUser = []
-              res.data.geofeatures.forEach((item) => {
-                this.itemsForUser.push(this.parseGeoJson(item))
-              })
-              this.originalItems = JSON.parse(JSON.stringify(this.itemsForUser))
-            }
-          })
+          // Update original items to reflect saved state
+          this.itemsForUser.forEach((feature, idx) => {
+            this.originalItems[idx] = JSON.parse(JSON.stringify(feature));
+          });
+
+          // Show success message
+          if (response.data.updated_count > 0) {
+            console.log(`Successfully saved ${response.data.updated_count} feature(s)`);
+          }
         } else {
           this.msg = 'Error saving changes: ' + response.data.msg;
           window.alert(this.msg);
         }
-        this.lockButtons = false
-        this.isSaving = false
-      }).catch(error => {
-        this.msg = 'Error saving changes: ' + error.message;
+      } catch (error) {
+        this.msg = 'Error saving changes: ' + (error.response?.data?.msg || error.message);
         window.alert(this.msg);
-        this.lockButtons = false
-        this.isSaving = false
-      });
+      } finally {
+        this.lockButtons = false;
+        this.isSaving = false;
+      }
     },
     async performImport() {
-      this.lockButtons = true
-      this.isImporting = true
-      const csrftoken = getCookie('csrftoken')
+      this.lockButtons = true;
+      this.isImporting = true;
+      const csrftoken = getCookie('csrftoken');
 
-      // Filter out duplicate features before saving
-      const nonDuplicateFeatures = this.itemsForUser.filter(item => !item.isDuplicate)
+      try {
+        // Save changes first (handles all pages and duplicates)
+        await this.saveChanges();
 
-      // Save changes first (only non-duplicate features).
-      await axios.put('/api/data/item/import/update/' + this.id, nonDuplicateFeatures, {
-        headers: {
-          'X-CSRFToken': csrftoken
-        }
-      })
+        // Perform the import
+        const response = await axios.post('/api/data/item/import/perform/' + this.id, [], {
+          headers: {
+            'X-CSRFToken': csrftoken
+          }
+        });
 
-      axios.post('/api/data/item/import/perform/' + this.id, [], {
-        headers: {
-          'X-CSRFToken': csrftoken
-        }
-      }).then(response => {
         if (response.data.success) {
-          this.$store.dispatch('refreshImportQueue')
+          this.$store.dispatch('refreshImportQueue');
           // Remove the beforeunload handler before redirecting
           if (this.beforeUnloadHandler) {
             window.removeEventListener('beforeunload', this.beforeUnloadHandler);
@@ -588,14 +724,13 @@ export default {
           this.msg = 'Error performing import: ' + response.data.msg;
           window.alert(this.msg);
         }
-        this.lockButtons = false
-        this.isImporting = false
-      }).catch(error => {
+      } catch (error) {
         this.msg = 'Error performing import: ' + error.message;
         window.alert(this.msg);
-        this.lockButtons = false
-        this.isImporting = false
-      });
+      } finally {
+        this.lockButtons = false;
+        this.isImporting = false;
+      }
     },
     showMapPreview() {
       this.showMapPreviewDialog = true;
@@ -687,6 +822,108 @@ export default {
       this.showEditOriginalDialog = false;
       this.selectedOriginalFeature = null;
       this.showLogModal = false;
+      this.currentPage = 1;
+      this.pageSize = 50;
+      this.totalFeatures = 0;
+      this.totalPages = 0;
+      this.hasNextPage = false;
+      this.hasPreviousPage = false;
+      this.duplicateIndices = [];
+      this.allPagesCache = {};
+      this.allPagesOriginalCache = {};
+      this.isLoadingPage = false;
+      this.gotoPageInput = null;
+    },
+    async loadPage(page) {
+      // Cache current page changes before loading a new page
+      this.cacheCurrentPageChanges();
+
+      this.isLoadingPage = true;
+      try {
+        const response = await axios.get(`/api/data/item/import/get/${this.id}?page=${page}&page_size=${this.pageSize}`);
+        if (response.data.success) {
+          // Update pagination info
+          const pagination = response.data.pagination;
+          this.currentPage = pagination.page;
+          this.totalFeatures = pagination.total_features;
+          this.totalPages = pagination.total_pages;
+          this.hasNextPage = pagination.has_next;
+          this.hasPreviousPage = pagination.has_previous;
+          this.duplicateIndices = pagination.duplicate_indices || [];
+
+          // Parse features for this page
+          this.itemsForUser = [];
+          response.data.geofeatures.forEach((item) => {
+            this.itemsForUser.push(this.parseGeoJson(item));
+          });
+          this.originalItems = JSON.parse(JSON.stringify(this.itemsForUser));
+
+          // Restore cached changes if they exist for this page
+          this.restoreCachedPageChanges(page);
+
+          // Process duplicates from the API response
+          this.duplicateFeatures = response.data.duplicates || [];
+          this.markDuplicateFeatures();
+        }
+      } catch (error) {
+        this.msg = 'Error loading page: ' + error.message;
+        console.error(error);
+      } finally {
+        this.isLoadingPage = false;
+      }
+    },
+    async loadLogs() {
+      // Load logs independently from main data
+      try {
+        const response = await axios.get(`/api/data/item/import/get/${this.id}/logs`);
+        if (response.data.success) {
+          this.workerLog = response.data.logs || [];
+        }
+      } catch (error) {
+        console.error('Error loading logs:', error);
+        // Don't set error message as logs are not critical
+      }
+    },
+    cacheCurrentPageChanges() {
+      // Store the current page's items in cache
+      if (this.currentPage && this.itemsForUser.length > 0) {
+        this.allPagesCache[this.currentPage] = JSON.parse(JSON.stringify(this.itemsForUser));
+        // Also cache the original items for this page for change detection
+        if (this.originalItems.length > 0) {
+          this.allPagesOriginalCache[this.currentPage] = JSON.parse(JSON.stringify(this.originalItems));
+        }
+      }
+    },
+    restoreCachedPageChanges(page) {
+      // Restore cached changes for the specified page
+      if (this.allPagesCache[page]) {
+        this.itemsForUser = JSON.parse(JSON.stringify(this.allPagesCache[page]));
+        // Also restore the original items if we have them
+        if (this.allPagesOriginalCache[page]) {
+          this.originalItems = JSON.parse(JSON.stringify(this.allPagesOriginalCache[page]));
+        }
+      }
+    },
+    async nextPage() {
+      if (this.hasNextPage) {
+        await this.loadPage(this.currentPage + 1);
+      }
+    },
+    async previousPage() {
+      if (this.hasPreviousPage) {
+        await this.loadPage(this.currentPage - 1);
+      }
+    },
+    async goToPage(page) {
+      if (page >= 1 && page <= this.totalPages) {
+        await this.loadPage(page);
+      }
+    },
+    async jumpToPage() {
+      if (this.isValidPageNumber) {
+        await this.goToPage(this.gotoPageInput);
+        this.gotoPageInput = null; // Clear the input after jumping
+      }
     },
   },
   mounted() {
@@ -749,7 +986,8 @@ export default {
         vm.isImported = false
 
         try {
-          const response = await axios.get('/api/data/item/import/get/' + vm.id)
+          // Load first page with pagination
+          const response = await axios.get(`/api/data/item/import/get/${vm.id}?page=1&page_size=${vm.pageSize}`)
           if (!response.data.success) {
             vm.msg = capitalizeFirstLetter(response.data.msg).trim(".") + "."
           } else {
@@ -767,6 +1005,16 @@ export default {
                 vm.isRedirectingDueToInvalidId = true;
                 vm.$router.replace('/import');
                 return;
+              }
+
+              // Update pagination info
+              if (response.data.pagination) {
+                vm.currentPage = response.data.pagination.page;
+                vm.totalFeatures = response.data.pagination.total_features;
+                vm.totalPages = response.data.pagination.total_pages;
+                vm.hasNextPage = response.data.pagination.has_next;
+                vm.hasPreviousPage = response.data.pagination.has_previous;
+                vm.duplicateIndices = response.data.pagination.duplicate_indices || [];
               }
 
               // Check if this is an error response (unprocessable file)
@@ -788,11 +1036,8 @@ export default {
               }
             }
 
-            // Since processing is now synchronous, we don't need to check processing status
-            vm.workerLog = vm.workerLog.concat(response.data.log || [])
-            if (response.data.msg != null && response.data.msg.length > 0) {
-              vm.workerLog.push({timestamp: now, msg: response.data.msg})
-            }
+            // Load logs independently
+            vm.loadLogs()
           }
         } catch (error) {
           if (error.response && error.response.data && error.response.data.code === 404) {

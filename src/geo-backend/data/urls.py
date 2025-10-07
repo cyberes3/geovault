@@ -1,12 +1,13 @@
 from django.urls import path
 
-from data.views.import_item import upload_item, fetch_import_queue, fetch_import_waiting, delete_import_item, bulk_delete_import_items, update_import_item, fetch_import_history, fetch_import_history_item, import_to_featurestore
+from data.views.import_item import upload_item, fetch_import_queue, fetch_import_logs, fetch_import_waiting, delete_import_item, bulk_delete_import_items, update_import_item, fetch_import_history, fetch_import_history_item, import_to_featurestore
 from data.views.geojson_api import get_geojson_data, get_feature, update_feature
 from data.views.geolocation_api import get_user_location, get_location_by_ip
 
 urlpatterns = [
     path('item/import/upload', upload_item),
     path('item/import/get/<int:item_id>', fetch_import_queue),
+    path('item/import/get/<int:item_id>/logs', fetch_import_logs),
     path('item/import/get', fetch_import_waiting),
     path('item/import/get/history', fetch_import_history),
     path('item/import/get/history/<int:item_id>', fetch_import_history_item),

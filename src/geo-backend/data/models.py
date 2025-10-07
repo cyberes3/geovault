@@ -39,6 +39,7 @@ class FeatureStore(models.Model):
 class DatabaseLogging(django_models.Model):
     id = django_models.AutoField(primary_key=True)
     user = django_models.ForeignKey(get_user_model(), on_delete=django_models.CASCADE)
+    log_id = django_models.UUIDField(null=True, blank=True, db_index=True, help_text="UUID to group related log entries")
     level = django_models.IntegerField()
     text = django_models.TextField()
     source = django_models.CharField(max_length=64)
@@ -50,4 +51,5 @@ class DatabaseLogging(django_models.Model):
             models.Index(fields=['user', 'timestamp']),
             models.Index(fields=['source']),
             models.Index(fields=['level']),
+            models.Index(fields=['log_id', 'timestamp']),
         ]

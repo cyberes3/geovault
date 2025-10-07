@@ -180,7 +180,7 @@
 <script>
 import axios from "axios";
 import {getCookie} from "@/assets/js/auth.js";
-import FeatureMapDialog from "./FeatureMapDialog.vue";
+import FeatureMapDialog from "@/components/import/parts/FeatureMapDialog.vue";
 
 export default {
   name: 'EditOriginalFeatureDialog',

@@ -232,7 +232,7 @@ import axios from "axios";
 import {capitalizeFirstLetter} from "@/assets/js/string.js";
 import {IMPORT_QUEUE_LIST_URL} from "@/assets/js/import/url.js";
 import {ImportQueueItem} from "@/assets/js/types/import-types"
-import Importqueue from "@/components/import/parts/importqueue.vue";
+import ImportQueue from "@/components/import/parts/ImportQueue.vue";
 import {getCookie} from "@/assets/js/auth.js";
 import {SECURITY_CONFIG} from "@/config.js";
 
@@ -346,7 +346,7 @@ export default {
       }
     }
   },
-  components: {Importqueue},
+  components: {Importqueue: ImportQueue},
   mixins: [authMixin],
   data() {
     return {

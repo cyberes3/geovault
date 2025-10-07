@@ -109,7 +109,7 @@ import {mapState} from "vuex"
 import {authMixin} from "@/assets/js/authMixin.js";
 import axios from "axios";
 import {IMPORT_HISTORY_URL} from "@/assets/js/import/url.js";
-import Importqueue from "@/components/import/parts/importqueue.vue";
+import ImportQueue from "@/components/import/parts/ImportQueue.vue";
 
 export default {
   computed: {
@@ -122,7 +122,7 @@ export default {
       return this.historyIsLoading && !this.hasHistoryInitiallyLoaded && this.history.length === 0;
     }
   },
-  components: {ImportQueue: Importqueue},
+  components: {ImportQueue: ImportQueue},
   mixins: [authMixin],
   data() {
     return {
@@ -207,7 +207,7 @@ export default {
       this.hasHistoryInitiallyLoaded = true;
       this.historyIsLoading = false;
     }
-    
+
     await Promise.all([
       this.fetchHistory(),
       this.fetchImportQueue()

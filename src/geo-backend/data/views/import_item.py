@@ -292,13 +292,13 @@ def _find_existing_features_by_coordinates(coordinates: List, geom_type: str, us
 
 def _get_logs_by_log_id(log_id):
     """Fetch logs from DatabaseLogging table by log_id"""
-    logs = DatabaseLogging.objects.filter(attributes__log_id=log_id).order_by('timestamp')
+    logs = DatabaseLogging.objects.filter(log_id=log_id).order_by('timestamp')
     return [{'timestamp': log.timestamp.isoformat(), 'msg': log.text, 'source': log.source, 'level': log.level} for log in logs]
 
 
 def _delete_logs_by_log_id(log_id):
     """Delete all logs from DatabaseLogging table by log_id"""
-    deleted_count = DatabaseLogging.objects.filter(attributes__log_id=log_id).delete()[0]
+    deleted_count = DatabaseLogging.objects.filter(log_id=log_id).delete()[0]
     return deleted_count
 
 
@@ -547,29 +547,104 @@ def fetch_import_queue(request, item_id):
             return JsonResponse({'success': False, 'processing': False, 'msg': 'not authorized to view this item', 'code': 403}, status=400)
 
         if item.imported:
-            return JsonResponse({'success': True, 'processing': False, 'geofeatures': None, 'log': None, 'msg': None, 'original_filename': None, 'imported': item.imported}, status=200)
+            return JsonResponse({'success': True, 'processing': False, 'geofeatures': None, 'msg': None, 'original_filename': None, 'imported': item.imported}, status=200)
 
-        # Since processing is now synchronous, items are always ready
+        # Get pagination parameters
+        page = int(request.GET.get('page', 1))
+        page_size = int(request.GET.get('page_size', 50))
+        
+        # Validate pagination parameters
+        if page < 1:
+            page = 1
+        if page_size < 1 or page_size > 500:
+            page_size = 50
+
+        # Calculate pagination
+        total_features = len(item.geofeatures)
+        start_idx = (page - 1) * page_size
+        end_idx = start_idx + page_size
+        
+        # Get paginated features
+        paginated_features = item.geofeatures[start_idx:end_idx]
+        
+        # Optimize duplicate information - only include IDs and essential data
+        # Create a mapping of feature indices to duplicate info for current page
+        duplicates_optimized = []
+        duplicate_indices = []  # Track which indices are duplicates
+        
+        for dup_info in (item.duplicate_features if item.duplicate_features else []):
+            # Find the index of this duplicate feature in the full list
+            dup_feature = dup_info.get('feature')
+            if dup_feature:
+                # Try to find matching feature by coordinates
+                for idx, feature in enumerate(item.geofeatures):
+                    if (feature.get('geometry', {}).get('coordinates') == dup_feature.get('geometry', {}).get('coordinates') and
+                        feature.get('geometry', {}).get('type') == dup_feature.get('geometry', {}).get('type')):
+                        duplicate_indices.append(idx)
+                        # Only include duplicate info if it's in the current page
+                        if start_idx <= idx < end_idx:
+                            # Optimize existing_features to only include essential fields
+                            existing_features_optimized = []
+                            for existing in dup_info.get('existing_features', []):
+                                existing_features_optimized.append({
+                                    'id': existing.get('id'),
+                                    'name': existing.get('name'),
+                                    'type': existing.get('type'),
+                                    'timestamp': existing.get('timestamp')
+                                    # Removed full geojson to save bandwidth
+                                })
+                            duplicates_optimized.append({
+                                'feature': dup_feature,
+                                'existing_features': existing_features_optimized,
+                                'page_index': idx - start_idx  # Index within the current page
+                            })
+                        break
+
+        return JsonResponse({
+            'success': True,
+            'processing': False,
+            'geofeatures': paginated_features,
+            'msg': None,
+            'original_filename': item.original_filename,
+            'imported': item.imported,
+            'log_id': str(item.log_id) if item.log_id else None,
+            'duplicates': duplicates_optimized,
+            'pagination': {
+                'page': page,
+                'page_size': page_size,
+                'total_features': total_features,
+                'total_pages': (total_features + page_size - 1) // page_size,
+                'has_next': end_idx < total_features,
+                'has_previous': page > 1,
+                'duplicate_indices': duplicate_indices  # All duplicate indices in the full list
+            }
+        }, status=200)
+    except ImportQueue.DoesNotExist:
+        return JsonResponse({'success': False, 'msg': 'ID does not exist', 'code': 404}, status=400)
+
+
+@login_required_401
+def fetch_import_logs(request, item_id):
+    """Fetch logs for an import item separately from the item data"""
+    if item_id is None:
+        return JsonResponse({'success': False, 'msg': 'ID not provided', 'code': 400}, status=400)
+    try:
+        item = ImportQueue.objects.get(id=item_id)
+
+        if item.user_id != request.user.id:
+            return JsonResponse({'success': False, 'msg': 'not authorized to view this item', 'code': 403}, status=403)
+
         # Fetch logs from database if log_id exists
         logs = []
         if item.log_id:
             logs = _get_logs_by_log_id(str(item.log_id))
 
-        # Return stored duplicate information (computed during initial conversion)
-        duplicates = item.duplicate_features if item.duplicate_features else []
-
         return JsonResponse({
             'success': True,
-            'processing': False,
-            'geofeatures': item.geofeatures,
-            'log': logs,
-            'msg': None,
-            'original_filename': item.original_filename,
-            'imported': item.imported,
-            'duplicates': duplicates
+            'logs': logs
         }, status=200)
     except ImportQueue.DoesNotExist:
-        return JsonResponse({'success': False, 'msg': 'ID does not exist', 'code': 404}, status=400)
+        return JsonResponse({'success': False, 'msg': 'ID does not exist', 'code': 404}, status=404)
 
 
 @login_required_401
@@ -689,7 +764,7 @@ def bulk_delete_import_items(request):
 
 @login_required_401
 @csrf_protect
-@require_http_methods(["PUT"])
+@require_http_methods(["PUT", "PATCH"])
 def update_import_item(request, item_id):
     try:
         queue = ImportQueue.objects.get(id=item_id)
@@ -708,15 +783,22 @@ def update_import_item(request, item_id):
 
     try:
         data = json.loads(request.body)
-        if not isinstance(data, list):
-            raise ValueError('Invalid data format. Expected a list.')
+        if not isinstance(data, dict) or 'features' not in data:
+            raise ValueError('Invalid data format. Expected {"features": [{feature with id}, ...]}')
+        
+        features_to_update = data['features']
+        if not isinstance(features_to_update, list):
+            raise ValueError('features must be a list')
     except (json.JSONDecodeError, ValueError) as e:
         return JsonResponse({'success': False, 'msg': str(e), 'code': 400}, status=400)
 
-    parsed_data = []
-    for feature in data:
+    # Build a lookup map of feature ID to updated feature
+    updates_by_id = {}
+    for feature in features_to_update:
+        # Validate and parse the feature
         c = None
-        match feature['type'].lower():
+        geom_type = feature.get('geometry', {}).get('type', '').lower()
+        match geom_type:
             case 'point':
                 c = PointFeature
             case 'linestring':
@@ -725,14 +807,41 @@ def update_import_item(request, item_id):
                 c = PolygonFeature
             case _:
                 continue
-        assert c is not None
-        parsed_data.append(json.loads(c(**feature).model_dump_json()))
+        
+        if c is None:
+            continue
+            
+        # Parse the feature to validate it
+        try:
+            parsed_feature = c(**feature)
+            feature_json = json.loads(parsed_feature.model_dump_json())
+            feature_id = feature_json.get('properties', {}).get('id')
+            
+            if not feature_id:
+                logger.warning(f"Skipping feature without ID: {feature.get('properties', {}).get('name', 'Unnamed')}")
+                continue
+                
+            updates_by_id[feature_id] = feature_json
+        except Exception as e:
+            logger.error(f"Error parsing feature: {e}")
+            continue
 
-    # Update the geofeatures column with the new data
-    queue.geofeatures = parsed_data
+    # Update features in the geofeatures array by matching IDs
+    updated_count = 0
+    for i, existing_feature in enumerate(queue.geofeatures):
+        feature_id = existing_feature.get('properties', {}).get('id')
+        if feature_id and feature_id in updates_by_id:
+            queue.geofeatures[i] = updates_by_id[feature_id]
+            updated_count += 1
+
+    # Save the updated queue
     queue.save()
 
-    return JsonResponse({'success': True, 'msg': 'Item updated successfully'})
+    return JsonResponse({
+        'success': True, 
+        'msg': f'Successfully updated {updated_count} feature(s)',
+        'updated_count': updated_count
+    })
 
 
 @login_required_401
