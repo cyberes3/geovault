@@ -293,7 +293,7 @@ def _find_existing_features_by_coordinates(coordinates: List, geom_type: str, us
 def _get_logs_by_log_id(log_id):
     """Fetch logs from DatabaseLogging table by log_id"""
     logs = DatabaseLogging.objects.filter(attributes__log_id=log_id).order_by('timestamp')
-    return [{'timestamp': log.timestamp.isoformat(), 'msg': log.text} for log in logs]
+    return [{'timestamp': log.timestamp.isoformat(), 'msg': log.text, 'source': log.source, 'level': log.level} for log in logs]
 
 
 def _delete_logs_by_log_id(log_id):

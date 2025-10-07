@@ -64,7 +64,15 @@
         <div class="h-32 overflow-auto">
           <ul class="space-y-2">
             <li v-for="(item, index) in workerLog" :key="`logitem-${index}`" class="flex items-start space-x-2">
-              <span class="text-sm text-gray-500">{{ item.timestamp }}</span>
+              <span class="text-sm text-gray-500">{{ formatTimestamp(item.timestamp) }}</span>
+              <span v-if="item.source" class="text-xs text-gray-400 bg-gray-100 px-2 py-1 rounded">{{ item.source }}</span>
+              <span 
+                v-if="item.level !== undefined" 
+                class="text-xs px-2 py-1 rounded font-medium"
+                :class="getLevelClass(item.level)"
+              >
+                {{ getLevelName(item.level) }}
+              </span>
               <span class="text-sm text-gray-700">{{ item.msg }}</span>
             </li>
             <li v-if="workerLog.length === 0" class="text-sm text-gray-500 italic">
@@ -390,6 +398,7 @@
 import {mapState} from "vuex";
 import {authMixin} from "@/assets/js/authMixin.js";
 import axios from "axios";
+import moment from "moment";
 import {capitalizeFirstLetter} from "@/assets/js/string.js";
 import Importqueue from "@/components/import/parts/importqueue.vue";
 import {GeoFeatureTypeStrings} from "@/assets/js/types/geofeature-strings";
@@ -437,6 +446,31 @@ export default {
   mixins: [authMixin],
   props: ['id'],
   methods: {
+    getLevelName(level) {
+      const levelMap = {
+        10: 'DEBUG',
+        20: 'INFO', 
+        30: 'WARNING',
+        40: 'ERROR',
+        50: 'CRITICAL'
+      };
+      return levelMap[level] || 'UNKNOWN';
+    },
+    getLevelClass(level) {
+      if (level >= 40) { // ERROR or CRITICAL
+        return 'bg-red-100 text-red-800';
+      } else if (level >= 30) { // WARNING
+        return 'bg-yellow-100 text-yellow-800';
+      } else if (level >= 20) { // INFO
+        return 'bg-blue-100 text-blue-800';
+      } else { // DEBUG
+        return 'bg-gray-100 text-gray-800';
+      }
+    },
+    formatTimestamp(timestamp) {
+      if (!timestamp) return '';
+      return moment(timestamp).format('YYYY-MM-DD HH:mm:ss');
+    },
     parseGeoJson(item) {
       switch (item.geometry.type) {
         case GeoFeatureTypeStrings.Point:
