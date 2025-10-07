@@ -206,8 +206,13 @@ def process_togeojson_features(features: list) -> Tuple[list, ImportLog]:
     return processed_features, import_log
 
 
-def kml_to_geojson(kml_bytes) -> Tuple[dict, ImportLog]:
-    """Convert KML/KMZ to GeoJSON using JavaScript togeojson library for proper styling support."""
+def kml_to_geojson(kml_bytes, timeout_seconds: int = 20) -> Tuple[dict, ImportLog]:
+    """Convert KML/KMZ to GeoJSON using JavaScript togeojson library for proper styling support.
+    
+    Args:
+        kml_bytes: KML/KMZ file content as bytes or string
+        timeout_seconds: Timeout in seconds for the conversion process (default: 20)
+    """
     import_log = ImportLog()
 
     try:
@@ -230,7 +235,7 @@ def kml_to_geojson(kml_bytes) -> Tuple[dict, ImportLog]:
                     ['node', togeojson_path, temp_file_path],
                     capture_output=True,
                     text=True,
-                    timeout=30
+                    timeout=timeout_seconds
                 )
 
                 if result.returncode != 0:
@@ -267,7 +272,7 @@ def kml_to_geojson(kml_bytes) -> Tuple[dict, ImportLog]:
                     ['node', togeojson_path, temp_file_path],
                     capture_output=True,
                     text=True,
-                    timeout=30
+                    timeout=timeout_seconds
                 )
             finally:
                 # Clean up temporary file

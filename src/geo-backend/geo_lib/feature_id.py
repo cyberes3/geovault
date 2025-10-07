@@ -4,6 +4,18 @@ Utility functions for generating consistent feature IDs based on GeoJSON content
 import hashlib
 import json
 from typing import Dict, Any
+from functools import lru_cache
+
+
+@lru_cache(maxsize=10000)
+def _hash_geometry_and_properties(geometry_json: str, properties_json: str) -> str:
+    """
+    Cached hash generation for geometry and properties.
+    This avoids re-serializing the same data multiple times.
+    """
+    # Combine geometry and properties into a single string for hashing
+    combined_data = f"{geometry_json}|{properties_json}"
+    return hashlib.sha256(combined_data.encode('utf-8')).hexdigest()
 
 
 def generate_feature_hash(geojson_feature: Dict[str, Any]) -> str:
@@ -33,12 +45,12 @@ def generate_feature_hash(geojson_feature: Dict[str, Any]) -> str:
         normalized_feature['properties'] = normalized_feature['properties'].copy()
         del normalized_feature['properties']['id']
     
-    # Convert to JSON string with consistent formatting
-    # Use sort_keys=True to ensure consistent ordering
-    feature_json = json.dumps(normalized_feature, sort_keys=True, separators=(',', ':'))
+    # Convert geometry and properties to JSON strings separately for caching
+    geometry_json = json.dumps(normalized_feature['geometry'], sort_keys=True, separators=(',', ':'))
+    properties_json = json.dumps(normalized_feature['properties'], sort_keys=True, separators=(',', ':'))
     
-    # Generate SHA-256 hash
-    return hashlib.sha256(feature_json.encode('utf-8')).hexdigest()
+    # Use cached hash generation
+    return _hash_geometry_and_properties(geometry_json, properties_json)
 
 
 def get_feature_id_from_geojson(geojson_feature: Dict[str, Any]) -> str:

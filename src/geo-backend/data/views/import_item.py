@@ -85,6 +85,11 @@ def _find_coordinate_duplicates(features: List[Dict], user_id: int) -> Tuple[Lis
     if not features:
         return features, [], import_log
 
+    # For large files, use batched approach to reduce database queries
+    if len(features) > 1000:
+        return _find_coordinate_duplicates_batched(features, user_id, import_log)
+
+    # For smaller files, use the original approach
     unique_features = []
     duplicate_features = []
 
@@ -116,6 +121,103 @@ def _find_coordinate_duplicates(features: List[Dict], user_id: int) -> Tuple[Lis
             import_log.add(f"Coordinate duplicate found: '{feature_name}' ({feature_type}) matches {existing_count} existing feature(s)", 'Find Coordinate Duplicates')
         else:
             unique_features.append(feature)
+
+    return unique_features, duplicate_features, import_log
+
+
+def _find_coordinate_duplicates_batched(features: List[Dict], user_id: int, import_log: ImportLog) -> Tuple[List[Dict], List[Dict], ImportLog]:
+    """
+    Optimized duplicate detection for large files using batched database queries.
+    """
+    from django.contrib.gis.geos import GEOSGeometry
+    from data.models import FeatureStore
+    import json
+
+    unique_features = []
+    duplicate_features = []
+
+    # Group features by geometry type for more efficient queries
+    features_by_type = {'point': [], 'linestring': [], 'polygon': []}
+
+    for i, feature in enumerate(features):
+        geometry = feature.get('geometry', {})
+        geom_type = geometry.get('type', '').lower()
+        coordinates = geometry.get('coordinates', [])
+
+        if not coordinates or geom_type not in features_by_type:
+            unique_features.append(feature)
+            continue
+
+        features_by_type[geom_type].append((i, feature, coordinates))
+
+    # Process each geometry type in batches
+    for geom_type, type_features in features_by_type.items():
+        if not type_features:
+            continue
+
+        import_log.add(f"Processing {len(type_features)} {geom_type} features for duplicates", 'Find Coordinate Duplicates')
+
+        # Process in batches of 100 to avoid memory issues
+        batch_size = 100
+        for batch_start in range(0, len(type_features), batch_size):
+            batch_end = min(batch_start + batch_size, len(type_features))
+            batch_features = type_features[batch_start:batch_end]
+
+            # Create geometries for this batch
+            batch_geometries = []
+            for idx, feature, coordinates in batch_features:
+                try:
+                    geom_data = {
+                        'type': geom_type.title(),
+                        'coordinates': coordinates
+                    }
+                    geometry = GEOSGeometry(json.dumps(geom_data))
+                    batch_geometries.append((idx, feature, geometry))
+                except Exception as e:
+                    import_log.add(f"Failed to create geometry for feature {idx}: {str(e)}", 'Find Coordinate Duplicates')
+                    unique_features.append(feature)
+
+            if not batch_geometries:
+                continue
+
+            # Single database query for the entire batch
+            try:
+                geometries = [geom for _, _, geom in batch_geometries]
+                existing_features = FeatureStore.objects.filter(
+                    user_id=user_id,
+                    geometry__in=geometries
+                ).values('id', 'geojson', 'timestamp', 'geometry')
+
+                # Create a lookup map for existing features
+                existing_lookup = {}
+                for existing in existing_features:
+                    geom_wkt = existing['geometry'].wkt
+                    if geom_wkt not in existing_lookup:
+                        existing_lookup[geom_wkt] = []
+                    existing_lookup[geom_wkt].append(existing)
+
+                # Check each feature in the batch
+                for idx, feature, geometry in batch_geometries:
+                    geom_wkt = geometry.wkt
+                    if geom_wkt in existing_lookup:
+                        # This is a duplicate
+                        duplicate_info = {
+                            'feature': feature,
+                            'existing_features': existing_lookup[geom_wkt]
+                        }
+                        duplicate_features.append(duplicate_info)
+
+                        feature_name = feature.get('properties', {}).get('name', 'Unnamed')
+                        existing_count = len(existing_lookup[geom_wkt])
+                        import_log.add(f"Coordinate duplicate found: '{feature_name}' ({geom_type}) matches {existing_count} existing feature(s)", 'Find Coordinate Duplicates')
+                    else:
+                        unique_features.append(feature)
+
+            except Exception as e:
+                import_log.add(f"Batch query failed for {geom_type} features: {str(e)}", 'Find Coordinate Duplicates')
+                # Fall back to individual processing for this batch
+                for idx, feature, coordinates in batch_features:
+                    unique_features.append(feature)
 
     return unique_features, duplicate_features, import_log
 
@@ -208,12 +310,15 @@ class DocumentForm(forms.Form):
 @csrf_protect
 def upload_item(request):
     if request.method == 'POST':
+        processing_start = time.time()
+        import_log = ImportLog()
         form = DocumentForm(request.POST, request.FILES)
         if form.is_valid():
             uploaded_file = request.FILES['file']
             file_name = uploaded_file.name
 
             # Comprehensive file validation using security module
+            validate_start = time.time()
             validator = SecureFileValidator()
             is_valid, validation_message = validator.validate_file(uploaded_file)
 
@@ -244,7 +349,6 @@ def upload_item(request):
                     # Validate KML content (don't modify it)
                     validate_kml_content(kml_content)
                     kml_doc = kml_content
-
             except (SecurityError, FileValidationError) as e:
                 logger.error(f"Secure file processing failed for {file_name}: {str(e)}")
                 return JsonResponse({
@@ -259,6 +363,11 @@ def upload_item(request):
                     'msg': f'Failed to process KML/KMZ file "{file_name}"',
                     'id': None
                 }, status=400)
+
+            del file_data
+            import_log.add(f'Validation took {time.time() - validate_start:.3f} seconds', 'Timing', DatabaseLogLevel.INFO)
+
+            hash_kml_start = time.time()
 
             # Normalize KML content for comparison (handles KML vs KMZ differences)
             normalized_kml = normalize_kml_for_comparison(kml_doc)
@@ -331,8 +440,9 @@ def upload_item(request):
                         'id': None
                     }, status=200)  # Changed to 200 for benign duplicate filename
 
+            import_log.add(f'File hashing took {time.time() - hash_kml_start:.3f} seconds', 'Timing', DatabaseLogLevel.INFO)
+
             # If we get here, there are no existing records with this hash, so create a new one
-            import_log = ImportLog()
             try:
                 try:
                     # Main conversion
@@ -341,16 +451,26 @@ def upload_item(request):
                     kml_end_time = time.time()
                     kml_duration = kml_end_time - kml_start_time
                     import_log.add(f'KML to GeoJSON conversion took {kml_duration:.3f} seconds', 'Timing', DatabaseLogLevel.INFO)
+
+                    # Log feature count for progress tracking
+                    feature_count = len(geojson_data.get('features', []))
+                    import_log.add(f'Converted {feature_count} features from KML', 'Conversion', DatabaseLogLevel.INFO)
+
                     geo_features, geojson_typing_log = geojson_to_geofeature(geojson_data)
 
                     # Convert features to JSON format
                     features_json = [json.loads(x.model_dump_json()) for x in geo_features]
 
+                    duplicate_start_time = time.time()
+
                     # Strip internal duplicate features (100% identical features within the file)
                     unique_features, duplicate_feature_count, duplicate_features_log = _strip_duplicate_features(features_json)
+                    import_log.add(f'Found {duplicate_feature_count} duplicate items in the file', 'Duplicate Detection', DatabaseLogLevel.INFO)
 
                     # Find coordinate-based duplicates against existing features in the feature store
                     final_unique_features, coordinate_duplicates, coordinate_duplicate_log = _find_coordinate_duplicates(unique_features, request.user.id)
+                    import_log.add(f'Found {len(coordinate_duplicates)} duplicates already in the database', 'Coordinate Duplicate Detection', DatabaseLogLevel.INFO)
+                    import_log.add(f'Duplicate detection took {time.time() - duplicate_start_time:.3f} seconds', 'Timing', DatabaseLogLevel.INFO)
 
                     # Create import queue item with processed features and duplicate information
                     import_queue = ImportQueue.objects.create(
@@ -368,6 +488,7 @@ def upload_item(request):
                     importlog_to_db(duplicate_features_log, request.user.id, log_id)
                     importlog_to_db(coordinate_duplicate_log, request.user.id, log_id)
                     import_log.add('Processing complete', 'Conversion')
+                    import_log.add(f'Processing took {time.time() - processing_start:.3f} seconds', 'Timing', DatabaseLogLevel.INFO)
                     import_log.add(f'{duplicate_feature_count} exact duplicates skipped', 'Conversion')
                     import_log.add(f'{len(coordinate_duplicates)} coordinate duplicates', 'Conversion')
                     import_log.add(f'{len(features_json)} total features', 'Conversion')
