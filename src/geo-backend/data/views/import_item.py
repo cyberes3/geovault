@@ -880,7 +880,12 @@ def import_to_featurestore(request, item_id):
     i = 0
     for feature in import_item.geofeatures:
         c = None
-        match feature['type'].lower():
+        if 'geometry' not in feature or not feature['geometry']:
+            logger.warning(f"Skipping feature {i} due to missing or empty geometry: {feature.get('properties', {}).get('name', 'Unnamed')}")
+            i += 1
+            continue
+
+        match feature['geometry']['type'].lower():
             case 'point':
                 c = PointFeature
             case 'linestring':

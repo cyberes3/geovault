@@ -752,6 +752,7 @@ export default {
           }
           // Redirect to import page after successful import
           this.isRedirectingDueToInvalidId = true;
+          window.alert('Import successful: ' + response.data.msg);
           this.$router.replace('/import');
         } else {
           this.msg = 'Error performing import: ' + response.data.msg;
