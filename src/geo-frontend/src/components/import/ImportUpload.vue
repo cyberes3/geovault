@@ -51,15 +51,26 @@
         <!-- Progress Bar -->
         <div class="space-y-2">
           <div class="flex justify-between text-sm text-gray-600">
-            <span>{{ progressStatusText }}</span>
+            <span class="flex items-center">
+              {{ progressStatusText }}
+              <!-- Processing spinner -->
+              <svg v-if="isProcessing" class="animate-spin ml-1 mr-2 h-4 w-4 text-purple-600" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+                <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+              </svg>
+            </span>
             <span v-if="overallProgress > 0">{{ overallProgress }}%</span>
           </div>
-          <div class="w-full bg-gray-200 rounded-full h-2">
+          <div class="w-full bg-gray-200 rounded-full h-2 relative">
             <div
                 :class="progressBarColor"
                 :style="{ width: progressBarWidth + '%' }"
                 class="h-2 rounded-full transition-all duration-300"
             ></div>
+            <!-- Barber pole animation when processing -->
+            <div v-if="isProcessing" class="absolute inset-0 h-2 rounded-full overflow-hidden">
+              <div class="h-full w-full bg-gradient-to-r from-transparent via-white to-transparent opacity-40 animate-barber-pole"></div>
+            </div>
           </div>
         </div>
 
@@ -97,13 +108,13 @@
               </button>
             </div>
             <div class="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-3 max-h-48 overflow-y-auto p-3 pr-6">
-              <div 
-                v-for="(file, index) in files" 
+              <div
+                v-for="(file, index) in files"
                 :key="index"
                 class="relative group bg-gray-50 rounded-lg border p-3 hover:bg-gray-100 transition-colors duration-150"
               >
                 <!-- Remove button -->
-                <button 
+                <button
                   @click="removeFile(index)"
                   class="absolute -right-2 w-6 h-6 bg-red-500 text-white rounded-full flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity duration-150 hover:bg-red-600 shadow-sm z-10"
                   :style="{ top: '-9px' }"
@@ -113,14 +124,14 @@
                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path>
                   </svg>
                 </button>
-                
+
                 <!-- File icon -->
                 <div class="flex justify-center mb-2">
                   <svg class="h-8 w-8 text-blue-500" fill="currentColor" viewBox="0 0 20 20">
                     <path fill-rule="evenodd" d="M4 4a2 2 0 012-2h4.586A2 2 0 0112 2.586L15.414 6A2 2 0 0116 7.414V16a2 2 0 01-2 2H6a2 2 0 01-2-2V4zm2 6a1 1 0 011-1h6a1 1 0 110 2H7a1 1 0 01-1-1zm1 3a1 1 0 100 2h6a1 1 0 100-2H7z" clip-rule="evenodd"></path>
                   </svg>
                 </div>
-                
+
                 <!-- File info -->
                 <div class="text-center">
                   <p class="text-xs font-medium text-gray-900 truncate" :title="file.name">{{ file.name }}</p>
@@ -156,7 +167,7 @@
             </div>
             <div class="ml-3 flex-1">
               <p :class="messageTextClass" class="text-sm">{{ uploadMsg }}</p>
-              
+
             </div>
           </div>
         </div>
@@ -165,7 +176,7 @@
         <div v-if="uploadResults.successful.length > 0 || uploadResults.failed.length > 0 || uploadResults.skipped.length > 0" class="mt-4 bg-gray-50 border border-gray-200 rounded-md p-6">
           <h4 class="text-sm font-medium text-gray-900 mb-3">Upload Details</h4>
           <div class="h-48 overflow-y-auto space-y-2">
-            
+
             <!-- Successful uploads -->
             <div v-if="uploadResults.successful.length > 0">
               <h5 class="text-xs font-medium text-green-700 mb-1">✓ Successful ({{ uploadResults.successful.length }})</h5>
@@ -240,7 +251,9 @@ export default {
         return `Ready to upload ${this.files.length} file${this.files.length > 1 ? 's' : ''}`
       } else if (this.uploadProgress > 0 && this.uploadProgress < 100) {
         return `Uploading ${this.currentFileIndex + 1}/${this.totalFiles} items...`
-      } else if (this.uploadProgress === 100 && this.overallProgress < 100 && !this.uploadMsg) {
+      } else if (this.uploadProgress === 100 && this.isProcessing && !this.uploadMsg) {
+        return `Processing ${this.currentFileIndex + 1}/${this.totalFiles} items...`
+      } else if (this.uploadProgress === 100 && this.overallProgress < 100 && !this.uploadMsg && !this.isProcessing) {
         return `Uploaded ${this.currentFileIndex + 1}/${this.totalFiles} items...`
       } else if (this.overallProgress === 100 && !this.uploadMsg) {
         return `Upload complete (${this.currentFileIndex + 1}/${this.totalFiles})`
@@ -266,7 +279,9 @@ export default {
       }
     },
     progressBarColor() {
-      if (this.overallProgress === 100 && !this.uploadMsg) {
+      if (this.isProcessing) {
+        return "bg-blue-600"
+      } else if (this.overallProgress === 100 && !this.uploadMsg) {
         return "bg-green-600"
       } else if (this.uploadMsg.toLowerCase().includes("failed") || this.uploadMsg.toLowerCase().includes("error")) {
         return "bg-red-600"
@@ -351,6 +366,10 @@ export default {
         failed: [],
         skipped: []
       },
+      // Track server processing state
+      isProcessing: false,
+      processingStartTime: null,
+      currentFileUploadComplete: false,
     }
   },
   methods: {
@@ -359,10 +378,10 @@ export default {
       if (this.isRefreshing) {
         return
       }
-      
+
       this.isRefreshing = true
       this.loadingQueueList = true
-      
+
       try {
         const response = await axios.get(IMPORT_QUEUE_LIST_URL)
         const ourImportQueue = response.data.data.map((item) => new ImportQueueItem(item))
@@ -388,6 +407,9 @@ export default {
       this.overallProgress = 0
       this.uploadMsg = ""
       this.currentFileIndex = 0
+      this.isProcessing = false
+      this.processingStartTime = null
+      this.currentFileUploadComplete = false
 
       // Enhanced file validation
       for (const file of selectedFiles) {
@@ -425,11 +447,11 @@ export default {
       // Check file size using config values
       const maxKmlSize = SECURITY_CONFIG.MAX_KML_SIZE
       const maxKmzSize = SECURITY_CONFIG.MAX_KMZ_SIZE
-      
+
       if (fileType === 'kml' && file.size > maxKmlSize) {
         return { isValid: false, error: `KML file too large. Maximum size: ${maxKmlSize / (1024 * 1024)}MB` }
       }
-      
+
       if (fileType === 'kmz' && file.size > maxKmzSize) {
         return { isValid: false, error: `KMZ file too large. Maximum size: ${maxKmzSize / (1024 * 1024)}MB` }
       }
@@ -442,16 +464,16 @@ export default {
       // Basic MIME type validation
       const allowedMimeTypes = {
         'kml': [
-          'text/xml', 
-          'application/xml', 
-          'text/plain', 
+          'text/xml',
+          'application/xml',
+          'text/plain',
           'application/octet-stream',
           'application/vnd.google-earth.kml+xml',
           'application/vnd.google-earth.kml'
         ],
         'kmz': [
-          'application/zip', 
-          'application/x-zip-compressed', 
+          'application/zip',
+          'application/x-zip-compressed',
           'application/octet-stream',
           'application/vnd.google-earth.kmz',
           'application/vnd.google-earth.kmz+xml'
@@ -507,6 +529,9 @@ export default {
       this.overallProgress = 0
       this.uploadMsg = ""
       this.currentFileIndex = 0
+      this.isProcessing = false
+      this.processingStartTime = null
+      this.currentFileUploadComplete = false
     },
     formatFileSize(bytes) {
       if (bytes === 0) return '0 Bytes'
@@ -533,21 +558,30 @@ export default {
         skipped: []
       }
 
+      // Reset processing state
+      this.isProcessing = false
+      this.processingStartTime = null
+      this.currentFileUploadComplete = false
+
       try {
         for (let i = 0; i < this.files.length; i++) {
           this.currentFileIndex = i
           const file = this.files[i]
-          
+
           // Calculate overall progress based on completed files
           const baseProgress = (i / this.files.length) * 100
-          
+
           let formData = new FormData()
           formData.append('file', file)
-          
+
           // Debug: Log the file being uploaded
           console.log('Uploading file:', file.name, 'Size:', file.size, 'Type:', file.type)
-          
+
           try {
+            // Reset processing state for this file
+            this.isProcessing = false
+            this.currentFileUploadComplete = false
+
             const response = await axios.post('/api/data/item/import/upload', formData, {
               headers: {
                 'X-CSRFToken': getCookie('csrftoken')
@@ -558,8 +592,25 @@ export default {
                 // Calculate overall progress: base progress + (current file progress / total files)
                 this.overallProgress = Math.round(baseProgress + (fileProgress / this.files.length))
                 this.uploadProgress = fileProgress
+
+                // Track when upload completes
+                if (fileProgress === 100 && !this.currentFileUploadComplete) {
+                  this.currentFileUploadComplete = true
+                  this.isProcessing = true
+                  this.processingStartTime = Date.now()
+                }
               },
             })
+
+            // Server processing complete - clear processing state
+            this.isProcessing = false
+            this.currentFileUploadComplete = false
+
+            // Calculate processing time if we tracked it
+            if (this.processingStartTime) {
+              const processingTime = Date.now() - this.processingStartTime
+              console.log(`File ${file.name} processed in ${processingTime}ms`)
+            }
 
             // Handle response message
             if (response.data.msg.toLowerCase().includes("success")) {
@@ -585,22 +636,26 @@ export default {
               }
             }
           } catch (fileError) {
+            // Clear processing state on error
+            this.isProcessing = false
+            this.currentFileUploadComplete = false
+
             // Handle individual file errors without stopping the entire process
             console.error(`Error uploading file ${file.name}:`, fileError)
-            
+
             let errorMessage = "Upload failed"
             if (fileError.response && fileError.response.data && fileError.response.data.msg) {
               errorMessage = fileError.response.data.msg
             } else if (fileError.response && fileError.response.status === 400) {
               errorMessage = "Invalid file format or upload structure"
             }
-            
+
             this.uploadResults.failed.push({
               filename: file.name,
               message: errorMessage
             })
           }
-          
+
           // Don't reset individual file progress to 0 during upload process
           // Keep it at 100 to show completion until all files are done
         }
@@ -608,60 +663,60 @@ export default {
         // All files processed - show organized results
         this.overallProgress = 100
         this.uploadProgress = 100
-        
+
         // Generate organized message
         this.uploadMsg = this.generateUploadSummary(this.uploadResults)
-        
+
         // Clear files and reset input
         this.files = []
         this.totalFiles = 0
         this.currentFileIndex = 0
         this.$refs.fileInput.value = ""
-        
+
         // Reset progress bar and status message after a short delay to show completion
         setTimeout(() => {
           this.overallProgress = 0
           this.uploadProgress = 0
         }, 1000)
-        
+
       } catch (error) {
         this.handleError(error)
       }
-      
+
       this.disableUpload = false
     },
     generateUploadSummary(results) {
       const { successful, failed, skipped } = results
       const total = successful.length + failed.length + skipped.length
-      
+
       if (total === 0) {
         return "No files were processed"
       }
-      
+
       let summary = []
-      
+
       // Add success count
       if (successful.length > 0) {
         summary.push(`${successful.length} file${successful.length > 1 ? 's' : ''} uploaded successfully`)
       }
-      
+
       // Add skipped count (benign errors)
       if (skipped.length > 0) {
         summary.push(`${skipped.length} file${skipped.length > 1 ? 's' : ''} skipped (already exists)`)
       }
-      
+
       // Add failed count
       if (failed.length > 0) {
         summary.push(`${failed.length} file${failed.length > 1 ? 's' : ''} failed`)
       }
-      
+
       return summary.join('. ') + '.'
     },
     handleError(error) {
       console.error("Upload failed:", error)
       console.error("Error response:", error.response)
       console.error("Error response data:", error.response?.data)
-      
+
       if (error.response && error.response.data && error.response.data.msg != null) {
         this.uploadMsg = error.response.data.msg
       } else if (error.response && error.response.status === 400) {
@@ -702,14 +757,14 @@ export default {
   async mounted() {
     // Start auto-refresh when component is mounted
     this.startAutoRefresh()
-    
+
     // Add beforeunload event listener to prevent navigation during upload
     window.addEventListener('beforeunload', this.handleBeforeUnload)
   },
   beforeUnmount() {
     // Stop auto-refresh when component is about to be destroyed
     this.stopAutoRefresh()
-    
+
     // Remove beforeunload event listener
     window.removeEventListener('beforeunload', this.handleBeforeUnload)
   },
@@ -740,21 +795,21 @@ export default {
   beforeRouteLeave(to, from, next) {
     // Stop auto-refresh when leaving the route
     this.stopAutoRefresh()
-    
+
     // Clear upload details when navigating away
     this.uploadResults = {
       successful: [],
       failed: [],
       skipped: []
     }
-    
+
     // Check if upload is in progress
     if (this.disableUpload) {
       const confirmed = confirm(
         'Upload is currently in progress. Are you sure you want to leave this page? ' +
         'Leaving now may interrupt the upload process.'
       )
-      
+
       if (!confirmed) {
         // User cancelled, don't navigate away
         // Restart auto-refresh since we're staying on the page
@@ -762,10 +817,10 @@ export default {
         return
       }
     }
-    
+
     // Remove beforeunload event listener before navigating away
     window.removeEventListener('beforeunload', this.handleBeforeUnload)
-    
+
     next()
   },
   watch: {},
@@ -773,4 +828,16 @@ export default {
 </script>
 
 <style scoped>
+@keyframes barber-pole {
+  0% {
+    transform: translateX(-100%);
+  }
+  100% {
+    transform: translateX(100%);
+  }
+}
+
+.animate-barber-pole {
+  animation: barber-pole 1.5s linear infinite;
+}
 </style>
