@@ -8,6 +8,7 @@ from django.contrib.gis.geos import Polygon, GEOSGeometry
 from django.http import JsonResponse
 from django.views.decorators.http import require_http_methods
 from django.views.decorators.csrf import csrf_protect
+from django.conf import settings
 
 from data.models import FeatureStore
 from geo_lib.website.auth import login_required_401
@@ -34,25 +35,20 @@ def _get_features_in_bbox(bbox: Tuple[float, float, float, float], user_id: int,
     # Create a polygon from the bounding box
     bbox_polygon = Polygon.from_bbox(bbox)
 
-    # Adjust query based on zoom level for performance
-    if zoom_level < 8:
-        # Low zoom: only get a subset of features to avoid overwhelming the client
-        features = FeatureStore.objects.filter(
-            user_id=user_id,
-            geometry__intersects=bbox_polygon
-        )[:100]  # Limit to 100 features for low zoom
-    elif zoom_level < 12:
-        # Medium zoom: get more features but still limit
-        features = FeatureStore.objects.filter(
-            user_id=user_id,
-            geometry__intersects=bbox_polygon
-        )[:500]  # Limit to 500 features for medium zoom
+    # Get the maximum features limit from settings
+    max_features = getattr(settings, 'MAX_FEATURES_PER_REQUEST', -1)
+    
+    # Build the base query
+    features_query = FeatureStore.objects.filter(
+        user_id=user_id,
+        geometry__intersects=bbox_polygon
+    )
+    
+    # Apply limit if configured (max_features = -1 means no limit)
+    if max_features > 0:
+        features = features_query[:max_features]
     else:
-        # High zoom: get all features in the area
-        features = FeatureStore.objects.filter(
-            user_id=user_id,
-            geometry__intersects=bbox_polygon
-        )
+        features = features_query
 
     # Convert to GeoJSON format
     geojson_features = []
@@ -115,6 +111,14 @@ def get_geojson_data(request):
     # Fetch data from database
     try:
         features = _get_features_in_bbox(bbox, request.user.id, zoom_level)
+        
+        # Get the configured limit and total count for comparison
+        max_features = getattr(settings, 'MAX_FEATURES_PER_REQUEST', -1)
+        bbox_polygon = Polygon.from_bbox(bbox)
+        total_features_in_bbox = FeatureStore.objects.filter(
+            user_id=request.user.id,
+            geometry__intersects=bbox_polygon
+        ).count()
 
         # Create GeoJSON FeatureCollection
         geojson_data = {
@@ -122,12 +126,21 @@ def get_geojson_data(request):
             "features": features
         }
 
-        return JsonResponse({
+        response_data = {
             'success': True,
             'data': geojson_data,
             'feature_count': len(features),
+            'total_features_in_bbox': total_features_in_bbox,
+            'max_features_limit': max_features,
+            'zoom_level': zoom_level,
             'timestamp': time.time()
-        })
+        }
+        
+        # Add warning if features were limited by configuration
+        if max_features > 0 and total_features_in_bbox > max_features:
+            response_data['warning'] = f'Displaying {len(features)} of {total_features_in_bbox} features due to MAX_FEATURES_PER_REQUEST limit ({max_features})'
+
+        return JsonResponse(response_data)
 
     except Exception as e:
         logger.error(f"Error in get_geojson_data API: {traceback.format_exc()}")

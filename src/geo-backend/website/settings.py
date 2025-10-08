@@ -184,6 +184,19 @@ SECURE_XML_PARSING = True
 ENABLE_FILE_SIGNATURE_VALIDATION = True
 ENABLE_MIME_TYPE_VALIDATION = True
 
+# GeoJSON API Configuration
+# Maximum number of features to return in a single API request
+# Set to -1 for no limit (default), or any positive integer to limit features
+# 
+# Examples:
+# MAX_FEATURES_PER_REQUEST = -1    # No limit (return all features)
+# MAX_FEATURES_PER_REQUEST = 1000  # Limit to 1000 features per request
+# MAX_FEATURES_PER_REQUEST = 500   # Limit to 500 features per request
+#
+# When a limit is applied, the API will return a warning in the response
+# indicating how many features were limited.
+MAX_FEATURES_PER_REQUEST = -1
+
 # Logging configuration for security events
 LOGGING = {
     'version': 1,

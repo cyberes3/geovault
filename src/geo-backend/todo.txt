@@ -1,3 +1,6 @@
-- For tracks, set the created date to the timestamp of the first point in the track
-insane linework test isn't showing up on the map
 not every point is loaded in the map for an extent
+insane linework test isn't showing up on the map
+
+
+Later:
+For tracks, set the created date to the timestamp of the first point in the track

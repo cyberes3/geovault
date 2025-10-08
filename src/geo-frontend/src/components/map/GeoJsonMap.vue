@@ -315,6 +315,11 @@ export default {
         const data = await response.json()
 
         if (data.success && data.data.features) {
+          // Show warning if features were limited by configuration
+          if (data.warning) {
+            console.warn(data.warning)
+          }
+
           // Add new features to the vector source
           const features = new GeoJSON().readFeatures(data.data, {
             featureProjection: 'EPSG:3857',
@@ -386,7 +391,10 @@ export default {
           this.updateFeatureCount()
           this.updateLastUpdateTime()
 
-          console.log(`Loaded ${features.length} features for bbox: ${bboxString}`)
+          console.log(`Loaded ${features.length} features for bbox: ${bboxString} (zoom: ${roundedZoom})`)
+          if (data.total_features_in_bbox && data.total_features_in_bbox > features.length) {
+            console.log(`Note: ${data.total_features_in_bbox - features.length} additional features not shown due to limit (${data.max_features_limit})`)
+          }
         } else {
           console.error('Error loading data:', data.error)
         }
