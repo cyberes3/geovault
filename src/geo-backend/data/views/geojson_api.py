@@ -2,7 +2,7 @@ import time
 import logging
 import traceback
 import json
-from typing import List, Tuple, Dict
+from typing import List, Tuple, Dict, NamedTuple
 
 from django.contrib.gis.geos import Polygon, GEOSGeometry
 from django.http import JsonResponse
@@ -18,6 +18,12 @@ from geo_lib.feature_id import generate_feature_hash
 logger = logging.getLogger(__name__)
 
 
+class BboxQueryResult(NamedTuple):
+    """Result of a bounding box query containing features and total count"""
+    features: List[Dict]
+    total_count: int
+
+
 def _parse_bbox(bbox_str: str) -> tuple[float, ...] | None:
     """Parse bounding box string into tuple of floats"""
     try:
@@ -29,8 +35,11 @@ def _parse_bbox(bbox_str: str) -> tuple[float, ...] | None:
         return None
 
 
-def _get_features_in_bbox(bbox: Tuple[float, float, float, float], user_id: int, zoom_level: int) -> List[Dict]:
-    """Get features within bounding box from database, handling world-wide extents that cross the International Date Line"""
+def _get_features_in_bbox(bbox: Tuple[float, float, float, float], user_id: int, zoom_level: int) -> BboxQueryResult:
+    """
+    Get features within bounding box from database, handling world-wide extents that cross the International Date Line.
+    Returns both the features and the total count in a single optimized operation.
+    """
     min_lon, min_lat, max_lon, max_lat = bbox
 
     # Check if this is a world-wide bbox that crosses the International Date Line
@@ -52,37 +61,32 @@ def _get_features_in_bbox(bbox: Tuple[float, float, float, float], user_id: int,
         bbox_east = (-180.0, min_lat, max_lon, max_lat)
         bbox_polygon_east = Polygon.from_bbox(bbox_east)
 
-        # Build queries for both hemispheres
-        features_query_west = FeatureStore.objects.filter(
-            user_id=user_id,
-            geometry__intersects=bbox_polygon_west
+        # Build the base query for both hemispheres
+        base_query = FeatureStore.objects.filter(
+            Q(user_id=user_id, geometry__intersects=bbox_polygon_west) |
+            Q(user_id=user_id, geometry__intersects=bbox_polygon_east)
         )
-
-        features_query_east = FeatureStore.objects.filter(
-            user_id=user_id,
-            geometry__intersects=bbox_polygon_east
-        )
-
-        # Combine the queries using OR
-        features_query = features_query_west.union(features_query_east)
 
     else:
         # Normal bbox that doesn't cross the International Date Line
         bbox_polygon = Polygon.from_bbox(bbox)
-        features_query = FeatureStore.objects.filter(
+        base_query = FeatureStore.objects.filter(
             user_id=user_id,
             geometry__intersects=bbox_polygon
         )
 
+    # Get total count first (this is a lightweight operation)
+    total_count = base_query.count()
+
     # Apply limit if configured (max_features = -1 means no limit)
     if max_features > 0:
-        features = features_query[:max_features]
+        features_query = base_query[:max_features]
     else:
-        features = features_query
+        features_query = base_query
 
     # Convert to GeoJSON format
     geojson_features = []
-    for feature in features:
+    for feature in features_query:
         geojson_data = feature.geojson
         if geojson_data and 'geometry' in geojson_data:
             # Wrap the data in a proper GeoJSON Feature structure
@@ -93,7 +97,7 @@ def _get_features_in_bbox(bbox: Tuple[float, float, float, float], user_id: int,
             }
             geojson_features.append(geojson_feature)
 
-    return geojson_features
+    return BboxQueryResult(features=geojson_features, total_count=total_count)
 
 
 @login_required_401
@@ -138,35 +142,14 @@ def get_geojson_data(request):
             'code': 400
         }, status=400)
 
-    # Fetch data from database
+    # Fetch data from database with optimized single query
     try:
-        features = _get_features_in_bbox(bbox, request.user.id, zoom_level)
+        query_result = _get_features_in_bbox(bbox, request.user.id, zoom_level)
+        features = query_result.features
+        total_features_in_bbox = query_result.total_count
 
-        # Get the configured limit and total count for comparison
+        # Get the configured limit for comparison
         max_features = getattr(settings, 'MAX_FEATURES_PER_REQUEST', -1)
-
-        # Calculate total features in bbox, handling world-wide extents
-        min_lon, min_lat, max_lon, max_lat = bbox
-        crosses_dateline = min_lon > max_lon
-
-        if crosses_dateline:
-            # Handle world-wide bbox that crosses the International Date Line
-            bbox_west = (min_lon, min_lat, 180.0, max_lat)
-            bbox_east = (-180.0, min_lat, max_lon, max_lat)
-            bbox_polygon_west = Polygon.from_bbox(bbox_west)
-            bbox_polygon_east = Polygon.from_bbox(bbox_east)
-
-            total_features_in_bbox = FeatureStore.objects.filter(
-                Q(user_id=request.user.id, geometry__intersects=bbox_polygon_west) |
-                Q(user_id=request.user.id, geometry__intersects=bbox_polygon_east)
-            ).count()
-        else:
-            # Normal bbox
-            bbox_polygon = Polygon.from_bbox(bbox)
-            total_features_in_bbox = FeatureStore.objects.filter(
-                user_id=request.user.id,
-                geometry__intersects=bbox_polygon
-            ).count()
 
         # Create GeoJSON FeatureCollection
         geojson_data = {
