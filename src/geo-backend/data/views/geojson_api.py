@@ -1,19 +1,19 @@
-import time
-import logging
-import traceback
 import json
+import logging
+import time
+import traceback
 from typing import List, Tuple, Dict, NamedTuple
 
-from django.contrib.gis.geos import Polygon, GEOSGeometry
-from django.http import JsonResponse
-from django.views.decorators.http import require_http_methods
-from django.views.decorators.csrf import csrf_protect
 from django.conf import settings
+from django.contrib.gis.geos import Polygon, GEOSGeometry
 from django.db.models import Q
+from django.http import JsonResponse
+from django.views.decorators.csrf import csrf_protect
+from django.views.decorators.http import require_http_methods
 
 from data.models import FeatureStore
-from geo_lib.website.auth import login_required_401
 from geo_lib.feature_id import generate_feature_hash
+from geo_lib.website.auth import login_required_401
 
 logger = logging.getLogger(__name__)
 
@@ -93,7 +93,8 @@ def _get_features_in_bbox(bbox: Tuple[float, float, float, float], user_id: int,
             geojson_feature = {
                 "type": "Feature",
                 "geometry": geojson_data.get('geometry'),
-                "properties": geojson_data.get('properties', {})
+                "properties": geojson_data.get('properties', {}),
+                "geojson_hash": feature.geojson_hash
             }
             geojson_features.append(geojson_feature)
 

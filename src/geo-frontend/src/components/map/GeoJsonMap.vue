@@ -358,36 +358,35 @@ export default {
               })
             }
 
-            const props = feature.getProperties()
+            // Set the geojson_hash for efficient duplicate detection
+            if (originalFeature && originalFeature.geojson_hash) {
+              feature.set('geojson_hash', originalFeature.geojson_hash)
+            }
           })
 
-          // Filter out features that already exist in the vector source
+          // Filter out features that already exist in the vector source using hash-based detection
           const existingFeatures = this.vectorSource.getFeatures()
+
+          // Create a Set of existing feature hashes for O(1) lookup
+          const existingFeatureHashes = new Set()
+          existingFeatures.forEach(feature => {
+            const hash = feature.get('geojson_hash')
+            if (hash) {
+              existingFeatureHashes.add(hash)
+            }
+          })
+
+          // Filter new features using hash-based duplicate detection (O(n) instead of O(n²))
           const newFeatures = features.filter(newFeature => {
-            const newGeometry = newFeature.getGeometry()
-            if (!newGeometry) return true // Keep features without geometry
+            const newHash = newFeature.get('geojson_hash')
+            if (!newHash) {
+              // If no hash is available, keep the feature (shouldn't happen with backend fix)
+              console.warn('Feature missing geojson_hash, keeping feature')
+              return true
+            }
 
-            // Check if a feature with the same geometry already exists
-            return !existingFeatures.some(existingFeature => {
-              const existingGeometry = existingFeature.getGeometry()
-              if (!existingGeometry) return false
-
-              // Compare geometries using their extent and type
-              const newExtent = newGeometry.getExtent()
-              const existingExtent = existingGeometry.getExtent()
-
-              // Check if extents are the same (within tolerance)
-              const tolerance = 0.001
-              const extentsMatch = Math.abs(newExtent[0] - existingExtent[0]) < tolerance &&
-                  Math.abs(newExtent[1] - existingExtent[1]) < tolerance &&
-                  Math.abs(newExtent[2] - existingExtent[2]) < tolerance &&
-                  Math.abs(newExtent[3] - existingExtent[3]) < tolerance
-
-              // Also check geometry type
-              const typesMatch = newGeometry.getType() === existingGeometry.getType()
-
-              return extentsMatch && typesMatch
-            })
+            // O(1) hash lookup instead of O(n) geometry comparison
+            return !existingFeatureHashes.has(newHash)
           })
 
           if (newFeatures.length > 0) {
@@ -436,7 +435,7 @@ export default {
         this.currentAbortController.abort()
         console.log('Cancelled previous API request due to new view change')
       }
-      
+
       clearTimeout(this.loadTimeout)
       this.loadTimeout = setTimeout(this.loadDataForCurrentView, 500)
     },
@@ -512,13 +511,13 @@ export default {
     if (this.loadTimeout) {
       clearTimeout(this.loadTimeout)
     }
-    
+
     // Cancel any pending API request
     if (this.currentAbortController) {
       this.currentAbortController.abort()
       console.log('Cancelled API request on component unmount')
     }
-    
+
     // Clear feature timestamps
     this.featureTimestamps = {}
   }
