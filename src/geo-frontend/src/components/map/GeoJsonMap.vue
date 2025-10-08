@@ -52,6 +52,7 @@ export default {
       featureCount: 0,
       loadTimeout: null,
       userLocation: null,
+      currentAbortController: null, // AbortController for current request
       // Configuration
       API_BASE_URL: '/api/data/geojson/',
       LOCATION_API_URL: '/api/data/location/user/',
@@ -302,7 +303,11 @@ export default {
     },
 
     async loadDataForCurrentView() {
-      if (this.isLoading) return
+      // Cancel any existing request
+      if (this.currentAbortController) {
+        this.currentAbortController.abort()
+        console.log('Cancelled previous API request')
+      }
 
       const view = this.map.getView()
       const extent = view.calculateExtent()
@@ -314,6 +319,8 @@ export default {
         return
       }
 
+      // Create new AbortController for this request
+      this.currentAbortController = new AbortController()
       this.isLoading = true
 
       try {
@@ -321,7 +328,9 @@ export default {
         const roundedZoom = Math.round(zoom) // Round to integer for API compatibility
         const url = `${this.API_BASE_URL}?bbox=${bboxString}&zoom=${roundedZoom}`
 
-        const response = await fetch(url)
+        const response = await fetch(url, {
+          signal: this.currentAbortController.signal
+        })
         const data = await response.json()
 
         if (data.success && data.data.features) {
@@ -409,13 +418,25 @@ export default {
           console.error('Error loading data:', data.error)
         }
       } catch (error) {
-        console.error('Error fetching data:', error)
+        // Don't log errors for aborted requests
+        if (error.name === 'AbortError') {
+          console.log('Request was cancelled')
+        } else {
+          console.error('Error fetching data:', error)
+        }
       } finally {
         this.isLoading = false
+        this.currentAbortController = null
       }
     },
 
     debouncedLoadData() {
+      // Cancel any pending request when starting a new debounced request
+      if (this.currentAbortController) {
+        this.currentAbortController.abort()
+        console.log('Cancelled previous API request due to new view change')
+      }
+      
       clearTimeout(this.loadTimeout)
       this.loadTimeout = setTimeout(this.loadDataForCurrentView, 500)
     },
@@ -491,6 +512,13 @@ export default {
     if (this.loadTimeout) {
       clearTimeout(this.loadTimeout)
     }
+    
+    // Cancel any pending API request
+    if (this.currentAbortController) {
+      this.currentAbortController.abort()
+      console.log('Cancelled API request on component unmount')
+    }
+    
     // Clear feature timestamps
     this.featureTimestamps = {}
   }
