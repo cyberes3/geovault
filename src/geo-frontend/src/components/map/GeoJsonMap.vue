@@ -55,11 +55,21 @@ export default {
       // Configuration
       API_BASE_URL: '/api/data/geojson/',
       LOCATION_API_URL: '/api/data/location/user/',
-      MAX_FEATURES: 1000, // Maximum number of features to keep on the map
-      featureTimestamps: new Map() // Track when features were added
+      MAX_FEATURES: 5000, // Maximum number of features to keep on the map
+      featureTimestamps: {}, // Use plain object instead of Map
+      featureIdCounter: 0 // Counter to generate unique IDs for features
     }
   },
   methods: {
+    // Generate a unique ID for a feature
+    getFeatureId(feature) {
+      // Try to get existing ID or create a new one
+      if (!feature._geoJsonMapId) {
+        feature._geoJsonMapId = `feature_${++this.featureIdCounter}_${Date.now()}`
+      }
+      return feature._geoJsonMapId
+    },
+
     async initializeMap() {
       // Get user location first
       await this.getUserLocation()
@@ -95,7 +105,7 @@ export default {
       this.map.getView().on('change:resolution', this.debouncedLoadData)
 
       // Event listeners removed - cache functionality eliminated
-      
+
       // Return a promise that resolves when the map is ready
       return new Promise((resolve) => {
         // Wait for the map to be fully rendered
@@ -109,7 +119,7 @@ export default {
       try {
         const response = await fetch(this.LOCATION_API_URL)
         const data = await response.json()
-        
+
         if (data.success && data.location) {
           this.userLocation = data.location
           console.log('User location detected:', this.userLocation)
@@ -143,7 +153,7 @@ export default {
     getStateExtentConfig(location) {
       // Calculate appropriate zoom level based on location type and country
       const zoomLevel = this.calculateZoomLevel(location)
-      
+
       return {
         center: [location.longitude, location.latitude],
         zoom: zoomLevel
@@ -162,17 +172,17 @@ export default {
       if (location.city) {
         return baseZooms.state
       }
-      
+
       // If we only have country data, show the country
       if (location.country && !location.state) {
         return baseZooms.country
       }
-      
+
       // Default to state level if we have state data
       if (location.state) {
         return baseZooms.state
       }
-      
+
       // Fallback to moderate zoom
       return 6
     },
@@ -180,12 +190,12 @@ export default {
     getLocationDisplayName() {
       // Create a display name for the user's location
       if (!this.userLocation) return 'Unknown Location'
-      
+
       const parts = []
       if (this.userLocation.city) parts.push(this.userLocation.city)
       if (this.userLocation.state) parts.push(this.userLocation.state)
       if (this.userLocation.country) parts.push(this.userLocation.country)
-      
+
       return parts.length > 0 ? parts.join(', ') : this.userLocation.country || 'Unknown Location'
     },
 
@@ -424,20 +434,24 @@ export default {
         return
       }
 
-      // Sort features by timestamp (oldest first)
-      const featuresWithTimestamps = features.map(feature => ({
-        feature,
-        timestamp: this.featureTimestamps.get(feature) || 0
-      })).sort((a, b) => a.timestamp - b.timestamp)
+      // Sort features by timestamp (oldest first) using plain object
+      const featuresWithTimestamps = features.map(feature => {
+        const featureId = this.getFeatureId(feature)
+        return {
+          feature,
+          featureId,
+          timestamp: this.featureTimestamps[featureId] || 0
+        }
+      }).sort((a, b) => a.timestamp - b.timestamp)
 
       // Calculate how many features to remove
       const featuresToRemove = features.length - this.MAX_FEATURES
 
       // Remove oldest features
       for (let i = 0; i < featuresToRemove; i++) {
-        const {feature} = featuresWithTimestamps[i]
+        const {feature, featureId} = featuresWithTimestamps[i]
         this.vectorSource.removeFeature(feature)
-        this.featureTimestamps.delete(feature)
+        delete this.featureTimestamps[featureId]
       }
 
       console.log(`Removed ${featuresToRemove} oldest features to maintain limit of ${this.MAX_FEATURES}`)
@@ -445,13 +459,14 @@ export default {
     },
 
     addFeatureTimestamp(feature) {
-      this.featureTimestamps.set(feature, Date.now())
+      const featureId = this.getFeatureId(feature)
+      this.featureTimestamps[featureId] = Date.now()
     },
 
     clearAllFeatures() {
       // Clear all features and their timestamps
       this.vectorSource.clear()
-      this.featureTimestamps.clear()
+      this.featureTimestamps = {}
       this.loadedBounds.clear()
       this.updateFeatureCount()
       console.log('Cleared all features from the map')
@@ -461,6 +476,9 @@ export default {
   },
 
   async mounted() {
+    // Initialize featureTimestamps as empty object
+    this.featureTimestamps = {}
+
     // Wait for map to be fully initialized before loading data
     await this.initializeMap()
 
@@ -474,7 +492,7 @@ export default {
       clearTimeout(this.loadTimeout)
     }
     // Clear feature timestamps
-    this.featureTimestamps.clear()
+    this.featureTimestamps = {}
   }
 }
 </script>
