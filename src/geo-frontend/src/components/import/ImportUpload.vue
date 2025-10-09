@@ -3,7 +3,7 @@
     <!-- Page Header -->
     <div class="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
       <h1 class="text-2xl font-bold text-gray-900 mb-2">Upload Data</h1>
-      <p class="text-gray-600">Upload one or more KML/KMZ files to import geospatial data into your feature store.</p>
+      <p class="text-gray-600">Upload one or more geospatial files (KML, KMZ, GPX) to import data into your feature store.</p>
     </div>
 
     <!-- File Requirements -->
@@ -235,6 +235,15 @@ import {ImportQueueItem} from "@/assets/js/types/import-types"
 import ImportQueue from "@/components/import/parts/ImportQueue.vue";
 import {getCookie} from "@/assets/js/auth.js";
 import {SECURITY_CONFIG} from "@/config.js";
+import { 
+  getFileTypeByExtension, 
+  validateFileExtension, 
+  validateFileSize, 
+  validateMimeType, 
+  formatFileSize, 
+  getSupportedFileTypesString,
+  getFileTypeConfig
+} from "@/fileTypes.js";
 
 // TODO: after import, don't disable the upload, instead add the new item to a table at the button and then prompt the user to continue
 
@@ -438,49 +447,30 @@ export default {
         return { isValid: true, error: null }
       }
 
-      // Check file extension
-      const fileType = file.name.split('.').pop().toLowerCase()
-      if (fileType !== 'kmz' && fileType !== 'kml') {
-        return { isValid: false, error: 'Only KMZ and KML files are allowed' }
-      }
-
-      // Check file size using config values
-      const maxKmlSize = SECURITY_CONFIG.MAX_KML_SIZE
-      const maxKmzSize = SECURITY_CONFIG.MAX_KMZ_SIZE
-
-      if (fileType === 'kml' && file.size > maxKmlSize) {
-        return { isValid: false, error: `KML file too large. Maximum size: ${maxKmlSize / (1024 * 1024)}MB` }
-      }
-
-      if (fileType === 'kmz' && file.size > maxKmzSize) {
-        return { isValid: false, error: `KMZ file too large. Maximum size: ${maxKmzSize / (1024 * 1024)}MB` }
-      }
-
       // Check for empty files
       if (file.size === 0) {
         return { isValid: false, error: 'File is empty' }
       }
 
-      // Basic MIME type validation
-      const allowedMimeTypes = {
-        'kml': [
-          'text/xml',
-          'application/xml',
-          'text/plain',
-          'application/octet-stream',
-          'application/vnd.google-earth.kml+xml',
-          'application/vnd.google-earth.kml'
-        ],
-        'kmz': [
-          'application/zip',
-          'application/x-zip-compressed',
-          'application/octet-stream',
-          'application/vnd.google-earth.kmz',
-          'application/vnd.google-earth.kmz+xml'
-        ]
+      // Check file extension
+      if (!validateFileExtension(file.name)) {
+        return { isValid: false, error: `Only ${getSupportedFileTypesString()} files are allowed` }
       }
 
-      if (file.type && !allowedMimeTypes[fileType].includes(file.type)) {
+      // Get file type and validate
+      const fileType = getFileTypeByExtension(file.name)
+      if (!fileType) {
+        return { isValid: false, error: 'Unsupported file type' }
+      }
+
+      // Check file size
+      if (!validateFileSize(file, fileType)) {
+        const config = getFileTypeConfig(fileType)
+        return { isValid: false, error: `${config.displayName} file too large. Maximum size: ${formatFileSize(config.maxSize)}` }
+      }
+
+      // Check MIME type
+      if (!validateMimeType(file, fileType)) {
         return { isValid: false, error: `Invalid MIME type: ${file.type}` }
       }
 

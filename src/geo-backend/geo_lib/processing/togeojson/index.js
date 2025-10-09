@@ -2,12 +2,12 @@
 
 const fs = require('fs');
 const path = require('path');
-const { kml } = require('@tmcw/togeojson');
+const { kml, gpx } = require('@tmcw/togeojson');
 const { DOMParser } = require('@xmldom/xmldom');
 
 /**
- * Main KML to GeoJSON converter module
- * Provides functions for converting KML/KMZ content to GeoJSON
+ * Main KML/GPX to GeoJSON converter module
+ * Provides functions for converting KML/KMZ/GPX content to GeoJSON
  */
 
 /**
@@ -38,6 +38,37 @@ function convertKmlContent(kmlContent) {
         return geojson;
     } catch (error) {
         throw new Error(`Failed to convert KML content: ${error.message}`);
+    }
+}
+
+/**
+ * Convert GPX content string to GeoJSON
+ * @param {string} gpxContent - GPX content as string
+ * @returns {Object} GeoJSON FeatureCollection
+ */
+function convertGpxContent(gpxContent) {
+    try {
+        // Remove BOM (Byte Order Mark) if present
+        if (gpxContent.charCodeAt(0) === 0xFEFF) {
+            gpxContent = gpxContent.slice(1);
+        }
+        
+        // Parse the GPX content
+        const parser = new DOMParser();
+        const gpxDoc = parser.parseFromString(gpxContent, 'text/xml');
+        
+        // Check for parsing errors
+        const parseError = gpxDoc.getElementsByTagName('parsererror');
+        if (parseError.length > 0) {
+            throw new Error(`XML parsing error: ${parseError[0].textContent}`);
+        }
+        
+        // Convert to GeoJSON
+        const geojson = gpx(gpxDoc);
+        
+        return geojson;
+    } catch (error) {
+        throw new Error(`Failed to convert GPX content: ${error.message}`);
     }
 }
 
@@ -73,8 +104,63 @@ function convertKmzContent(kmzBuffer) {
 }
 
 /**
+ * File type configuration (should match backend file_types.py)
+ */
+const FILE_TYPE_CONFIGS = {
+    kml: {
+        extensions: ['.kml'],
+        signatures: ['<?xml', '<kml', '<KML'],
+        xmlRoot: 'kml'
+    },
+    kmz: {
+        extensions: ['.kmz'],
+        signatures: ['PK\x03\x04', 'PK\x05\x06', 'PK\x07\x08'],
+        isArchive: true
+    },
+    gpx: {
+        extensions: ['.gpx'],
+        signatures: ['<?xml', '<gpx', '<GPX'],
+        xmlRoot: 'gpx'
+    }
+};
+
+/**
+ * Detect file type based on content and extension
+ * @param {Buffer} content - File content
+ * @param {string} filePath - File path for extension detection
+ * @returns {string} File type ('kml', 'kmz', 'gpx')
+ */
+function detectFileType(content, filePath) {
+    const ext = path.extname(filePath).toLowerCase();
+    
+    // Check file extension first
+    for (const [type, config] of Object.entries(FILE_TYPE_CONFIGS)) {
+        if (config.extensions.includes(ext)) {
+            return type;
+        }
+    }
+    
+    // Check content signatures
+    for (const [type, config] of Object.entries(FILE_TYPE_CONFIGS)) {
+        if (config.signatures.some(sig => {
+            if (typeof sig === 'string') {
+                return content.toString('utf8').toLowerCase().includes(sig.toLowerCase());
+            } else {
+                // Binary signature
+                return content[0] === sig[0] && content[1] === sig[1];
+            }
+        })) {
+            return type;
+        }
+    }
+    
+    // Default to KML
+    return 'kml';
+}
+
+/**
  * Convert file to GeoJSON
- * @param {string} filePath - Path to KML or KMZ file
+ * @param {string} filePath - Path to KML, KMZ, or GPX file
  * @returns {Object} GeoJSON FeatureCollection
  */
 function convertFile(filePath) {
@@ -84,13 +170,18 @@ function convertFile(filePath) {
         }
         
         const content = fs.readFileSync(filePath);
+        const fileType = detectFileType(content, filePath);
         
-        // Try to determine if it's KMZ or KML
-        if (content[0] === 0x50 && content[1] === 0x4B) { // ZIP signature
-            return convertKmzContent(content);
-        } else {
-            const kmlContent = content.toString('utf8');
-            return convertKmlContent(kmlContent);
+        switch (fileType) {
+            case 'kmz':
+                return convertKmzContent(content);
+            case 'gpx':
+                const gpxContent = content.toString('utf8');
+                return convertGpxContent(gpxContent);
+            case 'kml':
+            default:
+                const kmlContent = content.toString('utf8');
+                return convertKmlContent(kmlContent);
         }
     } catch (error) {
         throw new Error(`Failed to convert file: ${error.message}`);
@@ -139,7 +230,9 @@ function processInput() {
 module.exports = {
     convertKmlContent,
     convertKmzContent,
-    convertFile
+    convertGpxContent,
+    convertFile,
+    detectFileType
 };
 
 // If run directly, process input

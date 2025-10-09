@@ -1,7 +1,7 @@
 {
-  "name": "geoserver-kml-importer",
+  "name": "geoserver-geo-importer",
   "version": "1.0.0",
-  "description": "KML to GeoJSON converter for GeoServer using togeojson",
+  "description": "KML and GPX to GeoJSON converter for GeoServer using togeojson",
   "main": "index.js",
   "scripts": {
     "test": "node test.js",
@@ -17,6 +17,7 @@
   },
   "keywords": [
     "kml",
+    "gpx",
     "geojson",
     "converter",
     "geoserver"

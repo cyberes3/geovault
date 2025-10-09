@@ -16,11 +16,10 @@ from django.views.decorators.http import require_http_methods
 from data.models import ImportQueue, FeatureStore, DatabaseLogging
 from geo_lib.feature_id import generate_feature_hash
 from geo_lib.logging.database import importlog_to_db
-from geo_lib.processing.kml.kml import normalize_kml_for_comparison, kml_to_geojson
+from geo_lib.processing.geo_processor import geo_to_geojson, FileType
 from geo_lib.processing.logging import ImportLog, DatabaseLogLevel
 from geo_lib.processing.tagging import generate_auto_tags
-from geo_lib.security.file_validation import SecureFileValidator, secure_kmz_to_kml, FileValidationError, SecurityError
-from geo_lib.security.file_validation import validate_kml_content
+from geo_lib.security.file_validation import SecureFileValidator, FileValidationError, SecurityError
 from geo_lib.types.feature import PointFeature, PolygonFeature, LineStringFeature
 from geo_lib.types.feature import geojson_to_geofeature
 from geo_lib.website.auth import login_required_401
@@ -334,21 +333,9 @@ def upload_item(request):
             file_data = uploaded_file.read()
 
             try:
-                # Determine file type and process accordingly
-                filename_lower = file_name.lower()
-                if filename_lower.endswith('.kmz') or (isinstance(file_data, bytes) and file_data.startswith(b'PK')):
-                    # It's a KMZ file - use secure KMZ to KML conversion
-                    kml_doc = secure_kmz_to_kml(file_data)
-                else:
-                    # It's a KML file - decode and validate directly
-                    if isinstance(file_data, bytes):
-                        kml_content = file_data.decode('utf-8')
-                    else:
-                        kml_content = file_data
-
-                    # Validate KML content (don't modify it)
-                    validate_kml_content(kml_content)
-                    kml_doc = kml_content
+                # Use the new generic file processor to handle KML, KMZ, and GPX files
+                geojson_data, processing_log = geo_to_geojson(file_data, file_name)
+                import_log.extend(processing_log)
             except (SecurityError, FileValidationError) as e:
                 logger.error(f"Secure file processing failed for {file_name}: {str(e)}")
                 return JsonResponse({
@@ -360,25 +347,24 @@ def upload_item(request):
                 logger.error(f"Unexpected error processing file {file_name}: {traceback.format_exc()}")
                 return JsonResponse({
                     'success': False,
-                    'msg': f'Failed to process KML/KMZ file "{file_name}"',
+                    'msg': f'Failed to process file "{file_name}"',
                     'id': None
                 }, status=400)
 
             del file_data
             import_log.add(f'Validation took {time.time() - validate_start:.3f} seconds', 'Timing', DatabaseLogLevel.INFO)
 
-            hash_kml_start = time.time()
+            hash_content_start = time.time()
 
-            # Normalize KML content for comparison (handles KML vs KMZ differences)
-            normalized_kml = normalize_kml_for_comparison(kml_doc)
+            # For duplicate checking, we'll use the GeoJSON data hash
+            # This is more reliable than trying to normalize the original file content
+            geojson_str = json.dumps(geojson_data, sort_keys=True)
+            content_hash = hashlib.sha256(geojson_str.encode('utf-8')).hexdigest()
 
-            # Check for duplicates more comprehensively using normalized content
-            kml_hash = _hash_kml(normalized_kml)
-
-            # Check if this exact KML content already exists for this user (regardless of filename)
+            # Check if this exact content already exists for this user (regardless of filename)
             # First check for non-unparsable files
             existing_by_content = ImportQueue.objects.filter(
-                raw_kml_hash=kml_hash,
+                raw_kml_hash=content_hash,
                 user=request.user,
                 unparsable=False
             ).first()
@@ -387,19 +373,19 @@ def upload_item(request):
                 if existing_by_content.imported:
                     return JsonResponse({
                         'success': False,
-                        'msg': f'This KML/KMZ file has already been imported to the feature store (originally as "{existing_by_content.original_filename}")',
+                        'msg': f'This file has already been imported to the feature store (originally as "{existing_by_content.original_filename}")',
                         'id': None
                     }, status=200)  # Changed to 200 for benign duplicate content
                 else:
                     return JsonResponse({
                         'success': False,
-                        'msg': f'This KML/KMZ file is already in your import queue (originally as "{existing_by_content.original_filename}")',
+                        'msg': f'This file is already in your import queue (originally as "{existing_by_content.original_filename}")',
                         'id': None
                     }, status=200)  # Changed to 200 for benign duplicate content
 
             # Check for unparsable files with the same hash
             existing_unparsable = ImportQueue.objects.filter(
-                raw_kml_hash=kml_hash,
+                raw_kml_hash=content_hash,
                 user=request.user,
                 unparsable=True
             ).first()
@@ -407,7 +393,7 @@ def upload_item(request):
             if existing_unparsable:
                 # If there's an unparsable record, we need to handle the unique constraint
                 # We'll update the existing record instead of creating a new one
-                existing_unparsable.raw_kml = kml_doc
+                existing_unparsable.raw_kml = geojson_str  # Store GeoJSON as the raw content
                 existing_unparsable.original_filename = file_name
                 existing_unparsable.imported = False
                 existing_unparsable.unparsable = False
@@ -440,21 +426,14 @@ def upload_item(request):
                         'id': None
                     }, status=200)  # Changed to 200 for benign duplicate filename
 
-            import_log.add(f'File hashing took {time.time() - hash_kml_start:.3f} seconds', 'Timing', DatabaseLogLevel.INFO)
+            import_log.add(f'File hashing took {time.time() - hash_content_start:.3f} seconds', 'Timing', DatabaseLogLevel.INFO)
 
             # If we get here, there are no existing records with this hash, so create a new one
             try:
                 try:
-                    # Main conversion
-                    kml_start_time = time.time()
-                    geojson_data, kml_conv_log = kml_to_geojson(kml_doc)
-                    kml_end_time = time.time()
-                    kml_duration = kml_end_time - kml_start_time
-                    import_log.add(f'KML to GeoJSON conversion took {kml_duration:.3f} seconds', 'Timing', DatabaseLogLevel.INFO)
-
                     # Log feature count for progress tracking
                     feature_count = len(geojson_data.get('features', []))
-                    import_log.add(f'Converted {feature_count} features from KML', 'Conversion', DatabaseLogLevel.INFO)
+                    import_log.add(f'Converted {feature_count} features from file', 'Conversion', DatabaseLogLevel.INFO)
 
                     geo_features, geojson_typing_log = geojson_to_geofeature(geojson_data)
 
@@ -474,8 +453,8 @@ def upload_item(request):
 
                     # Create import queue item with processed features and duplicate information
                     import_queue = ImportQueue.objects.create(
-                        raw_kml=kml_doc,
-                        raw_kml_hash=kml_hash,
+                        raw_kml=geojson_str,  # Store GeoJSON as the raw content
+                        raw_kml_hash=content_hash,
                         original_filename=file_name,
                         user=request.user,
                         geofeatures=final_unique_features,
@@ -483,7 +462,7 @@ def upload_item(request):
                     )
                     log_id = str(import_queue.log_id)
 
-                    importlog_to_db(kml_conv_log, request.user.id, log_id)
+                    importlog_to_db(processing_log, request.user.id, log_id)
                     importlog_to_db(geojson_typing_log, request.user.id, log_id)
                     importlog_to_db(duplicate_features_log, request.user.id, log_id)
                     importlog_to_db(coordinate_duplicate_log, request.user.id, log_id)
@@ -509,8 +488,8 @@ def upload_item(request):
                     logger.error(f"Processing failed for {file_name}: {str(processing_error)}")
 
                     import_queue = ImportQueue.objects.create(
-                        raw_kml=kml_doc,
-                        raw_kml_hash=kml_hash,
+                        raw_kml=geojson_str,
+                        raw_kml_hash=content_hash,
                         original_filename=file_name,
                         user=request.user,
                         geofeatures=[{"error": "processing_failed", "message": str(processing_error)}]

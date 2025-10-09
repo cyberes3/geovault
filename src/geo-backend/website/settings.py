@@ -157,27 +157,9 @@ SECURE_HSTS_INCLUDE_SUBDOMAINS = True
 SECURE_HSTS_PRELOAD = True
 
 # File Upload Security Settings
-MAX_KML_FILE_SIZE = 5 * 1024 * 1024  # 5MB
-MAX_KMZ_FILE_SIZE = 10 * 1024 * 1024  # 10MB
+# Note: File type configurations are now centralized in geo_lib.processing.file_types
 FILE_UPLOAD_MAX_MEMORY_SIZE = 2 * 1024 * 1024  # 2MB
 DATA_UPLOAD_MAX_MEMORY_SIZE = 2 * 1024 * 1024  # 2MB
-
-# Allowed file types for validation
-ALLOWED_FILE_TYPES = {
-    'kml': [
-        'text/xml', 
-        'application/xml', 
-        'text/plain',
-        'application/vnd.google-earth.kml+xml',
-        'application/vnd.google-earth.kml'
-    ],
-    'kmz': [
-        'application/zip', 
-        'application/x-zip-compressed',
-        'application/vnd.google-earth.kmz',
-        'application/vnd.google-earth.kmz+xml'
-    ]
-}
 
 # Security validation settings
 SECURE_XML_PARSING = True

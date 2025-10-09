@@ -18,6 +18,11 @@ import magic
 from django.conf import settings
 from django.core.files.uploadedfile import UploadedFile
 
+from geo_lib.processing.file_types import (
+    FileType, get_file_type_by_extension, validate_file_size, validate_mime_type, 
+    validate_file_signature, get_allowed_elements
+)
+
 logger = logging.getLogger(__name__)
 
 
@@ -33,42 +38,8 @@ class SecurityError(Exception):
 
 class SecureFileValidator:
     """
-    Comprehensive file validator for KML/KMZ files with security measures.
+    Comprehensive file validator for KML/KMZ/GPX files with security measures.
     """
-
-    # File signatures (magic numbers)
-    KML_SIGNATURES = [
-        b'<?xml',
-        b'<kml',
-        b'<KML'
-    ]
-
-    KMZ_SIGNATURES = [
-        b'PK\x03\x04',  # Standard ZIP
-        b'PK\x05\x06',  # Empty ZIP
-        b'PK\x07\x08'  # Spanned ZIP
-    ]
-
-    # Allowed MIME types
-    ALLOWED_MIME_TYPES = {
-        'kml': [
-            'text/xml',
-            'application/xml',
-            'text/plain',
-            'application/vnd.google-earth.kml+xml',
-            'application/vnd.google-earth.kml'
-        ],
-        'kmz': [
-            'application/zip',
-            'application/x-zip-compressed',
-            'application/vnd.google-earth.kmz',
-            'application/vnd.google-earth.kmz+xml'
-        ]
-    }
-
-    # Maximum file sizes (configurable)
-    MAX_KML_SIZE = getattr(settings, 'MAX_KML_FILE_SIZE', 5 * 1024 * 1024)  # 5MB
-    MAX_KMZ_SIZE = getattr(settings, 'MAX_KMZ_FILE_SIZE', 10 * 1024 * 1024)  # 10MB
 
     # Dangerous XML elements/attributes to remove
     DANGEROUS_ELEMENTS = [
@@ -81,11 +52,6 @@ class SecureFileValidator:
         'link'  # HTML link elements, but KML link elements are allowed
     ]
     
-    # KML-specific elements that are allowed (including style and metadata elements)
-    ALLOWED_KML_ELEMENTS = [
-        'style', 'iconstyle', 'linestyle', 'polystyle', 'labelstyle', 'balloonstyle',
-        'liststyle', 'itemicon', 'pair', 'hotspot', 'link'
-    ]
 
     DANGEROUS_ATTRIBUTES = [
         'onload', 'onerror', 'onclick', 'onmouseover', 'onfocus', 'onblur',
@@ -139,8 +105,11 @@ class SecureFileValidator:
             raise FileValidationError("Invalid file")
 
         # Check file extension
-        filename_lower = uploaded_file.name.lower()
-        if not (filename_lower.endswith('.kml') or filename_lower.endswith('.kmz')):
+        try:
+            import os
+            _, ext = os.path.splitext(uploaded_file.name)
+            get_file_type_by_extension(ext)
+        except ValueError:
             raise FileValidationError("Invalid file type")
 
     def _validate_file_signature(self, uploaded_file: UploadedFile):
@@ -149,15 +118,14 @@ class SecureFileValidator:
         file_data = uploaded_file.read(1024)
         uploaded_file.seek(0)  # Reset file pointer
 
-        filename_lower = uploaded_file.name.lower()
-
-        if filename_lower.endswith('.kml'):
-            if not any(file_data.startswith(sig) for sig in self.KML_SIGNATURES):
+        try:
+            import os
+            _, ext = os.path.splitext(uploaded_file.name)
+            file_type = get_file_type_by_extension(ext)
+            if not validate_file_signature(file_data, file_type):
                 raise SecurityError("Invalid file format")
-
-        elif filename_lower.endswith('.kmz'):
-            if not any(file_data.startswith(sig) for sig in self.KMZ_SIGNATURES):
-                raise SecurityError("Invalid file format")
+        except ValueError:
+            raise SecurityError("Invalid file format")
 
     def _validate_mime_type(self, uploaded_file: UploadedFile):
         """Validate MIME type using python-magic."""
@@ -166,34 +134,42 @@ class SecureFileValidator:
         uploaded_file.seek(0)  # Reset file pointer
 
         mime_type = magic.from_buffer(file_data, mime=True)
-        filename_lower = uploaded_file.name.lower()
-
-        if filename_lower.endswith('.kml'):
-            if mime_type not in self.ALLOWED_MIME_TYPES['kml']:
+        
+        try:
+            import os
+            _, ext = os.path.splitext(uploaded_file.name)
+            file_type = get_file_type_by_extension(ext)
+            if not validate_mime_type(mime_type, file_type):
                 raise SecurityError("Invalid file format")
-
-        elif filename_lower.endswith('.kmz'):
-            if mime_type not in self.ALLOWED_MIME_TYPES['kmz']:
-                raise SecurityError("Invalid file format")
+        except ValueError:
+            raise SecurityError("Invalid file format")
 
     def _validate_file_size(self, uploaded_file: UploadedFile):
         """Validate file size limits."""
-        filename_lower = uploaded_file.name.lower()
-
-        if filename_lower.endswith('.kml') and uploaded_file.size > self.MAX_KML_SIZE:
-            raise FileValidationError("File too large")
-
-        elif filename_lower.endswith('.kmz') and uploaded_file.size > self.MAX_KMZ_SIZE:
-            raise FileValidationError("File too large")
+        try:
+            import os
+            _, ext = os.path.splitext(uploaded_file.name)
+            file_type = get_file_type_by_extension(ext)
+            if not validate_file_size(uploaded_file.size, file_type):
+                raise FileValidationError("File too large")
+        except ValueError:
+            raise FileValidationError("Invalid file type")
 
     def _validate_content(self, uploaded_file: UploadedFile):
         """Validate file content structure."""
-        filename_lower = uploaded_file.name.lower()
-
-        if filename_lower.endswith('.kmz'):
-            self._validate_kmz_content(uploaded_file)
-        else:
-            self._validate_kml_content(uploaded_file)
+        try:
+            import os
+            _, ext = os.path.splitext(uploaded_file.name)
+            file_type = get_file_type_by_extension(ext)
+            
+            if file_type == FileType.KMZ:
+                self._validate_kmz_content(uploaded_file)
+            elif file_type == FileType.GPX:
+                self._validate_gpx_content(uploaded_file)
+            else:
+                self._validate_kml_content(uploaded_file)
+        except ValueError:
+            raise FileValidationError("Invalid file type")
 
     def _validate_kmz_content(self, uploaded_file: UploadedFile):
         """Validate KMZ content and check for zip slip attacks."""
@@ -249,6 +225,22 @@ class SecureFileValidator:
                 raise
             raise SecurityError("Invalid file content")
 
+    def _validate_gpx_content(self, uploaded_file: UploadedFile):
+        """Validate GPX content structure."""
+        try:
+            file_data = uploaded_file.read()
+            uploaded_file.seek(0)  # Reset file pointer
+
+            gpx_content = file_data.decode('utf-8')
+            self._validate_gpx_structure(gpx_content)
+
+        except UnicodeDecodeError:
+            raise SecurityError("Invalid file format")
+        except Exception as e:
+            if isinstance(e, (SecurityError, FileValidationError)):
+                raise
+            raise SecurityError("Invalid file content")
+
     def _validate_kml_structure(self, kml_content: str):
         """Validate KML XML structure and check for dangerous content."""
         try:
@@ -256,7 +248,7 @@ class SecureFileValidator:
             root = self._secure_xml_parse(kml_content)
 
             # Check for dangerous elements
-            self._check_dangerous_elements(root)
+            self._check_dangerous_elements(root, FileType.KML)
 
             # Check for dangerous attributes
             self._check_dangerous_attributes(root)
@@ -271,6 +263,29 @@ class SecureFileValidator:
             if isinstance(e, (SecurityError, FileValidationError)):
                 raise
             raise SecurityError("Invalid KML content")
+
+    def _validate_gpx_structure(self, gpx_content: str):
+        """Validate GPX XML structure and check for dangerous content."""
+        try:
+            # Parse XML with secure settings
+            root = self._secure_xml_parse(gpx_content)
+
+            # Check for dangerous elements
+            self._check_dangerous_elements(root, FileType.GPX)
+
+            # Check for dangerous attributes
+            self._check_dangerous_attributes(root)
+
+            # Validate GPX namespace
+            if not self._is_valid_gpx(root):
+                raise FileValidationError("Invalid GPX structure")
+
+        except ET.ParseError:
+            raise FileValidationError("Invalid XML structure")
+        except Exception as e:
+            if isinstance(e, (SecurityError, FileValidationError)):
+                raise
+            raise SecurityError("Invalid GPX content")
 
     def _secure_xml_parse(self, xml_content: str) -> ET.Element:
         """Parse XML with security measures against XXE attacks."""
@@ -293,14 +308,18 @@ class SecureFileValidator:
         except ET.ParseError:
             raise FileValidationError("Invalid file format")
 
-    def _check_dangerous_elements(self, root: ET.Element):
+    def _check_dangerous_elements(self, root: ET.Element, file_type: FileType = None):
         """Check for dangerous XML elements."""
+        allowed_elements = []
+        if file_type:
+            allowed_elements = get_allowed_elements(file_type)
+            
         for elem in root.iter():
             # Extract the local name from namespaced tags (e.g., {namespace}tag -> tag)
             tag_name = elem.tag.split('}')[-1].lower() if '}' in elem.tag else elem.tag.lower()
             
-            # Allow KML-specific elements
-            if tag_name in self.ALLOWED_KML_ELEMENTS:
+            # Allow file-type-specific elements
+            if tag_name in allowed_elements:
                 continue
                 
             # Check for dangerous elements
@@ -322,6 +341,21 @@ class SecureFileValidator:
 
         # Check for required KML elements (handle namespaced tags)
         required_elements = ['document', 'folder', 'placemark', 'groundoverlay', 'screenoverlay']
+        has_required = any(
+            any(req in elem.tag.lower() for req in required_elements) 
+            for elem in root.iter()
+        )
+
+        return has_required
+
+    def _is_valid_gpx(self, root: ET.Element) -> bool:
+        """Check if the XML is a valid GPX document."""
+        # Check for GPX namespace
+        if 'gpx' not in root.tag.lower():
+            return False
+
+        # Check for required GPX elements (handle namespaced tags)
+        required_elements = ['trk', 'rte', 'wpt']
         has_required = any(
             any(req in elem.tag.lower() for req in required_elements) 
             for elem in root.iter()
