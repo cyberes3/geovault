@@ -13,4 +13,8 @@ from django.core.asgi import get_asgi_application
 
 os.environ.setdefault('DJANGO_SETTINGS_MODULE', 'website.settings')
 
+# Run startup checks before creating the ASGI application
+from website.startup_checks import run_startup_checks
+run_startup_checks()
+
 application = get_asgi_application()

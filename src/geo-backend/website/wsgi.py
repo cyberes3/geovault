@@ -13,4 +13,8 @@ from django.core.wsgi import get_wsgi_application
 
 os.environ.setdefault('DJANGO_SETTINGS_MODULE', 'website.settings')
 
+# Run startup checks before creating the WSGI application
+from website.startup_checks import run_startup_checks
+run_startup_checks()
+
 application = get_wsgi_application()
