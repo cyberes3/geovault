@@ -15,6 +15,7 @@ from django.db import transaction
 from geo_lib.processing.status_tracker import ProcessingStatusTracker, ProcessingStatus, status_tracker
 from geo_lib.processing.geo_processor import geo_to_geojson
 from geo_lib.processing.logging import ImportLog, RealTimeImportLog, DatabaseLogLevel
+from geo_lib.processing.geojson_normalization import hash_normalized_geojson
 from geo_lib.security.file_validation import SecureFileValidator, SecurityError, FileValidationError
 from data.models import ImportQueue
 from geo_lib.logging.database import importlog_to_db
@@ -170,6 +171,57 @@ class AsyncFileProcessor:
             # Add processing log messages to real-time log
             realtime_log.extend(processing_log)
             
+            # Check for duplicate files (per-user)
+            self.status_tracker.update_job_status(
+                job_id, ProcessingStatus.PROCESSING, 
+                "Checking for duplicate files...", 60.0
+            )
+            realtime_log.add("Checking for duplicate files", "AsyncProcessor", DatabaseLogLevel.INFO)
+            
+            # Calculate normalized hash of the GeoJSON
+            duplicate_check_start = time.time()
+            normalized_hash = hash_normalized_geojson(geojson_data)
+            realtime_log.add(f"Calculated normalized hash: {normalized_hash[:16]}...", "AsyncProcessor", DatabaseLogLevel.DEBUG)
+            
+            # Check if this hash already exists for this user in the import queue (imported or not)
+            existing_items = ImportQueue.objects.filter(
+                user_id=user_id,
+                raw_kml_hash=normalized_hash
+            ).values('id', 'original_filename', 'imported', 'timestamp')
+            
+            if existing_items.exists():
+                # Found a duplicate!
+                existing_item = existing_items.first()
+                duplicate_filename = existing_item['original_filename']
+                is_imported = existing_item['imported']
+                status_text = "already imported" if is_imported else "already in import queue"
+                
+                error_msg = f"Duplicate file detected: '{filename}' has the same content as '{duplicate_filename}' which was {status_text}"
+                realtime_log.add(error_msg, "AsyncProcessor", DatabaseLogLevel.WARNING)
+                
+                duplicate_check_duration = time.time() - duplicate_check_start
+                realtime_log.add_timing("Duplicate check", duplicate_check_duration, "AsyncProcessor")
+                
+                # Delete the initial import queue entry we created
+                if import_queue_id:
+                    try:
+                        ImportQueue.objects.filter(id=import_queue_id).delete()
+                        realtime_log.add("Removed temporary queue entry for duplicate", "AsyncProcessor", DatabaseLogLevel.DEBUG)
+                    except Exception as e:
+                        realtime_log.add(f"Failed to remove temporary entry: {str(e)}", "AsyncProcessor", DatabaseLogLevel.WARNING)
+                
+                # Mark as failed with duplicate message
+                self.status_tracker.update_job_status(
+                    job_id, ProcessingStatus.FAILED, 
+                    error_msg, 
+                    error_message=error_msg
+                )
+                return
+            
+            duplicate_check_duration = time.time() - duplicate_check_start
+            realtime_log.add_timing("Duplicate check", duplicate_check_duration, "AsyncProcessor")
+            realtime_log.add("No duplicate found, proceeding with import", "AsyncProcessor", DatabaseLogLevel.INFO)
+            
             # Update progress
             self.status_tracker.update_job_status(
                 job_id, ProcessingStatus.PROCESSING, 
@@ -281,9 +333,9 @@ class AsyncFileProcessor:
                 import json
                 geojson_str = json.dumps(geojson_data)
                 
-                # Create content hash
-                import hashlib
-                content_hash = hashlib.sha256(geojson_str.encode('utf-8')).hexdigest()
+                # Create normalized content hash for duplicate detection
+                # This ensures KML/KMZ files with same content get same hash
+                content_hash = hash_normalized_geojson(geojson_data)
                 
                 # Process features
                 from geo_lib.processing.geo_processor import process_togeojson_features, detect_file_type
