@@ -20,7 +20,7 @@ from django.core.files.uploadedfile import UploadedFile
 
 from geo_lib.processing.file_types import (
     FileType, get_file_type_by_extension, validate_file_size, validate_mime_type, 
-    validate_file_signature, get_allowed_elements
+    validate_file_signature, get_allowed_elements, get_max_file_size
 )
 
 logger = logging.getLogger(__name__)
@@ -151,7 +151,9 @@ class SecureFileValidator:
             _, ext = os.path.splitext(uploaded_file.name)
             file_type = get_file_type_by_extension(ext)
             if not validate_file_size(uploaded_file.size, file_type):
-                raise FileValidationError("File too large")
+                max_size_mb = get_max_file_size(file_type) / (1024 * 1024)
+                file_size_mb = uploaded_file.size / (1024 * 1024)
+                raise FileValidationError(f"File too large: {file_size_mb:.1f}MB exceeds {max_size_mb:.0f}MB limit")
         except ValueError:
             raise FileValidationError("Invalid file type")
 

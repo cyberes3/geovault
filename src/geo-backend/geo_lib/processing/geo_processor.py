@@ -8,6 +8,7 @@ import os
 import re
 import subprocess
 import tempfile
+import time
 import xml.etree.ElementTree as ET
 from typing import Tuple, Union
 
@@ -346,20 +347,36 @@ def detect_file_type(file_data: Union[bytes, str], filename: str = "") -> FileTy
     return FileType.KML
 
 
-def geo_to_geojson(file_data: Union[bytes, str], filename: str = "", timeout_seconds: int = 20) -> Tuple[dict, ImportLog]:
+def geo_to_geojson(file_data: Union[bytes, str], filename: str = "", timeout_seconds: int = None) -> Tuple[dict, ImportLog]:
     """
     Convert KML/KMZ/GPX to GeoJSON using JavaScript togeojson library.
     
     Args:
         file_data: File content as bytes or string
         filename: Optional filename for type detection
-        timeout_seconds: Timeout in seconds for the conversion process
+        timeout_seconds: Timeout in seconds for the conversion process. If None, calculated based on file size.
         
     Returns:
         Tuple of (geojson_data, import_log)
     """
     import_log = ImportLog()
+    
+    # Time file type detection
+    detection_start = time.time()
     file_type = detect_file_type(file_data, filename)
+    detection_duration = time.time() - detection_start
+    import_log.add_timing("File type detection", detection_duration, "Processing")
+
+    # Calculate dynamic timeout based on file size if not specified
+    if timeout_seconds is None:
+        file_size = len(file_data) if isinstance(file_data, bytes) else len(file_data.encode('utf-8'))
+        file_size_mb = file_size / (1024 * 1024)
+        
+        # Base timeout of 30 seconds, plus 2 seconds per MB for large files
+        # This gives us: 30s for small files, 60s for 15MB, 120s for 45MB, 240s for 105MB
+        timeout_seconds = max(30, int(30 + (file_size_mb * 2)))
+        
+        import_log.add(f'Calculated timeout: {timeout_seconds}s for {file_size_mb:.1f}MB file', 'Processing', DatabaseLogLevel.INFO)
 
     try:
         # Get the path to the togeojson converter
@@ -374,13 +391,16 @@ def geo_to_geojson(file_data: Union[bytes, str], filename: str = "", timeout_sec
                 temp_file_path = temp_file.name
 
             try:
-                # Use the JavaScript converter with file path
+                # Use the JavaScript converter with file path and timing
+                conversion_start = time.time()
                 result = subprocess.run(
                     ['node', togeojson_path, temp_file_path],
                     capture_output=True,
                     text=True,
                     timeout=timeout_seconds
                 )
+                conversion_duration = time.time() - conversion_start
+                import_log.add_timing("JavaScript KMZ conversion", conversion_duration, "Processing")
 
                 if result.returncode != 0:
                     raise Exception(f"JavaScript converter failed: {result.stderr}")
@@ -412,13 +432,16 @@ def geo_to_geojson(file_data: Union[bytes, str], filename: str = "", timeout_sec
                 temp_file_path = temp_file.name
 
             try:
-                # Use the JavaScript converter with file path
+                # Use the JavaScript converter with file path and timing
+                conversion_start = time.time()
                 result = subprocess.run(
                     ['node', togeojson_path, temp_file_path],
                     capture_output=True,
                     text=True,
                     timeout=timeout_seconds
                 )
+                conversion_duration = time.time() - conversion_start
+                import_log.add_timing(f"JavaScript {file_type.value.upper()} conversion", conversion_duration, "Processing")
             finally:
                 # Clean up temporary file
                 os.unlink(temp_file_path)
@@ -428,8 +451,11 @@ def geo_to_geojson(file_data: Union[bytes, str], filename: str = "", timeout_sec
 
             geojson_data = json.loads(result.stdout)
 
-        # Process the features using the existing processing logic
+        # Process the features using the existing processing logic with timing
+        feature_processing_start = time.time()
         processed_features, processing_log = process_togeojson_features(geojson_data['features'], file_type)
+        feature_processing_duration = time.time() - feature_processing_start
+        import_log.add_timing("Feature processing", feature_processing_duration, "Processing")
         import_log.extend(processing_log)
 
         # Create the final GeoJSON structure

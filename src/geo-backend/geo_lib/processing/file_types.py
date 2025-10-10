@@ -68,7 +68,7 @@ FILE_TYPE_CONFIGS: Dict[FileType, FileTypeConfig] = {
             'application/vnd.google-earth.kmz',
             'application/vnd.google-earth.kmz+xml'
         ],
-        max_size=10 * 1024 * 1024,  # 10MB
+        max_size=200 * 1024 * 1024,  # 200MB
         xml_root_elements=['kml'],
         allowed_elements=[
             'style', 'iconstyle', 'linestyle', 'polystyle', 'labelstyle', 'balloonstyle',

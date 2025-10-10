@@ -74,7 +74,7 @@
     </div>
 
     <!-- Import Summary -->
-    <div v-if="itemsForUser.length > 0 || isLoadingPage" class="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
+    <div class="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
       <h3 class="text-lg font-semibold text-gray-900 mb-4">Import Summary</h3>
       <div v-if="isLoadingPage" class="text-center py-8">
         <span class="text-blue-600 font-medium">Loading...</span>
@@ -144,6 +144,7 @@
         :is-importing="isImporting"
         :importable-count="totalFeatures - duplicateIndices.length"
         :goto-page-input="gotoPageInput"
+        :show-no-features-message="originalFilename != null && !isProcessing"
         @previous-page="previousPage"
         @next-page="nextPage"
         @jump-to-page="goToPage"
@@ -226,8 +227,25 @@
       </div>
     </div>
 
+    <!-- Processing Status -->
+    <div v-if="isProcessing" class="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
+      <div class="flex items-center justify-center py-8">
+        <div class="text-center">
+          <div class="animate-spin h-8 w-8 border-2 border-blue-600 border-t-transparent rounded-full mx-auto mb-4"></div>
+          <h3 class="text-lg font-medium text-gray-900 mb-2">Processing File</h3>
+          <p class="text-gray-600">{{ processingMessage }}</p>
+          <div v-if="processingProgress !== null" class="mt-4">
+            <div class="w-full bg-gray-200 rounded-full h-2">
+              <div class="bg-blue-600 h-2 rounded-full transition-all duration-300" :style="{ width: processingProgress + '%' }"></div>
+            </div>
+            <p class="text-sm text-gray-500 mt-2">{{ Math.round(processingProgress) }}% complete</p>
+          </div>
+        </div>
+      </div>
+    </div>
+
     <!-- Feature Items -->
-    <div v-if="itemsForUser.length > 0 && !isLoadingPage" class="space-y-6">
+    <div v-else-if="itemsForUser.length > 0 && !isLoadingPage" class="space-y-6">
       <div v-for="(item, index) in itemsForUser" :key="`item-${index}`"
            :class="item.isDuplicate ? 'bg-gray-100 rounded-lg shadow-sm border border-gray-300 p-6 opacity-75' : 'bg-white rounded-lg shadow-sm border border-gray-200 p-6'">
         <div class="flex items-center justify-between mb-6">
@@ -412,12 +430,14 @@
         :is-importing="isImporting"
         :importable-count="totalFeatures - duplicateIndices.length"
         :goto-page-input="gotoPageInput"
+        :show-no-features-message="false"
         @previous-page="previousPage"
         @next-page="nextPage"
         @jump-to-page="goToPage"
         @show-map-preview="showMapPreview"
         @save-changes="saveChanges"
         @perform-import="performImport"
+        v-if="!isLoadingPage"
     />
 
     <div class="hidden">
@@ -513,6 +533,10 @@ export default {
       showEditOriginalDialog: false, // Track edit original feature dialog state
       selectedOriginalFeature: null, // Track which original feature is being edited
       showLogModal: false, // Track log modal state
+      isProcessing: false, // Track if file is currently being processed
+      processingMessage: '', // Current processing message
+      processingProgress: null, // Current processing progress (0-100)
+      processingPollingInterval: null, // Interval for polling processing status
       // Pagination state
       currentPage: 1,
       pageSize: 50,
@@ -528,9 +552,104 @@ export default {
       // Removed flatpickrConfig - using native HTML5 datetime-local input
     }
   },
+  beforeDestroy() {
+    // Clean up polling interval
+    this.stopProcessingPolling()
+  },
   mixins: [authMixin],
   props: ['id'],
   methods: {
+    async checkProcessingStatus() {
+      try {
+        const response = await axios.get(`/api/data/item/import/item-status/${this.currentId}`)
+        if (response.data.success) {
+          this.isProcessing = response.data.is_processing
+          if (this.isProcessing && response.data.job_details) {
+            this.processingMessage = response.data.job_details.message || 'Processing file...'
+            this.processingProgress = response.data.job_details.progress || 0
+          } else if (!this.isProcessing) {
+            // Processing completed, refresh the page data
+            this.stopProcessingPolling()
+            await this.refreshImportItem()
+          }
+          
+          // Update logs from the status response
+          if (response.data.logs) {
+            this.workerLog = response.data.logs
+          }
+        }
+      } catch (error) {
+        console.error('Failed to check processing status:', error)
+      }
+    },
+    async refreshImportItem() {
+      // Refresh the import item data after processing completes
+      try {
+        // Fetch items and logs in parallel for better performance
+        const [itemsResponse, logsResponse] = await Promise.all([
+          axios.get(`/api/data/item/import/get/${this.currentId}?page=1&page_size=${this.pageSize}`),
+          axios.get(`/api/data/item/import/item-status/${this.currentId}`)
+        ])
+        
+        if (itemsResponse.data.success) {
+          // Load logs first (they're already fetched)
+          if (logsResponse.data.success) {
+            this.workerLog = logsResponse.data.logs || []
+            this.isProcessing = logsResponse.data.is_processing || false
+          }
+          
+          if (Object.keys(itemsResponse.data).length > 0) {
+            this.originalFilename = itemsResponse.data.original_filename
+            this.isImported = itemsResponse.data.imported || false
+
+            // Update pagination info
+            if (itemsResponse.data.pagination) {
+              this.currentPage = itemsResponse.data.pagination.page;
+              this.totalFeatures = itemsResponse.data.pagination.total_features;
+              this.totalPages = itemsResponse.data.pagination.total_pages;
+              this.hasNextPage = itemsResponse.data.pagination.has_next;
+              this.hasPreviousPage = itemsResponse.data.pagination.has_previous;
+              this.duplicateIndices = itemsResponse.data.pagination.duplicate_indices || [];
+            }
+
+            // Check if this is an error response (unprocessable file)
+            if (itemsResponse.data.geofeatures.length > 0 && itemsResponse.data.geofeatures[0].error) {
+              // This is an unprocessable file, show a simple error message
+              const errorItem = itemsResponse.data.geofeatures[0];
+              this.msg = "File processing failed. Please check the processing logs below for details.";
+              // Keep the logs we already fetched, but add the error message if not already present
+              if (this.workerLog.length === 0) {
+                this.workerLog = [{timestamp: new Date().toISOString(), msg: errorItem.message}];
+              }
+            } else {
+              // Normal processing - parse the geofeatures
+              this.itemsForUser = []
+              itemsResponse.data.geofeatures.forEach((item) => {
+                this.itemsForUser.push(this.parseGeoJson(item))
+              })
+              this.originalItems = JSON.parse(JSON.stringify(this.itemsForUser))
+
+              // Process duplicates from the API response
+              this.duplicateFeatures = itemsResponse.data.duplicates || []
+              this.markDuplicateFeatures()
+            }
+          }
+        }
+      } catch (error) {
+        console.error('Error refreshing import item:', error)
+      }
+    },
+    startProcessingPolling() {
+      this.processingPollingInterval = setInterval(() => {
+        this.checkProcessingStatus()
+      }, 2000) // Poll every 2 seconds
+    },
+    stopProcessingPolling() {
+      if (this.processingPollingInterval) {
+        clearInterval(this.processingPollingInterval)
+        this.processingPollingInterval = null
+      }
+    },
     getLevelName(level) {
       const levelMap = {
         10: 'DEBUG',
@@ -664,7 +783,7 @@ export default {
       const csrftoken = getCookie('csrftoken');
 
       // Save only changed features using the new API format
-      const response = await axios.put('/api/data/item/import/update/' + this.id, {
+      const response = await axios.put('/api/data/item/import/update/' + this.currentId, {
         features: changedFeatures
       }, {
         headers: {
@@ -738,7 +857,7 @@ export default {
 
         // Perform the import - server will use the stored features in the database
         // No need to send the feature collection, it's already saved
-        const response = await axios.post('/api/data/item/import/perform/' + this.id, {}, {
+        const response = await axios.post('/api/data/item/import/perform/' + this.currentId, {}, {
           headers: {
             'X-CSRFToken': csrftoken
           }
@@ -875,7 +994,7 @@ export default {
 
       this.isLoadingPage = true;
       try {
-        const response = await axios.get(`/api/data/item/import/get/${this.id}?page=${page}&page_size=${this.pageSize}`);
+        const response = await axios.get(`/api/data/item/import/get/${this.currentId}?page=${page}&page_size=${this.pageSize}`);
         if (response.data.success) {
           // Update pagination info
           const pagination = response.data.pagination;
@@ -908,10 +1027,10 @@ export default {
       }
     },
     async loadLogs() {
-      // Load logs independently from main data
+      // Load logs from the status endpoint
       this.isLoadingLogs = true;
       try {
-        const response = await axios.get(`/api/data/item/import/get/${this.id}/logs`);
+        const response = await axios.get(`/api/data/item/import/item-status/${this.currentId}`);
         if (response.data.success) {
           this.workerLog = response.data.logs || [];
         }
@@ -1024,15 +1143,26 @@ export default {
         vm.isImported = false
 
         try {
-          // Load first page with pagination
-          const response = await axios.get(`/api/data/item/import/get/${vm.id}?page=1&page_size=${vm.pageSize}`)
-          if (!response.data.success) {
-            vm.msg = capitalizeFirstLetter(response.data.msg).trim(".") + "."
+          // Fetch items and logs in parallel for better performance
+          const [itemsResponse, logsResponse] = await Promise.all([
+            axios.get(`/api/data/item/import/get/${vm.id}?page=1&page_size=${vm.pageSize}`),
+            axios.get(`/api/data/item/import/item-status/${vm.id}`)
+          ])
+          
+          if (!itemsResponse.data.success) {
+            vm.msg = capitalizeFirstLetter(itemsResponse.data.msg).trim(".") + "."
           } else {
             vm.currentId = vm.id
-            if (Object.keys(response.data).length > 0) {
-              vm.originalFilename = response.data.original_filename
-              vm.isImported = response.data.imported || false
+            
+            // Load logs first (they're already fetched)
+            if (logsResponse.data.success) {
+              vm.workerLog = logsResponse.data.logs || []
+              vm.isProcessing = logsResponse.data.is_processing || false
+            }
+            
+            if (Object.keys(itemsResponse.data).length > 0) {
+              vm.originalFilename = itemsResponse.data.original_filename
+              vm.isImported = itemsResponse.data.imported || false
 
               // If the item is already imported, redirect to import page
               if (vm.isImported) {
@@ -1046,36 +1176,41 @@ export default {
               }
 
               // Update pagination info
-              if (response.data.pagination) {
-                vm.currentPage = response.data.pagination.page;
-                vm.totalFeatures = response.data.pagination.total_features;
-                vm.totalPages = response.data.pagination.total_pages;
-                vm.hasNextPage = response.data.pagination.has_next;
-                vm.hasPreviousPage = response.data.pagination.has_previous;
-                vm.duplicateIndices = response.data.pagination.duplicate_indices || [];
+              if (itemsResponse.data.pagination) {
+                vm.currentPage = itemsResponse.data.pagination.page;
+                vm.totalFeatures = itemsResponse.data.pagination.total_features;
+                vm.totalPages = itemsResponse.data.pagination.total_pages;
+                vm.hasNextPage = itemsResponse.data.pagination.has_next;
+                vm.hasPreviousPage = itemsResponse.data.pagination.has_previous;
+                vm.duplicateIndices = itemsResponse.data.pagination.duplicate_indices || [];
               }
 
               // Check if this is an error response (unprocessable file)
-              if (response.data.geofeatures.length > 0 && response.data.geofeatures[0].error) {
+              if (itemsResponse.data.geofeatures.length > 0 && itemsResponse.data.geofeatures[0].error) {
                 // This is an unprocessable file, show a simple error message
-                const errorItem = response.data.geofeatures[0];
+                const errorItem = itemsResponse.data.geofeatures[0];
                 vm.msg = "File processing failed. Please check the processing logs below for details.";
-                vm.workerLog = [{timestamp: now, msg: errorItem.message}];
+                // Keep the logs we already fetched, but add the error message if not already present
+                if (vm.workerLog.length === 0) {
+                  vm.workerLog = [{timestamp: now, msg: errorItem.message}];
+                }
+              } else if (itemsResponse.data.geofeatures.length === 0) {
+                // Empty geofeatures - check if still processing
+                if (vm.isProcessing) {
+                  vm.startProcessingPolling()
+                }
               } else {
                 // Normal processing - parse the geofeatures
-                response.data.geofeatures.forEach((item) => {
+                itemsResponse.data.geofeatures.forEach((item) => {
                   vm.itemsForUser.push(vm.parseGeoJson(item))
                 })
                 vm.originalItems = JSON.parse(JSON.stringify(vm.itemsForUser))
 
                 // Process duplicates from the API response
-                vm.duplicateFeatures = response.data.duplicates || []
+                vm.duplicateFeatures = itemsResponse.data.duplicates || []
                 vm.markDuplicateFeatures()
               }
             }
-
-            // Load logs independently
-            vm.loadLogs()
           }
         } catch (error) {
           if (error.response && error.response.data && error.response.data.code === 404) {

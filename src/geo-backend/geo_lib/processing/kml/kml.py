@@ -206,14 +206,25 @@ def process_togeojson_features(features: list) -> Tuple[list, ImportLog]:
     return processed_features, import_log
 
 
-def kml_to_geojson(kml_bytes, timeout_seconds: int = 20) -> Tuple[dict, ImportLog]:
+def kml_to_geojson(kml_bytes, timeout_seconds: int = None) -> Tuple[dict, ImportLog]:
     """Convert KML/KMZ to GeoJSON using JavaScript togeojson library for proper styling support.
     
     Args:
         kml_bytes: KML/KMZ file content as bytes or string
-        timeout_seconds: Timeout in seconds for the conversion process (default: 20)
+        timeout_seconds: Timeout in seconds for the conversion process. If None, calculated based on file size.
     """
     import_log = ImportLog()
+
+    # Calculate dynamic timeout based on file size if not specified
+    if timeout_seconds is None:
+        file_size = len(kml_bytes) if isinstance(kml_bytes, bytes) else len(kml_bytes.encode('utf-8'))
+        file_size_mb = file_size / (1024 * 1024)
+        
+        # Base timeout of 30 seconds, plus 2 seconds per MB for large files
+        # This gives us: 30s for small files, 60s for 15MB, 120s for 45MB, 240s for 105MB
+        timeout_seconds = max(30, int(30 + (file_size_mb * 2)))
+        
+        import_log.add(f'Calculated timeout: {timeout_seconds}s for {file_size_mb:.1f}MB file', 'Processing', DatabaseLogLevel.INFO)
 
     try:
         # Get the path to the togeojson converter

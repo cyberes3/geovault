@@ -1,7 +1,7 @@
 <template>
   <div class="space-y-4">
     <!-- Pagination Controls -->
-    <div v-if="(hasFeatures || isLoadingPage) && totalPages > 1" class="bg-white rounded-lg shadow-sm border border-gray-200 p-4">
+    <div v-if="(hasFeatures || isLoadingPage)" class="bg-white rounded-lg shadow-sm border border-gray-200 p-4">
       <div class="flex items-center justify-between flex-wrap gap-4">
         <div class="text-sm text-gray-700">
           <span v-if="!isLoadingPage">
@@ -12,7 +12,7 @@
         </div>
         <div class="flex items-center space-x-2">
           <button
-              :disabled="!hasPreviousPage || isLoadingPage"
+              :disabled="!hasPreviousPage || isLoadingPage || totalPages <= 1"
               class="inline-flex items-center px-3 py-2 border border-gray-300 shadow-sm text-sm font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 disabled:opacity-50 disabled:cursor-not-allowed"
               @click="$emit('previous-page')"
           >
@@ -23,7 +23,7 @@
           </button>
           <span class="text-sm text-gray-700">Page {{ currentPage }} of {{ totalPages }}</span>
           <button
-              :disabled="!hasNextPage || isLoadingPage"
+              :disabled="!hasNextPage || isLoadingPage || totalPages <= 1"
               class="inline-flex items-center px-3 py-2 border border-gray-300 shadow-sm text-sm font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 disabled:opacity-50 disabled:cursor-not-allowed"
               @click="$emit('next-page')"
           >
@@ -37,7 +37,7 @@
             <input
                 id="goto-page"
                 v-model.number="gotoPageInputLocal"
-                :disabled="isLoadingPage"
+                :disabled="isLoadingPage || totalPages <= 1"
                 :max="totalPages"
                 class="w-16 px-2 py-1 border border-gray-300 rounded-md text-sm focus:ring-blue-500 focus:border-blue-500 disabled:opacity-50 disabled:cursor-not-allowed"
                 min="1"
@@ -45,7 +45,7 @@
                 @keyup.enter="jumpToPage"
             />
             <button
-                :disabled="isLoadingPage || !isValidPageNumber"
+                :disabled="isLoadingPage || !isValidPageNumber || totalPages <= 1"
                 class="inline-flex items-center px-3 py-2 border border-gray-300 shadow-sm text-sm font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 disabled:opacity-50 disabled:cursor-not-allowed"
                 @click="jumpToPage"
             >
@@ -67,7 +67,7 @@
     </div>
 
     <!-- Action Buttons -->
-    <div v-if="hasFeatures || isLoadingPage" class="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
+    <div v-if="shouldShowActions" class="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
       <div v-if="isLoadingPage" class="text-center py-4">
         <span class="text-blue-600 font-medium">Loading...</span>
       </div>
@@ -86,8 +86,16 @@
           </div>
         </div>
       </div>
-
-      <div v-else class="flex items-center space-x-4">
+      <div v-else-if="showNoFeaturesMessage && !isLoadingPage && importableCount === 0" class="text-center py-8">
+        <div class="text-gray-500 mb-4">
+          <svg class="mx-auto h-12 w-12 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" stroke-linecap="round" stroke-linejoin="round" stroke-width="2"></path>
+          </svg>
+        </div>
+        <h3 class="text-lg font-medium text-gray-900 mb-2">No Features to Import</h3>
+        <p class="text-gray-600">This file has been processed but contains no importable features.</p>
+      </div>
+      <div v-else-if="hasFeatures" class="flex items-center space-x-4">
         <button
             :disabled="lockButtons || isSaving"
             class="inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md text-white bg-green-600 hover:bg-green-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-green-500 disabled:bg-gray-400 disabled:cursor-not-allowed transition-colors duration-200"
@@ -184,6 +192,10 @@ export default {
     gotoPageInput: {
       type: Number,
       default: null
+    },
+    showNoFeaturesMessage: {
+      type: Boolean,
+      default: true
     }
   },
   data() {
@@ -197,6 +209,14 @@ export default {
              this.gotoPageInputLocal >= 1 && 
              this.gotoPageInputLocal <= this.totalPages && 
              this.gotoPageInputLocal !== this.currentPage;
+    },
+    shouldShowActions() {
+      return (
+        this.isLoadingPage ||
+        this.isImported ||
+        (this.showNoFeaturesMessage && !this.isLoadingPage && this.importableCount === 0) ||
+        this.hasFeatures
+      );
     }
   },
   watch: {

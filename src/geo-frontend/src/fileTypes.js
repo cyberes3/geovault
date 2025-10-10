@@ -27,7 +27,7 @@ export const FILE_TYPE_CONFIGS = {
       'application/vnd.google-earth.kmz',
       'application/vnd.google-earth.kmz+xml'
     ],
-    maxSize: 10 * 1024 * 1024, // 10MB
+    maxSize: 200 * 1024 * 1024, // 200MB
     displayName: 'KMZ'
   },
   gpx: {

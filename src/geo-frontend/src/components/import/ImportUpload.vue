@@ -606,7 +606,8 @@ export default {
             if (response.data.msg.toLowerCase().includes("success")) {
               this.uploadResults.successful.push({
                 filename: file.name,
-                message: response.data.msg
+                message: response.data.msg,
+                job_id: response.data.job_id
               })
               // Refresh queue list after each successful upload
               await this.fetchQueueList()

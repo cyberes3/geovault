@@ -23,6 +23,8 @@ from geo_lib.security.file_validation import SecureFileValidator, FileValidation
 from geo_lib.types.feature import PointFeature, PolygonFeature, LineStringFeature
 from geo_lib.types.feature import geojson_to_geofeature
 from geo_lib.website.auth import login_required_401
+from geo_lib.processing.status_tracker import status_tracker
+from geo_lib.processing.async_processor import async_processor
 
 logger = logging.getLogger(__name__)
 
@@ -308,16 +310,16 @@ class DocumentForm(forms.Form):
 @login_required_401
 @csrf_protect
 def upload_item(request):
+    """
+    Main upload endpoint - now uses async processing by default.
+    """
     if request.method == 'POST':
-        processing_start = time.time()
-        import_log = ImportLog()
         form = DocumentForm(request.POST, request.FILES)
         if form.is_valid():
             uploaded_file = request.FILES['file']
             file_name = uploaded_file.name
 
             # Comprehensive file validation using security module
-            validate_start = time.time()
             validator = SecureFileValidator()
             is_valid, validation_message = validator.validate_file(uploaded_file)
 
@@ -326,193 +328,162 @@ def upload_item(request):
                 return JsonResponse({
                     'success': False,
                     'msg': f'File validation failed: {validation_message}',
-                    'id': None
+                    'job_id': None
                 }, status=400)
 
             # Read file data after validation
             file_data = uploaded_file.read()
 
-            try:
-                # Use the new generic file processor to handle KML, KMZ, and GPX files
-                geojson_data, processing_log = geo_to_geojson(file_data, file_name)
-                import_log.extend(processing_log)
-            except (SecurityError, FileValidationError) as e:
-                logger.error(f"Secure file processing failed for {file_name}: {str(e)}")
+            # Create a processing job
+            job_id = status_tracker.create_job(file_name, request.user.id)
+            
+            # Start background processing
+            if async_processor.start_processing(job_id, file_data, file_name, request.user.id):
+                return JsonResponse({
+                    'success': True,
+                    'msg': 'File uploaded successfully, processing started',
+                    'job_id': job_id
+                }, status=200)
+            else:
                 return JsonResponse({
                     'success': False,
-                    'msg': f'Secure file processing failed: {str(e)}',
-                    'id': None
-                }, status=400)
-            except Exception as e:
-                logger.error(f"Unexpected error processing file {file_name}: {traceback.format_exc()}")
-                return JsonResponse({
-                    'success': False,
-                    'msg': f'Failed to process file "{file_name}"',
-                    'id': None
-                }, status=400)
-
-            del file_data
-            import_log.add(f'Validation took {time.time() - validate_start:.3f} seconds', 'Timing', DatabaseLogLevel.INFO)
-
-            hash_content_start = time.time()
-
-            # For duplicate checking, we'll use the GeoJSON data hash
-            # This is more reliable than trying to normalize the original file content
-            geojson_str = json.dumps(geojson_data, sort_keys=True)
-            content_hash = hashlib.sha256(geojson_str.encode('utf-8')).hexdigest()
-
-            # Check if this exact content already exists for this user (regardless of filename)
-            # First check for non-unparsable files
-            existing_by_content = ImportQueue.objects.filter(
-                raw_kml_hash=content_hash,
-                user=request.user,
-                unparsable=False
-            ).first()
-
-            if existing_by_content:
-                if existing_by_content.imported:
-                    return JsonResponse({
-                        'success': False,
-                        'msg': f'This file has already been imported to the feature store (originally as "{existing_by_content.original_filename}")',
-                        'id': None
-                    }, status=200)  # Changed to 200 for benign duplicate content
-                else:
-                    return JsonResponse({
-                        'success': False,
-                        'msg': f'This file is already in your import queue (originally as "{existing_by_content.original_filename}")',
-                        'id': None
-                    }, status=200)  # Changed to 200 for benign duplicate content
-
-            # Check for unparsable files with the same hash
-            existing_unparsable = ImportQueue.objects.filter(
-                raw_kml_hash=content_hash,
-                user=request.user,
-                unparsable=True
-            ).first()
-
-            if existing_unparsable:
-                # If there's an unparsable record, we need to handle the unique constraint
-                # We'll update the existing record instead of creating a new one
-                existing_unparsable.raw_kml = geojson_str  # Store GeoJSON as the raw content
-                existing_unparsable.original_filename = file_name
-                existing_unparsable.imported = False
-                existing_unparsable.unparsable = False
-                existing_unparsable.geofeatures = []
-                existing_unparsable.save()
-
-                # Return success with the existing record's ID
-                msg = 'upload successful (replaced previous unparsable record)'
-                return JsonResponse({'success': True, 'msg': msg, 'id': existing_unparsable.id}, status=200)
-
-            # Check if this exact filename already exists for this user (regardless of content)
-            # Exclude unparsable files from duplicate checking
-            existing_by_filename = ImportQueue.objects.filter(
-                original_filename=file_name,
-                user=request.user,
-                unparsable=False
-            ).first()
-
-            if existing_by_filename:
-                if existing_by_filename.imported:
-                    return JsonResponse({
-                        'success': False,
-                        'msg': f'A file with the name "{file_name}" has already been imported to the feature store',
-                        'id': None
-                    }, status=200)  # Changed to 200 for benign duplicate filename
-                else:
-                    return JsonResponse({
-                        'success': False,
-                        'msg': f'A file with the name "{file_name}" is already in your import queue',
-                        'id': None
-                    }, status=200)  # Changed to 200 for benign duplicate filename
-
-            import_log.add(f'File hashing took {time.time() - hash_content_start:.3f} seconds', 'Timing', DatabaseLogLevel.INFO)
-
-            # If we get here, there are no existing records with this hash, so create a new one
-            try:
-                try:
-                    # Log feature count for progress tracking
-                    feature_count = len(geojson_data.get('features', []))
-                    import_log.add(f'Converted {feature_count} features from file', 'Conversion', DatabaseLogLevel.INFO)
-
-                    geo_features, geojson_typing_log = geojson_to_geofeature(geojson_data)
-
-                    # Convert features to JSON format
-                    features_json = [json.loads(x.model_dump_json()) for x in geo_features]
-
-                    duplicate_start_time = time.time()
-
-                    # Strip internal duplicate features (100% identical features within the file)
-                    unique_features, duplicate_feature_count, duplicate_features_log = _strip_duplicate_features(features_json)
-                    import_log.add(f'Found {duplicate_feature_count} duplicate items in the file', 'Duplicate Detection', DatabaseLogLevel.INFO)
-
-                    # Find coordinate-based duplicates against existing features in the feature store
-                    final_unique_features, coordinate_duplicates, coordinate_duplicate_log = _find_coordinate_duplicates(unique_features, request.user.id)
-                    import_log.add(f'Found {len(coordinate_duplicates)} duplicates already in the database', 'Coordinate Duplicate Detection', DatabaseLogLevel.INFO)
-                    import_log.add(f'Duplicate detection took {time.time() - duplicate_start_time:.3f} seconds', 'Timing', DatabaseLogLevel.INFO)
-
-                    # Create import queue item with processed features and duplicate information
-                    import_queue = ImportQueue.objects.create(
-                        raw_kml=geojson_str,  # Store GeoJSON as the raw content
-                        raw_kml_hash=content_hash,
-                        original_filename=file_name,
-                        user=request.user,
-                        geofeatures=final_unique_features,
-                        duplicate_features=coordinate_duplicates
-                    )
-                    log_id = str(import_queue.log_id)
-
-                    importlog_to_db(processing_log, request.user.id, log_id)
-                    importlog_to_db(geojson_typing_log, request.user.id, log_id)
-                    importlog_to_db(duplicate_features_log, request.user.id, log_id)
-                    importlog_to_db(coordinate_duplicate_log, request.user.id, log_id)
-                    import_log.add('Processing complete', 'Conversion')
-                    import_log.add(f'Processing took {time.time() - processing_start:.3f} seconds', 'Timing', DatabaseLogLevel.INFO)
-                    import_log.add(f'{duplicate_feature_count} exact duplicates skipped', 'Conversion')
-                    import_log.add(f'{len(coordinate_duplicates)} coordinate duplicates', 'Conversion')
-                    import_log.add(f'{len(features_json)} total features', 'Conversion')
-                    import_log.add(f'{len(final_unique_features)} unique features', 'Conversion')
-
-                    point_count = sum(1 for f in final_unique_features if f['geometry']['type'] == 'Point')
-                    linestring_count = sum(1 for f in final_unique_features if f['geometry']['type'] == 'LineString')
-                    polygon_count = sum(1 for f in final_unique_features if f['geometry']['type'] == 'Polygon')
-                    import_log.add(f'{point_count} points, {linestring_count} linestrings, {polygon_count} polygons', 'Feature Statistics', DatabaseLogLevel.INFO)
-
-                    importlog_to_db(import_log, request.user.id, log_id)
-
-                    return JsonResponse({'success': True, 'msg': 'upload and processing successful', 'id': import_queue.id}, status=200)
-
-                except Exception as processing_error:
-                    # If processing fails, still create the queue item but without processed data
-                    # This allows the user to see the file was uploaded but processing failed
-                    logger.error(f"Processing failed for {file_name}: {str(processing_error)}")
-
-                    import_queue = ImportQueue.objects.create(
-                        raw_kml=geojson_str,
-                        raw_kml_hash=content_hash,
-                        original_filename=file_name,
-                        user=request.user,
-                        geofeatures=[{"error": "processing_failed", "message": str(processing_error)}]
-                    )
-
-                    msg = f'upload successful but processing failed: {str(processing_error)}'
-                    return JsonResponse({'success': True, 'msg': msg, 'id': import_queue.id}, status=200)
-
-            except IntegrityError:
-                error_msg = f'An unexpected error occurred while creating the import item for file "{file_name}"'
-                # Raise exception in server process
-                raise Exception(error_msg)
-
-            # TODO: put the processed data into the database and then return the ID so the frontend can go to the import page and use the ID to start the import
+                    'msg': 'Failed to start file processing',
+                    'job_id': None
+                }, status=500)
         else:
             # Try to get filename even if form validation failed
             filename = "unknown file"
             if 'file' in request.FILES:
                 filename = request.FILES['file'].name
-            return JsonResponse({'success': False, 'msg': f'Invalid upload structure for file "{filename}"', 'id': None}, status=400)
-
+            return JsonResponse({
+                'success': False, 
+                'msg': f'Invalid upload structure for file "{filename}"', 
+                'job_id': None
+            }, status=400)
     else:
         return HttpResponse(status=405)
+
+
+@login_required_401
+def get_import_item_status(request, item_id):
+    """
+    Get the processing status of a specific import queue item, including real-time logs.
+    """
+    try:
+        item = ImportQueue.objects.get(id=item_id, user=request.user)
+        
+        # Check if this item is currently being processed
+        user_jobs = status_tracker.get_user_jobs(request.user.id)
+        active_job_ids = {job.import_queue_id for job in user_jobs if job.status.value == 'processing' and job.import_queue_id}
+        
+        is_processing = item.id in active_job_ids
+        
+        # Get job details if processing
+        job_details = None
+        if is_processing:
+            for job in user_jobs:
+                if job.import_queue_id == item.id and job.status.value == 'processing':
+                    job_details = status_tracker.get_job_status(job.job_id)
+                    break
+        
+        # Get logs for this import queue item
+        logs = []
+        if item.log_id:
+            try:
+                from data.models import DatabaseLogging
+                db_logs = DatabaseLogging.objects.filter(
+                    log_id=item.log_id
+                ).order_by('timestamp')
+                
+                logs = [{
+                    'timestamp': log.timestamp.isoformat(),
+                    'msg': log.text,
+                    'source': log.source,
+                    'level': log.level
+                } for log in db_logs]
+            except Exception as e:
+                logger.error(f"Failed to fetch logs for item {item_id}: {str(e)}")
+                logs = []
+        
+        return JsonResponse({
+            'success': True,
+            'is_processing': is_processing,
+            'job_details': job_details,
+            'feature_count': len(item.geofeatures) if item.geofeatures else 0,
+            'logs': logs
+        }, status=200)
+        
+    except ImportQueue.DoesNotExist:
+        return JsonResponse({'success': False, 'msg': 'Item not found'}, status=404)
+
+
+@login_required_401
+def get_processing_status(request, job_id):
+    """
+    Get the processing status of a file upload job.
+    """
+    if not job_id:
+        return JsonResponse({'success': False, 'msg': 'Job ID not provided'}, status=400)
+    
+    # Get job status
+    job_status = status_tracker.get_job_status(job_id)
+    
+    if not job_status:
+        return JsonResponse({'success': False, 'msg': 'Job not found'}, status=404)
+    
+    # Check if user owns this job
+    job = status_tracker.get_job(job_id)
+    if not job or job.user_id != request.user.id:
+        return JsonResponse({'success': False, 'msg': 'Not authorized to view this job'}, status=403)
+    
+    return JsonResponse({
+        'success': True,
+        'job_status': job_status
+    }, status=200)
+
+
+@login_required_401
+def get_user_processing_jobs(request):
+    """
+    Get all processing jobs for the current user.
+    """
+    user_jobs = status_tracker.get_user_jobs(request.user.id)
+    
+    job_statuses = []
+    for job in user_jobs:
+        job_status = status_tracker.get_job_status(job.job_id)
+        if job_status:
+            job_statuses.append(job_status)
+    
+    return JsonResponse({
+        'success': True,
+        'jobs': job_statuses
+    }, status=200)
+
+
+@login_required_401
+def cancel_processing_job(request, job_id):
+    """
+    Cancel a processing job.
+    """
+    if not job_id:
+        return JsonResponse({'success': False, 'msg': 'Job ID not provided'}, status=400)
+    
+    # Check if user owns this job
+    job = status_tracker.get_job(job_id)
+    if not job or job.user_id != request.user.id:
+        return JsonResponse({'success': False, 'msg': 'Not authorized to cancel this job'}, status=403)
+    
+    if async_processor.cancel_processing(job_id):
+        return JsonResponse({
+            'success': True,
+            'msg': 'Job cancelled successfully'
+        }, status=200)
+    else:
+        return JsonResponse({
+            'success': False,
+            'msg': 'Failed to cancel job or job already completed'
+        }, status=400)
 
 
 @login_required_401
@@ -603,43 +574,29 @@ def fetch_import_queue(request, item_id):
 
 
 @login_required_401
-def fetch_import_logs(request, item_id):
-    """Fetch logs for an import item separately from the item data"""
-    if item_id is None:
-        return JsonResponse({'success': False, 'msg': 'ID not provided', 'code': 400}, status=400)
-    try:
-        item = ImportQueue.objects.get(id=item_id)
-
-        if item.user_id != request.user.id:
-            return JsonResponse({'success': False, 'msg': 'not authorized to view this item', 'code': 403}, status=403)
-
-        # Fetch logs from database if log_id exists
-        logs = []
-        if item.log_id:
-            logs = _get_logs_by_log_id(str(item.log_id))
-
-        return JsonResponse({
-            'success': True,
-            'logs': logs
-        }, status=200)
-    except ImportQueue.DoesNotExist:
-        return JsonResponse({'success': False, 'msg': 'ID does not exist', 'code': 404}, status=404)
-
-
-@login_required_401
 def fetch_import_waiting(request):
     user_items = ImportQueue.objects.filter(user=request.user, imported=False).values('id', 'geofeatures', 'original_filename', 'raw_kml_hash', 'log_id', 'timestamp', 'imported')
     data = json.loads(json.dumps(list(user_items), cls=DjangoJSONEncoder))
+    
+    # Get all active processing jobs for this user
+    user_jobs = status_tracker.get_user_jobs(request.user.id)
+    active_job_ids = {job.import_queue_id for job in user_jobs if job.status.value == 'processing' and job.import_queue_id}
+    
     for i, item in enumerate(data):
         count = len(item['geofeatures'])
-        # Since processing is now synchronous, items are never processing
-        item['processing'] = False
+        
+        # Check if this item is currently being processed
+        item['processing'] = item['id'] in active_job_ids
 
         # Check if there's an error in the geofeatures
         if count == 1 and item['geofeatures'] and isinstance(item['geofeatures'][0], dict) and 'error' in item['geofeatures'][0]:
             # This is an error case from failed processing
             item['feature_count'] = 0
             item['processing_failed'] = True
+        elif count == 0 and item['processing']:
+            # Empty geofeatures but currently processing - this is normal for async processing
+            item['feature_count'] = -1  # Special value to indicate processing
+            item['processing_failed'] = False
         else:
             item['feature_count'] = count
             item['processing_failed'] = False
