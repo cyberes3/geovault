@@ -54,10 +54,7 @@ class ImportLog:
         
         # Add timing information to the message if provided
         if duration is not None:
-            if duration < 1.0:
-                timing_info = f" ({duration*1000:.1f}ms)"
-            else:
-                timing_info = f" ({duration:.2f}s)"
+            timing_info = f" ({duration:.1f}s)"
             msg = msg + timing_info
             
         self._messages.append(DatabaseLogMsg(msg=msg, source=source, level=level))
@@ -95,10 +92,7 @@ class RealTimeImportLog:
         
         # Add timing information to the message if provided
         if duration is not None:
-            if duration < 1.0:
-                timing_info = f" ({duration*1000:.1f}ms)"
-            else:
-                timing_info = f" ({duration:.2f}s)"
+            timing_info = f" ({duration:.1f}s)"
             msg = msg + timing_info
         
         # Create the log message

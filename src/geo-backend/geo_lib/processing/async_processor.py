@@ -167,40 +167,13 @@ class AsyncFileProcessor:
             # Add processing log messages to real-time log
             realtime_log.extend(processing_log)
 
-            # Check file size immediately after conversion to avoid wasting time on processing
+            # Prepare GeoJSON string and size for database storage
             import json
             geojson_str = json.dumps(geojson_data)
             geojson_size_mb = len(geojson_str) / (1024 * 1024)
             
-            # PostgreSQL JSONB limit is ~256 MB. Check early to avoid wasting time on processing
-            POSTGRES_JSONB_LIMIT_MB = 200
-            logger.info(f"Checking file size: {geojson_size_mb:.1f} MB vs limit {POSTGRES_JSONB_LIMIT_MB} MB")
-            if geojson_size_mb > POSTGRES_JSONB_LIMIT_MB:
-                error_msg = (
-                    f"File contains very complex geometries ({geojson_size_mb:.1f} MB of data), "
-                    f"exceeding the database storage limit of ~{POSTGRES_JSONB_LIMIT_MB} MB. "
-                    f"This application is not designed for files of this size. "
-                    f"Please simplify the geometries or split the file into smaller chunks."
-                )
-                realtime_log.add(error_msg, "AsyncProcessor", DatabaseLogLevel.ERROR)
-                
-                # Get the import queue entry and mark as unparsable
-                job = self.status_tracker.get_job(job_id)
-                if job and job.import_queue_id:
-                    import_queue = ImportQueue.objects.get(id=job.import_queue_id)
-                    # Don't store the raw data for oversized files - just mark as unparsable
-                    import_queue.geojson_hash = None  # Can't compute hash without processing
-                    import_queue.geofeatures = []
-                    import_queue.unparsable = True
-                    import_queue.save()
-                
-                # Mark job as failed
-                overall_duration = time.time() - overall_start_time
-                self.status_tracker.update_job_status(
-                    job_id, ProcessingStatus.FAILED,
-                    error_msg, 100.0
-                )
-                return  # Exit early, don't process features
+            # File size validation is now handled consistently in the file validation step
+            # No need for additional size checks here since we validate against FILE_TYPE_CONFIGS limits
 
             # Update progress
             self.status_tracker.update_job_status(
@@ -249,14 +222,14 @@ class AsyncFileProcessor:
             logger.info(f"Successfully completed processing for job {job_id}: {feature_count} features")
 
         except (SecurityError, FileValidationError) as e:
-            # Use generic error message for security issues to avoid info disclosure
-            error_msg = "File validation failed: file format or content is invalid"
+            # Use the error message directly from the validation
+            error_msg = f"File validation failed: {str(e)}"
             # Log detailed error internally for debugging
             logger.error(f"Security error in job {job_id}: {str(e)}")
             realtime_log.add(error_msg, "AsyncProcessor", DatabaseLogLevel.ERROR)
             self.status_tracker.update_job_status(
                 job_id, ProcessingStatus.FAILED,
-                error_msg, error_message=error_msg
+                error_msg, error_message=str(e)
             )
 
         except subprocess.TimeoutExpired:
