@@ -46,28 +46,22 @@ class FeatureStore(models.Model):
             models.Index(fields=['geojson_hash']),  # Index for hash-based lookups
             
             # NEW COMPOUND INDEXES FOR OPTIMIZED QUERIES (with short names)
+            # NOTE: Removed compound indexes that include geometry fields to avoid PostgreSQL
+            # btree index size limits. Geometry fields use GiST spatial indexes instead.
             
-            # 1. Most critical: User + Spatial queries (used in get_geojson_data)
-            # This is the most common query pattern: user_id + geometry__intersects
-            models.Index(fields=['user', 'geometry'], name='fs_user_geom'),
-            
-            # 2. User + Hash lookups (used in duplicate detection and hash-based queries)
+            # 1. User + Hash lookups (used in duplicate detection and hash-based queries)
             # Optimizes queries like: user_id=user_id, geojson_hash=hash
             models.Index(fields=['user', 'geojson_hash'], name='fs_user_hash'),
             
-            # 3. User + Timestamp for chronological queries
+            # 2. User + Timestamp for chronological queries
             # Optimizes queries like: user_id=user_id ORDER BY timestamp
             models.Index(fields=['user', 'timestamp'], name='fs_user_time'),
             
-            # 4. User + Source for import tracking
+            # 3. User + Source for import tracking
             # Optimizes queries like: user_id=user_id, source=import_queue
             models.Index(fields=['user', 'source'], name='fs_user_source'),
             
-            # 5. Spatial + Timestamp for time-based spatial queries
-            # Optimizes queries that combine spatial and temporal filtering
-            models.Index(fields=['geometry', 'timestamp'], name='fs_geom_time'),
-            
-            # 6. Hash + Timestamp for hash-based chronological queries
+            # 4. Hash + Timestamp for hash-based chronological queries
             # Optimizes duplicate detection with temporal ordering
             models.Index(fields=['geojson_hash', 'timestamp'], name='fs_hash_time'),
         ]
