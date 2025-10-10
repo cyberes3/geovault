@@ -657,7 +657,7 @@ def fetch_import_queue(request, item_id):
 
 @login_required_401
 def fetch_import_waiting(request):
-    user_items = ImportQueue.objects.filter(user=request.user, imported=False).values('id', 'geofeatures', 'original_filename', 'geojson_hash', 'log_id', 'timestamp', 'imported', 'unparsable')
+    user_items = ImportQueue.objects.filter(user=request.user, imported=False).order_by('-timestamp').values('id', 'geofeatures', 'original_filename', 'geojson_hash', 'log_id', 'timestamp', 'imported', 'unparsable')
     data = json.loads(json.dumps(list(user_items), cls=DjangoJSONEncoder))
     
     # Get all active processing jobs for this user
@@ -748,7 +748,7 @@ def fetch_import_waiting(request):
 
 @login_required_401
 def fetch_import_history(request):
-    user_items = ImportQueue.objects.filter(user=request.user, imported=True).values('id', 'original_filename', 'timestamp')
+    user_items = ImportQueue.objects.filter(user=request.user, imported=True).order_by('-timestamp').values('id', 'original_filename', 'timestamp')
     data = json.loads(json.dumps(list(user_items), cls=DjangoJSONEncoder))
     return JsonResponse({'data': data})
 
