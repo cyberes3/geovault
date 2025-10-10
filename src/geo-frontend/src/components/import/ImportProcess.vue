@@ -145,6 +145,8 @@
         :importable-count="totalFeatures - duplicateIndices.length"
         :goto-page-input="gotoPageInput"
         :show-no-features-message="originalFilename != null && !isProcessing"
+        :duplicate-status="duplicateStatus"
+        :duplicate-original-filename="duplicateOriginalFilename"
         @previous-page="previousPage"
         @next-page="nextPage"
         @jump-to-page="goToPage"
@@ -431,13 +433,16 @@
         :importable-count="totalFeatures - duplicateIndices.length"
         :goto-page-input="gotoPageInput"
         :show-no-features-message="false"
+        :show-duplicate-message="false"
+        :duplicate-status="duplicateStatus"
+        :duplicate-original-filename="duplicateOriginalFilename"
         @previous-page="previousPage"
         @next-page="nextPage"
         @jump-to-page="goToPage"
         @show-map-preview="showMapPreview"
         @save-changes="saveChanges"
         @perform-import="performImport"
-        v-if="!isLoadingPage"
+        v-if="!isLoadingPage && duplicateStatus !== 'duplicate_in_queue'"
     />
 
     <div class="hidden">
@@ -550,6 +555,9 @@ export default {
       isLoadingPage: false, // Track loading state for pagination changes
       gotoPageInput: null, // Input value for jump to page feature
       // Removed flatpickrConfig - using native HTML5 datetime-local input
+      // Duplicate file tracking
+      duplicateStatus: null, // 'duplicate_in_queue' or 'duplicate_imported' or null
+      duplicateOriginalFilename: null, // Name of the original file this is a duplicate of
     }
   },
   beforeDestroy() {
@@ -612,8 +620,17 @@ export default {
               this.duplicateIndices = itemsResponse.data.pagination.duplicate_indices || [];
             }
 
-            // Check if this is an error response (unprocessable file)
-            if (itemsResponse.data.geofeatures.length > 0 && itemsResponse.data.geofeatures[0].error) {
+            // Update duplicate file status
+            this.duplicateStatus = itemsResponse.data.duplicate_status || null;
+            this.duplicateOriginalFilename = itemsResponse.data.duplicate_original_filename || null;
+
+            // If this is a duplicate of a file in queue, skip processing features
+            if (this.duplicateStatus === 'duplicate_in_queue') {
+              // Don't process any features - they'll remain empty
+              this.itemsForUser = [];
+              this.originalItems = [];
+            } else if (itemsResponse.data.geofeatures.length > 0 && itemsResponse.data.geofeatures[0].error) {
+              // Check if this is an error response (unprocessable file)
               // This is an unprocessable file, show a simple error message
               const errorItem = itemsResponse.data.geofeatures[0];
               this.msg = "File processing failed. Please check the processing logs below for details.";
@@ -632,6 +649,11 @@ export default {
               // Process duplicates from the API response
               this.duplicateFeatures = itemsResponse.data.duplicates || []
               this.markDuplicateFeatures()
+
+              // If this is a duplicate of an imported file, mark ALL features as duplicates
+              if (this.duplicateStatus === 'duplicate_imported') {
+                this.duplicateIndices = Array.from({length: this.totalFeatures}, (_, i) => i);
+              }
             }
           }
         }
@@ -1005,19 +1027,35 @@ export default {
           this.hasPreviousPage = pagination.has_previous;
           this.duplicateIndices = pagination.duplicate_indices || [];
 
-          // Parse features for this page
-          this.itemsForUser = [];
-          response.data.geofeatures.forEach((item) => {
-            this.itemsForUser.push(this.parseGeoJson(item));
-          });
-          this.originalItems = JSON.parse(JSON.stringify(this.itemsForUser));
+          // Update duplicate file status
+          this.duplicateStatus = response.data.duplicate_status || null;
+          this.duplicateOriginalFilename = response.data.duplicate_original_filename || null;
 
-          // Restore cached changes if they exist for this page
-          this.restoreCachedPageChanges(page);
+          // If this is a duplicate of a file in queue, hide all features
+          if (this.duplicateStatus === 'duplicate_in_queue') {
+            this.itemsForUser = [];
+            this.originalItems = [];
+          } else {
+            // Parse features for this page
+            this.itemsForUser = [];
+            response.data.geofeatures.forEach((item) => {
+              this.itemsForUser.push(this.parseGeoJson(item));
+            });
+            this.originalItems = JSON.parse(JSON.stringify(this.itemsForUser));
 
-          // Process duplicates from the API response
-          this.duplicateFeatures = response.data.duplicates || [];
-          this.markDuplicateFeatures();
+            // Restore cached changes if they exist for this page
+            this.restoreCachedPageChanges(page);
+
+            // Process duplicates from the API response
+            this.duplicateFeatures = response.data.duplicates || [];
+            this.markDuplicateFeatures();
+
+            // If this is a duplicate of an imported file, mark ALL features as duplicates
+            if (this.duplicateStatus === 'duplicate_imported') {
+              // Mark all feature indices as duplicates
+              this.duplicateIndices = Array.from({length: this.totalFeatures}, (_, i) => i);
+            }
+          }
         }
       } catch (error) {
         this.msg = 'Error loading page: ' + error.message;
@@ -1141,6 +1179,18 @@ export default {
         vm.workerLog = []
         vm.lockButtons = false
         vm.isImported = false
+        vm.isProcessing = false
+        vm.processingMessage = ''
+        vm.processingProgress = null
+        vm.duplicateStatus = null
+        vm.duplicateOriginalFilename = null
+        vm.duplicateIndices = []
+        vm.duplicateFeatures = []
+        vm.totalFeatures = 0
+        vm.currentPage = 1
+        vm.totalPages = 0
+        vm.hasNextPage = false
+        vm.hasPreviousPage = false
 
         try {
           // Fetch items and logs in parallel for better performance
@@ -1185,8 +1235,17 @@ export default {
                 vm.duplicateIndices = itemsResponse.data.pagination.duplicate_indices || [];
               }
 
-              // Check if this is an error response (unprocessable file)
-              if (itemsResponse.data.geofeatures.length > 0 && itemsResponse.data.geofeatures[0].error) {
+              // Update duplicate file status
+              vm.duplicateStatus = itemsResponse.data.duplicate_status || null;
+              vm.duplicateOriginalFilename = itemsResponse.data.duplicate_original_filename || null;
+
+              // If this is a duplicate of a file in queue, skip processing features
+              if (vm.duplicateStatus === 'duplicate_in_queue') {
+                // Don't process any features - they'll remain empty
+                vm.itemsForUser = [];
+                vm.originalItems = [];
+              } else if (itemsResponse.data.geofeatures.length > 0 && itemsResponse.data.geofeatures[0].error) {
+                // Check if this is an error response (unprocessable file)
                 // This is an unprocessable file, show a simple error message
                 const errorItem = itemsResponse.data.geofeatures[0];
                 vm.msg = "File processing failed. Please check the processing logs below for details.";
@@ -1209,6 +1268,11 @@ export default {
                 // Process duplicates from the API response
                 vm.duplicateFeatures = itemsResponse.data.duplicates || []
                 vm.markDuplicateFeatures()
+
+                // If this is a duplicate of an imported file, mark ALL features as duplicates
+                if (vm.duplicateStatus === 'duplicate_imported') {
+                  vm.duplicateIndices = Array.from({length: vm.totalFeatures}, (_, i) => i);
+                }
               }
             }
           }

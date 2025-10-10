@@ -498,6 +498,37 @@ def fetch_import_queue(request, item_id):
 
         if item.imported:
             return JsonResponse({'success': True, 'processing': False, 'geofeatures': None, 'msg': None, 'original_filename': None, 'imported': item.imported}, status=200)
+        
+        # Check for duplicate files based on geojson_hash
+        duplicate_status = None
+        duplicate_original_filename = None
+        
+        if item.geojson_hash:
+            # Check if there's an EARLIER file in the import queue (not imported) with the same hash
+            # Only mark as duplicate if this file was uploaded AFTER another one with same hash
+            duplicate_in_queue = ImportQueue.objects.filter(
+                user_id=request.user.id,
+                geojson_hash=item.geojson_hash,
+                imported=False,
+                timestamp__lt=item.timestamp  # Only files uploaded BEFORE this one
+            ).order_by('timestamp').first()
+            
+            if duplicate_in_queue:
+                # This is a duplicate of a file in the queue (uploaded earlier)
+                duplicate_status = 'duplicate_in_queue'
+                duplicate_original_filename = duplicate_in_queue.original_filename
+            else:
+                # Check if a file with this hash has been imported
+                duplicate_imported = ImportQueue.objects.filter(
+                    user_id=request.user.id,
+                    geojson_hash=item.geojson_hash,
+                    imported=True
+                ).order_by('timestamp').first()
+                
+                if duplicate_imported:
+                    # This is a duplicate of an imported file
+                    duplicate_status = 'duplicate_imported'
+                    duplicate_original_filename = duplicate_imported.original_filename
 
         # Get pagination parameters
         page = int(request.GET.get('page', 1))
@@ -559,6 +590,8 @@ def fetch_import_queue(request, item_id):
             'imported': item.imported,
             'log_id': str(item.log_id) if item.log_id else None,
             'duplicates': duplicates_optimized,
+            'duplicate_status': duplicate_status,
+            'duplicate_original_filename': duplicate_original_filename,
             'pagination': {
                 'page': page,
                 'page_size': page_size,
@@ -575,12 +608,32 @@ def fetch_import_queue(request, item_id):
 
 @login_required_401
 def fetch_import_waiting(request):
-    user_items = ImportQueue.objects.filter(user=request.user, imported=False).values('id', 'geofeatures', 'original_filename', 'raw_kml_hash', 'log_id', 'timestamp', 'imported')
+    user_items = ImportQueue.objects.filter(user=request.user, imported=False).values('id', 'geofeatures', 'original_filename', 'raw_kml_hash', 'geojson_hash', 'log_id', 'timestamp', 'imported')
     data = json.loads(json.dumps(list(user_items), cls=DjangoJSONEncoder))
     
     # Get all active processing jobs for this user
     user_jobs = status_tracker.get_user_jobs(request.user.id)
     active_job_ids = {job.import_queue_id for job in user_jobs if job.status.value == 'processing' and job.import_queue_id}
+    
+    # Build a map of geojson_hash to items for duplicate detection
+    hash_to_items = {}
+    for item in data:
+        if item.get('geojson_hash'):
+            if item['geojson_hash'] not in hash_to_items:
+                hash_to_items[item['geojson_hash']] = []
+            hash_to_items[item['geojson_hash']].append(item)
+    
+    # Check for imported files with same hash (do this once for all items)
+    imported_hashes = {}
+    if hash_to_items:
+        imported_items = ImportQueue.objects.filter(
+            user=request.user,
+            imported=True,
+            geojson_hash__in=list(hash_to_items.keys())
+        ).values('geojson_hash', 'original_filename')
+        
+        for imported_item in imported_items:
+            imported_hashes[imported_item['geojson_hash']] = imported_item['original_filename']
     
     for i, item in enumerate(data):
         count = len(item['geofeatures'])
@@ -600,10 +653,30 @@ def fetch_import_waiting(request):
         else:
             item['feature_count'] = count
             item['processing_failed'] = False
+        
+        # Check for duplicate status
+        item['duplicate_status'] = None
+        if item.get('geojson_hash'):
+            geojson_hash = item['geojson_hash']
+            items_with_same_hash = hash_to_items.get(geojson_hash, [])
+            
+            # Check if there are other items in queue with same hash (uploaded earlier)
+            earlier_items = [
+                other for other in items_with_same_hash 
+                if other['id'] != item['id'] and other['timestamp'] < item['timestamp']
+            ]
+            
+            if earlier_items:
+                # This is a duplicate of an item in the queue
+                item['duplicate_status'] = 'duplicate_in_queue'
+            elif geojson_hash in imported_hashes:
+                # This is a duplicate of an imported file
+                item['duplicate_status'] = 'duplicate_imported'
 
         # Remove keys from response as they're not needed by frontend.
         del item['geofeatures']
         del item['log_id']
+        del item['geojson_hash']
     return JsonResponse({'data': data, 'msg': None})
 
 

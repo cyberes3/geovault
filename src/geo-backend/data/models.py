@@ -14,7 +14,8 @@ class ImportQueue(django_models.Model):
     duplicate_features = django_models.JSONField(default=list, help_text="Features that are duplicates of existing features in the feature store")
     original_filename = django_models.TextField()
     raw_kml = django_models.TextField()
-    raw_kml_hash = django_models.CharField(max_length=64, unique=True)
+    raw_kml_hash = django_models.CharField(max_length=64, db_index=True)
+    geojson_hash = django_models.CharField(max_length=64, null=True, blank=True, help_text="SHA-256 hash of the normalized GeoJSON FeatureCollection content")
     log_id = django_models.UUIDField(default=uuid.uuid4, unique=True, help_text="UUID to group related log entries", null=True)
     timestamp = django_models.DateTimeField(auto_now_add=True)
 
@@ -24,6 +25,8 @@ class ImportQueue(django_models.Model):
             django_models.Index(fields=['user', 'imported', 'timestamp'], name='import_user_imported_time'),
             # Index for hash-based lookups
             django_models.Index(fields=['raw_kml_hash'], name='import_raw_kml_hash'),
+            # Index for geojson hash lookups
+            django_models.Index(fields=['user', 'geojson_hash'], name='import_user_geojson_hash'),
             # Index for log grouping
             django_models.Index(fields=['log_id', 'timestamp'], name='import_log_id_time'),
         ]
