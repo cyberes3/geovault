@@ -10,7 +10,10 @@ data produce identical hashes, regardless of minor formatting differences like:
 
 import hashlib
 import json
+import logging
 from typing import Any, Dict
+
+logger = logging.getLogger(__name__)
 
 
 def norm_coords(c):
@@ -36,6 +39,9 @@ def hash_normalized_geojson(geojson: Dict[str, Any]) -> str:
     Returns:
         SHA256 hash of the normalized GeoJSON
     """
+    
+    feature_count = len(geojson.get('features', []))
+    logger.debug(f"Normalizing {feature_count} features for hashing")
 
     # Color properties that need lowercase normalization
     color_props = {'stroke', 'fill', 'marker-color'}
@@ -60,4 +66,7 @@ def hash_normalized_geojson(geojson: Dict[str, Any]) -> str:
     }
 
     # Generate hash from sorted JSON
-    return hashlib.sha256(json.dumps(normalized, sort_keys=True, separators=(',', ':')).encode()).hexdigest()
+    content_hash = hashlib.sha256(json.dumps(normalized, sort_keys=True, separators=(',', ':')).encode()).hexdigest()
+    logger.debug(f"Generated content hash: {content_hash[:16]}... for {feature_count} features")
+    
+    return content_hash

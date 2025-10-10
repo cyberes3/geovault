@@ -28,7 +28,7 @@
           </svg>
         </div>
         <div class="ml-3">
-          <h3 class="text-sm font-medium text-red-800">Error</h3>
+          <h3 class="text-sm font-medium text-red-800">Processing Failed</h3>
           <div class="mt-2 text-sm text-red-700">
             <p>{{ msg }}</p>
           </div>
@@ -53,7 +53,9 @@
       <div class="bg-gray-50 rounded-lg p-4">
         <div class="h-32 overflow-auto">
           <ul class="space-y-2">
-            <li v-for="(item, index) in workerLog" :key="`logitem-${index}`" class="flex items-start space-x-2">
+            <li v-for="(item, index) in workerLog" :key="`logitem-${index}`"
+                class="flex items-start space-x-2"
+                :class="{'bg-red-50 border-l-4 border-red-400 pl-2 py-1': item.level >= 40}">
               <span class="text-sm text-gray-500">{{ formatTimestamp(item.timestamp) }}</span>
               <span v-if="item.source" class="text-xs text-gray-400 bg-gray-100 px-2 py-1 rounded">{{ item.source }}</span>
               <span
@@ -63,7 +65,7 @@
               >
                 {{ getLevelName(item.level) }}
               </span>
-              <span class="text-sm text-gray-700">{{ item.msg }}</span>
+              <span class="text-sm" :class="item.level >= 40 ? 'text-red-800 font-medium' : 'text-gray-700'">{{ item.msg }}</span>
             </li>
             <li v-if="workerLog.length === 0" class="text-sm text-gray-500 italic">
               {{ isLoadingLogs ? 'Fetching logs...' : 'No logs available yet...' }}
@@ -580,7 +582,7 @@ export default {
             this.stopProcessingPolling()
             await this.refreshImportItem()
           }
-          
+
           // Update logs from the status response
           if (response.data.logs) {
             this.workerLog = response.data.logs
@@ -598,14 +600,14 @@ export default {
           axios.get(`/api/data/item/import/get/${this.currentId}?page=1&page_size=${this.pageSize}`),
           axios.get(`/api/data/item/import/item-status/${this.currentId}`)
         ])
-        
+
         if (itemsResponse.data.success) {
           // Load logs first (they're already fetched)
           if (logsResponse.data.success) {
             this.workerLog = logsResponse.data.logs || []
             this.isProcessing = logsResponse.data.is_processing || false
           }
-          
+
           if (Object.keys(itemsResponse.data).length > 0) {
             this.originalFilename = itemsResponse.data.original_filename
             this.isImported = itemsResponse.data.imported || false
@@ -633,10 +635,20 @@ export default {
               // Check if this is an error response (unprocessable file)
               // This is an unprocessable file, show a simple error message
               const errorItem = itemsResponse.data.geofeatures[0];
-              this.msg = "File processing failed. Please check the processing logs below for details.";
+
+              // Extract error message from logs if available
+              const errorLogs = this.workerLog.filter(log => log.level >= 40); // ERROR or CRITICAL
+              if (errorLogs.length > 0) {
+                // Use the most recent error message from logs
+                const latestError = errorLogs[errorLogs.length - 1];
+                this.msg = latestError.msg || "File processing failed. Please check the processing logs below for details.";
+              } else {
+                this.msg = errorItem.message || "File processing failed. Please check the processing logs below for details.";
+              }
+
               // Keep the logs we already fetched, but add the error message if not already present
               if (this.workerLog.length === 0) {
-                this.workerLog = [{timestamp: new Date().toISOString(), msg: errorItem.message}];
+                this.workerLog = [{timestamp: new Date().toISOString(), msg: this.msg}];
               }
             } else {
               // Normal processing - parse the geofeatures
@@ -747,7 +759,7 @@ export default {
     async _saveChangesInternal() {
       // Internal save function that doesn't manage locks
       // This can be called by both saveChanges() and performImport()
-      
+
       // Cache current page changes first
       this.cacheCurrentPageChanges();
 
@@ -818,12 +830,12 @@ export default {
         this.itemsForUser.forEach((feature, idx) => {
           this.originalItems[idx] = JSON.parse(JSON.stringify(feature));
         });
-        
+
         // Also update the cached original items for current page
         if (this.currentPage) {
           this.allPagesOriginalCache[this.currentPage] = JSON.parse(JSON.stringify(this.originalItems));
         }
-        
+
         // For cached pages, update their original state to match the current state
         // since we just saved those changes
         Object.keys(this.allPagesCache).forEach(page => {
@@ -838,7 +850,7 @@ export default {
         if (response.data.updated_count > 0) {
           console.log(`Successfully saved ${response.data.updated_count} feature(s)`);
         }
-        
+
         return { success: true, changedCount: response.data.updated_count };
       } else {
         throw new Error(response.data.msg);
@@ -1198,18 +1210,18 @@ export default {
             axios.get(`/api/data/item/import/get/${vm.id}?page=1&page_size=${vm.pageSize}`),
             axios.get(`/api/data/item/import/item-status/${vm.id}`)
           ])
-          
+
           if (!itemsResponse.data.success) {
             vm.msg = capitalizeFirstLetter(itemsResponse.data.msg).trim(".") + "."
           } else {
             vm.currentId = vm.id
-            
+
             // Load logs first (they're already fetched)
             if (logsResponse.data.success) {
               vm.workerLog = logsResponse.data.logs || []
               vm.isProcessing = logsResponse.data.is_processing || false
             }
-            
+
             if (Object.keys(itemsResponse.data).length > 0) {
               vm.originalFilename = itemsResponse.data.original_filename
               vm.isImported = itemsResponse.data.imported || false

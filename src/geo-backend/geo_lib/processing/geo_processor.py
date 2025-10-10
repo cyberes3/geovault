@@ -4,6 +4,7 @@ This module provides a unified interface for processing various geospatial file 
 """
 
 import json
+import logging
 import os
 import re
 import subprocess
@@ -17,6 +18,8 @@ import markdownify
 from geo_lib.processing.file_types import FileType, get_file_type_by_extension, get_file_type_by_signature
 from geo_lib.processing.logging import ImportLog, DatabaseLogLevel
 from geo_lib.types.geojson import GeojsonRawProperty
+
+logger = logging.getLogger(__name__)
 
 
 def html_to_markdown(html_content) -> str:
@@ -278,12 +281,22 @@ def process_togeojson_features(features: list, file_type: FileType) -> Tuple[lis
     processed_features = []
     import_log = ImportLog()
     
+    skipped_count = 0
+    geometry_collection_count = 0
+    
+    import_log.add(f"Processing {len(features)} raw features from file", "Feature Processing", DatabaseLogLevel.INFO)
+    
     for feature in features:
         # Split GeometryCollection into separate features
         split_features = split_geometry_collection(feature)
         
+        # Count geometry collections that were split
+        if len(split_features) > 1:
+            geometry_collection_count += 1
+        
         # Skip features with no valid geometry
         if not split_features:
+            skipped_count += 1
             continue
 
         for split_feature in split_features:
@@ -296,9 +309,21 @@ def process_togeojson_features(features: list, file_type: FileType) -> Tuple[lis
                     split_feature['properties'] = GeojsonRawProperty(**split_feature['properties']).model_dump()
                     processed_features.append(split_feature)
                 except Exception as e:
-                    import_log.add(f'Failed to process feature properties: {str(e)}, skipping feature', 'ToGeoJSON Process', DatabaseLogLevel.ERROR)
+                    feature_name = split_feature.get('properties', {}).get('name', 'Unnamed')
+                    import_log.add(f"Failed to process feature '{feature_name}', skipping", 'Feature Processing', DatabaseLogLevel.WARNING)
+                    skipped_count += 1
             else:
-                import_log.add(f'Unsupported geometry type: {split_feature["geometry"]["type"]}, skipping', 'ToGeoJSON Process', DatabaseLogLevel.WARNING)
+                import_log.add(f'Skipping unsupported geometry type: {split_feature["geometry"]["type"]}', 'Feature Processing', DatabaseLogLevel.WARNING)
+                skipped_count += 1
+    
+    # Log summary
+    if geometry_collection_count > 0:
+        import_log.add(f"Split {geometry_collection_count} geometry collections into individual features", "Feature Processing", DatabaseLogLevel.INFO)
+    
+    if skipped_count > 0:
+        import_log.add(f"Skipped {skipped_count} features (invalid geometry or unsupported type)", "Feature Processing", DatabaseLogLevel.INFO)
+    
+    import_log.add(f"Successfully processed {len(processed_features)} features", "Feature Processing", DatabaseLogLevel.INFO)
 
     return processed_features, import_log
 
@@ -393,6 +418,7 @@ def geo_to_geojson(file_data: Union[bytes, str], filename: str = "", timeout_sec
             try:
                 # Use the JavaScript converter with file path and timing
                 conversion_start = time.time()
+                import_log.add("Converting KMZ file to GeoJSON format", "File Conversion", DatabaseLogLevel.INFO)
                 result = subprocess.run(
                     ['node', togeojson_path, temp_file_path],
                     capture_output=True,
@@ -400,10 +426,11 @@ def geo_to_geojson(file_data: Union[bytes, str], filename: str = "", timeout_sec
                     timeout=timeout_seconds
                 )
                 conversion_duration = time.time() - conversion_start
-                import_log.add_timing("JavaScript KMZ conversion", conversion_duration, "Processing")
+                import_log.add_timing("KMZ conversion", conversion_duration, "File Conversion")
 
                 if result.returncode != 0:
-                    raise Exception(f"JavaScript converter failed: {result.stderr}")
+                    # Don't expose internal stderr to user
+                    raise Exception("KMZ file conversion failed")
 
                 geojson_data = json.loads(result.stdout)
 
@@ -434,6 +461,7 @@ def geo_to_geojson(file_data: Union[bytes, str], filename: str = "", timeout_sec
             try:
                 # Use the JavaScript converter with file path and timing
                 conversion_start = time.time()
+                import_log.add(f"Converting {file_type.value.upper()} file to GeoJSON format", "File Conversion", DatabaseLogLevel.INFO)
                 result = subprocess.run(
                     ['node', togeojson_path, temp_file_path],
                     capture_output=True,
@@ -441,13 +469,14 @@ def geo_to_geojson(file_data: Union[bytes, str], filename: str = "", timeout_sec
                     timeout=timeout_seconds
                 )
                 conversion_duration = time.time() - conversion_start
-                import_log.add_timing(f"JavaScript {file_type.value.upper()} conversion", conversion_duration, "Processing")
+                import_log.add_timing(f"{file_type.value.upper()} conversion", conversion_duration, "File Conversion")
             finally:
                 # Clean up temporary file
                 os.unlink(temp_file_path)
 
             if result.returncode != 0:
-                raise Exception(f"JavaScript converter failed: {result.stderr}")
+                # Don't expose internal stderr to user
+                raise Exception(f"{file_type.value.upper()} file conversion failed")
 
             geojson_data = json.loads(result.stdout)
 
@@ -466,8 +495,16 @@ def geo_to_geojson(file_data: Union[bytes, str], filename: str = "", timeout_sec
 
         return final_geojson, import_log
 
+    except subprocess.TimeoutExpired:
+        import_log.add(f"File conversion timed out after {timeout_seconds}s - file may be too large or complex", "File Conversion", DatabaseLogLevel.ERROR)
+        raise Exception("File conversion timed out")
+    except json.JSONDecodeError as e:
+        import_log.add("File conversion produced invalid output - file may be corrupted", "File Conversion", DatabaseLogLevel.ERROR)
+        raise Exception("File conversion failed")
     except Exception as e:
-        import_log.add(f"{file_type.value.upper()} conversion failed: {str(e)}", f'{file_type.value.upper()} to GeoJSON', DatabaseLogLevel.ERROR)
+        # Log user-friendly message, but log internal details to server logs
+        import_log.add(f"File conversion failed: {type(e).__name__}", "File Conversion", DatabaseLogLevel.ERROR)
+        logger.error(f"Detailed conversion error: {str(e)}")
         raise
 
 

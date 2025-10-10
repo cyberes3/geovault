@@ -35,6 +35,8 @@ def _strip_duplicate_features(features) -> Tuple[List[Any], int, ImportLog]:
 
     if not features:
         return features, 0, import_log
+    
+    import_log.add(f"Checking {len(features)} features for internal duplicates", "Duplicate Detection", DatabaseLogLevel.INFO)
 
     # Track features by hash
     seen_hashes = set()
@@ -50,11 +52,16 @@ def _strip_duplicate_features(features) -> Tuple[List[Any], int, ImportLog]:
             duplicate_feature_count += 1
             feature_name = feature.get('properties', {}).get('name', 'Unnamed')
             feature_type = feature.get('geometry', {}).get('type', 'Unknown')
-            import_log.add(f'{feature_name} ({feature_type})', 'Find Duplicate Features')
+            import_log.add(f"Duplicate within file: '{feature_name}' ({feature_type})", 'Duplicate Detection', DatabaseLogLevel.INFO)
         else:
             # This is a unique feature
             seen_hashes.add(feature_hash)
             unique_features.append(feature)
+    
+    if duplicate_feature_count > 0:
+        import_log.add(f"Removed {duplicate_feature_count} duplicate features within the file", "Duplicate Detection", DatabaseLogLevel.INFO)
+    else:
+        import_log.add("No duplicate features found within the file", "Duplicate Detection", DatabaseLogLevel.INFO)
 
     return unique_features, duplicate_feature_count, import_log
 
@@ -85,9 +92,12 @@ def _find_coordinate_duplicates(features: List[Dict], user_id: int) -> Tuple[Lis
 
     if not features:
         return features, [], import_log
+    
+    import_log.add(f"Checking {len(features)} features against existing features in your library", "Duplicate Detection", DatabaseLogLevel.INFO)
 
     # For large files, use batched approach to reduce database queries
     if len(features) > 1000:
+        import_log.add("Using optimized batch processing for large file", "Duplicate Detection", DatabaseLogLevel.INFO)
         return _find_coordinate_duplicates_batched(features, user_id, import_log)
 
     # For smaller files, use the original approach
@@ -119,9 +129,15 @@ def _find_coordinate_duplicates(features: List[Dict], user_id: int) -> Tuple[Lis
             feature_name = feature.get('properties', {}).get('name', 'Unnamed')
             feature_type = feature.get('geometry', {}).get('type', 'Unknown')
             existing_count = len(existing_features)
-            import_log.add(f"Coordinate duplicate found: '{feature_name}' ({feature_type}) matches {existing_count} existing feature(s)", 'Find Coordinate Duplicates')
+            import_log.add(f"Coordinate duplicate found: '{feature_name}' ({feature_type}) matches {existing_count} existing feature(s)", 'Duplicate Detection', DatabaseLogLevel.INFO)
         else:
             unique_features.append(feature)
+    
+    # Log summary
+    if duplicate_features:
+        import_log.add(f"Found {len(duplicate_features)} features that already exist in your library", "Duplicate Detection", DatabaseLogLevel.INFO)
+    else:
+        import_log.add("No duplicate features found in your existing library", "Duplicate Detection", DatabaseLogLevel.INFO)
 
     return unique_features, duplicate_features, import_log
 
@@ -210,15 +226,23 @@ def _find_coordinate_duplicates_batched(features: List[Dict], user_id: int, impo
 
                         feature_name = feature.get('properties', {}).get('name', 'Unnamed')
                         existing_count = len(existing_lookup[geom_wkt])
-                        import_log.add(f"Coordinate duplicate found: '{feature_name}' ({geom_type}) matches {existing_count} existing feature(s)", 'Find Coordinate Duplicates')
+                        import_log.add(f"Coordinate duplicate found: '{feature_name}' ({geom_type}) matches {existing_count} existing feature(s)", 'Duplicate Detection', DatabaseLogLevel.INFO)
                     else:
                         unique_features.append(feature)
 
             except Exception as e:
-                import_log.add(f"Batch query failed for {geom_type} features: {str(e)}", 'Find Coordinate Duplicates')
+                import_log.add(f"Batch query encountered an issue, processing individually", 'Duplicate Detection', DatabaseLogLevel.WARNING)
+                # Log internal error details for debugging
+                logger.warning(f"Batch query failed for {geom_type} features: {str(e)}")
                 # Fall back to individual processing for this batch
                 for idx, feature, coordinates in batch_features:
                     unique_features.append(feature)
+    
+    # Log summary
+    if duplicate_features:
+        import_log.add(f"Found {len(duplicate_features)} features that already exist in your library", "Duplicate Detection", DatabaseLogLevel.INFO)
+    else:
+        import_log.add("No duplicate features found in your existing library", "Duplicate Detection", DatabaseLogLevel.INFO)
 
     return unique_features, duplicate_features, import_log
 
@@ -285,7 +309,8 @@ def _find_existing_features_by_coordinates(coordinates: List, geom_type: str, us
         return result
 
     except Exception as e:
-        logger.error(f"Error finding existing features by coordinates: {e}")
+        # Log internal error details but don't expose to user
+        logger.error(f"Error finding existing features by coordinates: {type(e).__name__}: {str(e)}")
         return []
 
 
@@ -499,6 +524,30 @@ def fetch_import_queue(request, item_id):
         if item.imported:
             return JsonResponse({'success': True, 'processing': False, 'geofeatures': None, 'msg': None, 'original_filename': None, 'imported': item.imported}, status=200)
         
+        # Check if this is an unparsable file (processing failed)
+        if item.unparsable:
+            return JsonResponse({
+                'success': True,
+                'processing': False,
+                'geofeatures': [{'error': 'file_unparsable', 'message': 'File processing failed. Please check the processing logs below for details.'}],
+                'msg': 'File processing failed. Please check the processing logs below for details.',
+                'original_filename': item.original_filename,
+                'imported': item.imported,
+                'log_id': str(item.log_id) if item.log_id else None,
+                'duplicates': [],
+                'duplicate_status': None,
+                'duplicate_original_filename': None,
+                'pagination': {
+                    'page': 1,
+                    'page_size': 50,
+                    'total_features': 0,
+                    'total_pages': 0,
+                    'has_next': False,
+                    'has_previous': False,
+                    'duplicate_indices': []
+                }
+            }, status=200)
+        
         # Check for duplicate files based on geojson_hash
         duplicate_status = None
         duplicate_original_filename = None
@@ -608,7 +657,7 @@ def fetch_import_queue(request, item_id):
 
 @login_required_401
 def fetch_import_waiting(request):
-    user_items = ImportQueue.objects.filter(user=request.user, imported=False).values('id', 'geofeatures', 'original_filename', 'raw_kml_hash', 'geojson_hash', 'log_id', 'timestamp', 'imported')
+    user_items = ImportQueue.objects.filter(user=request.user, imported=False).values('id', 'geofeatures', 'original_filename', 'raw_kml_hash', 'geojson_hash', 'log_id', 'timestamp', 'imported', 'unparsable')
     data = json.loads(json.dumps(list(user_items), cls=DjangoJSONEncoder))
     
     # Get all active processing jobs for this user
@@ -640,9 +689,9 @@ def fetch_import_waiting(request):
         
         # Check if this item is currently being processed
         item['processing'] = item['id'] in active_job_ids
-
-        # Check if there's an error in the geofeatures
-        if count == 1 and item['geofeatures'] and isinstance(item['geofeatures'][0], dict) and 'error' in item['geofeatures'][0]:
+        
+        # Check if there's an error in the geofeatures or if marked as unparsable
+        if item.get('unparsable') or (count == 1 and item['geofeatures'] and isinstance(item['geofeatures'][0], dict) and 'error' in item['geofeatures'][0]):
             # This is an error case from failed processing
             item['feature_count'] = 0
             item['processing_failed'] = True
@@ -677,6 +726,7 @@ def fetch_import_waiting(request):
         del item['geofeatures']
         del item['log_id']
         del item['geojson_hash']
+        del item['unparsable']
     return JsonResponse({'data': data, 'msg': None})
 
 
@@ -767,8 +817,9 @@ def bulk_delete_import_items(request):
     except json.JSONDecodeError:
         return JsonResponse({'success': False, 'msg': 'Invalid JSON data', 'code': 400}, status=400)
     except Exception as e:
-        logger.error(f'Bulk delete error: {str(e)}')
-        return JsonResponse({'success': False, 'msg': f'Internal server error: {str(e)}', 'code': 500}, status=500)
+        # Log internal error details for debugging, but don't expose to user
+        logger.error(f'Bulk delete error: {type(e).__name__}: {str(e)}')
+        return JsonResponse({'success': False, 'msg': 'Internal server error occurred', 'code': 500}, status=500)
 
 
 @login_required_401
@@ -883,8 +934,10 @@ def import_to_featurestore(request, item_id):
     current_batch_hashes = set()  # Track hashes in current import batch
 
     # Get existing feature hashes for this user to avoid duplicates
+    logger.info(f"Checking for duplicate features in user {request.user.id}'s feature library")
     existing_features = FeatureStore.objects.filter(user=request.user).values_list('geojson_hash', flat=True)
     existing_hashes.update(existing_features)
+    logger.info(f"User has {len(existing_hashes)} existing features in library")
 
     i = 0
     for feature in import_item.geofeatures:
@@ -966,7 +1019,8 @@ def import_to_featurestore(request, item_id):
 
                 geometry = GEOSGeometry(json.dumps(geom_data))
             except Exception as e:
-                print(f"Error creating geometry for feature {i}: {e}")
+                # Log internal error details for debugging - don't expose to user
+                logger.warning(f"Error creating geometry for feature {i}: {type(e).__name__}: {str(e)}")
 
         # Add to bulk creation list
         features_to_create.append(FeatureStore(

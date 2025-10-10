@@ -12,3 +12,4 @@ Allow edit raw jspn in feature edit page or map view
 See how https://trails.colorado.gov loads their data in the map
 Add a config route so the server can send config settings stored in the config yaml to the frontend
 Look for magic numbers and strings and move those to a yaml config
+Debug log messages are hidden by default and only shown if a user enables that in his settings
