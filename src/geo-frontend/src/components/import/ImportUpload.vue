@@ -54,9 +54,9 @@
             <span class="flex items-center">
               {{ progressStatusText }}
               <!-- Processing spinner -->
-              <svg v-if="isProcessing" class="animate-spin ml-1 mr-2 h-4 w-4 text-purple-600" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+              <svg v-if="isProcessing" class="animate-spin ml-1 mr-2 h-4 w-4 text-blue-600" fill="none" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
                 <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
-                <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                <path class="opacity-75" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" fill="currentColor"></path>
               </svg>
             </span>
             <span v-if="overallProgress > 0">{{ overallProgress }}%</span>
@@ -76,16 +76,16 @@
 
         <!-- Dropzone -->
         <div
-          class="border-2 border-dashed border-gray-300 rounded-lg p-6 transition-colors duration-200"
-          :class="dropzoneClasses"
-          @drop="onDrop"
-          @dragover.prevent
-          @dragenter.prevent="dragEnter"
-          @dragleave="dragLeave"
+            :class="dropzoneClasses"
+            class="border-2 border-dashed border-gray-300 rounded-lg p-6 transition-colors duration-200"
+            @dragleave="dragLeave"
+            @drop="onDrop"
+            @dragover.prevent
+            @dragenter.prevent="dragEnter"
         >
-          <div v-if="files.length === 0" class="text-center" @dragenter.prevent="dragEnter" @dragleave="dragLeave">
-            <svg class="mx-auto h-12 w-12 text-gray-400" stroke="currentColor" fill="none" viewBox="0 0 48 48">
-              <path d="M28 8H12a4 4 0 00-4 4v20m32-12v8m0 0v8a4 4 0 01-4 4H12a4 4 0 01-4-4v-4m32-4l-3.172-3.172a4 4 0 00-5.656 0L28 28M8 32l9.172-9.172a4 4 0 015.656 0L28 28m0 0l4 4m4-24h8m-4-4v8m-12 4h.02" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" />
+          <div v-if="files.length === 0" class="text-center" @dragleave="dragLeave" @dragenter.prevent="dragEnter">
+            <svg class="mx-auto h-12 w-12 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 48 48">
+              <path d="M28 8H12a4 4 0 00-4 4v20m32-12v8m0 0v8a4 4 0 01-4 4H12a4 4 0 01-4-4v-4m32-4l-3.172-3.172a4 4 0 00-5.656 0L28 28M8 32l9.172-9.172a4 4 0 015.656 0L28 28m0 0l4 4m4-24h8m-4-4v8m-12 4h.02" stroke-linecap="round" stroke-linejoin="round" stroke-width="2"/>
             </svg>
             <div class="mt-4">
               <p class="text-sm text-gray-600">
@@ -96,45 +96,45 @@
             </div>
           </div>
 
-          <div v-else class="space-y-3" :class="{ 'pointer-events-none opacity-50': disableUpload }" @dragenter.prevent="dragEnter" @dragleave="dragLeave">
+          <div v-else :class="{ 'pointer-events-none opacity-50': disableUpload }" class="space-y-3" @dragleave="dragLeave" @dragenter.prevent="dragEnter">
             <div class="flex items-center justify-between">
               <h3 class="text-sm font-medium text-gray-900">Selected Files ({{ files.length }})</h3>
               <button
-                @click="clearFiles"
-                :disabled="disableUpload"
-                class="text-sm text-red-600 hover:text-red-500 font-medium disabled:text-gray-400 disabled:cursor-not-allowed"
+                  :disabled="disableUpload"
+                  class="text-sm text-red-600 hover:text-red-500 font-medium disabled:text-gray-400 disabled:cursor-not-allowed"
+                  @click="clearFiles"
               >
                 Clear All
               </button>
             </div>
             <div class="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-3 max-h-48 overflow-y-auto p-3 pr-6">
               <div
-                v-for="(file, index) in files"
-                :key="index"
-                class="relative group bg-gray-50 rounded-lg border p-3 hover:bg-gray-100 transition-colors duration-150"
+                  v-for="(file, index) in files"
+                  :key="index"
+                  class="relative group bg-gray-50 rounded-lg border p-3 hover:bg-gray-100 transition-colors duration-150"
               >
                 <!-- Remove button -->
                 <button
-                  @click="removeFile(index)"
-                  class="absolute -right-2 w-6 h-6 bg-red-500 text-white rounded-full flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity duration-150 hover:bg-red-600 shadow-sm z-10"
-                  :style="{ top: '-9px' }"
-                  :title="`Remove ${file.name}`"
+                    :style="{ top: '-9px' }"
+                    :title="`Remove ${file.name}`"
+                    class="absolute -right-2 w-6 h-6 bg-red-500 text-white rounded-full flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity duration-150 hover:bg-red-600 shadow-sm z-10"
+                    @click="removeFile(index)"
                 >
                   <svg class="h-3 w-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path>
+                    <path d="M6 18L18 6M6 6l12 12" stroke-linecap="round" stroke-linejoin="round" stroke-width="2"></path>
                   </svg>
                 </button>
 
                 <!-- File icon -->
                 <div class="flex justify-center mb-2">
                   <svg class="h-8 w-8 text-blue-500" fill="currentColor" viewBox="0 0 20 20">
-                    <path fill-rule="evenodd" d="M4 4a2 2 0 012-2h4.586A2 2 0 0112 2.586L15.414 6A2 2 0 0116 7.414V16a2 2 0 01-2 2H6a2 2 0 01-2-2V4zm2 6a1 1 0 011-1h6a1 1 0 110 2H7a1 1 0 01-1-1zm1 3a1 1 0 100 2h6a1 1 0 100-2H7z" clip-rule="evenodd"></path>
+                    <path clip-rule="evenodd" d="M4 4a2 2 0 012-2h4.586A2 2 0 0112 2.586L15.414 6A2 2 0 0116 7.414V16a2 2 0 01-2 2H6a2 2 0 01-2-2V4zm2 6a1 1 0 011-1h6a1 1 0 110 2H7a1 1 0 01-1-1zm1 3a1 1 0 100 2h6a1 1 0 100-2H7z" fill-rule="evenodd"></path>
                   </svg>
                 </div>
 
                 <!-- File info -->
                 <div class="text-center">
-                  <p class="text-xs font-medium text-gray-900 truncate" :title="file.name">{{ file.name }}</p>
+                  <p :title="file.name" class="text-xs font-medium text-gray-900 truncate">{{ file.name }}</p>
                   <p class="text-xs text-gray-500 mt-1">{{ formatFileSize(file.size) }}</p>
                 </div>
               </div>
@@ -144,12 +144,12 @@
 
         <!-- Hidden file input for click-to-upload -->
         <input
-          ref="fileInput"
-          type="file"
-          accept=".kml,.kmz"
-          multiple
-          class="hidden"
-          @change="onFileChange"
+            ref="fileInput"
+            accept=".kml,.kmz"
+            class="hidden"
+            multiple
+            type="file"
+            @change="onFileChange"
         >
 
         <!-- Upload Messages -->
@@ -158,7 +158,7 @@
             <div class="flex-shrink-0">
               <!-- Success icon -->
               <svg v-if="uploadMsg.toLowerCase().includes('success')" :class="messageIconClass" class="h-5 w-5" fill="currentColor" viewBox="0 0 20 20">
-                <path fill-rule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clip-rule="evenodd"></path>
+                <path clip-rule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" fill-rule="evenodd"></path>
               </svg>
               <!-- Error/info icon -->
               <svg v-else :class="messageIconClass" class="h-5 w-5" fill="currentColor" viewBox="0 0 20 20">
@@ -218,7 +218,7 @@
     <div class="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
       <div class="flex items-center justify-between mb-4">
         <h2 class="text-lg font-semibold text-gray-900">Ready to Import</h2>
-<!--        <span v-if="loadingQueueList" class="text-sm text-gray-500 italic">Loading...</span>-->
+        <!--        <span v-if="loadingQueueList" class="text-sm text-gray-500 italic">Loading...</span>-->
       </div>
       <Importqueue/>
     </div>
@@ -235,12 +235,12 @@ import {ImportQueueItem} from "@/assets/js/types/import-types"
 import ImportQueue from "@/components/import/parts/ImportQueue.vue";
 import {getCookie} from "@/assets/js/auth.js";
 import {SECURITY_CONFIG} from "@/config.js";
-import { 
-  getFileTypeByExtension, 
-  validateFileExtension, 
-  validateFileSize, 
-  validateMimeType, 
-  formatFileSize, 
+import {
+  getFileTypeByExtension,
+  validateFileExtension,
+  validateFileSize,
+  validateMimeType,
+  formatFileSize,
   getSupportedFileTypesString,
   getFileTypeConfig
 } from "@/fileTypes.js";
@@ -444,42 +444,42 @@ export default {
       // Skip frontend validation if disabled (for testing backend validation)
       if (!SECURITY_CONFIG.ENABLE_FRONTEND_VALIDATION) {
         console.log('Frontend validation disabled - file will be validated by backend only')
-        return { isValid: true, error: null }
+        return {isValid: true, error: null}
       }
 
       // Check for empty files
       if (file.size === 0) {
-        return { isValid: false, error: 'File is empty' }
+        return {isValid: false, error: 'File is empty'}
       }
 
       // Check file extension
       if (!validateFileExtension(file.name)) {
-        return { isValid: false, error: `Only ${getSupportedFileTypesString()} files are allowed` }
+        return {isValid: false, error: `Only ${getSupportedFileTypesString()} files are allowed`}
       }
 
       // Get file type and validate
       const fileType = getFileTypeByExtension(file.name)
       if (!fileType) {
-        return { isValid: false, error: 'Unsupported file type' }
+        return {isValid: false, error: 'Unsupported file type'}
       }
 
       // Check file size
       if (!validateFileSize(file, fileType)) {
         const config = getFileTypeConfig(fileType)
-        return { isValid: false, error: `${config.displayName} file too large. Maximum size: ${formatFileSize(config.maxSize)}` }
+        return {isValid: false, error: `${config.displayName} file too large. Maximum size: ${formatFileSize(config.maxSize)}`}
       }
 
       // Check MIME type
       if (!validateMimeType(file, fileType)) {
-        return { isValid: false, error: `Invalid MIME type: ${file.type}` }
+        return {isValid: false, error: `Invalid MIME type: ${file.type}`}
       }
 
       // Check filename for suspicious characters
       if (/[<>:"/\\|?*]/.test(file.name)) {
-        return { isValid: false, error: 'Filename contains invalid characters' }
+        return {isValid: false, error: 'Filename contains invalid characters'}
       }
 
-      return { isValid: true, error: null }
+      return {isValid: true, error: null}
     },
     onDrop(e) {
       e.preventDefault()
@@ -677,7 +677,7 @@ export default {
       this.disableUpload = false
     },
     generateUploadSummary(results) {
-      const { successful, failed, skipped } = results
+      const {successful, failed, skipped} = results
       const total = successful.length + failed.length + skipped.length
 
       if (total === 0) {
@@ -797,8 +797,8 @@ export default {
     // Check if upload is in progress
     if (this.disableUpload) {
       const confirmed = confirm(
-        'Upload is currently in progress. Are you sure you want to leave this page? ' +
-        'Leaving now may interrupt the upload process.'
+          'Upload is currently in progress. Are you sure you want to leave this page? ' +
+          'Leaving now may interrupt the upload process.'
       )
 
       if (!confirmed) {
