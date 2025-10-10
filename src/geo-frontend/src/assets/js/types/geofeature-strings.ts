@@ -1,5 +1,8 @@
 export const GeoFeatureTypeStrings = {
     Point: "Point",
+    MultiPoint: "MultiPoint",
     LineString: "LineString",
-    Polygon: "Polygon"
+    MultiLineString: "MultiLineString",
+    Polygon: "Polygon",
+    MultiPolygon: "MultiPolygon"
 }

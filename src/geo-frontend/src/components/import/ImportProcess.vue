@@ -146,7 +146,7 @@
         :is-importing="isImporting"
         :importable-count="totalFeatures - duplicateIndices.length"
         :goto-page-input="gotoPageInput"
-        :show-no-features-message="originalFilename != null && !isProcessing"
+        :show-no-features-message="originalFilename != null && !isProcessing && !isLoadingPage && itemsForUser.length === 0"
         :duplicate-status="duplicateStatus"
         :duplicate-original-filename="duplicateOriginalFilename"
         @previous-page="previousPage"
@@ -712,13 +712,16 @@ export default {
     parseGeoJson(item) {
       switch (item.geometry.type) {
         case GeoFeatureTypeStrings.Point:
+        case GeoFeatureTypeStrings.MultiPoint:
           return new GeoPoint(item);
         case GeoFeatureTypeStrings.LineString:
+        case GeoFeatureTypeStrings.MultiLineString:
           return new GeoLineString(item);
         case GeoFeatureTypeStrings.Polygon:
+        case GeoFeatureTypeStrings.MultiPolygon:
           return new GeoPolygon(item);
         default:
-          throw new Error(`Invalid feature type: ${item.type}`);
+          throw new Error(`Invalid feature type: ${item.geometry.type}`);
       }
     },
     resetField(index, fieldName) {

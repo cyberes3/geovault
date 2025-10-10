@@ -70,9 +70,15 @@ def geojson_to_geofeature(geojson: dict) -> Tuple[List[GeoFeatureSupported], Imp
         match item['geometry']['type'].lower():
             case 'point':
                 c = PointFeature
+            case 'multipoint':
+                c = PointFeature
             case 'linestring':
                 c = LineStringFeature
+            case 'multilinestring':
+                c = LineStringFeature
             case 'polygon':
+                c = PolygonFeature
+            case 'multipolygon':
                 c = PolygonFeature
             case _:
                 import_log.add(f'Feature named "{item["properties"].get("name", "unnamed")}" had unsupported type "{item["geometry"]["type"]}".', 'GeoJSON to GeoFeature', DatabaseLogLevel.WARNING)

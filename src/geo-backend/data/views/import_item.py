@@ -955,6 +955,14 @@ def import_to_featurestore(request, item_id):
     existing_hashes.update(existing_features)
     logger.info(f"User has {len(existing_hashes)} existing features in library")
 
+    # Log geometry type breakdown for debugging
+    geometry_types = {}
+    for feature in import_item.geofeatures:
+        if 'geometry' in feature and feature['geometry']:
+            geom_type = feature['geometry']['type']
+            geometry_types[geom_type] = geometry_types.get(geom_type, 0) + 1
+    logger.info(f"Importing {len(import_item.geofeatures)} features with geometry types: {geometry_types}")
+
     i = 0
     for feature in import_item.geofeatures:
         c = None
@@ -963,14 +971,24 @@ def import_to_featurestore(request, item_id):
             i += 1
             continue
 
-        match feature['geometry']['type'].lower():
+        geometry_type = feature['geometry']['type'].lower()
+        match geometry_type:
             case 'point':
+                c = PointFeature
+            case 'multipoint':
                 c = PointFeature
             case 'linestring':
                 c = LineStringFeature
+            case 'multilinestring':
+                c = LineStringFeature
             case 'polygon':
                 c = PolygonFeature
+            case 'multipolygon':
+                c = PolygonFeature
             case _:
+                feature_name = feature.get('properties', {}).get('name', 'Unnamed')
+                logger.warning(f"Skipping feature {i} '{feature_name}' due to unsupported geometry type: {geometry_type}")
+                i += 1
                 continue
         assert c is not None
 

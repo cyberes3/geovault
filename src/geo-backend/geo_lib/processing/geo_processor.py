@@ -300,7 +300,7 @@ def process_togeojson_features(features: list, file_type: FileType) -> Tuple[lis
             continue
 
         for split_feature in split_features:
-            if split_feature['geometry']['type'] in ['Point', 'LineString', 'Polygon']:
+            if split_feature['geometry']['type'] in ['Point', 'MultiPoint', 'LineString', 'MultiLineString', 'Polygon', 'MultiPolygon']:
                 try:
                     # Apply appropriate styling based on file type
                     split_feature['properties'] = preserve_togeojson_styling(split_feature['properties'], file_type)
