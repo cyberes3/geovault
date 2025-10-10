@@ -189,7 +189,6 @@ class AsyncFileProcessor:
                 if job and job.import_queue_id:
                     import_queue = ImportQueue.objects.get(id=job.import_queue_id)
                     # Don't store the raw data for oversized files - just mark as unparsable
-                    import_queue.raw_kml_hash = hash_normalized_geojson(geojson_data)
                     import_queue.geojson_hash = None  # Can't compute hash without processing
                     import_queue.geofeatures = []
                     import_queue.unparsable = True
@@ -224,7 +223,7 @@ class AsyncFileProcessor:
             # Update existing import queue entry with timing
             feature_processing_start = time.time()
             import_queue_id = self._update_import_queue_entry(
-                geojson_data, realtime_log, filename, user_id, job_id
+                geojson_data, realtime_log, filename, user_id, job_id, geojson_str, geojson_size_mb
             )
             feature_processing_duration = time.time() - feature_processing_start
             realtime_log.add_timing("Feature processing and database update", feature_processing_duration, "AsyncProcessor")
@@ -294,11 +293,8 @@ class AsyncFileProcessor:
                 user = User.objects.get(id=user_id)
 
                 # Create import queue entry with empty geofeatures during processing
-                # Use a temporary hash based on job_id to avoid unique constraint violations
-                temp_hash = f"processing_{job_id}"
                 import_queue = ImportQueue.objects.create(
                     raw_kml='{"type": "FeatureCollection", "features": []}',  # Empty GeoJSON
-                    raw_kml_hash=temp_hash,  # Temporary hash during processing
                     original_filename=filename,
                     user=user,
                     geofeatures=[]  # Empty array during processing
@@ -312,7 +308,7 @@ class AsyncFileProcessor:
 
     def _update_import_queue_entry(self, geojson_data: Dict[str, Any],
                                    processing_log: RealTimeImportLog, filename: str,
-                                   user_id: int, job_id: str) -> int:
+                                   user_id: int, job_id: str, geojson_str: str, geojson_size_mb: float) -> int:
         """Update an existing ImportQueue entry with processed data."""
         # Get the import queue entry
         job = self.status_tracker.get_job(job_id)
@@ -360,7 +356,6 @@ class AsyncFileProcessor:
                 processing_log.add(f"Saving {len(processed_features)} features to database ({geojson_size_mb:.2f} MB)", "AsyncProcessor", DatabaseLogLevel.INFO)
 
                 import_queue.raw_kml = geojson_str
-                import_queue.raw_kml_hash = content_hash
                 import_queue.geojson_hash = geojson_hash
                 import_queue.geofeatures = processed_features
                 import_queue.save()

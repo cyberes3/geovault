@@ -657,7 +657,7 @@ def fetch_import_queue(request, item_id):
 
 @login_required_401
 def fetch_import_waiting(request):
-    user_items = ImportQueue.objects.filter(user=request.user, imported=False).values('id', 'geofeatures', 'original_filename', 'raw_kml_hash', 'geojson_hash', 'log_id', 'timestamp', 'imported', 'unparsable')
+    user_items = ImportQueue.objects.filter(user=request.user, imported=False).values('id', 'geofeatures', 'original_filename', 'geojson_hash', 'log_id', 'timestamp', 'imported', 'unparsable')
     data = json.loads(json.dumps(list(user_items), cls=DjangoJSONEncoder))
     
     # Get all active processing jobs for this user
@@ -689,6 +689,22 @@ def fetch_import_waiting(request):
         
         # Check if this item is currently being processed
         item['processing'] = item['id'] in active_job_ids
+        
+        # Also consider items with empty geofeatures as processing if they were created recently
+        # This handles the race condition where processing hasn't started yet but the item was just uploaded
+        if not item['processing'] and count == 0 and not item.get('unparsable'):
+            from django.utils import timezone
+            from datetime import timedelta
+            
+            # If item was created within the last 10 seconds, consider it as processing
+            item_timestamp = item['timestamp']
+            if isinstance(item_timestamp, str):
+                from datetime import datetime
+                item_timestamp = datetime.fromisoformat(item_timestamp.replace('Z', '+00:00'))
+            
+            time_since_creation = timezone.now() - item_timestamp
+            if time_since_creation < timedelta(seconds=10):
+                item['processing'] = True
         
         # Check if there's an error in the geofeatures or if marked as unparsable
         if item.get('unparsable') or (count == 1 and item['geofeatures'] and isinstance(item['geofeatures'][0], dict) and 'error' in item['geofeatures'][0]):
