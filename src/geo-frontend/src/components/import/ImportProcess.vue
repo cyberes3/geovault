@@ -118,7 +118,7 @@
               </svg>
             </div>
             <div class="ml-3">
-              <p class="text-sm font-medium text-yellow-800">Exact Duplicates (Skipped)</p>
+              <p class="text-sm font-medium text-yellow-800">Exact Duplicates</p>
               <p class="text-2xl font-bold text-yellow-900">{{ duplicates.indices.length }}</p>
             </div>
           </div>
@@ -682,6 +682,18 @@ export default {
               // If this is a duplicate of an imported file, mark ALL features as duplicates
               if (this.duplicates.status === 'duplicate_imported') {
                 this.duplicates.indices = Array.from({length: this.pagination.totalFeatures}, (_, i) => i);
+                // Also mark all current page features as duplicates
+                this.itemsForUser.forEach((item, index) => {
+                  item.isDuplicate = true;
+                  // Create a generic duplicate info for imported file duplicates
+                  item.duplicateInfo = {
+                    feature: item,
+                    existing_features: [{
+                      id: 'imported_file_duplicate',
+                      properties: { name: 'Feature from imported file' }
+                    }]
+                  };
+                });
               }
             }
           }
@@ -959,15 +971,36 @@ export default {
         item.duplicateInfo = null;
       });
 
-      // Mark duplicate features using tolerance-based coordinate comparison
-      // This matches the backend's coordinate matching logic (1e-6 tolerance)
+      // Mark duplicate features using the duplicate_indices from pagination response
+      // This is more reliable than coordinate matching since it comes directly from the backend
+      const currentPageStartIndex = (this.pagination.currentPage - 1) * this.pagination.pageSize;
+
+      this.duplicates.indices.forEach(globalIndex => {
+        const localIndex = globalIndex - currentPageStartIndex;
+        if (localIndex >= 0 && localIndex < this.itemsForUser.length) {
+          this.itemsForUser[localIndex].isDuplicate = true;
+
+          // Try to find the corresponding duplicate info from the duplicates.features array
+          const feature = this.itemsForUser[localIndex];
+          const duplicateInfo = this.duplicates.features.find(dupInfo =>
+              featuresMatch(feature, dupInfo.feature)
+          );
+
+          if (duplicateInfo) {
+            this.itemsForUser[localIndex].duplicateInfo = duplicateInfo;
+          }
+        }
+      });
+
+      // Fallback: Also mark duplicates using coordinate comparison for any features
+      // that might not be in the duplicate_indices but are in the duplicates.features array
       this.duplicates.features.forEach(duplicateInfo => {
         const duplicateFeature = duplicateInfo.feature;
         const index = this.itemsForUser.findIndex(item =>
             featuresMatch(item, duplicateFeature)
         );
 
-        if (index !== -1) {
+        if (index !== -1 && !this.itemsForUser[index].isDuplicate) {
           this.itemsForUser[index].isDuplicate = true;
           this.itemsForUser[index].duplicateInfo = duplicateInfo;
         }
@@ -1116,6 +1149,18 @@ export default {
             if (this.duplicates.status === 'duplicate_imported') {
               // Mark all feature indices as duplicates
               this.duplicates.indices = Array.from({length: this.pagination.totalFeatures}, (_, i) => i);
+              // Also mark all current page features as duplicates
+              this.itemsForUser.forEach((item, index) => {
+                item.isDuplicate = true;
+                // Create a generic duplicate info for imported file duplicates
+                item.duplicateInfo = {
+                  feature: item,
+                  existing_features: [{
+                    id: 'imported_file_duplicate',
+                    properties: { name: 'Feature from imported file' }
+                  }]
+                };
+              });
             }
           }
         }
@@ -1334,6 +1379,18 @@ export default {
                 // If this is a duplicate of an imported file, mark ALL features as duplicates
                 if (vm.duplicates.status === 'duplicate_imported') {
                   vm.duplicates.indices = Array.from({length: vm.pagination.totalFeatures}, (_, i) => i);
+                  // Also mark all current page features as duplicates
+                  vm.itemsForUser.forEach((item, index) => {
+                    item.isDuplicate = true;
+                    // Create a generic duplicate info for imported file duplicates
+                    item.duplicateInfo = {
+                      feature: item,
+                      existing_features: [{
+                        id: 'imported_file_duplicate',
+                        properties: { name: 'Feature from imported file' }
+                      }]
+                    };
+                  });
                 }
               }
             }

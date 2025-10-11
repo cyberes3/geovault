@@ -325,12 +325,40 @@ class AsyncFileProcessor:
                 }
                 geojson_hash = hash_normalized_geojson(geojson_for_hash)
 
+                # Perform duplicate detection against existing features
+                processing_log.add("Starting duplicate detection against existing feature store", "AsyncProcessor", DatabaseLogLevel.INFO)
+                
+                # Import the duplicate detection functions
+                from data.views.import_item import _find_coordinate_duplicates, _strip_duplicate_features
+                
+                # First, check for internal duplicates within the file
+                processing_log.add("Checking for internal duplicates within the uploaded file", "AsyncProcessor", DatabaseLogLevel.INFO)
+                unique_internal_features, internal_duplicate_count, internal_duplicate_log = _strip_duplicate_features(processed_features)
+                processing_log.extend(internal_duplicate_log)
+                
+                # Then check for coordinate duplicates against existing features
+                processing_log.add("Checking for coordinate duplicates against existing features in your library", "AsyncProcessor", DatabaseLogLevel.INFO)
+                duplicate_detection_start = time.time()
+                unique_features, duplicate_features, duplicate_log = _find_coordinate_duplicates(unique_internal_features, user_id)
+                duplicate_detection_duration = time.time() - duplicate_detection_start
+                processing_log.extend(duplicate_log)
+                processing_log.add_timing("Duplicate detection", duplicate_detection_duration, "AsyncProcessor")
+                
+                # Log summary of duplicate detection results
+                total_duplicates = internal_duplicate_count + len(duplicate_features)
+                processing_log.add(f"Duplicate detection completed: {internal_duplicate_count} internal duplicates, {len(duplicate_features)} existing duplicates", "AsyncProcessor", DatabaseLogLevel.INFO)
+                
+                # Use the original processed_features (not unique_features) to preserve all features
+                # The duplicate_features list contains the duplicate information we need
+                processing_log.add(f"Total duplicate features found: {total_duplicates}", "AsyncProcessor", DatabaseLogLevel.INFO)
+
                 # Save the features to the database
                 processing_log.add(f"Saving {len(processed_features)} features to database ({geojson_size_mb:.2f} MB)", "AsyncProcessor", DatabaseLogLevel.INFO)
 
                 import_queue.raw_kml = geojson_str
                 import_queue.geojson_hash = geojson_hash
                 import_queue.geofeatures = processed_features
+                import_queue.duplicate_features = duplicate_features  # Store duplicate information
                 import_queue.save()
 
                 processing_log.add("Import queue entry updated successfully", "AsyncProcessor", DatabaseLogLevel.INFO)

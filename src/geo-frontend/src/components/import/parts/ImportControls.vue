@@ -6,7 +6,6 @@
         <div class="text-sm text-gray-700">
           <span v-if="!isLoadingPage">
             Showing features {{ (currentPage - 1) * pageSize + 1 }} - {{ Math.min(currentPage * pageSize, totalFeatures) }} of {{ totalFeatures }}
-            <span v-if="duplicateCount > 0" class="text-yellow-600">({{ duplicateCount }} duplicates across all pages)</span>
           </span>
           <span v-else class="text-blue-600 font-medium">Loading...</span>
         </div>
@@ -244,9 +243,9 @@ export default {
   },
   computed: {
     isValidPageNumber() {
-      return this.gotoPageInputLocal && 
-             this.gotoPageInputLocal >= 1 && 
-             this.gotoPageInputLocal <= this.totalPages && 
+      return this.gotoPageInputLocal &&
+             this.gotoPageInputLocal >= 1 &&
+             this.gotoPageInputLocal <= this.totalPages &&
              this.gotoPageInputLocal !== this.currentPage;
     },
     shouldShowActions() {
