@@ -2,6 +2,7 @@ import datetime
 import json
 import logging
 import time
+import traceback
 from contextlib import contextmanager
 from enum import Enum
 from typing import List
@@ -114,6 +115,7 @@ class RealTimeImportLog:
             self._db_logger.debug(f"Real-time log written: {source} - {msg}")
         except Exception as e:
             self._db_logger.error(f"Failed to write real-time log to database: {str(e)}")
+            self._db_logger.error(f"Real-time log database write error traceback: {traceback.format_exc()}")
             # Don't raise the exception - we still want processing to continue
     
     def extend(self, msgs: 'ImportLog'):

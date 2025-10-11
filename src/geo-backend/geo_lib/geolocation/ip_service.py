@@ -3,6 +3,7 @@ IP-based geolocation service using MaxMind GeoIP2 database.
 """
 import os
 import logging
+import traceback
 from typing import Optional, Dict, Any
 import geoip2.database
 import geoip2.errors
@@ -111,6 +112,7 @@ class IPGeolocationService:
             return None
         except Exception as e:
             logger.error(f"Error looking up IP {ip_address}: {e}")
+            logger.error(f"IP lookup error traceback: {traceback.format_exc()}")
             return None
     
     def _is_private_ip(self, ip_address: str) -> bool:

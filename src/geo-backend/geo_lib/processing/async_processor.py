@@ -63,6 +63,7 @@ class AsyncFileProcessor:
             self.status_tracker.set_job_result(job_id, {}, import_queue_id)
         except Exception as e:
             logger.error(f"Failed to create initial import queue entry for job {job_id}: {str(e)}")
+            logger.error(f"Import queue creation error traceback: {traceback.format_exc()}")
             return False
 
         # Start processing in background thread
@@ -277,6 +278,7 @@ class AsyncFileProcessor:
 
         except Exception as e:
             logger.error(f"Failed to create initial import queue entry for job {job_id}: {str(e)}")
+            logger.error(f"Import queue creation error traceback: {traceback.format_exc()}")
             raise
 
     def _update_import_queue_entry(self, geojson_data: Dict[str, Any],
@@ -369,6 +371,7 @@ class AsyncFileProcessor:
 
         except Exception as e:
             logger.error(f"Failed to update import queue entry for job {job_id}: {str(e)}")
+            logger.error(f"Import queue update error traceback: {traceback.format_exc()}")
             raise
 
     def cancel_processing(self, job_id: str) -> bool:

@@ -10,6 +10,7 @@ import re
 import subprocess
 import tempfile
 import time
+import traceback
 import xml.etree.ElementTree as ET
 from typing import Tuple, Union
 
@@ -311,6 +312,7 @@ def process_togeojson_features(features: list, file_type: FileType) -> Tuple[lis
                 except Exception as e:
                     feature_name = split_feature.get('properties', {}).get('name', 'Unnamed')
                     import_log.add(f"Failed to process feature '{feature_name}', skipping", 'Feature Processing', DatabaseLogLevel.WARNING)
+                    logger.error(f"Feature processing error for '{feature_name}': {traceback.format_exc()}")
                     skipped_count += 1
             else:
                 import_log.add(f'Skipping unsupported geometry type: {split_feature["geometry"]["type"]}', 'Feature Processing', DatabaseLogLevel.WARNING)
@@ -505,6 +507,7 @@ def geo_to_geojson(file_data: Union[bytes, str], filename: str = "", timeout_sec
         # Log user-friendly message, but log internal details to server logs
         import_log.add(f"File conversion failed: {type(e).__name__}", "File Conversion", DatabaseLogLevel.ERROR)
         logger.error(f"Detailed conversion error: {str(e)}")
+        logger.error(f"File conversion error traceback: {traceback.format_exc()}")
         raise
 
 

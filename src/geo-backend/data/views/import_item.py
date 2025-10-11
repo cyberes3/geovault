@@ -1,30 +1,25 @@
 import hashlib
 import json
 import logging
-import time
 import traceback
 from typing import List, Dict, Tuple, Any
 
 from django import forms
 from django.contrib.gis.geos import GEOSGeometry
 from django.core.serializers.json import DjangoJSONEncoder
-from django.db import IntegrityError
 from django.http import HttpResponse, JsonResponse
 from django.views.decorators.csrf import csrf_protect
 from django.views.decorators.http import require_http_methods
 
 from data.models import ImportQueue, FeatureStore, DatabaseLogging
 from geo_lib.feature_id import generate_feature_hash
-from geo_lib.logging.database import importlog_to_db
-from geo_lib.processing.geo_processor import geo_to_geojson, FileType
-from geo_lib.processing.logging import ImportLog, DatabaseLogLevel
-from geo_lib.processing.tagging import generate_auto_tags
-from geo_lib.security.file_validation import SecureFileValidator, FileValidationError, SecurityError
-from geo_lib.types.feature import PointFeature, PolygonFeature, LineStringFeature, MultiLineStringFeature
-from geo_lib.types.feature import geojson_to_geofeature
-from geo_lib.website.auth import login_required_401
-from geo_lib.processing.status_tracker import status_tracker
 from geo_lib.processing.async_processor import async_processor
+from geo_lib.processing.logging import ImportLog, DatabaseLogLevel
+from geo_lib.processing.status_tracker import status_tracker
+from geo_lib.processing.tagging import generate_auto_tags
+from geo_lib.security.file_validation import SecureFileValidator
+from geo_lib.types.feature import PointFeature, PolygonFeature, LineStringFeature, MultiLineStringFeature
+from geo_lib.website.auth import login_required_401
 
 logger = logging.getLogger(__name__)
 
@@ -35,7 +30,7 @@ def _strip_duplicate_features(features) -> Tuple[List[Any], int, ImportLog]:
 
     if not features:
         return features, 0, import_log
-    
+
     import_log.add(f"Checking {len(features)} features for internal duplicates", "Duplicate Detection", DatabaseLogLevel.INFO)
 
     # Track features by hash
@@ -57,7 +52,7 @@ def _strip_duplicate_features(features) -> Tuple[List[Any], int, ImportLog]:
             # This is a unique feature
             seen_hashes.add(feature_hash)
             unique_features.append(feature)
-    
+
     if duplicate_feature_count > 0:
         import_log.add(f"Removed {duplicate_feature_count} duplicate features within the file", "Duplicate Detection", DatabaseLogLevel.INFO)
     else:
@@ -92,7 +87,7 @@ def _find_coordinate_duplicates(features: List[Dict], user_id: int) -> Tuple[Lis
 
     if not features:
         return features, [], import_log
-    
+
     import_log.add(f"Checking {len(features)} features against existing features in your library", "Duplicate Detection", DatabaseLogLevel.INFO)
 
     # For large files, use batched approach to reduce database queries
@@ -132,7 +127,7 @@ def _find_coordinate_duplicates(features: List[Dict], user_id: int) -> Tuple[Lis
             import_log.add(f"Coordinate duplicate found: '{feature_name}' ({feature_type}) matches {existing_count} existing feature(s)", 'Duplicate Detection', DatabaseLogLevel.INFO)
         else:
             unique_features.append(feature)
-    
+
     # Log summary
     if duplicate_features:
         import_log.add(f"Found {len(duplicate_features)} features that already exist in your library", "Duplicate Detection", DatabaseLogLevel.INFO)
@@ -209,7 +204,7 @@ def _find_coordinate_duplicates_batched(features: List[Dict], user_id: int, impo
                         continue
                     else:
                         geom_type_name = geom_type.title()
-                    
+
                     geom_data = {
                         'type': geom_type_name,
                         'coordinates': coordinates
@@ -218,6 +213,7 @@ def _find_coordinate_duplicates_batched(features: List[Dict], user_id: int, impo
                     batch_geometries.append((idx, feature, geometry))
                 except Exception as e:
                     import_log.add(f"Failed to create geometry for feature {idx}: {str(e)}", 'Find Coordinate Duplicates')
+                    logger.error(f"Failed to create geometry for feature {idx}: {traceback.format_exc()}")
                     unique_features.append(feature)
 
             if not batch_geometries:
@@ -260,10 +256,11 @@ def _find_coordinate_duplicates_batched(features: List[Dict], user_id: int, impo
                 import_log.add(f"Batch query encountered an issue, processing individually", 'Duplicate Detection', DatabaseLogLevel.WARNING)
                 # Log internal error details for debugging
                 logger.warning(f"Batch query failed for {geom_type} features: {str(e)}")
+                logger.error(f"Batch query error traceback: {traceback.format_exc()}")
                 # Fall back to individual processing for this batch
                 for idx, feature, coordinates in batch_features:
                     unique_features.append(feature)
-    
+
     # Log summary
     if duplicate_features:
         import_log.add(f"Found {len(duplicate_features)} features that already exist in your library", "Duplicate Detection", DatabaseLogLevel.INFO)
@@ -382,6 +379,7 @@ def _find_existing_features_by_coordinates(coordinates: List, geom_type: str, us
     except Exception as e:
         # Log internal error details but don't expose to user
         logger.error(f"Error finding existing features by coordinates: {type(e).__name__}: {str(e)}")
+        logger.error(f"Coordinate lookup error traceback: {traceback.format_exc()}")
         return []
 
 
@@ -395,19 +393,20 @@ def _find_geometry_collection_duplicates(geometries: List, user_id: int) -> List
         for geometry in geometries:
             geom_type = geometry.get('type', '').lower()
             coordinates = geometry.get('coordinates', [])
-            
+
             if coordinates:
                 # Recursively check this geometry for duplicates
                 existing_features = _find_existing_features_by_coordinates(coordinates, geom_type, user_id)
                 if existing_features:
                     # Return the first match found
                     return existing_features
-        
+
         # No duplicates found in any geometry
         return []
-        
+
     except Exception as e:
         logger.error(f"Error finding geometry collection duplicates: {type(e).__name__}: {str(e)}")
+        logger.error(f"Geometry collection error traceback: {traceback.format_exc()}")
         return []
 
 
@@ -458,7 +457,7 @@ def upload_item(request):
 
             # Create a processing job
             job_id = status_tracker.create_job(file_name, request.user.id)
-            
+
             # Start background processing
             if async_processor.start_processing(job_id, file_data, file_name, request.user.id):
                 return JsonResponse({
@@ -478,8 +477,8 @@ def upload_item(request):
             if 'file' in request.FILES:
                 filename = request.FILES['file'].name
             return JsonResponse({
-                'success': False, 
-                'msg': f'Invalid upload structure for file "{filename}"', 
+                'success': False,
+                'msg': f'Invalid upload structure for file "{filename}"',
                 'job_id': None
             }, status=400)
     else:
@@ -493,7 +492,7 @@ def get_import_item_logs(request, item_id):
     """
     try:
         item = ImportQueue.objects.get(id=item_id, user=request.user)
-        
+
         # Get logs for this import queue item
         logs = []
         if item.log_id:
@@ -502,7 +501,7 @@ def get_import_item_logs(request, item_id):
                 db_logs = DatabaseLogging.objects.filter(
                     log_id=item.log_id
                 ).order_by('timestamp')
-                
+
                 logs = [{
                     'timestamp': log.timestamp.isoformat(),
                     'msg': log.text,
@@ -511,10 +510,11 @@ def get_import_item_logs(request, item_id):
                 } for log in db_logs]
             except Exception as e:
                 logger.error(f"Failed to fetch logs for item {item_id}: {str(e)}")
+                logger.error(f"Log fetching error traceback: {traceback.format_exc()}")
                 logs = []
-        
+
         return JsonResponse({'logs': logs}, status=200)
-        
+
     except ImportQueue.DoesNotExist:
         return JsonResponse({'error': 'Item not found'}, status=404)
 
@@ -526,18 +526,18 @@ def get_processing_status(request, job_id):
     """
     if not job_id:
         return JsonResponse({'success': False, 'msg': 'Job ID not provided'}, status=400)
-    
+
     # Get job status
     job_status = status_tracker.get_job_status(job_id)
-    
+
     if not job_status:
         return JsonResponse({'success': False, 'msg': 'Job not found'}, status=404)
-    
+
     # Check if user owns this job
     job = status_tracker.get_job(job_id)
     if not job or job.user_id != request.user.id:
         return JsonResponse({'success': False, 'msg': 'Not authorized to view this job'}, status=403)
-    
+
     return JsonResponse({
         'success': True,
         'job_status': job_status
@@ -550,13 +550,13 @@ def get_user_processing_jobs(request):
     Get all processing jobs for the current user.
     """
     user_jobs = status_tracker.get_user_jobs(request.user.id)
-    
+
     job_statuses = []
     for job in user_jobs:
         job_status = status_tracker.get_job_status(job.job_id)
         if job_status:
             job_statuses.append(job_status)
-    
+
     return JsonResponse({
         'success': True,
         'jobs': job_statuses
@@ -570,12 +570,12 @@ def cancel_processing_job(request, job_id):
     """
     if not job_id:
         return JsonResponse({'success': False, 'msg': 'Job ID not provided'}, status=400)
-    
+
     # Check if user owns this job
     job = status_tracker.get_job(job_id)
     if not job or job.user_id != request.user.id:
         return JsonResponse({'success': False, 'msg': 'Not authorized to cancel this job'}, status=403)
-    
+
     if async_processor.cancel_processing(job_id):
         return JsonResponse({
             'success': True,
@@ -598,9 +598,9 @@ def fetch_import_queue(request, item_id):
         # Check if this item is currently being processed
         user_jobs = status_tracker.get_user_jobs(request.user.id)
         active_job_ids = {job.import_queue_id for job in user_jobs if job.status.value == 'processing' and job.import_queue_id}
-        
+
         is_processing = item.id in active_job_ids
-        
+
         # Get job details if processing
         job_details = None
         if is_processing:
@@ -614,15 +614,15 @@ def fetch_import_queue(request, item_id):
 
         if item.imported:
             return JsonResponse({
-                'success': True, 
-                'processing': is_processing, 
+                'success': True,
+                'processing': is_processing,
                 'job_details': job_details,
-                'geofeatures': None, 
-                'msg': None, 
-                'original_filename': None, 
+                'geofeatures': None,
+                'msg': None,
+                'original_filename': None,
                 'imported': item.imported
             }, status=200)
-        
+
         # Check if this is an unparsable file (processing failed)
         if item.unparsable:
             return JsonResponse({
@@ -647,11 +647,11 @@ def fetch_import_queue(request, item_id):
                     'duplicate_indices': []
                 }
             }, status=200)
-        
+
         # Check for duplicate files based on geojson_hash
         duplicate_status = None
         duplicate_original_filename = None
-        
+
         if item.geojson_hash:
             # Check if there's an EARLIER file in the import queue (not imported) with the same hash
             # Only mark as duplicate if this file was uploaded AFTER another one with same hash
@@ -661,7 +661,7 @@ def fetch_import_queue(request, item_id):
                 imported=False,
                 timestamp__lt=item.timestamp  # Only files uploaded BEFORE this one
             ).order_by('timestamp').first()
-            
+
             if duplicate_in_queue:
                 # This is a duplicate of a file in the queue (uploaded earlier)
                 duplicate_status = 'duplicate_in_queue'
@@ -673,7 +673,7 @@ def fetch_import_queue(request, item_id):
                     geojson_hash=item.geojson_hash,
                     imported=True
                 ).order_by('timestamp').first()
-                
+
                 if duplicate_imported:
                     # This is a duplicate of an imported file
                     duplicate_status = 'duplicate_imported'
@@ -682,7 +682,7 @@ def fetch_import_queue(request, item_id):
         # Get pagination parameters
         page = int(request.GET.get('page', 1))
         page_size = int(request.GET.get('page_size', 50))
-        
+
         # Validate pagination parameters
         if page < 1:
             page = 1
@@ -693,15 +693,15 @@ def fetch_import_queue(request, item_id):
         total_features = len(item.geofeatures)
         start_idx = (page - 1) * page_size
         end_idx = start_idx + page_size
-        
+
         # Get paginated features
         paginated_features = item.geofeatures[start_idx:end_idx]
-        
+
         # Optimize duplicate information - only include IDs and essential data
         # Create a mapping of feature indices to duplicate info for current page
         duplicates_optimized = []
         duplicate_indices = []  # Track which indices are duplicates
-        
+
         for dup_info in (item.duplicate_features if item.duplicate_features else []):
             # Find the index of this duplicate feature in the full list
             dup_feature = dup_info.get('feature')
@@ -709,7 +709,7 @@ def fetch_import_queue(request, item_id):
                 # Try to find matching feature by coordinates
                 for idx, feature in enumerate(item.geofeatures):
                     if (feature.get('geometry', {}).get('coordinates') == dup_feature.get('geometry', {}).get('coordinates') and
-                        feature.get('geometry', {}).get('type') == dup_feature.get('geometry', {}).get('type')):
+                            feature.get('geometry', {}).get('type') == dup_feature.get('geometry', {}).get('type')):
                         duplicate_indices.append(idx)
                         # Only include duplicate info if it's in the current page
                         if start_idx <= idx < end_idx:
@@ -759,11 +759,11 @@ def fetch_import_queue(request, item_id):
 def fetch_import_waiting(request):
     user_items = ImportQueue.objects.filter(user=request.user, imported=False).order_by('-timestamp').values('id', 'geofeatures', 'original_filename', 'geojson_hash', 'log_id', 'timestamp', 'imported', 'unparsable')
     data = json.loads(json.dumps(list(user_items), cls=DjangoJSONEncoder))
-    
+
     # Get all active processing jobs for this user
     user_jobs = status_tracker.get_user_jobs(request.user.id)
     active_job_ids = {job.import_queue_id for job in user_jobs if job.status.value == 'processing' and job.import_queue_id}
-    
+
     # Build a map of geojson_hash to items for duplicate detection
     hash_to_items = {}
     for item in data:
@@ -771,7 +771,7 @@ def fetch_import_waiting(request):
             if item['geojson_hash'] not in hash_to_items:
                 hash_to_items[item['geojson_hash']] = []
             hash_to_items[item['geojson_hash']].append(item)
-    
+
     # Check for imported files with same hash (do this once for all items)
     imported_hashes = {}
     if hash_to_items:
@@ -780,32 +780,32 @@ def fetch_import_waiting(request):
             imported=True,
             geojson_hash__in=list(hash_to_items.keys())
         ).values('geojson_hash', 'original_filename')
-        
+
         for imported_item in imported_items:
             imported_hashes[imported_item['geojson_hash']] = imported_item['original_filename']
-    
+
     for i, item in enumerate(data):
         count = len(item['geofeatures'])
-        
+
         # Check if this item is currently being processed
         item['processing'] = item['id'] in active_job_ids
-        
+
         # Also consider items with empty geofeatures as processing if they were created recently
         # This handles the race condition where processing hasn't started yet but the item was just uploaded
         if not item['processing'] and count == 0 and not item.get('unparsable'):
             from django.utils import timezone
             from datetime import timedelta
-            
+
             # If item was created within the last 10 seconds, consider it as processing
             item_timestamp = item['timestamp']
             if isinstance(item_timestamp, str):
                 from datetime import datetime
                 item_timestamp = datetime.fromisoformat(item_timestamp.replace('Z', '+00:00'))
-            
+
             time_since_creation = timezone.now() - item_timestamp
             if time_since_creation < timedelta(seconds=10):
                 item['processing'] = True
-        
+
         # Check if there's an error in the geofeatures or if marked as unparsable
         if item.get('unparsable') or (count == 1 and item['geofeatures'] and isinstance(item['geofeatures'][0], dict) and 'error' in item['geofeatures'][0]):
             # This is an error case from failed processing
@@ -818,19 +818,19 @@ def fetch_import_waiting(request):
         else:
             item['feature_count'] = count
             item['processing_failed'] = False
-        
+
         # Check for duplicate status
         item['duplicate_status'] = None
         if item.get('geojson_hash'):
             geojson_hash = item['geojson_hash']
             items_with_same_hash = hash_to_items.get(geojson_hash, [])
-            
+
             # Check if there are other items in queue with same hash (uploaded earlier)
             earlier_items = [
-                other for other in items_with_same_hash 
+                other for other in items_with_same_hash
                 if other['id'] != item['id'] and other['timestamp'] < item['timestamp']
             ]
-            
+
             if earlier_items:
                 # This is a duplicate of an item in the queue
                 item['duplicate_status'] = 'duplicate_in_queue'
@@ -935,6 +935,7 @@ def bulk_delete_import_items(request):
     except Exception as e:
         # Log internal error details for debugging, but don't expose to user
         logger.error(f'Bulk delete error: {type(e).__name__}: {str(e)}')
+        logger.error(f'Bulk delete error traceback: {traceback.format_exc()}')
         return JsonResponse({'success': False, 'msg': 'Internal server error occurred', 'code': 500}, status=500)
 
 
@@ -961,7 +962,7 @@ def update_import_item(request, item_id):
         data = json.loads(request.body)
         if not isinstance(data, dict) or 'features' not in data:
             raise ValueError('Invalid data format. Expected {"features": [{feature with id}, ...]}')
-        
+
         features_to_update = data['features']
         if not isinstance(features_to_update, list):
             raise ValueError('features must be a list')
@@ -983,23 +984,24 @@ def update_import_item(request, item_id):
                 c = PolygonFeature
             case _:
                 continue
-        
+
         if c is None:
             continue
-            
+
         # Parse the feature to validate it
         try:
             parsed_feature = c(**feature)
             feature_json = json.loads(parsed_feature.model_dump_json())
             feature_id = feature_json.get('properties', {}).get('id')
-            
+
             if not feature_id:
                 logger.warning(f"Skipping feature without ID: {feature.get('properties', {}).get('name', 'Unnamed')}")
                 continue
-                
+
             updates_by_id[feature_id] = feature_json
         except Exception as e:
             logger.error(f"Error parsing feature: {e}")
+            logger.error(f"Feature parsing error traceback: {traceback.format_exc()}")
             continue
 
     # Update features in the geofeatures array by matching IDs
@@ -1014,7 +1016,7 @@ def update_import_item(request, item_id):
     queue.save()
 
     return JsonResponse({
-        'success': True, 
+        'success': True,
         'msg': f'Successfully updated {updated_count} feature(s)',
         'updated_count': updated_count
     })
@@ -1155,6 +1157,7 @@ def import_to_featurestore(request, item_id):
             except Exception as e:
                 # Log internal error details for debugging - don't expose to user
                 logger.warning(f"Error creating geometry for feature {i}: {type(e).__name__}: {str(e)}")
+                logger.error(f"Geometry creation error traceback for feature {i}: {traceback.format_exc()}")
 
         # Add to bulk creation list
         features_to_create.append(FeatureStore(
@@ -1175,6 +1178,7 @@ def import_to_featurestore(request, item_id):
             logger.info(f"Successfully imported {len(features_to_create)} features in bulk for user {request.user.id}")
         except Exception as e:
             logger.warning(f"Bulk import failed for user {request.user.id}, falling back to individual imports: {str(e)}")
+            logger.error(f"Bulk import error traceback: {traceback.format_exc()}")
             # Fallback to individual creation if bulk fails
             successful_imports = 0
             for feature in features_to_create:
@@ -1183,6 +1187,7 @@ def import_to_featurestore(request, item_id):
                     successful_imports += 1
                 except Exception as individual_error:
                     logger.error(f"Error creating individual feature for user {request.user.id}: {individual_error}")
+                    logger.error(f"Individual feature creation error traceback: {traceback.format_exc()}")
                     # If it's a duplicate key error, that's expected and we can continue
                     if "duplicate key" not in str(individual_error).lower():
                         logger.error(f"Unexpected error creating feature for user {request.user.id}: {individual_error}")

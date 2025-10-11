@@ -1,8 +1,10 @@
 import json
+import logging
 import os
 import re
 import subprocess
 import tempfile
+import traceback
 import xml.etree.ElementTree as ET
 from typing import Tuple
 
@@ -10,6 +12,8 @@ import markdownify
 
 from geo_lib.processing.logging import ImportLog, DatabaseLogLevel
 from geo_lib.types.geojson import GeojsonRawProperty
+
+logger = logging.getLogger(__name__)
 
 
 def html_to_markdown(html_content) -> str:
@@ -200,6 +204,7 @@ def process_togeojson_features(features: list) -> Tuple[list, ImportLog]:
                     processed_features.append(split_feature)
                 except Exception as e:
                     import_log.add(f'Failed to process feature properties: {str(e)}, skipping feature', 'ToGeoJSON Process', DatabaseLogLevel.ERROR)
+                    logger.error(f"Feature properties processing error: {traceback.format_exc()}")
             else:
                 import_log.add(f'Unsupported geometry type: {split_feature["geometry"]["type"]}, skipping', 'ToGeoJSON Process', DatabaseLogLevel.WARNING)
 
@@ -308,6 +313,7 @@ def kml_to_geojson(kml_bytes, timeout_seconds: int = None) -> Tuple[dict, Import
 
     except Exception as e:
         import_log.add(f"KML conversion failed: {str(e)}", 'KML to GeoJSON', DatabaseLogLevel.ERROR)
+        logger.error(f"KML conversion error traceback: {traceback.format_exc()}")
         raise
 
 
