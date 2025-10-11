@@ -1292,13 +1292,18 @@ export default {
             }
           }
         } catch (error) {
-          if (error.response && error.response.data && error.response.data.code === 404) {
-            // Import ID does not exist.
+          // Check for 404 response from backend (both custom format and HTTP status)
+          if ((error.response && error.response.data && 
+               error.response.data.success === false && 
+               error.response.data.code === 404) ||
+              (error.response && error.response.status === 404)) {
+            // Import ID does not exist - redirect to import page and remove from history
             // Remove the beforeunload handler before redirecting
             if (vm.beforeUnloadHandler) {
               window.removeEventListener('beforeunload', vm.beforeUnloadHandler);
             }
             vm.isRedirectingDueToInvalidId = true;
+            // Use replace to remove the current entry from browser history
             vm.$router.replace('/import');
             return;
           }
