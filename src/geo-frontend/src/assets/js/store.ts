@@ -1,34 +1,50 @@
-import {createStore} from 'vuex'
-import {UserInfo} from './types/store-types'
-import {ImportQueueItem} from "@/assets/js/types/import-types";
+import { createStore, Commit } from 'vuex'
+import { UserInfo } from './types/store-types'
 
+// Define import queue item interface
+interface ImportQueueItem {
+    id: string
+    filename: string
+    status: string
+    [key: string]: any
+}
 
-export default createStore({
+// Define the state interface
+interface State {
+    userInfo: typeof UserInfo
+    importQueue: ImportQueueItem[]
+    importQueueRefreshTrigger: boolean
+}
+
+// Store type is inferred from createStore<State>
+
+export default createStore<State>({
     state: {
         userInfo: UserInfo,
         importQueue: [],
         importQueueRefreshTrigger: false,
-
-    }, mutations: {
-        userInfo(state, payload) {
+    }, 
+    mutations: {
+        userInfo(state: State, payload: typeof UserInfo) {
             state.userInfo = payload
         },
-        importQueue(state, payload) {
+        importQueue(state: State, payload: ImportQueueItem[]) {
             state.importQueue = payload
         },
-        setImportQueue(state, importQueue) {
+        setImportQueue(state: State, importQueue: ImportQueueItem[]) {
             state.importQueue = importQueue;
         },
-        triggerImportQueueRefresh(state) {
+        triggerImportQueueRefresh(state: State) {
             state.importQueueRefreshTrigger = !state.importQueueRefreshTrigger;
         },
-    }, getters: {
+    }, 
+    getters: {
         // alertExists: (state) => (message) => {
         //     return state.siteAlerts.includes(message);
         // },
     },
     actions: {
-        refreshImportQueue({commit}) {
+        refreshImportQueue({ commit }: { commit: Commit }) {
             commit('triggerImportQueueRefresh');
         },
     },

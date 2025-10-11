@@ -1,12 +1,12 @@
 import {getCookie} from "../auth.js"
 
 export class UserInfo {
-    username: String;
-    id: BigInteger;
-    featureCount: Number;
-    csrftoken: String;
+    username: string;
+    id: bigint;
+    featureCount: number;
+    csrftoken: string | null;
 
-    constructor(username: String, userId: BigInteger, featureCount: Number = 0) {
+    constructor(username: string, userId: bigint, featureCount: number = 0) {
         this.username = username
         this.id = userId
         this.featureCount = featureCount

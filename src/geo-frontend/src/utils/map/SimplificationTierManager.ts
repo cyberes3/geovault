@@ -59,7 +59,7 @@ export class SimplificationTierManager {
      * @returns The current tier level (1-5)
      */
     getCurrentTier(featureCount: number): number {
-        const {tier1, tier2, tier3, tier4, tier5} = this.thresholds;
+        const {tier1, tier2, tier3, tier4} = this.thresholds;
 
         if (featureCount <= tier1) return 1;
         if (featureCount <= tier2) return 2;

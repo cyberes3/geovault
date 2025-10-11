@@ -390,26 +390,12 @@ def upload_item(request):
 
 
 @login_required_401
-def get_import_item_status(request, item_id):
+def get_import_item_logs(request, item_id):
     """
-    Get the processing status of a specific import queue item, including real-time logs.
+    Get the logs for a specific import queue item.
     """
     try:
         item = ImportQueue.objects.get(id=item_id, user=request.user)
-        
-        # Check if this item is currently being processed
-        user_jobs = status_tracker.get_user_jobs(request.user.id)
-        active_job_ids = {job.import_queue_id for job in user_jobs if job.status.value == 'processing' and job.import_queue_id}
-        
-        is_processing = item.id in active_job_ids
-        
-        # Get job details if processing
-        job_details = None
-        if is_processing:
-            for job in user_jobs:
-                if job.import_queue_id == item.id and job.status.value == 'processing':
-                    job_details = status_tracker.get_job_status(job.job_id)
-                    break
         
         # Get logs for this import queue item
         logs = []
@@ -430,16 +416,10 @@ def get_import_item_status(request, item_id):
                 logger.error(f"Failed to fetch logs for item {item_id}: {str(e)}")
                 logs = []
         
-        return JsonResponse({
-            'success': True,
-            'is_processing': is_processing,
-            'job_details': job_details,
-            'feature_count': len(item.geofeatures) if item.geofeatures else 0,
-            'logs': logs
-        }, status=200)
+        return JsonResponse({'logs': logs}, status=200)
         
     except ImportQueue.DoesNotExist:
-        return JsonResponse({'success': False, 'msg': 'Item not found'}, status=404)
+        return JsonResponse({'error': 'Item not found'}, status=404)
 
 
 @login_required_401
@@ -518,17 +498,40 @@ def fetch_import_queue(request, item_id):
     try:
         item = ImportQueue.objects.get(id=item_id)
 
+        # Check if this item is currently being processed
+        user_jobs = status_tracker.get_user_jobs(request.user.id)
+        active_job_ids = {job.import_queue_id for job in user_jobs if job.status.value == 'processing' and job.import_queue_id}
+        
+        is_processing = item.id in active_job_ids
+        
+        # Get job details if processing
+        job_details = None
+        if is_processing:
+            for job in user_jobs:
+                if job.import_queue_id == item.id and job.status.value == 'processing':
+                    job_details = status_tracker.get_job_status(job.job_id)
+                    break
+
         if item.user_id != request.user.id:
             return JsonResponse({'success': False, 'processing': False, 'msg': 'not authorized to view this item', 'code': 403}, status=400)
 
         if item.imported:
-            return JsonResponse({'success': True, 'processing': False, 'geofeatures': None, 'msg': None, 'original_filename': None, 'imported': item.imported}, status=200)
+            return JsonResponse({
+                'success': True, 
+                'processing': is_processing, 
+                'job_details': job_details,
+                'geofeatures': None, 
+                'msg': None, 
+                'original_filename': None, 
+                'imported': item.imported
+            }, status=200)
         
         # Check if this is an unparsable file (processing failed)
         if item.unparsable:
             return JsonResponse({
                 'success': True,
-                'processing': False,
+                'processing': is_processing,
+                'job_details': job_details,
                 'geofeatures': [{'error': 'file_unparsable', 'message': 'File processing failed. Please check the processing logs below for details.'}],
                 'msg': 'File processing failed. Please check the processing logs below for details.',
                 'original_filename': item.original_filename,
@@ -632,7 +635,8 @@ def fetch_import_queue(request, item_id):
 
         return JsonResponse({
             'success': True,
-            'processing': False,
+            'processing': is_processing,
+            'job_details': job_details,
             'geofeatures': paginated_features,
             'msg': None,
             'original_filename': item.original_filename,

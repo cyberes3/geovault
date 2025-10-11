@@ -43,7 +43,7 @@
         <button
             class="inline-flex items-center p-2 border border-gray-300 shadow-sm text-sm font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500"
             title="Open full log view"
-            @click="showLogModal = true"
+            @click="dialogs.logs = true"
         >
           <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" stroke-linecap="round" stroke-linejoin="round" stroke-width="2"></path>
@@ -54,21 +54,21 @@
         <div class="h-32 overflow-auto">
           <ul class="space-y-2">
             <li v-for="(item, index) in workerLog" :key="`logitem-${index}`"
-                class="flex items-start space-x-2"
-                :class="{'bg-red-50 border-l-4 border-red-400 pl-2 py-1': item.level >= 40}">
+                :class="{'bg-red-50 border-l-4 border-red-400 pl-2 py-1': item.level >= 40}"
+                class="flex items-start space-x-2">
               <span class="text-sm text-gray-500">{{ formatTimestamp(item.timestamp) }}</span>
               <span v-if="item.source" class="text-xs text-gray-400 bg-gray-100 px-2 py-1 rounded">{{ item.source }}</span>
               <span
-                v-if="item.level !== undefined"
-                class="text-xs px-2 py-1 rounded font-medium"
-                :class="getLevelClass(item.level)"
+                  v-if="item.level !== undefined"
+                  :class="getLevelClass(item.level)"
+                  class="text-xs px-2 py-1 rounded font-medium"
               >
                 {{ getLevelName(item.level) }}
               </span>
-              <span class="text-sm" :class="item.level >= 40 ? 'text-red-800 font-medium' : 'text-gray-700'">{{ item.msg }}</span>
+              <span :class="item.level >= 40 ? 'text-red-800 font-medium' : 'text-gray-700'" class="text-sm">{{ item.msg }}</span>
             </li>
             <li v-if="workerLog.length === 0" class="text-sm text-gray-500 italic">
-              {{ isLoadingLogs ? 'Fetching logs...' : 'No logs available yet...' }}
+              {{ loading.logs ? 'Fetching logs...' : 'No logs available yet...' }}
             </li>
           </ul>
         </div>
@@ -78,7 +78,7 @@
     <!-- Import Summary -->
     <div class="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
       <h3 class="text-lg font-semibold text-gray-900 mb-4">Import Summary</h3>
-      <div v-if="isLoadingPage" class="text-center py-8">
+      <div v-if="loading.page" class="text-center py-8">
         <span class="text-blue-600 font-medium">Loading...</span>
       </div>
       <div v-else class="grid grid-cols-1 md:grid-cols-3 gap-4">
@@ -91,7 +91,7 @@
             </div>
             <div class="ml-3">
               <p class="text-sm font-medium text-blue-800">Total Features</p>
-              <p class="text-2xl font-bold text-blue-900">{{ totalFeatures || itemsForUser.length }}</p>
+              <p class="text-2xl font-bold text-blue-900">{{ pagination.totalFeatures || itemsForUser.length }}</p>
             </div>
           </div>
         </div>
@@ -105,7 +105,7 @@
             </div>
             <div class="ml-3">
               <p class="text-sm font-medium text-green-800">Ready to Import</p>
-              <p class="text-2xl font-bold text-green-900">{{ totalFeatures - duplicateIndices.length }}</p>
+              <p class="text-2xl font-bold text-green-900">{{ pagination.totalFeatures - duplicates.indices.length }}</p>
             </div>
           </div>
         </div>
@@ -119,7 +119,7 @@
             </div>
             <div class="ml-3">
               <p class="text-sm font-medium text-yellow-800">Exact Duplicates (Skipped)</p>
-              <p class="text-2xl font-bold text-yellow-900">{{ duplicateIndices.length }}</p>
+              <p class="text-2xl font-bold text-yellow-900">{{ duplicates.indices.length }}</p>
             </div>
           </div>
         </div>
@@ -127,28 +127,28 @@
     </div>
 
     <!-- Loading State for Initial Page Load -->
-    <Loader v-if="originalFilename == null && !isLoadingPage"/>
+    <Loader v-if="originalFilename == null && !loading.page"/>
 
     <!-- Import Controls (Top) -->
     <ImportControls
+        :current-page="pagination.currentPage"
+        :duplicate-count="duplicates.indices.length"
+        :duplicate-original-filename="duplicates.originalFilename"
+        :duplicate-status="duplicates.status"
+        :goto-page-input="pagination.gotoInput"
         :has-features="itemsForUser.length > 0"
-        :is-loading-page="isLoadingPage"
-        :current-page="currentPage"
-        :page-size="pageSize"
-        :total-features="totalFeatures"
-        :total-pages="totalPages"
-        :has-next-page="hasNextPage"
-        :has-previous-page="hasPreviousPage"
-        :duplicate-count="duplicateIndices.length"
+        :has-next-page="pagination.hasNext"
+        :has-previous-page="pagination.hasPrevious"
+        :importable-count="pagination.totalFeatures - duplicates.indices.length"
         :is-imported="isImported"
+        :is-importing="loading.importing"
+        :is-loading-page="loading.page"
+        :is-saving="loading.saving"
         :lock-buttons="lockButtons"
-        :is-saving="isSaving"
-        :is-importing="isImporting"
-        :importable-count="totalFeatures - duplicateIndices.length"
-        :goto-page-input="gotoPageInput"
-        :show-no-features-message="originalFilename != null && !isProcessing && !isLoadingPage && itemsForUser.length === 0"
-        :duplicate-status="duplicateStatus"
-        :duplicate-original-filename="duplicateOriginalFilename"
+        :page-size="pagination.pageSize"
+        :show-no-features-message="originalFilename != null && !processing.active && !loading.page && itemsForUser.length === 0"
+        :total-features="pagination.totalFeatures"
+        :total-pages="pagination.totalPages"
         @previous-page="previousPage"
         @next-page="nextPage"
         @jump-to-page="goToPage"
@@ -158,9 +158,9 @@
     />
 
     <!-- Loading Skeleton for Pagination Changes -->
-    <div v-if="isLoadingPage" class="space-y-6">
+    <div v-if="loading.page" class="space-y-6">
       <!-- Feature Item Skeletons -->
-      <div v-for="i in Math.min(3, pageSize)" :key="`skeleton-${i}`" class="bg-white rounded-lg shadow-sm border border-gray-200 p-6 animate-pulse">
+      <div v-for="i in Math.min(3, pagination.pageSize)" :key="`skeleton-${i}`" class="bg-white rounded-lg shadow-sm border border-gray-200 p-6 animate-pulse">
         <div class="flex items-center justify-between mb-6">
           <div class="h-6 w-48 bg-gray-200 rounded"></div>
           <div class="flex items-center space-x-2">
@@ -232,28 +232,28 @@
     </div>
 
     <!-- Processing Status -->
-    <div v-if="isProcessing" class="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
+    <div v-if="processing.active" class="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
       <div class="flex items-center justify-center py-8">
         <div class="text-center">
           <div class="animate-spin h-8 w-8 border-2 border-blue-600 border-t-transparent rounded-full mx-auto mb-4"></div>
           <h3 class="text-lg font-medium text-gray-900 mb-2">Processing File</h3>
-          <p class="text-gray-600">{{ processingMessage }}</p>
-          <div v-if="processingProgress !== null" class="mt-4">
+          <p class="text-gray-600">{{ processing.message }}</p>
+          <div v-if="processing.progress !== null" class="mt-4">
             <div class="w-full bg-gray-200 rounded-full h-2">
-              <div class="bg-blue-600 h-2 rounded-full transition-all duration-300" :style="{ width: processingProgress + '%' }"></div>
+              <div :style="{ width: processing.progress + '%' }" class="bg-blue-600 h-2 rounded-full transition-all duration-300"></div>
             </div>
-            <p class="text-sm text-gray-500 mt-2">{{ Math.round(processingProgress) }}% complete</p>
+            <p class="text-sm text-gray-500 mt-2">{{ Math.round(processing.progress) }}% complete</p>
           </div>
         </div>
       </div>
     </div>
 
     <!-- Feature Items -->
-    <div v-else-if="itemsForUser.length > 0 && !isLoadingPage" class="space-y-6">
+    <div v-else-if="itemsForUser.length > 0 && !loading.page" class="space-y-6">
       <div v-for="(item, index) in itemsForUser" :key="`item-${index}`"
            :class="item.isDuplicate ? 'bg-gray-100 rounded-lg shadow-sm border border-gray-300 p-6 opacity-75' : 'bg-white rounded-lg shadow-sm border border-gray-200 p-6'">
         <div class="flex items-center justify-between mb-6">
-          <h3 class="text-lg font-semibold text-gray-900">Feature {{ (currentPage - 1) * pageSize + index + 1 }} (of {{ totalFeatures }})</h3>
+          <h3 class="text-lg font-semibold text-gray-900">Feature {{ (pagination.currentPage - 1) * pagination.pageSize + index + 1 }} (of {{ pagination.totalFeatures }})</h3>
           <div class="flex items-center space-x-2">
             <button
                 class="inline-flex items-center px-3 py-1.5 border border-gray-300 shadow-sm text-xs font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500"
@@ -305,12 +305,12 @@
             <div class="flex items-center space-x-2">
               <input
                   v-model="item.properties.name"
-                  :class="isImported || item.isDuplicate || isImporting ? 'block w-full px-3 py-2 border border-gray-300 rounded-md bg-gray-100 cursor-not-allowed' : 'block w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-blue-500 focus:border-blue-500'"
-                  :disabled="isImported || item.isDuplicate || isImporting"
+                  :class="isImported || item.isDuplicate || loading.importing ? 'block w-full px-3 py-2 border border-gray-300 rounded-md bg-gray-100 cursor-not-allowed' : 'block w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-blue-500 focus:border-blue-500'"
+                  :disabled="isImported || item.isDuplicate || loading.importing"
                   :placeholder="originalItems[index].properties.name"
               />
               <button
-                  v-if="!isImported && !item.isDuplicate && !isImporting"
+                  v-if="!isImported && !item.isDuplicate && !loading.importing"
                   class="inline-flex items-center px-3 py-2 border border-gray-300 shadow-sm text-sm leading-4 font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500"
                   @click="resetNestedField(index, 'properties', 'name')"
               >
@@ -327,14 +327,14 @@
             <div class="flex items-start space-x-2">
               <textarea
                   v-model="item.properties.description"
-                  :class="isImported || item.isDuplicate || isImporting ? 'block w-full px-3 py-2 border border-gray-300 rounded-md bg-gray-100 cursor-not-allowed resize-none' : 'block w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-blue-500 focus:border-blue-500 resize-none'"
-                  :disabled="isImported || item.isDuplicate || isImporting"
+                  :class="isImported || item.isDuplicate || loading.importing ? 'block w-full px-3 py-2 border border-gray-300 rounded-md bg-gray-100 cursor-not-allowed resize-none' : 'block w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-blue-500 focus:border-blue-500 resize-none'"
+                  :disabled="isImported || item.isDuplicate || loading.importing"
                   :placeholder="originalItems[index].properties.description"
                   class="text-sm"
                   rows="4"
               ></textarea>
               <button
-                  v-if="!isImported && !item.isDuplicate && !isImporting"
+                  v-if="!isImported && !item.isDuplicate && !loading.importing"
                   class="inline-flex items-center px-3 py-2 border border-gray-300 shadow-sm text-sm leading-4 font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 mt-1"
                   @click="resetNestedField(index, 'properties', 'description')"
               >
@@ -350,14 +350,14 @@
             <label class="block text-sm font-medium text-gray-700 mb-2">Created Date</label>
             <div class="flex items-center space-x-2">
               <input
-                  :class="isImported || item.isDuplicate || isImporting ? 'block w-full px-3 py-2 border border-gray-300 rounded-md bg-gray-100 cursor-not-allowed' : 'block w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-blue-500 focus:border-blue-500'"
-                  :disabled="isImported || item.isDuplicate || isImporting"
+                  :class="isImported || item.isDuplicate || loading.importing ? 'block w-full px-3 py-2 border border-gray-300 rounded-md bg-gray-100 cursor-not-allowed' : 'block w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-blue-500 focus:border-blue-500'"
+                  :disabled="isImported || item.isDuplicate || loading.importing"
                   :value="formatDateForInput(item.properties.created)"
                   type="datetime-local"
                   @change="updateDate(index, $event)"
               />
               <button
-                  v-if="!isImported && !item.isDuplicate && !isImporting"
+                  v-if="!isImported && !item.isDuplicate && !loading.importing"
                   class="inline-flex items-center px-3 py-2 border border-gray-300 shadow-sm text-sm leading-4 font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500"
                   @click="resetNestedField(index, 'properties', 'created')"
               >
@@ -375,12 +375,12 @@
               <div v-for="(tag, tagIndex) in item.properties.tags" :key="`tag-${tagIndex}`" class="flex items-center space-x-2">
                 <input
                     v-model="item.properties.tags[tagIndex]"
-                    :class="isImported || item.isDuplicate || isImporting ? 'block w-full px-3 py-2 border border-gray-300 rounded-md bg-gray-100 cursor-not-allowed' : 'block w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-blue-500 focus:border-blue-500'"
-                    :disabled="isImported || item.isDuplicate || isImporting"
+                    :class="isImported || item.isDuplicate || loading.importing ? 'block w-full px-3 py-2 border border-gray-300 rounded-md bg-gray-100 cursor-not-allowed' : 'block w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-blue-500 focus:border-blue-500'"
+                    :disabled="isImported || item.isDuplicate || loading.importing"
                     :placeholder="getTagPlaceholder(index, tag)"
                 />
                 <button
-                    v-if="!isImported && !item.isDuplicate && !isImporting"
+                    v-if="!isImported && !item.isDuplicate && !loading.importing"
                     class="inline-flex items-center px-3 py-2 border border-transparent text-sm font-medium rounded-md text-white bg-red-600 hover:bg-red-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-red-500"
                     @click="removeTag(index, tagIndex)"
                 >
@@ -390,7 +390,7 @@
                 </button>
               </div>
             </div>
-            <div v-if="!isImported && !item.isDuplicate && !isImporting" class="flex items-center space-x-2 mt-3">
+            <div v-if="!isImported && !item.isDuplicate && !loading.importing" class="flex items-center space-x-2 mt-3">
               <button
                   :class="{ 'opacity-50 cursor-not-allowed': isLastTagEmpty(index) }"
                   :disabled="isLastTagEmpty(index)"
@@ -419,32 +419,32 @@
 
     <!-- Import Controls (Bottom) -->
     <ImportControls
+        v-if="!loading.page && duplicates.status !== 'duplicate_in_queue'"
+        :current-page="pagination.currentPage"
+        :duplicate-count="duplicates.indices.length"
+        :duplicate-original-filename="duplicates.originalFilename"
+        :duplicate-status="duplicates.status"
+        :goto-page-input="pagination.gotoInput"
         :has-features="itemsForUser.length > 0"
-        :is-loading-page="isLoadingPage"
-        :current-page="currentPage"
-        :page-size="pageSize"
-        :total-features="totalFeatures"
-        :total-pages="totalPages"
-        :has-next-page="hasNextPage"
-        :has-previous-page="hasPreviousPage"
-        :duplicate-count="duplicateIndices.length"
+        :has-next-page="pagination.hasNext"
+        :has-previous-page="pagination.hasPrevious"
+        :importable-count="pagination.totalFeatures - duplicates.indices.length"
         :is-imported="isImported"
+        :is-importing="loading.importing"
+        :is-loading-page="loading.page"
+        :is-saving="loading.saving"
         :lock-buttons="lockButtons"
-        :is-saving="isSaving"
-        :is-importing="isImporting"
-        :importable-count="totalFeatures - duplicateIndices.length"
-        :goto-page-input="gotoPageInput"
-        :show-no-features-message="false"
+        :page-size="pagination.pageSize"
         :show-duplicate-message="false"
-        :duplicate-status="duplicateStatus"
-        :duplicate-original-filename="duplicateOriginalFilename"
+        :show-no-features-message="false"
+        :total-features="pagination.totalFeatures"
+        :total-pages="pagination.totalPages"
         @previous-page="previousPage"
         @next-page="nextPage"
         @jump-to-page="goToPage"
         @show-map-preview="showMapPreview"
         @save-changes="saveChanges"
         @perform-import="performImport"
-        v-if="!isLoadingPage && duplicateStatus !== 'duplicate_in_queue'"
     />
 
     <div class="hidden">
@@ -456,7 +456,7 @@
     <MapPreviewDialog
         :features="itemsForUser"
         :filename="originalFilename"
-        :is-open="showMapPreviewDialog"
+        :is-open="dialogs.mapPreview"
         @close="closeMapPreview"
     />
 
@@ -464,22 +464,22 @@
     <FeatureMapDialog
         :features="itemsForUser"
         :filename="originalFilename"
-        :is-open="showFeatureMapDialog"
-        :selected-feature-index="selectedFeatureIndex"
+        :is-open="dialogs.featureMap.isOpen"
+        :selected-feature-index="dialogs.featureMap.selectedIndex"
         @close="closeFeatureMap"
     />
 
     <!-- Edit Original Feature Dialog -->
     <EditOriginalFeatureDialog
-        :is-open="showEditOriginalDialog"
-        :original-feature="selectedOriginalFeature"
+        :is-open="dialogs.editOriginal.isOpen"
+        :original-feature="dialogs.editOriginal.feature"
         @close="closeEditOriginalDialog"
         @saved="onOriginalFeatureSaved"
     />
 
     <!-- Log View Modal -->
     <LogViewModal
-        :is-open="showLogModal"
+        :is-open="dialogs.logs"
         :logs="workerLog"
         @close="closeLogModal"
     />
@@ -512,54 +512,76 @@ export default {
   computed: {
     ...mapState(["userInfo"]),
     isValidPageNumber() {
-      return this.gotoPageInput &&
-             this.gotoPageInput >= 1 &&
-             this.gotoPageInput <= this.totalPages &&
-             this.gotoPageInput !== this.currentPage;
+      return this.pagination.gotoInput &&
+          this.pagination.gotoInput >= 1 &&
+          this.pagination.gotoInput <= this.pagination.totalPages &&
+          this.pagination.gotoInput !== this.pagination.currentPage;
     }
   },
   components: {Loader, Importqueue: ImportQueue, MapPreviewDialog, FeatureMapDialog, EditOriginalFeatureDialog, LogViewModal, ImportControls},
   data() {
     return {
+      // Core data
       msg: "",
       currentId: null,
       originalFilename: null,
       itemsForUser: [],
       originalItems: [],
       workerLog: [],
-      isLoadingLogs: true, // Track if logs are being loaded
+
+      // Consolidated: Dialog state
+      dialogs: {
+        mapPreview: false,
+        featureMap: {isOpen: false, selectedIndex: 0},
+        editOriginal: {isOpen: false, feature: null},
+        logs: false
+      },
+
+      // Consolidated: Loading states
+      loading: {
+        logs: true,
+        page: false,
+        saving: false,
+        importing: false,
+        redirecting: false
+      },
+
+      // Consolidated: Processing state
+      processing: {
+        active: false,
+        message: '',
+        progress: null,
+        pollingInterval: null
+      },
+
+      // Consolidated: Pagination
+      pagination: {
+        currentPage: 1,
+        pageSize: 50,
+        totalFeatures: 0,
+        totalPages: 0,
+        hasNext: false,
+        hasPrevious: false,
+        gotoInput: null
+      },
+
+      // Consolidated: Duplicates
+      duplicates: {
+        features: [],
+        indices: [],
+        status: null,
+        originalFilename: null
+      },
+
+      // Consolidated: Edit cache
+      editCache: {
+        pages: {},
+        originals: {}
+      },
+
+      // Misc state
       lockButtons: false,
-      isImported: false, // Track if this item has been imported
-      showMapPreviewDialog: false, // Track map preview dialog state
-      showFeatureMapDialog: false, // Track feature map dialog state
-      selectedFeatureIndex: 0, // Track which feature is selected for the feature map
-      isSaving: false, // Track save operation loading state
-      isImporting: false, // Track import operation loading state
-      isRedirectingDueToInvalidId: false, // Track if we're redirecting due to invalid import ID
-      duplicateFeatures: [], // Track features that are duplicates
-      showEditOriginalDialog: false, // Track edit original feature dialog state
-      selectedOriginalFeature: null, // Track which original feature is being edited
-      showLogModal: false, // Track log modal state
-      isProcessing: false, // Track if file is currently being processed
-      processingMessage: '', // Current processing message
-      processingProgress: null, // Current processing progress (0-100)
-      processingPollingInterval: null, // Interval for polling processing status
-      // Pagination state
-      currentPage: 1,
-      pageSize: 50,
-      totalFeatures: 0,
-      totalPages: 0,
-      hasNextPage: false,
-      hasPreviousPage: false,
-      duplicateIndices: [], // All duplicate indices across all pages
-      allPagesCache: {}, // Cache edited features from all pages
-      allPagesOriginalCache: {}, // Cache original features from all pages for change detection
-      isLoadingPage: false, // Track loading state for pagination changes
-      gotoPageInput: null, // Input value for jump to page feature
-      // Removed flatpickrConfig - using native HTML5 datetime-local input
-      // Duplicate file tracking
-      duplicateStatus: null, // 'duplicate_in_queue' or 'duplicate_imported' or null
-      duplicateOriginalFilename: null, // Name of the original file this is a duplicate of
+      isImported: false
     }
   },
   beforeDestroy() {
@@ -571,21 +593,16 @@ export default {
   methods: {
     async checkProcessingStatus() {
       try {
-        const response = await axios.get(`/api/data/item/import/item-status/${this.currentId}`)
+        const response = await axios.get(`/api/data/item/import/get/${this.currentId}?page=1&page_size=${this.pagination.pageSize}`)
         if (response.data.success) {
-          this.isProcessing = response.data.is_processing
-          if (this.isProcessing && response.data.job_details) {
-            this.processingMessage = response.data.job_details.message || 'Processing file...'
-            this.processingProgress = response.data.job_details.progress || 0
-          } else if (!this.isProcessing) {
+          this.processing.active = response.data.processing
+          if (this.processing.active && response.data.job_details) {
+            this.processing.message = response.data.job_details.message || 'Processing file...'
+            this.processing.progress = response.data.job_details.progress || 0
+          } else if (!this.processing.active) {
             // Processing completed, refresh the page data
             this.stopProcessingPolling()
             await this.refreshImportItem()
-          }
-
-          // Update logs from the status response
-          if (response.data.logs) {
-            this.workerLog = response.data.logs
           }
         }
       } catch (error) {
@@ -597,16 +614,16 @@ export default {
       try {
         // Fetch items and logs in parallel for better performance
         const [itemsResponse, logsResponse] = await Promise.all([
-          axios.get(`/api/data/item/import/get/${this.currentId}?page=1&page_size=${this.pageSize}`),
-          axios.get(`/api/data/item/import/item-status/${this.currentId}`)
+          axios.get(`/api/data/item/import/get/${this.currentId}?page=1&page_size=${this.pagination.pageSize}`),
+          axios.get(`/api/data/item/import/logs/${this.currentId}`)
         ])
 
         if (itemsResponse.data.success) {
           // Load logs first (they're already fetched)
-          if (logsResponse.data.success) {
+          if (logsResponse.data && logsResponse.data.logs) {
             this.workerLog = logsResponse.data.logs || []
-            this.isProcessing = logsResponse.data.is_processing || false
           }
+          this.processing.active = itemsResponse.data.processing || false
 
           if (Object.keys(itemsResponse.data).length > 0) {
             this.originalFilename = itemsResponse.data.original_filename
@@ -614,20 +631,20 @@ export default {
 
             // Update pagination info
             if (itemsResponse.data.pagination) {
-              this.currentPage = itemsResponse.data.pagination.page;
-              this.totalFeatures = itemsResponse.data.pagination.total_features;
-              this.totalPages = itemsResponse.data.pagination.total_pages;
-              this.hasNextPage = itemsResponse.data.pagination.has_next;
-              this.hasPreviousPage = itemsResponse.data.pagination.has_previous;
-              this.duplicateIndices = itemsResponse.data.pagination.duplicate_indices || [];
+              this.pagination.currentPage = itemsResponse.data.pagination.page;
+              this.pagination.totalFeatures = itemsResponse.data.pagination.total_features;
+              this.pagination.totalPages = itemsResponse.data.pagination.total_pages;
+              this.pagination.hasNext = itemsResponse.data.pagination.has_next;
+              this.pagination.hasPrevious = itemsResponse.data.pagination.has_previous;
+              this.duplicates.indices = itemsResponse.data.pagination.duplicate_indices || [];
             }
 
             // Update duplicate file status
-            this.duplicateStatus = itemsResponse.data.duplicate_status || null;
-            this.duplicateOriginalFilename = itemsResponse.data.duplicate_original_filename || null;
+            this.duplicates.status = itemsResponse.data.duplicate_status || null;
+            this.duplicates.originalFilename = itemsResponse.data.duplicate_original_filename || null;
 
             // If this is a duplicate of a file in queue, skip processing features
-            if (this.duplicateStatus === 'duplicate_in_queue') {
+            if (this.duplicates.status === 'duplicate_in_queue') {
               // Don't process any features - they'll remain empty
               this.itemsForUser = [];
               this.originalItems = [];
@@ -659,12 +676,12 @@ export default {
               this.originalItems = JSON.parse(JSON.stringify(this.itemsForUser))
 
               // Process duplicates from the API response
-              this.duplicateFeatures = itemsResponse.data.duplicates || []
+              this.duplicates.features = itemsResponse.data.duplicates || []
               this.markDuplicateFeatures()
 
               // If this is a duplicate of an imported file, mark ALL features as duplicates
-              if (this.duplicateStatus === 'duplicate_imported') {
-                this.duplicateIndices = Array.from({length: this.totalFeatures}, (_, i) => i);
+              if (this.duplicates.status === 'duplicate_imported') {
+                this.duplicates.indices = Array.from({length: this.pagination.totalFeatures}, (_, i) => i);
               }
             }
           }
@@ -674,14 +691,14 @@ export default {
       }
     },
     startProcessingPolling() {
-      this.processingPollingInterval = setInterval(() => {
+      this.processing.pollingInterval = setInterval(() => {
         this.checkProcessingStatus()
       }, 2000) // Poll every 2 seconds
     },
     stopProcessingPolling() {
-      if (this.processingPollingInterval) {
-        clearInterval(this.processingPollingInterval)
-        this.processingPollingInterval = null
+      if (this.processing.pollingInterval) {
+        clearInterval(this.processing.pollingInterval)
+        this.processing.pollingInterval = null
       }
     },
     getLevelName(level) {
@@ -794,14 +811,14 @@ export default {
       });
 
       // Check cached pages for changes
-      Object.entries(this.allPagesCache).forEach(([page, cachedFeatures]) => {
+      Object.entries(this.editCache.pages).forEach(([page, cachedFeatures]) => {
         const pageNum = parseInt(page);
-        if (pageNum !== this.currentPage) {
-          const originalForPage = this.allPagesOriginalCache[pageNum] || [];
+        if (pageNum !== this.pagination.currentPage) {
+          const originalForPage = this.editCache.originals[pageNum] || [];
           cachedFeatures.forEach((feature, idx) => {
-            const globalIdx = (pageNum - 1) * this.pageSize + idx;
+            const globalIdx = (pageNum - 1) * this.pagination.pageSize + idx;
             // Skip duplicates
-            if (!this.duplicateIndices.includes(globalIdx) && !feature.isDuplicate) {
+            if (!this.duplicates.indices.includes(globalIdx) && !feature.isDuplicate) {
               // Compare with original if we have it
               const original = originalForPage[idx];
               if (!original || hasChanged(feature, original)) {
@@ -814,7 +831,7 @@ export default {
 
       if (changedFeatures.length === 0) {
         // No changes to save
-        return { success: true, changedCount: 0 };
+        return {success: true, changedCount: 0};
       }
 
       const csrftoken = getCookie('csrftoken');
@@ -835,17 +852,17 @@ export default {
         });
 
         // Also update the cached original items for current page
-        if (this.currentPage) {
-          this.allPagesOriginalCache[this.currentPage] = JSON.parse(JSON.stringify(this.originalItems));
+        if (this.pagination.currentPage) {
+          this.editCache.originals[this.pagination.currentPage] = JSON.parse(JSON.stringify(this.originalItems));
         }
 
         // For cached pages, update their original state to match the current state
         // since we just saved those changes
-        Object.keys(this.allPagesCache).forEach(page => {
+        Object.keys(this.editCache.pages).forEach(page => {
           const pageNum = parseInt(page);
-          if (pageNum !== this.currentPage) {
+          if (pageNum !== this.pagination.currentPage) {
             // Update original to match current since we saved
-            this.allPagesOriginalCache[pageNum] = JSON.parse(JSON.stringify(this.allPagesCache[pageNum]));
+            this.editCache.originals[pageNum] = JSON.parse(JSON.stringify(this.editCache.pages[pageNum]));
           }
         });
 
@@ -854,7 +871,7 @@ export default {
           console.log(`Successfully saved ${response.data.updated_count} feature(s)`);
         }
 
-        return { success: true, changedCount: response.data.updated_count };
+        return {success: true, changedCount: response.data.updated_count};
       } else {
         throw new Error(response.data.msg);
       }
@@ -862,7 +879,7 @@ export default {
     async saveChanges() {
       // User-facing save function that manages locks and error handling
       this.lockButtons = true;
-      this.isSaving = true;
+      this.loading.saving = true;
 
       try {
         await this._saveChangesInternal();
@@ -871,12 +888,12 @@ export default {
         window.alert(this.msg);
       } finally {
         this.lockButtons = false;
-        this.isSaving = false;
+        this.loading.saving = false;
       }
     },
     async performImport() {
       this.lockButtons = true;
-      this.isImporting = true;
+      this.loading.importing = true;
       const csrftoken = getCookie('csrftoken');
 
       try {
@@ -907,7 +924,7 @@ export default {
             window.removeEventListener('beforeunload', this.beforeUnloadHandler);
           }
           // Redirect to import page after successful import
-          this.isRedirectingDueToInvalidId = true;
+          this.loading.redirecting = true;
           window.alert('Import successful: ' + response.data.msg);
           this.$router.replace('/import');
         } else {
@@ -919,21 +936,21 @@ export default {
         window.alert(this.msg);
       } finally {
         this.lockButtons = false;
-        this.isImporting = false;
+        this.loading.importing = false;
       }
     },
     showMapPreview() {
-      this.showMapPreviewDialog = true;
+      this.dialogs.mapPreview = true;
     },
     closeMapPreview() {
-      this.showMapPreviewDialog = false;
+      this.dialogs.mapPreview = false;
     },
     showFeatureMap(featureIndex) {
-      this.selectedFeatureIndex = featureIndex;
-      this.showFeatureMapDialog = true;
+      this.dialogs.featureMap.selectedIndex = featureIndex;
+      this.dialogs.featureMap.isOpen = true;
     },
     closeFeatureMap() {
-      this.showFeatureMapDialog = false;
+      this.dialogs.featureMap.isOpen = false;
     },
     markDuplicateFeatures() {
       // Reset all features to not be duplicates
@@ -944,7 +961,7 @@ export default {
 
       // Mark duplicate features using tolerance-based coordinate comparison
       // This matches the backend's coordinate matching logic (1e-6 tolerance)
-      this.duplicateFeatures.forEach(duplicateInfo => {
+      this.duplicates.features.forEach(duplicateInfo => {
         const duplicateFeature = duplicateInfo.feature;
         const index = this.itemsForUser.findIndex(item =>
             featuresMatch(item, duplicateFeature)
@@ -958,15 +975,15 @@ export default {
     },
     editOriginalFeature(duplicateInfo) {
       // Show the edit dialog for the original feature
-      this.selectedOriginalFeature = duplicateInfo.existing_features[0];
-      this.showEditOriginalDialog = true;
+      this.dialogs.editOriginal.feature = duplicateInfo.existing_features[0];
+      this.dialogs.editOriginal.isOpen = true;
     },
     closeEditOriginalDialog() {
-      this.showEditOriginalDialog = false;
-      this.selectedOriginalFeature = null;
+      this.dialogs.editOriginal.isOpen = false;
+      this.dialogs.editOriginal.feature = null;
     },
     closeLogModal() {
-      this.showLogModal = false;
+      this.dialogs.logs = false;
     },
     async onOriginalFeatureSaved(featureId) {
       // Handle when the original feature is saved
@@ -977,7 +994,7 @@ export default {
         const response = await axios.get(`/api/data/feature/${featureId}/`);
         if (response.data.success) {
           // Update the selectedOriginalFeature with the fresh data
-          this.selectedOriginalFeature = response.data.feature;
+          this.dialogs.editOriginal.feature = response.data.feature;
 
           // Also update the duplicate info in the itemsForUser array
           this.itemsForUser.forEach((item, index) => {
@@ -1000,54 +1017,84 @@ export default {
       this.itemsForUser = [];
       this.originalItems = [];
       this.workerLog = [];
-      this.isLoadingLogs = true;
+
+      // Reset dialog state
+      this.dialogs = {
+        mapPreview: false,
+        featureMap: {isOpen: false, selectedIndex: 0},
+        editOriginal: {isOpen: false, feature: null},
+        logs: false
+      };
+
+      // Reset loading state
+      this.loading = {
+        logs: true,
+        page: false,
+        saving: false,
+        importing: false,
+        redirecting: false
+      };
+
+      // Reset processing state
+      this.processing = {
+        active: false,
+        message: '',
+        progress: null,
+        pollingInterval: null
+      };
+
+      // Reset pagination
+      this.pagination = {
+        currentPage: 1,
+        pageSize: 50,
+        totalFeatures: 0,
+        totalPages: 0,
+        hasNext: false,
+        hasPrevious: false,
+        gotoInput: null
+      };
+
+      // Reset duplicates
+      this.duplicates = {
+        features: [],
+        indices: [],
+        status: null,
+        originalFilename: null
+      };
+
+      // Reset edit cache
+      this.editCache = {
+        pages: {},
+        originals: {}
+      };
+
+      // Reset misc state
       this.lockButtons = false;
       this.isImported = false;
-      this.showMapPreviewDialog = false;
-      this.showFeatureMapDialog = false;
-      this.selectedFeatureIndex = 0;
-      this.isSaving = false;
-      this.isImporting = false;
-      this.isRedirectingDueToInvalidId = false;
-      this.duplicateFeatures = [];
-      this.showEditOriginalDialog = false;
-      this.selectedOriginalFeature = null;
-      this.showLogModal = false;
-      this.currentPage = 1;
-      this.pageSize = 50;
-      this.totalFeatures = 0;
-      this.totalPages = 0;
-      this.hasNextPage = false;
-      this.hasPreviousPage = false;
-      this.duplicateIndices = [];
-      this.allPagesCache = {};
-      this.allPagesOriginalCache = {};
-      this.isLoadingPage = false;
-      this.gotoPageInput = null;
     },
     async loadPage(page) {
       // Cache current page changes before loading a new page
       this.cacheCurrentPageChanges();
 
-      this.isLoadingPage = true;
+      this.loading.page = true;
       try {
-        const response = await axios.get(`/api/data/item/import/get/${this.currentId}?page=${page}&page_size=${this.pageSize}`);
+        const response = await axios.get(`/api/data/item/import/get/${this.currentId}?page=${page}&page_size=${this.pagination.pageSize}`);
         if (response.data.success) {
           // Update pagination info
           const pagination = response.data.pagination;
-          this.currentPage = pagination.page;
-          this.totalFeatures = pagination.total_features;
-          this.totalPages = pagination.total_pages;
-          this.hasNextPage = pagination.has_next;
-          this.hasPreviousPage = pagination.has_previous;
-          this.duplicateIndices = pagination.duplicate_indices || [];
+          this.pagination.currentPage = pagination.page;
+          this.pagination.totalFeatures = pagination.total_features;
+          this.pagination.totalPages = pagination.total_pages;
+          this.pagination.hasNext = pagination.has_next;
+          this.pagination.hasPrevious = pagination.has_previous;
+          this.duplicates.indices = pagination.duplicate_indices || [];
 
           // Update duplicate file status
-          this.duplicateStatus = response.data.duplicate_status || null;
-          this.duplicateOriginalFilename = response.data.duplicate_original_filename || null;
+          this.duplicates.status = response.data.duplicate_status || null;
+          this.duplicates.originalFilename = response.data.duplicate_original_filename || null;
 
           // If this is a duplicate of a file in queue, hide all features
-          if (this.duplicateStatus === 'duplicate_in_queue') {
+          if (this.duplicates.status === 'duplicate_in_queue') {
             this.itemsForUser = [];
             this.originalItems = [];
           } else {
@@ -1062,13 +1109,13 @@ export default {
             this.restoreCachedPageChanges(page);
 
             // Process duplicates from the API response
-            this.duplicateFeatures = response.data.duplicates || [];
+            this.duplicates.features = response.data.duplicates || [];
             this.markDuplicateFeatures();
 
             // If this is a duplicate of an imported file, mark ALL features as duplicates
-            if (this.duplicateStatus === 'duplicate_imported') {
+            if (this.duplicates.status === 'duplicate_imported') {
               // Mark all feature indices as duplicates
-              this.duplicateIndices = Array.from({length: this.totalFeatures}, (_, i) => i);
+              this.duplicates.indices = Array.from({length: this.pagination.totalFeatures}, (_, i) => i);
             }
           }
         }
@@ -1076,14 +1123,14 @@ export default {
         this.msg = 'Error loading page: ' + error.message;
         console.error(error);
       } finally {
-        this.isLoadingPage = false;
+        this.loading.page = false;
       }
     },
     async loadLogs() {
       // Load logs from the status endpoint
-      this.isLoadingLogs = true;
+      this.loading.logs = true;
       try {
-        const response = await axios.get(`/api/data/item/import/item-status/${this.currentId}`);
+        const response = await axios.get(`/api/data/item/import/logs/${this.currentId}`);
         if (response.data.success) {
           this.workerLog = response.data.logs || [];
         }
@@ -1091,48 +1138,48 @@ export default {
         console.error('Error loading logs:', error);
         // Don't set error message as logs are not critical
       } finally {
-        this.isLoadingLogs = false;
+        this.loading.logs = false;
       }
     },
     cacheCurrentPageChanges() {
       // Store the current page's items in cache
-      if (this.currentPage && this.itemsForUser.length > 0) {
-        this.allPagesCache[this.currentPage] = JSON.parse(JSON.stringify(this.itemsForUser));
+      if (this.pagination.currentPage && this.itemsForUser.length > 0) {
+        this.editCache.pages[this.pagination.currentPage] = JSON.parse(JSON.stringify(this.itemsForUser));
         // Also cache the original items for this page for change detection
         if (this.originalItems.length > 0) {
-          this.allPagesOriginalCache[this.currentPage] = JSON.parse(JSON.stringify(this.originalItems));
+          this.editCache.originals[this.pagination.currentPage] = JSON.parse(JSON.stringify(this.originalItems));
         }
       }
     },
     restoreCachedPageChanges(page) {
       // Restore cached changes for the specified page
-      if (this.allPagesCache[page]) {
-        this.itemsForUser = JSON.parse(JSON.stringify(this.allPagesCache[page]));
+      if (this.editCache.pages[page]) {
+        this.itemsForUser = JSON.parse(JSON.stringify(this.editCache.pages[page]));
         // Also restore the original items if we have them
-        if (this.allPagesOriginalCache[page]) {
-          this.originalItems = JSON.parse(JSON.stringify(this.allPagesOriginalCache[page]));
+        if (this.editCache.originals[page]) {
+          this.originalItems = JSON.parse(JSON.stringify(this.editCache.originals[page]));
         }
       }
     },
     async nextPage() {
-      if (this.hasNextPage) {
-        await this.loadPage(this.currentPage + 1);
+      if (this.pagination.hasNext) {
+        await this.loadPage(this.pagination.currentPage + 1);
       }
     },
     async previousPage() {
-      if (this.hasPreviousPage) {
-        await this.loadPage(this.currentPage - 1);
+      if (this.pagination.hasPrevious) {
+        await this.loadPage(this.pagination.currentPage - 1);
       }
     },
     async goToPage(page) {
-      if (page >= 1 && page <= this.totalPages) {
+      if (page >= 1 && page <= this.pagination.totalPages) {
         await this.loadPage(page);
       }
     },
     async jumpToPage() {
       if (this.isValidPageNumber) {
-        await this.goToPage(this.gotoPageInput);
-        this.gotoPageInput = null; // Clear the input after jumping
+        await this.goToPage(this.pagination.gotoInput);
+        this.pagination.gotoInput = null; // Clear the input after jumping
       }
     },
   },
@@ -1140,7 +1187,7 @@ export default {
     // Add navigation warning when user tries to leave the page
     this.beforeUnloadHandler = (event) => {
       // Only warn if we're not redirecting due to import completion
-      if (!this.isRedirectingDueToInvalidId) {
+      if (!this.loading.redirecting) {
         event.preventDefault();
         event.returnValue = '';
         return '';
@@ -1158,7 +1205,7 @@ export default {
   },
   beforeRouteLeave(to, from, next) {
     // Skip warning if we're redirecting due to invalid import ID
-    if (this.isRedirectingDueToInvalidId) {
+    if (this.loading.redirecting) {
       // Remove the beforeunload handler before redirecting
       if (this.beforeUnloadHandler) {
         window.removeEventListener('beforeunload', this.beforeUnloadHandler);
@@ -1194,24 +1241,24 @@ export default {
         vm.workerLog = []
         vm.lockButtons = false
         vm.isImported = false
-        vm.isProcessing = false
-        vm.processingMessage = ''
-        vm.processingProgress = null
-        vm.duplicateStatus = null
-        vm.duplicateOriginalFilename = null
-        vm.duplicateIndices = []
-        vm.duplicateFeatures = []
-        vm.totalFeatures = 0
-        vm.currentPage = 1
-        vm.totalPages = 0
-        vm.hasNextPage = false
-        vm.hasPreviousPage = false
+        vm.processing.active = false
+        vm.processing.message = ''
+        vm.processing.progress = null
+        vm.duplicates.status = null
+        vm.duplicates.originalFilename = null
+        vm.duplicates.indices = []
+        vm.duplicates.features = []
+        vm.pagination.totalFeatures = 0
+        vm.pagination.currentPage = 1
+        vm.pagination.totalPages = 0
+        vm.pagination.hasNext = false
+        vm.pagination.hasPrevious = false
 
         try {
           // Fetch items and logs in parallel for better performance
           const [itemsResponse, logsResponse] = await Promise.all([
-            axios.get(`/api/data/item/import/get/${vm.id}?page=1&page_size=${vm.pageSize}`),
-            axios.get(`/api/data/item/import/item-status/${vm.id}`)
+            axios.get(`/api/data/item/import/get/${vm.id}?page=1&page_size=${vm.pagination.pageSize}`),
+            axios.get(`/api/data/item/import/logs/${vm.id}`)
           ])
 
           if (!itemsResponse.data.success) {
@@ -1220,10 +1267,10 @@ export default {
             vm.currentId = vm.id
 
             // Load logs first (they're already fetched)
-            if (logsResponse.data.success) {
+            if (logsResponse.data && logsResponse.data.logs) {
               vm.workerLog = logsResponse.data.logs || []
-              vm.isProcessing = logsResponse.data.is_processing || false
             }
+            vm.processing.active = itemsResponse.data.processing || false
 
             if (Object.keys(itemsResponse.data).length > 0) {
               vm.originalFilename = itemsResponse.data.original_filename
@@ -1235,27 +1282,27 @@ export default {
                 if (vm.beforeUnloadHandler) {
                   window.removeEventListener('beforeunload', vm.beforeUnloadHandler);
                 }
-                vm.isRedirectingDueToInvalidId = true;
+                vm.loading.redirecting = true;
                 vm.$router.replace('/import');
                 return;
               }
 
               // Update pagination info
               if (itemsResponse.data.pagination) {
-                vm.currentPage = itemsResponse.data.pagination.page;
-                vm.totalFeatures = itemsResponse.data.pagination.total_features;
-                vm.totalPages = itemsResponse.data.pagination.total_pages;
-                vm.hasNextPage = itemsResponse.data.pagination.has_next;
-                vm.hasPreviousPage = itemsResponse.data.pagination.has_previous;
-                vm.duplicateIndices = itemsResponse.data.pagination.duplicate_indices || [];
+                vm.pagination.currentPage = itemsResponse.data.pagination.page;
+                vm.pagination.totalFeatures = itemsResponse.data.pagination.total_features;
+                vm.pagination.totalPages = itemsResponse.data.pagination.total_pages;
+                vm.pagination.hasNext = itemsResponse.data.pagination.has_next;
+                vm.pagination.hasPrevious = itemsResponse.data.pagination.has_previous;
+                vm.duplicates.indices = itemsResponse.data.pagination.duplicate_indices || [];
               }
 
               // Update duplicate file status
-              vm.duplicateStatus = itemsResponse.data.duplicate_status || null;
-              vm.duplicateOriginalFilename = itemsResponse.data.duplicate_original_filename || null;
+              vm.duplicates.status = itemsResponse.data.duplicate_status || null;
+              vm.duplicates.originalFilename = itemsResponse.data.duplicate_original_filename || null;
 
               // If this is a duplicate of a file in queue, skip processing features
-              if (vm.duplicateStatus === 'duplicate_in_queue') {
+              if (vm.duplicates.status === 'duplicate_in_queue') {
                 // Don't process any features - they'll remain empty
                 vm.itemsForUser = [];
                 vm.originalItems = [];
@@ -1270,7 +1317,7 @@ export default {
                 }
               } else if (itemsResponse.data.geofeatures.length === 0) {
                 // Empty geofeatures - check if still processing
-                if (vm.isProcessing) {
+                if (vm.processing.active) {
                   vm.startProcessingPolling()
                 }
               } else {
@@ -1281,28 +1328,28 @@ export default {
                 vm.originalItems = JSON.parse(JSON.stringify(vm.itemsForUser))
 
                 // Process duplicates from the API response
-                vm.duplicateFeatures = itemsResponse.data.duplicates || []
+                vm.duplicates.features = itemsResponse.data.duplicates || []
                 vm.markDuplicateFeatures()
 
                 // If this is a duplicate of an imported file, mark ALL features as duplicates
-                if (vm.duplicateStatus === 'duplicate_imported') {
-                  vm.duplicateIndices = Array.from({length: vm.totalFeatures}, (_, i) => i);
+                if (vm.duplicates.status === 'duplicate_imported') {
+                  vm.duplicates.indices = Array.from({length: vm.pagination.totalFeatures}, (_, i) => i);
                 }
               }
             }
           }
         } catch (error) {
           // Check for 404 response from backend (both custom format and HTTP status)
-          if ((error.response && error.response.data && 
-               error.response.data.success === false && 
-               error.response.data.code === 404) ||
+          if ((error.response && error.response.data &&
+                  error.response.data.success === false &&
+                  error.response.data.code === 404) ||
               (error.response && error.response.status === 404)) {
             // Import ID does not exist - redirect to import page and remove from history
             // Remove the beforeunload handler before redirecting
             if (vm.beforeUnloadHandler) {
               window.removeEventListener('beforeunload', vm.beforeUnloadHandler);
             }
-            vm.isRedirectingDueToInvalidId = true;
+            vm.loading.redirecting = true;
             // Use replace to remove the current entry from browser history
             vm.$router.replace('/import');
             return;

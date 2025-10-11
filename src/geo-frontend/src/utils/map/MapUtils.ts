@@ -115,7 +115,7 @@ export class MapUtils {
      * @param featureTimestamps - Timestamp storage object
      * @param featureId - Feature ID
      */
-    static addFeatureTimestamp(feature: any, featureTimestamps: Record<string, number>, featureId: string): void {
+    static addFeatureTimestamp(_feature: any, featureTimestamps: Record<string, number>, featureId: string): void {
         featureTimestamps[featureId] = Date.now();
     }
 

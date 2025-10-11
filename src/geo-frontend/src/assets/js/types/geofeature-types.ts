@@ -38,7 +38,7 @@ class GeoFeature {
 
 export class GeoPoint extends GeoFeature {
     type: GeoFeatureType = GeoFeatureType.POINT;
-    geometry: number[];
+    declare geometry: number[];
 
     constructor(props: GeoFeatureProps) {
         super(props)
@@ -47,7 +47,7 @@ export class GeoPoint extends GeoFeature {
 
 export class GeoLineString extends GeoFeature {
     type: GeoFeatureType = GeoFeatureType.LINESTRING;
-    geometry: number[][];
+    declare geometry: number[][];
 
     constructor(props: GeoFeatureProps) {
         super(props)
@@ -56,7 +56,7 @@ export class GeoLineString extends GeoFeature {
 
 export class GeoPolygon extends GeoFeature {
     type: GeoFeatureType = GeoFeatureType.POLYGON;
-    geometry: number[][][];
+    declare geometry: number[][][];
 
     constructor(props: GeoFeatureProps) {
         super(props)
