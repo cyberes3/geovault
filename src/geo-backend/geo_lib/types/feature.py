@@ -13,6 +13,7 @@ from geo_lib.processing.logging import ImportLog, DatabaseLogLevel
 class GeoFeatureType(str, Enum):
     POINT = 'Point'
     LINESTRING = 'LineString'
+    MULTILINESTRING = 'MultiLineString'
     POLYGON = 'Polygon'
 
 
@@ -36,6 +37,11 @@ class LineStringGeometry(BaseModel):
     coordinates: List[Union[Tuple[float, float], Tuple[float, float, float], Tuple[float, float, float, int]]]
 
 
+class MultiLineStringGeometry(BaseModel):
+    type: GeoFeatureType = GeoFeatureType.MULTILINESTRING
+    coordinates: List[List[Union[Tuple[float, float], Tuple[float, float, float], Tuple[float, float, float, int]]]]
+
+
 class PolygonGeometry(BaseModel):
     type: GeoFeatureType = GeoFeatureType.POLYGON
     coordinates: List[List[Union[Tuple[float, float], Tuple[float, float, float]]]]
@@ -43,7 +49,7 @@ class PolygonGeometry(BaseModel):
 
 class Feature(BaseModel):
     type: str = 'Feature'
-    geometry: Union[PointFeatureGeometry, LineStringGeometry, PolygonGeometry]
+    geometry: Union[PointFeatureGeometry, LineStringGeometry, MultiLineStringGeometry, PolygonGeometry]
     properties: Properties
 
 
@@ -55,11 +61,15 @@ class LineStringFeature(Feature):
     geometry: LineStringGeometry
 
 
+class MultiLineStringFeature(Feature):
+    geometry: MultiLineStringGeometry
+
+
 class PolygonFeature(Feature):
     geometry: PolygonGeometry
 
 
-GeoFeatureSupported = Type[PolygonFeature | LineStringFeature | PointFeature]
+GeoFeatureSupported = Type[PolygonFeature | LineStringFeature | MultiLineStringFeature | PointFeature]
 
 
 def geojson_to_geofeature(geojson: dict) -> Tuple[List[GeoFeatureSupported], ImportLog]:
@@ -75,7 +85,7 @@ def geojson_to_geofeature(geojson: dict) -> Tuple[List[GeoFeatureSupported], Imp
             case 'linestring':
                 c = LineStringFeature
             case 'multilinestring':
-                c = LineStringFeature
+                c = MultiLineStringFeature
             case 'polygon':
                 c = PolygonFeature
             case 'multipolygon':

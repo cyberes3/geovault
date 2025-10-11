@@ -20,7 +20,7 @@ from geo_lib.processing.geo_processor import geo_to_geojson, FileType
 from geo_lib.processing.logging import ImportLog, DatabaseLogLevel
 from geo_lib.processing.tagging import generate_auto_tags
 from geo_lib.security.file_validation import SecureFileValidator, FileValidationError, SecurityError
-from geo_lib.types.feature import PointFeature, PolygonFeature, LineStringFeature
+from geo_lib.types.feature import PointFeature, PolygonFeature, LineStringFeature, MultiLineStringFeature
 from geo_lib.types.feature import geojson_to_geofeature
 from geo_lib.website.auth import login_required_401
 from geo_lib.processing.status_tracker import status_tracker
@@ -984,7 +984,7 @@ def import_to_featurestore(request, item_id):
             case 'linestring':
                 c = LineStringFeature
             case 'multilinestring':
-                c = LineStringFeature
+                c = MultiLineStringFeature
             case 'polygon':
                 c = PolygonFeature
             case 'multipolygon':
