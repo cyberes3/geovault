@@ -154,7 +154,7 @@ def _find_coordinate_duplicates_batched(features: List[Dict], user_id: int, impo
     duplicate_features = []
 
     # Group features by geometry type for more efficient queries
-    features_by_type = {'point': [], 'linestring': [], 'polygon': []}
+    features_by_type = {'point': [], 'linestring': [], 'polygon': [], 'multilinestring': [], 'multipolygon': [], 'multipoint': [], 'geometrycollection': []}
 
     for i, feature in enumerate(features):
         geometry = feature.get('geometry', {})
@@ -184,8 +184,34 @@ def _find_coordinate_duplicates_batched(features: List[Dict], user_id: int, impo
             batch_geometries = []
             for idx, feature, coordinates in batch_features:
                 try:
+                    # Handle different geometry type naming conventions
+                    if geom_type == 'multilinestring':
+                        geom_type_name = 'MultiLineString'
+                    elif geom_type == 'multipolygon':
+                        geom_type_name = 'MultiPolygon'
+                    elif geom_type == 'multipoint':
+                        geom_type_name = 'MultiPoint'
+                    elif geom_type == 'geometrycollection':
+                        # GeometryCollection needs special handling - skip batching for now
+                        # and use the regular duplicate detection logic
+                        existing_features = _find_geometry_collection_duplicates(coordinates, user_id)
+                        if existing_features:
+                            duplicate_info = {
+                                'feature': feature,
+                                'existing_features': existing_features
+                            }
+                            duplicate_features.append(duplicate_info)
+                            feature_name = feature.get('properties', {}).get('name', 'Unnamed')
+                            existing_count = len(existing_features)
+                            import_log.add(f"Coordinate duplicate found: '{feature_name}' (GeometryCollection) matches {existing_count} existing feature(s)", 'Duplicate Detection', DatabaseLogLevel.INFO)
+                        else:
+                            unique_features.append(feature)
+                        continue
+                    else:
+                        geom_type_name = geom_type.title()
+                    
                     geom_data = {
-                        'type': geom_type.title(),
+                        'type': geom_type_name,
                         'coordinates': coordinates
                     }
                     geometry = GEOSGeometry(json.dumps(geom_data))
@@ -291,6 +317,51 @@ def _find_existing_features_by_coordinates(coordinates: List, geom_type: str, us
                 geometry__equals=geometry
             ).values('id', 'geojson', 'timestamp')
 
+        elif geom_type == 'multilinestring':
+            # For multilinestrings, check if coordinates match exactly
+            geom_data = {
+                'type': 'MultiLineString',
+                'coordinates': coordinates
+            }
+            geometry = GEOSGeometry(json.dumps(geom_data))
+
+            existing_features = FeatureStore.objects.filter(
+                user_id=user_id,
+                geometry__equals=geometry
+            ).values('id', 'geojson', 'timestamp')
+
+        elif geom_type == 'multipolygon':
+            # For multipolygons, check if coordinates match exactly
+            geom_data = {
+                'type': 'MultiPolygon',
+                'coordinates': coordinates
+            }
+            geometry = GEOSGeometry(json.dumps(geom_data))
+
+            existing_features = FeatureStore.objects.filter(
+                user_id=user_id,
+                geometry__equals=geometry
+            ).values('id', 'geojson', 'timestamp')
+
+        elif geom_type == 'multipoint':
+            # For multipoints, check if coordinates match exactly
+            geom_data = {
+                'type': 'MultiPoint',
+                'coordinates': coordinates
+            }
+            geometry = GEOSGeometry(json.dumps(geom_data))
+
+            existing_features = FeatureStore.objects.filter(
+                user_id=user_id,
+                geometry__equals=geometry
+            ).values('id', 'geojson', 'timestamp')
+
+        elif geom_type == 'geometrycollection':
+            # For geometry collections, we need to handle this differently
+            # since GeometryCollection uses 'geometries' not 'coordinates'
+            # and contains multiple geometries of different types
+            return _find_geometry_collection_duplicates(coordinates, user_id)
+
         else:
             return []
 
@@ -311,6 +382,32 @@ def _find_existing_features_by_coordinates(coordinates: List, geom_type: str, us
     except Exception as e:
         # Log internal error details but don't expose to user
         logger.error(f"Error finding existing features by coordinates: {type(e).__name__}: {str(e)}")
+        return []
+
+
+def _find_geometry_collection_duplicates(geometries: List, user_id: int) -> List[Dict]:
+    """
+    Find existing features that match any geometry within a GeometryCollection.
+    Returns the first match found for any geometry in the collection.
+    """
+    try:
+        # Check each geometry in the collection for duplicates
+        for geometry in geometries:
+            geom_type = geometry.get('type', '').lower()
+            coordinates = geometry.get('coordinates', [])
+            
+            if coordinates:
+                # Recursively check this geometry for duplicates
+                existing_features = _find_existing_features_by_coordinates(coordinates, geom_type, user_id)
+                if existing_features:
+                    # Return the first match found
+                    return existing_features
+        
+        # No duplicates found in any geometry
+        return []
+        
+    except Exception as e:
+        logger.error(f"Error finding geometry collection duplicates: {type(e).__name__}: {str(e)}")
         return []
 
 

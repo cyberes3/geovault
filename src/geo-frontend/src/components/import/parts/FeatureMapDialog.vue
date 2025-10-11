@@ -281,6 +281,141 @@ export default {
             })
           })
         }
+      } else if (geometryType === 'MultiPoint') {
+        const fillColor = isSelected ? highlightColor : hexToColor(properties['marker-color'], '#ff0000')
+        const strokeColor = isSelected ? highlightStrokeColor : '#000000'
+        const strokeWidth = isSelected ? 3 : 2
+
+        return new Style({
+          image: new Circle({
+            radius: isSelected ? 12 : 8, // Larger radius for selected
+            fill: new Fill({
+              color: fillColor
+            }),
+            stroke: new Stroke({
+              color: strokeColor,
+              width: strokeWidth
+            })
+          }),
+          text: new Text({
+            text: name,
+            font: isSelected ? 'bold 14px Arial' : '12px Arial',
+            fill: new Fill({
+              color: isSelected ? '#000000' : '#000000'
+            }),
+            stroke: new Stroke({
+              color: '#ffffff',
+              width: isSelected ? 4 : 3
+            }),
+            offsetY: isSelected ? -20 : -15
+          })
+        })
+      } else if (geometryType === 'MultiLineString') {
+        if (isSelected) {
+          // For selected MultiLineStrings, create a multi-layer effect with black outline and yellow center
+          return [
+            // Black outline (wider)
+            new Style({
+              stroke: new Stroke({
+                color: highlightStrokeColor,
+                width: 10
+              })
+            }),
+            // Yellow center (narrower)
+            new Style({
+              stroke: new Stroke({
+                color: highlightColor,
+                width: 6
+              })
+            }),
+            // Text label
+            new Style({
+              text: new Text({
+                text: name,
+                font: 'bold 14px Arial',
+                fill: new Fill({
+                  color: '#000000'
+                }),
+                stroke: new Stroke({
+                  color: '#ffffff',
+                  width: 4
+                }),
+                offsetY: -15
+              })
+            })
+          ]
+        } else {
+          // Normal styling for non-selected MultiLineStrings with black border
+          const strokeColor = hexToColor(properties.stroke, '#ff0000')
+          const strokeWidth = properties['stroke-width'] || 3
+
+          return [
+            // Black border (wider)
+            new Style({
+              stroke: new Stroke({
+                color: '#000000',
+                width: strokeWidth + 2
+              })
+            }),
+            // Colored center (narrower)
+            new Style({
+              stroke: new Stroke({
+                color: strokeColor,
+                width: strokeWidth
+              })
+            }),
+            // Text label
+            new Style({
+              text: new Text({
+                text: name,
+                font: '12px Arial',
+                fill: new Fill({
+                  color: '#000000'
+                }),
+                stroke: new Stroke({
+                  color: '#ffffff',
+                  width: 3
+                }),
+                offsetY: -10
+              })
+            })
+          ]
+        }
+      } else if (geometryType === 'MultiPolygon') {
+        const strokeColor = isSelected ? highlightStrokeColor : hexToColor(properties.stroke, '#ff0000')
+        let fillColor = isSelected ? highlightColor : hexToColor(properties.fill, '#ff0000')
+        const strokeWidth = isSelected ? 4 : (properties['stroke-width'] || 2)
+
+        // Apply fill-opacity if specified (but not for selected)
+        if (!isSelected && properties['fill-opacity'] !== undefined) {
+          const hex = fillColor.replace('#', '')
+          const r = parseInt(hex.substr(0, 2), 16)
+          const g = parseInt(hex.substr(2, 2), 16)
+          const b = parseInt(hex.substr(4, 2), 16)
+          fillColor = `rgba(${r}, ${g}, ${b}, ${properties['fill-opacity']})`
+        }
+
+        return new Style({
+          stroke: new Stroke({
+            color: strokeColor,
+            width: strokeWidth
+          }),
+          fill: new Fill({
+            color: fillColor
+          }),
+          text: new Text({
+            text: name,
+            font: isSelected ? 'bold 14px Arial' : '12px Arial',
+            fill: new Fill({
+              color: isSelected ? '#000000' : '#000000'
+            }),
+            stroke: new Stroke({
+              color: '#ffffff',
+              width: isSelected ? 4 : 3
+            }),
+            offsetY: isSelected ? -15 : -10
+          })
+        })
       } else if (geometryType === 'Polygon') {
         const strokeColor = isSelected ? highlightStrokeColor : hexToColor(properties.stroke, '#ff0000')
         let fillColor = isSelected ? highlightColor : hexToColor(properties.fill, '#ff0000')
