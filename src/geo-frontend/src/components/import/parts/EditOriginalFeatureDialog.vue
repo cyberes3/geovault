@@ -29,20 +29,51 @@
           </div>
         </div>
 
+        <!-- Loading State -->
+        <div v-if="loading" class="px-4 pb-4">
+          <div class="flex items-center justify-center py-12">
+            <div class="text-center">
+              <div class="animate-spin h-8 w-8 border-2 border-blue-600 border-t-transparent rounded-full mx-auto mb-4"></div>
+              <h3 class="text-lg font-medium text-gray-900 mb-2">Loading Feature Data</h3>
+              <p class="text-gray-600">Fetching original feature information...</p>
+            </div>
+          </div>
+        </div>
+
         <!-- Feature Details -->
-        <div v-if="originalFeature" class="px-4 pb-4">
+        <div v-else-if="originalFeature" class="px-4 pb-4">
           <div class="bg-gray-50 rounded-lg p-4">
             <h4 class="text-sm font-medium text-gray-900 mb-3">Original Feature Details</h4>
             
             <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
               <!-- Name Field -->
               <div>
-                <label class="block text-sm font-medium text-gray-700 mb-2">Name</label>
-                <input
-                  v-model="editableFeature.properties.name"
-                  class="block w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-blue-500 focus:border-blue-500"
-                  placeholder="Feature name"
-                />
+                <label class="block text-sm font-medium text-gray-700 mb-2">
+                  Name
+                  <span v-if="originalValues.name" class="text-xs text-gray-500 font-normal ml-2">
+                    (Original: "{{ originalValues.name }}")
+                  </span>
+                  <span v-else class="text-xs text-gray-400 font-normal ml-2">
+                    (No original name)
+                  </span>
+                </label>
+                <div class="flex items-center space-x-2">
+                  <input
+                    v-model="editableFeature.properties.name"
+                    class="block flex-1 px-3 py-2 border border-gray-300 rounded-md focus:ring-blue-500 focus:border-blue-500"
+                    placeholder="Feature name"
+                  />
+                  <button
+                    v-if="originalValues.name"
+                    @click="resetField('name')"
+                    class="inline-flex items-center px-3 py-2 border border-gray-300 shadow-sm text-sm font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500"
+                    title="Reset to original value"
+                  >
+                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"></path>
+                    </svg>
+                  </button>
+                </div>
               </div>
 
               <!-- Type Field (read-only) -->
@@ -57,29 +88,77 @@
 
               <!-- Description Field -->
               <div class="md:col-span-2">
-                <label class="block text-sm font-medium text-gray-700 mb-2">Description</label>
-                <textarea
-                  v-model="editableFeature.properties.description"
-                  class="block w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-blue-500 focus:border-blue-500 resize-none"
-                  rows="3"
-                  placeholder="Feature description"
-                ></textarea>
+                <label class="block text-sm font-medium text-gray-700 mb-2">
+                  Description
+                  <span v-if="originalValues.description" class="text-xs text-gray-500 font-normal ml-2">
+                    (Original: "{{ originalValues.description }}")
+                  </span>
+                  <span v-else class="text-xs text-gray-400 font-normal ml-2">
+                    (No original description)
+                  </span>
+                </label>
+                <div class="flex items-start space-x-2">
+                  <textarea
+                    v-model="editableFeature.properties.description"
+                    class="block flex-1 px-3 py-2 border border-gray-300 rounded-md focus:ring-blue-500 focus:border-blue-500 resize-none"
+                    rows="3"
+                    placeholder="Feature description"
+                  ></textarea>
+                  <button
+                    v-if="originalValues.description"
+                    @click="resetField('description')"
+                    class="inline-flex items-center px-3 py-2 border border-gray-300 shadow-sm text-sm font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 mt-1"
+                    title="Reset to original value"
+                  >
+                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"></path>
+                    </svg>
+                  </button>
+                </div>
               </div>
 
               <!-- Created Date Field -->
               <div>
-                <label class="block text-sm font-medium text-gray-700 mb-2">Created Date</label>
-                <input
-                  type="datetime-local"
-                  :value="formatDateForInput(editableFeature.properties.created)"
-                  @change="updateDate($event)"
-                  class="block w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-blue-500 focus:border-blue-500"
-                />
+                <label class="block text-sm font-medium text-gray-700 mb-2">
+                  Created Date
+                  <span v-if="originalValues.created" class="text-xs text-gray-500 font-normal ml-2">
+                    (Original: {{ formatDateForInput(originalValues.created) }})
+                  </span>
+                  <span v-else class="text-xs text-gray-400 font-normal ml-2">
+                    (No original date)
+                  </span>
+                </label>
+                <div class="flex items-center space-x-2">
+                  <input
+                    type="datetime-local"
+                    :value="formatDateForInput(editableFeature.properties.created)"
+                    @change="updateDate($event)"
+                    class="block flex-1 px-3 py-2 border border-gray-300 rounded-md focus:ring-blue-500 focus:border-blue-500"
+                  />
+                  <button
+                    v-if="originalValues.created"
+                    @click="resetField('created')"
+                    class="inline-flex items-center px-3 py-2 border border-gray-300 shadow-sm text-sm font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500"
+                    title="Reset to original value"
+                  >
+                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"></path>
+                    </svg>
+                  </button>
+                </div>
               </div>
 
               <!-- Tags Section -->
               <div>
-                <label class="block text-sm font-medium text-gray-700 mb-2">Tags</label>
+                <label class="block text-sm font-medium text-gray-700 mb-2">
+                  Tags
+                  <span v-if="originalValues.tags && originalValues.tags.length > 0" class="text-xs text-gray-500 font-normal ml-2">
+                    (Original: {{ originalValues.tags.join(', ') }})
+                  </span>
+                  <span v-else class="text-xs text-gray-400 font-normal ml-2">
+                    (No original tags)
+                  </span>
+                </label>
                 <div class="space-y-2">
                   <div v-for="(tag, tagIndex) in editableFeature.properties.tags" :key="`tag-${tagIndex}`" class="flex items-center space-x-2">
                     <input
@@ -108,6 +187,17 @@
                       <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6v6m0 0v6m0-6h6m-6 0H6"></path>
                     </svg>
                     Add Tag
+                  </button>
+                  <button
+                    v-if="originalValues.tags && originalValues.tags.length > 0"
+                    @click="resetField('tags')"
+                    class="inline-flex items-center px-3 py-2 border border-gray-300 shadow-sm text-sm font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500"
+                    title="Reset all tags to original values"
+                  >
+                    <svg class="w-4 h-4 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"></path>
+                    </svg>
+                    Reset Tags
                   </button>
                 </div>
               </div>
@@ -195,6 +285,10 @@ export default {
     originalFeature: {
       type: Object,
       default: null
+    },
+    loading: {
+      type: Boolean,
+      default: false
     }
   },
   data() {
@@ -209,16 +303,23 @@ export default {
       if (!this.editableFeature || !this.editableFeature.properties.tags) return false;
       const tags = this.editableFeature.properties.tags;
       return tags.length > 0 && tags[tags.length - 1].trim().length === 0;
+    },
+    originalValues() {
+      if (!this.originalFeature || !this.originalFeature.geojson) return {};
+      return {
+        name: this.originalFeature.geojson.properties?.name || '',
+        description: this.originalFeature.geojson.properties?.description || '',
+        created: this.originalFeature.geojson.properties?.created || '',
+        tags: this.originalFeature.geojson.properties?.tags || []
+      };
     }
   },
   watch: {
     originalFeature: {
       handler(newFeature) {
         if (newFeature) {
-          console.log('Original feature received:', newFeature);
           // Create a deep copy of the feature for editing
           this.editableFeature = JSON.parse(JSON.stringify(newFeature.geojson));
-          console.log('Editable feature created:', this.editableFeature);
         }
       },
       immediate: true
@@ -250,6 +351,25 @@ export default {
       const date = new Date(dateString);
       if (isNaN(date.getTime())) return '';
       return date.toISOString().slice(0, 16);
+    },
+    resetField(fieldName) {
+      if (!this.originalFeature || !this.originalFeature.geojson) return;
+      
+      const originalValue = this.originalFeature.geojson.properties?.[fieldName];
+      
+      switch (fieldName) {
+        case 'name':
+        case 'description':
+        case 'created':
+          this.editableFeature.properties[fieldName] = originalValue || '';
+          break;
+        case 'tags':
+          // For tags, we need to create a deep copy of the array
+          this.editableFeature.properties.tags = originalValue ? [...originalValue] : [];
+          break;
+        default:
+          console.warn(`Unknown field: ${fieldName}`);
+      }
     },
     async saveChanges() {
       if (!this.originalFeature || !this.editableFeature) return;

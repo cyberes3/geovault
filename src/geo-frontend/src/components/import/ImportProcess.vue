@@ -133,8 +133,6 @@
     <ImportControls
         :current-page="pagination.currentPage"
         :duplicate-count="duplicates.indices.length"
-        :duplicate-original-filename="duplicates.originalFilename"
-        :duplicate-status="duplicates.status"
         :goto-page-input="pagination.gotoInput"
         :has-features="itemsForUser.length > 0"
         :has-next-page="pagination.hasNext"
@@ -419,11 +417,9 @@
 
     <!-- Import Controls (Bottom) -->
     <ImportControls
-        v-if="!loading.page && duplicates.status !== 'duplicate_in_queue'"
+        v-if="!loading.page"
         :current-page="pagination.currentPage"
         :duplicate-count="duplicates.indices.length"
-        :duplicate-original-filename="duplicates.originalFilename"
-        :duplicate-status="duplicates.status"
         :goto-page-input="pagination.gotoInput"
         :has-features="itemsForUser.length > 0"
         :has-next-page="pagination.hasNext"
@@ -473,6 +469,7 @@
     <EditOriginalFeatureDialog
         :is-open="dialogs.editOriginal.isOpen"
         :original-feature="dialogs.editOriginal.feature"
+        :loading="dialogs.editOriginal.loading"
         @close="closeEditOriginalDialog"
         @saved="onOriginalFeatureSaved"
     />
@@ -503,7 +500,6 @@ import FeatureMapDialog from "@/components/import/parts/FeatureMapDialog.vue";
 import EditOriginalFeatureDialog from "@/components/import/parts/EditOriginalFeatureDialog.vue";
 import LogViewModal from "@/components/import/parts/LogViewModal.vue";
 import ImportControls from "@/components/import/parts/ImportControls.vue";
-import {featuresMatch} from "@/assets/js/coordinate-utils.js";
 
 // TODO: for each feature, query the DB and check if there is a duplicate. For points that's duplicate coords, for linestrings and polygons that's duplicate points
 // TODO: redo the entire log feature to include local timestamps
@@ -533,7 +529,7 @@ export default {
       dialogs: {
         mapPreview: false,
         featureMap: {isOpen: false, selectedIndex: 0},
-        editOriginal: {isOpen: false, feature: null},
+        editOriginal: {isOpen: false, feature: null, loading: false},
         logs: false
       },
 
@@ -568,9 +564,7 @@ export default {
       // Consolidated: Duplicates
       duplicates: {
         features: [],
-        indices: [],
-        status: null,
-        originalFilename: null
+        indices: []
       },
 
       // Consolidated: Edit cache
@@ -639,16 +633,8 @@ export default {
               this.duplicates.indices = itemsResponse.data.pagination.duplicate_indices || [];
             }
 
-            // Update duplicate file status
-            this.duplicates.status = itemsResponse.data.duplicate_status || null;
-            this.duplicates.originalFilename = itemsResponse.data.duplicate_original_filename || null;
 
-            // If this is a duplicate of a file in queue, skip processing features
-            if (this.duplicates.status === 'duplicate_in_queue') {
-              // Don't process any features - they'll remain empty
-              this.itemsForUser = [];
-              this.originalItems = [];
-            } else if (itemsResponse.data.geofeatures.length > 0 && itemsResponse.data.geofeatures[0].error) {
+            if (itemsResponse.data.geofeatures.length > 0 && itemsResponse.data.geofeatures[0].error) {
               // Check if this is an error response (unprocessable file)
               // This is an unprocessable file, show a simple error message
               const errorItem = itemsResponse.data.geofeatures[0];
@@ -678,23 +664,6 @@ export default {
               // Process duplicates from the API response
               this.duplicates.features = itemsResponse.data.duplicates || []
               this.markDuplicateFeatures()
-
-              // If this is a duplicate of an imported file, mark ALL features as duplicates
-              if (this.duplicates.status === 'duplicate_imported') {
-                this.duplicates.indices = Array.from({length: this.pagination.totalFeatures}, (_, i) => i);
-                // Also mark all current page features as duplicates
-                this.itemsForUser.forEach((item, index) => {
-                  item.isDuplicate = true;
-                  // Create a generic duplicate info for imported file duplicates
-                  item.duplicateInfo = {
-                    feature: item,
-                    existing_features: [{
-                      id: 'imported_file_duplicate',
-                      properties: { name: 'Feature from imported file' }
-                    }]
-                  };
-                });
-              }
             }
           }
         }
@@ -971,49 +940,46 @@ export default {
         item.duplicateInfo = null;
       });
 
-      // Mark duplicate features using the duplicate_indices from pagination response
-      // This is more reliable than coordinate matching since it comes directly from the backend
-      const currentPageStartIndex = (this.pagination.currentPage - 1) * this.pagination.pageSize;
-
-      this.duplicates.indices.forEach(globalIndex => {
-        const localIndex = globalIndex - currentPageStartIndex;
-        if (localIndex >= 0 && localIndex < this.itemsForUser.length) {
-          this.itemsForUser[localIndex].isDuplicate = true;
-
-          // Try to find the corresponding duplicate info from the duplicates.features array
-          const feature = this.itemsForUser[localIndex];
-          const duplicateInfo = this.duplicates.features.find(dupInfo =>
-              featuresMatch(feature, dupInfo.feature)
-          );
-
-          if (duplicateInfo) {
-            this.itemsForUser[localIndex].duplicateInfo = duplicateInfo;
-          }
-        }
-      });
-
-      // Fallback: Also mark duplicates using coordinate comparison for any features
-      // that might not be in the duplicate_indices but are in the duplicates.features array
+      // Mark duplicate features using the page_index from the new API format
+      // The backend now provides page_index which directly tells us which feature on the current page is a duplicate
       this.duplicates.features.forEach(duplicateInfo => {
-        const duplicateFeature = duplicateInfo.feature;
-        const index = this.itemsForUser.findIndex(item =>
-            featuresMatch(item, duplicateFeature)
-        );
-
-        if (index !== -1 && !this.itemsForUser[index].isDuplicate) {
-          this.itemsForUser[index].isDuplicate = true;
-          this.itemsForUser[index].duplicateInfo = duplicateInfo;
+        const pageIndex = duplicateInfo.page_index;
+        if (pageIndex >= 0 && pageIndex < this.itemsForUser.length) {
+          this.itemsForUser[pageIndex].isDuplicate = true;
+          this.itemsForUser[pageIndex].duplicateInfo = duplicateInfo;
         }
       });
     },
-    editOriginalFeature(duplicateInfo) {
-      // Show the edit dialog for the original feature
-      this.dialogs.editOriginal.feature = duplicateInfo.existing_features[0];
+    async editOriginalFeature(duplicateInfo) {
+      // Fetch the full feature data since the new API format only provides basic fields
+      const existingFeature = duplicateInfo.existing_features[0];
+      
+      // Show dialog with loading state immediately
       this.dialogs.editOriginal.isOpen = true;
+      this.dialogs.editOriginal.loading = true;
+      this.dialogs.editOriginal.feature = null;
+      
+      try {
+        const response = await axios.get(`/api/data/feature/${existingFeature.id}/`);
+        if (response.data.success) {
+          this.dialogs.editOriginal.feature = response.data.feature;
+        } else {
+          console.error('Failed to fetch feature data:', response.data.msg);
+          alert('Error loading feature data: ' + response.data.msg);
+          this.dialogs.editOriginal.isOpen = false;
+        }
+      } catch (error) {
+        console.error('Error fetching feature data:', error);
+        alert('Error loading feature data: ' + error.message);
+        this.dialogs.editOriginal.isOpen = false;
+      } finally {
+        this.dialogs.editOriginal.loading = false;
+      }
     },
     closeEditOriginalDialog() {
       this.dialogs.editOriginal.isOpen = false;
       this.dialogs.editOriginal.feature = null;
+      this.dialogs.editOriginal.loading = false;
     },
     closeLogModal() {
       this.dialogs.logs = false;
@@ -1055,7 +1021,7 @@ export default {
       this.dialogs = {
         mapPreview: false,
         featureMap: {isOpen: false, selectedIndex: 0},
-        editOriginal: {isOpen: false, feature: null},
+        editOriginal: {isOpen: false, feature: null, loading: false},
         logs: false
       };
 
@@ -1090,9 +1056,7 @@ export default {
       // Reset duplicates
       this.duplicates = {
         features: [],
-        indices: [],
-        status: null,
-        originalFilename: null
+        indices: []
       };
 
       // Reset edit cache
@@ -1122,47 +1086,19 @@ export default {
           this.pagination.hasPrevious = pagination.has_previous;
           this.duplicates.indices = pagination.duplicate_indices || [];
 
-          // Update duplicate file status
-          this.duplicates.status = response.data.duplicate_status || null;
-          this.duplicates.originalFilename = response.data.duplicate_original_filename || null;
+          // Parse features for this page
+          this.itemsForUser = [];
+          response.data.geofeatures.forEach((item) => {
+            this.itemsForUser.push(this.parseGeoJson(item));
+          });
+          this.originalItems = JSON.parse(JSON.stringify(this.itemsForUser));
 
-          // If this is a duplicate of a file in queue, hide all features
-          if (this.duplicates.status === 'duplicate_in_queue') {
-            this.itemsForUser = [];
-            this.originalItems = [];
-          } else {
-            // Parse features for this page
-            this.itemsForUser = [];
-            response.data.geofeatures.forEach((item) => {
-              this.itemsForUser.push(this.parseGeoJson(item));
-            });
-            this.originalItems = JSON.parse(JSON.stringify(this.itemsForUser));
+          // Restore cached changes if they exist for this page
+          this.restoreCachedPageChanges(page);
 
-            // Restore cached changes if they exist for this page
-            this.restoreCachedPageChanges(page);
-
-            // Process duplicates from the API response
-            this.duplicates.features = response.data.duplicates || [];
-            this.markDuplicateFeatures();
-
-            // If this is a duplicate of an imported file, mark ALL features as duplicates
-            if (this.duplicates.status === 'duplicate_imported') {
-              // Mark all feature indices as duplicates
-              this.duplicates.indices = Array.from({length: this.pagination.totalFeatures}, (_, i) => i);
-              // Also mark all current page features as duplicates
-              this.itemsForUser.forEach((item, index) => {
-                item.isDuplicate = true;
-                // Create a generic duplicate info for imported file duplicates
-                item.duplicateInfo = {
-                  feature: item,
-                  existing_features: [{
-                    id: 'imported_file_duplicate',
-                    properties: { name: 'Feature from imported file' }
-                  }]
-                };
-              });
-            }
-          }
+          // Process duplicates from the API response
+          this.duplicates.features = response.data.duplicates || [];
+          this.markDuplicateFeatures();
         }
       } catch (error) {
         this.msg = 'Error loading page: ' + error.message;
@@ -1226,7 +1162,7 @@ export default {
         await this.goToPage(this.pagination.gotoInput);
         this.pagination.gotoInput = null; // Clear the input after jumping
       }
-    },
+    }
   },
   mounted() {
     // Add navigation warning when user tries to leave the page
@@ -1342,16 +1278,7 @@ export default {
                 vm.duplicates.indices = itemsResponse.data.pagination.duplicate_indices || [];
               }
 
-              // Update duplicate file status
-              vm.duplicates.status = itemsResponse.data.duplicate_status || null;
-              vm.duplicates.originalFilename = itemsResponse.data.duplicate_original_filename || null;
-
-              // If this is a duplicate of a file in queue, skip processing features
-              if (vm.duplicates.status === 'duplicate_in_queue') {
-                // Don't process any features - they'll remain empty
-                vm.itemsForUser = [];
-                vm.originalItems = [];
-              } else if (itemsResponse.data.geofeatures.length > 0 && itemsResponse.data.geofeatures[0].error) {
+              if (itemsResponse.data.geofeatures.length > 0 && itemsResponse.data.geofeatures[0].error) {
                 // Check if this is an error response (unprocessable file)
                 // This is an unprocessable file, show a simple error message
                 const errorItem = itemsResponse.data.geofeatures[0];
@@ -1375,23 +1302,6 @@ export default {
                 // Process duplicates from the API response
                 vm.duplicates.features = itemsResponse.data.duplicates || []
                 vm.markDuplicateFeatures()
-
-                // If this is a duplicate of an imported file, mark ALL features as duplicates
-                if (vm.duplicates.status === 'duplicate_imported') {
-                  vm.duplicates.indices = Array.from({length: vm.pagination.totalFeatures}, (_, i) => i);
-                  // Also mark all current page features as duplicates
-                  vm.itemsForUser.forEach((item, index) => {
-                    item.isDuplicate = true;
-                    // Create a generic duplicate info for imported file duplicates
-                    item.duplicateInfo = {
-                      feature: item,
-                      existing_features: [{
-                        id: 'imported_file_duplicate',
-                        properties: { name: 'Feature from imported file' }
-                      }]
-                    };
-                  });
-                }
               }
             }
           }
@@ -1416,7 +1326,6 @@ export default {
       }
     })
   }
-  ,
 }
 
 </script>

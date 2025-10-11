@@ -627,9 +627,8 @@ def fetch_import_queue(request, item_id):
                                     # Removed full geojson to save bandwidth
                                 })
                             duplicates_optimized.append({
-                                'feature': dup_feature,
                                 'existing_features': existing_features_optimized,
-                                'page_index': idx - start_idx  # Index within the current page
+                                'page_index': idx - start_idx,  # Index within the current page
                             })
                         break
 

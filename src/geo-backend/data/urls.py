@@ -1,8 +1,9 @@
 from django.urls import path
 
-from data.views.import_item import upload_item, get_import_item_logs, get_processing_status, get_user_processing_jobs, cancel_processing_job, fetch_import_queue, fetch_import_waiting, delete_import_item, bulk_delete_import_items, update_import_item, fetch_import_history, fetch_import_history_item, import_to_featurestore
-from data.views.geojson_api import get_geojson_data, get_feature, update_feature
+from data.views.geojson_api import get_geojson_data, get_feature, update_feature, update_feature_metadata
 from data.views.geolocation_api import get_user_location, get_location_by_ip
+from data.views.import_item import upload_item, get_import_item_logs, get_processing_status, get_user_processing_jobs, cancel_processing_job, fetch_import_queue, fetch_import_waiting, delete_import_item, bulk_delete_import_items, update_import_item, fetch_import_history, fetch_import_history_item, \
+    import_to_featurestore
 
 urlpatterns = [
     path('item/import/upload', upload_item),
@@ -22,6 +23,7 @@ urlpatterns = [
     path('geojson/', get_geojson_data),
     path('feature/<int:feature_id>/', get_feature),
     path('feature/<int:feature_id>/update/', update_feature),
+    path('feature/<int:feature_id>/update-metadata/', update_feature_metadata),
     # Geolocation API endpoints
     path('location/user/', get_user_location),
     path('location/ip/', get_location_by_ip),

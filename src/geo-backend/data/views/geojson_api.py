@@ -224,6 +224,140 @@ def get_feature(request, feature_id):
 @login_required_401
 @csrf_protect
 @require_http_methods(["PUT"])
+def update_feature_metadata(request, feature_id):
+    """
+    API endpoint to update only the metadata of a specific feature (name, description, tags, created date).
+    Does not modify geometry or geojson_hash.
+
+    URL parameter:
+    - feature_id: ID of the feature to update
+
+    Request body: JSON object with optional fields:
+    - name: string
+    - description: string  
+    - tags: array of strings
+    - created: datetime string (ISO format)
+    """
+    try:
+        # Get the feature from database
+        feature = FeatureStore.objects.get(id=feature_id, user=request.user)
+
+        # Parse request body
+        try:
+            metadata = json.loads(request.body)
+        except json.JSONDecodeError:
+            return JsonResponse({
+                'success': False,
+                'error': 'Invalid JSON in request body',
+                'code': 400
+            }, status=400)
+
+        # Validate that it's a proper object
+        if not isinstance(metadata, dict):
+            return JsonResponse({
+                'success': False,
+                'error': 'Request body must be a valid JSON object',
+                'code': 400
+            }, status=400)
+
+        # Update only the specified metadata fields
+        updated_fields = []
+        geojson_data = feature.geojson.copy()
+
+        if 'name' in metadata:
+            if not isinstance(metadata['name'], str):
+                return JsonResponse({
+                    'success': False,
+                    'error': 'name must be a string',
+                    'code': 400
+                }, status=400)
+            geojson_data['properties']['name'] = metadata['name']
+            updated_fields.append('name')
+
+        if 'description' in metadata:
+            if not isinstance(metadata['description'], str):
+                return JsonResponse({
+                    'success': False,
+                    'error': 'description must be a string',
+                    'code': 400
+                }, status=400)
+            geojson_data['properties']['description'] = metadata['description']
+            updated_fields.append('description')
+
+        if 'tags' in metadata:
+            if not isinstance(metadata['tags'], list):
+                return JsonResponse({
+                    'success': False,
+                    'error': 'tags must be an array',
+                    'code': 400
+                }, status=400)
+            # Validate that all tags are strings
+            for tag in metadata['tags']:
+                if not isinstance(tag, str):
+                    return JsonResponse({
+                        'success': False,
+                        'error': 'all tags must be strings',
+                        'code': 400
+                    }, status=400)
+            geojson_data['properties']['tags'] = metadata['tags']
+            updated_fields.append('tags')
+
+        if 'created' in metadata:
+            if not isinstance(metadata['created'], str):
+                return JsonResponse({
+                    'success': False,
+                    'error': 'created must be a string',
+                    'code': 400
+                }, status=400)
+            # Validate datetime format
+            try:
+                from datetime import datetime
+                datetime.fromisoformat(metadata['created'].replace('Z', '+00:00'))
+            except ValueError:
+                return JsonResponse({
+                    'success': False,
+                    'error': 'created must be a valid ISO datetime string',
+                    'code': 400
+                }, status=400)
+            geojson_data['properties']['created'] = metadata['created']
+            updated_fields.append('created')
+
+        if not updated_fields:
+            return JsonResponse({
+                'success': False,
+                'error': 'No valid fields to update. Supported fields: name, description, tags, created',
+                'code': 400
+            }, status=400)
+
+        # Update the feature's geojson data
+        feature.geojson = geojson_data
+        feature.save()
+
+        return JsonResponse({
+            'success': True,
+            'message': f'Feature metadata updated successfully. Updated fields: {", ".join(updated_fields)}',
+            'feature_id': feature.id,
+            'updated_fields': updated_fields
+        })
+
+    except FeatureStore.DoesNotExist:
+        return JsonResponse({
+            'success': False,
+            'error': 'Feature not found or access denied',
+            'code': 404
+        }, status=404)
+    except Exception as e:
+        logger.error(f"Error updating feature metadata {feature_id}: {traceback.format_exc()}")
+        return JsonResponse({
+            'success': False,
+            'error': 'Failed to update feature metadata',
+            'code': 500
+        }, status=500)
+
+
+@login_required_401
+@csrf_protect
+@require_http_methods(["PUT"])
 def update_feature(request, feature_id):
     """
     API endpoint to update a specific feature.
