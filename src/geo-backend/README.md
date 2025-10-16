@@ -25,3 +25,7 @@ GRANT ALL PRIVILEGES ON TABLE spatial_ref_sys TO geoserver;
 ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT ALL ON TABLES TO geoserver;
 ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT ALL ON SEQUENCES TO geoserver;
 ```
+
+```sql
+CREATE INDEX IF NOT EXISTS featurestore_geometry_idx ON data_featurestore USING GIST (geometry);
+```
