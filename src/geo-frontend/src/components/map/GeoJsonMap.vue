@@ -165,7 +165,12 @@ export default {
 
       this.vectorLayer = new VectorLayer({
         source: this.vectorSource,
-        style: (feature) => this.getFeatureStyle(feature)
+        style: (feature) => this.getFeatureStyle(feature),
+        // Performance optimizations for complex polygon rendering
+        renderBuffer: 100,  // Only render features within 100px of viewport
+        updateWhileAnimating: true,  // Continue updating during animations
+        updateWhileInteracting: true,  // Continue updating during interactions
+        declutter: true  // Disable label decluttering (enable if you have overlapping labels)
       })
 
       // Determine initial map center and zoom based on user location

@@ -1,5 +1,4 @@
 insane linework test isn't showing up on the map
-Checkbox to allow uploading duplicate file
 Auto parse kml point color from url
 Batch loading features on map (split into chunks of 100, account for vertices in polys and lines)
 Up to 3 concurrent feature loading requests. Have a 5 second timeout. Don't cancel requests when the user scrolls map
