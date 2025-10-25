@@ -40,6 +40,11 @@ def html_to_markdown(html_content) -> str:
     if not html_content or not html_content.strip():
         return ""
 
+    # Handle CDATA sections - extract HTML content from CDATA wrapper
+    cdata_match = re.search(r'<!\[CDATA\[(.*?)\]\]>', html_content, re.DOTALL)
+    if cdata_match:
+        html_content = cdata_match.group(1).strip()
+
     # Convert HTML to markdown using markdownify
     markdown_content = markdownify.markdownify(
         html_content,
