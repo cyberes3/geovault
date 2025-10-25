@@ -744,13 +744,6 @@ def fetch_import_queue(request, item_id):
 
 
 @login_required_401
-def fetch_import_history(request):
-    user_items = ImportQueue.objects.filter(user=request.user, imported=True).order_by('-timestamp').values('id', 'original_filename', 'timestamp')
-    data = json.loads(json.dumps(list(user_items), cls=DjangoJSONEncoder))
-    return JsonResponse({'data': data})
-
-
-@login_required_401
 def fetch_import_history_item(request, item_id: int):
     item = ImportQueue.objects.get(id=item_id)
     if item.user_id != request.user.id:
@@ -1176,13 +1169,35 @@ def _broadcast_item_imported(user_id: int, item_id: int):
     """Broadcast WebSocket event when an item is imported."""
     from channels.layers import get_channel_layer
     from asgiref.sync import async_to_sync
+    from data.models import ImportQueue
     
     channel_layer = get_channel_layer()
     if channel_layer:
+        # Get item details for history broadcast
+        try:
+            item = ImportQueue.objects.get(id=item_id)
+            item_data = {
+                'id': item_id,
+                'original_filename': item.original_filename,
+                'timestamp': item.timestamp.isoformat()
+            }
+        except ImportQueue.DoesNotExist:
+            item_data = {'id': item_id}
+        
+        # Broadcast to import queue module
         async_to_sync(channel_layer.group_send)(
             f"realtime_{user_id}",
             {
                 'type': 'import_queue_item_imported',
                 'data': {'id': item_id}
+            }
+        )
+        
+        # Broadcast to import history module
+        async_to_sync(channel_layer.group_send)(
+            f"realtime_{user_id}",
+            {
+                'type': 'import_history_item_added',
+                'data': item_data
             }
         )

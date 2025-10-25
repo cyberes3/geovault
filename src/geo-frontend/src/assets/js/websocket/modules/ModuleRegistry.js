@@ -4,6 +4,7 @@
  */
 
 import { ImportQueueModule } from './ImportQueueModule.js';
+import { ImportHistoryModule } from './ImportHistoryModule.js';
 import { UploadJobModule } from './UploadJobModule.js';
 import { DeleteJobModule } from './DeleteJobModule.js';
 // Import other modules here as they are created
@@ -16,6 +17,7 @@ import { DeleteJobModule } from './DeleteJobModule.js';
  */
 export const MODULE_REGISTRY = [
     ImportQueueModule,
+    ImportHistoryModule,
     UploadJobModule,
     DeleteJobModule,
     // Add other modules here:

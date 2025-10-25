@@ -63,7 +63,7 @@
             </tr>
           </thead>
           <tbody class="bg-white divide-y divide-gray-200">
-            <tr v-for="(item, index) in history" :key="`history-${index}`" class="hover:bg-gray-50">
+            <tr v-for="(item, index) in importHistory" :key="`history-${index}`" class="hover:bg-gray-50">
               <td class="px-6 py-4 whitespace-nowrap">
                 <a :href="`${IMPORT_HISTORY_URL()}/${item.id}`" class="text-sm font-medium text-blue-600 hover:text-blue-900">
                   {{ item.original_filename }}
@@ -84,7 +84,7 @@
                 <div class="w-24 h-4 bg-gray-200 rounded mx-auto"></div>
               </td>
             </tr>
-            <tr v-if="!combinedHistoryLoading && history.length === 0">
+            <tr v-if="!combinedHistoryLoading && importHistory.length === 0">
               <td colspan="3" class="px-6 py-12 text-center">
                 <div class="flex flex-col items-center">
                   <div class="w-12 h-12 bg-gray-100 rounded-full flex items-center justify-center mb-3">
@@ -107,28 +107,23 @@
 <script>
 import {mapState} from "vuex"
 import {authMixin} from "@/assets/js/authMixin.js";
-import axios from "axios";
 import {IMPORT_HISTORY_URL} from "@/assets/js/import/url.js";
 import ImportQueue from "@/components/import/parts/ImportQueue.vue";
 
 export default {
   computed: {
-    ...mapState(["userInfo", "importQueue"]),
+    ...mapState(["userInfo", "importQueue", "importHistory", "importHistoryLoaded"]),
     combinedHistoryLoading() {
       // Show loading placeholders only when:
-      // 1. We're actually loading (historyIsLoading is true)
-      // 2. We haven't initially loaded yet (hasHistoryInitiallyLoaded is false)
-      // 3. AND we don't have any data yet
-      return this.historyIsLoading && !this.hasHistoryInitiallyLoaded && this.history.length === 0;
+      // 1. We haven't received initial data from WebSocket yet
+      // 2. AND we don't have any data yet
+      return !this.importHistoryLoaded && this.importHistory.length === 0;
     }
   },
   components: {ImportQueue: ImportQueue},
   mixins: [authMixin],
   data() {
     return {
-      history: [],
-      historyIsLoading: true,
-      hasHistoryInitiallyLoaded: false,
       importQueueIsLoading: true,
       hasImportQueueLoaded: false,
       refreshInterval: null,
@@ -138,22 +133,6 @@ export default {
   methods: {
     IMPORT_HISTORY_URL() {
       return IMPORT_HISTORY_URL
-    },
-    async fetchHistory(showLoading = true) {
-      if (showLoading) {
-        this.historyIsLoading = true
-      }
-      try {
-        const response = await axios.get(IMPORT_HISTORY_URL)
-        this.history = response.data.data
-        this.hasHistoryInitiallyLoaded = true
-      } catch (error) {
-        console.error('Error fetching import history:', error)
-      } finally {
-        if (showLoading) {
-          this.historyIsLoading = false
-        }
-      }
     },
     async fetchImportQueue(showLoading = true) {
       if (showLoading) {
@@ -174,12 +153,12 @@ export default {
       // Clear any existing interval
       this.stopAutoRefresh()
 
-      // Start auto-refresh every 5 seconds for both tables
+      // Start auto-refresh every 5 seconds for import queue only
+      // Import history is now handled by WebSocket
       this.refreshInterval = setInterval(() => {
-        // Don't show loading indicators during auto-refresh
-        this.fetchHistory(false)
         // Don't call fetchImportQueue during auto-refresh to avoid duplicate API calls
         // The ImportQueue component will handle its own auto-refresh
+        // History is now handled by WebSocket
       }, 5000)
     },
     stopAutoRefresh() {
@@ -189,13 +168,11 @@ export default {
       }
     },
     async refreshTables() {
-      // Force immediate refresh of both tables with loading indicators
+      // Force immediate refresh of import queue with loading indicators
+      // Import history is now handled by WebSocket
       this.isRefreshing = true
       try {
-        await Promise.all([
-          this.fetchHistory(true),
-          this.fetchImportQueue(true)
-        ])
+        await this.fetchImportQueue(true)
       } finally {
         this.isRefreshing = false
       }
@@ -204,9 +181,8 @@ export default {
   async created() {
     // If we already have data, mark as initially loaded
     // This prevents showing loading placeholders when navigating back with browser buttons
-    if (this.history && this.history.length > 0) {
-      this.hasHistoryInitiallyLoaded = true;
-      this.historyIsLoading = false;
+    if (this.importHistory && this.importHistory.length > 0) {
+      this.$store.dispatch('setImportHistoryLoaded', true);
     }
 
     // Don't fetch data here - let the route guards handle it

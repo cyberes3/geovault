@@ -9,15 +9,25 @@ interface ImportQueueItem {
     [key: string]: any
 }
 
+// Define import history item interface
+interface ImportHistoryItem {
+    id: string
+    original_filename: string
+    timestamp: string
+}
+
 // Define the state interface
 interface State {
     userInfo: typeof UserInfo
     importQueue: ImportQueueItem[]
+    importHistory: ImportHistoryItem[]
+    importHistoryLoaded: boolean
     importQueueRefreshTrigger: boolean
     websocketConnected: boolean
     websocketReconnectAttempts: number
     realtimeData: {
         importQueue: ImportQueueItem[]
+        importHistory: ImportHistoryItem[]
         [key: string]: any
     }
 }
@@ -28,11 +38,14 @@ export default createStore<State>({
     state: {
         userInfo: UserInfo,
         importQueue: [],
+        importHistory: [],
+        importHistoryLoaded: false,
         importQueueRefreshTrigger: false,
         websocketConnected: false,
         websocketReconnectAttempts: 0,
         realtimeData: {
-            importQueue: []
+            importQueue: [],
+            importHistory: []
         },
     }, 
     mutations: {
@@ -78,6 +91,19 @@ export default createStore<State>({
         },
         setRealtimeModuleData(state: State, { module, data }: { module: string, data: any }) {
             state.realtimeData[module] = data;
+        },
+        setImportHistory(state: State, importHistory: ImportHistoryItem[]) {
+            state.importHistory = importHistory;
+        },
+        addImportHistoryItem(state: State, item: ImportHistoryItem) {
+            // Check if item already exists to avoid duplicates
+            const existingIndex = state.importHistory.findIndex(existing => existing.id === item.id);
+            if (existingIndex === -1) {
+                state.importHistory.unshift(item); // Add to beginning
+            }
+        },
+        setImportHistoryLoaded(state: State, loaded: boolean) {
+            state.importHistoryLoaded = loaded;
         },
         updateRealtimeModuleData(state: State, { module, updates }: { module: string, updates: any }) {
             if (!state.realtimeData[module]) {
@@ -128,6 +154,15 @@ export default createStore<State>({
         },
         setRealtimeModuleData({ commit }: { commit: Commit }, payload: { module: string, data: any }) {
             commit('setRealtimeModuleData', payload);
+        },
+        setImportHistory({ commit }: { commit: Commit }, importHistory: ImportHistoryItem[]) {
+            commit('setImportHistory', importHistory);
+        },
+        addImportHistoryItem({ commit }: { commit: Commit }, item: ImportHistoryItem) {
+            commit('addImportHistoryItem', item);
+        },
+        setImportHistoryLoaded({ commit }: { commit: Commit }, loaded: boolean) {
+            commit('setImportHistoryLoaded', loaded);
         },
         updateRealtimeModuleData({ commit }: { commit: Commit }, payload: { module: string, updates: any }) {
             commit('updateRealtimeModuleData', payload);
