@@ -85,15 +85,25 @@ class AsyncFileProcessor:
         """
         Worker function that runs in a background thread to process the file.
         """
-        # Get the import queue ID for logging
+        # Check if job was cancelled before starting processing
         job = self.status_tracker.get_job(job_id)
+        if not job or job.status == ProcessingStatus.CANCELLED:
+            logger.info(f"Job {job_id} was cancelled before processing started")
+            return
+
+        # Get the import queue ID for logging
         import_queue_id = job.import_queue_id if job else None
 
         # Get the UUID from the ImportQueue for logging
         assert import_queue_id
-        import_queue = ImportQueue.objects.get(id=import_queue_id)
-        assert import_queue.log_id
-        log_uuid = str(import_queue.log_id)
+        try:
+            import_queue = ImportQueue.objects.get(id=import_queue_id)
+            assert import_queue.log_id
+            log_uuid = str(import_queue.log_id)
+        except ImportQueue.DoesNotExist:
+            # ImportQueue was deleted (likely by user deletion), stop processing
+            logger.info(f"ImportQueue {import_queue_id} was deleted, stopping processing for job {job_id}")
+            return
 
         # Create real-time logger
         realtime_log = RealTimeImportLog(user_id, log_uuid)
@@ -148,6 +158,12 @@ class AsyncFileProcessor:
 
             realtime_log.add("File validation passed successfully", "AsyncProcessor", DatabaseLogLevel.INFO)
 
+            # Check if job was cancelled after validation
+            job = self.status_tracker.get_job(job_id)
+            if job and job.status == ProcessingStatus.CANCELLED:
+                logger.info(f"Job {job_id} was cancelled after validation, stopping processing")
+                return
+
             # Update progress
             self.status_tracker.update_job_status(
                 job_id, ProcessingStatus.PROCESSING,
@@ -163,6 +179,12 @@ class AsyncFileProcessor:
                 "Converting to GeoJSON format...", 50.0
             )
             realtime_log.add("Starting GeoJSON conversion", "AsyncProcessor", DatabaseLogLevel.INFO)
+
+            # Check if job was cancelled before conversion
+            job = self.status_tracker.get_job(job_id)
+            if job and job.status == ProcessingStatus.CANCELLED:
+                logger.info(f"Job {job_id} was cancelled before conversion, stopping processing")
+                return
 
             # Get file size for logging
             file_size_mb = len(file_data) / (1024 * 1024)
@@ -206,6 +228,12 @@ class AsyncFileProcessor:
             # Count features for logging
             feature_count = len(geojson_data.get('features', []))
             realtime_log.add(f"Found {feature_count} features to process", "AsyncProcessor", DatabaseLogLevel.INFO)
+
+            # Check if job was cancelled before database update
+            job = self.status_tracker.get_job(job_id)
+            if job and job.status == ProcessingStatus.CANCELLED:
+                logger.info(f"Job {job_id} was cancelled before database update, stopping processing")
+                return
 
             # Update existing import queue entry with timing
             feature_processing_start = time.time()
@@ -315,7 +343,12 @@ class AsyncFileProcessor:
         if not job or not job.import_queue_id:
             raise Exception("No import queue ID found for job")
 
-        import_queue = ImportQueue.objects.get(id=job.import_queue_id)
+        try:
+            import_queue = ImportQueue.objects.get(id=job.import_queue_id)
+        except ImportQueue.DoesNotExist:
+            # ImportQueue was deleted (likely by user deletion), stop processing
+            logger.info(f"ImportQueue {job.import_queue_id} was deleted during processing, stopping for job {job_id}")
+            return job.import_queue_id  # Return the ID even though we can't update it
 
         try:
             with transaction.atomic():

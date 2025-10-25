@@ -577,31 +577,6 @@ def get_user_processing_jobs(request):
 
 
 @login_required_401
-def cancel_processing_job(request, job_id):
-    """
-    Cancel a processing job.
-    """
-    if not job_id:
-        return JsonResponse({'success': False, 'msg': 'Job ID not provided'}, status=400)
-
-    # Check if user owns this job
-    job = status_tracker.get_job(job_id)
-    if not job or job.user_id != request.user.id:
-        return JsonResponse({'success': False, 'msg': 'Not authorized to cancel this job'}, status=403)
-
-    if async_processor.cancel_processing(job_id):
-        return JsonResponse({
-            'success': True,
-            'msg': 'Job cancelled successfully'
-        }, status=200)
-    else:
-        return JsonResponse({
-            'success': False,
-            'msg': 'Failed to cancel job or job already completed'
-        }, status=400)
-
-
-@login_required_401
 def fetch_import_queue(request, item_id):
     if item_id is None:
         return JsonResponse({'success': False, 'msg': 'ID not provided', 'code': 400}, status=400)
@@ -795,6 +770,17 @@ def delete_import_item(request, id):
         except ImportQueue.DoesNotExist:
             return JsonResponse({'success': False, 'msg': 'ID does not exist', 'code': 404}, status=400)
 
+        # Check if user owns this item
+        if queue.user_id != request.user.id:
+            return JsonResponse({'success': False, 'msg': 'Not authorized to delete this item', 'code': 403}, status=400)
+
+        # Cancel any active processing job for this item
+        user_jobs = status_tracker.get_user_jobs(request.user.id)
+        for job in user_jobs:
+            if job.import_queue_id == id and job.status.value == 'processing':
+                async_processor.cancel_processing(job.job_id)
+                break
+
         # Delete logs associated with this import item before deleting the item
         _delete_logs_by_log_id(str(queue.log_id))
 
@@ -842,6 +828,12 @@ def bulk_delete_import_items(request):
                 'msg': f'Items not found or not authorized: {list(missing_ids)}',
                 'code': 404
             }, status=400)
+
+        # Cancel any active processing jobs for these items
+        user_jobs = status_tracker.get_user_jobs(request.user.id)
+        for job in user_jobs:
+            if job.import_queue_id in found_ids and job.status.value == 'processing':
+                async_processor.cancel_processing(job.job_id)
 
         # Delete logs associated with each import item before deleting the items
         for item in items:
