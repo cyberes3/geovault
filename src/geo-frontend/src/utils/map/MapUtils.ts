@@ -82,9 +82,20 @@ export class MapUtils {
         const [minX, minY, maxX, maxY] = extent;
         const roundedZoom = Math.round(zoom);
 
-        // Create a grid system - divide the world into grid cells
-        // Use a larger grid size to reduce precision issues and overlap
-        const gridSize = Math.pow(2, 15 - roundedZoom); // Adjust grid size based on zoom
+        // For very low zoom levels (world view), use a more precise grid system
+        // to avoid overly large grid cells that prevent proper data loading
+        let gridSize;
+        if (roundedZoom <= 3) {
+            // For world view (zoom 0-3), use a fixed smaller grid size
+            gridSize = 1000000; // 1 million meters (roughly 1 degree at equator)
+        } else if (roundedZoom <= 6) {
+            // For continental view (zoom 4-6), use moderate grid size
+            gridSize = Math.pow(2, 18 - roundedZoom);
+        } else {
+            // For local view (zoom 7+), use the original calculation
+            gridSize = Math.pow(2, 15 - roundedZoom);
+        }
+
         const gridMinX = Math.floor(minX / gridSize) * gridSize;
         const gridMinY = Math.floor(minY / gridSize) * gridSize;
         const gridMaxX = Math.ceil(maxX / gridSize) * gridSize;

@@ -42,30 +42,38 @@ def _get_features_in_bbox(bbox: Tuple[float, float, float, float], user_id: int,
     """
     min_lon, min_lat, max_lon, max_lat = bbox
 
+    # Log the bounding box for debugging
+    logger.info(f"Querying features for bbox: {min_lon}, {min_lat}, {max_lon}, {max_lat} (zoom: {zoom_level})")
+
     # Check if this is a world-wide bbox that crosses the International Date Line
     # This happens when min_lon > max_lon (e.g., min_lon=134, max_lon=134 means we're crossing 180°/-180°)
     crosses_dateline = min_lon > max_lon
+    
+    # Also check for world-wide extents that span most of the globe
+    # If the bbox spans more than 300 degrees of longitude, treat it as world-wide
+    world_wide_extent = (max_lon - min_lon) > 300 if not crosses_dateline else True
+    
+    # Additional check: if the bbox is very close to world-wide (spans > 350 degrees), treat as world-wide
+    if not world_wide_extent and not crosses_dateline:
+        world_wide_extent = (max_lon - min_lon) > 350
 
     # Get the maximum features limit from settings
     max_features = getattr(settings, 'MAX_FEATURES_PER_REQUEST', -1)
 
-    if crosses_dateline:
-        # Handle world-wide bbox that crosses the International Date Line
-        # Split into two queries: one for the western hemisphere and one for the eastern hemisphere
-
-        # Western hemisphere: from min_lon to 180°
-        bbox_west = (min_lon, min_lat, 180.0, max_lat)
-        bbox_polygon_west = Polygon.from_bbox(bbox_west)
-
-        # Eastern hemisphere: from -180° to max_lon
-        bbox_east = (-180.0, min_lat, max_lon, max_lat)
-        bbox_polygon_east = Polygon.from_bbox(bbox_east)
-
-        # Build the base query for both hemispheres
-        base_query = FeatureStore.objects.filter(
-            Q(user_id=user_id, geometry__intersects=bbox_polygon_west) |
-            Q(user_id=user_id, geometry__intersects=bbox_polygon_east)
-        )
+    if crosses_dateline or world_wide_extent:
+        # Handle world-wide bbox that crosses the International Date Line or spans most of the globe
+        logger.info(f"World-wide extent detected: crosses_dateline={crosses_dateline}, world_wide_extent={world_wide_extent}")
+        
+        if crosses_dateline:
+            # Handle world-wide bbox that crosses the International Date Line
+            # For world-wide queries that cross the dateline, just get all features for the user
+            # since the bbox spans most of the globe anyway
+            logger.info("Dateline crossing detected - using all features for user")
+            base_query = FeatureStore.objects.filter(user_id=user_id)
+        else:
+            # For world-wide extents that don't cross the dateline, use a simpler approach
+            # Just query all features for the user (since the bbox spans most of the globe)
+            base_query = FeatureStore.objects.filter(user_id=user_id)
 
     else:
         # Normal bbox that doesn't cross the International Date Line
@@ -77,12 +85,15 @@ def _get_features_in_bbox(bbox: Tuple[float, float, float, float], user_id: int,
 
     # Get total count first (this is a lightweight operation)
     total_count = base_query.count()
+    logger.info(f"Total features in bbox: {total_count}")
 
     # Apply limit if configured (max_features = -1 means no limit)
     if max_features > 0:
         features_query = base_query[:max_features]
+        logger.info(f"Applied feature limit: {max_features}")
     else:
         features_query = base_query
+        logger.info("No feature limit applied")
 
     # Convert to GeoJSON format
     geojson_features = []
@@ -98,6 +109,7 @@ def _get_features_in_bbox(bbox: Tuple[float, float, float, float], user_id: int,
             }
             geojson_features.append(geojson_feature)
 
+    logger.info(f"Returning {len(geojson_features)} features out of {total_count} total")
     return BboxQueryResult(features=geojson_features, total_count=total_count)
 
 

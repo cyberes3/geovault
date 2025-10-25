@@ -189,7 +189,21 @@
         function getBoundingBoxKey(extent, zoom) {
             const [minX, minY, maxX, maxY] = extent;
             const roundedZoom = Math.round(zoom);
-            const gridSize = Math.pow(2, 15 - roundedZoom);
+            
+            // For very low zoom levels (world view), use a more precise grid system
+            // to avoid overly large grid cells that prevent proper data loading
+            let gridSize;
+            if (roundedZoom <= 3) {
+                // For world view (zoom 0-3), use a fixed smaller grid size
+                gridSize = 1000000; // 1 million meters (roughly 1 degree at equator)
+            } else if (roundedZoom <= 6) {
+                // For continental view (zoom 4-6), use moderate grid size
+                gridSize = Math.pow(2, 18 - roundedZoom);
+            } else {
+                // For local view (zoom 7+), use the original calculation
+                gridSize = Math.pow(2, 15 - roundedZoom);
+            }
+            
             const gridMinX = Math.floor(minX / gridSize) * gridSize;
             const gridMinY = Math.floor(minY / gridSize) * gridSize;
             const gridMaxX = Math.ceil(maxX / gridSize) * gridSize;
@@ -367,6 +381,43 @@
             // Add event listeners
             map.getView().on('change:center', debouncedLoadData);
             map.getView().on('change:resolution', debouncedLoadData);
+            
+            // Add debounced zoom change listener to clear cache on significant zoom changes
+            let zoomChangeTimeout = null;
+            map.getView().on('change:resolution', () => {
+                // Clear any existing timeout
+                if (zoomChangeTimeout) {
+                    clearTimeout(zoomChangeTimeout);
+                }
+                
+                // Debounce the zoom change handling
+                zoomChangeTimeout = setTimeout(() => {
+                    const newZoom = map.getView().getZoom();
+                    if (newZoom !== currentZoom) {
+                        // Clear cache when zoom changes significantly to ensure data reload
+                        const zoomDiff = Math.abs(newZoom - (currentZoom || 0));
+                        if (zoomDiff >= 3) {
+                            console.log(`Significant zoom change detected (${zoomDiff} levels), clearing cache`);
+                            loadedBounds.clear();
+                        }
+                        
+                        // Clear cache when zooming out to world view (zoom <= 3)
+                        if (newZoom <= 3) {
+                            console.log(`Zooming to world view (zoom: ${newZoom}), clearing cache`);
+                            loadedBounds.clear();
+                        }
+                        
+                        currentZoom = newZoom;
+                    }
+                }, 100); // 100ms debounce
+            });
+
+            // Clear cache if map starts at world view level
+            const initialZoom = map.getView().getZoom();
+            if (initialZoom <= 3) {
+                console.log(`Map initialized at world view (zoom: ${initialZoom}), clearing cache`);
+                loadedBounds.clear();
+            }
 
             // Update location display
             if (userLocation) {
@@ -390,7 +441,23 @@
             const zoom = view.getZoom();
 
             const bboxKey = getBoundingBoxKey(extent, zoom);
-            if (loadedBounds.has(bboxKey)) {
+            
+            // Check if this is a world-wide extent by calculating the geographic extent
+            const [minX, minY, maxX, maxY] = extent;
+            const minLonLat = ol.proj.toLonLat([minX, minY]);
+            const maxLonLat = ol.proj.toLonLat([maxX, maxY]);
+            const lonSpan = maxLonLat[0] - minLonLat[0];
+            const latSpan = maxLonLat[1] - minLonLat[1];
+            
+            // Consider it world-wide if longitude span > 300 degrees or latitude span > 150 degrees
+            const isWorldWide = lonSpan > 300 || latSpan > 150 || zoom <= 2;
+            
+            if (isWorldWide) {
+                console.log(`World-wide extent detected (zoom: ${zoom}, lonSpan: ${lonSpan.toFixed(1)}, latSpan: ${latSpan.toFixed(1)}), clearing cache and forcing reload`);
+                loadedBounds.clear();
+                // Don't return here - continue to load data
+            } else if (loadedBounds.has(bboxKey)) {
+                // For normal extents, use normal caching
                 return;
             }
 

@@ -195,15 +195,44 @@ export default {
       this.map.getView().on('change:center', this.debouncedLoadData)
       this.map.getView().on('change:resolution', this.debouncedLoadData)
 
-      // Add zoom change listener for debounced re-simplification of cached data
+      // Add debounced zoom change listener
+      let zoomChangeTimeout = null
       this.map.getView().on('change:resolution', () => {
-        const newZoom = this.map.getView().getZoom()
-        if (newZoom !== this.currentZoom) {
-          // Use debounced immediate simplification to wait for zoom completion
-          this.debouncedImmediateReSimplify(newZoom)
-          // Don't call secondary re-simplification here - it will be called when new data loads
+        // Clear any existing timeout
+        if (zoomChangeTimeout) {
+          clearTimeout(zoomChangeTimeout)
         }
+        
+        // Debounce the zoom change handling
+        zoomChangeTimeout = setTimeout(() => {
+          const newZoom = this.map.getView().getZoom()
+          if (newZoom !== this.currentZoom) {
+            // Clear cache when zoom changes significantly to ensure data reload
+            const zoomDiff = Math.abs(newZoom - (this.currentZoom || 0))
+            if (zoomDiff >= 3) {
+              console.log(`Significant zoom change detected (${zoomDiff} levels), clearing cache`)
+              this.loadedBounds.clear()
+            }
+            
+            // Clear cache when zooming out to world view (zoom <= 3)
+            if (newZoom <= 3) {
+              console.log(`Zooming to world view (zoom: ${newZoom}), clearing cache`)
+              this.loadedBounds.clear()
+            }
+            
+            // Use debounced immediate simplification to wait for zoom completion
+            this.debouncedImmediateReSimplify(newZoom)
+            // Don't call secondary re-simplification here - it will be called when new data loads
+          }
+        }, 100) // 100ms debounce
       })
+
+      // Clear cache if map starts at world view level
+      const initialZoom = this.map.getView().getZoom()
+      if (initialZoom <= 3) {
+        console.log(`Map initialized at world view (zoom: ${initialZoom}), clearing cache`)
+        this.loadedBounds.clear()
+      }
 
       // Event listeners removed - cache functionality eliminated
 
@@ -339,7 +368,23 @@ export default {
 
       // Check if we already loaded data for this area
       const bboxKey = this.getBoundingBoxKey(extent, zoom)
-      if (this.loadedBounds.has(bboxKey)) {
+      
+      // Check if this is a world-wide extent by calculating the geographic extent
+      const [minX, minY, maxX, maxY] = extent
+      const minLonLat = toLonLat([minX, minY])
+      const maxLonLat = toLonLat([maxX, maxY])
+      const lonSpan = maxLonLat[0] - minLonLat[0]
+      const latSpan = maxLonLat[1] - minLonLat[1]
+      
+      // Consider it world-wide if longitude span > 300 degrees or latitude span > 150 degrees
+      const isWorldWide = lonSpan > 300 || latSpan > 150 || zoom <= 2
+      
+      if (isWorldWide) {
+        console.log(`World-wide extent detected (zoom: ${zoom}, lonSpan: ${lonSpan.toFixed(1)}, latSpan: ${latSpan.toFixed(1)}), clearing cache and forcing reload`)
+        this.loadedBounds.clear()
+        // Don't return here - continue to load data
+      } else if (this.loadedBounds.has(bboxKey)) {
+        // For normal extents, use normal caching
         return
       }
 
