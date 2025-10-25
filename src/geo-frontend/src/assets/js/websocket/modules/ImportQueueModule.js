@@ -8,7 +8,7 @@ import { BaseModule } from './BaseModule.js';
 export class ImportQueueModule extends BaseModule {
     constructor(store) {
         super(store);
-        this.moduleName = 'import_queue';
+        this.moduleName = 'import_job';
     }
 
     /**
@@ -58,6 +58,20 @@ export class ImportQueueModule extends BaseModule {
                 updates: { imported: true }
             });
         });
+
+        // Handle import job completion
+        this.subscribe('completed', (data) => {
+            console.log('Import job completed:', data);
+            // Request refresh to get updated data
+            this.requestRefresh();
+        });
+
+        // Handle import job failure
+        this.subscribe('failed', (data) => {
+            console.log('Import job failed:', data);
+            // Request refresh to get updated data
+            this.requestRefresh();
+        });
     }
 
     /**
@@ -86,7 +100,7 @@ export class ImportQueueModule extends BaseModule {
 
         // Update the specific item in the store
         this.store.dispatch('updateImportQueueItem', {
-            id: data.id.toString(),
+            id: data.import_queue_id.toString(),
             updates: updates
         });
     }

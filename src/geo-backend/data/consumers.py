@@ -4,8 +4,11 @@ WebSocket consumers for real-time updates.
 
 import json
 import logging
+
 from channels.generic.websocket import AsyncWebsocketConsumer
 from django.contrib.auth.models import AnonymousUser
+
+from geo_lib.websocket.modules.delete_job_module import DeleteJobModule
 from geo_lib.websocket.modules.import_queue_module import ImportQueueModule
 
 logger = logging.getLogger(__name__)
@@ -20,15 +23,15 @@ class RealtimeConsumer(AsyncWebsocketConsumer):
 
     def _load_modules(self):
         """Load all available WebSocket modules."""
-        # Import queue module
-        self.modules['import_queue'] = ImportQueueModule(self)
+        self.modules['import_job'] = ImportQueueModule(self)
+        self.modules['delete_job'] = DeleteJobModule(self)
         # Add more modules here as they are created
 
     async def connect(self):
         """Handle WebSocket connection."""
         # Get user from scope
         self.user = self.scope["user"]
-        
+
         # Reject connection if user is not authenticated
         if isinstance(self.user, AnonymousUser):
             await self.close()
@@ -36,18 +39,18 @@ class RealtimeConsumer(AsyncWebsocketConsumer):
 
         # Create user-specific room group
         self.room_group_name = f"realtime_{self.user.id}"
-        
+
         # Join room group
         await self.channel_layer.group_add(
             self.room_group_name,
             self.channel_name
         )
-        
+
         await self.accept()
-        
+
         # Load modules now that user is available
         self._load_modules()
-        
+
         # Send initial state for all modules
         for module in self.modules.values():
             await module.send_initial_state()
@@ -68,7 +71,7 @@ class RealtimeConsumer(AsyncWebsocketConsumer):
                 module_name = data.get('module')
                 message_type = data.get('type')
                 message_data = data.get('data', {})
-                
+
                 if message_type == 'ping':
                     await self.send(text_data=json.dumps({'type': 'pong'}))
                 elif module_name in self.modules:
@@ -90,19 +93,20 @@ class RealtimeConsumer(AsyncWebsocketConsumer):
         # Check if modules are loaded (safety check for timing issues)
         if not hasattr(self, 'modules') or not self.modules:
             raise AttributeError(f"'{self.__class__.__name__}' object has no attribute '{name}'")
-        
+
         # Find the module that matches the beginning of the event name
         for module_name in self.modules.keys():
             if name.startswith(f"{module_name}_"):
                 # Extract the event name after the module prefix
                 event_name = name[len(module_name) + 1:]  # +1 for the underscore
                 module = self.modules[module_name]
-                
+
                 if hasattr(module, event_name):
                     # Return a wrapper that calls the module method
                     async def event_handler(event):
                         return await getattr(module, event_name)(event)
+
                     return event_handler
-        
+
         # If not a module event, raise AttributeError
         raise AttributeError(f"'{self.__class__.__name__}' object has no attribute '{name}'")

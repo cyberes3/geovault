@@ -108,7 +108,7 @@
               type="checkbox"
               :checked="selectedItems.has(item.id)"
               @change="toggleItemSelection(item.id)"
-              :disabled="item.imported || item.processing === true || (item.processing === false && item.feature_count === -1)"
+              :disabled="item.imported || item.processing === true || (item.processing === false && item.feature_count === -1) || item.deleting"
               class="h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300 rounded disabled:opacity-50 disabled:cursor-not-allowed"
             />
           </td>
@@ -137,7 +137,14 @@
             <span v-else class="font-medium">{{ item.feature_count }}</span>
           </td>
           <td class="px-6 py-4 whitespace-nowrap text-center">
-            <span v-if="item.imported" class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-800">
+            <span v-if="item.deleting" class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-orange-100 text-orange-800">
+              <svg class="animate-spin -ml-1 mr-1 h-3 w-3" fill="none" viewBox="0 0 24 24">
+                <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+                <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+              </svg>
+              Deleting
+            </span>
+            <span v-else-if="item.imported" class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-800">
               <svg class="w-3 h-3 mr-1" fill="currentColor" viewBox="0 0 20 20">
                 <path fill-rule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clip-rule="evenodd"></path>
               </svg>
@@ -172,7 +179,8 @@
           </td>
           <td class="px-6 py-4 whitespace-nowrap text-center text-sm font-medium">
             <button
-              class="inline-flex items-center px-3 py-1.5 border border-transparent text-xs font-medium rounded-md text-white bg-red-600 hover:bg-red-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-red-500 transition-colors duration-200"
+              :disabled="item.deleting"
+              class="inline-flex items-center px-3 py-1.5 border border-transparent text-xs font-medium rounded-md text-white bg-red-600 hover:bg-red-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-red-500 transition-colors duration-200 disabled:opacity-50 disabled:cursor-not-allowed disabled:bg-gray-400 disabled:hover:bg-gray-400"
               @click="deleteItem(item, index)"
             >
               <svg class="w-3 h-3 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -206,8 +214,13 @@ export default {
   computed: {
     ...mapState(["userInfo", "importQueue", "websocketConnected"]),
     filteredImportQueue() {
-      // Filter out items that have been locally deleted
-      return this.importQueue.filter(item => !this.deletedItems.has(item.id));
+      // Filter out items that have been locally deleted and add deleting state
+      return this.importQueue
+        .filter(item => !this.deletedItems.has(item.id))
+        .map(item => ({
+          ...item,
+          deleting: this.deletingItems.has(item.id)
+        }));
     },
     combinedLoading() {
       // Show loading placeholders only when:
@@ -233,12 +246,20 @@ export default {
       isBulkImporting: false, // Track bulk import state
       isBulkDeleting: false, // Track bulk delete state
       refreshInterval: null, // Auto-refresh interval
+      deletingItems: new Set(), // Track items currently being deleted
+      deleteJobIds: new Map(), // Track delete job IDs for each item
     }
   },
   watch: {
     isIndeterminate(newVal) {
       if (this.$refs.selectAllCheckbox) {
         this.$refs.selectAllCheckbox.indeterminate = newVal;
+      }
+    },
+    websocketConnected(newVal) {
+      if (newVal) {
+        // WebSocket connected, subscribe to delete job events
+        this.subscribeToDeleteJobEvents();
       }
     }
   },
@@ -270,7 +291,7 @@ export default {
 
       try {
         // Request refresh from WebSocket
-        realtimeSocket.requestRefresh('import_queue')
+        realtimeSocket.requestRefresh('import_job')
       } catch (error) {
         console.error('Error requesting queue refresh:', error)
       } finally {
@@ -300,10 +321,11 @@ export default {
     },
     async deleteItem(item, index) {
       if (window.confirm(`Delete "${item.original_filename}" (#${item.id})`)) {
-        // Add to deleted items set to prevent flicker during auto-refresh
-        this.deletedItems.add(item.id);
-        // Initialize timeout counter for this item
-        this.deletedItemTimeouts.set(item.id, 0);
+        // Mark item as deleting
+        this.deletingItems.add(item.id);
+        
+        // Force reactivity update
+        this.$forceUpdate();
 
         try {
           const response = await axios.delete('/api/data/item/import/delete/' + item.id, {
@@ -312,16 +334,21 @@ export default {
             }
           });
 
-          if (!response.data.success) {
-            throw new Error("server reported failure");
+          if (response.data.success && response.data.job_id) {
+            // Store the job ID for tracking
+            this.deleteJobIds.set(item.id, response.data.job_id);
+            console.log(`Delete job started for item ${item.id}: ${response.data.job_id}`);
+          } else {
+            throw new Error(response.data.msg || "server reported failure");
           }
 
-          // Keep the item in deletedItems set - it will be filtered out until auto-refresh removes it from server
         } catch (error) {
+          console.error(`Failed to start delete job for item ${item.id}:`, error);
           alert(`Failed to delete ${item.id}: ${error.message}`);
-          // Remove from deleted items set to restore the item if deletion failed
-          this.deletedItems.delete(item.id);
-          this.deletedItemTimeouts.delete(item.id);
+          // Remove from deleting items set to restore the item if deletion failed
+          this.deletingItems.delete(item.id);
+          this.deleteJobIds.delete(item.id);
+          this.$forceUpdate();
         }
       }
     },
@@ -329,6 +356,8 @@ export default {
       // Clear the deleted items list when navigating away
       this.deletedItems.clear();
       this.deletedItemTimeouts.clear();
+      this.deletingItems.clear();
+      this.deleteJobIds.clear();
     },
     // Bulk import methods
     updateSelectAllCheckbox() {
@@ -355,8 +384,8 @@ export default {
     },
     selectAll() {
       this.filteredImportQueue.forEach(item => {
-        // Select items that are not imported and not currently processing
-        if (!item.imported && !(item.processing === true || (item.processing === false && item.feature_count === -1))) {
+        // Select items that are not imported, not currently processing, and not being deleted
+        if (!item.imported && !(item.processing === true || (item.processing === false && item.feature_count === -1)) && !item.deleting) {
           this.selectedItems.add(item.id);
         }
       });
@@ -453,11 +482,11 @@ export default {
         return;
       }
 
-      // Check for items that cannot be deleted (imported items)
+      // Check for items that cannot be deleted (imported items or items being deleted)
       const invalidItems = [];
       this.selectedItems.forEach(itemId => {
         const item = this.filteredImportQueue.find(i => i.id === itemId);
-        if (item && item.imported) {
+        if (item && (item.imported || item.deleting)) {
           invalidItems.push(itemId);
         }
       });
@@ -468,7 +497,7 @@ export default {
       });
 
       if (this.selectedItems.size === 0) {
-        alert('No valid items selected for deletion. Imported items cannot be deleted.');
+        alert('No valid items selected for deletion. Imported items or items being deleted cannot be bulk deleted.');
         this.updateSelectAllCheckbox();
         return;
       }
@@ -492,21 +521,27 @@ export default {
           }
         });
 
-        if (response.data.success) {
-          // Add all deleted items to the deletedItems set to prevent flicker
+        if (response.data.success && response.data.job_ids) {
+          // Mark all items as deleting
           itemIds.forEach(itemId => {
-            this.deletedItems.add(itemId);
-            this.deletedItemTimeouts.set(itemId, 0);
+            this.deletingItems.add(itemId);
+          });
+
+          // Store job IDs for tracking
+          response.data.job_ids.forEach((jobId, index) => {
+            if (index < itemIds.length) {
+              this.deleteJobIds.set(itemIds[index], jobId);
+            }
           });
 
           // Clear selection
           this.clearSelection();
 
           // Show success message
-          alert(`Successfully deleted ${response.data.deleted_count} item${response.data.deleted_count === 1 ? '' : 's'}!`);
+          alert(`Started deletion of ${response.data.started_count} item${response.data.started_count === 1 ? '' : 's'}!`);
 
-          // Refresh the queue
-          this.$store.dispatch('refreshImportQueue');
+          // Force reactivity update
+          this.$forceUpdate();
         } else {
           throw new Error(response.data.msg || 'Unknown error occurred');
         }
@@ -524,6 +559,59 @@ export default {
       this.hasInitiallyLoaded = true
       this.internalLoading = false
     },
+    subscribeToDeleteJobEvents() {
+      // Subscribe to WebSocket events for delete jobs
+      if (this.$store.state.websocketConnected) {
+        // Listen for delete job events
+        this.$store.subscribe((mutation, state) => {
+          if (mutation.type === 'websocket/delete_job_started') {
+            this.handleDeleteJobStarted(mutation.payload);
+          } else if (mutation.type === 'websocket/delete_job_status_updated') {
+            this.handleDeleteJobStatusUpdated(mutation.payload);
+          } else if (mutation.type === 'websocket/delete_job_completed') {
+            this.handleDeleteJobCompleted(mutation.payload);
+          } else if (mutation.type === 'websocket/delete_job_failed') {
+            this.handleDeleteJobFailed(mutation.payload);
+          }
+        });
+      }
+    },
+    handleDeleteJobStarted(event) {
+      console.log('Delete job started:', event);
+      // The item should already be marked as deleting, but ensure it is
+      if (event.data && event.data.item_id) {
+        this.deletingItems.add(event.data.item_id);
+        this.$forceUpdate();
+      }
+    },
+    handleDeleteJobStatusUpdated(event) {
+      console.log('Delete job status updated:', event);
+      // Update progress if needed (optional for now)
+    },
+    handleDeleteJobCompleted(event) {
+      console.log('Delete job completed:', event);
+      if (event.data && event.data.item_id) {
+        // Remove from deleting items and add to deleted items
+        this.deletingItems.delete(event.data.item_id);
+        this.deleteJobIds.delete(event.data.item_id);
+        this.deletedItems.add(event.data.item_id);
+        this.deletedItemTimeouts.set(event.data.item_id, 0);
+        this.$forceUpdate();
+        
+        // Manually refresh the table to ensure it updates
+        this.refreshData();
+      }
+    },
+    handleDeleteJobFailed(event) {
+      console.log('Delete job failed:', event);
+      if (event.data && event.data.item_id) {
+        // Remove from deleting items to restore the item
+        this.deletingItems.delete(event.data.item_id);
+        this.deleteJobIds.delete(event.data.item_id);
+        this.$forceUpdate();
+        alert(`Delete failed for item ${event.data.item_id}: ${event.data.error_message || 'Unknown error'}`);
+      }
+    },
   },
   async created() {
     // If we already have data in the store, mark as initially loaded
@@ -538,6 +626,11 @@ export default {
 
     // Subscribe to manual refresh mutations
     this.subscribeToRefreshMutation()
+
+    // Subscribe to WebSocket events for delete jobs
+    if (this.$store.state.websocketConnected) {
+      this.subscribeToDeleteJobEvents();
+    }
   },
   mounted() {
     // WebSocket is already connected in created()

@@ -18,14 +18,14 @@ class ImportQueueModule(BaseWebSocketModule):
     
     @property
     def module_name(self) -> str:
-        return "import_queue"
+        return "import_job"
     
     async def handle_message(self, message_type: str, data: dict) -> None:
-        """Handle incoming messages for import queue module."""
+        """Handle incoming messages for import job module."""
         if message_type == 'refresh':
             await self.send_initial_state()
         else:
-            logger.warning(f"Unknown message type for import_queue module: {message_type}")
+            logger.warning(f"Unknown message type for import_job module: {message_type}")
     
     async def send_initial_state(self) -> None:
         """Send the current import queue state to the client."""
@@ -155,6 +155,15 @@ class ImportQueueModule(BaseWebSocketModule):
         """Handle status_updated event."""
         await self.send_to_client('status_updated', event['data'])
     
+    async def completed(self, event):
+        """Handle completed event."""
+        await self.send_to_client('completed', event['data'])
+    
+    async def failed(self, event):
+        """Handle failed event."""
+        await self.send_to_client('failed', event['data'])
+    
     async def item_imported(self, event):
         """Handle item_imported event."""
         await self.send_to_client('item_imported', event['data'])
+    

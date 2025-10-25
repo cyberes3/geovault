@@ -85,6 +85,19 @@ export default createStore<State>({
             }
             Object.assign(state.realtimeData[module], updates);
         },
+        // WebSocket delete job mutations
+        'websocket/delete_job_started'(state: State, payload: any) {
+            // This mutation is handled by the component subscription
+        },
+        'websocket/delete_job_status_updated'(state: State, payload: any) {
+            // This mutation is handled by the component subscription
+        },
+        'websocket/delete_job_completed'(state: State, payload: any) {
+            // This mutation is handled by the component subscription
+        },
+        'websocket/delete_job_failed'(state: State, payload: any) {
+            // This mutation is handled by the component subscription
+        },
     }, 
     getters: {
         // alertExists: (state) => (message) => {
@@ -118,6 +131,19 @@ export default createStore<State>({
         },
         updateRealtimeModuleData({ commit }: { commit: Commit }, payload: { module: string, updates: any }) {
             commit('updateRealtimeModuleData', payload);
+        },
+        // WebSocket delete job actions
+        'websocket/delete_job_started'({ commit }: { commit: Commit }, payload: any) {
+            commit('websocket/delete_job_started', payload);
+        },
+        'websocket/delete_job_status_updated'({ commit }: { commit: Commit }, payload: any) {
+            commit('websocket/delete_job_status_updated', payload);
+        },
+        'websocket/delete_job_completed'({ commit }: { commit: Commit }, payload: any) {
+            commit('websocket/delete_job_completed', payload);
+        },
+        'websocket/delete_job_failed'({ commit }: { commit: Commit }, payload: any) {
+            commit('websocket/delete_job_failed', payload);
         },
     },
 })

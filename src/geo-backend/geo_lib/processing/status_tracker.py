@@ -23,6 +23,12 @@ class ProcessingStatus(Enum):
     CANCELLED = "cancelled"  # Processing was cancelled
 
 
+class JobType(Enum):
+    """Type of job being processed."""
+    IMPORT = "import"  # File import job
+    DELETE = "delete"  # Item deletion job
+
+
 @dataclass
 class ProcessingJob:
     """Represents a file processing job."""
@@ -30,6 +36,7 @@ class ProcessingJob:
     filename: str
     user_id: int
     status: ProcessingStatus
+    job_type: JobType
     created_at: float
     started_at: Optional[float] = None
     completed_at: Optional[float] = None
@@ -53,7 +60,7 @@ class ProcessingStatusTracker:
         self._max_job_age = 7200  # 2 hours
         self._last_cleanup = time.time()
 
-    def create_job(self, filename: str, user_id: int) -> str:
+    def create_job(self, filename: str, user_id: int, job_type: JobType = JobType.IMPORT) -> str:
         """Create a new processing job and return its ID."""
         job_id = str(uuid.uuid4())
         job = ProcessingJob(
@@ -61,6 +68,7 @@ class ProcessingStatusTracker:
             filename=filename,
             user_id=user_id,
             status=ProcessingStatus.UPLOADED,
+            job_type=job_type,
             created_at=time.time()
         )
 
@@ -68,7 +76,7 @@ class ProcessingStatusTracker:
             self._jobs[job_id] = job
             self._cleanup_old_jobs()
 
-        logger.info(f"Created processing job {job_id} for file {filename}")
+        logger.info(f"Created {job_type.value} job {job_id} for file {filename}")
         return job_id
 
     def get_job(self, job_id: str) -> Optional[ProcessingJob]:
@@ -128,6 +136,7 @@ class ProcessingStatusTracker:
             return {
                 'job_id': job.job_id,
                 'filename': job.filename,
+                'job_type': job.job_type.value,
                 'status': job.status.value,
                 'progress': job.progress,
                 'message': job.message,

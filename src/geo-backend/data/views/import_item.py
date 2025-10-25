@@ -13,9 +13,9 @@ from django.views.decorators.http import require_http_methods
 
 from data.models import ImportQueue, FeatureStore, DatabaseLogging
 from geo_lib.feature_id import generate_feature_hash
-from geo_lib.processing.async_processor import async_processor
-from geo_lib.processing.logging import ImportLog, DatabaseLogLevel
+from geo_lib.processing.jobs import import_job, delete_job
 from geo_lib.processing.status_tracker import status_tracker
+from geo_lib.processing.logging import ImportLog, DatabaseLogLevel
 from geo_lib.processing.tagging import generate_auto_tags
 from geo_lib.security.file_validation import SecureFileValidator
 from geo_lib.types.feature import PointFeature, PolygonFeature, LineStringFeature, MultiLineStringFeature
@@ -459,7 +459,7 @@ def upload_item(request):
             job_id = status_tracker.create_job(file_name, request.user.id)
 
             # Start background processing
-            if async_processor.start_processing(job_id, file_data, file_name, request.user.id):
+            if import_job.start_import_job(job_id, file_data, file_name, request.user.id):
                 return JsonResponse({
                     'success': True,
                     'msg': 'File uploaded successfully, processing started',
@@ -774,22 +774,20 @@ def delete_import_item(request, id):
         if queue.user_id != request.user.id:
             return JsonResponse({'success': False, 'msg': 'Not authorized to delete this item', 'code': 403}, status=400)
 
-        # Cancel any active processing job for this item
-        user_jobs = status_tracker.get_user_jobs(request.user.id)
-        for job in user_jobs:
-            if job.import_queue_id == id and job.status.value == 'processing':
-                async_processor.cancel_processing(job.job_id)
-                break
-
-        # Delete logs associated with this import item before deleting the item
-        _delete_logs_by_log_id(str(queue.log_id))
-
-        queue.delete()
+        # Start async delete job
+        job_id = delete_job.start_delete_job(id, request.user.id, queue.original_filename)
         
-        # Broadcast WebSocket event for item deletion
-        _broadcast_item_deleted(request.user.id, id)
-        
-        return JsonResponse({'success': True})
+        if job_id:
+            return JsonResponse({
+                'success': True, 
+                'msg': 'Delete job started',
+                'job_id': job_id
+            })
+        else:
+            return JsonResponse({
+                'success': False, 
+                'msg': 'Failed to start delete job'
+            }, status=500)
     return HttpResponse(status=405)
 
 
@@ -797,7 +795,7 @@ def delete_import_item(request, id):
 @csrf_protect
 @require_http_methods(["DELETE"])
 def bulk_delete_import_items(request):
-    """Bulk delete multiple import queue items"""
+    """Bulk delete multiple import queue items using async jobs"""
     try:
         data = json.loads(request.body)
         if not isinstance(data, dict) or 'ids' not in data:
@@ -829,27 +827,25 @@ def bulk_delete_import_items(request):
                 'code': 404
             }, status=400)
 
-        # Cancel any active processing jobs for these items
-        user_jobs = status_tracker.get_user_jobs(request.user.id)
-        for job in user_jobs:
-            if job.import_queue_id in found_ids and job.status.value == 'processing':
-                async_processor.cancel_processing(job.job_id)
-
-        # Delete logs associated with each import item before deleting the items
+        # Start delete jobs for each item
+        job_ids = []
         for item in items:
-            _delete_logs_by_log_id(str(item.log_id))
+            job_id = delete_job.start_delete_job(item.id, request.user.id, item.original_filename)
+            if job_id:
+                job_ids.append(job_id)
 
-        # Delete the items
-        deleted_count, _ = items.delete()
-        
-        # Broadcast WebSocket event for bulk deletion
-        _broadcast_items_deleted(request.user.id, found_ids)
-
-        return JsonResponse({
-            'success': True,
-            'msg': f'Successfully deleted {deleted_count} item{"s" if deleted_count != 1 else ""}',
-            'deleted_count': deleted_count
-        })
+        if job_ids:
+            return JsonResponse({
+                'success': True,
+                'msg': f'Started {len(job_ids)} delete job{"s" if len(job_ids) != 1 else ""}',
+                'job_ids': job_ids,
+                'started_count': len(job_ids)
+            })
+        else:
+            return JsonResponse({
+                'success': False,
+                'msg': 'Failed to start any delete jobs'
+            }, status=500)
 
     except json.JSONDecodeError:
         return JsonResponse({'success': False, 'msg': 'Invalid JSON data', 'code': 400}, status=400)
