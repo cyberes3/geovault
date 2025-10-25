@@ -589,6 +589,11 @@ export default {
   props: ['id'],
   methods: {
     async checkProcessingStatus() {
+      // Safety check: don't make API calls if currentId is null (component is being destroyed)
+      if (!this.currentId) {
+        return;
+      }
+      
       try {
         const response = await axios.get(`/api/data/item/import/get/${this.currentId}?page=1&page_size=${this.pagination.pageSize}`)
         if (response.data.success) {
@@ -1015,6 +1020,9 @@ export default {
       }
     },
     clearComponentState() {
+      // Stop polling first to prevent API calls with null currentId
+      this.stopProcessingPolling();
+      
       // Clear all component data to reset state
       this.msg = "";
       this.currentId = null;
@@ -1133,6 +1141,11 @@ export default {
       }
     },
     async loadLogsIncremental() {
+      // Safety check: don't make API calls if currentId is null (component is being destroyed)
+      if (!this.currentId) {
+        return;
+      }
+      
       // Load only new logs since the last fetch
       try {
         const url = this.lastLogId 

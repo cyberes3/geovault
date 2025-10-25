@@ -103,7 +103,7 @@ export default {
         // Restore background scrolling when modal closes
         document.body.style.overflow = '';
       }
-    }
+    },
   },
   mounted() {
     document.addEventListener('keydown', this.handleKeydown);
