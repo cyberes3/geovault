@@ -18,10 +18,11 @@ from django.conf.urls import include
 from django.contrib import admin
 from django.urls import path, re_path
 
-from website.views import index
+from website.views import index, standalone_map
 
 urlpatterns = [
     path('', index),
+    path('map-standalone/', standalone_map, name='standalone_map'),
     re_path(r"^account/", include("django.contrib.auth.urls")),
     path('admin/', admin.site.urls),
     path('', include("users.urls")),
