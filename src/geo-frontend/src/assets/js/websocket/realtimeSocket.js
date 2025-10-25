@@ -13,7 +13,6 @@ class RealtimeSocket {
         this.moduleHandlers = new Map(); // Map of module -> event -> handlers
         this.pingInterval = null;
         this.pingTimeout = null;
-        this.connectionCount = 0; // Track how many components are using the connection
         this.shouldStayConnected = false; // Track if we should maintain connection
     }
 
@@ -21,12 +20,11 @@ class RealtimeSocket {
      * Connect to the WebSocket server
      */
     connect() {
-        this.connectionCount++;
         this.shouldStayConnected = true;
         
-        // If already connected, just increment the counter
+        // If already connected, don't create another connection
         if (this.socket && this.socket.readyState === WebSocket.OPEN) {
-            console.log('Realtime WebSocket already connected, incrementing reference count');
+            console.log('Realtime WebSocket already connected');
             return;
         }
 
@@ -75,13 +73,29 @@ class RealtimeSocket {
 
         this.socket.onclose = (event) => {
             console.log('Realtime WebSocket disconnected:', event.code, event.reason);
+            console.log('Should stay connected:', this.shouldStayConnected);
+            console.log('Event code:', event.code, '(1000 = normal closure)');
+            console.log('Connection was clean:', event.wasClean);
+            console.trace('WebSocket close call stack:');
             this.isConnected = false;
             this.stopPing();
             this.emit('disconnected', event);
             
-            // Attempt to reconnect if we should stay connected and it's not a normal closure
-            if (this.shouldStayConnected && event.code !== 1000) {
+            // Attempt to reconnect if we should stay connected
+            if (this.shouldStayConnected) {
+                if (event.code === 1000) {
+                    console.log('Normal closure detected - this should not happen unless user logged out');
+                    console.log('This indicates something is calling socket.close(1000) or socket.close()');
+                    console.log('But we should stay connected, so attempting reconnection...');
+                } else if (event.code === 1006) {
+                    console.log('Ping timeout detected - triggering reconnection');
+                } else {
+                    console.log('Connection lost - triggering reconnection');
+                }
+                console.log('Scheduling reconnect...');
                 this.scheduleReconnect();
+            } else {
+                console.log('Not reconnecting - shouldStayConnected is false');
             }
         };
 
@@ -99,6 +113,11 @@ class RealtimeSocket {
         
         // Handle ping/pong
         if (type === 'pong') {
+            console.log('Received pong, clearing ping timeout');
+            if (this.pingTimeout) {
+                clearTimeout(this.pingTimeout);
+                this.pingTimeout = null;
+            }
             return;
         }
         
@@ -139,13 +158,17 @@ class RealtimeSocket {
      * Send a ping to keep the connection alive
      */
     ping() {
+        console.log('Sending ping...');
         this.send('ping', 'ping');
         
         // Set timeout for pong response
         this.pingTimeout = setTimeout(() => {
-            console.warn('Ping timeout, closing connection');
-            this.socket.close();
-        }, 5000);
+            console.warn('Ping timeout, triggering reconnection');
+            // Trigger reconnection instead of closing
+            if (this.socket) {
+                this.socket.close(1006, 'Ping timeout'); // This will trigger onclose and reconnection
+            }
+        }, 10000); // Increased timeout to 10 seconds
     }
 
     /**
@@ -199,30 +222,21 @@ class RealtimeSocket {
     }
 
     /**
-     * Disconnect from the WebSocket server
+     * Disconnect from the WebSocket server (only for component cleanup)
      */
     disconnect() {
-        this.connectionCount = Math.max(0, this.connectionCount - 1);
-        
-        // Only actually disconnect if no components are using it
-        if (this.connectionCount <= 0) {
-            this.shouldStayConnected = false;
-            this.stopPing();
-            
-            if (this.socket) {
-                this.socket.close(1000, 'Client disconnect');
-                this.socket = null;
-            }
-            
-            this.isConnected = false;
-            this.reconnectAttempts = 0;
-        }
+        // Don't actually disconnect - this is just for component cleanup
+        // The connection should stay alive across the entire app lifecycle
+        console.log('Disconnect called but connection will remain active');
+        console.trace('Disconnect call stack:');
     }
 
     /**
      * Force disconnect (for cleanup)
      */
     forceDisconnect() {
+        console.log('forceDisconnect() called - this should only happen on logout');
+        console.trace('forceDisconnect call stack:');
         this.connectionCount = 0;
         this.shouldStayConnected = false;
         this.stopPing();
@@ -325,7 +339,6 @@ class RealtimeSocket {
             isConnected: this.isConnected,
             reconnectAttempts: this.reconnectAttempts,
             readyState: this.socket ? this.socket.readyState : null,
-            connectionCount: this.connectionCount,
             shouldStayConnected: this.shouldStayConnected
         };
     }
