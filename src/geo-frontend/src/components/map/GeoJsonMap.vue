@@ -18,22 +18,8 @@
         <div class="absolute bottom-4 left-4 bg-white bg-opacity-90 px-4 py-2 rounded-lg shadow-md z-10 text-xs">
           <div class="space-y-1">
             <div>Features: <span class="font-medium">{{ featureCount }}</span> / <span class="font-medium">{{ MAX_FEATURES }}</span></div>
-            <div v-if="simplificationEnabled" class="text-blue-600">
-              Simplification: Tier {{ getCurrentSimplificationTier() }} ({{ getSimplificationMultiplierForTier(getCurrentSimplificationTier()) }}x)
-            </div>
             <div v-if="userLocation" class="text-gray-600">
               📍 {{ getLocationDisplayName() }}
-            </div>
-            <div class="flex items-center space-x-2">
-              <label class="flex items-center space-x-1 cursor-pointer">
-                <input
-                    v-model="simplificationEnabled"
-                    class="rounded"
-                    type="checkbox"
-                    @change="onSimplificationToggle"
-                >
-                <span class="text-xs">Simplify geometry</span>
-              </label>
             </div>
           </div>
         </div>
@@ -51,9 +37,7 @@ import {Style, Fill, Stroke, Circle} from 'ol/style'
 import {GeoJSON} from 'ol/format'
 import {fromLonLat, toLonLat} from 'ol/proj'
 import {authMixin} from '@/assets/js/authMixin.js'
-import {SimplificationTierManager} from '@/utils/map/SimplificationTierManager'
 import {MapUtils} from '@/utils/map/MapUtils'
-import {GeometrySimplification} from "@/utils/map/GeometrySimplification";
 
 export default {
   name: 'GeoJsonMap',
@@ -76,41 +60,7 @@ export default {
       MAX_FEATURES: 5000, // Maximum number of features to keep on the map
       featureTimestamps: {}, // Use plain object instead of Map
       featureIdCounter: 0, // Counter to generate unique IDs for features
-      // Geometry simplification settings
-      simplificationEnabled: true,
-      simplificationOptions: {
-        baseTolerance: 0.001, // Base tolerance for zoom level 10
-        minZoom: 1,
-        maxZoom: 20,
-        enableSimplification: true
-      },
-      // Performance monitoring
-      lastSimplificationStats: null,
-      // Performance thresholds
-      performanceThresholds: {
-        maxProcessingTime: 100, // ms
-        maxFeaturesForFullDetail: 1000,
-        minZoomForAggressiveSimplification: 8
-      },
-      // Feature count scaling thresholds (5 tiers based on MAX_FEATURES)
-      featureCountThresholds: {
-        tier1: 0,      // 0-20% of max features - minimal simplification
-        tier2: 0,      // 20-40% of max features - light simplification
-        tier3: 0,      // 40-60% of max features - moderate simplification
-        tier4: 0,      // 60-80% of max features - aggressive simplification
-        tier5: 0       // 80-100% of max features - maximum simplification
-      },
-      // Dynamic simplification
-      originalFeatureData: new Map(), // Store original GeoJSON data for re-simplification
-      currentZoom: null,
-      immediateSimplificationTimeout: null, // Timeout for immediate simplification
-      immediateSimplificationPerformed: false, // Track if immediate simplification was done
-      // Performance optimization settings
-      simplificationSettings: {
-        minImmediateZoomChangeThreshold: 0.5 // Minimum zoom change for immediate simplification
-      },
-      // Utility instances
-      tierManager: null
+      currentZoom: null
     }
   },
   methods: {
@@ -123,38 +73,6 @@ export default {
       return feature._geoJsonMapId
     },
 
-    initializeFeatureCountThresholds() {
-      // Initialize the 5-tier thresholds based on MAX_FEATURES
-      const maxFeatures = this.MAX_FEATURES
-      this.featureCountThresholds = {
-        tier1: Math.floor(maxFeatures * 0.2),  // 0-20% of max features
-        tier2: Math.floor(maxFeatures * 0.4),  // 20-40% of max features
-        tier3: Math.floor(maxFeatures * 0.6),  // 40-60% of max features
-        tier4: Math.floor(maxFeatures * 0.8),  // 60-80% of max features
-        tier5: maxFeatures                     // 80-100% of max features
-      }
-      console.log('Feature count thresholds initialized:', this.featureCountThresholds)
-    },
-
-    getCurrentSimplificationTier() {
-      if (!this.vectorSource || !this.tierManager) {
-        return 1 // Default tier during initialization
-      }
-
-      // Count only polygon and line features (not points)
-      const allFeatures = this.vectorSource.getFeatures()
-      const featureCount = MapUtils.countPolyLineFeatures(allFeatures)
-
-      return this.tierManager.getCurrentTier(featureCount)
-    },
-
-    getSimplificationMultiplierForTier(tier) {
-      if (!this.tierManager) {
-        return 1.0 // Default multiplier during initialization
-      }
-
-      return this.tierManager.getSimplificationMultiplier(tier)
-    },
 
     async initializeMap() {
       // Get user location first
@@ -220,9 +138,6 @@ export default {
               this.loadedBounds.clear()
             }
             
-            // Use debounced immediate simplification to wait for zoom completion
-            this.debouncedImmediateReSimplify(newZoom)
-            // Don't call secondary re-simplification here - it will be called when new data loads
           }
         }, 100) // 100ms debounce
       })
@@ -408,43 +323,8 @@ export default {
             console.warn(data.warning)
           }
 
-          // Apply geometry simplification if enabled
-          let processedData = data.data
-          if (this.simplificationEnabled) {
-            const startTime = performance.now()
-
-            // Calculate current simplification tier and multiplier
-            const currentTier = this.getCurrentSimplificationTier()
-            let multiplier = this.getSimplificationMultiplierForTier(currentTier)
-
-            // For large feature sets, be more aggressive with initial simplification
-            if (data.data.features.length > 500) {
-              multiplier = Math.max(multiplier, 2.0) // At least 2x simplification for large sets
-              console.log(`Large feature set detected (${data.data.features.length} features), using aggressive simplification: ${multiplier}x`)
-            }
-
-            processedData = GeometrySimplification.simplifyFeatureCollection(data.data, roundedZoom, this.simplificationOptions, multiplier)
-            const endTime = performance.now()
-
-            // Log simplification statistics for debugging
-            if (data.data.features.length > 0 && processedData.features.length > 0) {
-              const stats = GeometrySimplification.getSimplificationStats(data.data.features[0].geometry, processedData.features[0].geometry)
-              if (stats) {
-                this.lastSimplificationStats = {
-                  ...stats,
-                  processingTime: endTime - startTime,
-                  featureCount: data.data.features.length,
-                  zoom: roundedZoom,
-                  tier: currentTier,
-                  multiplier: multiplier
-                }
-                console.log(`Geometry simplification (Tier ${currentTier}, ${multiplier}x): ${stats.reductionPercentage}% reduction, ${stats.compressionRatio}x compression, ${(endTime - startTime).toFixed(2)}ms for ${data.data.features.length} features at zoom ${roundedZoom}`)
-              }
-            }
-
-            // Adjust simplification tolerance based on performance
-            this.adjustSimplificationTolerance()
-          }
+          // Use original data without simplification
+          const processedData = data.data
 
           // Add new features to the vector source
           const features = new GeoJSON().readFeatures(processedData, {
@@ -472,11 +352,6 @@ export default {
               feature.set('geojson_hash', originalFeature.geojson_hash)
             }
 
-            // Store original GeoJSON data for re-simplification
-            if (this.simplificationEnabled && originalFeature) {
-              const featureId = this.getFeatureId(feature)
-              this.originalFeatureData.set(featureId, originalFeature)
-            }
           })
 
           // Filter out features that already exist in the vector source using hash-based detection
@@ -526,16 +401,8 @@ export default {
           this.updateFeatureCount()
           this.updateLastUpdateTime()
 
-          // Update current zoom for dynamic re-simplification
+          // Update current zoom
           this.currentZoom = roundedZoom
-
-          // Reset immediate simplification flag since we have new data
-          this.immediateSimplificationPerformed = false
-
-          // Check if we need to re-simplify existing features due to feature count change
-          this.checkForFeatureCountBasedReSimplification()
-
-          // New features are already simplified during initial processing, no need for secondary re-simplification
 
           console.log(`Loaded ${features.length} features for bbox: ${bboxString} (zoom: ${roundedZoom})`)
           if (data.total_features_in_bbox && data.total_features_in_bbox > features.length) {
@@ -604,8 +471,6 @@ export default {
         const {feature, featureId} = featuresWithTimestamps[i]
         this.vectorSource.removeFeature(feature)
         delete this.featureTimestamps[featureId]
-        // Clean up original feature data
-        this.originalFeatureData.delete(featureId)
       }
 
       console.log(`Removed ${featuresToRemove} oldest features to maintain limit of ${this.MAX_FEATURES}`)
@@ -623,144 +488,11 @@ export default {
         this.vectorSource.clear()
       }
       this.featureTimestamps = {}
-      this.originalFeatureData.clear()
       this.loadedBounds.clear()
       this.updateFeatureCount()
       console.log('Cleared all features from the map')
     },
 
-    onSimplificationToggle() {
-      // When simplification is toggled, clear the map and reload data
-      // This ensures all features are re-processed with the new simplification setting
-      console.log(`Geometry simplification ${this.simplificationEnabled ? 'enabled' : 'disabled'}`)
-      this.clearAllFeatures()
-      this.loadDataForCurrentView()
-    },
-
-    adjustSimplificationTolerance() {
-      // Dynamically adjust simplification tolerance based on performance
-      if (!this.lastSimplificationStats) return
-
-      const {processingTime, featureCount, zoom} = this.lastSimplificationStats
-      const {maxProcessingTime, maxFeaturesForFullDetail, minZoomForAggressiveSimplification} = this.performanceThresholds
-
-      // If processing is taking too long or we have many features, increase tolerance
-      if (processingTime > maxProcessingTime || featureCount > maxFeaturesForFullDetail) {
-        this.simplificationOptions.baseTolerance = Math.min(
-            this.simplificationOptions.baseTolerance * 1.5,
-            0.01 // Max tolerance
-        )
-        console.log(`Increased simplification tolerance to ${this.simplificationOptions.baseTolerance} due to performance (${processingTime.toFixed(1)}ms, ${featureCount} features)`)
-      }
-      // If processing is very fast and we have few features, decrease tolerance for better quality
-      else if (processingTime < 10 && featureCount < 100 && zoom >= minZoomForAggressiveSimplification) {
-        this.simplificationOptions.baseTolerance = Math.max(
-            this.simplificationOptions.baseTolerance * 0.8,
-            0.0001 // Min tolerance
-        )
-        console.log(`Decreased simplification tolerance to ${this.simplificationOptions.baseTolerance} for better quality`)
-      }
-    },
-
-    immediateReSimplifyCachedData(newZoom) {
-      // Immediately re-simplify cached data without waiting for debounce or API calls
-      if (!this.simplificationEnabled || this.originalFeatureData.size === 0 || !this.vectorSource) {
-        return
-      }
-
-      // Check if zoom change is significant enough
-      const {minImmediateZoomChangeThreshold} = this.simplificationSettings
-      if (this.currentZoom !== null && Math.abs(newZoom - this.currentZoom) < minImmediateZoomChangeThreshold) {
-        return
-      }
-
-      // Get all current features
-      const currentFeatures = this.vectorSource.getFeatures()
-      if (currentFeatures.length === 0) {
-        return
-      }
-
-      // Calculate current simplification tier and multiplier
-      const currentTier = this.getCurrentSimplificationTier()
-      const multiplier = this.getSimplificationMultiplierForTier(currentTier)
-
-      console.log(`Immediate re-simplification for zoom change: ${this.currentZoom} → ${newZoom} (Tier ${currentTier}, ${multiplier}x)`)
-
-      const startTime = performance.now()
-      let totalOriginalCoords = 0
-      let totalSimplifiedCoords = 0
-      let processedFeatures = 0
-
-      // Process features synchronously for immediate response
-      currentFeatures.forEach(feature => {
-        const featureId = this.getFeatureId(feature)
-        const originalGeoJSON = this.originalFeatureData.get(featureId)
-
-        if (originalGeoJSON) {
-          // Re-simplify the original geometry with current tier multiplier
-          const simplifiedFeature = GeometrySimplification.simplifyFeature(originalGeoJSON, newZoom, this.simplificationOptions, multiplier)
-
-          // Update the feature's geometry
-          const newGeometry = new GeoJSON().readGeometry(simplifiedFeature.geometry, {
-            featureProjection: 'EPSG:3857',
-            dataProjection: 'EPSG:4326'
-          })
-
-          feature.setGeometry(newGeometry)
-
-          // Track statistics
-          const originalCoords = GeometrySimplification.countCoordinates(originalGeoJSON.geometry)
-          const simplifiedCoords = GeometrySimplification.countCoordinates(simplifiedFeature.geometry)
-          totalOriginalCoords += originalCoords
-          totalSimplifiedCoords += simplifiedCoords
-          processedFeatures++
-        }
-      })
-
-      const endTime = performance.now()
-      const reductionPercentage = totalOriginalCoords > 0 ?
-          ((totalOriginalCoords - totalSimplifiedCoords) / totalOriginalCoords * 100).toFixed(2) : 0
-
-      console.log(`Immediate re-simplified ${processedFeatures} features (Tier ${currentTier}): ${totalOriginalCoords} → ${totalSimplifiedCoords} coordinates (${reductionPercentage}% reduction) in ${(endTime - startTime).toFixed(2)}ms`)
-
-      this.currentZoom = newZoom
-      this.immediateSimplificationPerformed = true
-    },
-
-
-    debouncedImmediateReSimplify(zoom) {
-      // Debounce immediate re-simplification to wait for zoom completion
-      if (this.immediateSimplificationTimeout) {
-        clearTimeout(this.immediateSimplificationTimeout)
-      }
-
-      this.immediateSimplificationTimeout = setTimeout(() => {
-        this.immediateReSimplifyCachedData(zoom)
-      }, 300) // 300ms debounce for immediate simplification
-    },
-
-
-    checkForFeatureCountBasedReSimplification() {
-      // Check if the feature count has crossed a tier threshold and re-simplify if needed
-      if (!this.simplificationEnabled || this.originalFeatureData.size === 0 || !this.vectorSource) {
-        return
-      }
-
-      const currentTier = this.getCurrentSimplificationTier()
-      const currentMultiplier = this.getSimplificationMultiplierForTier(currentTier)
-
-      // Check if we have a previous tier stored
-      if (this.lastSimplificationStats && this.lastSimplificationStats.tier) {
-        const previousTier = this.lastSimplificationStats.tier
-        const previousMultiplier = this.lastSimplificationStats.multiplier
-
-        // If tier changed, re-simplify all features
-        if (currentTier !== previousTier) {
-          console.log(`Feature count tier changed: ${previousTier} → ${currentTier} (${previousMultiplier}x → ${currentMultiplier}x)`)
-          this.reSimplifyExistingFeatures(this.currentZoom)
-        }
-      }
-    },
 
     // Cache functionality removed
   },
@@ -769,9 +501,6 @@ export default {
     // Initialize featureTimestamps as empty object
     this.featureTimestamps = {}
 
-    // Initialize feature count thresholds
-    this.initializeFeatureCountThresholds()
-    this.tierManager = new SimplificationTierManager(this.MAX_FEATURES)
 
     // Wait for map to be fully initialized before loading data
     await this.initializeMap()
@@ -786,9 +515,6 @@ export default {
       clearTimeout(this.loadTimeout)
     }
 
-    if (this.immediateSimplificationTimeout) {
-      clearTimeout(this.immediateSimplificationTimeout)
-    }
 
     // Cancel any pending API request
     if (this.currentAbortController) {
@@ -796,9 +522,8 @@ export default {
       console.log('Cancelled API request on component unmount')
     }
 
-    // Clear feature timestamps and original data
+    // Clear feature timestamps
     this.featureTimestamps = {}
-    this.originalFeatureData.clear()
   }
 }
 </script>

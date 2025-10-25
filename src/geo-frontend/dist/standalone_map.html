@@ -89,17 +89,8 @@
             <div class="absolute bottom-4 left-4 feature-stats px-4 py-2 rounded-lg shadow-md z-10 text-xs">
                 <div class="space-y-1">
                     <div>Features: <span class="font-medium" id="featureCount">0</span> / <span class="font-medium" id="maxFeatures">5000</span></div>
-                    <div id="simplificationInfo" class="text-blue-600 hidden">
-                        Simplification: Tier <span id="currentTier">1</span> (<span id="simplificationMultiplier">1.0</span>x)
-                    </div>
                     <div id="locationInfo" class="text-gray-600 hidden">
                         📍 <span id="locationName">Unknown Location</span>
-                    </div>
-                    <div class="flex items-center space-x-2">
-                        <label class="flex items-center space-x-1 cursor-pointer">
-                            <input id="simplificationToggle" class="rounded" type="checkbox" checked>
-                            <span class="text-xs">Simplify geometry</span>
-                        </label>
                     </div>
                 </div>
             </div>
@@ -115,12 +106,6 @@
             API_BASE_URL: '/api/data/geojson/',
             LOCATION_API_URL: '/api/data/location/user/',
             MAX_FEATURES: 5000,
-            SIMPLIFICATION_OPTIONS: {
-                baseTolerance: 0.001,
-                minZoom: 1,
-                maxZoom: 20,
-                enableSimplification: true
-            }
         };
 
         // Global variables
@@ -135,28 +120,8 @@
         let currentAbortController = null;
         let featureTimestamps = {};
         let featureIdCounter = 0;
-        let simplificationEnabled = true;
-        let originalFeatureData = new Map();
         let currentZoom = null;
-        let tierManager = null;
 
-        // Initialize feature count thresholds (5 tiers)
-        const featureCountThresholds = {
-            tier1: Math.floor(CONFIG.MAX_FEATURES * 0.2),  // 0-20% of max features
-            tier2: Math.floor(CONFIG.MAX_FEATURES * 0.4),  // 20-40% of max features
-            tier3: Math.floor(CONFIG.MAX_FEATURES * 0.6),  // 40-60% of max features
-            tier4: Math.floor(CONFIG.MAX_FEATURES * 0.8),  // 60-80% of max features
-            tier5: CONFIG.MAX_FEATURES                     // 80-100% of max features
-        };
-
-        // Simplification tier multipliers
-        const simplificationMultipliers = {
-            1: 0.5,   // Minimal simplification
-            2: 1.0,   // Light simplification
-            3: 2.0,   // Moderate simplification
-            4: 4.0,   // Aggressive simplification
-            5: 8.0    // Maximum simplification
-        };
 
         // Utility functions
         function getFeatureId(feature) {
@@ -166,25 +131,6 @@
             return feature._geoJsonMapId;
         }
 
-        function getCurrentSimplificationTier() {
-            if (!vectorSource || !tierManager) {
-                return 1;
-            }
-            const allFeatures = vectorSource.getFeatures();
-            const featureCount = countPolyLineFeatures(allFeatures);
-            return tierManager.getCurrentTier(featureCount);
-        }
-
-        function getSimplificationMultiplierForTier(tier) {
-            return simplificationMultipliers[tier] || 1.0;
-        }
-
-        function countPolyLineFeatures(features) {
-            return features.filter(feature => {
-                const geometryType = feature.getGeometry().getType();
-                return ['LineString', 'Polygon', 'MultiLineString', 'MultiPolygon'].indexOf(geometryType) !== -1;
-            }).length;
-        }
 
         function getBoundingBoxKey(extent, zoom) {
             const [minX, minY, maxX, maxY] = extent;
@@ -480,12 +426,8 @@
                         console.warn(data.warning);
                     }
 
-                    let processedData = data.data;
-                    if (simplificationEnabled) {
-                        // Apply basic simplification logic here
-                        // For now, we'll use the data as-is
-                        processedData = data.data;
-                    }
+                    // Use original data without simplification
+                    const processedData = data.data;
 
                     const features = new ol.format.GeoJSON().readFeatures(processedData, {
                         featureProjection: 'EPSG:3857',
@@ -603,27 +545,12 @@
                 const {feature, featureId} = featuresWithTimestamps[i];
                 vectorSource.removeFeature(feature);
                 delete featureTimestamps[featureId];
-                originalFeatureData.delete(featureId);
             }
 
             console.log(`Removed ${featuresToRemove} oldest features to maintain limit of ${CONFIG.MAX_FEATURES}`);
             updateFeatureCount();
         }
 
-        function onSimplificationToggle() {
-            simplificationEnabled = document.getElementById('simplificationToggle').checked;
-            console.log(`Geometry simplification ${simplificationEnabled ? 'enabled' : 'disabled'}`);
-
-            // Clear map and reload data
-            if (vectorSource) {
-                vectorSource.clear();
-            }
-            featureTimestamps = {};
-            originalFeatureData.clear();
-            loadedBounds.clear();
-            updateFeatureCount();
-            loadDataForCurrentView();
-        }
 
         // Initialize the application
         async function init() {
@@ -633,8 +560,6 @@
             // Initialize the map
             await initializeMap();
 
-            // Set up event listeners
-            document.getElementById('simplificationToggle').addEventListener('change', onSimplificationToggle);
         }
 
         // Start the application when the page loads
