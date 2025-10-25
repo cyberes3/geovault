@@ -126,8 +126,8 @@
       </div>
     </div>
 
-    <!-- Loading State for Initial Page Load -->
-    <Loader v-if="originalFilename == null && !loading.page"/>
+    <!-- Loading State for Initial Page Load and Post-Processing -->
+    <Loader v-if="(originalFilename == null && !loading.page) || (processing.active && processing.progress === null)"/>
 
     <!-- Import Controls (Top) -->
     <ImportControls
@@ -229,14 +229,14 @@
       </div>
     </div>
 
-    <!-- Processing Status -->
-    <div v-if="processing.active" class="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
+    <!-- Processing Status with Progress Bar -->
+    <div v-if="processing.active && processing.progress !== null" class="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
       <div class="flex items-center justify-center py-8">
         <div class="text-center">
           <div class="animate-spin h-8 w-8 border-2 border-blue-600 border-t-transparent rounded-full mx-auto mb-4"></div>
           <h3 class="text-lg font-medium text-gray-900 mb-2">Processing File</h3>
           <p class="text-gray-600">{{ processing.message }}</p>
-          <div v-if="processing.progress !== null" class="mt-4">
+          <div class="mt-4">
             <div class="w-full bg-gray-200 rounded-full h-2">
               <div :style="{ width: processing.progress + '%' }" class="bg-blue-600 h-2 rounded-full transition-all duration-300"></div>
             </div>
@@ -714,12 +714,12 @@ export default {
     
     handleItemCompleted(data) {
       this.processing.active = false;
-      this.processing.message = 'Processing completed!';
-      this.processing.progress = 100;
+      this.processing.message = 'Loading...';
+      this.processing.progress = null;
       this.stopProcessingPolling();
       
-      // Set loading state during refresh to prevent "zero features" screen
-      this.loading.page = true;
+      // Keep processing active to show the unified loading spinner
+      this.processing.active = true;
       
       // Refresh the page data
       this.sendWebSocketMessage('refresh', {});
