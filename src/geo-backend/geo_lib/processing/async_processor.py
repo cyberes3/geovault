@@ -14,7 +14,7 @@ from django.contrib.auth.models import User
 from django.db import transaction
 
 from data.models import ImportQueue
-from geo_lib.processing.geo_processor import geo_to_geojson
+from geo_lib.processing.processors import get_processor
 from geo_lib.processing.geojson_normalization import hash_normalized_geojson
 from geo_lib.processing.logging import RealTimeImportLog, DatabaseLogLevel
 from geo_lib.processing.status_tracker import ProcessingStatusTracker, ProcessingStatus, status_tracker
@@ -159,9 +159,10 @@ class AsyncFileProcessor:
             file_size_mb = len(file_data) / (1024 * 1024)
             realtime_log.add(f"Processing {file_size_mb:.1f}MB file", "AsyncProcessor", DatabaseLogLevel.INFO)
 
-            # Convert to GeoJSON with timing
+            # Convert to GeoJSON with timing using new processor API
             conversion_start = time.time()
-            geojson_data, processing_log = geo_to_geojson(file_data, filename)
+            processor = get_processor(file_data, filename)
+            geojson_data, processing_log = processor.process()
             conversion_duration = time.time() - conversion_start
             realtime_log.add_timing("GeoJSON conversion", conversion_duration, "AsyncProcessor")
 
@@ -299,15 +300,12 @@ class AsyncFileProcessor:
                 # This ensures KML/KMZ files with same content get same hash
                 content_hash = hash_normalized_geojson(geojson_data)
 
-                # Process features
-                from geo_lib.processing.geo_processor import process_togeojson_features, detect_file_type
-
-                file_type = detect_file_type(geojson_str, filename)
+                # Process features using the processor's already processed features
                 features = geojson_data.get('features', [])
 
                 processing_log.add(f"Processing {len(features)} features from uploaded file", "AsyncProcessor", DatabaseLogLevel.INFO)
-                processed_features, feature_log = process_togeojson_features(features, file_type)
-                processing_log.extend(feature_log)
+                # Features are already processed by the processor, so we use them directly
+                processed_features = features
 
                 # Log feature type breakdown
                 feature_types = {}

@@ -4,7 +4,7 @@ This module provides a unified registry of supported file types with their prope
 """
 
 from dataclasses import dataclass
-from typing import List, Dict, Any
+from typing import List, Dict, Any, Union
 from enum import Enum
 
 
@@ -182,3 +182,47 @@ def validate_mime_type(mime_type: str, file_type: FileType) -> bool:
 def validate_file_signature(file_data: bytes, file_type: FileType) -> bool:
     """Validate file signature against type-specific signatures."""
     return any(file_data.startswith(sig) for sig in FILE_TYPE_CONFIGS[file_type].signatures)
+
+
+def detect_file_type(file_data: Union[bytes, str], filename: str = "") -> FileType:
+    """
+    Detect the file type based on content and filename.
+    
+    Args:
+        file_data: File content as bytes or string
+        filename: Optional filename for extension-based detection
+        
+    Returns:
+        FileType enum value
+    """
+    # First check filename extension
+    if filename:
+        try:
+            import os
+            _, ext = os.path.splitext(filename)
+            return get_file_type_by_extension(ext)
+        except ValueError:
+            pass  # Continue to content-based detection
+    
+    # Check file content signatures
+    if isinstance(file_data, bytes):
+        try:
+            return get_file_type_by_signature(file_data)
+        except ValueError:
+            # Check for XML-based formats
+            try:
+                content = file_data.decode('utf-8')
+            except UnicodeDecodeError:
+                return FileType.KMZ  # Assume KMZ if not decodable as UTF-8
+    else:
+        content = file_data
+    
+    # Check for KML/GPX XML signatures in content
+    content_lower = content.lower().strip()
+    if content_lower.startswith('<?xml') or content_lower.startswith('<kml'):
+        return FileType.KML
+    elif content_lower.startswith('<?xml') or content_lower.startswith('<gpx'):
+        return FileType.GPX
+    
+    # Default to KML if we can't determine
+    return FileType.KML

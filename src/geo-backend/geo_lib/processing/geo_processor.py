@@ -1,24 +1,16 @@
 """
-Generic file processor for KML, KMZ, and GPX files.
-This module provides a unified interface for processing various geospatial file formats.
+Utility functions for geospatial file processing.
+This module provides helper functions for processing various geospatial file formats.
+Main processing logic has been moved to the processors module.
 """
 
-import json
 import logging
-import os
 import re
-import subprocess
-import tempfile
-import time
-import traceback
 import xml.etree.ElementTree as ET
-from typing import Tuple, Union
+from typing import List
 
 import markdownify
-
-from geo_lib.processing.file_types import FileType, get_file_type_by_extension, get_file_type_by_signature
-from geo_lib.processing.logging import ImportLog, DatabaseLogLevel
-from geo_lib.types.geojson import GeojsonRawProperty
+from geo_lib.processing.file_types import FileType
 
 logger = logging.getLogger(__name__)
 
@@ -268,247 +260,13 @@ def split_geometry_collection(feature: dict) -> list:
     return features
 
 
-def process_togeojson_features(features: list, file_type: FileType) -> Tuple[list, ImportLog]:
-    """
-    Process features from togeojson output.
-    
-    Args:
-        features: List of GeoJSON features
-        file_type: Type of file being processed
-        
-    Returns:
-        Tuple of (processed_features, import_log)
-    """
-    processed_features = []
-    import_log = ImportLog()
-    
-    skipped_count = 0
-    geometry_collection_count = 0
-    
-    import_log.add(f"Processing {len(features)} raw features from file", "Feature Processing", DatabaseLogLevel.INFO)
-    
-    for feature in features:
-        # Split GeometryCollection into separate features
-        split_features = split_geometry_collection(feature)
-        
-        # Count geometry collections that were split
-        if len(split_features) > 1:
-            geometry_collection_count += 1
-        
-        # Skip features with no valid geometry
-        if not split_features:
-            skipped_count += 1
-            continue
-
-        for split_feature in split_features:
-            if split_feature['geometry']['type'] in ['Point', 'MultiPoint', 'LineString', 'MultiLineString', 'Polygon', 'MultiPolygon']:
-                try:
-                    # Apply appropriate styling based on file type
-                    split_feature['properties'] = preserve_togeojson_styling(split_feature['properties'], file_type)
-
-                    # Convert to our property format
-                    split_feature['properties'] = GeojsonRawProperty(**split_feature['properties']).model_dump()
-                    processed_features.append(split_feature)
-                except Exception as e:
-                    feature_name = split_feature.get('properties', {}).get('name', 'Unnamed')
-                    import_log.add(f"Failed to process feature '{feature_name}', skipping", 'Feature Processing', DatabaseLogLevel.WARNING)
-                    logger.error(f"Feature processing error for '{feature_name}': {traceback.format_exc()}")
-                    skipped_count += 1
-            else:
-                import_log.add(f'Skipping unsupported geometry type: {split_feature["geometry"]["type"]}', 'Feature Processing', DatabaseLogLevel.WARNING)
-                skipped_count += 1
-    
-    # Log summary
-    if geometry_collection_count > 0:
-        import_log.add(f"Split {geometry_collection_count} geometry collections into individual features", "Feature Processing", DatabaseLogLevel.INFO)
-    
-    if skipped_count > 0:
-        import_log.add(f"Skipped {skipped_count} features (invalid geometry or unsupported type)", "Feature Processing", DatabaseLogLevel.INFO)
-    
-    import_log.add(f"Successfully processed {len(processed_features)} features", "Feature Processing", DatabaseLogLevel.INFO)
-
-    return processed_features, import_log
+# process_togeojson_features function moved to processors/base_processor.py
 
 
-def detect_file_type(file_data: Union[bytes, str], filename: str = "") -> FileType:
-    """
-    Detect the file type based on content and filename.
-    
-    Args:
-        file_data: File content as bytes or string
-        filename: Optional filename for extension-based detection
-        
-    Returns:
-        FileType enum value
-    """
-    # First check filename extension
-    if filename:
-        try:
-            import os
-            _, ext = os.path.splitext(filename)
-            return get_file_type_by_extension(ext)
-        except ValueError:
-            pass  # Continue to content-based detection
-    
-    # Check file content signatures
-    if isinstance(file_data, bytes):
-        try:
-            return get_file_type_by_signature(file_data)
-        except ValueError:
-            # Check for XML-based formats
-            try:
-                content = file_data.decode('utf-8')
-            except UnicodeDecodeError:
-                return FileType.KMZ  # Assume KMZ if not decodable as UTF-8
-    else:
-        content = file_data
-    
-    # Check for KML/GPX XML signatures in content
-    content_lower = content.lower().strip()
-    if content_lower.startswith('<?xml') or content_lower.startswith('<kml'):
-        return FileType.KML
-    elif content_lower.startswith('<?xml') or content_lower.startswith('<gpx'):
-        return FileType.GPX
-    
-    # Default to KML if we can't determine
-    return FileType.KML
+# detect_file_type function moved to processors/base_processor.py
 
 
-def geo_to_geojson(file_data: Union[bytes, str], filename: str = "", timeout_seconds: int = None) -> Tuple[dict, ImportLog]:
-    """
-    Convert KML/KMZ/GPX to GeoJSON using JavaScript togeojson library.
-    
-    Args:
-        file_data: File content as bytes or string
-        filename: Optional filename for type detection
-        timeout_seconds: Timeout in seconds for the conversion process. If None, calculated based on file size.
-        
-    Returns:
-        Tuple of (geojson_data, import_log)
-    """
-    import_log = ImportLog()
-    
-    # Time file type detection
-    detection_start = time.time()
-    file_type = detect_file_type(file_data, filename)
-    detection_duration = time.time() - detection_start
-    import_log.add_timing("File type detection", detection_duration, "Processing")
-
-    # Calculate dynamic timeout based on file size if not specified
-    if timeout_seconds is None:
-        file_size = len(file_data) if isinstance(file_data, bytes) else len(file_data.encode('utf-8'))
-        file_size_mb = file_size / (1024 * 1024)
-        
-        # Base timeout of 30 seconds, plus 2 seconds per MB for large files
-        # This gives us: 30s for small files, 60s for 15MB, 120s for 45MB, 240s for 105MB
-        timeout_seconds = max(30, int(30 + (file_size_mb * 2)))
-        
-        import_log.add(f'Calculated timeout: {timeout_seconds}s for {file_size_mb:.1f}MB file', 'Processing', DatabaseLogLevel.INFO)
-
-    try:
-        # Get the path to the togeojson converter
-        current_dir = os.path.dirname(os.path.abspath(__file__))
-        togeojson_path = os.path.join(current_dir, 'togeojson', 'index.js')
-
-        # Handle different file types
-        if file_type == FileType.KMZ:
-            # It's a KMZ file - write to temporary file for JavaScript converter
-            with tempfile.NamedTemporaryFile(suffix='.kmz', delete=False) as temp_file:
-                temp_file.write(file_data)
-                temp_file_path = temp_file.name
-
-            try:
-                # Use the JavaScript converter with file path and timing
-                conversion_start = time.time()
-                import_log.add("Converting KMZ file to GeoJSON format", "File Conversion", DatabaseLogLevel.INFO)
-                result = subprocess.run(
-                    ['node', togeojson_path, temp_file_path],
-                    capture_output=True,
-                    text=True,
-                    timeout=timeout_seconds
-                )
-                conversion_duration = time.time() - conversion_start
-                import_log.add_timing("KMZ conversion", conversion_duration, "File Conversion")
-
-                if result.returncode != 0:
-                    # Don't expose internal stderr to user
-                    raise Exception("KMZ file conversion failed")
-
-                geojson_data = json.loads(result.stdout)
-
-            finally:
-                # Clean up temporary file
-                os.unlink(temp_file_path)
-        else:
-            # It's a regular KML or GPX file
-            if isinstance(file_data, str):
-                content = file_data
-            else:
-                content = file_data.decode('utf-8')
-
-            # Remove namespaces from content to make it compatible with togeojson
-            # The togeojson library doesn't handle namespaced XML well
-            if file_type == FileType.KML:
-                # Remove namespace declarations
-                content = re.sub(r'xmlns:ns\d+="[^"]*"', '', content)
-                # Remove namespace prefixes from tags
-                content = re.sub(r'ns\d+:', '', content)
-            
-            # Write content to temporary file to avoid stdin issues
-            suffix = f'.{file_type.value}'
-            with tempfile.NamedTemporaryFile(mode='w', suffix=suffix, delete=False, encoding='utf-8') as temp_file:
-                temp_file.write(content)
-                temp_file_path = temp_file.name
-
-            try:
-                # Use the JavaScript converter with file path and timing
-                conversion_start = time.time()
-                import_log.add(f"Converting {file_type.value.upper()} file to GeoJSON format", "File Conversion", DatabaseLogLevel.INFO)
-                result = subprocess.run(
-                    ['node', togeojson_path, temp_file_path],
-                    capture_output=True,
-                    text=True,
-                    timeout=timeout_seconds
-                )
-                conversion_duration = time.time() - conversion_start
-                import_log.add_timing(f"{file_type.value.upper()} conversion", conversion_duration, "File Conversion")
-            finally:
-                # Clean up temporary file
-                os.unlink(temp_file_path)
-
-            if result.returncode != 0:
-                # Don't expose internal stderr to user
-                raise Exception(f"{file_type.value.upper()} file conversion failed")
-
-            geojson_data = json.loads(result.stdout)
-
-        # Process the features using the existing processing logic with timing
-        feature_processing_start = time.time()
-        processed_features, processing_log = process_togeojson_features(geojson_data['features'], file_type)
-        feature_processing_duration = time.time() - feature_processing_start
-        import_log.add_timing("Feature processing", feature_processing_duration, "Processing")
-        import_log.extend(processing_log)
-
-        # Create the final GeoJSON structure
-        final_geojson = {
-            'type': 'FeatureCollection',
-            'features': processed_features
-        }
-
-        return final_geojson, import_log
-
-    except subprocess.TimeoutExpired:
-        import_log.add(f"File conversion timed out after {timeout_seconds}s - file may be too large or complex", "File Conversion", DatabaseLogLevel.ERROR)
-        raise Exception("File conversion timed out")
-    except json.JSONDecodeError as e:
-        import_log.add("File conversion produced invalid output - file may be corrupted", "File Conversion", DatabaseLogLevel.ERROR)
-        raise Exception("File conversion failed")
-    except Exception as e:
-        # Log user-friendly message, but log internal details to server logs
-        import_log.add(f"File conversion failed: {type(e).__name__}", "File Conversion", DatabaseLogLevel.ERROR)
-        logger.error(f"Detailed conversion error: {str(e)}")
-        logger.error(f"File conversion error traceback: {traceback.format_exc()}")
-        raise
+# geo_to_geojson function replaced by processor classes
 
 
 def load_geojson_type(data: dict) -> dict:

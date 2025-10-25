@@ -17,7 +17,7 @@ os.environ.setdefault("DJANGO_SETTINGS_MODULE", "website.settings")
 import django
 django.setup()
 
-from geo_lib.processing.geo_processor import geo_to_geojson
+from geo_lib.processing.processors import get_processor
 from geo_lib.processing.geojson_normalization import hash_normalized_geojson
 
 
@@ -47,7 +47,8 @@ def test_file_conversion(file_path: str) -> tuple:
     
     # Convert to GeoJSON
     try:
-        geojson_data, processing_log = geo_to_geojson(file_data, os.path.basename(file_path))
+        processor = get_processor(file_data, os.path.basename(file_path))
+        geojson_data, processing_log = processor.process()
         
         # Print conversion log
         print("\nConversion log:")

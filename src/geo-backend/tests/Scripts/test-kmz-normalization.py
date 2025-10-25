@@ -8,7 +8,9 @@ import sys
 
 sys.path.append(os.path.join(os.path.dirname(__file__), '..'))
 
-from geo_lib.processing.kml.kml import kmz_to_kml, normalize_kml_for_comparison
+from geo_lib.processing.geo_processor import normalize_content_for_comparison
+from geo_lib.security.file_validation import secure_kmz_to_kml
+from geo_lib.processing.file_types import FileType
 import hashlib
 
 
@@ -39,12 +41,12 @@ def test_normalization():
     with open(kmz_file, 'rb') as f:
         kmz_content = f.read()
 
-    extracted_kml = kmz_to_kml(kmz_content)
+    extracted_kml = secure_kmz_to_kml(kmz_content)
     print(f"2. Extracted KML from KMZ size: {len(extracted_kml)} characters")
 
     # Test 3: Normalize both files
-    normalized_kml = normalize_kml_for_comparison(kml_content)
-    normalized_extracted = normalize_kml_for_comparison(extracted_kml)
+    normalized_kml = normalize_content_for_comparison(kml_content, FileType.KML)
+    normalized_extracted = normalize_content_for_comparison(extracted_kml, FileType.KML)
 
     print(f"3. Normalized KML size: {len(normalized_kml)} characters")
     print(f"4. Normalized extracted KML size: {len(normalized_extracted)} characters")
