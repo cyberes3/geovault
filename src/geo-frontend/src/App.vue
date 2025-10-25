@@ -88,16 +88,19 @@ export default {
     }
   },
   methods: {
-    setupRealtimeConnection() {
-      // Only connect if not already connected
-      if (!realtimeSocket.isConnected) {
-        realtimeSocket.connect();
-      }
-
+    async setupRealtimeConnection() {
+      // Load all modules from registry first
+      await realtimeSocket.loadAllModules(this.$store);
+      
       // Handle connection status (only add listeners once)
       if (!this.realtimeListenersAdded) {
         this.addRealtimeListeners();
         this.realtimeListenersAdded = true;
+      }
+      
+      // Connect socket after modules are loaded and listeners are set up
+      if (!realtimeSocket.isConnected) {
+        realtimeSocket.connect();
       }
     },
     addRealtimeListeners() {
@@ -117,68 +120,9 @@ export default {
         console.error('Realtime WebSocket max reconnection attempts reached');
         this.$store.dispatch('setWebSocketReconnectAttempts', realtimeSocket.maxReconnectAttempts);
       });
-
-      // Subscribe to import queue module
-      realtimeSocket.subscribe('import_queue', 'initial_state', (data) => {
-        console.log('Received import queue initial state:', data);
-        this.$store.dispatch('setRealtimeModuleData', {module: 'importQueue', data});
-        // Also update the legacy importQueue state for backward compatibility
-        this.$store.commit('setImportQueue', data);
-      });
-
-      realtimeSocket.subscribe('import_queue', 'item_added', (data) => {
-        console.log('Import queue item added:', data);
-        // Request refresh to get updated data
-        realtimeSocket.requestRefresh('import_queue');
-      });
-
-      realtimeSocket.subscribe('import_queue', 'item_deleted', (data) => {
-        console.log('Import queue item deleted:', data);
-        this.$store.dispatch('removeImportQueueItem', data.id.toString());
-      });
-
-      realtimeSocket.subscribe('import_queue', 'items_deleted', (data) => {
-        console.log('Import queue items deleted:', data);
-        this.$store.dispatch('removeImportQueueItems', data.ids.map(id => id.toString()));
-      });
-
-      realtimeSocket.subscribe('import_queue', 'status_updated', (data) => {
-        console.log('Import queue status updated:', data);
-
-        let updates = {
-          processing: data.status === 'processing',
-          processing_failed: data.status === 'failed'
-        }
-
-        // Handle completed status - need to get the actual feature count from the server
-        if (data.status === 'completed') {
-          updates.processing = false;
-          updates.processing_failed = false;
-          // Request a refresh to get the updated item with correct feature count
-          realtimeSocket.requestRefresh('import_queue');
-          return;
-        }
-
-        // For processing status, set feature_count to -1 to indicate processing
-        if (data.status === 'processing') {
-          updates.feature_count = -1;
-        }
-
-        // Update the specific item in the store
-        this.$store.dispatch('updateImportQueueItem', {
-          id: data.id.toString(),
-          updates: updates
-        });
-      });
-
-      realtimeSocket.subscribe('import_queue', 'item_imported', (data) => {
-        console.log('Import queue item imported:', data);
-        this.$store.dispatch('updateImportQueueItem', {
-          id: data.id.toString(),
-          updates: {imported: true}
-        });
-      });
-
+    },
+    handleLogout() {
+      realtimeSocket.forceDisconnect();
     }
   },
   async created() {

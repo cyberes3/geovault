@@ -11,6 +11,8 @@ class RealtimeSocket {
         this.reconnectInterval = 1000; // Start with 1 second
         this.maxReconnectInterval = 30000; // Max 30 seconds
         this.moduleHandlers = new Map(); // Map of module -> event -> handlers
+        this.globalHandlers = new Map(); // Global event handlers
+        this.modules = new Map(); // Registered modules
         this.pingInterval = null;
         this.pingTimeout = null;
         this.shouldStayConnected = false; // Track if we should maintain connection
@@ -59,6 +61,7 @@ class RealtimeSocket {
             this.reconnectAttempts = 0;
             this.reconnectInterval = 1000;
             this.startPing();
+            this.initializeModules(); // Initialize all registered modules
             this.emit('connected', event);
         };
 
@@ -79,6 +82,7 @@ class RealtimeSocket {
             console.trace('WebSocket close call stack:');
             this.isConnected = false;
             this.stopPing();
+            this.cleanupModules(); // Cleanup all registered modules
             this.emit('disconnected', event);
             
             // Attempt to reconnect if we should stay connected
@@ -237,9 +241,9 @@ class RealtimeSocket {
     forceDisconnect() {
         console.log('forceDisconnect() called - this should only happen on logout');
         console.trace('forceDisconnect call stack:');
-        this.connectionCount = 0;
         this.shouldStayConnected = false;
         this.stopPing();
+        this.cleanupModules(); // Cleanup all registered modules
         
         if (this.socket) {
             this.socket.close(1000, 'Force disconnect');
@@ -286,10 +290,6 @@ class RealtimeSocket {
      * Add global event listener
      */
     on(event, handler) {
-        if (!this.globalHandlers) {
-            this.globalHandlers = new Map();
-        }
-        
         if (!this.globalHandlers.has(event)) {
             this.globalHandlers.set(event, []);
         }
@@ -300,7 +300,7 @@ class RealtimeSocket {
      * Remove global event listener
      */
     off(event, handler) {
-        if (this.globalHandlers && this.globalHandlers.has(event)) {
+        if (this.globalHandlers.has(event)) {
             const handlers = this.globalHandlers.get(event);
             const index = handlers.indexOf(handler);
             if (index > -1) {
@@ -313,7 +313,7 @@ class RealtimeSocket {
      * Emit global event to all registered handlers
      */
     emit(event, data) {
-        if (this.globalHandlers && this.globalHandlers.has(event)) {
+        if (this.globalHandlers.has(event)) {
             this.globalHandlers.get(event).forEach(handler => {
                 try {
                     handler(data);
@@ -329,6 +329,82 @@ class RealtimeSocket {
      */
     requestRefresh(module) {
         this.send(module, 'refresh');
+    }
+
+    /**
+     * Load all modules from the registry
+     * @param {Object} store - Vuex store instance
+     */
+    async loadAllModules(store) {
+        try {
+            const { loadAllModules } = await import('./modules/ModuleRegistry.js');
+            const modules = loadAllModules(store);
+            
+            // Register all loaded modules
+            for (const module of modules) {
+                this.registerModule(module);
+            }
+            
+            console.log(`Loaded ${modules.length} modules from registry`);
+        } catch (error) {
+            console.error('Failed to load modules from registry:', error);
+        }
+    }
+
+    /**
+     * Register a module with the WebSocket service
+     * @param {BaseModule} module - The module to register
+     */
+    registerModule(module) {
+        if (!module.moduleName) {
+            throw new Error('Module must have a moduleName property');
+        }
+        
+        // Set socket reference for the module
+        module.socket = this;
+        
+        this.modules.set(module.moduleName, module);
+        console.log(`Registered module: ${module.moduleName}`);
+        
+        // If already connected, initialize the module immediately
+        if (this.isConnected) {
+            module.initialize();
+        }
+    }
+
+    /**
+     * Unregister a module from the WebSocket service
+     * @param {string} moduleName - The name of the module to unregister
+     */
+    unregisterModule(moduleName) {
+        const module = this.modules.get(moduleName);
+        if (module) {
+            module.cleanup();
+            this.modules.delete(moduleName);
+            console.log(`Unregistered module: ${moduleName}`);
+        }
+    }
+
+    /**
+     * Initialize all registered modules (called on connection)
+     */
+    initializeModules() {
+        this.modules.forEach(module => {
+            module.initialize();
+        });
+    }
+
+    /**
+     * Cleanup all registered modules (called on disconnection)
+     */
+    cleanupModules() {
+        this.modules.forEach(module => {
+            // Clear all subscriptions for this module
+            if (this.moduleHandlers.has(module.moduleName)) {
+                this.moduleHandlers.delete(module.moduleName);
+            }
+            module.cleanup();
+        });
     }
 
     /**
