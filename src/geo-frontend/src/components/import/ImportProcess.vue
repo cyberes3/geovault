@@ -468,8 +468,8 @@
     <!-- Edit Original Feature Dialog -->
     <EditOriginalFeatureDialog
         :is-open="dialogs.editOriginal.isOpen"
-        :original-feature="dialogs.editOriginal.feature"
         :loading="dialogs.editOriginal.loading"
+        :original-feature="dialogs.editOriginal.feature"
         @close="closeEditOriginalDialog"
         @saved="onOriginalFeatureSaved"
     />
@@ -593,7 +593,7 @@ export default {
       if (!this.currentId) {
         return;
       }
-      
+
       try {
         const response = await axios.get(`/api/data/item/import/get/${this.currentId}?page=1&page_size=${this.pagination.pageSize}`)
         if (response.data.success) {
@@ -601,7 +601,7 @@ export default {
           if (this.processing.active && response.data.job_details) {
             this.processing.message = response.data.job_details.message || 'Processing file...'
             this.processing.progress = response.data.job_details.progress || 0
-            
+
             // Fetch new logs during processing for real-time updates
             await this.loadLogsIncremental()
           } else if (!this.processing.active) {
@@ -964,12 +964,12 @@ export default {
     async editOriginalFeature(duplicateInfo) {
       // Fetch the full feature data since the new API format only provides basic fields
       const existingFeature = duplicateInfo.existing_features[0];
-      
+
       // Show dialog with loading state immediately
       this.dialogs.editOriginal.isOpen = true;
       this.dialogs.editOriginal.loading = true;
       this.dialogs.editOriginal.feature = null;
-      
+
       try {
         const response = await axios.get(`/api/data/feature/${existingFeature.id}/`);
         if (response.data.success) {
@@ -1022,7 +1022,7 @@ export default {
     clearComponentState() {
       // Stop polling first to prevent API calls with null currentId
       this.stopProcessingPolling();
-      
+
       // Clear all component data to reset state
       this.msg = "";
       this.currentId = null;
@@ -1145,13 +1145,13 @@ export default {
       if (!this.currentId) {
         return;
       }
-      
+
       // Load only new logs since the last fetch
       try {
-        const url = this.lastLogId 
-          ? `/api/data/item/import/logs/${this.currentId}?after_id=${this.lastLogId}`
-          : `/api/data/item/import/logs/${this.currentId}`;
-        
+        const url = this.lastLogId
+            ? `/api/data/item/import/logs/${this.currentId}?after_id=${this.lastLogId}`
+            : `/api/data/item/import/logs/${this.currentId}`;
+
         const response = await axios.get(url);
         if (response.data.success && response.data.logs) {
           // Append new logs to existing ones

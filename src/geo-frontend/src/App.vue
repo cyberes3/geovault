@@ -9,31 +9,31 @@
               <h1 class="text-xl font-bold text-gray-900">GeoServer</h1>
             </div>
             <div class="hidden sm:ml-6 sm:flex sm:space-x-8">
-              <router-link 
-                to="/" 
-                class="inline-flex items-center px-1 pt-1 text-sm font-medium text-gray-500 hover:text-gray-700 hover:border-gray-300 border-b-2 border-transparent transition-colors duration-200"
-                :class="{ 'text-gray-900 border-gray-500': $route.path === '/' }"
+              <router-link
+                  :class="{ 'text-gray-900 border-gray-500': $route.path === '/' }"
+                  class="inline-flex items-center px-1 pt-1 text-sm font-medium text-gray-500 hover:text-gray-700 hover:border-gray-300 border-b-2 border-transparent transition-colors duration-200"
+                  to="/"
               >
                 Home
               </router-link>
-              <router-link 
-                to="/dashboard" 
-                class="inline-flex items-center px-1 pt-1 text-sm font-medium text-gray-500 hover:text-gray-700 hover:border-gray-300 border-b-2 border-transparent transition-colors duration-200"
-                :class="{ 'text-gray-900 border-gray-500': $route.path === '/dashboard' }"
+              <router-link
+                  :class="{ 'text-gray-900 border-gray-500': $route.path === '/dashboard' }"
+                  class="inline-flex items-center px-1 pt-1 text-sm font-medium text-gray-500 hover:text-gray-700 hover:border-gray-300 border-b-2 border-transparent transition-colors duration-200"
+                  to="/dashboard"
               >
                 Dashboard
               </router-link>
-              <router-link 
-                to="/import" 
-                class="inline-flex items-center px-1 pt-1 text-sm font-medium text-gray-500 hover:text-gray-700 hover:border-gray-300 border-b-2 border-transparent transition-colors duration-200"
-                :class="{ 'text-gray-900 border-gray-500': $route.path.startsWith('/import') }"
+              <router-link
+                  :class="{ 'text-gray-900 border-gray-500': $route.path.startsWith('/import') }"
+                  class="inline-flex items-center px-1 pt-1 text-sm font-medium text-gray-500 hover:text-gray-700 hover:border-gray-300 border-b-2 border-transparent transition-colors duration-200"
+                  to="/import"
               >
                 Import
               </router-link>
-              <router-link 
-                to="/map" 
-                class="inline-flex items-center px-1 pt-1 text-sm font-medium text-gray-500 hover:text-gray-700 hover:border-gray-300 border-b-2 border-transparent transition-colors duration-200"
-                :class="{ 'text-gray-900 border-gray-500': $route.path === '/map' }"
+              <router-link
+                  :class="{ 'text-gray-900 border-gray-500': $route.path === '/map' }"
+                  class="inline-flex items-center px-1 pt-1 text-sm font-medium text-gray-500 hover:text-gray-700 hover:border-gray-300 border-b-2 border-transparent transition-colors duration-200"
+                  to="/map"
               >
                 Map
               </router-link>
@@ -60,7 +60,7 @@
 </template>
 
 <script>
-import { mapState } from "vuex";
+import {mapState} from "vuex";
 
 export default {
   name: 'App',

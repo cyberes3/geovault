@@ -231,6 +231,7 @@ export default {
       selectedItems: new Set(), // Track selected items for bulk import
       isBulkImporting: false, // Track bulk import state
       isBulkDeleting: false, // Track bulk delete state
+      refreshInterval: null, // Auto-refresh interval
     }
   },
   watch: {
@@ -244,7 +245,11 @@ export default {
     subscribeToRefreshMutation() {
       this.$store.subscribe((mutation, state) => {
         if (mutation.type === 'triggerImportQueueRefresh') {
-          this.refreshData();
+          // Only refresh if we're not in the middle of an auto-refresh cycle
+          // This prevents duplicate API calls when the parent component is already refreshing
+          if (!this.isRefreshing) {
+            this.refreshData();
+          }
         }
       });
     },
@@ -525,6 +530,21 @@ export default {
         this.isBulkDeleting = false;
       }
     },
+    startAutoRefresh() {
+      // Clear any existing interval
+      this.stopAutoRefresh()
+      
+      // Start auto-refresh every 5 seconds
+      this.refreshInterval = setInterval(() => {
+        this.refreshData()
+      }, 5000)
+    },
+    stopAutoRefresh() {
+      if (this.refreshInterval) {
+        clearInterval(this.refreshInterval)
+        this.refreshInterval = null
+      }
+    },
   },
   async created() {
     // If we already have data in the store, mark as initially loaded
@@ -534,10 +554,17 @@ export default {
       this.internalLoading = false;
     }
 
-    await this.fetchQueueList()
+    // Don't fetch data here - let the parent component handle initial data loading
+    // This prevents duplicate API calls during navigation
     this.subscribeToRefreshMutation()
   },
+  mounted() {
+    // Start auto-refresh when component is mounted
+    this.startAutoRefresh()
+  },
   beforeDestroy() {
+    // Stop auto-refresh when component is destroyed
+    this.stopAutoRefresh();
     // Clear deleted items when component is destroyed (user navigates away)
     this.clearDeletedItems();
     // Clear selected items when component is destroyed

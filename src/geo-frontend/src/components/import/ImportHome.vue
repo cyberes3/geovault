@@ -178,7 +178,8 @@ export default {
       this.refreshInterval = setInterval(() => {
         // Don't show loading indicators during auto-refresh
         this.fetchHistory(false)
-        this.fetchImportQueue(false)
+        // Don't call fetchImportQueue during auto-refresh to avoid duplicate API calls
+        // The ImportQueue component will handle its own auto-refresh
       }, 5000)
     },
     stopAutoRefresh() {
@@ -208,10 +209,8 @@ export default {
       this.historyIsLoading = false;
     }
 
-    await Promise.all([
-      this.fetchHistory(),
-      this.fetchImportQueue()
-    ])
+    // Don't fetch data here - let the route guards handle it
+    // This prevents duplicate API calls during navigation
   },
   mounted() {
     // Start auto-refresh for both tables
@@ -223,10 +222,9 @@ export default {
   },
   beforeRouteEnter(to, from, next) {
     next(async vm => {
-      // Refresh data immediately when entering from a different route
-      if (from.name && from.name !== 'Import') {
-        await vm.refreshTables()
-      }
+      // Always refresh data when entering the route
+      // This handles both navigation from other routes and direct access
+      await vm.refreshTables()
       // Start auto-refresh when entering the route
       vm.startAutoRefresh()
     })
