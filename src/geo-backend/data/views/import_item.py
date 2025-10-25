@@ -13,7 +13,7 @@ from django.views.decorators.http import require_http_methods
 
 from data.models import ImportQueue, FeatureStore, DatabaseLogging
 from geo_lib.feature_id import generate_feature_hash
-from geo_lib.processing.jobs import import_job, delete_job
+from geo_lib.processing.jobs import upload_job, delete_job
 from geo_lib.processing.status_tracker import status_tracker
 from geo_lib.processing.logging import ImportLog, DatabaseLogLevel
 from geo_lib.processing.tagging import generate_auto_tags
@@ -459,7 +459,7 @@ def upload_item(request):
             job_id = status_tracker.create_job(file_name, request.user.id)
 
             # Start background processing
-            if import_job.start_import_job(job_id, file_data, file_name, request.user.id):
+            if upload_job.start_upload_job(job_id, file_data, file_name, request.user.id):
                 return JsonResponse({
                     'success': True,
                     'msg': 'File uploaded successfully, processing started',

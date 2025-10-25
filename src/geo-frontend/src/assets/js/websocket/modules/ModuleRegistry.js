@@ -3,7 +3,8 @@
  * All modules should be registered here for automatic loading.
  */
 
-import { ImportJobModule } from './ImportJobModule.js';
+import { ImportQueueModule } from './ImportQueueModule.js';
+import { UploadJobModule } from './UploadJobModule.js';
 import { DeleteJobModule } from './DeleteJobModule.js';
 // Import other modules here as they are created
 // import { NotificationsModule } from './NotificationsModule.js';
@@ -14,7 +15,8 @@ import { DeleteJobModule } from './DeleteJobModule.js';
  * Add new modules to this array to have them automatically loaded
  */
 export const MODULE_REGISTRY = [
-    ImportJobModule,
+    ImportQueueModule,
+    UploadJobModule,
     DeleteJobModule,
     // Add other modules here:
     // NotificationsModule,

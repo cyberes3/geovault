@@ -4,9 +4,8 @@ Base job class for all asynchronous operations.
 
 import logging
 import threading
-import time
 from abc import ABC, abstractmethod
-from typing import Dict, Any, Optional
+from typing import Dict, Any
 
 from geo_lib.processing.status_tracker import ProcessingStatusTracker, ProcessingStatus
 
@@ -102,7 +101,7 @@ class BaseJob(ABC):
             f"Job failed: {error_message}",
             error_message=error_message
         )
-        
+
         # Broadcast WebSocket event for job failure
         self._broadcast_job_failed(job_id, error_message)
 
@@ -125,7 +124,7 @@ class BaseJob(ABC):
         """Unified WebSocket broadcast helper."""
         from channels.layers import get_channel_layer
         from asgiref.sync import async_to_sync
-        
+
         channel_layer = get_channel_layer()
         if channel_layer:
             async_to_sync(channel_layer.group_send)(
@@ -162,7 +161,7 @@ class BaseJob(ABC):
         job = self.status_tracker.get_job(job_id)
         if not job:
             return
-            
+
         self._broadcast_websocket_event(job.user_id, 'failed', {
             'job_id': job_id,
             'error_message': error_message,

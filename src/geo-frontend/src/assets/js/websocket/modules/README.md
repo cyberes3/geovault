@@ -61,7 +61,7 @@ Add your module to the registry in `ModuleRegistry.js`:
 import {NotificationsModule} from './NotificationsModule.js';
 
 export const MODULE_REGISTRY = [
-    ImportJobModule,
+    UploadJobModule,
     NotificationsModule, // Add your module here
     // Add more modules as needed
 ];
@@ -168,7 +168,7 @@ Then add it to the registry:
 import {ChatModule} from './ChatModule.js';
 
 export const MODULE_REGISTRY = [
-    ImportJobModule,
+    UploadJobModule,
     ChatModule, // Add your new module here
     // Add more modules as needed
 ];

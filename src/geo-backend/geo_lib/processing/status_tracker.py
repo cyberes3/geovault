@@ -25,7 +25,7 @@ class ProcessingStatus(Enum):
 
 class JobType(Enum):
     """Type of job being processed."""
-    IMPORT = "import"  # File import job
+    UPLOAD = "upload"  # File upload job
     DELETE = "delete"  # Item deletion job
 
 
@@ -60,7 +60,7 @@ class ProcessingStatusTracker:
         self._max_job_age = 7200  # 2 hours
         self._last_cleanup = time.time()
 
-    def create_job(self, filename: str, user_id: int, job_type: JobType = JobType.IMPORT) -> str:
+    def create_job(self, filename: str, user_id: int, job_type: JobType = JobType.UPLOAD) -> str:
         """Create a new processing job and return its ID."""
         job_id = str(uuid.uuid4())
         job = ProcessingJob(

@@ -291,7 +291,7 @@ export default {
 
       try {
         // Request refresh from WebSocket
-        realtimeSocket.requestRefresh('import_job')
+        realtimeSocket.requestRefresh('import_queue')
       } catch (error) {
         console.error('Error requesting queue refresh:', error)
       } finally {
