@@ -7,9 +7,9 @@ Main processing logic has been moved to the processors module.
 import logging
 import re
 import xml.etree.ElementTree as ET
-from typing import List
 
 import markdownify
+
 from geo_lib.processing.file_types import FileType
 
 logger = logging.getLogger(__name__)
@@ -32,11 +32,11 @@ def html_to_markdown(html_content) -> str:
         else:
             # If it's a dict but not the expected format, convert to string
             html_content = str(html_content)
-    
+
     # Ensure we have a string
     if not isinstance(html_content, str):
         html_content = str(html_content)
-    
+
     if not html_content or not html_content.strip():
         return ""
 
@@ -91,7 +91,7 @@ def _normalize_kml_for_comparison(kml_content: str) -> str:
     try:
         # Use secure parser to prevent XXE attacks
         parser = ET.XMLParser()
-        
+
         # Disable entity processing to prevent XXE attacks
         # Note: In newer Python versions, parser.entity is readonly, so we use a different approach
         try:
@@ -100,7 +100,7 @@ def _normalize_kml_for_comparison(kml_content: str) -> str:
         except (AttributeError, TypeError):
             # In newer versions, we rely on the default secure behavior
             pass
-            
+
         root = ET.fromstring(kml_content, parser=parser)
     except ET.ParseError:
         # If XML parsing fails, return the original content
@@ -149,13 +149,13 @@ def _normalize_gpx_for_comparison(gpx_content: str) -> str:
     try:
         # Use secure parser to prevent XXE attacks
         parser = ET.XMLParser()
-        
+
         # Disable entity processing to prevent XXE attacks
         try:
             parser.entity = {}
         except (AttributeError, TypeError):
             pass
-            
+
         root = ET.fromstring(gpx_content, parser=parser)
     except ET.ParseError:
         # If XML parsing fails, return the original content
@@ -174,59 +174,23 @@ def _normalize_gpx_for_comparison(gpx_content: str) -> str:
         return gpx_content
 
 
-def hex_to_rgba(hex_color: str, opacity: float = 1.0) -> list:
-    """Convert hex color string to RGBA array."""
-    if not hex_color or not hex_color.startswith('#'):
-        return [255, 0, 0, 1.0]  # Default red
-
-    try:
-        hex_color = hex_color.lstrip('#')
-        if len(hex_color) == 6:
-            red = int(hex_color[0:2], 16)
-            green = int(hex_color[2:4], 16)
-            blue = int(hex_color[4:6], 16)
-            return [red, green, blue, opacity]
-    except ValueError:
-        pass
-
-    return [255, 0, 0, 1.0]  # Default red
-
-
-def preserve_togeojson_styling(properties: dict, file_type: FileType) -> dict:
+def geojson_property_generation(feature: dict) -> dict:
     """
-    Preserve togeojson styling and apply appropriate styling based on file type.
+    Generate GeoJSON properties.
     
     Args:
-        properties: Feature properties dictionary
-        file_type: Type of file being processed
-        
+        feature: Full GeoJSON
+
     Returns:
-        Styled properties dictionary
+        Properties dictionary with optional styling changes
     """
-    properties = properties.copy()
-
-    if file_type in [FileType.KML, FileType.KMZ]:
-        # If this is a point feature with an icon, replace it with red circle styling
-        if 'icon' in properties:
-            # Remove the icon URL and add red circle styling
-            del properties['icon']
-
-            # Add red circle styling
-            properties['marker-color'] = '#FF0000'
-            properties['marker-size'] = 'medium'
-            properties['marker-symbol'] = 'circle'
-    elif file_type == FileType.GPX:
-        # GPX files typically don't have icons, but we can add default styling
-        if 'marker-color' not in properties:
-            properties['marker-color'] = '#FF0000'
-            properties['marker-size'] = 'medium'
-            properties['marker-symbol'] = 'circle'
+    # Extract properties from feature
+    properties = feature.get('properties', {}).copy()
 
     # Convert HTML descriptions to markdown
     if 'description' in properties and properties['description']:
         properties['description'] = html_to_markdown(properties['description'])
 
-    # Keep all other togeojson properties (stroke, fill, stroke-width, etc.)
     return properties
 
 
@@ -235,7 +199,7 @@ def split_geometry_collection(feature: dict) -> list:
     # Handle features with None geometry - skip these as they have no spatial data
     if not feature.get('geometry') or feature['geometry'] is None:
         return []
-    
+
     if feature['geometry']['type'] != 'GeometryCollection':
         return [feature]
 
@@ -258,18 +222,3 @@ def split_geometry_collection(feature: dict) -> list:
         features.append(new_feature)
 
     return features
-
-
-# process_togeojson_features function moved to processors/base_processor.py
-
-
-# detect_file_type function moved to processors/base_processor.py
-
-
-# geo_to_geojson function replaced by processor classes
-
-
-def load_geojson_type(data: dict) -> dict:
-    """Convert the processed data to the expected format."""
-    # The data is already in the correct format from our processing
-    return data

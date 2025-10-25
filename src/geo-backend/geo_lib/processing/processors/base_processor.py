@@ -10,7 +10,7 @@ from typing import Dict, Any, Tuple, Union
 
 from geo_lib.processing.file_types import FileType, detect_file_type
 from geo_lib.processing.geo_processor import (
-    preserve_togeojson_styling,
+    geojson_property_generation,
     split_geometry_collection
 )
 from geo_lib.processing.logging import ImportLog, DatabaseLogLevel
@@ -146,8 +146,8 @@ class BaseProcessor(ABC):
             for split_feature in split_features:
                 if split_feature['geometry']['type'] in ['Point', 'MultiPoint', 'LineString', 'MultiLineString', 'Polygon', 'MultiPolygon']:
                     try:
-                        # Apply appropriate styling based on file type
-                        split_feature['properties'] = preserve_togeojson_styling(split_feature['properties'], file_type)
+                        # Generate properties with appropriate styling based on file type and feature geometry
+                        split_feature['properties'] = geojson_property_generation(split_feature)
 
                         # Convert to our property format
                         from geo_lib.types.geojson import GeojsonRawProperty
