@@ -31,6 +31,10 @@ share/python-wheels/
 *.egg
 MANIFEST
 
+# Frontend dist folder - exclude everything except standalone_map.html
+src/geo-frontend/dist/*
+!src/geo-frontend/dist/standalone_map.html
+
 # PyInstaller
 #  Usually these files are written by a python script from a template
 #  before PyInstaller builds the exe, so as to inject date/other infos into it.
