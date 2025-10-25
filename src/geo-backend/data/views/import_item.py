@@ -486,53 +486,6 @@ def upload_item(request):
 
 
 @login_required_401
-def get_import_item_logs(request, item_id):
-    """
-    Get the logs for a specific import queue item.
-    Supports incremental fetching with 'after_id' query parameter.
-    """
-    try:
-        item = ImportQueue.objects.get(id=item_id, user=request.user)
-
-        # Get logs for this import queue item
-        logs = []
-        if item.log_id:
-            try:
-                from data.models import DatabaseLogging
-                
-                # Support incremental fetching with after_id parameter
-                after_id = request.GET.get('after_id')
-                query = DatabaseLogging.objects.filter(log_id=item.log_id)
-                
-                if after_id:
-                    try:
-                        after_id_int = int(after_id)
-                        query = query.filter(id__gt=after_id_int)
-                    except ValueError:
-                        # Invalid after_id, ignore it
-                        pass
-                
-                db_logs = query.order_by('id')
-
-                logs = [{
-                    'id': log.id,
-                    'timestamp': log.timestamp.isoformat(),
-                    'msg': log.text,
-                    'source': log.source,
-                    'level': log.level
-                } for log in db_logs]
-            except Exception as e:
-                logger.error(f"Failed to fetch logs for item {item_id}: {str(e)}")
-                logger.error(f"Log fetching error traceback: {traceback.format_exc()}")
-                logs = []
-
-        return JsonResponse({'logs': logs}, status=200)
-
-    except ImportQueue.DoesNotExist:
-        return JsonResponse({'error': 'Item not found'}, status=404)
-
-
-@login_required_401
 def get_processing_status(request, job_id):
     """
     Get the processing status of a file upload job.
@@ -574,173 +527,6 @@ def get_user_processing_jobs(request):
         'success': True,
         'jobs': job_statuses
     }, status=200)
-
-
-@login_required_401
-def fetch_import_queue(request, item_id):
-    if item_id is None:
-        return JsonResponse({'success': False, 'msg': 'ID not provided', 'code': 400}, status=400)
-    try:
-        item = ImportQueue.objects.get(id=item_id)
-
-        # Check if this item is currently being processed
-        user_jobs = status_tracker.get_user_jobs(request.user.id)
-        active_job_ids = {job.import_queue_id for job in user_jobs if job.status.value == 'processing' and job.import_queue_id}
-
-        is_processing = item.id in active_job_ids
-
-        # Get job details if processing
-        job_details = None
-        if is_processing:
-            for job in user_jobs:
-                if job.import_queue_id == item.id and job.status.value == 'processing':
-                    job_details = status_tracker.get_job_status(job.job_id)
-                    break
-
-        if item.user_id != request.user.id:
-            return JsonResponse({'success': False, 'processing': False, 'msg': 'not authorized to view this item', 'code': 403}, status=400)
-
-        if item.imported:
-            return JsonResponse({
-                'success': True,
-                'processing': is_processing,
-                'job_details': job_details,
-                'geofeatures': None,
-                'msg': None,
-                'original_filename': None,
-                'imported': item.imported
-            }, status=200)
-
-        # Check if this is an unparsable file (processing failed)
-        if item.unparsable:
-            return JsonResponse({
-                'success': True,
-                'processing': is_processing,
-                'job_details': job_details,
-                'geofeatures': [{'error': 'file_unparsable', 'message': 'File processing failed. Please check the processing logs below for details.'}],
-                'msg': 'File processing failed. Please check the processing logs below for details.',
-                'original_filename': item.original_filename,
-                'imported': item.imported,
-                'log_id': str(item.log_id) if item.log_id else None,
-                'duplicates': [],
-                'duplicate_status': None,
-                'duplicate_original_filename': None,
-                'pagination': {
-                    'page': 1,
-                    'page_size': 50,
-                    'total_features': 0,
-                    'total_pages': 0,
-                    'has_next': False,
-                    'has_previous': False,
-                    'duplicate_indices': []
-                }
-            }, status=200)
-
-        # Check for duplicate files based on geojson_hash
-        duplicate_status = None
-        duplicate_original_filename = None
-
-        if item.geojson_hash:
-            # Check if there's an EARLIER file in the import queue (not imported) with the same hash
-            # Only mark as duplicate if this file was uploaded AFTER another one with same hash
-            duplicate_in_queue = ImportQueue.objects.filter(
-                user_id=request.user.id,
-                geojson_hash=item.geojson_hash,
-                imported=False,
-                timestamp__lt=item.timestamp  # Only files uploaded BEFORE this one
-            ).order_by('timestamp').first()
-
-            if duplicate_in_queue:
-                # This is a duplicate of a file in the queue (uploaded earlier)
-                duplicate_status = 'duplicate_in_queue'
-                duplicate_original_filename = duplicate_in_queue.original_filename
-            else:
-                # Check if a file with this hash has been imported
-                duplicate_imported = ImportQueue.objects.filter(
-                    user_id=request.user.id,
-                    geojson_hash=item.geojson_hash,
-                    imported=True
-                ).order_by('timestamp').first()
-
-                if duplicate_imported:
-                    # This is a duplicate of an imported file
-                    duplicate_status = 'duplicate_imported'
-                    duplicate_original_filename = duplicate_imported.original_filename
-
-        # Get pagination parameters
-        page = int(request.GET.get('page', 1))
-        page_size = int(request.GET.get('page_size', 50))
-
-        # Validate pagination parameters
-        if page < 1:
-            page = 1
-        if page_size < 1 or page_size > 500:
-            page_size = 50
-
-        # Calculate pagination
-        total_features = len(item.geofeatures)
-        start_idx = (page - 1) * page_size
-        end_idx = start_idx + page_size
-
-        # Get paginated features
-        paginated_features = item.geofeatures[start_idx:end_idx]
-
-        # Optimize duplicate information - only include IDs and essential data
-        # Create a mapping of feature indices to duplicate info for current page
-        duplicates_optimized = []
-        duplicate_indices = []  # Track which indices are duplicates
-
-        for dup_info in (item.duplicate_features if item.duplicate_features else []):
-            # Find the index of this duplicate feature in the full list
-            dup_feature = dup_info.get('feature')
-            if dup_feature:
-                # Try to find matching feature by coordinates
-                for idx, feature in enumerate(item.geofeatures):
-                    if (feature.get('geometry', {}).get('coordinates') == dup_feature.get('geometry', {}).get('coordinates') and
-                            feature.get('geometry', {}).get('type') == dup_feature.get('geometry', {}).get('type')):
-                        duplicate_indices.append(idx)
-                        # Only include duplicate info if it's in the current page
-                        if start_idx <= idx < end_idx:
-                            # Optimize existing_features to only include essential fields
-                            existing_features_optimized = []
-                            for existing in dup_info.get('existing_features', []):
-                                existing_features_optimized.append({
-                                    'id': existing.get('id'),
-                                    'name': existing.get('name'),
-                                    'type': existing.get('type'),
-                                    'timestamp': existing.get('timestamp')
-                                    # Removed full geojson to save bandwidth
-                                })
-                            duplicates_optimized.append({
-                                'existing_features': existing_features_optimized,
-                                'page_index': idx - start_idx,  # Index within the current page
-                            })
-                        break
-
-        return JsonResponse({
-            'success': True,
-            'processing': is_processing,
-            'job_details': job_details,
-            'geofeatures': paginated_features,
-            'msg': None,
-            'original_filename': item.original_filename,
-            'imported': item.imported,
-            'log_id': str(item.log_id) if item.log_id else None,
-            'duplicates': duplicates_optimized,
-            'duplicate_status': duplicate_status,
-            'duplicate_original_filename': duplicate_original_filename,
-            'pagination': {
-                'page': page,
-                'page_size': page_size,
-                'total_features': total_features,
-                'total_pages': (total_features + page_size - 1) // page_size,
-                'has_next': end_idx < total_features,
-                'has_previous': page > 1,
-                'duplicate_indices': duplicate_indices  # All duplicate indices in the full list
-            }
-        }, status=200)
-    except ImportQueue.DoesNotExist:
-        return JsonResponse({'success': False, 'msg': 'ID does not exist', 'code': 404}, status=400)
 
 
 @login_required_401
@@ -1140,10 +926,20 @@ def _broadcast_item_deleted(user_id: int, item_id: int):
     
     channel_layer = get_channel_layer()
     if channel_layer:
+        # Broadcast to general realtime channel
         async_to_sync(channel_layer.group_send)(
             f"realtime_{user_id}",
             {
                 'type': 'import_queue_item_deleted',
+                'data': {'id': item_id}
+            }
+        )
+        
+        # Also broadcast to upload status channel for this specific item
+        async_to_sync(channel_layer.group_send)(
+            f"upload_status_{user_id}_{item_id}",
+            {
+                'type': 'item_deleted',
                 'data': {'id': item_id}
             }
         )

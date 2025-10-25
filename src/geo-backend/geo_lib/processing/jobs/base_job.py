@@ -4,6 +4,7 @@ Base job class for all asynchronous operations.
 
 import logging
 import threading
+import traceback
 from abc import ABC, abstractmethod
 from typing import Dict, Any
 
@@ -76,7 +77,7 @@ class BaseJob(ABC):
             self._execute_job(job_id, kwargs)
 
         except Exception as e:
-            logger.error(f"Error in {self.get_job_type()} job {job_id}: {str(e)}")
+            logger.error(f"Error in {self.get_job_type()} job {job_id}: {traceback.format_exc()}")
             self._handle_job_error(job_id, str(e))
 
         finally:

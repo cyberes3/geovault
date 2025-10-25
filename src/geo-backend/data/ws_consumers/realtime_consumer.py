@@ -1,5 +1,5 @@
 """
-WebSocket consumers for real-time updates.
+Realtime WebSocket consumer for global real-time updates.
 """
 
 import json

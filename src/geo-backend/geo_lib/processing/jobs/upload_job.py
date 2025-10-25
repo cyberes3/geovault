@@ -254,6 +254,12 @@ class UploadJob(BaseJob):
                 'job_id': job_id,
                 'import_queue_id': import_queue_id
             })
+            
+            # Also broadcast to upload status channel for specific item
+            self._broadcast_to_upload_status_module(user_id, import_queue_id, 'item_completed', {
+                'job_id': job_id,
+                'message': completion_msg
+            })
             realtime_log.add(completion_msg, "UploadJob", DatabaseLogLevel.INFO)
 
             # Set result data
@@ -281,6 +287,14 @@ class UploadJob(BaseJob):
                 'job_id': job_id,
                 'error_message': error_msg
             })
+            
+            # Also broadcast to upload status channel for specific item (if we have import_queue_id)
+            job = self.status_tracker.get_job(job_id)
+            if job and job.import_queue_id:
+                self._broadcast_to_upload_status_module(user_id, job.import_queue_id, 'item_failed', {
+                    'job_id': job_id,
+                    'error_message': error_msg
+                })
 
         except subprocess.TimeoutExpired:
             error_msg = "File processing timed out: file may be too large or complex"
@@ -296,6 +310,14 @@ class UploadJob(BaseJob):
                 'job_id': job_id,
                 'error_message': error_msg
             })
+            
+            # Also broadcast to upload status channel for specific item (if we have import_queue_id)
+            job = self.status_tracker.get_job(job_id)
+            if job and job.import_queue_id:
+                self._broadcast_to_upload_status_module(user_id, job.import_queue_id, 'item_failed', {
+                    'job_id': job_id,
+                    'error_message': error_msg
+                })
 
         except Exception as e:
             # Generic error message for users, detailed logging internally
@@ -314,6 +336,14 @@ class UploadJob(BaseJob):
                 'job_id': job_id,
                 'error_message': error_msg
             })
+            
+            # Also broadcast to upload status channel for specific item (if we have import_queue_id)
+            job = self.status_tracker.get_job(job_id)
+            if job and job.import_queue_id:
+                self._broadcast_to_upload_status_module(user_id, job.import_queue_id, 'item_failed', {
+                    'job_id': job_id,
+                    'error_message': error_msg
+                })
 
     def _create_initial_import_queue_entry(self, filename: str, user_id: int, job_id: str) -> int:
         """Create an initial ImportQueue entry for async processing."""
@@ -474,3 +504,25 @@ class UploadJob(BaseJob):
             'progress': progress,
             'message': message
         })
+        
+        # Also broadcast to upload status channel for specific item
+        self._broadcast_to_upload_status_module(user_id, import_queue_id, 'status_updated', {
+            'status': status,
+            'progress': progress,
+            'message': message
+        })
+
+    def _broadcast_to_upload_status_module(self, user_id: int, import_queue_id: int, event_type: str, data: dict):
+        """Broadcast WebSocket event to upload_status module for specific item."""
+        from channels.layers import get_channel_layer
+        from asgiref.sync import async_to_sync
+
+        channel_layer = get_channel_layer()
+        if channel_layer:
+            async_to_sync(channel_layer.group_send)(
+                f"upload_status_{user_id}_{import_queue_id}",
+                {
+                    'type': event_type,
+                    'data': data
+                }
+            )

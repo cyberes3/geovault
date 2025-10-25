@@ -116,6 +116,11 @@ class RealTimeImportLog:
                 timestamp=timestamp,
             )
             self._db_logger.debug(f"Real-time log written: {source} - {msg}")
+            
+            # Broadcast to WebSocket if we have a log_id (indicating this is for an import item)
+            if self.log_id:
+                self._broadcast_log_to_websocket(log_msg)
+                
         except Exception as e:
             self._db_logger.error(f"Failed to write real-time log to database: {str(e)}")
             self._db_logger.error(f"Real-time log database write error traceback: {traceback.format_exc()}")
@@ -137,3 +142,39 @@ class RealTimeImportLog:
     def add_timing(self, step_name: str, duration: float, source: str = "Processing", level=DatabaseLogLevel.INFO):
         """Add a timing log message for a completed step."""
         self.add(f"{step_name} completed", source, level, duration)
+    
+    def _broadcast_log_to_websocket(self, log_msg: DatabaseLogMsg):
+        """Broadcast log message to WebSocket channels."""
+        try:
+            from channels.layers import get_channel_layer
+            from asgiref.sync import async_to_sync
+            
+            # Find the import item associated with this log_id
+            from data.models import ImportQueue
+            try:
+                import_item = ImportQueue.objects.get(log_id=self.log_id)
+                user_id = import_item.user_id
+                item_id = import_item.id
+                
+                # Broadcast to the upload status channel for this specific item
+                channel_layer = get_channel_layer()
+                if channel_layer:
+                    async_to_sync(channel_layer.group_send)(
+                        f"upload_status_{user_id}_{item_id}",
+                        {
+                            'type': 'logs_added',
+                            'data': {
+                                'id': log_msg.id if hasattr(log_msg, 'id') else None,
+                                'timestamp': log_msg.timestamp.isoformat(),
+                                'msg': log_msg.msg,
+                                'source': log_msg.source,
+                                'level': log_msg.level.value
+                            }
+                        }
+                    )
+            except ImportQueue.DoesNotExist:
+                # Import item not found, skip broadcasting
+                pass
+        except Exception as e:
+            self._db_logger.error(f"Failed to broadcast log to WebSocket: {str(e)}")
+            # Don't raise the exception - we still want processing to continue

@@ -144,7 +144,7 @@
         :is-saving="loading.saving"
         :lock-buttons="lockButtons"
         :page-size="pagination.pageSize"
-        :show-no-features-message="originalFilename != null && !processing.active && !loading.page && itemsForUser.length === 0"
+        :show-no-features-message="showNoFeaturesMessage"
         :total-features="pagination.totalFeatures"
         :total-pages="pagination.totalPages"
         @previous-page="previousPage"
@@ -512,6 +512,10 @@ export default {
           this.pagination.gotoInput >= 1 &&
           this.pagination.gotoInput <= this.pagination.totalPages &&
           this.pagination.gotoInput !== this.pagination.currentPage;
+    },
+    
+    showNoFeaturesMessage() {
+      return this.originalFilename != null && !this.processing.active && !this.loading.page && this.itemsForUser.length === 0;
     }
   },
   components: {Loader, Importqueue: ImportQueue, MapPreviewDialog, FeatureMapDialog, EditOriginalFeatureDialog, LogViewModal, ImportControls},
@@ -578,7 +582,13 @@ export default {
 
       // Misc state
       lockButtons: false,
-      isImported: false
+      isImported: false,
+      
+      // WebSocket connection
+      ws: null,
+      wsConnected: false,
+      wsReconnectAttempts: 0,
+      maxReconnectAttempts: 5
     }
   },
   beforeDestroy() {
@@ -588,6 +598,203 @@ export default {
   mixins: [authMixin],
   props: ['id'],
   methods: {
+    // WebSocket methods
+    connectWebSocket() {
+      const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+      const wsUrl = `${protocol}//${window.location.host}/ws/upload/status/${this.currentId}/`;
+      
+      this.ws = new WebSocket(wsUrl);
+      this.ws.onopen = this.onWebSocketOpen;
+      this.ws.onmessage = this.onWebSocketMessage;
+      this.ws.onclose = this.onWebSocketClose;
+      this.ws.onerror = this.onWebSocketError;
+    },
+    
+    onWebSocketOpen() {
+      console.log('WebSocket connected');
+      this.wsConnected = true;
+      this.wsReconnectAttempts = 0;
+    },
+    
+    onWebSocketMessage(event) {
+      const message = JSON.parse(event.data);
+      
+      switch(message.type) {
+        case 'initial_state':
+          this.handleInitialState(message.data);
+          break;
+        case 'status_updated':
+          this.handleStatusUpdate(message.data);
+          break;
+        case 'log_added':
+          this.handleLogAdded(message.data);
+          break;
+        case 'item_completed':
+          this.handleItemCompleted(message.data);
+          break;
+        case 'item_failed':
+          this.handleItemFailed(message.data);
+          break;
+        case 'page':
+          this.handlePageData(message.data);
+          break;
+        case 'logs':
+          this.handleLogsData(message.data);
+          break;
+        case 'item_deleted':
+          this.handleItemDeleted(message.data);
+          break;
+        case 'error':
+          this.handleError(message.data);
+          break;
+      }
+    },
+    
+    onWebSocketClose(event) {
+      console.log('WebSocket closed:', event.code, event.reason);
+      this.wsConnected = false;
+      
+      // Handle 404 - item not found
+      if (event.code === 4004) {
+        console.log('Item not found (404) - redirecting to import queue');
+        this.loading.redirecting = true;
+        this.$router.replace('/import');
+        return;
+      }
+      
+      // Attempt to reconnect if not a normal closure and we haven't exceeded max attempts
+      if (event.code !== 1000 && this.wsReconnectAttempts < this.maxReconnectAttempts) {
+        this.wsReconnectAttempts++;
+        console.log(`Attempting to reconnect (${this.wsReconnectAttempts}/${this.maxReconnectAttempts})...`);
+        setTimeout(() => this.connectWebSocket(), 2000);
+      }
+    },
+    
+    onWebSocketError(error) {
+      console.error('WebSocket error:', error);
+    },
+    
+    handleInitialState(data) {
+      // Set all component data from initial state
+      this.originalFilename = data.original_filename;
+      this.isImported = data.imported;
+      this.processing.active = data.processing;
+      
+      if (data.job_details) {
+        this.processing.message = data.job_details.message || 'Processing file...';
+        this.processing.progress = data.job_details.progress || 0;
+      }
+      
+      if (data.features) {
+        this.handlePageData(data.features);
+      }
+      
+      if (data.logs) {
+        this.workerLog = data.logs;
+        this.lastLogId = data.logs.length > 0 ? data.logs[data.logs.length - 1].id : null;
+      }
+      
+      if (data.duplicates) {
+        this.duplicates.features = data.duplicates;
+      }
+      
+      this.loading.logs = false;
+      this.loading.page = false;
+    },
+    
+    handleStatusUpdate(data) {
+      this.processing.message = data.message || 'Processing file...';
+      this.processing.progress = data.progress || 0;
+    },
+    
+    handleLogAdded(data) {
+      this.workerLog.push(data);
+      this.lastLogId = data.id;
+    },
+    
+    handleItemCompleted(data) {
+      this.processing.active = false;
+      this.processing.message = 'Processing completed!';
+      this.processing.progress = 100;
+      this.stopProcessingPolling();
+      
+      // Set loading state during refresh to prevent "zero features" screen
+      this.loading.page = true;
+      
+      // Refresh the page data
+      this.sendWebSocketMessage('refresh', {});
+    },
+    
+    handleItemFailed(data) {
+      this.processing.active = false;
+      this.processing.message = 'Processing failed';
+      this.processing.progress = null;
+      this.msg = data.error_message || 'Processing failed';
+      this.stopProcessingPolling();
+    },
+    
+    handlePageData(data) {
+      this.itemsForUser = [];
+      if (data.data && data.data.length > 0) {
+        data.data.forEach((item) => {
+          this.itemsForUser.push(this.parseGeoJson(item));
+        });
+        this.originalItems = JSON.parse(JSON.stringify(this.itemsForUser));
+        
+        // Restore cached changes if they exist for this page
+        this.restoreCachedPageChanges(data.pagination.page);
+      }
+      
+      if (data.pagination) {
+        this.pagination.currentPage = data.pagination.page;
+        this.pagination.totalFeatures = data.pagination.total_features;
+        this.pagination.totalPages = data.pagination.total_pages;
+        this.pagination.hasNext = data.pagination.has_next;
+        this.pagination.hasPrevious = data.pagination.has_previous;
+        this.duplicates.indices = data.pagination.duplicate_indices || [];
+      }
+      
+      if (data.duplicates) {
+        this.duplicates.features = data.duplicates;
+        this.markDuplicateFeatures();
+      }
+      
+      this.loading.page = false;
+    },
+    
+    handleLogsData(data) {
+      if (data.logs) {
+        this.workerLog = data.logs;
+        this.lastLogId = data.logs.length > 0 ? data.logs[data.logs.length - 1].id : null;
+      }
+      this.loading.logs = false;
+    },
+    
+    handleItemDeleted(data) {
+      // Show notification and redirect
+      this.$toast.error('This import item has been deleted');
+      this.loading.redirecting = true;
+      this.$router.push('/import');
+    },
+    
+    handleError(data) {
+      // Handle error messages from WebSocket
+      if (data.code === 404) {
+        console.log('Item not found (404) - redirecting to import queue');
+        this.loading.redirecting = true;
+        this.$router.replace('/import');
+      } else {
+        console.error('WebSocket error:', data.message);
+        this.msg = data.message || 'An error occurred';
+      }
+    },
+    
+    sendWebSocketMessage(type, data) {
+      if (this.ws && this.wsConnected) {
+        this.ws.send(JSON.stringify({ type, data }));
+      }
+    },
+    
     async checkProcessingStatus() {
       // Safety check: don't make API calls if currentId is null (component is being destroyed)
       if (!this.currentId) {
@@ -1088,57 +1295,13 @@ export default {
       this.cacheCurrentPageChanges();
 
       this.loading.page = true;
-      try {
-        const response = await axios.get(`/api/data/item/import/get/${this.currentId}?page=${page}&page_size=${this.pagination.pageSize}`);
-        if (response.data.success) {
-          // Update pagination info
-          const pagination = response.data.pagination;
-          this.pagination.currentPage = pagination.page;
-          this.pagination.totalFeatures = pagination.total_features;
-          this.pagination.totalPages = pagination.total_pages;
-          this.pagination.hasNext = pagination.has_next;
-          this.pagination.hasPrevious = pagination.has_previous;
-          this.duplicates.indices = pagination.duplicate_indices || [];
-
-          // Parse features for this page
-          this.itemsForUser = [];
-          response.data.geofeatures.forEach((item) => {
-            this.itemsForUser.push(this.parseGeoJson(item));
-          });
-          this.originalItems = JSON.parse(JSON.stringify(this.itemsForUser));
-
-          // Restore cached changes if they exist for this page
-          this.restoreCachedPageChanges(page);
-
-          // Process duplicates from the API response
-          this.duplicates.features = response.data.duplicates || [];
-          this.markDuplicateFeatures();
-        }
-      } catch (error) {
-        this.msg = 'Error loading page: ' + error.message;
-        console.error(error);
-      } finally {
-        this.loading.page = false;
-      }
+      // Request page data via WebSocket
+      this.sendWebSocketMessage('request_page', { page, page_size: this.pagination.pageSize });
     },
     async loadLogs() {
-      // Load logs from the status endpoint
+      // Load logs via WebSocket
       this.loading.logs = true;
-      try {
-        const response = await axios.get(`/api/data/item/import/logs/${this.currentId}`);
-        if (response.data.success) {
-          this.workerLog = response.data.logs || [];
-          // Track the last log ID for incremental updates
-          if (this.workerLog.length > 0) {
-            this.lastLogId = this.workerLog[this.workerLog.length - 1].id;
-          }
-        }
-      } catch (error) {
-        console.error('Error loading logs:', error);
-        // Don't set error message as logs are not critical
-      } finally {
-        this.loading.logs = false;
-      }
+      this.sendWebSocketMessage('request_logs', {});
     },
     async loadLogsIncremental() {
       // Safety check: don't make API calls if currentId is null (component is being destroyed)
@@ -1146,25 +1309,8 @@ export default {
         return;
       }
 
-      // Load only new logs since the last fetch
-      try {
-        const url = this.lastLogId
-            ? `/api/data/item/import/logs/${this.currentId}?after_id=${this.lastLogId}`
-            : `/api/data/item/import/logs/${this.currentId}`;
-
-        const response = await axios.get(url);
-        if (response.data.success && response.data.logs) {
-          // Append new logs to existing ones
-          this.workerLog = [...this.workerLog, ...response.data.logs];
-          // Update the last log ID
-          if (response.data.logs.length > 0) {
-            this.lastLogId = response.data.logs[response.data.logs.length - 1].id;
-          }
-        }
-      } catch (error) {
-        console.error('Error loading incremental logs:', error);
-        // Don't set error message as logs are not critical
-      }
+      // Request incremental logs via WebSocket
+      this.sendWebSocketMessage('request_logs', { after_id: this.lastLogId });
     },
     cacheCurrentPageChanges() {
       // Store the current page's items in cache
@@ -1225,6 +1371,11 @@ export default {
     if (this.beforeUnloadHandler) {
       window.removeEventListener('beforeunload', this.beforeUnloadHandler);
     }
+    // Close WebSocket connection
+    if (this.ws) {
+      this.ws.close();
+      this.ws = null;
+    }
     // Clear component state when component is destroyed
     this.clearComponentState();
   },
@@ -1279,94 +1430,9 @@ export default {
         vm.pagination.hasNext = false
         vm.pagination.hasPrevious = false
 
-        try {
-          // Fetch items and logs in parallel for better performance
-          const [itemsResponse, logsResponse] = await Promise.all([
-            axios.get(`/api/data/item/import/get/${vm.id}?page=1&page_size=${vm.pagination.pageSize}`),
-            axios.get(`/api/data/item/import/logs/${vm.id}`)
-          ])
-
-          if (!itemsResponse.data.success) {
-            vm.msg = capitalizeFirstLetter(itemsResponse.data.msg).trim(".") + "."
-          } else {
-            vm.currentId = vm.id
-
-            // Load logs first (they're already fetched)
-            if (logsResponse.data && logsResponse.data.logs) {
-              vm.workerLog = logsResponse.data.logs || []
-            }
-            vm.processing.active = itemsResponse.data.processing || false
-
-            if (Object.keys(itemsResponse.data).length > 0) {
-              vm.originalFilename = itemsResponse.data.original_filename
-              vm.isImported = itemsResponse.data.imported || false
-
-              // If the item is already imported, redirect to import page
-              if (vm.isImported) {
-                // Remove the beforeunload handler before redirecting
-                if (vm.beforeUnloadHandler) {
-                  window.removeEventListener('beforeunload', vm.beforeUnloadHandler);
-                }
-                vm.loading.redirecting = true;
-                vm.$router.replace('/import');
-                return;
-              }
-
-              // Update pagination info
-              if (itemsResponse.data.pagination) {
-                vm.pagination.currentPage = itemsResponse.data.pagination.page;
-                vm.pagination.totalFeatures = itemsResponse.data.pagination.total_features;
-                vm.pagination.totalPages = itemsResponse.data.pagination.total_pages;
-                vm.pagination.hasNext = itemsResponse.data.pagination.has_next;
-                vm.pagination.hasPrevious = itemsResponse.data.pagination.has_previous;
-                vm.duplicates.indices = itemsResponse.data.pagination.duplicate_indices || [];
-              }
-
-              if (itemsResponse.data.geofeatures.length > 0 && itemsResponse.data.geofeatures[0].error) {
-                // Check if this is an error response (unprocessable file)
-                // This is an unprocessable file, show a simple error message
-                const errorItem = itemsResponse.data.geofeatures[0];
-                vm.msg = "File processing failed. Please check the processing logs below for details.";
-                // Keep the logs we already fetched, but add the error message if not already present
-                if (vm.workerLog.length === 0) {
-                  vm.workerLog = [{timestamp: now, msg: errorItem.message}];
-                }
-              } else if (itemsResponse.data.geofeatures.length === 0) {
-                // Empty geofeatures - check if still processing
-                if (vm.processing.active) {
-                  vm.startProcessingPolling()
-                }
-              } else {
-                // Normal processing - parse the geofeatures
-                itemsResponse.data.geofeatures.forEach((item) => {
-                  vm.itemsForUser.push(vm.parseGeoJson(item))
-                })
-                vm.originalItems = JSON.parse(JSON.stringify(vm.itemsForUser))
-
-                // Process duplicates from the API response
-                vm.duplicates.features = itemsResponse.data.duplicates || []
-                vm.markDuplicateFeatures()
-              }
-            }
-          }
-        } catch (error) {
-          // Check for 404 response from backend (both custom format and HTTP status)
-          if ((error.response && error.response.data &&
-                  error.response.data.success === false &&
-                  error.response.data.code === 404) ||
-              (error.response && error.response.status === 404)) {
-            // Import ID does not exist - redirect to import page and remove from history
-            // Remove the beforeunload handler before redirecting
-            if (vm.beforeUnloadHandler) {
-              window.removeEventListener('beforeunload', vm.beforeUnloadHandler);
-            }
-            vm.loading.redirecting = true;
-            // Use replace to remove the current entry from browser history
-            vm.$router.replace('/import');
-            return;
-          }
-          vm.msg = capitalizeFirstLetter(error.message).trim(".") + "."
-        }
+        // Set currentId and connect WebSocket
+        vm.currentId = vm.id
+        vm.connectWebSocket()
       }
     })
   }
