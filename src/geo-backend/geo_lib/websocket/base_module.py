@@ -42,12 +42,3 @@ class BaseWebSocketModule(ABC):
             'data': data
         }))
     
-    async def broadcast_to_group(self, message_type: str, data: Dict[str, Any]) -> None:
-        """Broadcast a message to the user's group."""
-        await self.consumer.channel_layer.group_send(
-            self.room_group_name,
-            {
-                'type': f'{self.module_name}_{message_type}',
-                'data': data
-            }
-        )

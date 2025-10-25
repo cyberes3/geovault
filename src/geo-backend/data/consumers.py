@@ -84,23 +84,25 @@ class RealtimeConsumer(AsyncWebsocketConsumer):
         """Encode data as JSON."""
         return json.dumps(data)
 
-    # Channel layer event handlers - route to appropriate modules
-    async def import_queue_item_added(self, event):
-        """Route import queue item_added event to module."""
-        await self.modules['import_queue'].item_added(event)
-
-    async def import_queue_item_deleted(self, event):
-        """Route import queue item_deleted event to module."""
-        await self.modules['import_queue'].item_deleted(event)
-
-    async def import_queue_items_deleted(self, event):
-        """Route import queue items_deleted event to module."""
-        await self.modules['import_queue'].items_deleted(event)
-
-    async def import_queue_status_updated(self, event):
-        """Route import queue status_updated event to module."""
-        await self.modules['import_queue'].status_updated(event)
-
-    async def import_queue_item_imported(self, event):
-        """Route import queue item_imported event to module."""
-        await self.modules['import_queue'].item_imported(event)
+    # Dynamic event routing - automatically route events to modules
+    def __getattr__(self, name):
+        """Dynamically route events to appropriate modules."""
+        # Check if modules are loaded (safety check for timing issues)
+        if not hasattr(self, 'modules') or not self.modules:
+            raise AttributeError(f"'{self.__class__.__name__}' object has no attribute '{name}'")
+        
+        # Find the module that matches the beginning of the event name
+        for module_name in self.modules.keys():
+            if name.startswith(f"{module_name}_"):
+                # Extract the event name after the module prefix
+                event_name = name[len(module_name) + 1:]  # +1 for the underscore
+                module = self.modules[module_name]
+                
+                if hasattr(module, event_name):
+                    # Return a wrapper that calls the module method
+                    async def event_handler(event):
+                        return await getattr(module, event_name)(event)
+                    return event_handler
+        
+        # If not a module event, raise AttributeError
+        raise AttributeError(f"'{self.__class__.__name__}' object has no attribute '{name}'")
