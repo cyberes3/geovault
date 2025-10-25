@@ -3,7 +3,7 @@
  * All modules should be registered here for automatic loading.
  */
 
-import { ImportQueueModule } from './ImportQueueModule.js';
+import { ImportJobModule } from './ImportJobModule.js';
 import { DeleteJobModule } from './DeleteJobModule.js';
 // Import other modules here as they are created
 // import { NotificationsModule } from './NotificationsModule.js';
@@ -14,7 +14,7 @@ import { DeleteJobModule } from './DeleteJobModule.js';
  * Add new modules to this array to have them automatically loaded
  */
 export const MODULE_REGISTRY = [
-    ImportQueueModule,
+    ImportJobModule,
     DeleteJobModule,
     // Add other modules here:
     // NotificationsModule,
@@ -28,7 +28,7 @@ export const MODULE_REGISTRY = [
  */
 export function loadAllModules(store) {
     const modules = [];
-    
+
     for (const ModuleClass of MODULE_REGISTRY) {
         try {
             const module = new ModuleClass(store);
@@ -38,6 +38,6 @@ export function loadAllModules(store) {
             console.error(`Failed to load module ${ModuleClass.name}:`, error);
         }
     }
-    
+
     return modules;
 }

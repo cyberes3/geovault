@@ -58,10 +58,10 @@ Add your module to the registry in `ModuleRegistry.js`:
 
 ```javascript
 // In ModuleRegistry.js
-import { NotificationsModule } from './NotificationsModule.js';
+import {NotificationsModule} from './NotificationsModule.js';
 
 export const MODULE_REGISTRY = [
-    ImportQueueModule,
+    ImportJobModule,
     NotificationsModule, // Add your module here
     // Add more modules as needed
 ];
@@ -165,10 +165,10 @@ Then add it to the registry:
 
 ```javascript
 // In ModuleRegistry.js
-import { ChatModule } from './ChatModule.js';
+import {ChatModule} from './ChatModule.js';
 
 export const MODULE_REGISTRY = [
-    ImportQueueModule,
+    ImportJobModule,
     ChatModule, // Add your new module here
     // Add more modules as needed
 ];

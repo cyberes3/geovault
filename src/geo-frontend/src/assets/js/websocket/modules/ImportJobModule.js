@@ -3,9 +3,9 @@
  * Handles all import queue related realtime events.
  */
 
-import { BaseModule } from './BaseModule.js';
+import {BaseModule} from './BaseModule.js';
 
-export class ImportQueueModule extends BaseModule {
+export class ImportJobModule extends BaseModule {
     constructor(store) {
         super(store);
         this.moduleName = 'import_job';
@@ -20,7 +20,7 @@ export class ImportQueueModule extends BaseModule {
         // Handle initial state
         this.subscribe('initial_state', (data) => {
             console.log('Received import queue initial state:', data);
-            this.store.dispatch('setRealtimeModuleData', { module: 'importQueue', data });
+            this.store.dispatch('setRealtimeModuleData', {module: 'importQueue', data});
             // Also update the legacy importQueue state for backward compatibility
             this.store.commit('setImportQueue', data);
         });
@@ -55,7 +55,7 @@ export class ImportQueueModule extends BaseModule {
             console.log('Import queue item imported:', data);
             this.store.dispatch('updateImportQueueItem', {
                 id: data.id.toString(),
-                updates: { imported: true }
+                updates: {imported: true}
             });
         });
 
