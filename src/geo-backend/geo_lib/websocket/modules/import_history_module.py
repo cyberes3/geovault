@@ -58,3 +58,4 @@ class ImportHistoryModule(BaseWebSocketModule):
     async def item_added(self, event):
         """Handle item_added event."""
         await self.send_to_client('item_added', event['data'])
+

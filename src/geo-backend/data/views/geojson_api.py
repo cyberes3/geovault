@@ -181,12 +181,12 @@ def get_geojson_data(request):
         }
 
         # Add warning if features were limited by configuration
-        if max_features > 0 and total_features_in_bbox > max_features:
+        if 0 < max_features < total_features_in_bbox:
             response_data['warning'] = f'Displaying {len(features)} of {total_features_in_bbox} features due to MAX_FEATURES_PER_REQUEST limit ({max_features})'
 
         return JsonResponse(response_data)
 
-    except Exception as e:
+    except Exception:
         logger.error(f"Error in get_geojson_data API: {traceback.format_exc()}")
         return JsonResponse({
             'success': False,
@@ -224,7 +224,7 @@ def get_feature(request, feature_id):
             'error': 'Feature not found or access denied',
             'code': 404
         }, status=404)
-    except Exception as e:
+    except Exception:
         logger.error(f"Error getting feature {feature_id}: {traceback.format_exc()}")
         return JsonResponse({
             'success': False,
