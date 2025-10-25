@@ -1,8 +1,8 @@
 /**
- * WebSocket service for real-time import queue updates.
+ * Global WebSocket service for real-time updates.
  */
 
-class ImportQueueSocket {
+class RealtimeSocket {
     constructor() {
         this.socket = null;
         this.isConnected = false;
@@ -10,7 +10,7 @@ class ImportQueueSocket {
         this.maxReconnectAttempts = 5;
         this.reconnectInterval = 1000; // Start with 1 second
         this.maxReconnectInterval = 30000; // Max 30 seconds
-        this.eventHandlers = new Map();
+        this.moduleHandlers = new Map(); // Map of module -> event -> handlers
         this.pingInterval = null;
         this.pingTimeout = null;
         this.connectionCount = 0; // Track how many components are using the connection
@@ -26,27 +26,27 @@ class ImportQueueSocket {
         
         // If already connected, just increment the counter
         if (this.socket && this.socket.readyState === WebSocket.OPEN) {
-            console.log('WebSocket already connected, incrementing reference count');
+            console.log('Realtime WebSocket already connected, incrementing reference count');
             return;
         }
 
         // If already connecting, wait for it to complete
         if (this.socket && this.socket.readyState === WebSocket.CONNECTING) {
-            console.log('WebSocket already connecting, waiting...');
+            console.log('Realtime WebSocket already connecting, waiting...');
             return;
         }
 
         const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
         const host = window.location.host;
-        const wsUrl = `${protocol}//${host}/ws/import-queue/`;
+        const wsUrl = `${protocol}//${host}/ws/realtime/`;
         
-        console.log('Connecting to WebSocket:', wsUrl);
+        console.log('Connecting to Realtime WebSocket:', wsUrl);
         
         try {
             this.socket = new WebSocket(wsUrl);
             this.setupEventHandlers();
         } catch (error) {
-            console.error('Failed to create WebSocket connection:', error);
+            console.error('Failed to create Realtime WebSocket connection:', error);
             this.scheduleReconnect();
         }
     }
@@ -56,7 +56,7 @@ class ImportQueueSocket {
      */
     setupEventHandlers() {
         this.socket.onopen = (event) => {
-            console.log('WebSocket connected');
+            console.log('Realtime WebSocket connected');
             this.isConnected = true;
             this.reconnectAttempts = 0;
             this.reconnectInterval = 1000;
@@ -69,12 +69,12 @@ class ImportQueueSocket {
                 const data = JSON.parse(event.data);
                 this.handleMessage(data);
             } catch (error) {
-                console.error('Failed to parse WebSocket message:', error);
+                console.error('Failed to parse Realtime WebSocket message:', error);
             }
         };
 
         this.socket.onclose = (event) => {
-            console.log('WebSocket disconnected:', event.code, event.reason);
+            console.log('Realtime WebSocket disconnected:', event.code, event.reason);
             this.isConnected = false;
             this.stopPing();
             this.emit('disconnected', event);
@@ -86,7 +86,7 @@ class ImportQueueSocket {
         };
 
         this.socket.onerror = (error) => {
-            console.error('WebSocket error:', error);
+            console.error('Realtime WebSocket error:', error);
             this.emit('error', error);
         };
     }
@@ -95,47 +95,43 @@ class ImportQueueSocket {
      * Handle incoming WebSocket messages
      */
     handleMessage(data) {
-        const { type, data: messageData } = data;
+        const { module, type, data: messageData } = data;
         
-        switch (type) {
-            case 'initial_state':
-                this.emit('initial_state', messageData);
-                break;
-            case 'item_added':
-                this.emit('item_added', messageData);
-                break;
-            case 'item_deleted':
-                this.emit('item_deleted', messageData);
-                break;
-            case 'items_deleted':
-                this.emit('items_deleted', messageData);
-                break;
-            case 'status_updated':
-                this.emit('status_updated', messageData);
-                break;
-            case 'item_imported':
-                this.emit('item_imported', messageData);
-                break;
-            case 'pong':
-                // Handle pong response
-                break;
-            case 'error':
-                console.error('WebSocket server error:', messageData);
-                this.emit('server_error', messageData);
-                break;
-            default:
-                console.warn('Unknown WebSocket message type:', type);
+        // Handle ping/pong
+        if (type === 'pong') {
+            return;
         }
+        
+        // Route to module handlers
+        if (module && this.moduleHandlers.has(module)) {
+            const moduleHandlers = this.moduleHandlers.get(module);
+            if (moduleHandlers.has(type)) {
+                moduleHandlers.get(type).forEach(handler => {
+                    try {
+                        handler(messageData);
+                    } catch (error) {
+                        console.error(`Error in Realtime WebSocket handler for ${module}.${type}:`, error);
+                    }
+                });
+            }
+        }
+        
+        // Emit global event
+        this.emit(`${module}_${type}`, messageData);
     }
 
     /**
      * Send a message to the server
      */
-    send(data) {
+    send(module, type, data = {}) {
         if (this.socket && this.socket.readyState === WebSocket.OPEN) {
-            this.socket.send(JSON.stringify(data));
+            this.socket.send(JSON.stringify({
+                module,
+                type,
+                data
+            }));
         } else {
-            console.warn('WebSocket not connected, cannot send message:', data);
+            console.warn('Realtime WebSocket not connected, cannot send message:', { module, type, data });
         }
     }
 
@@ -143,7 +139,7 @@ class ImportQueueSocket {
      * Send a ping to keep the connection alive
      */
     ping() {
-        this.send({ type: 'ping' });
+        this.send('ping', 'ping');
         
         // Set timeout for pong response
         this.pingTimeout = setTimeout(() => {
@@ -241,21 +237,57 @@ class ImportQueueSocket {
     }
 
     /**
-     * Add event listener
+     * Subscribe to module events
      */
-    on(event, handler) {
-        if (!this.eventHandlers.has(event)) {
-            this.eventHandlers.set(event, []);
+    subscribe(module, event, handler) {
+        if (!this.moduleHandlers.has(module)) {
+            this.moduleHandlers.set(module, new Map());
         }
-        this.eventHandlers.get(event).push(handler);
+        
+        const moduleHandlers = this.moduleHandlers.get(module);
+        if (!moduleHandlers.has(event)) {
+            moduleHandlers.set(event, []);
+        }
+        
+        moduleHandlers.get(event).push(handler);
     }
 
     /**
-     * Remove event listener
+     * Unsubscribe from module events
+     */
+    unsubscribe(module, event, handler) {
+        if (this.moduleHandlers.has(module)) {
+            const moduleHandlers = this.moduleHandlers.get(module);
+            if (moduleHandlers.has(event)) {
+                const handlers = moduleHandlers.get(event);
+                const index = handlers.indexOf(handler);
+                if (index > -1) {
+                    handlers.splice(index, 1);
+                }
+            }
+        }
+    }
+
+    /**
+     * Add global event listener
+     */
+    on(event, handler) {
+        if (!this.globalHandlers) {
+            this.globalHandlers = new Map();
+        }
+        
+        if (!this.globalHandlers.has(event)) {
+            this.globalHandlers.set(event, []);
+        }
+        this.globalHandlers.get(event).push(handler);
+    }
+
+    /**
+     * Remove global event listener
      */
     off(event, handler) {
-        if (this.eventHandlers.has(event)) {
-            const handlers = this.eventHandlers.get(event);
+        if (this.globalHandlers && this.globalHandlers.has(event)) {
+            const handlers = this.globalHandlers.get(event);
             const index = handlers.indexOf(handler);
             if (index > -1) {
                 handlers.splice(index, 1);
@@ -264,25 +296,25 @@ class ImportQueueSocket {
     }
 
     /**
-     * Emit event to all registered handlers
+     * Emit global event to all registered handlers
      */
     emit(event, data) {
-        if (this.eventHandlers.has(event)) {
-            this.eventHandlers.get(event).forEach(handler => {
+        if (this.globalHandlers && this.globalHandlers.has(event)) {
+            this.globalHandlers.get(event).forEach(handler => {
                 try {
                     handler(data);
                 } catch (error) {
-                    console.error(`Error in WebSocket event handler for ${event}:`, error);
+                    console.error(`Error in Realtime WebSocket global event handler for ${event}:`, error);
                 }
             });
         }
     }
 
     /**
-     * Request a refresh of the import queue data
+     * Request a refresh of module data
      */
-    requestRefresh() {
-        this.send({ type: 'refresh' });
+    requestRefresh(module) {
+        this.send(module, 'refresh');
     }
 
     /**
@@ -297,9 +329,8 @@ class ImportQueueSocket {
             shouldStayConnected: this.shouldStayConnected
         };
     }
-
 }
 
 // Create and export a singleton instance
-export const importQueueSocket = new ImportQueueSocket();
-export default importQueueSocket;
+export const realtimeSocket = new RealtimeSocket();
+export default realtimeSocket;

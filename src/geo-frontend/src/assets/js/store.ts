@@ -16,6 +16,10 @@ interface State {
     importQueueRefreshTrigger: boolean
     websocketConnected: boolean
     websocketReconnectAttempts: number
+    realtimeData: {
+        importQueue: ImportQueueItem[]
+        [key: string]: any
+    }
 }
 
 // Store type is inferred from createStore<State>
@@ -27,6 +31,9 @@ export default createStore<State>({
         importQueueRefreshTrigger: false,
         websocketConnected: false,
         websocketReconnectAttempts: 0,
+        realtimeData: {
+            importQueue: []
+        },
     }, 
     mutations: {
         userInfo(state: State, payload: typeof UserInfo) {
@@ -69,6 +76,15 @@ export default createStore<State>({
         setWebSocketReconnectAttempts(state: State, attempts: number) {
             state.websocketReconnectAttempts = attempts;
         },
+        setRealtimeModuleData(state: State, { module, data }: { module: string, data: any }) {
+            state.realtimeData[module] = data;
+        },
+        updateRealtimeModuleData(state: State, { module, updates }: { module: string, updates: any }) {
+            if (!state.realtimeData[module]) {
+                state.realtimeData[module] = {};
+            }
+            Object.assign(state.realtimeData[module], updates);
+        },
     }, 
     getters: {
         // alertExists: (state) => (message) => {
@@ -96,6 +112,12 @@ export default createStore<State>({
         },
         setWebSocketReconnectAttempts({ commit }: { commit: Commit }, attempts: number) {
             commit('setWebSocketReconnectAttempts', attempts);
+        },
+        setRealtimeModuleData({ commit }: { commit: Commit }, payload: { module: string, data: any }) {
+            commit('setRealtimeModuleData', payload);
+        },
+        updateRealtimeModuleData({ commit }: { commit: Commit }, payload: { module: string, updates: any }) {
+            commit('updateRealtimeModuleData', payload);
         },
     },
 })

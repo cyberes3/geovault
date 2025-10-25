@@ -1160,9 +1160,9 @@ def _broadcast_item_deleted(user_id: int, item_id: int):
     channel_layer = get_channel_layer()
     if channel_layer:
         async_to_sync(channel_layer.group_send)(
-            f"import_queue_{user_id}",
+            f"realtime_{user_id}",
             {
-                'type': 'item_deleted',
+                'type': 'import_queue_item_deleted',
                 'data': {'id': item_id}
             }
         )
@@ -1176,9 +1176,9 @@ def _broadcast_items_deleted(user_id: int, item_ids: list):
     channel_layer = get_channel_layer()
     if channel_layer:
         async_to_sync(channel_layer.group_send)(
-            f"import_queue_{user_id}",
+            f"realtime_{user_id}",
             {
-                'type': 'items_deleted',
+                'type': 'import_queue_items_deleted',
                 'data': {'ids': item_ids}
             }
         )
@@ -1192,9 +1192,9 @@ def _broadcast_item_imported(user_id: int, item_id: int):
     channel_layer = get_channel_layer()
     if channel_layer:
         async_to_sync(channel_layer.group_send)(
-            f"import_queue_{user_id}",
+            f"realtime_{user_id}",
             {
-                'type': 'item_imported',
+                'type': 'import_queue_item_imported',
                 'data': {'id': item_id}
             }
         )

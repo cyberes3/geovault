@@ -421,9 +421,9 @@ class AsyncFileProcessor:
         channel_layer = get_channel_layer()
         if channel_layer:
             async_to_sync(channel_layer.group_send)(
-                f"import_queue_{user_id}",
+                f"realtime_{user_id}",
                 {
-                    'type': 'item_added',
+                    'type': 'import_queue_item_added',
                     'data': {'id': import_queue_id}
                 }
             )
@@ -436,9 +436,9 @@ class AsyncFileProcessor:
         channel_layer = get_channel_layer()
         if channel_layer:
             async_to_sync(channel_layer.group_send)(
-                f"import_queue_{user_id}",
+                f"realtime_{user_id}",
                 {
-                    'type': 'status_updated',
+                    'type': 'import_queue_status_updated',
                     'data': {
                         'id': import_queue_id,
                         'status': status,
