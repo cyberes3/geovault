@@ -550,6 +550,9 @@ export default {
         pollingInterval: null
       },
 
+      // Log tracking for incremental updates
+      lastLogId: null,
+
       // Consolidated: Pagination
       pagination: {
         currentPage: 1,
@@ -593,6 +596,9 @@ export default {
           if (this.processing.active && response.data.job_details) {
             this.processing.message = response.data.job_details.message || 'Processing file...'
             this.processing.progress = response.data.job_details.progress || 0
+            
+            // Fetch new logs during processing for real-time updates
+            await this.loadLogsIncremental()
           } else if (!this.processing.active) {
             // Processing completed, refresh the page data
             this.stopProcessingPolling()
@@ -1114,12 +1120,37 @@ export default {
         const response = await axios.get(`/api/data/item/import/logs/${this.currentId}`);
         if (response.data.success) {
           this.workerLog = response.data.logs || [];
+          // Track the last log ID for incremental updates
+          if (this.workerLog.length > 0) {
+            this.lastLogId = this.workerLog[this.workerLog.length - 1].id;
+          }
         }
       } catch (error) {
         console.error('Error loading logs:', error);
         // Don't set error message as logs are not critical
       } finally {
         this.loading.logs = false;
+      }
+    },
+    async loadLogsIncremental() {
+      // Load only new logs since the last fetch
+      try {
+        const url = this.lastLogId 
+          ? `/api/data/item/import/logs/${this.currentId}?after_id=${this.lastLogId}`
+          : `/api/data/item/import/logs/${this.currentId}`;
+        
+        const response = await axios.get(url);
+        if (response.data.success && response.data.logs) {
+          // Append new logs to existing ones
+          this.workerLog = [...this.workerLog, ...response.data.logs];
+          // Update the last log ID
+          if (response.data.logs.length > 0) {
+            this.lastLogId = response.data.logs[response.data.logs.length - 1].id;
+          }
+        }
+      } catch (error) {
+        console.error('Error loading incremental logs:', error);
+        // Don't set error message as logs are not critical
       }
     },
     cacheCurrentPageChanges() {

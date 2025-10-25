@@ -14,9 +14,9 @@ from django.contrib.auth.models import User
 from django.db import transaction
 
 from data.models import ImportQueue
-from geo_lib.processing.processors import get_processor
 from geo_lib.processing.geojson_normalization import hash_normalized_geojson
 from geo_lib.processing.logging import RealTimeImportLog, DatabaseLogLevel
+from geo_lib.processing.processors import get_processor
 from geo_lib.processing.status_tracker import ProcessingStatusTracker, ProcessingStatus, status_tracker
 from geo_lib.security.file_validation import SecureFileValidator, SecurityError, FileValidationError
 
@@ -87,13 +87,10 @@ class AsyncFileProcessor:
         import_queue_id = job.import_queue_id if job else None
 
         # Get the UUID from the ImportQueue for logging
-        log_uuid = None
-        if import_queue_id:
-            try:
-                import_queue = ImportQueue.objects.get(id=import_queue_id)
-                log_uuid = str(import_queue.log_id) if import_queue.log_id else None
-            except ImportQueue.DoesNotExist:
-                pass
+        assert import_queue_id
+        import_queue = ImportQueue.objects.get(id=import_queue_id)
+        assert import_queue.log_id
+        log_uuid = str(import_queue.log_id)
 
         # Create real-time logger
         realtime_log = RealTimeImportLog(user_id, log_uuid)
@@ -173,7 +170,7 @@ class AsyncFileProcessor:
             import json
             geojson_str = json.dumps(geojson_data)
             geojson_size_mb = len(geojson_str) / (1024 * 1024)
-            
+
             # File size validation is now handled consistently in the file validation step
             # No need for additional size checks here since we validate against FILE_TYPE_CONFIGS limits
 
@@ -327,27 +324,27 @@ class AsyncFileProcessor:
 
                 # Perform duplicate detection against existing features
                 processing_log.add("Starting duplicate detection against existing feature store", "AsyncProcessor", DatabaseLogLevel.INFO)
-                
+
                 # Import the duplicate detection functions
-                from data.views.import_item import _find_coordinate_duplicates, _strip_duplicate_features
-                
+                from data.views.import_item import find_coordinate_duplicates, strip_duplicate_features
+
                 # First, check for internal duplicates within the file
                 processing_log.add("Checking for internal duplicates within the uploaded file", "AsyncProcessor", DatabaseLogLevel.INFO)
-                unique_internal_features, internal_duplicate_count, internal_duplicate_log = _strip_duplicate_features(processed_features)
+                unique_internal_features, internal_duplicate_count, internal_duplicate_log = strip_duplicate_features(processed_features)
                 processing_log.extend(internal_duplicate_log)
-                
+
                 # Then check for coordinate duplicates against existing features
                 processing_log.add("Checking for coordinate duplicates against existing features in your library", "AsyncProcessor", DatabaseLogLevel.INFO)
                 duplicate_detection_start = time.time()
-                unique_features, duplicate_features, duplicate_log = _find_coordinate_duplicates(unique_internal_features, user_id)
+                unique_features, duplicate_features, duplicate_log = find_coordinate_duplicates(unique_internal_features, user_id)
                 duplicate_detection_duration = time.time() - duplicate_detection_start
                 processing_log.extend(duplicate_log)
                 processing_log.add_timing("Duplicate detection", duplicate_detection_duration, "AsyncProcessor")
-                
+
                 # Log summary of duplicate detection results
                 total_duplicates = internal_duplicate_count + len(duplicate_features)
                 processing_log.add(f"Duplicate detection completed: {internal_duplicate_count} internal duplicates, {len(duplicate_features)} existing duplicates", "AsyncProcessor", DatabaseLogLevel.INFO)
-                
+
                 # Use the original processed_features (not unique_features) to preserve all features
                 # The duplicate_features list contains the duplicate information we need
                 processing_log.add(f"Total duplicate features found: {total_duplicates}", "AsyncProcessor", DatabaseLogLevel.INFO)

@@ -42,7 +42,7 @@ class DatabaseLogLevel(Enum):
 class DatabaseLogMsg(BaseModel):
     msg: str
     source: str
-    timestamp: Optional[datetime.datetime] = Field(default_factory=lambda: datetime.datetime.now(datetime.timezone.utc))
+    timestamp: Optional[datetime.datetime] = None
     level: Optional[DatabaseLogLevel] = Field(DatabaseLogLevel.INFO)
 
 
@@ -96,11 +96,14 @@ class RealTimeImportLog:
             timing_info = f" ({duration:.1f}s)"
             msg = msg + timing_info
         
-        # Create the log message
-        log_msg = DatabaseLogMsg(msg=msg, source=source, level=level)
+        # Generate timestamp once for both in-memory object and database write
+        timestamp = timezone.now()
+        
+        # Create the log message with the timestamp
+        log_msg = DatabaseLogMsg(msg=msg, source=source, level=level, timestamp=timestamp)
         self._messages.append(log_msg)
         
-        # Write to database immediately
+        # Write to database immediately with the same timestamp
         try:
             from data.models import DatabaseLogging
             DatabaseLogging.objects.create(
@@ -110,7 +113,7 @@ class RealTimeImportLog:
                 text=log_msg.msg,
                 source=log_msg.source,
                 attributes={},
-                timestamp=timezone.now(),
+                timestamp=timestamp,
             )
             self._db_logger.debug(f"Real-time log written: {source} - {msg}")
         except Exception as e:

@@ -24,7 +24,7 @@ from geo_lib.website.auth import login_required_401
 logger = logging.getLogger(__name__)
 
 
-def _strip_duplicate_features(features) -> Tuple[List[Any], int, ImportLog]:
+def strip_duplicate_features(features) -> Tuple[List[Any], int, ImportLog]:
     """Remove 100% duplicate features and log the process."""
     import_log = ImportLog()
 
@@ -78,7 +78,7 @@ def _coordinates_match(coord1: List, coord2: List, tolerance: float = 1e-6) -> b
     return norm1 == norm2
 
 
-def _find_coordinate_duplicates(features: List[Dict], user_id: int) -> Tuple[List[Dict], List[Dict], ImportLog]:
+def find_coordinate_duplicates(features: List[Dict], user_id: int) -> Tuple[List[Dict], List[Dict], ImportLog]:
     """
     Find features that have duplicate coordinates in the existing featurestore.
     Returns (unique_features, duplicate_features_with_originals, log_messages)
@@ -414,7 +414,7 @@ def _find_geometry_collection_duplicates(geometries: List, user_id: int) -> List
 
 def _get_logs_by_log_id(log_id):
     """Fetch logs from DatabaseLogging table by log_id"""
-    logs = DatabaseLogging.objects.filter(log_id=log_id).order_by('timestamp')
+    logs = DatabaseLogging.objects.filter(log_id=log_id).order_by('id')
     return [{'timestamp': log.timestamp.isoformat(), 'msg': log.text, 'source': log.source, 'level': log.level} for log in logs]
 
 
@@ -489,6 +489,7 @@ def upload_item(request):
 def get_import_item_logs(request, item_id):
     """
     Get the logs for a specific import queue item.
+    Supports incremental fetching with 'after_id' query parameter.
     """
     try:
         item = ImportQueue.objects.get(id=item_id, user=request.user)
@@ -498,11 +499,23 @@ def get_import_item_logs(request, item_id):
         if item.log_id:
             try:
                 from data.models import DatabaseLogging
-                db_logs = DatabaseLogging.objects.filter(
-                    log_id=item.log_id
-                ).order_by('timestamp')
+                
+                # Support incremental fetching with after_id parameter
+                after_id = request.GET.get('after_id')
+                query = DatabaseLogging.objects.filter(log_id=item.log_id)
+                
+                if after_id:
+                    try:
+                        after_id_int = int(after_id)
+                        query = query.filter(id__gt=after_id_int)
+                    except ValueError:
+                        # Invalid after_id, ignore it
+                        pass
+                
+                db_logs = query.order_by('id')
 
                 logs = [{
+                    'id': log.id,
                     'timestamp': log.timestamp.isoformat(),
                     'msg': log.text,
                     'source': log.source,
