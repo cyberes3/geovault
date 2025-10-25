@@ -230,7 +230,6 @@ import {mapState} from "vuex"
 import {authMixin} from "@/assets/js/authMixin.js";
 import axios from "axios";
 import {capitalizeFirstLetter} from "@/assets/js/string.js";
-import {IMPORT_QUEUE_LIST_URL} from "@/assets/js/import/url.js";
 import {ImportQueueItem} from "@/assets/js/types/import-types"
 import ImportQueue from "@/components/import/parts/ImportQueue.vue";
 import {getCookie} from "@/assets/js/auth.js";
@@ -382,26 +381,6 @@ export default {
     }
   },
   methods: {
-    async fetchQueueList() {
-      // Prevent overlapping requests
-      if (this.isRefreshing) {
-        return
-      }
-
-      this.isRefreshing = true
-      this.loadingQueueList = true
-
-      try {
-        const response = await axios.get(IMPORT_QUEUE_LIST_URL)
-        const ourImportQueue = response.data.data.map((item) => new ImportQueueItem(item))
-        this.$store.commit('importQueue', ourImportQueue)
-      } catch (error) {
-        console.error('Error fetching queue list:', error)
-      } finally {
-        this.loadingQueueList = false
-        this.isRefreshing = false
-      }
-    },
     onFileChange(e) {
       const selectedFiles = Array.from(e.target.files)
       this.addFiles(selectedFiles)
@@ -609,8 +588,7 @@ export default {
                 message: response.data.msg,
                 job_id: response.data.job_id
               })
-              // Refresh queue list after each successful upload
-              await this.fetchQueueList()
+              // WebSocket will handle real-time updates
             } else {
               // Check if this is a benign error (duplicate file)
               const msg = response.data.msg.toLowerCase()
@@ -722,7 +700,7 @@ export default {
 
       // Start auto-refresh every 1 second
       this.refreshInterval = setInterval(() => {
-        this.fetchQueueList()
+        // WebSocket will handle real-time updates
       }, 1000)
     },
     stopAutoRefresh() {
@@ -743,7 +721,7 @@ export default {
   },
   async created() {
     // Initial fetch of the queue list
-    await this.fetchQueueList()
+    // WebSocket will handle real-time updates
   },
   async mounted() {
     // Start auto-refresh when component is mounted

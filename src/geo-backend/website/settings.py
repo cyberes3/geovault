@@ -30,6 +30,8 @@ ALLOWED_HOSTS = ['localhost', '127.0.0.1']  # Configure for production
 # Application definition
 
 INSTALLED_APPS = [
+    'daphne',
+    'channels',
     'users',
     'data',
     'django.contrib.admin',
@@ -71,6 +73,7 @@ TEMPLATES = [
 ]
 
 WSGI_APPLICATION = 'website.wsgi.application'
+ASGI_APPLICATION = 'website.asgi.application'
 
 # Database
 # https://docs.djangoproject.com/en/5.0/ref/settings/#databases
@@ -126,6 +129,16 @@ CACHES = {
     'default': {
         'BACKEND': 'django.core.cache.backends.dummy.DummyCache',
     }
+}
+
+# Channel layers configuration for WebSockets
+CHANNEL_LAYERS = {
+    'default': {
+        'BACKEND': 'channels_redis.core.RedisChannelLayer',
+        'CONFIG': {
+            "hosts": [('127.0.0.1', 6379)],
+        },
+    },
 }
 
 # Default primary key field type

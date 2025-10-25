@@ -61,6 +61,9 @@ class AsyncFileProcessor:
         try:
             import_queue_id = self._create_initial_import_queue_entry(filename, user_id, job_id)
             self.status_tracker.set_job_result(job_id, {}, import_queue_id)
+            
+            # Broadcast WebSocket event for new item
+            self._broadcast_item_added(user_id, import_queue_id)
         except Exception as e:
             logger.error(f"Failed to create initial import queue entry for job {job_id}: {str(e)}")
             logger.error(f"Import queue creation error traceback: {traceback.format_exc()}")
@@ -104,6 +107,9 @@ class AsyncFileProcessor:
                 job_id, ProcessingStatus.PROCESSING,
                 "Starting file validation and processing...", 10.0
             )
+            
+            # Broadcast WebSocket event for status update
+            self._broadcast_status_updated(user_id, import_queue_id, "processing", 10.0, "Starting file validation and processing...")
 
             # Validate file
             self.status_tracker.update_job_status(
@@ -135,6 +141,9 @@ class AsyncFileProcessor:
                     error_msg,
                     error_message=validation_message
                 )
+                
+                # Broadcast WebSocket event for processing failure
+                self._broadcast_status_updated(user_id, import_queue_id, "failed", 0.0, error_msg)
                 return
 
             realtime_log.add("File validation passed successfully", "AsyncProcessor", DatabaseLogLevel.INFO)
@@ -144,6 +153,9 @@ class AsyncFileProcessor:
                 job_id, ProcessingStatus.PROCESSING,
                 "File validation passed, starting conversion...", 30.0
             )
+            
+            # Broadcast WebSocket event for status update
+            self._broadcast_status_updated(user_id, import_queue_id, "processing", 30.0, "File validation passed, starting conversion...")
 
             # Process file to GeoJSON
             self.status_tracker.update_job_status(
@@ -179,6 +191,9 @@ class AsyncFileProcessor:
                 job_id, ProcessingStatus.PROCESSING,
                 "GeoJSON conversion complete, processing features...", 70.0
             )
+            
+            # Broadcast WebSocket event for status update
+            self._broadcast_status_updated(user_id, import_queue_id, "processing", 70.0, "GeoJSON conversion complete, processing features...")
             realtime_log.add("GeoJSON conversion complete, processing features", "AsyncProcessor", DatabaseLogLevel.INFO)
 
             # Process features and update import queue entry
@@ -209,6 +224,9 @@ class AsyncFileProcessor:
                 job_id, ProcessingStatus.COMPLETED,
                 completion_msg, 100.0
             )
+            
+            # Broadcast WebSocket event for completion
+            self._broadcast_status_updated(user_id, import_queue_id, "completed", 100.0, completion_msg)
             realtime_log.add(completion_msg, "AsyncProcessor", DatabaseLogLevel.INFO)
 
             # Set result data
@@ -230,6 +248,9 @@ class AsyncFileProcessor:
                 job_id, ProcessingStatus.FAILED,
                 error_msg, error_message=str(e)
             )
+            
+            # Broadcast WebSocket event for processing failure
+            self._broadcast_status_updated(user_id, import_queue_id, "failed", 0.0, error_msg)
 
         except subprocess.TimeoutExpired:
             error_msg = "File processing timed out: file may be too large or complex"
@@ -239,6 +260,9 @@ class AsyncFileProcessor:
                 job_id, ProcessingStatus.FAILED,
                 error_msg, error_message=error_msg
             )
+            
+            # Broadcast WebSocket event for processing failure
+            self._broadcast_status_updated(user_id, import_queue_id, "failed", 0.0, error_msg)
 
         except Exception as e:
             # Generic error message for users, detailed logging internally
@@ -251,6 +275,9 @@ class AsyncFileProcessor:
                 job_id, ProcessingStatus.FAILED,
                 error_msg, error_message=error_msg
             )
+            
+            # Broadcast WebSocket event for processing failure
+            self._broadcast_status_updated(user_id, import_queue_id, "failed", 0.0, error_msg)
 
         finally:
             # Clean up thread reference
@@ -385,6 +412,41 @@ class AsyncFileProcessor:
             'thread_job_ids': list(self._processing_threads.keys()),
             'status_tracker_stats': self.status_tracker.get_stats()
         }
+
+    def _broadcast_item_added(self, user_id: int, import_queue_id: int):
+        """Broadcast WebSocket event when a new item is added."""
+        from channels.layers import get_channel_layer
+        from asgiref.sync import async_to_sync
+        
+        channel_layer = get_channel_layer()
+        if channel_layer:
+            async_to_sync(channel_layer.group_send)(
+                f"import_queue_{user_id}",
+                {
+                    'type': 'item_added',
+                    'data': {'id': import_queue_id}
+                }
+            )
+
+    def _broadcast_status_updated(self, user_id: int, import_queue_id: int, status: str, progress: float, message: str):
+        """Broadcast WebSocket event when item status is updated."""
+        from channels.layers import get_channel_layer
+        from asgiref.sync import async_to_sync
+        
+        channel_layer = get_channel_layer()
+        if channel_layer:
+            async_to_sync(channel_layer.group_send)(
+                f"import_queue_{user_id}",
+                {
+                    'type': 'status_updated',
+                    'data': {
+                        'id': import_queue_id,
+                        'status': status,
+                        'progress': progress,
+                        'message': message
+                    }
+                }
+            )
 
 
 # Global instance for the application

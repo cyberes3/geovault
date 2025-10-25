@@ -769,97 +769,6 @@ def fetch_import_queue(request, item_id):
 
 
 @login_required_401
-def fetch_import_waiting(request):
-    user_items = ImportQueue.objects.filter(user=request.user, imported=False).order_by('-timestamp').values('id', 'geofeatures', 'original_filename', 'geojson_hash', 'log_id', 'timestamp', 'imported', 'unparsable')
-    data = json.loads(json.dumps(list(user_items), cls=DjangoJSONEncoder))
-
-    # Get all active processing jobs for this user
-    user_jobs = status_tracker.get_user_jobs(request.user.id)
-    active_job_ids = {job.import_queue_id for job in user_jobs if job.status.value == 'processing' and job.import_queue_id}
-
-    # Build a map of geojson_hash to items for duplicate detection
-    hash_to_items = {}
-    for item in data:
-        if item.get('geojson_hash'):
-            if item['geojson_hash'] not in hash_to_items:
-                hash_to_items[item['geojson_hash']] = []
-            hash_to_items[item['geojson_hash']].append(item)
-
-    # Check for imported files with same hash (do this once for all items)
-    imported_hashes = {}
-    if hash_to_items:
-        imported_items = ImportQueue.objects.filter(
-            user=request.user,
-            imported=True,
-            geojson_hash__in=list(hash_to_items.keys())
-        ).values('geojson_hash', 'original_filename')
-
-        for imported_item in imported_items:
-            imported_hashes[imported_item['geojson_hash']] = imported_item['original_filename']
-
-    for i, item in enumerate(data):
-        count = len(item['geofeatures'])
-
-        # Check if this item is currently being processed
-        item['processing'] = item['id'] in active_job_ids
-
-        # Also consider items with empty geofeatures as processing if they were created recently
-        # This handles the race condition where processing hasn't started yet but the item was just uploaded
-        if not item['processing'] and count == 0 and not item.get('unparsable'):
-            from django.utils import timezone
-            from datetime import timedelta
-
-            # If item was created within the last 10 seconds, consider it as processing
-            item_timestamp = item['timestamp']
-            if isinstance(item_timestamp, str):
-                from datetime import datetime
-                item_timestamp = datetime.fromisoformat(item_timestamp.replace('Z', '+00:00'))
-
-            time_since_creation = timezone.now() - item_timestamp
-            if time_since_creation < timedelta(seconds=10):
-                item['processing'] = True
-
-        # Check if there's an error in the geofeatures or if marked as unparsable
-        if item.get('unparsable') or (count == 1 and item['geofeatures'] and isinstance(item['geofeatures'][0], dict) and 'error' in item['geofeatures'][0]):
-            # This is an error case from failed processing
-            item['feature_count'] = 0
-            item['processing_failed'] = True
-        elif count == 0 and item['processing']:
-            # Empty geofeatures but currently processing - this is normal for async processing
-            item['feature_count'] = -1  # Special value to indicate processing
-            item['processing_failed'] = False
-        else:
-            item['feature_count'] = count
-            item['processing_failed'] = False
-
-        # Check for duplicate status
-        item['duplicate_status'] = None
-        if item.get('geojson_hash'):
-            geojson_hash = item['geojson_hash']
-            items_with_same_hash = hash_to_items.get(geojson_hash, [])
-
-            # Check if there are other items in queue with same hash (uploaded earlier)
-            earlier_items = [
-                other for other in items_with_same_hash
-                if other['id'] != item['id'] and other['timestamp'] < item['timestamp']
-            ]
-
-            if earlier_items:
-                # This is a duplicate of an item in the queue
-                item['duplicate_status'] = 'duplicate_in_queue'
-            elif geojson_hash in imported_hashes:
-                # This is a duplicate of an imported file
-                item['duplicate_status'] = 'duplicate_imported'
-
-        # Remove keys from response as they're not needed by frontend.
-        del item['geofeatures']
-        del item['log_id']
-        del item['geojson_hash']
-        del item['unparsable']
-    return JsonResponse({'data': data, 'msg': None})
-
-
-@login_required_401
 def fetch_import_history(request):
     user_items = ImportQueue.objects.filter(user=request.user, imported=True).order_by('-timestamp').values('id', 'original_filename', 'timestamp')
     data = json.loads(json.dumps(list(user_items), cls=DjangoJSONEncoder))
@@ -890,6 +799,10 @@ def delete_import_item(request, id):
         _delete_logs_by_log_id(str(queue.log_id))
 
         queue.delete()
+        
+        # Broadcast WebSocket event for item deletion
+        _broadcast_item_deleted(request.user.id, id)
+        
         return JsonResponse({'success': True})
     return HttpResponse(status=405)
 
@@ -936,6 +849,9 @@ def bulk_delete_import_items(request):
 
         # Delete the items
         deleted_count, _ = items.delete()
+        
+        # Broadcast WebSocket event for bulk deletion
+        _broadcast_items_deleted(request.user.id, found_ids)
 
         return JsonResponse({
             'success': True,
@@ -1223,6 +1139,9 @@ def import_to_featurestore(request, item_id):
     import_item.log_id = None
 
     import_item.save()
+    
+    # Broadcast WebSocket event for item import
+    _broadcast_item_imported(request.user.id, item_id)
 
     return JsonResponse({'success': True, 'msg': f'Successfully imported {total_imported} features ({total_skipped} already existed)'})
 
@@ -1231,3 +1150,51 @@ def _hash_kml(b: str):
     if not isinstance(b, bytes):
         b = b.encode()
     return hashlib.sha256(b).hexdigest()
+
+
+def _broadcast_item_deleted(user_id: int, item_id: int):
+    """Broadcast WebSocket event when an item is deleted."""
+    from channels.layers import get_channel_layer
+    from asgiref.sync import async_to_sync
+    
+    channel_layer = get_channel_layer()
+    if channel_layer:
+        async_to_sync(channel_layer.group_send)(
+            f"import_queue_{user_id}",
+            {
+                'type': 'item_deleted',
+                'data': {'id': item_id}
+            }
+        )
+
+
+def _broadcast_items_deleted(user_id: int, item_ids: list):
+    """Broadcast WebSocket event when multiple items are deleted."""
+    from channels.layers import get_channel_layer
+    from asgiref.sync import async_to_sync
+    
+    channel_layer = get_channel_layer()
+    if channel_layer:
+        async_to_sync(channel_layer.group_send)(
+            f"import_queue_{user_id}",
+            {
+                'type': 'items_deleted',
+                'data': {'ids': item_ids}
+            }
+        )
+
+
+def _broadcast_item_imported(user_id: int, item_id: int):
+    """Broadcast WebSocket event when an item is imported."""
+    from channels.layers import get_channel_layer
+    from asgiref.sync import async_to_sync
+    
+    channel_layer = get_channel_layer()
+    if channel_layer:
+        async_to_sync(channel_layer.group_send)(
+            f"import_queue_{user_id}",
+            {
+                'type': 'item_imported',
+                'data': {'id': item_id}
+            }
+        )

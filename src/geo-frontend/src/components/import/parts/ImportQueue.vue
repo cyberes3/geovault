@@ -191,9 +191,10 @@
 import {mapState} from "vuex";
 import {authMixin} from "@/assets/js/authMixin.js";
 import axios from "axios";
-import {IMPORT_QUEUE_LIST_URL, IMPORT_BULK_DELETE_URL} from "@/assets/js/import/url.js";
+import {IMPORT_BULK_DELETE_URL} from "@/assets/js/import/url.js";
 import {ImportQueueItem} from "@/assets/js/types/import-types";
 import {getCookie} from "@/assets/js/auth.js";
+import {importQueueSocket} from "@/assets/js/websocket/importQueueSocket.js";
 
 export default {
   props: {
@@ -203,7 +204,7 @@ export default {
     }
   },
   computed: {
-    ...mapState(["userInfo", "importQueue"]),
+    ...mapState(["userInfo", "importQueue", "websocketConnected"]),
     filteredImportQueue() {
       // Filter out items that have been locally deleted
       return this.importQueue.filter(item => !this.deletedItems.has(item.id));
@@ -258,7 +259,8 @@ export default {
       await this.fetchQueueList()
     },
     async fetchQueueList() {
-      // Prevent overlapping requests
+      // This method is now only used for manual refresh
+      // WebSocket handles real-time updates
       if (this.isRefreshing) {
         return
       }
@@ -267,24 +269,10 @@ export default {
       this.internalLoading = true
 
       try {
-        const response = await axios.get(IMPORT_QUEUE_LIST_URL)
-        const ourImportQueue = response.data.data.map((item) => new ImportQueueItem(item))
-
-        // Check for items that should be restored (still exist on server after 3 refresh cycles)
-        this.checkForRestoreItems(ourImportQueue);
-
-        this.$store.commit('setImportQueue', ourImportQueue)
-        this.hasInitiallyLoaded = true
-
-        // Clear selection for items that no longer exist
-        this.selectedItems.forEach(itemId => {
-          if (!ourImportQueue.some(item => item.id === itemId)) {
-            this.selectedItems.delete(itemId);
-          }
-        });
-        this.updateSelectAllCheckbox();
+        // Request refresh from WebSocket
+        importQueueSocket.requestRefresh()
       } catch (error) {
-        console.error('Error fetching queue list:', error)
+        console.error('Error requesting queue refresh:', error)
       } finally {
         this.internalLoading = false
         this.isRefreshing = false
@@ -530,20 +518,93 @@ export default {
         this.isBulkDeleting = false;
       }
     },
-    startAutoRefresh() {
-      // Clear any existing interval
-      this.stopAutoRefresh()
-      
-      // Start auto-refresh every 5 seconds
-      this.refreshInterval = setInterval(() => {
+    setupWebSocket() {
+      // Handle initial state
+      importQueueSocket.on('initial_state', (data) => {
+        console.log('Received initial state from WebSocket:', data)
+        const ourImportQueue = data.map((item) => new ImportQueueItem(item))
+        this.$store.commit('setImportQueue', ourImportQueue)
+        this.hasInitiallyLoaded = true
+        this.internalLoading = false
+      })
+
+      // Handle new item added
+      importQueueSocket.on('item_added', (data) => {
+        console.log('Item added via WebSocket:', data)
+        // The item will be included in the next status update or refresh
         this.refreshData()
-      }, 5000)
-    },
-    stopAutoRefresh() {
-      if (this.refreshInterval) {
-        clearInterval(this.refreshInterval)
-        this.refreshInterval = null
-      }
+      })
+
+      // Handle item deleted
+      importQueueSocket.on('item_deleted', (data) => {
+        console.log('Item deleted via WebSocket:', data)
+        this.$store.dispatch('removeImportQueueItem', data.id.toString())
+      })
+
+      // Handle items deleted (bulk)
+      importQueueSocket.on('items_deleted', (data) => {
+        console.log('Items deleted via WebSocket:', data)
+        this.$store.dispatch('removeImportQueueItems', data.ids.map(id => id.toString()))
+      })
+
+      // Handle status updates
+      importQueueSocket.on('status_updated', (data) => {
+        console.log('Status updated via WebSocket:', data)
+        
+        let updates = {
+          processing: data.status === 'processing',
+          processing_failed: data.status === 'failed'
+        }
+        
+        // Handle completed status - need to get the actual feature count from the server
+        if (data.status === 'completed') {
+          updates.processing = false
+          updates.processing_failed = false
+          // Request a refresh to get the updated item with correct feature count
+          this.refreshData()
+          return
+        }
+        
+        // For processing status, set feature_count to -1 to indicate processing
+        if (data.status === 'processing') {
+          updates.feature_count = -1
+        }
+        
+        // Update the specific item in the store
+        this.$store.dispatch('updateImportQueueItem', {
+          id: data.id.toString(),
+          updates: updates
+        })
+      })
+
+      // Handle item imported
+      importQueueSocket.on('item_imported', (data) => {
+        console.log('Item imported via WebSocket:', data)
+        this.$store.dispatch('updateImportQueueItem', {
+          id: data.id.toString(),
+          updates: { imported: true }
+        })
+      })
+
+      // Handle connection status
+      importQueueSocket.on('connected', () => {
+        console.log('WebSocket connected')
+        this.$store.dispatch('setWebSocketConnected', true)
+        this.$store.dispatch('setWebSocketReconnectAttempts', 0)
+      })
+
+      importQueueSocket.on('disconnected', () => {
+        console.log('WebSocket disconnected')
+        this.$store.dispatch('setWebSocketConnected', false)
+      })
+
+      importQueueSocket.on('max_reconnect_attempts_reached', () => {
+        console.error('WebSocket max reconnection attempts reached')
+        this.$store.dispatch('setWebSocketReconnectAttempts', importQueueSocket.maxReconnectAttempts)
+      })
+
+      // Connect to WebSocket
+      importQueueSocket.connect()
     },
   },
   async created() {
@@ -554,17 +615,19 @@ export default {
       this.internalLoading = false;
     }
 
-    // Don't fetch data here - let the parent component handle initial data loading
-    // This prevents duplicate API calls during navigation
+    // Setup WebSocket connection
+    this.setupWebSocket()
+
+    // Subscribe to manual refresh mutations
     this.subscribeToRefreshMutation()
   },
   mounted() {
-    // Start auto-refresh when component is mounted
-    this.startAutoRefresh()
+    // WebSocket is already connected in created()
   },
   beforeDestroy() {
-    // Stop auto-refresh when component is destroyed
-    this.stopAutoRefresh();
+    // Disconnect WebSocket when component is destroyed
+    // The WebSocket service will only actually disconnect if no other components are using it
+    importQueueSocket.disconnect();
     // Clear deleted items when component is destroyed (user navigates away)
     this.clearDeletedItems();
     // Clear selected items when component is destroyed
