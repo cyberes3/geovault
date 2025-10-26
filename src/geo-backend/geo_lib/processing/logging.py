@@ -44,6 +44,7 @@ class DatabaseLogMsg(BaseModel):
     source: str
     timestamp: Optional[datetime.datetime] = None
     level: Optional[DatabaseLogLevel] = Field(DatabaseLogLevel.INFO)
+    id: Optional[int] = None  # Database ID, assigned after creation
 
 
 class ImportLog:
@@ -106,7 +107,7 @@ class RealTimeImportLog:
         # Write to database immediately with the same timestamp
         try:
             from data.models import DatabaseLogging
-            DatabaseLogging.objects.create(
+            db_log = DatabaseLogging.objects.create(
                 user_id=self.user_id,
                 log_id=self.log_id,
                 level=log_msg.level.value,
@@ -115,6 +116,8 @@ class RealTimeImportLog:
                 attributes={},
                 timestamp=timestamp,
             )
+            # Assign the database ID to the log message for WebSocket broadcast
+            log_msg.id = db_log.id
             self._db_logger.debug(f"Real-time log written: {source} - {msg}")
             
             # Broadcast to WebSocket if we have a log_id (indicating this is for an import item)

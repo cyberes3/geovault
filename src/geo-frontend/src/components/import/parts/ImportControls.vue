@@ -32,7 +32,7 @@
             </svg>
           </button>
           <div class="flex items-center space-x-2 ml-4 pl-4 border-l border-gray-300">
-            <label for="goto-page" class="text-sm text-gray-700">Go to:</label>
+            <label class="text-sm text-gray-700" for="goto-page">Go to:</label>
             <input
                 id="goto-page"
                 v-model.number="gotoPageInputLocal"
@@ -244,18 +244,18 @@ export default {
   computed: {
     isValidPageNumber() {
       return this.gotoPageInputLocal &&
-             this.gotoPageInputLocal >= 1 &&
-             this.gotoPageInputLocal <= this.totalPages &&
-             this.gotoPageInputLocal !== this.currentPage;
+          this.gotoPageInputLocal >= 1 &&
+          this.gotoPageInputLocal <= this.totalPages &&
+          this.gotoPageInputLocal !== this.currentPage;
     },
     shouldShowActions() {
       return (
-        this.isLoadingPage ||
-        this.isImported ||
-        this.duplicateStatus === 'duplicate_in_queue' ||
-        this.duplicateStatus === 'duplicate_imported' ||
-        (this.showNoFeaturesMessage && !this.isLoadingPage && this.importableCount === 0) ||
-        this.hasFeatures
+          this.isLoadingPage ||
+          this.isImported ||
+          this.duplicateStatus === 'duplicate_in_queue' ||
+          this.duplicateStatus === 'duplicate_imported' ||
+          (this.showNoFeaturesMessage && !this.isLoadingPage && this.importableCount === 0) ||
+          this.hasFeatures
       );
     }
   },

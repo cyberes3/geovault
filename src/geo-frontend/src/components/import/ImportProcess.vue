@@ -51,7 +51,7 @@
         </button>
       </div>
       <div class="bg-gray-50 rounded-lg p-4">
-        <div class="h-32 overflow-auto">
+        <div ref="logsContainer" class="h-32 overflow-auto">
           <ul class="space-y-2">
             <li v-for="(item, index) in workerLog" :key="`logitem-${index}`"
                 :class="{'bg-red-50 border-l-4 border-red-400 pl-2 py-1': item.level >= 40}"
@@ -513,7 +513,7 @@ export default {
           this.pagination.gotoInput <= this.pagination.totalPages &&
           this.pagination.gotoInput !== this.pagination.currentPage;
     },
-    
+
     showNoFeaturesMessage() {
       return this.originalFilename != null && !this.processing.active && !this.loading.page && this.itemsForUser.length === 0;
     }
@@ -583,12 +583,27 @@ export default {
       // Misc state
       lockButtons: false,
       isImported: false,
-      
+
       // WebSocket connection
       ws: null,
       wsConnected: false,
       wsReconnectAttempts: 0,
       maxReconnectAttempts: 5
+    }
+  },
+  watch: {
+    workerLog: {
+      handler(newLogs, oldLogs) {
+        // Auto-scroll to bottom when new logs are added
+        if (newLogs && newLogs.length > 0 && (!oldLogs || newLogs.length > oldLogs.length)) {
+          // Use a small delay to ensure DOM is updated
+          setTimeout(() => {
+            this.scrollLogsToBottom();
+          }, 50);
+        }
+      },
+      deep: true,
+      immediate: false
     }
   },
   beforeDestroy() {
@@ -602,24 +617,24 @@ export default {
     connectWebSocket() {
       const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
       const wsUrl = `${protocol}//${window.location.host}/ws/upload/status/${this.currentId}/`;
-      
+
       this.ws = new WebSocket(wsUrl);
       this.ws.onopen = this.onWebSocketOpen;
       this.ws.onmessage = this.onWebSocketMessage;
       this.ws.onclose = this.onWebSocketClose;
       this.ws.onerror = this.onWebSocketError;
     },
-    
+
     onWebSocketOpen() {
       console.log('WebSocket connected');
       this.wsConnected = true;
       this.wsReconnectAttempts = 0;
     },
-    
+
     onWebSocketMessage(event) {
       const message = JSON.parse(event.data);
-      
-      switch(message.type) {
+
+      switch (message.type) {
         case 'initial_state':
           this.handleInitialState(message.data);
           break;
@@ -649,11 +664,11 @@ export default {
           break;
       }
     },
-    
+
     onWebSocketClose(event) {
       console.log('WebSocket closed:', event.code, event.reason);
       this.wsConnected = false;
-      
+
       // Handle 404 - item not found
       if (event.code === 4004) {
         console.log('Item not found (404) - redirecting to import queue');
@@ -661,7 +676,7 @@ export default {
         this.$router.replace('/import');
         return;
       }
-      
+
       // Attempt to reconnect if not a normal closure and we haven't exceeded max attempts
       if (event.code !== 1000 && this.wsReconnectAttempts < this.maxReconnectAttempts) {
         this.wsReconnectAttempts++;
@@ -669,62 +684,78 @@ export default {
         setTimeout(() => this.connectWebSocket(), 2000);
       }
     },
-    
+
     onWebSocketError(error) {
       console.error('WebSocket error:', error);
     },
-    
+
     handleInitialState(data) {
       // Set all component data from initial state
       this.originalFilename = data.original_filename;
       this.isImported = data.imported;
       this.processing.active = data.processing;
-      
+
       if (data.job_details) {
         this.processing.message = data.job_details.message || 'Processing file...';
         this.processing.progress = data.job_details.progress || 0;
       }
-      
+
       if (data.features) {
         this.handlePageData(data.features);
       }
-      
+
       if (data.logs) {
-        this.workerLog = data.logs;
-        this.lastLogId = data.logs.length > 0 ? data.logs[data.logs.length - 1].id : null;
+        // Only replace logs if we don't have any logs yet, or if the new logs are more recent
+        const shouldReplace = this.workerLog.length === 0 || 
+            (data.logs.length > 0 && this.lastLogId && data.logs[data.logs.length - 1].id > this.lastLogId);
+        
+        if (shouldReplace) {
+          this.workerLog = data.logs;
+          this.lastLogId = data.logs.length > 0 ? data.logs[data.logs.length - 1].id : null;
+          // Auto-scroll to bottom when initial logs are loaded
+          this.scrollLogsToBottom();
+        }
       }
-      
+
       if (data.duplicates) {
         this.duplicates.features = data.duplicates;
       }
-      
+
       this.loading.logs = false;
       this.loading.page = false;
     },
-    
+
     handleStatusUpdate(data) {
       this.processing.message = data.message || 'Processing file...';
       this.processing.progress = data.progress || 0;
     },
-    
+
     handleLogAdded(data) {
+      // Check if this log already exists (by ID) to prevent duplicates
+      const existingLog = this.workerLog.find(log => log.id === data.id);
+      if (existingLog) {
+        return;
+      }
+      
       this.workerLog.push(data);
       this.lastLogId = data.id;
+      // Auto-scroll to bottom when new log is added during processing
+      this.scrollLogsToBottom();
     },
-    
+
     handleItemCompleted(data) {
       this.processing.active = false;
       this.processing.message = 'Loading...';
       this.processing.progress = null;
       this.stopProcessingPolling();
-      
+
       // Keep processing active to show the unified loading spinner
       this.processing.active = true;
-      
+
       // Refresh the page data
       this.sendWebSocketMessage('refresh', {});
     },
-    
+
     handleItemFailed(data) {
       this.processing.active = false;
       this.processing.message = 'Processing failed';
@@ -732,7 +763,7 @@ export default {
       this.msg = data.error_message || 'Processing failed';
       this.stopProcessingPolling();
     },
-    
+
     handlePageData(data) {
       this.itemsForUser = [];
       if (data.data && data.data.length > 0) {
@@ -740,11 +771,11 @@ export default {
           this.itemsForUser.push(this.parseGeoJson(item));
         });
         this.originalItems = JSON.parse(JSON.stringify(this.itemsForUser));
-        
+
         // Restore cached changes if they exist for this page
         this.restoreCachedPageChanges(data.pagination.page);
       }
-      
+
       if (data.pagination) {
         this.pagination.currentPage = data.pagination.page;
         this.pagination.totalFeatures = data.pagination.total_features;
@@ -753,30 +784,38 @@ export default {
         this.pagination.hasPrevious = data.pagination.has_previous;
         this.duplicates.indices = data.pagination.duplicate_indices || [];
       }
-      
+
       if (data.duplicates) {
         this.duplicates.features = data.duplicates;
         this.markDuplicateFeatures();
       }
-      
+
       this.loading.page = false;
     },
-    
+
     handleLogsData(data) {
       if (data.logs) {
-        this.workerLog = data.logs;
+        if (data.after_id) {
+          // This is an incremental update - append new logs to existing ones
+          this.workerLog = this.workerLog.concat(data.logs);
+        } else {
+          // This is a full refresh - replace all logs
+          this.workerLog = data.logs;
+        }
         this.lastLogId = data.logs.length > 0 ? data.logs[data.logs.length - 1].id : null;
+        // Auto-scroll to bottom when logs are loaded
+        this.scrollLogsToBottom();
       }
       this.loading.logs = false;
     },
-    
+
     handleItemDeleted(data) {
       // Show notification and redirect
       this.$toast.error('This import item has been deleted');
       this.loading.redirecting = true;
       this.$router.push('/import');
     },
-    
+
     handleError(data) {
       // Handle error messages from WebSocket
       if (data.code === 404) {
@@ -788,13 +827,13 @@ export default {
         this.msg = data.message || 'An error occurred';
       }
     },
-    
+
     sendWebSocketMessage(type, data) {
       if (this.ws && this.wsConnected) {
-        this.ws.send(JSON.stringify({ type, data }));
+        this.ws.send(JSON.stringify({type, data}));
       }
     },
-    
+
     async checkProcessingStatus() {
       // Safety check: don't make API calls if currentId is null (component is being destroyed)
       if (!this.currentId) {
@@ -834,6 +873,8 @@ export default {
           // Load logs first (they're already fetched)
           if (logsResponse.data && logsResponse.data.logs) {
             this.workerLog = logsResponse.data.logs || []
+            // Auto-scroll to bottom when logs are refreshed
+            this.scrollLogsToBottom();
           }
           this.processing.active = itemsResponse.data.processing || false
 
@@ -924,6 +965,19 @@ export default {
     formatTimestamp(timestamp) {
       if (!timestamp) return '';
       return moment(timestamp).format('YYYY-MM-DD HH:mm:ss');
+    },
+    scrollLogsToBottom() {
+      // Scroll the logs container to the bottom when new logs are added
+      this.$nextTick(() => {
+        if (this.$refs.logsContainer) {
+          const container = this.$refs.logsContainer;
+          // Use smooth scrolling for better UX
+          container.scrollTo({
+            top: container.scrollHeight,
+            behavior: 'smooth'
+          });
+        }
+      });
     },
     parseGeoJson(item) {
       switch (item.geometry.type) {
@@ -1296,7 +1350,7 @@ export default {
 
       this.loading.page = true;
       // Request page data via WebSocket
-      this.sendWebSocketMessage('request_page', { page, page_size: this.pagination.pageSize });
+      this.sendWebSocketMessage('request_page', {page, page_size: this.pagination.pageSize});
     },
     async loadLogs() {
       // Load logs via WebSocket
@@ -1310,7 +1364,12 @@ export default {
       }
 
       // Request incremental logs via WebSocket
-      this.sendWebSocketMessage('request_logs', { after_id: this.lastLogId });
+      this.sendWebSocketMessage('request_logs', {after_id: this.lastLogId});
+      
+      // Also trigger scroll after a short delay to catch any logs that might be added
+      setTimeout(() => {
+        this.scrollLogsToBottom();
+      }, 100);
     },
     cacheCurrentPageChanges() {
       // Store the current page's items in cache
