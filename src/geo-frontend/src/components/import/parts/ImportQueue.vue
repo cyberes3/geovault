@@ -102,7 +102,7 @@
         </tr>
 
         <!-- Actual data rows -->
-        <tr v-for="(item, index) in filteredImportQueue" :key="`item-${index}`" class="hover:bg-gray-50">
+        <tr v-for="(item, index) in filteredImportQueue" :key="`item-${index}`" :class="item.deleting ? 'opacity-50 bg-gray-100' : 'hover:bg-gray-50'">
           <td class="px-6 py-4 whitespace-nowrap">
             <input
               type="checkbox"
@@ -162,6 +162,13 @@
                 <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
               </svg>
               Processing
+            </span>
+            <span v-else-if="item.deleting" class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-orange-100 text-orange-800">
+              <svg class="animate-spin -ml-1 mr-1 h-3 w-3" fill="none" viewBox="0 0 24 24">
+                <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+                <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+              </svg>
+              Deleting
             </span>
             <span v-else-if="item.duplicate_status === 'duplicate_in_queue' || item.duplicate_status === 'duplicate_imported'" class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-purple-100 text-purple-800">
               <svg class="w-3 h-3 mr-1" fill="currentColor" viewBox="0 0 20 20">
@@ -258,8 +265,7 @@ export default {
     },
     websocketConnected(newVal) {
       if (newVal) {
-        // WebSocket connected, subscribe to delete job events
-        this.subscribeToDeleteJobEvents();
+        // WebSocket connected - delete job events are now handled directly by store actions
       }
     }
   },
@@ -567,59 +573,6 @@ export default {
         }
       });
     },
-    subscribeToDeleteJobEvents() {
-      // Subscribe to WebSocket events for delete jobs
-      if (this.$store.state.websocketConnected) {
-        // Listen for delete job events
-        this.$store.subscribe((mutation, state) => {
-          if (mutation.type === 'websocket/delete_job_started') {
-            this.handleDeleteJobStarted(mutation.payload);
-          } else if (mutation.type === 'websocket/delete_job_status_updated') {
-            this.handleDeleteJobStatusUpdated(mutation.payload);
-          } else if (mutation.type === 'websocket/delete_job_completed') {
-            this.handleDeleteJobCompleted(mutation.payload);
-          } else if (mutation.type === 'websocket/delete_job_failed') {
-            this.handleDeleteJobFailed(mutation.payload);
-          }
-        });
-      }
-    },
-    handleDeleteJobStarted(event) {
-      console.log('Delete job started:', event);
-      // The item should already be marked as deleting, but ensure it is
-      if (event.data && event.data.item_id) {
-        this.deletingItems.add(event.data.item_id);
-        this.$forceUpdate();
-      }
-    },
-    handleDeleteJobStatusUpdated(event) {
-      console.log('Delete job status updated:', event);
-      // Update progress if needed (optional for now)
-    },
-    handleDeleteJobCompleted(event) {
-      console.log('Delete job completed:', event);
-      if (event.data && event.data.item_id) {
-        // Remove from deleting items and add to deleted items
-        this.deletingItems.delete(event.data.item_id);
-        this.deleteJobIds.delete(event.data.item_id);
-        this.deletedItems.add(event.data.item_id);
-        this.deletedItemTimeouts.set(event.data.item_id, 0);
-        this.$forceUpdate();
-        
-        // Manually refresh the table to ensure it updates
-        this.refreshData();
-      }
-    },
-    handleDeleteJobFailed(event) {
-      console.log('Delete job failed:', event);
-      if (event.data && event.data.item_id) {
-        // Remove from deleting items to restore the item
-        this.deletingItems.delete(event.data.item_id);
-        this.deleteJobIds.delete(event.data.item_id);
-        this.$forceUpdate();
-        alert(`Delete failed for item ${event.data.item_id}: ${event.data.error_message || 'Unknown error'}`);
-      }
-    },
   },
   async created() {
     // If we already have data in the store, mark as initially loaded
@@ -635,10 +588,7 @@ export default {
     // Subscribe to manual refresh mutations
     this.subscribeToRefreshMutation()
 
-    // Subscribe to WebSocket events for delete jobs
-    if (this.$store.state.websocketConnected) {
-      this.subscribeToDeleteJobEvents();
-    }
+    // Delete job events are now handled directly by store actions
 
     // Subscribe to import queue updates to handle loading completion
     this.subscribeToImportQueueUpdates();

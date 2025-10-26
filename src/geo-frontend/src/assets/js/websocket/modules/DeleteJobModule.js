@@ -22,28 +22,55 @@ export class DeleteJobModule extends BaseModule {
             // Delete jobs don't have persistent state, so no action needed
         });
 
-        // Handle delete job started
+        // Handle delete job started - update item state
         this.subscribe('started', (data) => {
             console.log('Delete job started:', data);
-            this.store.dispatch('websocket/delete_job_started', { data });
+            // Mark item as deleting in the queue
+            this.store.dispatch('updateImportQueueItem', {
+                id: data.import_queue_id.toString(),
+                updates: { deleting: true }
+            });
         });
 
         // Handle delete job status updated
         this.subscribe('status_updated', (data) => {
             console.log('Delete job status updated:', data);
-            this.store.dispatch('websocket/delete_job_status_updated', { data });
+            // Could update progress here if needed
+            this.store.dispatch('updateImportQueueItem', {
+                id: data.import_queue_id.toString(),
+                updates: { 
+                    deleting: true,
+                    deleteProgress: data.progress 
+                }
+            });
         });
 
-        // Handle delete job completed
+        // Handle delete job completed - remove item
         this.subscribe('completed', (data) => {
             console.log('Delete job completed:', data);
-            this.store.dispatch('websocket/delete_job_completed', { data });
+            // Remove the deleted item(s) from the queue
+            if (data.import_queue_ids && data.import_queue_ids.length > 0) {
+                this.store.dispatch('removeImportQueueItems', 
+                    data.import_queue_ids.map(id => id.toString())
+                );
+            } else if (data.import_queue_id) {
+                this.store.dispatch('removeImportQueueItem', 
+                    data.import_queue_id.toString()
+                );
+            }
         });
 
-        // Handle delete job failed
+        // Handle delete job failed - clear deleting state
         this.subscribe('failed', (data) => {
             console.log('Delete job failed:', data);
-            this.store.dispatch('websocket/delete_job_failed', { data });
+            // Clear deleting state and optionally set error
+            this.store.dispatch('updateImportQueueItem', {
+                id: data.import_queue_id.toString(),
+                updates: { 
+                    deleting: false,
+                    deleteError: data.error 
+                }
+            });
         });
     }
 }

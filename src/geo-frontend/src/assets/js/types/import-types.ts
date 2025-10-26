@@ -10,6 +10,9 @@ export class ImportQueueItem {
     imported: boolean;
     processing_failed: boolean;
     duplicate_status: string | null;
+    deleting?: boolean;
+    deleteProgress?: number;
+    deleteError?: string;
 
     constructor(data: any) {
         this.id = data.id;
@@ -23,5 +26,8 @@ export class ImportQueueItem {
         this.imported = data.imported || false;
         this.processing_failed = data.processing_failed || false;
         this.duplicate_status = data.duplicate_status || null;
+        this.deleting = data.deleting || false;
+        this.deleteProgress = data.deleteProgress || 0;
+        this.deleteError = data.deleteError || null;
     }
 }
