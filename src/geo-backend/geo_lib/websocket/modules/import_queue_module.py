@@ -156,3 +156,7 @@ class ImportQueueModule(BaseWebSocketModule):
     async def item_imported(self, event):
         """Handle item_imported event."""
         await self.send_to_client('item_imported', event['data'])
+
+    async def status_updated(self, event):
+        """Handle status_updated event."""
+        await self.send_to_client('status_updated', event['data'])

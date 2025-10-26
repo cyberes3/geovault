@@ -96,22 +96,36 @@ class UploadJob(BaseJob):
             # Update status to processing
             self.status_tracker.update_job_status(
                 job_id, ProcessingStatus.PROCESSING,
-                "Starting file validation and processing...", 10.0
+                "Starting file validation and processing...", 12.0
             )
 
-            # Broadcast WebSocket event for status update
-            self._broadcast_to_upload_job_module(user_id, 'status_updated', {
-                'import_queue_id': import_queue_id,
+            # Broadcast high-level status to realtime channel (processing started)
+            self._broadcast_to_import_queue_module(user_id, 'status_updated', {
+                'id': import_queue_id,
                 'status': 'processing',
-                'progress': 10.0,
+                'progress': 12.0,
+                'message': 'Processing started'
+            })
+
+            # Broadcast detailed status to upload status channel
+            self._broadcast_to_upload_status_module(user_id, import_queue_id, 'status_updated', {
+                'status': 'processing',
+                'progress': 12.0,
                 'message': 'Starting file validation and processing...'
             })
 
             # Validate file
             self.status_tracker.update_job_status(
                 job_id, ProcessingStatus.PROCESSING,
-                "Validating file format and security...", 20.0
+                "Validating file format and security...", 24.0
             )
+
+            # Broadcast WebSocket event for status update
+            self._broadcast_to_upload_status_module(user_id, import_queue_id, 'status_updated', {
+                'status': 'processing',
+                'progress': 24.0,
+                'message': 'Validating file format and security...'
+            })
             realtime_log.add("Validating file format and security", "UploadJob", DatabaseLogLevel.INFO)
 
             # Create a mock uploaded file for validation
@@ -138,8 +152,16 @@ class UploadJob(BaseJob):
                     error_message=validation_message
                 )
 
-                # Broadcast WebSocket event for processing failure
-                self._broadcast_to_upload_job_module(user_id, 'failed', {
+                # Broadcast high-level status to realtime channel (processing failed)
+                self._broadcast_to_import_queue_module(user_id, 'status_updated', {
+                    'id': import_queue_id,
+                    'status': 'failed',
+                    'progress': 0.0,
+                    'message': 'Processing failed'
+                })
+
+                # Broadcast detailed failure to upload status channel
+                self._broadcast_to_upload_status_module(user_id, import_queue_id, 'item_failed', {
                     'job_id': job_id,
                     'error_message': error_msg
                 })
@@ -156,22 +178,28 @@ class UploadJob(BaseJob):
             # Update progress
             self.status_tracker.update_job_status(
                 job_id, ProcessingStatus.PROCESSING,
-                "File validation passed, starting conversion...", 30.0
+                "File validation passed, starting conversion...", 36.0
             )
 
             # Broadcast WebSocket event for status update
-            self._broadcast_to_upload_job_module(user_id, 'status_updated', {
-                'import_queue_id': import_queue_id,
+            self._broadcast_to_upload_status_module(user_id, import_queue_id, 'status_updated', {
                 'status': 'processing',
-                'progress': 30.0,
+                'progress': 36.0,
                 'message': 'File validation passed, starting conversion...'
             })
 
             # Process file to GeoJSON
             self.status_tracker.update_job_status(
                 job_id, ProcessingStatus.PROCESSING,
-                "Converting to GeoJSON format...", 50.0
+                "Converting to GeoJSON format...", 48.0
             )
+
+            # Broadcast WebSocket event for status update
+            self._broadcast_to_upload_status_module(user_id, import_queue_id, 'status_updated', {
+                'status': 'processing',
+                'progress': 48.0,
+                'message': 'Converting to GeoJSON format...'
+            })
             realtime_log.add("Starting GeoJSON conversion", "UploadJob", DatabaseLogLevel.INFO)
 
             # Check if job was cancelled before conversion
@@ -202,24 +230,30 @@ class UploadJob(BaseJob):
             # Update progress
             self.status_tracker.update_job_status(
                 job_id, ProcessingStatus.PROCESSING,
-                "GeoJSON conversion complete, processing features...", 70.0
+                "Processing features...", 60.0
             )
 
             # Broadcast WebSocket event for status update
-            self._broadcast_to_upload_job_module(user_id, 'status_updated', {
-                'import_queue_id': import_queue_id,
+            self._broadcast_to_upload_status_module(user_id, import_queue_id, 'status_updated', {
                 'status': 'processing',
-                'progress': 70.0,
-                'message': 'GeoJSON conversion complete, processing features...'
+                'progress': 60.0,
+                'message': 'Processing features...'
             })
-            realtime_log.add("GeoJSON conversion complete, processing features", "UploadJob", DatabaseLogLevel.INFO)
+            realtime_log.add("Processing features", "UploadJob", DatabaseLogLevel.INFO)
 
             # Process features and update import queue entry
             self.status_tracker.update_job_status(
                 job_id, ProcessingStatus.PROCESSING,
-                "Processing features and updating database entry...", 90.0
+                "Updating database entry...", 72.0
             )
-            realtime_log.add("Processing features and updating database entry", "UploadJob", DatabaseLogLevel.INFO)
+
+            # Broadcast WebSocket event for status update
+            self._broadcast_to_upload_status_module(user_id, import_queue_id, 'status_updated', {
+                'status': 'processing',
+                'progress': 72.0,
+                'message': 'Updating database entry...'
+            })
+            realtime_log.add("Updating database entry", "UploadJob", DatabaseLogLevel.INFO)
 
             # Count features for logging
             feature_count = len(geojson_data.get('features', []))
@@ -249,13 +283,15 @@ class UploadJob(BaseJob):
                 completion_msg, 100.0
             )
 
-            # Broadcast WebSocket event for completion
-            self._broadcast_to_upload_job_module(user_id, 'completed', {
-                'job_id': job_id,
-                'import_queue_id': import_queue_id
+            # Broadcast high-level status to realtime channel (processing completed)
+            self._broadcast_to_import_queue_module(user_id, 'status_updated', {
+                'id': import_queue_id,
+                'status': 'completed',
+                'progress': 100.0,
+                'message': 'Processing completed'
             })
-            
-            # Also broadcast to upload status channel for specific item
+
+            # Broadcast detailed completion to upload status channel
             self._broadcast_to_upload_status_module(user_id, import_queue_id, 'item_completed', {
                 'job_id': job_id,
                 'message': completion_msg
@@ -282,15 +318,17 @@ class UploadJob(BaseJob):
                 error_msg, error_message=str(e)
             )
 
-            # Broadcast WebSocket event for processing failure
-            self._broadcast_to_upload_job_module(user_id, 'failed', {
-                'job_id': job_id,
-                'error_message': error_msg
-            })
-            
-            # Also broadcast to upload status channel for specific item (if we have import_queue_id)
+            # Broadcast high-level status to realtime channel (processing failed)
             job = self.status_tracker.get_job(job_id)
             if job and job.import_queue_id:
+                self._broadcast_to_import_queue_module(user_id, 'status_updated', {
+                    'id': job.import_queue_id,
+                    'status': 'failed',
+                    'progress': 0.0,
+                    'message': 'Processing failed'
+                })
+
+                # Broadcast detailed failure to upload status channel
                 self._broadcast_to_upload_status_module(user_id, job.import_queue_id, 'item_failed', {
                     'job_id': job_id,
                     'error_message': error_msg
@@ -305,15 +343,17 @@ class UploadJob(BaseJob):
                 error_msg, error_message=error_msg
             )
 
-            # Broadcast WebSocket event for processing failure
-            self._broadcast_to_upload_job_module(user_id, 'failed', {
-                'job_id': job_id,
-                'error_message': error_msg
-            })
-            
-            # Also broadcast to upload status channel for specific item (if we have import_queue_id)
+            # Broadcast high-level status to realtime channel (processing failed)
             job = self.status_tracker.get_job(job_id)
             if job and job.import_queue_id:
+                self._broadcast_to_import_queue_module(user_id, 'status_updated', {
+                    'id': job.import_queue_id,
+                    'status': 'failed',
+                    'progress': 0.0,
+                    'message': 'Processing failed'
+                })
+
+                # Broadcast detailed failure to upload status channel
                 self._broadcast_to_upload_status_module(user_id, job.import_queue_id, 'item_failed', {
                     'job_id': job_id,
                     'error_message': error_msg
@@ -331,15 +371,17 @@ class UploadJob(BaseJob):
                 error_msg, error_message=error_msg
             )
 
-            # Broadcast WebSocket event for processing failure
-            self._broadcast_to_upload_job_module(user_id, 'failed', {
-                'job_id': job_id,
-                'error_message': error_msg
-            })
-            
-            # Also broadcast to upload status channel for specific item (if we have import_queue_id)
+            # Broadcast high-level status to realtime channel (processing failed)
             job = self.status_tracker.get_job(job_id)
             if job and job.import_queue_id:
+                self._broadcast_to_import_queue_module(user_id, 'status_updated', {
+                    'id': job.import_queue_id,
+                    'status': 'failed',
+                    'progress': 0.0,
+                    'message': 'Processing failed'
+                })
+
+                # Broadcast detailed failure to upload status channel
                 self._broadcast_to_upload_status_module(user_id, job.import_queue_id, 'item_failed', {
                     'job_id': job_id,
                     'error_message': error_msg
@@ -415,6 +457,19 @@ class UploadJob(BaseJob):
                 }
                 geojson_hash = hash_normalized_geojson(geojson_for_hash)
 
+                # Update progress for duplicate detection
+                self.status_tracker.update_job_status(
+                    job_id, ProcessingStatus.PROCESSING,
+                    "Checking for duplicate features...", 84.0
+                )
+
+                # Broadcast WebSocket event for status update
+                self._broadcast_to_upload_status_module(user_id, import_queue.id, 'status_updated', {
+                    'status': 'processing',
+                    'progress': 84.0,
+                    'message': 'Checking for duplicate features...'
+                })
+
                 # Perform duplicate detection against existing features
                 processing_log.add("Starting duplicate detection against existing feature store", "UploadJob", DatabaseLogLevel.INFO)
 
@@ -441,6 +496,19 @@ class UploadJob(BaseJob):
                 # Use the original processed_features (not unique_features) to preserve all features
                 # The duplicate_features list contains the duplicate information we need
                 processing_log.add(f"Total duplicate features found: {total_duplicates}", "UploadJob", DatabaseLogLevel.INFO)
+
+                # Update progress for database save
+                self.status_tracker.update_job_status(
+                    job_id, ProcessingStatus.PROCESSING,
+                    "Saving features to database...", 96.0
+                )
+
+                # Broadcast WebSocket event for status update
+                self._broadcast_to_upload_status_module(user_id, import_queue.id, 'status_updated', {
+                    'status': 'processing',
+                    'progress': 96.0,
+                    'message': 'Saving features to database...'
+                })
 
                 # Save the features to the database
                 processing_log.add(f"Saving {len(processed_features)} features to database ({geojson_size_mb:.2f} MB)", "UploadJob", DatabaseLogLevel.INFO)
@@ -477,40 +545,9 @@ class UploadJob(BaseJob):
                 }
             )
 
-    def _broadcast_to_upload_job_module(self, user_id: int, event_type: str, data: dict):
-        """Broadcast WebSocket event to upload_job module."""
-        from channels.layers import get_channel_layer
-        from asgiref.sync import async_to_sync
-
-        channel_layer = get_channel_layer()
-        if channel_layer:
-            async_to_sync(channel_layer.group_send)(
-                f"realtime_{user_id}",
-                {
-                    'type': f'upload_job_{event_type}',
-                    'data': data
-                }
-            )
-
     def _broadcast_item_added(self, user_id: int, import_queue_id: int):
         """Broadcast WebSocket event when a new item is added to import queue."""
         self._broadcast_to_import_queue_module(user_id, 'item_added', {'id': import_queue_id})
-
-    def _broadcast_status_updated(self, user_id: int, import_queue_id: int, status: str, progress: float, message: str):
-        """Broadcast WebSocket event when upload job status is updated."""
-        self._broadcast_to_upload_job_module(user_id, 'status_updated', {
-            'import_queue_id': import_queue_id,
-            'status': status,
-            'progress': progress,
-            'message': message
-        })
-        
-        # Also broadcast to upload status channel for specific item
-        self._broadcast_to_upload_status_module(user_id, import_queue_id, 'status_updated', {
-            'status': status,
-            'progress': progress,
-            'message': message
-        })
 
     def _broadcast_to_upload_status_module(self, user_id: int, import_queue_id: int, event_type: str, data: dict):
         """Broadcast WebSocket event to upload_status module for specific item."""
