@@ -54,7 +54,7 @@
       </thead>
       <tbody class="bg-white divide-y divide-gray-200">
         <!-- Loading placeholders -->
-        <tr v-for="n in 5" v-if="combinedLoading" :key="`loading-${n}`" class="animate-pulse">
+        <tr v-for="n in 3" v-if="combinedLoading" :key="`loading-${n}`" class="animate-pulse">
           <td class="px-6 py-4 whitespace-nowrap">
             <div class="w-4 h-4 bg-gray-200 rounded"></div>
           </td>
@@ -555,9 +555,17 @@ export default {
     },
     setupRealtimeConnection() {
       // The realtime connection is now managed globally in App.vue
-      // We just need to handle the initial loading state
-      this.hasInitiallyLoaded = true
-      this.internalLoading = false
+      // Loading state is handled by the store subscription
+    },
+    subscribeToImportQueueUpdates() {
+      // Subscribe to import queue mutations to handle loading completion
+      this.$store.subscribe((mutation, state) => {
+        if (mutation.type === 'setImportQueue') {
+          // When import queue data is received, mark as initially loaded
+          this.hasInitiallyLoaded = true;
+          this.internalLoading = false;
+        }
+      });
     },
     subscribeToDeleteJobEvents() {
       // Subscribe to WebSocket events for delete jobs
@@ -631,6 +639,9 @@ export default {
     if (this.$store.state.websocketConnected) {
       this.subscribeToDeleteJobEvents();
     }
+
+    // Subscribe to import queue updates to handle loading completion
+    this.subscribeToImportQueueUpdates();
   },
   mounted() {
     // WebSocket is already connected in created()
