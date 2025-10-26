@@ -77,11 +77,12 @@ def get_user_location(request):
         }, status=500)
 
 
+@login_required_401
 @require_http_methods(["GET"])
 def get_location_by_ip(request):
     """
     API endpoint to get location for a specific IP address.
-    This endpoint doesn't require authentication and can be used for testing.
+    Requires authentication.
     
     Query parameters:
     - ip: IP address to look up (optional, defaults to client IP)

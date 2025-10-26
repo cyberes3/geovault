@@ -114,3 +114,4 @@ class RealtimeConsumer(AsyncWebsocketConsumer):
 
         # If not a module event, raise AttributeError
         raise AttributeError(f"'{self.__class__.__name__}' object has no attribute '{name}'")
+
