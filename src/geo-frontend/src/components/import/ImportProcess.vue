@@ -615,6 +615,11 @@ export default {
   methods: {
     // WebSocket methods
     connectWebSocket() {
+      if (!this.currentId) {
+        console.warn('Cannot connect WebSocket: currentId is null');
+        return;
+      }
+      
       const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
       const wsUrl = `${protocol}//${window.location.host}/ws/upload/status/${this.currentId}/`;
 
@@ -674,6 +679,11 @@ export default {
         console.log('Item not found (404) - redirecting to import queue');
         this.loading.redirecting = true;
         this.$router.replace('/import');
+        return;
+      }
+
+      // Don't attempt reconnect if currentId is null (component being destroyed/navigating away)
+      if (!this.currentId) {
         return;
       }
 
@@ -1283,6 +1293,12 @@ export default {
     clearComponentState() {
       // Stop polling first to prevent API calls with null currentId
       this.stopProcessingPolling();
+      
+      // Close WebSocket connection before clearing state
+      if (this.ws) {
+        this.ws.close(1000); // Normal closure code
+        this.ws = null;
+      }
 
       // Clear all component data to reset state
       this.msg = "";
@@ -1463,6 +1479,20 @@ export default {
     } else {
       next(false);
     }
+  },
+  beforeRouteUpdate(to, from, next) {
+    // Close existing WebSocket before switching to new item
+    if (this.ws) {
+      this.ws.close(1000); // Normal closure
+      this.ws = null;
+    }
+    
+    // Update to new ID and reconnect
+    this.clearComponentState();
+    this.currentId = to.params.id;
+    this.connectWebSocket();
+    
+    next();
   },
   beforeRouteEnter(to, from, next) {
     const now = new Date().toISOString()
