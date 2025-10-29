@@ -94,7 +94,7 @@ class DeleteJob(BaseJob):
             )
 
             # Broadcast status update
-            self._broadcast_job_status_updated(user_id, job_id, "processing", 20.0, "Checking for active processing jobs...")
+            self._broadcast_job_status_updated(user_id, job_id, "processing", 20.0, "Checking for active processing jobs...", item_id=item_id)
 
             # Cancel any active processing job for this item
             self._cancel_active_processing_jobs(item_id, user_id, job_id)
@@ -106,7 +106,7 @@ class DeleteJob(BaseJob):
             )
 
             # Broadcast status update
-            self._broadcast_job_status_updated(user_id, job_id, "processing", 50.0, "Cleaning up associated resources...")
+            self._broadcast_job_status_updated(user_id, job_id, "processing", 50.0, "Cleaning up associated resources...", item_id=item_id)
 
             # Delete associated logs
             self._delete_associated_logs(import_queue_item, job_id)
@@ -118,7 +118,7 @@ class DeleteJob(BaseJob):
             )
 
             # Broadcast status update
-            self._broadcast_job_status_updated(user_id, job_id, "processing", 80.0, "Deleting item from database...")
+            self._broadcast_job_status_updated(user_id, job_id, "processing", 80.0, "Deleting item from database...", item_id=item_id)
 
             # Delete the item
             with transaction.atomic():

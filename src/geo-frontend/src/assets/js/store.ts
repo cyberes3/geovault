@@ -3,7 +3,7 @@ import { UserInfo } from './types/store-types'
 
 // Define import queue item interface
 interface ImportQueueItem {
-    id: string
+    id: number
     filename: string
     status: string
     [key: string]: any
@@ -11,7 +11,7 @@ interface ImportQueueItem {
 
 // Define import history item interface
 interface ImportHistoryItem {
-    id: string
+    id: number
     original_filename: string
     timestamp: string
 }
@@ -68,16 +68,16 @@ export default createStore<State>({
                 state.importQueue.unshift(item); // Add to beginning
             }
         },
-        removeImportQueueItem(state: State, itemId: string) {
+        removeImportQueueItem(state: State, itemId: number) {
             const index = state.importQueue.findIndex(item => item.id === itemId);
             if (index > -1) {
                 state.importQueue.splice(index, 1);
             }
         },
-        removeImportQueueItems(state: State, itemIds: string[]) {
+        removeImportQueueItems(state: State, itemIds: number[]) {
             state.importQueue = state.importQueue.filter(item => !itemIds.includes(item.id));
         },
-        updateImportQueueItem(state: State, { id, updates }: { id: string, updates: Partial<ImportQueueItem> }) {
+        updateImportQueueItem(state: State, { id, updates }: { id: number, updates: Partial<ImportQueueItem> }) {
             const index = state.importQueue.findIndex(item => item.id === id);
             if (index > -1) {
                 state.importQueue[index] = { ...state.importQueue[index], ...updates };
@@ -121,13 +121,13 @@ export default createStore<State>({
         addImportQueueItem({ commit }: { commit: Commit }, item: ImportQueueItem) {
             commit('addImportQueueItem', item);
         },
-        removeImportQueueItem({ commit }: { commit: Commit }, itemId: string) {
+        removeImportQueueItem({ commit }: { commit: Commit }, itemId: number) {
             commit('removeImportQueueItem', itemId);
         },
-        removeImportQueueItems({ commit }: { commit: Commit }, itemIds: string[]) {
+        removeImportQueueItems({ commit }: { commit: Commit }, itemIds: number[]) {
             commit('removeImportQueueItems', itemIds);
         },
-        updateImportQueueItem({ commit }: { commit: Commit }, payload: { id: string, updates: Partial<ImportQueueItem> }) {
+        updateImportQueueItem({ commit }: { commit: Commit }, payload: { id: number, updates: Partial<ImportQueueItem> }) {
             commit('updateImportQueueItem', payload);
         },
         setWebSocketConnected({ commit }: { commit: Commit }, connected: boolean) {

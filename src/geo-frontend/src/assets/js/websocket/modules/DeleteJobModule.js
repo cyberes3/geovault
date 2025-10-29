@@ -27,7 +27,7 @@ export class DeleteJobModule extends BaseModule {
             console.log('Delete job started:', data);
             // Mark item as deleting in the queue
             this.store.dispatch('updateImportQueueItem', {
-                id: data.import_queue_id.toString(),
+                id: data.item_id,
                 updates: { deleting: true }
             });
         });
@@ -37,7 +37,7 @@ export class DeleteJobModule extends BaseModule {
             console.log('Delete job status updated:', data);
             // Could update progress here if needed
             this.store.dispatch('updateImportQueueItem', {
-                id: data.import_queue_id.toString(),
+                id: data.item_id,
                 updates: { 
                     deleting: true,
                     deleteProgress: data.progress 
@@ -48,16 +48,8 @@ export class DeleteJobModule extends BaseModule {
         // Handle delete job completed - remove item
         this.subscribe('completed', (data) => {
             console.log('Delete job completed:', data);
-            // Remove the deleted item(s) from the queue
-            if (data.import_queue_ids && data.import_queue_ids.length > 0) {
-                this.store.dispatch('removeImportQueueItems', 
-                    data.import_queue_ids.map(id => id.toString())
-                );
-            } else if (data.import_queue_id) {
-                this.store.dispatch('removeImportQueueItem', 
-                    data.import_queue_id.toString()
-                );
-            }
+            // Remove the deleted item from the queue
+            this.store.dispatch('removeImportQueueItem', data.item_id);
         });
 
         // Handle delete job failed - clear deleting state
@@ -65,7 +57,7 @@ export class DeleteJobModule extends BaseModule {
             console.log('Delete job failed:', data);
             // Clear deleting state and optionally set error
             this.store.dispatch('updateImportQueueItem', {
-                id: data.import_queue_id.toString(),
+                id: data.item_id,
                 updates: { 
                     deleting: false,
                     deleteError: data.error 
