@@ -108,7 +108,7 @@
               type="checkbox"
               :checked="selectedItems.has(item.id)"
               @change="toggleItemSelection(item.id)"
-              :disabled="item.imported || item.processing === true || (item.processing === false && item.feature_count === -1) || item.deleting"
+              :disabled="item.imported || item.processing === true || (item.processing === false && item.feature_count === -1) || item.deleting || (item.duplicate_status === 'duplicate_in_queue' || item.duplicate_status === 'duplicate_imported')"
               class="h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300 rounded disabled:opacity-50 disabled:cursor-not-allowed"
             />
           </td>
@@ -123,9 +123,15 @@
               </div>
               <div class="ml-4">
                 <div class="text-sm font-medium text-gray-900">
-                  <a :href="`/#/import/process/${item.id}`" class="text-blue-600 hover:text-blue-900">
+                  <!-- Disable link for duplicate items -->
+                  <a v-if="!(item.duplicate_status === 'duplicate_in_queue' || item.duplicate_status === 'duplicate_imported')" 
+                     :href="`/#/import/process/${item.id}`" 
+                     class="text-blue-600 hover:text-blue-900">
                     {{ item.original_filename }}
                   </a>
+                  <span v-else class="text-gray-500 cursor-not-allowed">
+                    {{ item.original_filename }}
+                  </span>
                 </div>
               </div>
             </div>
@@ -390,8 +396,8 @@ export default {
     },
     selectAll() {
       this.filteredImportQueue.forEach(item => {
-        // Select items that are not imported, not currently processing, and not being deleted
-        if (!item.imported && !(item.processing === true || (item.processing === false && item.feature_count === -1)) && !item.deleting) {
+        // Select items that are not imported, not currently processing, not being deleted, and not file-level duplicates
+        if (!item.imported && !(item.processing === true || (item.processing === false && item.feature_count === -1)) && !item.deleting && !(item.duplicate_status === 'duplicate_in_queue' || item.duplicate_status === 'duplicate_imported')) {
           this.selectedItems.add(item.id);
         }
       });
@@ -412,7 +418,7 @@ export default {
 
       this.selectedItems.forEach(itemId => {
         const item = this.filteredImportQueue.find(i => i.id === itemId);
-        if (item && !item.imported && !item.processing_failed && !(item.processing === true || (item.processing === false && item.feature_count === -1))) {
+        if (item && !item.imported && !item.processing_failed && !(item.processing === true || (item.processing === false && item.feature_count === -1)) && !(item.duplicate_status === 'duplicate_in_queue' || item.duplicate_status === 'duplicate_imported')) {
           validItems.push(itemId);
         } else {
           invalidItems.push(itemId);
@@ -425,7 +431,7 @@ export default {
       });
 
       if (this.selectedItems.size === 0) {
-        alert('No valid items selected for import. Processing, already imported, or failed items cannot be bulk imported.');
+        alert('No valid items selected for import. Processing, already imported, failed items, or file-level duplicates cannot be bulk imported.');
         this.updateSelectAllCheckbox();
         return;
       }

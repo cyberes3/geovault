@@ -832,6 +832,12 @@ export default {
         console.log('Item not found (404) - redirecting to import queue');
         this.loading.redirecting = true;
         this.$router.replace('/import');
+      } else if (data.code === 409 && data.duplicate_status === 'duplicate_in_queue') {
+        // Handle duplicate file error with alert popup
+        window.alert(data.message || 'This upload is a duplicate and cannot be loaded.');
+        // When user closes the alert, redirect to import page
+        this.loading.redirecting = true;
+        this.$router.replace('/import');
       } else {
         console.error('WebSocket error:', data.message);
         this.msg = data.message || 'An error occurred';
