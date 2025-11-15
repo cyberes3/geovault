@@ -133,6 +133,8 @@
     <ImportControls
         :current-page="pagination.currentPage"
         :duplicate-count="duplicates.indices.length"
+        :duplicate-original-filename="duplicateOriginalFilename"
+        :duplicate-status="duplicateStatus"
         :goto-page-input="pagination.gotoInput"
         :has-features="itemsForUser.length > 0"
         :has-next-page="pagination.hasNext"
@@ -144,6 +146,7 @@
         :is-saving="loading.saving"
         :lock-buttons="lockButtons"
         :page-size="pagination.pageSize"
+        :show-duplicate-message="true"
         :show-no-features-message="showNoFeaturesMessage"
         :total-features="pagination.totalFeatures"
         :total-pages="pagination.totalPages"
@@ -420,6 +423,8 @@
         v-if="!loading.page"
         :current-page="pagination.currentPage"
         :duplicate-count="duplicates.indices.length"
+        :duplicate-original-filename="duplicateOriginalFilename"
+        :duplicate-status="duplicateStatus"
         :goto-page-input="pagination.gotoInput"
         :has-features="itemsForUser.length > 0"
         :has-next-page="pagination.hasNext"
@@ -583,6 +588,8 @@ export default {
       // Misc state
       lockButtons: false,
       isImported: false,
+      duplicateStatus: null,
+      duplicateOriginalFilename: null,
 
       // WebSocket connection
       ws: null,
@@ -704,6 +711,8 @@ export default {
       this.originalFilename = data.original_filename;
       this.isImported = data.imported;
       this.processing.active = data.processing;
+      this.duplicateStatus = data.duplicate_status || null;
+      this.duplicateOriginalFilename = data.duplicate_original_filename || null;
 
       if (data.job_details) {
         this.processing.message = data.job_details.message || 'Processing file...';
@@ -1355,6 +1364,10 @@ export default {
         features: [],
         indices: []
       };
+
+      // Reset duplicate status
+      this.duplicateStatus = null;
+      this.duplicateOriginalFilename = null;
 
       // Reset edit cache
       this.editCache = {

@@ -108,7 +108,7 @@
               type="checkbox"
               :checked="selectedItems.has(item.id)"
               @change="toggleItemSelection(item.id)"
-              :disabled="item.imported || item.processing === true || (item.processing === false && item.feature_count === -1) || item.deleting || (item.duplicate_status === 'duplicate_in_queue' || item.duplicate_status === 'duplicate_imported')"
+              :disabled="item.imported || item.processing === true || (item.processing === false && item.feature_count === -1) || item.deleting || item.duplicate_status === 'duplicate_in_queue'"
               class="h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300 rounded disabled:opacity-50 disabled:cursor-not-allowed"
             />
           </td>
@@ -123,8 +123,8 @@
               </div>
               <div class="ml-4">
                 <div class="text-sm font-medium text-gray-900">
-                  <!-- Disable link for duplicate items -->
-                  <a v-if="!(item.duplicate_status === 'duplicate_in_queue' || item.duplicate_status === 'duplicate_imported')" 
+                  <!-- Disable link only for duplicates in queue -->
+                  <a v-if="item.duplicate_status !== 'duplicate_in_queue'" 
                      :href="`/#/import/process/${item.id}`" 
                      class="text-blue-600 hover:text-blue-900">
                     {{ item.original_filename }}
@@ -396,8 +396,8 @@ export default {
     },
     selectAll() {
       this.filteredImportQueue.forEach(item => {
-        // Select items that are not imported, not currently processing, not being deleted, and not file-level duplicates
-        if (!item.imported && !(item.processing === true || (item.processing === false && item.feature_count === -1)) && !item.deleting && !(item.duplicate_status === 'duplicate_in_queue' || item.duplicate_status === 'duplicate_imported')) {
+        // Select items that are not imported, not currently processing, not being deleted, and not file-level duplicates in queue
+        if (!item.imported && !(item.processing === true || (item.processing === false && item.feature_count === -1)) && !item.deleting && item.duplicate_status !== 'duplicate_in_queue') {
           this.selectedItems.add(item.id);
         }
       });
@@ -418,7 +418,7 @@ export default {
 
       this.selectedItems.forEach(itemId => {
         const item = this.filteredImportQueue.find(i => i.id === itemId);
-        if (item && !item.imported && !item.processing_failed && !(item.processing === true || (item.processing === false && item.feature_count === -1)) && !(item.duplicate_status === 'duplicate_in_queue' || item.duplicate_status === 'duplicate_imported')) {
+        if (item && !item.imported && !item.processing_failed && !(item.processing === true || (item.processing === false && item.feature_count === -1)) && item.duplicate_status !== 'duplicate_in_queue') {
           validItems.push(itemId);
         } else {
           invalidItems.push(itemId);

@@ -738,6 +738,8 @@ def import_to_featurestore(request, item_id):
         }, status=400)
 
     # Check for file-level duplicates before importing
+    # Only block duplicates that are still in the queue (not yet imported)
+    # Allow re-importing files that were previously imported
     if import_item.geojson_hash:
         # Check if there are other items in queue with same hash (uploaded earlier)
         earlier_duplicates = ImportQueue.objects.filter(
@@ -751,20 +753,6 @@ def import_to_featurestore(request, item_id):
             return JsonResponse({
                 'success': False,
                 'msg': f'This file is a duplicate of "{earlier_duplicates.original_filename}" which is already in the import queue',
-                'code': 409
-            }, status=409)
-        
-        # Check for already-imported files with same hash
-        imported_duplicates = ImportQueue.objects.filter(
-            user=request.user,
-            geojson_hash=import_item.geojson_hash,
-            imported=True
-        ).order_by('timestamp').first()
-        
-        if imported_duplicates:
-            return JsonResponse({
-                'success': False,
-                'msg': f'This file is a duplicate of "{imported_duplicates.original_filename}" which has already been imported',
                 'code': 409
             }, status=409)
 

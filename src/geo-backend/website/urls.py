@@ -22,7 +22,7 @@ from website.views import index, standalone_map
 
 urlpatterns = [
     path('', index),
-    path('map-standalone/', standalone_map, name='standalone_map'),
+    path('standalone_map/', standalone_map, name='standalone_map'),
     re_path(r"^account/", include("django.contrib.auth.urls")),
     path('admin/', admin.site.urls),
     path('', include("users.urls")),

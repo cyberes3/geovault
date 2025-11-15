@@ -107,7 +107,7 @@
             <h3 class="text-sm font-medium text-purple-800">Duplicate of Imported File</h3>
             <div class="mt-2 text-sm text-purple-700">
               <p>This file is a duplicate of <span class="font-medium">{{ duplicateOriginalFilename }}</span>, which has already been imported.</p>
-              <p class="mt-1">All features in this file are marked as duplicates but can still be imported if needed.</p>
+              <p class="mt-1">You can still import this file. Features that match existing features in your library will be marked as duplicates during import.</p>
             </div>
           </div>
         </div>
@@ -253,7 +253,6 @@ export default {
           this.isLoadingPage ||
           this.isImported ||
           this.duplicateStatus === 'duplicate_in_queue' ||
-          this.duplicateStatus === 'duplicate_imported' ||
           (this.showNoFeaturesMessage && !this.isLoadingPage && this.importableCount === 0) ||
           this.hasFeatures
       );

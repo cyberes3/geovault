@@ -48,9 +48,9 @@ class UploadStatusModule(BaseWebSocketModule):
             get_item = sync_to_async(ImportQueue.objects.get)
             self.import_item = await get_item(id=self.import_item.id)
 
-            # If this item is a file-level duplicate (either a duplicate still in the queue
-            # with an earlier timestamp or a duplicate of an already-imported item), prevent
-            # loading and notify the client with an error message.
+            # Check for file-level duplicates
+            # Only block duplicates that are still in the queue (not yet imported)
+            # Allow re-importing files that were previously imported (but mark them as duplicates)
             duplicate_status = None
             duplicate_original_filename = None
 
@@ -80,7 +80,9 @@ class UploadStatusModule(BaseWebSocketModule):
                         duplicate_status = 'duplicate_imported'
                         duplicate_original_filename = duplicate_imported.original_filename
 
-            if duplicate_status is not None:
+            # Only block if it's a duplicate in the queue
+            # Allow duplicates of already-imported files to proceed (they'll be marked as duplicates)
+            if duplicate_status == 'duplicate_in_queue':
                 # Send an error to the client via this websocket channel and do not proceed
                 message = (
                     "This upload is a duplicate of '" + duplicate_original_filename
@@ -130,10 +132,9 @@ class UploadStatusModule(BaseWebSocketModule):
                 'features': features_data,
                 'logs': logs_data,
                 'duplicates': duplicates_data,
-                # Keep fields for clients that already rely on them, but they'll never
-                # see this payload when duplicate_status is set because we early-return
-                'duplicate_status': None,
-                'duplicate_original_filename': None
+                # Include duplicate status for informational purposes (duplicate_imported allows import)
+                'duplicate_status': duplicate_status,
+                'duplicate_original_filename': duplicate_original_filename
             }
 
             await self.send_to_client('initial_state', initial_state)
