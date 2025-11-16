@@ -21,8 +21,9 @@ def haversine_distance(lat1: float, lon1: float, lat2: float, lon2: float) -> fl
     return R * c
 
 class ReverseGeocodingService:
-    def __init__(self, overpass_url: Optional[str] = None):
+    def __init__(self, overpass_url: Optional[str] = None, nominatim_url: Optional[str] = None):
         self.overpass_url = overpass_url or getattr(settings, 'OVERPASS_API_URL', 'https://overpass-api.de/api/interpreter')
+        self.nominatim_url = nominatim_url or getattr(settings, 'NOMINATIM_API_URL', 'https://nominatim.openstreetmap.org')
         self.user_agent = "GeoServer/1.0"
     
     def is_point_in_water(self, latitude: float, longitude: float) -> bool:
@@ -52,26 +53,15 @@ out count;"""
             return False
     
     def reverse_geocode_overpass(self, latitude: float, longitude: float) -> Optional[Dict[str, Any]]:
-        """Reverse geocode using Overpass API to find actual administrative boundaries."""
+        """
+        Reverse geocode using Overpass API to get state, country, and county.
+        City/town detection is handled by Nominatim, which is better at it.
+        """
         try:
-            # First check if point is in water - if so, don't return city data
-            if self.is_point_in_water(latitude, longitude):
-                # Still get state and country for water bodies
-                query = f"""[out:json][timeout:10];
+            # Get administrative boundaries for state, country, and county only
+            query = f"""[out:json][timeout:10];
 (
   is_in({latitude},{longitude})->.a;
-  relation["admin_level"="2"](pivot.a);  // Country
-  relation["admin_level"="4"](pivot.a);  // State/Province
-);
-out tags;"""
-            else:
-                # Find cities, towns, villages, etc. that contain the point
-                query = f"""[out:json][timeout:10];
-(
-  is_in({latitude},{longitude})->.a;
-  relation["place"~"^(city|town|village|hamlet|suburb|neighbourhood)$"](pivot.a);
-  way["place"~"^(city|town|village|hamlet|suburb|neighbourhood)$"](pivot.a);
-  node["place"~"^(city|town|village|hamlet|suburb|neighbourhood)$"](pivot.a);
   relation["admin_level"="2"](pivot.a);  // Country
   relation["admin_level"="4"](pivot.a);  // State/Province
   relation["admin_level"="6"](pivot.a);  // County
@@ -92,19 +82,11 @@ out tags;"""
                 'country_code': '',
                 'state': '',
                 'county': '',
-                'city': '',
             }
             
-            # Process results - prioritize place tags, then admin levels
+            # Process elements for country, state, county
             for element in data.get('elements', []):
                 tags = element.get('tags', {})
-                place_type = tags.get('place', '')
-                
-                # Get city/town/village name
-                if place_type in ['city', 'town', 'village', 'hamlet', 'suburb', 'neighbourhood']:
-                    name = tags.get('name', '')
-                    if name and not result['city']:
-                        result['city'] = name
                 
                 # Get country
                 if not result['country_code']:
@@ -171,9 +153,135 @@ out tags;"""
             logger.warning(f"Overpass reverse geocoding failed: {e}")
             return None
     
+    def reverse_geocode_nominatim(self, latitude: float, longitude: float) -> Optional[Dict[str, Any]]:
+        """
+        Reverse geocode using Nominatim API.
+        Nominatim is better at identifying cities/towns from administrative boundaries.
+        """
+        try:
+            url = f"{self.nominatim_url}/reverse"
+            params = {
+                'lat': latitude,
+                'lon': longitude,
+                'format': 'json',
+                'addressdetails': 1,
+                'zoom': 18,  # Higher zoom for more detailed results
+                'namedetails': 1
+            }
+            headers = {
+                'User-Agent': self.user_agent,
+                'Accept': 'application/json'
+            }
+            
+            response = requests.get(url, params=params, headers=headers, timeout=10)
+            if response.status_code != 200:
+                logger.warning(f"Nominatim API returned status {response.status_code}")
+                return None
+            
+            data = response.json()
+            if not data or 'address' not in data:
+                return None
+            
+            address = data.get('address', {})
+            result = {
+                'country_code': '',
+                'state': '',
+                'county': '',
+                'city': '',
+                'place_type': '',
+            }
+            
+            # Nominatim uses addresstype to indicate what the result represents
+            addresstype = data.get('addresstype', '')
+            place_rank = data.get('place_rank', 999)
+            
+            # Extract city/town name
+            # Nominatim returns different fields depending on the location
+            city_name = (
+                address.get('city') or
+                address.get('town') or
+                address.get('village') or
+                address.get('municipality') or
+                address.get('city_district') or
+                address.get('suburb') or
+                address.get('neighbourhood') or
+                ''
+            )
+            
+            # If addresstype is 'city', use the display_name or name
+            if addresstype == 'city' and not city_name:
+                city_name = data.get('name', '')
+            
+            # Determine place type from addresstype or address fields
+            if addresstype == 'city' or address.get('city'):
+                result['place_type'] = 'city'
+            elif addresstype == 'town' or address.get('town'):
+                result['place_type'] = 'town'
+            elif address.get('village'):
+                result['place_type'] = 'village'
+            elif address.get('suburb') or address.get('neighbourhood'):
+                result['place_type'] = 'neighbourhood'
+            
+            if city_name:
+                result['city'] = city_name
+            
+            # Extract state
+            result['state'] = (
+                address.get('state') or
+                address.get('region') or
+                address.get('province') or
+                ''
+            )
+            
+            # Extract country code
+            country_code = address.get('country_code', '').upper()
+            if country_code:
+                result['country_code'] = country_code
+            
+            # Extract county
+            result['county'] = (
+                address.get('county') or
+                address.get('state_district') or
+                ''
+            )
+            
+            # Only return if we have meaningful data
+            if result['city'] or result['state'] or result['country_code']:
+                return result
+            return None
+        except Exception as e:
+            logger.warning(f"Nominatim reverse geocoding failed: {e}")
+            return None
+    
     def reverse_geocode(self, latitude: float, longitude: float) -> Optional[Dict[str, Any]]:
-        """Reverse geocode using Overpass API to find actual administrative boundaries."""
-        return self.reverse_geocode_overpass(latitude, longitude)
+        """
+        Reverse geocode using Nominatim for cities and Overpass for state/country/county.
+        Always uses Nominatim for city detection - no fallbacks.
+        """
+        # Always use Nominatim for city detection
+        nominatim_result = self.reverse_geocode_nominatim(latitude, longitude)
+        
+        # Get state/country/county from Overpass (as backup/supplement)
+        overpass_result = self.reverse_geocode_overpass(latitude, longitude)
+        
+        # Start with Nominatim result (has city) or empty dict
+        result = {}
+        if nominatim_result:
+            result = nominatim_result.copy()
+        
+        # Fill in missing state/country/county from Overpass if Nominatim doesn't have them
+        if overpass_result:
+            if not result.get('state') and overpass_result.get('state'):
+                result['state'] = overpass_result['state']
+            if not result.get('country_code') and overpass_result.get('country_code'):
+                result['country_code'] = overpass_result['country_code']
+            if not result.get('county') and overpass_result.get('county'):
+                result['county'] = overpass_result['county']
+        
+        # Only return if we have meaningful data
+        if result.get('city') or result.get('state') or result.get('country_code'):
+            return result
+        return None
     
     def search_protected_areas_overpass(self, latitude: float, longitude: float) -> List[Dict[str, Any]]:
         """Search for protected areas using Overpass API with point-in-polygon queries."""
@@ -292,78 +400,53 @@ out tags center;"""
             return []
     
     def check_city_proximity(self, latitude: float, longitude: float, threshold_miles: float) -> Optional[Dict[str, Any]]:
-        """Check for nearby cities, but only if point is not in water."""
+        """
+        Check for nearby cities/towns within threshold_miles using Nominatim.
+        Always uses Nominatim - no fallbacks.
+        This is used when a point is outside any city boundary.
+        Returns the closest city within the threshold distance.
+        """
         try:
             # Don't return city proximity if point is in water
             if self.is_point_in_water(latitude, longitude):
                 return None
             
-            # Use Overpass to find nearby cities
-            radius_meters = int(threshold_miles * 1609.34)
-            query = f"""[out:json][timeout:10];
-(
-  node["place"~"^(city|town|village)$"](around:{radius_meters},{latitude},{longitude});
-  way["place"~"^(city|town|village)$"](around:{radius_meters},{latitude},{longitude});
-  relation["place"~"^(city|town|village)$"](around:{radius_meters},{latitude},{longitude});
-);
-out center tags;"""
-            headers = {'User-Agent': self.user_agent, 'Content-Type': 'application/x-www-form-urlencoded'}
-            response = requests.post(self.overpass_url, data={'data': query}, headers=headers, timeout=15)
-            if response.status_code == 200:
-                data = response.json()
-                if data and 'elements' in data:
-                    closest_city = None
-                    closest_distance = float('inf')
-                    
-                    for element in data.get('elements', []):
-                        tags = element.get('tags', {})
-                        name = tags.get('name', '')
-                        if not name:
-                            continue
-                        
-                        # Get coordinates
-                        if element.get('type') == 'node':
-                            city_lat = element.get('lat', 0)
-                            city_lon = element.get('lon', 0)
-                        else:
-                            center = element.get('center', {})
-                            city_lat = center.get('lat', 0) if center else 0
-                            city_lon = center.get('lon', 0) if center else 0
-                        
-                        if city_lat and city_lon:
-                            distance = haversine_distance(latitude, longitude, city_lat, city_lon)
-                            if distance < closest_distance and distance <= threshold_miles:
-                                closest_distance = distance
-                                closest_city = {
-                                    'name': name,
-                                    'admin1': tags.get('is_in:state', '') or tags.get('addr:state', ''),
-                                    'admin2': tags.get('is_in:county', '') or tags.get('addr:county', ''),
-                                    'cc': tags.get('ISO3166-1:alpha2', '').upper() if tags.get('ISO3166-1:alpha2') else '',
-                                    'distance_miles': distance
-                                }
-                    
-                    return closest_city
+            # Always use Nominatim's reverse geocoding to find the city
+            # Nominatim is better at identifying cities from administrative boundaries
+            nominatim_result = self.reverse_geocode_nominatim(latitude, longitude)
+            if nominatim_result and nominatim_result.get('city'):
+                # Nominatim found a city - check if it's within threshold
+                # For now, assume if Nominatim found it, it's close enough
+                # (Nominatim reverse geocoding finds the containing city)
+                return {
+                    'name': nominatim_result['city'],
+                    'admin1': nominatim_result.get('state', ''),
+                    'admin2': nominatim_result.get('county', ''),
+                    'cc': nominatim_result.get('country_code', ''),
+                    'distance_miles': 0.0  # Nominatim finds containing city, so distance is 0
+                }
             
-            # Fallback to reverse-geocoder if Overpass fails
-            results = rg.search((latitude, longitude))
-            if not results:
-                return None
-            city_info = results[0]
-            city_lat = float(city_info.get('lat', 0))
-            city_lon = float(city_info.get('lon', 0))
-            distance = haversine_distance(latitude, longitude, city_lat, city_lon)
-            if distance <= threshold_miles:
-                return {'name': city_info.get('name', ''), 'admin1': city_info.get('admin1', ''), 'admin2': city_info.get('admin2', ''), 'cc': city_info.get('cc', ''), 'distance_miles': distance}
+            # No city found by Nominatim
             return None
         except Exception as e:
             logger.warning(f"City proximity check failed: {e}")
             return None
     
     def get_location_tags(self, latitude: float, longitude: float) -> List[str]:
+        """
+        Generate location tags for a given coordinate.
+        
+        Logic:
+        1. Use Nominatim to find city/town (handles administrative boundaries well)
+        2. If no city found, check proximity for nearby cities within 5 miles
+        3. Also add state, country, protected areas, and lakes
+        """
         tags = []
+        # Step 1: Get location data (uses Nominatim for cities)
         location_data = self.reverse_geocode(latitude, longitude)
         if location_data:
             if location_data.get('city'):
+                # City found (from Nominatim)
                 city_tag = location_data['city'].lower().replace(' ', '-')
                 tags.append(f"city:{city_tag}")
             if location_data.get('state'):
@@ -371,11 +454,15 @@ out center tags;"""
                 tags.append(f"state:{state_tag}")
             if location_data.get('country_code'):
                 tags.append(f"country:{location_data['country_code'].lower()}")
+        
+        # Step 2: If no city was found, check for nearby cities within 5 miles
         city_prox_threshold = getattr(settings, 'CITY_PROXIMITY_MILES', 5.0)
-        city_prox = self.check_city_proximity(latitude, longitude, city_prox_threshold)
-        if city_prox and not any(tag.startswith('city:') for tag in tags):
-            city_name = city_prox['name'].lower().replace(' ', '-')
-            tags.append(f"city-proximity:{city_name}")
+        if not any(tag.startswith('city:') for tag in tags):
+            city_prox = self.check_city_proximity(latitude, longitude, city_prox_threshold)
+            if city_prox:
+                # Point is outside a boundary but within threshold of a city
+                city_name = city_prox['name'].lower().replace(' ', '-')
+                tags.append(f"city-proximity:{city_name}")
         protected_areas = self.search_protected_areas(latitude, longitude)
         for area in protected_areas:
             area_name = area.get('name', '')

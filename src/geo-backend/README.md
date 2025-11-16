@@ -25,3 +25,23 @@ GRANT ALL PRIVILEGES ON TABLE spatial_ref_sys TO geoserver;
 ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT ALL ON TABLES TO geoserver;
 ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT ALL ON SEQUENCES TO geoserver;
 ```
+
+## Nominatim
+
+*Nominatim* is used for reverse geocoding to find cities and towns. It runs locally and requires a 10+ GB database.
+
+To install, use Docker: <https://github.com/mediagis/nominatim-docker>
+
+```shell
+docker run -d \
+  -e PBF_URL=https://download.geofabrik.de/north-america/us-latest.osm.pbf \
+  -p 8080:8080 \
+  --name nominatim \
+  mediagis/nominatim:5.2
+```
+
+### Overpass
+
+The *Overpass API* is used for reverse geocoding to find other features. It also requires a 10+ GB database.
+
+<https://github.com/wiktorn/Overpass-API>

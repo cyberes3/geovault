@@ -222,6 +222,10 @@ ICON_FETCH_TIMEOUT = float(os.environ.get('ICON_FETCH_TIMEOUT', '1.0'))
 # Overpass API server URL (default: public OSM Overpass)
 OVERPASS_API_URL = os.environ.get('OVERPASS_API_URL', 'https://overpass-api.de/api/interpreter')
 
+# Nominatim API server URL (default: public Nominatim)
+# Nominatim is better at identifying cities/towns from administrative boundaries
+NOMINATIM_API_URL = os.environ.get('NOMINATIM_API_URL', 'https://nominatim.openstreetmap.org')
+
 # Enable or disable reverse geocoding (default: True)
 REVERSE_GEOCODING_ENABLED = os.environ.get('REVERSE_GEOCODING_ENABLED', 'True').lower() == 'true'
 
