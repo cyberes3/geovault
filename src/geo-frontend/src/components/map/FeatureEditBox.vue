@@ -65,16 +65,15 @@
           </div>
         </div>
 
-        <!-- Raw JSON Field -->
+        <!-- Raw JSON Field (Coordinates Only) -->
         <div>
-          <label class="block text-sm font-medium text-gray-700 mb-1">Raw JSON</label>
+          <label class="block text-sm font-medium text-gray-700 mb-1">Coordinates</label>
           <textarea
             v-model="rawJsonInput"
-            rows="8"
+            rows="6"
             class="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500 font-mono text-xs"
-            placeholder='{"type": "Feature", ...}'
+            placeholder="[]"
           ></textarea>
-          <p class="mt-1 text-xs text-gray-500">Edit the full GeoJSON feature (will be validated on save)</p>
         </div>
 
         <!-- Error Message -->
@@ -167,7 +166,7 @@ export default {
       if (!this.feature) return
 
       const properties = this.feature.get('properties') || {}
-      
+
       // Initialize form data
       this.formData.name = properties.name || ''
       this.formData.description = properties.description || ''
@@ -186,7 +185,7 @@ export default {
 
     checkForPngIcon(properties) {
       const iconPropertyNames = ['icon', 'icon-href', 'iconUrl', 'icon_url', 'marker-icon', 'marker-symbol', 'symbol']
-      
+
       for (const propName of iconPropertyNames) {
         if (properties[propName] && typeof properties[propName] === 'string') {
           const iconUrl = properties[propName].trim()
@@ -205,14 +204,21 @@ export default {
       const geometry = this.feature.getGeometry()
       if (!geometry) return
 
-      // Convert OpenLayers geometry to GeoJSON
+      // Convert OpenLayers geometry to GeoJSON (geometry only, not full feature)
       const format = new GeoJSON()
-      const featureJson = format.writeFeatureObject(this.feature, {
+      const geometryJson = format.writeGeometryObject(geometry, {
         featureProjection: 'EPSG:3857',
         dataProjection: 'EPSG:4326'
       })
 
-      this.rawJsonInput = JSON.stringify(featureJson, null, 2)
+      // Extract only coordinates (or geometries for GeometryCollection)
+      if (geometryJson.type === 'GeometryCollection') {
+        // For GeometryCollection, show geometries array
+        this.rawJsonInput = JSON.stringify(geometryJson.geometries || [], null, 2)
+      } else {
+        // For all other types, show coordinates array
+        this.rawJsonInput = JSON.stringify(geometryJson.coordinates || [], null, 2)
+      }
     },
 
     parseTags(tagsString) {
@@ -235,49 +241,53 @@ export default {
           return
         }
 
-        // Parse raw JSON if provided, otherwise build from form data
-        let featureData
+        // Build feature from form data and current feature
+        const geometry = this.feature.getGeometry()
+        if (!geometry) {
+          this.errorMessage = 'Feature has no geometry'
+          this.isSaving = false
+          return
+        }
+
+        const format = new GeoJSON()
+        let featureData = format.writeFeatureObject(this.feature, {
+          featureProjection: 'EPSG:3857',
+          dataProjection: 'EPSG:4326'
+        })
+
+        // Parse raw JSON if provided to update only the coordinates
         if (this.rawJsonInput && this.rawJsonInput.trim()) {
           try {
-            featureData = JSON.parse(this.rawJsonInput)
-            // Ensure it's a proper Feature object
-            if (featureData.type !== 'Feature') {
-              this.errorMessage = 'JSON must be a GeoJSON Feature object'
+            const coordinatesData = JSON.parse(this.rawJsonInput)
+
+            // Validate it's an array
+            if (!Array.isArray(coordinatesData)) {
+              this.errorMessage = 'Coordinates must be a valid JSON array'
               this.isSaving = false
               return
             }
-            
-            // Clean up nested properties (flatten if needed)
-            if (featureData.properties && typeof featureData.properties === 'object') {
-              // If properties contains another properties object, flatten it
-              while (featureData.properties.properties && typeof featureData.properties.properties === 'object') {
-                const nestedProps = featureData.properties.properties
-                // Merge nested properties into parent, with nested taking precedence
-                featureData.properties = { ...featureData.properties, ...nestedProps }
-                delete featureData.properties.properties
-              }
+
+            // Get the current geometry type
+            const currentGeometry = featureData.geometry
+            if (!currentGeometry || !currentGeometry.type) {
+              this.errorMessage = 'Feature has no valid geometry type'
+              this.isSaving = false
+              return
+            }
+
+            // Update only the coordinates/geometries in the existing geometry
+            if (currentGeometry.type === 'GeometryCollection') {
+              // For GeometryCollection, update geometries array
+              featureData.geometry.geometries = coordinatesData
+            } else {
+              // For all other types, update coordinates array
+              featureData.geometry.coordinates = coordinatesData
             }
           } catch (e) {
             this.errorMessage = `Invalid JSON: ${e.message}`
             this.isSaving = false
             return
           }
-        } else {
-          // Build feature from form data
-          const geometry = this.feature.getGeometry()
-          if (!geometry) {
-            this.errorMessage = 'Feature has no geometry'
-            this.isSaving = false
-            return
-          }
-
-          const format = new GeoJSON()
-          const featureJson = format.writeFeatureObject(this.feature, {
-            featureProjection: 'EPSG:3857',
-            dataProjection: 'EPSG:4326'
-          })
-
-          featureData = featureJson
         }
 
         // Ensure properties object exists
@@ -331,7 +341,7 @@ export default {
         }
 
         this.successMessage = 'Feature updated successfully!'
-        
+
         // Emit saved event after a short delay
         setTimeout(() => {
           this.$emit('saved')
@@ -356,7 +366,7 @@ export default {
       // Show confirmation dialog
       const featureName = originalProperties.name || 'this feature'
       const confirmed = window.confirm(`Are you sure you want to delete "${featureName}"? This action cannot be undone.`)
-      
+
       if (!confirmed) {
         return
       }
