@@ -192,6 +192,17 @@ ENABLE_MIME_TYPE_VALIDATION = True
 # indicating how many features were limited.
 MAX_FEATURES_PER_REQUEST = -1
 
+# Tile Proxy Cache Configuration
+# Directory where proxied tiles will be cached on disk
+# Default: /tmp/geoserver-tiles (can be overridden via environment variable)
+TILE_CACHE_DIR = os.environ.get('TILE_CACHE_DIR', '/tmp/geoserver-tiles')
+
+# Enable or disable tile caching (default: True)
+TILE_CACHE_ENABLED = os.environ.get('TILE_CACHE_ENABLED', 'True').lower() == 'true'
+
+# Number of days before cached tiles expire (default: 30 days)
+TILE_CACHE_EXPIRY_DAYS = int(os.environ.get('TILE_CACHE_EXPIRY_DAYS', '30'))
+
 # Logging configuration for security events
 LOGGING = {
     'version': 1,
