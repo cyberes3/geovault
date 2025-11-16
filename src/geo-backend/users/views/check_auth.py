@@ -1,5 +1,5 @@
 from django.http import JsonResponse
-from data.models import FeatureStore
+from api.models import FeatureStore
 
 
 def check_auth(request):

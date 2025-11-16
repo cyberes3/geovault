@@ -10,7 +10,7 @@ from typing import Dict, Any
 
 from django.db import transaction
 
-from data.models import ImportQueue, DatabaseLogging
+from api.models import ImportQueue, DatabaseLogging
 from geo_lib.processing.jobs.base_job import BaseJob
 from geo_lib.processing.status_tracker import ProcessingStatus, JobType
 

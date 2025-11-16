@@ -8,7 +8,7 @@ import logging
 from channels.db import database_sync_to_async
 from django.core.serializers.json import DjangoJSONEncoder
 
-from data.models import ImportQueue
+from api.models import ImportQueue
 from geo_lib.processing.status_tracker import status_tracker
 from geo_lib.websocket.base_module import BaseWebSocketModule
 

@@ -106,7 +106,7 @@ class RealTimeImportLog:
         
         # Write to database immediately with the same timestamp
         try:
-            from data.models import DatabaseLogging
+            from api.models import DatabaseLogging
             db_log = DatabaseLogging.objects.create(
                 user_id=self.user_id,
                 log_id=self.log_id,
@@ -153,7 +153,7 @@ class RealTimeImportLog:
             from asgiref.sync import async_to_sync
             
             # Find the import item associated with this log_id
-            from data.models import ImportQueue
+            from api.models import ImportQueue
             try:
                 import_item = ImportQueue.objects.get(log_id=self.log_id)
                 user_id = import_item.user_id

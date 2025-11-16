@@ -19,7 +19,7 @@ from website.startup_checks import run_startup_checks
 run_startup_checks()
 
 # Import routing after Django is set up
-from data.routing import websocket_urlpatterns
+from api.routing import websocket_urlpatterns
 
 application = ProtocolTypeRouter({
     "http": get_asgi_application(),

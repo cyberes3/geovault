@@ -11,7 +11,7 @@ from typing import Dict, Any
 from django.contrib.auth.models import User
 from django.db import transaction
 
-from data.models import ImportQueue
+from api.models import ImportQueue
 from geo_lib.processing.geojson_normalization import hash_normalized_geojson
 from geo_lib.processing.jobs.base_job import BaseJob
 from geo_lib.processing.logging import RealTimeImportLog, DatabaseLogLevel
@@ -474,7 +474,7 @@ class UploadJob(BaseJob):
                 processing_log.add("Starting duplicate detection against existing feature store", "UploadJob", DatabaseLogLevel.INFO)
 
                 # Import the duplicate detection functions
-                from data.views.import_item import find_coordinate_duplicates, strip_duplicate_features
+                from api.views.import_item import find_coordinate_duplicates, strip_duplicate_features
 
                 # First, check for internal duplicates within the file
                 processing_log.add("Checking for internal duplicates within the uploaded file", "UploadJob", DatabaseLogLevel.INFO)

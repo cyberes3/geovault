@@ -1,7 +1,7 @@
 #!/bin/bash
 SCRIPT_DIR=$( cd -- "$( dirname -- "${BASH_SOURCE[0]}" )" &> /dev/null && pwd )
 source $SCRIPT_DIR/venv/bin/activate
-python manage.py makemigrations data --no-input
+python manage.py makemigrations api --no-input
 python manage.py migrate --no-input
 
 # Run startup checks before starting the server

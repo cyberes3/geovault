@@ -1,6 +1,6 @@
 import logging
 
-from data.models import DatabaseLogging
+from api.models import DatabaseLogging
 from geo_lib.processing.logging import ImportLog
 
 _logger = logging.getLogger("MAIN").getChild("DBLOG")

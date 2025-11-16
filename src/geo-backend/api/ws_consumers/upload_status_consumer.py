@@ -36,7 +36,7 @@ class UploadStatusConsumer(AsyncWebsocketConsumer):
 
         try:
             # Verify user owns this import item using async database query
-            from data.models import ImportQueue
+            from api.models import ImportQueue
             from asgiref.sync import sync_to_async
 
             # Use sync_to_async to make the database query async-safe

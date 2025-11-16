@@ -1,6 +1,6 @@
 import json
 from django.core.management.base import BaseCommand
-from data.models import ImportQueue
+from api.models import ImportQueue
 
 
 class Command(BaseCommand):

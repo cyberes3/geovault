@@ -1,8 +1,8 @@
 from django.urls import path
 
-from data.views.geojson_api import get_geojson_data, get_feature, update_feature, update_feature_metadata, serve_icon
-from data.views.geolocation_api import get_user_location, get_location_by_ip
-from data.views.import_item import upload_item, get_processing_status, get_user_processing_jobs, delete_import_item, bulk_delete_import_items, update_import_item, fetch_import_history_item, \
+from api.views.geojson_api import get_geojson_data, get_feature, update_feature, update_feature_metadata, serve_icon
+from api.views.geolocation_api import get_user_location, get_location_by_ip
+from api.views.import_item import upload_item, get_processing_status, get_user_processing_jobs, delete_import_item, bulk_delete_import_items, update_import_item, fetch_import_history_item, \
     import_to_featurestore
 
 urlpatterns = [

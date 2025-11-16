@@ -11,7 +11,7 @@ from django.http import HttpResponse, JsonResponse
 from django.views.decorators.csrf import csrf_protect
 from django.views.decorators.http import require_http_methods
 
-from data.models import ImportQueue, FeatureStore, DatabaseLogging
+from api.models import ImportQueue, FeatureStore, DatabaseLogging
 from geo_lib.feature_id import generate_feature_hash
 from geo_lib.processing.jobs import upload_job, delete_job
 from geo_lib.processing.status_tracker import status_tracker
@@ -142,7 +142,7 @@ def _find_coordinate_duplicates_batched(features: List[Dict], user_id: int, impo
     Optimized duplicate detection for large files using batched database queries.
     """
     from django.contrib.gis.geos import GEOSGeometry
-    from data.models import FeatureStore
+    from api.models import FeatureStore
     import json
 
     unique_features = []
@@ -984,7 +984,7 @@ def _broadcast_item_imported(user_id: int, item_id: int):
     """Broadcast WebSocket event when an item is imported."""
     from channels.layers import get_channel_layer
     from asgiref.sync import async_to_sync
-    from data.models import ImportQueue
+    from api.models import ImportQueue
     
     channel_layer = get_channel_layer()
     if channel_layer:

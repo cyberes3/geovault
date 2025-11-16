@@ -42,7 +42,7 @@ class UploadStatusModule(BaseWebSocketModule):
         """Send initial state with item status, features, and logs."""
         try:
             # Refresh the import item from database to get latest data
-            from data.models import ImportQueue
+            from api.models import ImportQueue
             from asgiref.sync import sync_to_async
 
             get_item = sync_to_async(ImportQueue.objects.get)
@@ -271,7 +271,7 @@ class UploadStatusModule(BaseWebSocketModule):
             return []
 
         try:
-            from data.models import DatabaseLogging
+            from api.models import DatabaseLogging
             from asgiref.sync import sync_to_async
 
             # Create async database query

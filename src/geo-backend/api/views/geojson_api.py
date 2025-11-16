@@ -13,7 +13,7 @@ from django.http import HttpResponse, Http404, JsonResponse
 from django.views.decorators.csrf import csrf_protect
 from django.views.decorators.http import require_http_methods
 
-from data.models import FeatureStore
+from api.models import FeatureStore
 from geo_lib.feature_id import generate_feature_hash
 from geo_lib.website.auth import login_required_401
 

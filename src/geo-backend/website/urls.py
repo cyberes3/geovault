@@ -26,7 +26,7 @@ urlpatterns = [
     re_path(r"^account/", include("django.contrib.auth.urls")),
     path('admin/', admin.site.urls),
     path('', include("users.urls")),
-    path('api/data/', include("data.urls")),
+    path('api/data/', include("api.urls")),
     path('api/tiles/sources/', get_tile_sources, name='get_tile_sources'),
     path('api/tiles/<str:service>/<int:z>/<int:x>/<int:y>', tile_proxy, name='tile_proxy'),
 ]

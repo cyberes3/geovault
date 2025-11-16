@@ -1,7 +1,7 @@
 from django.http import JsonResponse
 
 from geo_lib.website.auth import login_required_401
-from data.models import FeatureStore
+from api.models import FeatureStore
 
 
 @login_required_401

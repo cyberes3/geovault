@@ -1,6 +1,6 @@
 from django.core.management.base import BaseCommand, CommandError
 from django.db import transaction
-from data.models import ImportQueue, FeatureStore, DatabaseLogging
+from api.models import ImportQueue, FeatureStore, DatabaseLogging
 
 
 class Command(BaseCommand):
