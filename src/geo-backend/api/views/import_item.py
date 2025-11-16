@@ -889,7 +889,12 @@ def import_to_featurestore(request, item_id):
             feature = strip_icon_properties(feature.copy())
 
         feature_instance = c(**feature)
-        feature_instance.properties.tags = generate_auto_tags(feature_instance)  # Generate the tags after the user has made their changes.
+        # Generate auto tags (geocoding is already done during processing, this just adds type/date tags)
+        existing_tags = feature_instance.properties.tags or []
+        auto_tags = generate_auto_tags(feature_instance)
+        # Merge tags, avoiding duplicates
+        all_tags = list(existing_tags) + [tag for tag in auto_tags if tag not in existing_tags]
+        feature_instance.properties.tags = all_tags
 
         # Create the GeoJSON data
         geojson_data = json.loads(feature_instance.model_dump_json())

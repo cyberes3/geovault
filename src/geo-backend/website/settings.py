@@ -218,6 +218,17 @@ ICON_MAX_SIZE_BYTES = int(os.environ.get('ICON_MAX_SIZE_BYTES', '1048576'))
 # Timeout for fetching remote icons in seconds (default: 1 second)
 ICON_FETCH_TIMEOUT = float(os.environ.get('ICON_FETCH_TIMEOUT', '1.0'))
 
+# Reverse Geocoding Configuration
+# Overpass API server URL (default: public OSM Overpass)
+OVERPASS_API_URL = os.environ.get('OVERPASS_API_URL', 'https://overpass-api.de/api/interpreter')
+
+# Enable or disable reverse geocoding (default: True)
+REVERSE_GEOCODING_ENABLED = os.environ.get('REVERSE_GEOCODING_ENABLED', 'True').lower() == 'true'
+
+# Distance thresholds for proximity tags (in miles)
+CITY_PROXIMITY_MILES = float(os.environ.get('CITY_PROXIMITY_MILES', '5.0'))
+LAKE_PROXIMITY_MILES = float(os.environ.get('LAKE_PROXIMITY_MILES', '1.0'))
+
 # Logging configuration for security events
 LOGGING = {
     'version': 1,

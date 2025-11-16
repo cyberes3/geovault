@@ -130,6 +130,20 @@ class BaseProcessor(ABC):
 
         feature_log.add(f"Processing {len(features)} raw features from file", "Feature Processing", DatabaseLogLevel.INFO)
 
+        # Count features that will be geocoded (points and lines only)
+        from django.conf import settings
+        geocoding_enabled = getattr(settings, 'REVERSE_GEOCODING_ENABLED', True)
+        geocoding_count = 0
+        if geocoding_enabled:
+            for feature in features:
+                split_features = split_geometry_collection(feature)
+                for split_feature in split_features:
+                    geometry_type = split_feature.get('geometry', {}).get('type', '').lower()
+                    if geometry_type in ['point', 'multipoint', 'linestring', 'multilinestring']:
+                        geocoding_count += 1
+            if geocoding_count > 0:
+                feature_log.add(f"Geocoding {geocoding_count} feature(s)", "Geocoding", DatabaseLogLevel.INFO)
+
         for feature in features:
             # Split GeometryCollection into separate features
             split_features = split_geometry_collection(feature)
@@ -148,6 +162,51 @@ class BaseProcessor(ABC):
                     try:
                         # Generate properties with appropriate styling based on file type and feature geometry
                         split_feature['properties'] = geojson_property_generation(split_feature)
+
+                        # Add geocoding tags for points and lines
+                        from django.conf import settings
+                        if getattr(settings, 'REVERSE_GEOCODING_ENABLED', True):
+                            geometry_type = split_feature['geometry']['type'].lower()
+                            if geometry_type in ['point', 'multipoint', 'linestring', 'multilinestring']:
+                                try:
+                                    from geo_lib.geolocation.reverse_geocode import get_reverse_geocoding_service
+                                    from geo_lib.processing.tagging import get_representative_points
+                                    from geo_lib.types.feature import PointFeature, LineStringFeature, MultiLineStringFeature
+                                    
+                                    # Convert to feature instance to get representative points
+                                    feature_class = None
+                                    if geometry_type in ['point', 'multipoint']:
+                                        feature_class = PointFeature
+                                    elif geometry_type == 'linestring':
+                                        feature_class = LineStringFeature
+                                    elif geometry_type == 'multilinestring':
+                                        feature_class = MultiLineStringFeature
+                                    
+                                    if feature_class:
+                                        feature_instance = feature_class(**split_feature)
+                                        points = get_representative_points(feature_instance)
+                                        
+                                        if points:
+                                            geocoding_service = get_reverse_geocoding_service()
+                                            all_location_tags = set()
+                                            
+                                            for lat, lon in points:
+                                                location_tags = geocoding_service.get_location_tags(lat, lon)
+                                                all_location_tags.update(location_tags)
+                                            
+                                            # Add geocoding tags to existing tags
+                                            existing_tags = split_feature['properties'].get('tags', [])
+                                            if not isinstance(existing_tags, list):
+                                                existing_tags = []
+                                            split_feature['properties']['tags'] = existing_tags + sorted(all_location_tags)
+                                except Exception as geocode_error:
+                                    feature_name = split_feature.get('properties', {}).get('name', 'Unnamed')
+                                    feature_log.add(
+                                        f"Geocoding failed for feature '{feature_name}': {str(geocode_error)}",
+                                        "Geocoding",
+                                        DatabaseLogLevel.WARNING
+                                    )
+                                    logger.warning(f"Geocoding failed for feature '{feature_name}': {geocode_error}")
 
                         # Convert to our property format
                         from geo_lib.types.geojson import GeojsonRawProperty
