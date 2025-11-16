@@ -1,5 +1,3 @@
-version: '3.8'
-
 services:
   overpass:
     image: wiktorn/overpass-api:0.7.62
