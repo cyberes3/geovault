@@ -1,11 +1,11 @@
-```sql
-GRANT ALL ON SCHEMA public TO geobackend;
-GRANT ALL ON SCHEMA public TO public;
-```
+
+## Install
 
 ```shell
 sudo apt install postgresql-common libpq-dev libxml2-dev libxslt-dev python3.12 python3.12-dev python3.12-venv
 ```
+
+PostGIS setup. Run this on your database before starting the geoserver for the first time.
 
 ```sql
 CREATE EXTENSION IF NOT EXISTS postgis;
@@ -26,22 +26,24 @@ ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT ALL ON TABLES TO geoserver;
 ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT ALL ON SEQUENCES TO geoserver;
 ```
 
-## Nominatim
+## Reverse Geocoding
 
-*Nominatim* is used for reverse geocoding to find cities and towns. It runs locally and requires a 10+ GB database.
+Reverse geocoding is performed to generate tags for features that help to mark where they are spacially. This requires that you host
+2 very heavy services.
 
-To install, use Docker: <https://github.com/mediagis/nominatim-docker>
+This feature is disabled by default via the <TODO> flag.
 
-```shell
-docker run -d \
-  -e PBF_URL=https://download.geofabrik.de/north-america/us-latest.osm.pbf \
-  -p 8080:8080 \
-  --name nominatim \
-  mediagis/nominatim:5.2
-```
+[Nominatim](https://github.com/mediagis/nominatim-docker) is used to find cities and towns.
 
-### Overpass
+[Overpass API](https://github.com/wiktorn/Overpass-API) is used to find all other features.
 
-The *Overpass API* is used for reverse geocoding to find other features. It also requires a 10+ GB database.
+Docker Compose files are provided  to help you get the services running with minimal pain.
 
-<https://github.com/wiktorn/Overpass-API>
+Running these two services requires a minimum of 25GB RAM, 6 CPU cores, 500GB, and SSDs.
+
+### Setup
+
+1. Install Docker
+2. Create the `/srv/docker-data` directory (should be running on SSDs)
+3. `docker-compose -f nominatim.yml up -d`
+4. `docker-compose -f overpass.yml up -d`

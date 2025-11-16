@@ -1,0 +1,19 @@
+version: '3.8'
+
+services:
+  nominatim:
+    image: mediagis/nominatim:5.2
+    container_name: nominatim
+    shm_size: 2g
+    environment:
+      - PBF_URL=https://download.geofabrik.de/north-america/us-latest.osm.pbf
+    ports:
+      - "9091:8080"
+    volumes:
+      - type: bind
+        source: /srv/docker-data/nominatim/db
+        target: /var/lib/postgresql/16/main
+      - type: bind
+        source: /srv/docker-data/nominatim/flatnode
+        target: /nominatim/flatnode
+    restart: unless-stopped

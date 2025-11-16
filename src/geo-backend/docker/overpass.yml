@@ -1,0 +1,24 @@
+version: '3.8'
+
+services:
+  overpass:
+    image: wiktorn/overpass-api:0.7.62
+    container_name: overpass
+    shm_size: 2g
+    ports:
+      - "9092:80"
+    volumes:
+      - type: bind
+        source: /srv/docker-data/overpass
+        target: /db
+    environment:
+      - OVERPASS_META=no
+      - OVERPASS_MODE=init
+      - OVERPASS_PLANET_URL=https://download.geofabrik.de/north-america/us-latest.osm.bz2
+      - OVERPASS_DIFF_URL=https://download.openstreetmap.fr/replication/north-america/usa/minute/
+      - OVERPASS_UPDATE_SLEEP=3600
+      - OVERPASS_USE_AREAS=false
+    healthcheck:
+      test: curl --noproxy '*' -qfg 'http://localhost/api/interpreter?data=[out:json];node(1);out;' | jq '.generator' |grep -q Overpass || exit 1
+      start_period: 48h
+    restart: unless-stopped
