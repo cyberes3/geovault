@@ -17,6 +17,7 @@ from geo_lib.processing.jobs import upload_job, delete_job
 from geo_lib.processing.status_tracker import status_tracker
 from geo_lib.processing.logging import ImportLog, DatabaseLogLevel
 from geo_lib.processing.tagging import generate_auto_tags
+from geo_lib.const_strings import CONST_INTERNAL_TAGS, filter_protected_tags, is_protected_tag
 from geo_lib.security.file_validation import SecureFileValidator
 from geo_lib.types.feature import PointFeature, PolygonFeature, LineStringFeature, MultiLineStringFeature
 from geo_lib.website.auth import login_required_401
@@ -754,7 +755,22 @@ def update_import_item(request, item_id):
     for i, existing_feature in enumerate(queue.geofeatures):
         feature_id = existing_feature.get('properties', {}).get('id')
         if feature_id and feature_id in updates_by_id:
-            queue.geofeatures[i] = updates_by_id[feature_id]
+            # Preserve protected tags from original feature
+            original_tags = existing_feature.get('properties', {}).get('tags', [])
+            if not isinstance(original_tags, list):
+                original_tags = []
+            protected_tags = [tag for tag in original_tags if is_protected_tag(tag, CONST_INTERNAL_TAGS)]
+            
+            # Filter protected tags from incoming feature
+            updated_feature = updates_by_id[feature_id]
+            new_tags = updated_feature.get('properties', {}).get('tags', [])
+            if not isinstance(new_tags, list):
+                new_tags = []
+            filtered_tags = filter_protected_tags(new_tags, CONST_INTERNAL_TAGS)
+            
+            # Combine filtered user tags with preserved protected tags
+            updated_feature['properties']['tags'] = filtered_tags + protected_tags
+            queue.geofeatures[i] = updated_feature
             updated_count += 1
 
     # Save the updated queue

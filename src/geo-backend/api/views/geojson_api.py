@@ -17,6 +17,7 @@ from api.models import FeatureStore
 from geo_lib.feature_id import generate_feature_hash
 from geo_lib.website.auth import login_required_401
 from geo_lib.types.feature import PointFeature, LineStringFeature, MultiLineStringFeature, PolygonFeature
+from geo_lib.const_strings import CONST_INTERNAL_TAGS, filter_protected_tags, is_protected_tag
 
 logger = logging.getLogger(__name__)
 
@@ -379,7 +380,18 @@ def update_feature_metadata(request, feature_id):
                         'error': 'all tags must be strings',
                         'code': 400
                     }, status=400)
-            geojson_data['properties']['tags'] = metadata['tags']
+            
+            # Filter out protected tags from incoming tags
+            filtered_tags = filter_protected_tags(metadata['tags'], CONST_INTERNAL_TAGS)
+            
+            # Preserve existing protected tags from the original feature
+            original_tags = geojson_data.get('properties', {}).get('tags', [])
+            if not isinstance(original_tags, list):
+                original_tags = []
+            protected_tags = [tag for tag in original_tags if is_protected_tag(tag, CONST_INTERNAL_TAGS)]
+            
+            # Combine filtered user tags with preserved protected tags
+            geojson_data['properties']['tags'] = filtered_tags + protected_tags
             updated_fields.append('tags')
 
         if 'created' in metadata:
@@ -487,10 +499,25 @@ def update_feature(request, feature_id):
                 'code': 400
             }, status=400)
 
-        # Get original feature data to check for PNG icon URLs
+        # Get original feature data to check for PNG icon URLs and preserve protected tags
         original_geojson = feature.geojson
         original_properties = original_geojson.get('properties', {})
         new_properties = feature_data.get('properties', {})
+        
+        # Preserve protected tags from original feature
+        original_tags = original_properties.get('tags', [])
+        if not isinstance(original_tags, list):
+            original_tags = []
+        protected_tags = [tag for tag in original_tags if is_protected_tag(tag, CONST_INTERNAL_TAGS)]
+        
+        # Filter protected tags from incoming tags
+        new_tags = new_properties.get('tags', [])
+        if not isinstance(new_tags, list):
+            new_tags = []
+        filtered_tags = filter_protected_tags(new_tags, CONST_INTERNAL_TAGS)
+        
+        # Combine filtered user tags with preserved protected tags
+        new_properties['tags'] = filtered_tags + protected_tags
 
         # Check for custom PNG icon URLs in original feature
         icon_property_names = ['icon', 'icon-href', 'iconUrl', 'icon_url', 'marker-icon', 'marker-symbol', 'symbol']
@@ -611,6 +638,19 @@ def update_feature(request, feature_id):
             'error': 'Failed to update feature',
             'code': 500
         }, status=500)
+
+
+@require_http_methods(["GET"])
+def get_config(request):
+    """
+    API endpoint to get server configuration, including protected tags.
+    
+    Returns:
+        JSON object with protectedTags list
+    """
+    return JsonResponse({
+        'protectedTags': CONST_INTERNAL_TAGS
+    })
 
 
 @require_http_methods(["GET"])

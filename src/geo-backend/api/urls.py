@@ -1,6 +1,6 @@
 from django.urls import path
 
-from api.views.geojson_api import get_geojson_data, get_feature, update_feature, update_feature_metadata, serve_icon
+from api.views.geojson_api import get_geojson_data, get_feature, update_feature, update_feature_metadata, serve_icon, get_config
 from api.views.geolocation_api import get_user_location, get_location_by_ip
 from api.views.import_item import upload_item, get_processing_status, get_user_processing_jobs, delete_import_item, bulk_delete_import_items, update_import_item, fetch_import_history_item, \
     import_to_featurestore
@@ -19,6 +19,8 @@ urlpatterns = [
     path('feature/<int:feature_id>/', get_feature),
     path('feature/<int:feature_id>/update/', update_feature),
     path('feature/<int:feature_id>/update-metadata/', update_feature_metadata),
+    # Config endpoint
+    path('config/', get_config),
     # Icon serving endpoint
     path('icons/<str:icon_hash>', serve_icon, name='serve_icon'),
     # Geolocation API endpoints

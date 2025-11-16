@@ -1,20 +1,33 @@
+import { getProtectedTags, fetchConfig } from '@/utils/configService.js'
+import { filterProtectedTags } from '@/utils/tagUtils.js'
+
 class UserStatus {
-    constructor(authorized, username, id, featureCount = 0) {
+    constructor(authorized, username, id, featureCount = 0, tags = []) {
         this.authorized = authorized;
         this.username = username;
         this.id = id;
         this.featureCount = featureCount;
+        this.tags = tags;
     }
 }
 
 export async function getUserInfo() {
     try {
-        const response = await fetch('/api/user/status/')
+        // Fetch config in parallel with user status
+        const [response, protectedTags] = await Promise.all([
+            fetch('/api/user/status/'),
+            getProtectedTags()
+        ])
+        
         if (!response.ok) {
             throw new Error(`HTTP error! status: ${response.status}`)
         }
         const userStatusData = await response.json()
-        return new UserStatus(userStatusData.authorized, userStatusData.username, userStatusData.id, userStatusData.featureCount)
+        
+        // Filter protected tags from user tags
+        const filteredTags = filterProtectedTags(userStatusData.tags || [], protectedTags)
+        
+        return new UserStatus(userStatusData.authorized, userStatusData.username, userStatusData.id, userStatusData.featureCount, filteredTags)
     } catch (error) {
         console.error(error)
         return null

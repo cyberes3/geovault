@@ -112,6 +112,8 @@
 <script>
 import {APIHOST} from '@/config.js'
 import {GeoJSON} from 'ol/format'
+import { getProtectedTags } from '@/utils/configService.js'
+import { filterProtectedTags } from '@/utils/tagUtils.js'
 
 export default {
   name: 'FeatureEditBox',
@@ -135,10 +137,13 @@ export default {
       hasPngIcon: false,
       isSaving: false,
       errorMessage: '',
-      successMessage: ''
+      successMessage: '',
+      protectedTags: []
     }
   },
-  mounted() {
+  async mounted() {
+    // Fetch protected tags on mount
+    this.protectedTags = await getProtectedTags()
     this.initializeForm()
   },
   watch: {
@@ -158,7 +163,9 @@ export default {
       // Initialize form data
       this.formData.name = properties.name || ''
       this.formData.description = properties.description || ''
-      this.formData.tags = Array.isArray(properties.tags) ? properties.tags : []
+      // Filter protected tags when initializing
+      const allTags = Array.isArray(properties.tags) ? properties.tags : []
+      this.formData.tags = filterProtectedTags(allTags, this.protectedTags)
       this.tagsInput = this.formData.tags.join(', ')
       this.formData.markerColor = properties['marker-color'] || '#ff0000'
 
@@ -273,10 +280,13 @@ export default {
         // Merge form field values into the feature data
         // Form fields ALWAYS take precedence over raw JSON values
         // This ensures the color picker and other form fields work even when raw JSON is provided
+        const parsedTags = this.parseTags(this.tagsInput)
+        // Filter protected tags before sending
+        const filteredTags = filterProtectedTags(parsedTags, this.protectedTags)
         const formFieldUpdates = {
           name: this.formData.name,
           description: this.formData.description || '',
-          tags: this.parseTags(this.tagsInput)
+          tags: filteredTags
         }
 
         // Update marker color if no PNG icon

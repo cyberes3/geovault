@@ -438,17 +438,17 @@
           <div>
             <label class="block text-sm font-medium text-gray-700 mb-2">Tags</label>
             <div class="space-y-2">
-              <div v-for="(tag, tagIndex) in item.properties.tags" :key="`tag-${tagIndex}`" class="flex items-center space-x-2">
+              <div v-for="(tag, tagIndex) in getFilteredTagsWithIndex(item.properties.tags)" :key="`tag-${tagIndex}`" class="flex items-center space-x-2">
                 <input
-                    v-model="item.properties.tags[tagIndex]"
+                    v-model="item.properties.tags[tag.originalIndex]"
                     :class="isImported || item.isDuplicate || loading.importing ? 'block w-full px-3 py-2 border border-gray-300 rounded-md bg-gray-100 cursor-not-allowed' : 'block w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-blue-500 focus:border-blue-500'"
                     :disabled="isImported || item.isDuplicate || loading.importing"
-                    :placeholder="getTagPlaceholder(index, tag)"
+                    :placeholder="getTagPlaceholder(index, tag.tag)"
                 />
                 <button
                     v-if="!isImported && !item.isDuplicate && !loading.importing"
                     class="inline-flex items-center px-3 py-2 border border-transparent text-sm font-medium rounded-md text-white bg-red-600 hover:bg-red-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-red-500"
-                    @click="removeTag(index, tagIndex)"
+                    @click="removeTag(index, tag.originalIndex)"
                 >
                   <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" stroke-linecap="round" stroke-linejoin="round" stroke-width="2"></path>
@@ -564,6 +564,8 @@ import {GeoFeatureTypeStrings} from "@/assets/js/types/geofeature-strings";
 import {GeoPoint, GeoLineString, GeoPolygon} from "@/assets/js/types/geofeature-types";
 import {getCookie} from "@/assets/js/auth.js";
 import {APIHOST} from "@/config.js";
+import { getProtectedTags } from "@/utils/configService.js";
+import { filterProtectedTags } from "@/utils/tagUtils.js";
 // Removed flatpickr dependency - using native HTML5 date input
 import Loader from "@/components/parts/Loader.vue";
 import MapPreviewDialog from "@/components/import/parts/MapPreviewDialog.vue";
@@ -599,6 +601,7 @@ export default {
       itemsForUser: [],
       originalItems: [],
       workerLog: [],
+      protectedTags: [],
 
       // Consolidated: Dialog state
       dialogs: {
@@ -1167,8 +1170,37 @@ export default {
       const tags = this.itemsForUser[index].properties.tags;
       return tags.length > 0 && tags[tags.length - 1].trim().length === 0;
     },
+    getFilteredTags(tags) {
+      if (!Array.isArray(tags)) {
+        return [];
+      }
+      return filterProtectedTags(tags, this.protectedTags);
+    },
+    getFilteredTagsWithIndex(tags) {
+      if (!Array.isArray(tags)) {
+        return [];
+      }
+      // Return tags with their original indices for v-model binding
+      return tags
+        .map((tag, index) => ({ tag, originalIndex: index }))
+        .filter(({ tag }) => !this.isProtectedTag(tag))
+        .map(({ tag, originalIndex }) => ({ tag, originalIndex }));
+    },
+    isProtectedTag(tag) {
+      if (!tag || typeof tag !== 'string') {
+        return false;
+      }
+      for (const prefix of this.protectedTags) {
+        if (tag === prefix || tag.startsWith(prefix + ':')) {
+          return true;
+        }
+      }
+      return false;
+    },
     resetTags(index) {
-      this.itemsForUser[index].properties.tags = [...this.originalItems[index].properties.tags];
+      // Reset to original tags but filter out protected tags
+      const originalTags = [...this.originalItems[index].properties.tags];
+      this.itemsForUser[index].properties.tags = filterProtectedTags(originalTags, this.protectedTags);
     },
     removeTag(index, tagIndex) {
       this.itemsForUser[index].properties.tags.splice(tagIndex, 1);
@@ -1195,10 +1227,15 @@ export default {
 
       // Helper function to get comparable feature data (excluding UI-only properties)
       const getComparableFeature = (feature) => {
+        // Filter protected tags before comparing/saving
+        const properties = { ...feature.properties };
+        if (Array.isArray(properties.tags)) {
+          properties.tags = filterProtectedTags(properties.tags, this.protectedTags);
+        }
         return {
           type: feature.type,
           geometry: feature.geometry,
-          properties: feature.properties
+          properties: properties
         };
       };
 
@@ -1580,7 +1617,9 @@ export default {
       }
     }
   },
-  mounted() {
+  async mounted() {
+    // Fetch protected tags on mount
+    this.protectedTags = await getProtectedTags();
     // Add navigation warning when user tries to leave the page
     this.beforeUnloadHandler = (event) => {
       // Only warn if we're not redirecting due to import completion

@@ -52,6 +52,23 @@
       </div>
     </div>
 
+    <!-- Tags Section -->
+    <div class="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
+      <h2 class="text-lg font-semibold text-gray-900 mb-4">Your Tags</h2>
+      <div v-if="filteredTags && filteredTags.length > 0" class="flex flex-wrap gap-2">
+        <span
+          v-for="tag in filteredTags"
+          :key="tag"
+          class="inline-flex items-center px-3 py-1 rounded-full text-sm font-medium bg-blue-100 text-blue-800 border border-blue-200"
+        >
+          {{ tag }}
+        </span>
+      </div>
+      <div v-else class="text-gray-500 text-sm">
+        No tags found. Tags will appear here once you import features with tags.
+      </div>
+    </div>
+
     <!-- Quick Actions -->
     <div class="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
       <h2 class="text-lg font-semibold text-gray-900 mb-4">Quick Actions</h2>
@@ -114,18 +131,31 @@
 <script>
 import {mapState} from "vuex";
 import {authMixin} from "@/assets/js/authMixin.js";
+import { getProtectedTags } from "@/utils/configService.js";
+import { filterProtectedTags } from "@/utils/tagUtils.js";
 
 export default {
   computed: {
     ...mapState(["userInfo"]),
+    filteredTags() {
+      if (!this.userInfo || !this.userInfo.tags) {
+        return [];
+      }
+      // Filter protected tags (userInfo.tags should already be filtered, but double-check)
+      return filterProtectedTags(this.userInfo.tags, this.protectedTags);
+    }
   },
   components: {},
   mixins: [authMixin],
   data() {
-    return {}
+    return {
+      protectedTags: []
+    }
   },
   methods: {},
   async created() {
+    // Fetch protected tags on component creation
+    this.protectedTags = await getProtectedTags();
   },
   async mounted() {
   },

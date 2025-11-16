@@ -7,7 +7,7 @@ export const authMixin = {
         if (!userStatus.authorized) {
             window.location = "/account/login/"
         }
-        const userInfo = new UserInfo(userStatus.username, userStatus.id, userStatus.featureCount)
+        const userInfo = new UserInfo(userStatus.username, userStatus.id, userStatus.featureCount, userStatus.tags || [])
         this.$store.commit('userInfo', userInfo)
     },
 }

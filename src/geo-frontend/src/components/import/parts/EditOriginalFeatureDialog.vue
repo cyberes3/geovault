@@ -152,15 +152,15 @@
               <div>
                 <label class="block text-sm font-medium text-gray-700 mb-2">
                   Tags
-                  <span v-if="originalValues.tags && originalValues.tags.length > 0" class="text-xs text-gray-500 font-normal ml-2">
-                    (Original: {{ originalValues.tags.join(', ') }})
+                  <span v-if="filteredOriginalTags && filteredOriginalTags.length > 0" class="text-xs text-gray-500 font-normal ml-2">
+                    (Original: {{ filteredOriginalTags.join(', ') }})
                   </span>
                   <span v-else class="text-xs text-gray-400 font-normal ml-2">
                     (No original tags)
                   </span>
                 </label>
                 <div class="space-y-2">
-                  <div v-for="(tag, tagIndex) in editableFeature.properties.tags" :key="`tag-${tagIndex}`" class="flex items-center space-x-2">
+                  <div v-for="(tag, tagIndex) in filteredEditableTags" :key="`tag-${tagIndex}`" class="flex items-center space-x-2">
                     <input
                       v-model="editableFeature.properties.tags[tagIndex]"
                       class="block w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-blue-500 focus:border-blue-500"
@@ -271,6 +271,8 @@
 import axios from "axios";
 import {getCookie} from "@/assets/js/auth.js";
 import FeatureMapDialog from "@/components/import/parts/FeatureMapDialog.vue";
+import { getProtectedTags } from "@/utils/configService.js";
+import { filterProtectedTags } from "@/utils/tagUtils.js";
 
 export default {
   name: 'EditOriginalFeatureDialog',
@@ -295,7 +297,8 @@ export default {
     return {
       editableFeature: null,
       isSaving: false,
-      showMapDialog: false
+      showMapDialog: false,
+      protectedTags: []
     }
   },
   computed: {
@@ -312,7 +315,19 @@ export default {
         created: this.originalFeature.geojson.properties?.created || '',
         tags: this.originalFeature.geojson.properties?.tags || []
       };
+    },
+    filteredOriginalTags() {
+      if (!this.originalValues.tags) return [];
+      return filterProtectedTags(this.originalValues.tags, this.protectedTags);
+    },
+    filteredEditableTags() {
+      if (!this.editableFeature || !this.editableFeature.properties || !this.editableFeature.properties.tags) return [];
+      return filterProtectedTags(this.editableFeature.properties.tags, this.protectedTags);
     }
+  },
+  async mounted() {
+    // Fetch protected tags on mount
+    this.protectedTags = await getProtectedTags();
   },
   watch: {
     originalFeature: {
@@ -320,6 +335,13 @@ export default {
         if (newFeature) {
           // Create a deep copy of the feature for editing
           this.editableFeature = JSON.parse(JSON.stringify(newFeature.geojson));
+          // Filter protected tags from editable feature
+          if (this.editableFeature && this.editableFeature.properties && this.editableFeature.properties.tags) {
+            this.editableFeature.properties.tags = filterProtectedTags(
+              this.editableFeature.properties.tags,
+              this.protectedTags
+            );
+          }
         }
       },
       immediate: true
@@ -376,10 +398,19 @@ export default {
       
       this.isSaving = true;
       try {
+        // Filter protected tags before sending
+        const featureToSave = JSON.parse(JSON.stringify(this.editableFeature));
+        if (featureToSave.properties && featureToSave.properties.tags) {
+          featureToSave.properties.tags = filterProtectedTags(
+            featureToSave.properties.tags,
+            this.protectedTags
+          );
+        }
+        
         const csrftoken = getCookie('csrftoken');
         const response = await axios.put(
           `/api/data/feature/${this.originalFeature.id}/update/`,
-          this.editableFeature,
+          featureToSave,
           {
             headers: {
               'X-CSRFToken': csrftoken,
