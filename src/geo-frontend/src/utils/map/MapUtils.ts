@@ -332,20 +332,36 @@ export class MapUtils {
         let style: Style;
 
         if (geometryType === 'Point') {
+            // Check if icon previously failed to load
+            const iconFailed = feature.get('_iconFailed');
+            
             // Check for icon URL first
             const iconUrl = this.getIconUrl(properties);
-            if (iconUrl) {
+            if (iconUrl && !iconFailed) {
                 const resolvedIconUrl = this.resolveIconUrl(iconUrl);
+                
+                // Preload image to detect loading failures
+                const img = new Image();
+                img.onerror = () => {
+                    // Mark feature as having failed icon load
+                    feature.set('_iconFailed', true);
+                    // Trigger style update by changing a property
+                    feature.changed();
+                };
+                img.src = resolvedIconUrl;
+                
+                const icon = new Icon({
+                    src: resolvedIconUrl,
+                    scale: 0.4,
+                    anchor: [0.5, 1.0], // Anchor at bottom center of icon
+                });
+
                 style = new Style({
-                    image: new Icon({
-                        src: resolvedIconUrl,
-                        scale: 0.4,
-                        anchor: [0.5, 1.0], // Anchor at bottom center of icon
-                    }),
-                    text: textStyle
+                    image: icon,
+                    text: textStyle // offsetY: 8 for PNG icons
                 });
             } else {
-                // Fall back to circle style if no icon
+                // Fall back to circle style if no icon or icon failed to load
                 // Note: Circle styles are vector graphics, not PNG files
                 const fillColor = hexToColor(properties['marker-color'], '#ff0000');
                 // Create separate text style for default circle icons with more offset
@@ -368,7 +384,7 @@ export class MapUtils {
                             color: fillColor
                         }),
                         stroke: new Stroke({
-                            color: fillColor, // Use same color for stroke
+                            color: iconFailed ? '#000000' : fillColor, // Black border only if icon failed, otherwise same as fill
                             width: 2
                         })
                     }),
@@ -426,6 +442,33 @@ export class MapUtils {
     }
 
     /**
+     * Get default fallback icon style (red circle with optional black border)
+     * Used when custom icon fails to load or no icon is specified
+     * @param properties - Feature properties
+     * @param iconFailed - Whether the icon failed to load (true = black border, false = same color as fill)
+     * @returns OpenLayers Style with default circle icon
+     */
+    private static getDefaultIconStyle(properties: any, iconFailed: boolean = false): Style {
+        const hexToColor = (hexColor: string | undefined, defaultColor: string = '#ff0000'): string => {
+            if (!hexColor || typeof hexColor !== 'string') return defaultColor;
+            return hexColor;
+        };
+        const fillColor = hexToColor(properties['marker-color'], '#ff0000');
+        return new Style({
+            image: new Circle({
+                radius: 6,
+                fill: new Fill({
+                    color: fillColor
+                }),
+                stroke: new Stroke({
+                    color: iconFailed ? '#000000' : fillColor, // Black border only if icon failed, otherwise same as fill
+                    width: 2
+                })
+            })
+        });
+    }
+
+    /**
      * Get icon-only style for a feature (no text labels)
      * Used for rendering icons on a separate layer without decluttering
      * @param feature - OpenLayers feature
@@ -442,32 +485,39 @@ export class MapUtils {
         };
 
         if (geometryType === 'Point') {
+            // Check if icon previously failed to load
+            const iconFailed = feature.get('_iconFailed');
+            if (iconFailed) {
+                return this.getDefaultIconStyle(properties, true); // Pass true to indicate icon failed
+            }
+
             // Check for icon URL first
             const iconUrl = this.getIconUrl(properties);
             if (iconUrl) {
                 const resolvedIconUrl = this.resolveIconUrl(iconUrl);
+                
+                // Preload image to detect loading failures
+                const img = new Image();
+                img.onerror = () => {
+                    // Mark feature as having failed icon load
+                    feature.set('_iconFailed', true);
+                    // Trigger style update by changing a property
+                    feature.changed();
+                };
+                img.src = resolvedIconUrl;
+                
+                const icon = new Icon({
+                    src: resolvedIconUrl,
+                    scale: 0.4,
+                    anchor: [0.5, 1.0], // Anchor at bottom center of icon
+                });
+
                 return new Style({
-                    image: new Icon({
-                        src: resolvedIconUrl,
-                        scale: 0.4,
-                        anchor: [0.5, 1.0], // Anchor at bottom center of icon
-                    })
+                    image: icon
                 });
             } else {
-                // Fall back to circle style if no icon
-                const fillColor = hexToColor(properties['marker-color'], '#ff0000');
-                return new Style({
-                    image: new Circle({
-                        radius: 6,
-                        fill: new Fill({
-                            color: fillColor
-                        }),
-                        stroke: new Stroke({
-                            color: fillColor, // Use same color for stroke
-                            width: 2
-                        })
-                    })
-                });
+                // Fall back to circle style if no icon (no black border for normal points)
+                return this.getDefaultIconStyle(properties, false); // Pass false - no icon, but didn't fail
             }
         } else if (geometryType === 'LineString') {
             const strokeColor = hexToColor(properties.stroke, '#ff0000');
@@ -531,6 +581,9 @@ export class MapUtils {
         if (geometryType === 'Point') {
             // Points: text below, closer to the point
             const iconUrl = this.getIconUrl(properties);
+            const iconFailed = feature.get('_iconFailed');
+            // Use offsetY: 8 for PNG icons, offsetY: 15 for default circle icons (non-PNG)
+            const hasWorkingIcon = iconUrl && !iconFailed;
             textStyle = new Text({
                 text: name,
                 font: '12px Arial',
@@ -541,7 +594,7 @@ export class MapUtils {
                     color: '#ffffff',
                     width: 3
                 }),
-                offsetY: iconUrl ? 8 : 15 // More offset for default circle icons
+                offsetY: hasWorkingIcon ? 8 : 15 // More offset for default circle icons
             });
         } else if (geometryType === 'Polygon') {
             // Polygons: text centered in the polygon
