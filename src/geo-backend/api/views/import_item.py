@@ -24,6 +24,55 @@ from geo_lib.website.auth import login_required_401
 logger = logging.getLogger(__name__)
 
 
+def strip_icon_properties(feature: dict) -> dict:
+    """
+    Remove icon-related properties from a feature.
+    
+    Args:
+        feature: Feature dictionary with properties
+        
+    Returns:
+        Feature dictionary with icon properties removed
+    """
+    if not isinstance(feature, dict) or 'properties' not in feature:
+        return feature
+    
+    # Common property names that might contain icon hrefs
+    icon_property_names = [
+        'marker-symbol',
+        'icon',
+        'icon-href',
+        'iconUrl',
+        'icon_url',
+        'marker-icon',
+        'symbol',
+        'styleUrl',  # KML style URLs might reference icons
+    ]
+    
+    # Remove icon properties
+    for prop_name in icon_property_names:
+        if prop_name in feature['properties']:
+            del feature['properties'][prop_name]
+    
+    # Also check nested structures (e.g., style objects)
+    def remove_icons_from_dict(d):
+        if not isinstance(d, dict):
+            return
+        for key, value in list(d.items()):
+            if key in icon_property_names:
+                del d[key]
+            elif isinstance(value, dict):
+                remove_icons_from_dict(value)
+            elif isinstance(value, list):
+                for item in value:
+                    if isinstance(item, dict):
+                        remove_icons_from_dict(item)
+    
+    remove_icons_from_dict(feature['properties'])
+    
+    return feature
+
+
 def strip_duplicate_features(features) -> Tuple[List[Any], int, ImportLog]:
     """Remove 100% duplicate features and log the process."""
     import_log = ImportLog()
@@ -737,6 +786,15 @@ def import_to_featurestore(request, item_id):
             'code': 400
         }, status=400)
 
+    # Parse request body to get import_custom_icons flag
+    import_custom_icons = True  # Default to True for backward compatibility
+    try:
+        if request.body:
+            data = json.loads(request.body)
+            import_custom_icons = data.get('import_custom_icons', True)
+    except (json.JSONDecodeError, ValueError) as e:
+        logger.warning(f"Failed to parse request body for import_custom_icons: {str(e)}, using default True")
+
     # Check for file-level duplicates before importing
     # Only block duplicates that are still in the queue (not yet imported)
     # Allow re-importing files that were previously imported
@@ -808,6 +866,10 @@ def import_to_featurestore(request, item_id):
                 i += 1
                 continue
         assert c is not None
+
+        # Strip icon properties if import_custom_icons is False
+        if not import_custom_icons:
+            feature = strip_icon_properties(feature.copy())
 
         feature_instance = c(**feature)
         feature_instance.properties.tags = generate_auto_tags(feature_instance)  # Generate the tags after the user has made their changes.

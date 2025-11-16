@@ -1,5 +1,66 @@
 <template>
   <div class="space-y-4">
+    <!-- Status Messages -->
+    <div v-if="isImported && !isLoadingPage" class="bg-white rounded-lg shadow-sm border border-gray-200 p-4">
+      <div class="p-4 bg-yellow-50 border border-yellow-200 rounded-md">
+        <div class="flex">
+          <div class="flex-shrink-0">
+            <svg class="h-5 w-5 text-yellow-400" fill="currentColor" viewBox="0 0 20 20">
+              <path clip-rule="evenodd" d="M8.257 3.099c.765-1.36 2.722-1.36 3.486 0l5.58 9.92c.75 1.334-.213 2.98-1.742 2.98H4.42c-1.53 0-2.493-1.646-1.743-2.98l5.58-9.92zM11 13a1 1 0 11-2 0 1 1 0 012 0zm-1-8a1 1 0 00-1 1v3a1 1 0 002 0V6a1 1 0 00-1-1z" fill-rule="evenodd"></path>
+            </svg>
+          </div>
+          <div class="ml-3">
+            <h3 class="text-sm font-medium text-yellow-800">Already Imported</h3>
+            <div class="mt-2 text-sm text-yellow-700">
+              <p>This item has already been imported to the feature store and cannot be modified.</p>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div v-else-if="duplicateStatus === 'duplicate_in_queue' && !isLoadingPage && showDuplicateMessage" class="bg-white rounded-lg shadow-sm border border-gray-200 p-4">
+      <div class="text-center py-4">
+        <div class="text-purple-500 mb-4">
+          <svg class="mx-auto h-12 w-12 text-purple-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z" stroke-linecap="round" stroke-linejoin="round" stroke-width="2"></path>
+          </svg>
+        </div>
+        <h3 class="text-lg font-medium text-gray-900 mb-2">Duplicate File in Queue</h3>
+        <p class="text-gray-600">This file is a duplicate of <span class="font-medium text-purple-700">{{ duplicateOriginalFilename }}</span>, which is already waiting in the import queue.</p>
+        <p class="text-gray-500 text-sm mt-2">No actions can be performed on this duplicate file.</p>
+      </div>
+    </div>
+    <div v-else-if="duplicateStatus === 'duplicate_imported' && !isLoadingPage && showDuplicateMessage" class="bg-white rounded-lg shadow-sm border border-gray-200 p-4">
+      <div class="p-4 bg-purple-50 border border-purple-200 rounded-md">
+        <div class="flex">
+          <div class="flex-shrink-0">
+            <svg class="h-5 w-5 text-purple-400" fill="currentColor" viewBox="0 0 20 20">
+              <path d="M7 9a2 2 0 012-2h6a2 2 0 012 2v6a2 2 0 01-2 2H9a2 2 0 01-2-2V9z"></path>
+              <path d="M5 3a2 2 0 00-2 2v6a2 2 0 002 2V5h8a2 2 0 00-2-2H5z"></path>
+            </svg>
+          </div>
+          <div class="ml-3">
+            <h3 class="text-sm font-medium text-purple-800">Duplicate of Imported File</h3>
+            <div class="mt-2 text-sm text-purple-700">
+              <p>This file is a duplicate of <span class="font-medium">{{ duplicateOriginalFilename }}</span>, which has already been imported.</p>
+              <p class="mt-1">You can still import this file. Features that match existing features in your library will be marked as duplicates during import.</p>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div v-else-if="showNoFeaturesMessage && !isLoadingPage && importableCount === 0" class="bg-white rounded-lg shadow-sm border border-gray-200 p-4">
+      <div class="text-center py-4">
+        <div class="text-gray-500 mb-4">
+          <svg class="mx-auto h-12 w-12 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" stroke-linecap="round" stroke-linejoin="round" stroke-width="2"></path>
+          </svg>
+        </div>
+        <h3 class="text-lg font-medium text-gray-900 mb-2">No Features to Import</h3>
+        <p class="text-gray-600">This file has been processed but contains no importable features.</p>
+      </div>
+    </div>
+
     <!-- Pagination Controls -->
     <div v-if="(hasFeatures || isLoadingPage)" class="bg-white rounded-lg shadow-sm border border-gray-200 p-4">
       <div class="flex items-center justify-between flex-wrap gap-4">
@@ -66,67 +127,16 @@
     </div>
 
     <!-- Action Buttons -->
-    <div v-if="shouldShowActions" class="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
+    <div v-if="showActionButtons && shouldShowActions" class="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
       <div v-if="isLoadingPage" class="text-center py-4">
         <span class="text-blue-600 font-medium">Loading...</span>
       </div>
-      <div v-else-if="isImported" class="mb-4 p-4 bg-yellow-50 border border-yellow-200 rounded-md">
-        <div class="flex">
-          <div class="flex-shrink-0">
-            <svg class="h-5 w-5 text-yellow-400" fill="currentColor" viewBox="0 0 20 20">
-              <path clip-rule="evenodd" d="M8.257 3.099c.765-1.36 2.722-1.36 3.486 0l5.58 9.92c.75 1.334-.213 2.98-1.742 2.98H4.42c-1.53 0-2.493-1.646-1.743-2.98l5.58-9.92zM11 13a1 1 0 11-2 0 1 1 0 012 0zm-1-8a1 1 0 00-1 1v3a1 1 0 002 0V6a1 1 0 00-1-1z" fill-rule="evenodd"></path>
-            </svg>
-          </div>
-          <div class="ml-3">
-            <h3 class="text-sm font-medium text-yellow-800">Already Imported</h3>
-            <div class="mt-2 text-sm text-yellow-700">
-              <p>This item has already been imported to the feature store and cannot be modified.</p>
-            </div>
-          </div>
-        </div>
-      </div>
-      <div v-else-if="duplicateStatus === 'duplicate_in_queue' && !isLoadingPage && showDuplicateMessage" class="text-center py-8">
-        <div class="text-purple-500 mb-4">
-          <svg class="mx-auto h-12 w-12 text-purple-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z" stroke-linecap="round" stroke-linejoin="round" stroke-width="2"></path>
-          </svg>
-        </div>
-        <h3 class="text-lg font-medium text-gray-900 mb-2">Duplicate File in Queue</h3>
-        <p class="text-gray-600">This file is a duplicate of <span class="font-medium text-purple-700">{{ duplicateOriginalFilename }}</span>, which is already waiting in the import queue.</p>
-        <p class="text-gray-500 text-sm mt-2">No actions can be performed on this duplicate file.</p>
-      </div>
-      <div v-else-if="duplicateStatus === 'duplicate_imported' && !isLoadingPage && showDuplicateMessage" class="mb-4 p-4 bg-purple-50 border border-purple-200 rounded-md">
-        <div class="flex">
-          <div class="flex-shrink-0">
-            <svg class="h-5 w-5 text-purple-400" fill="currentColor" viewBox="0 0 20 20">
-              <path d="M7 9a2 2 0 012-2h6a2 2 0 012 2v6a2 2 0 01-2 2H9a2 2 0 01-2-2V9z"></path>
-              <path d="M5 3a2 2 0 00-2 2v6a2 2 0 002 2V5h8a2 2 0 00-2-2H5z"></path>
-            </svg>
-          </div>
-          <div class="ml-3">
-            <h3 class="text-sm font-medium text-purple-800">Duplicate of Imported File</h3>
-            <div class="mt-2 text-sm text-purple-700">
-              <p>This file is a duplicate of <span class="font-medium">{{ duplicateOriginalFilename }}</span>, which has already been imported.</p>
-              <p class="mt-1">You can still import this file. Features that match existing features in your library will be marked as duplicates during import.</p>
-            </div>
-          </div>
-        </div>
-      </div>
-      <div v-else-if="showNoFeaturesMessage && !isLoadingPage && importableCount === 0" class="text-center py-8">
-        <div class="text-gray-500 mb-4">
-          <svg class="mx-auto h-12 w-12 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" stroke-linecap="round" stroke-linejoin="round" stroke-width="2"></path>
-          </svg>
-        </div>
-        <h3 class="text-lg font-medium text-gray-900 mb-2">No Features to Import</h3>
-        <p class="text-gray-600">This file has been processed but contains no importable features.</p>
-      </div>
       <div v-else-if="hasFeatures" class="flex items-center space-x-4">
-        <button
-            :disabled="lockButtons || isSaving"
-            class="inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md text-white bg-green-600 hover:bg-green-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-green-500 disabled:bg-gray-400 disabled:cursor-not-allowed transition-colors duration-200"
-            @click="$emit('save-changes')"
-        >
+          <button
+              :disabled="lockButtons || isSaving"
+              class="inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md text-white bg-green-600 hover:bg-green-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-green-500 disabled:bg-gray-400 disabled:cursor-not-allowed transition-colors duration-200"
+              @click="$emit('save-changes')"
+          >
           <svg v-if="isSaving" class="animate-spin -ml-1 mr-2 h-4 w-4 text-white" fill="none" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
             <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
             <path class="opacity-75" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" fill="currentColor"></path>
@@ -232,6 +242,10 @@ export default {
       default: null
     },
     showDuplicateMessage: {
+      type: Boolean,
+      default: true
+    },
+    showActionButtons: {
       type: Boolean,
       default: true
     }

@@ -146,6 +146,7 @@
         :is-saving="loading.saving"
         :lock-buttons="lockButtons"
         :page-size="pagination.pageSize"
+        :show-action-buttons="false"
         :show-duplicate-message="true"
         :show-no-features-message="showNoFeaturesMessage"
         :total-features="pagination.totalFeatures"
@@ -157,6 +158,61 @@
         @save-changes="saveChanges"
         @perform-import="performImport"
     />
+
+    <!-- Global Options -->
+    <div v-if="itemsForUser.length > 0 && !loading.page && !processing.active" class="bg-white rounded-lg shadow-sm border border-gray-200 p-4">
+      <h3 class="text-sm font-semibold text-gray-900 mb-3">Global Options</h3>
+      <div class="flex items-center space-x-2">
+        <input
+            id="import-custom-icons"
+            v-model="importCustomIcons"
+            :disabled="lockButtons || loading.importing || loading.saving || isImported"
+            class="h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300 rounded disabled:opacity-50 disabled:cursor-not-allowed"
+            type="checkbox"
+        />
+        <label
+            for="import-custom-icons"
+            :class="lockButtons || loading.importing || loading.saving || isImported ? 'text-gray-400 cursor-not-allowed' : 'text-gray-700 cursor-pointer'"
+            class="text-sm font-medium"
+        >
+          Import custom icons for all features
+        </label>
+      </div>
+    </div>
+
+    <!-- Action Buttons (Top) -->
+    <div v-if="itemsForUser.length > 0 && !loading.page && !processing.active && !isImported" class="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
+      <div class="flex items-center space-x-4">
+        <button
+            :disabled="lockButtons || loading.saving"
+            class="inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md text-white bg-green-600 hover:bg-green-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-green-500 disabled:bg-gray-400 disabled:cursor-not-allowed transition-colors duration-200"
+            @click="saveChanges"
+        >
+          <svg v-if="loading.saving" class="animate-spin -ml-1 mr-2 h-4 w-4 text-white" fill="none" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+            <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+            <path class="opacity-75" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" fill="currentColor"></path>
+          </svg>
+          <svg v-else class="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path d="M8 7H5a2 2 0 00-2 2v9a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-3m-1 4l-3 3m0 0l-3-3m3 3V4" stroke-linecap="round" stroke-linejoin="round" stroke-width="2"></path>
+          </svg>
+          {{ loading.saving ? 'Saving...' : 'Save Changes' }}
+        </button>
+        <button
+            :disabled="lockButtons || loading.importing || (pagination.totalFeatures - duplicates.indices.length) === 0"
+            class="inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md text-white bg-blue-600 hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 disabled:bg-gray-400 disabled:cursor-not-allowed transition-colors duration-200"
+            @click="performImport"
+        >
+          <svg v-if="loading.importing" class="animate-spin -ml-1 mr-2 h-4 w-4 text-white" fill="none" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+            <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+            <path class="opacity-75" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" fill="currentColor"></path>
+          </svg>
+          <svg v-else class="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12" stroke-linecap="round" stroke-linejoin="round" stroke-width="2"></path>
+          </svg>
+          {{ loading.importing ? 'Importing...' : `Import ${pagination.totalFeatures - duplicates.indices.length} Features` }}
+        </button>
+      </div>
+    </div>
 
     <!-- Loading Skeleton for Pagination Changes -->
     <div v-if="loading.page" class="space-y-6">
@@ -256,6 +312,15 @@
         <div class="flex items-center justify-between mb-6">
           <h3 class="text-lg font-semibold text-gray-900">Feature {{ (pagination.currentPage - 1) * pagination.pageSize + index + 1 }} (of {{ pagination.totalFeatures }})</h3>
           <div class="flex items-center space-x-2">
+            <!-- Icon Preview -->
+            <div v-if="getFeatureIconUrl(item)" class="flex items-center justify-center w-8 h-8 p-1 border border-gray-300 rounded bg-white shadow-sm">
+              <img
+                  :src="getFeatureIconUrl(item)"
+                  :alt="'Custom icon for ' + (item.properties.name || 'feature')"
+                  class="max-w-full max-h-full object-contain"
+                  @error="handleIconError($event)"
+              />
+            </div>
             <button
                 class="inline-flex items-center px-3 py-1.5 border border-gray-300 shadow-sm text-xs font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500"
                 @click="showFeatureMap(index)"
@@ -498,6 +563,7 @@ import ImportQueue from "@/components/import/parts/ImportQueue.vue";
 import {GeoFeatureTypeStrings} from "@/assets/js/types/geofeature-strings";
 import {GeoPoint, GeoLineString, GeoPolygon} from "@/assets/js/types/geofeature-types";
 import {getCookie} from "@/assets/js/auth.js";
+import {APIHOST} from "@/config.js";
 // Removed flatpickr dependency - using native HTML5 date input
 import Loader from "@/components/parts/Loader.vue";
 import MapPreviewDialog from "@/components/import/parts/MapPreviewDialog.vue";
@@ -590,6 +656,7 @@ export default {
       isImported: false,
       duplicateStatus: null,
       duplicateOriginalFilename: null,
+      importCustomIcons: true,
 
       // WebSocket connection
       ws: null,
@@ -626,7 +693,7 @@ export default {
         console.warn('Cannot connect WebSocket: currentId is null');
         return;
       }
-      
+
       const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
       const wsUrl = `${protocol}//${window.location.host}/ws/upload/status/${this.currentId}/`;
 
@@ -725,9 +792,9 @@ export default {
 
       if (data.logs) {
         // Only replace logs if we don't have any logs yet, or if the new logs are more recent
-        const shouldReplace = this.workerLog.length === 0 || 
+        const shouldReplace = this.workerLog.length === 0 ||
             (data.logs.length > 0 && this.lastLogId && data.logs[data.logs.length - 1].id > this.lastLogId);
-        
+
         if (shouldReplace) {
           this.workerLog = data.logs;
           this.lastLogId = data.logs.length > 0 ? data.logs[data.logs.length - 1].id : null;
@@ -755,7 +822,7 @@ export default {
       if (existingLog) {
         return;
       }
-      
+
       this.workerLog.push(data);
       this.lastLogId = data.id;
       // Auto-scroll to bottom when new log is added during processing
@@ -991,6 +1058,68 @@ export default {
       if (!timestamp) return '';
       return moment(timestamp).format('YYYY-MM-DD HH:mm:ss');
     },
+    getFeatureIconUrl(feature) {
+      /**
+       * Get icon URL from feature properties.
+       * Checks multiple common property names for icon URLs.
+       * @param feature - Feature object with properties
+       * @returns Icon URL if found, null otherwise
+       */
+      if (!feature || !feature.properties) {
+        return null;
+      }
+
+      // Common property names that might contain icon hrefs
+      const iconPropertyNames = [
+        'icon',
+        'icon-href',
+        'iconUrl',
+        'icon_url',
+        'marker-icon',
+        'marker-symbol',
+        'symbol',
+      ];
+
+      for (const propName of iconPropertyNames) {
+        if (feature.properties[propName] && typeof feature.properties[propName] === 'string') {
+          const iconUrl = feature.properties[propName].trim();
+          if (iconUrl) {
+            return this.resolveIconUrl(iconUrl);
+          }
+        }
+      }
+
+      return null;
+    },
+    resolveIconUrl(iconUrl) {
+      /**
+       * Resolve icon URL to absolute URL.
+       * Converts relative URLs (starting with /api/) to absolute URLs using APIHOST.
+       * @param iconUrl - Icon URL (relative or absolute)
+       * @returns Absolute icon URL
+       */
+      // If already absolute URL, return as is
+      if (iconUrl.startsWith('http://') || iconUrl.startsWith('https://')) {
+        return iconUrl;
+      }
+
+      // If relative URL starting with /api/, prepend APIHOST
+      // The backend stores icons with path /api/data/icons/{hash}.png
+      if (iconUrl.startsWith('/api/')) {
+        return `${APIHOST}${iconUrl}`;
+      }
+
+      // Fallback: assume it's a relative path and prepend APIHOST
+      return `${APIHOST}${iconUrl.startsWith('/') ? '' : '/'}${iconUrl}`;
+    },
+    handleIconError(event) {
+      /**
+       * Handle icon loading errors by hiding the broken image.
+       */
+      if (event.target && event.target.parentElement) {
+        event.target.parentElement.style.display = 'none';
+      }
+    },
     scrollLogsToBottom() {
       // Scroll the logs container to the bottom when new logs are added
       this.$nextTick(() => {
@@ -1189,7 +1318,9 @@ export default {
 
         // Perform the import - server will use the stored features in the database
         // No need to send the feature collection, it's already saved
-        const response = await axios.post('/api/data/item/import/perform/' + this.currentId, {}, {
+        const response = await axios.post('/api/data/item/import/perform/' + this.currentId, {
+          import_custom_icons: this.importCustomIcons
+        }, {
           headers: {
             'X-CSRFToken': csrftoken
           }
@@ -1308,7 +1439,7 @@ export default {
     clearComponentState() {
       // Stop polling first to prevent API calls with null currentId
       this.stopProcessingPolling();
-      
+
       // Close WebSocket connection before clearing state
       if (this.ws) {
         this.ws.close(1000); // Normal closure code
@@ -1378,6 +1509,7 @@ export default {
       // Reset misc state
       this.lockButtons = false;
       this.isImported = false;
+      this.importCustomIcons = true;
     },
     async loadPage(page) {
       // Cache current page changes before loading a new page
@@ -1400,7 +1532,7 @@ export default {
 
       // Request incremental logs via WebSocket
       this.sendWebSocketMessage('request_logs', {after_id: this.lastLogId});
-      
+
       // Also trigger scroll after a short delay to catch any logs that might be added
       setTimeout(() => {
         this.scrollLogsToBottom();
@@ -1505,12 +1637,12 @@ export default {
       this.ws.close(1000); // Normal closure
       this.ws = null;
     }
-    
+
     // Update to new ID and reconnect
     this.clearComponentState();
     this.currentId = to.params.id;
     this.connectWebSocket();
-    
+
     next();
   },
   beforeRouteEnter(to, from, next) {
