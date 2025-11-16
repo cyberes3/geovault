@@ -233,6 +233,11 @@ REVERSE_GEOCODING_ENABLED = os.environ.get('REVERSE_GEOCODING_ENABLED', 'True').
 CITY_PROXIMITY_MILES = float(os.environ.get('CITY_PROXIMITY_MILES', '5.0'))
 LAKE_PROXIMITY_MILES = float(os.environ.get('LAKE_PROXIMITY_MILES', '1.0'))
 
+# Import Processing Configuration
+# Number of threads to use for parallel feature processing during import
+# Default: 4 threads (can be overridden via environment variable)
+IMPORT_PROCESSING_THREADS = int(os.environ.get('IMPORT_PROCESSING_THREADS', '10'))
+
 # Logging configuration for security events
 LOGGING = {
     'version': 1,

@@ -47,8 +47,8 @@ class GPXProcessor(BaseProcessor):
                 temp_file_path = temp_file.name
 
             try:
-                # Use the JavaScript converter with file path and timing
-                conversion_start = time.time()
+                # Use the JavaScript converter with file path
+                # Note: Timing is handled by the base processor's process() method
                 self.import_log.add("Converting GPX file to GeoJSON format", "File Conversion", DatabaseLogLevel.INFO)
                 result = subprocess.run(
                     ['node', togeojson_path, temp_file_path],
@@ -56,8 +56,6 @@ class GPXProcessor(BaseProcessor):
                     text=True,
                     timeout=self._calculate_timeout()
                 )
-                conversion_duration = time.time() - conversion_start
-                self.import_log.add_timing("GPX conversion", conversion_duration, "File Conversion")
 
                 if result.returncode != 0:
                     raise Exception("GPX file conversion failed")

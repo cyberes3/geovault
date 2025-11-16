@@ -6,7 +6,8 @@ Defines common processing logic that all file type processors inherit.
 import logging
 import time
 from abc import ABC, abstractmethod
-from typing import Dict, Any, Tuple, Union
+from concurrent.futures import ThreadPoolExecutor
+from typing import Dict, Any, Tuple, Union, List
 
 from geo_lib.processing.file_types import FileType, detect_file_type
 from geo_lib.processing.geo_processor import (
@@ -107,10 +108,105 @@ class BaseProcessor(ABC):
         """
         raise NotImplemented
 
+    def _process_single_feature(self, feature: Dict[str, Any]) -> Tuple[List[Dict[str, Any]], ImportLog, int, bool]:
+        """
+        Process a single feature, including splitting geometry collections and geocoding.
+        This is a worker function designed to be called in parallel.
+        
+        Args:
+            feature: Single feature dictionary from GeoJSON
+            
+        Returns:
+            Tuple of (processed_features_list, feature_log, skipped_count, was_geometry_collection)
+        """
+        feature_log = ImportLog()
+        processed_features = []
+        skipped_count = 0
+        was_geometry_collection = False
+        
+        # Split GeometryCollection into separate features
+        split_features = split_geometry_collection(feature)
+        
+        # Check if this was a geometry collection
+        if len(split_features) > 1:
+            was_geometry_collection = True
+        
+        # Skip features with no valid geometry
+        if not split_features:
+            skipped_count += 1
+            return processed_features, feature_log, skipped_count, was_geometry_collection
+        
+        for split_feature in split_features:
+            if split_feature['geometry']['type'] in ['Point', 'MultiPoint', 'LineString', 'MultiLineString', 'Polygon', 'MultiPolygon']:
+                try:
+                    # Generate properties with appropriate styling based on file type and feature geometry
+                    split_feature['properties'] = geojson_property_generation(split_feature)
+                    
+                    # Add geocoding tags for points and lines
+                    from django.conf import settings
+                    if getattr(settings, 'REVERSE_GEOCODING_ENABLED', True):
+                        geometry_type = split_feature['geometry']['type'].lower()
+                        if geometry_type in ['point', 'multipoint', 'linestring', 'multilinestring']:
+                            try:
+                                from geo_lib.geolocation.reverse_geocode import get_reverse_geocoding_service
+                                from geo_lib.processing.tagging import get_representative_points
+                                from geo_lib.types.feature import PointFeature, LineStringFeature, MultiLineStringFeature
+                                
+                                # Convert to feature instance to get representative points
+                                feature_class = None
+                                if geometry_type in ['point', 'multipoint']:
+                                    feature_class = PointFeature
+                                elif geometry_type == 'linestring':
+                                    feature_class = LineStringFeature
+                                elif geometry_type == 'multilinestring':
+                                    feature_class = MultiLineStringFeature
+                                
+                                if feature_class:
+                                    feature_instance = feature_class(**split_feature)
+                                    points = get_representative_points(feature_instance)
+                                    
+                                    if points:
+                                        geocoding_service = get_reverse_geocoding_service()
+                                        all_location_tags = set()
+                                        
+                                        for lat, lon in points:
+                                            location_tags = geocoding_service.get_location_tags(lat, lon)
+                                            all_location_tags.update(location_tags)
+                                        
+                                        # Add geocoding tags to existing tags
+                                        existing_tags = split_feature['properties'].get('tags', [])
+                                        if not isinstance(existing_tags, list):
+                                            existing_tags = []
+                                        split_feature['properties']['tags'] = existing_tags + sorted(all_location_tags)
+                            except Exception as geocode_error:
+                                feature_name = split_feature.get('properties', {}).get('name', 'Unnamed')
+                                feature_log.add(
+                                    f"Geocoding failed for feature '{feature_name}': {str(geocode_error)}",
+                                    "Geocoding",
+                                    DatabaseLogLevel.WARNING
+                                )
+                                logger.warning(f"Geocoding failed for feature '{feature_name}': {geocode_error}")
+                    
+                    # Convert to our property format
+                    from geo_lib.types.geojson import GeojsonRawProperty
+                    split_feature['properties'] = GeojsonRawProperty(**split_feature['properties']).model_dump()
+                    processed_features.append(split_feature)
+                except Exception as e:
+                    feature_name = split_feature.get('properties', {}).get('name', 'Unnamed')
+                    feature_log.add(f"Failed to process feature '{feature_name}', skipping", 'Feature Processing', DatabaseLogLevel.WARNING)
+                    logger.error(f"Feature processing error for '{feature_name}': {str(e)}")
+                    skipped_count += 1
+            else:
+                feature_log.add(f'Skipping unsupported geometry type: {split_feature["geometry"]["type"]}', 'Feature Processing', DatabaseLogLevel.WARNING)
+                skipped_count += 1
+        
+        return processed_features, feature_log, skipped_count, was_geometry_collection
+
     def process_features(self, geojson_data: Dict[str, Any]) -> Tuple[list, ImportLog]:
         """
         Process features from GeoJSON data.
         Common feature processing logic used by all file types.
+        Uses parallel processing via ThreadPoolExecutor for improved performance.
         
         Args:
             geojson_data: GeoJSON data dictionary
@@ -144,82 +240,22 @@ class BaseProcessor(ABC):
             if geocoding_count > 0:
                 feature_log.add(f"Geocoding {geocoding_count} feature(s)", "Geocoding", DatabaseLogLevel.INFO)
 
-        for feature in features:
-            # Split GeometryCollection into separate features
-            split_features = split_geometry_collection(feature)
-
-            # Count geometry collections that were split
-            if len(split_features) > 1:
-                geometry_collection_count += 1
-
-            # Skip features with no valid geometry
-            if not split_features:
-                skipped_count += 1
-                continue
-
-            for split_feature in split_features:
-                if split_feature['geometry']['type'] in ['Point', 'MultiPoint', 'LineString', 'MultiLineString', 'Polygon', 'MultiPolygon']:
-                    try:
-                        # Generate properties with appropriate styling based on file type and feature geometry
-                        split_feature['properties'] = geojson_property_generation(split_feature)
-
-                        # Add geocoding tags for points and lines
-                        from django.conf import settings
-                        if getattr(settings, 'REVERSE_GEOCODING_ENABLED', True):
-                            geometry_type = split_feature['geometry']['type'].lower()
-                            if geometry_type in ['point', 'multipoint', 'linestring', 'multilinestring']:
-                                try:
-                                    from geo_lib.geolocation.reverse_geocode import get_reverse_geocoding_service
-                                    from geo_lib.processing.tagging import get_representative_points
-                                    from geo_lib.types.feature import PointFeature, LineStringFeature, MultiLineStringFeature
-                                    
-                                    # Convert to feature instance to get representative points
-                                    feature_class = None
-                                    if geometry_type in ['point', 'multipoint']:
-                                        feature_class = PointFeature
-                                    elif geometry_type == 'linestring':
-                                        feature_class = LineStringFeature
-                                    elif geometry_type == 'multilinestring':
-                                        feature_class = MultiLineStringFeature
-                                    
-                                    if feature_class:
-                                        feature_instance = feature_class(**split_feature)
-                                        points = get_representative_points(feature_instance)
-                                        
-                                        if points:
-                                            geocoding_service = get_reverse_geocoding_service()
-                                            all_location_tags = set()
-                                            
-                                            for lat, lon in points:
-                                                location_tags = geocoding_service.get_location_tags(lat, lon)
-                                                all_location_tags.update(location_tags)
-                                            
-                                            # Add geocoding tags to existing tags
-                                            existing_tags = split_feature['properties'].get('tags', [])
-                                            if not isinstance(existing_tags, list):
-                                                existing_tags = []
-                                            split_feature['properties']['tags'] = existing_tags + sorted(all_location_tags)
-                                except Exception as geocode_error:
-                                    feature_name = split_feature.get('properties', {}).get('name', 'Unnamed')
-                                    feature_log.add(
-                                        f"Geocoding failed for feature '{feature_name}': {str(geocode_error)}",
-                                        "Geocoding",
-                                        DatabaseLogLevel.WARNING
-                                    )
-                                    logger.warning(f"Geocoding failed for feature '{feature_name}': {geocode_error}")
-
-                        # Convert to our property format
-                        from geo_lib.types.geojson import GeojsonRawProperty
-                        split_feature['properties'] = GeojsonRawProperty(**split_feature['properties']).model_dump()
-                        processed_features.append(split_feature)
-                    except Exception as e:
-                        feature_name = split_feature.get('properties', {}).get('name', 'Unnamed')
-                        feature_log.add(f"Failed to process feature '{feature_name}', skipping", 'Feature Processing', DatabaseLogLevel.WARNING)
-                        logger.error(f"Feature processing error for '{feature_name}': {str(e)}")
-                        skipped_count += 1
-                else:
-                    feature_log.add(f'Skipping unsupported geometry type: {split_feature["geometry"]["type"]}', 'Feature Processing', DatabaseLogLevel.WARNING)
-                    skipped_count += 1
+        # Get number of threads from settings
+        num_threads = getattr(settings, 'IMPORT_PROCESSING_THREADS', 4)
+        
+        # Process features in parallel using ThreadPoolExecutor
+        if len(features) > 0:
+            with ThreadPoolExecutor(max_workers=num_threads) as executor:
+                # Process all features in parallel and collect results
+                results = executor.map(self._process_single_feature, features)
+                
+                # Collect results from all workers
+                for result_features, result_log, result_skipped, was_geometry_collection in results:
+                    processed_features.extend(result_features)
+                    feature_log.extend(result_log)
+                    skipped_count += result_skipped
+                    if was_geometry_collection:
+                        geometry_collection_count += 1
 
         # Log summary
         if geometry_collection_count > 0:
@@ -230,8 +266,7 @@ class BaseProcessor(ABC):
 
         feature_log.add(f"Successfully processed {len(processed_features)} features", "Feature Processing", DatabaseLogLevel.INFO)
 
-        self.import_log.extend(feature_log)
-        return processed_features, self.import_log
+        return processed_features, feature_log
 
     def process(self) -> Tuple[Dict[str, Any], ImportLog]:
         """
@@ -262,8 +297,9 @@ class BaseProcessor(ABC):
             feature_processing_start = time.time()
             self.processed_features, processing_log = self.process_features(self.geojson_data)
             feature_processing_duration = time.time() - feature_processing_start
-            self.import_log.add_timing("Feature processing", feature_processing_duration, "Processing")
+            # Extend processing log first, then add timing so logs appear in correct order
             self.import_log.extend(processing_log)
+            self.import_log.add_timing("Feature processing", feature_processing_duration, "Processing")
 
             # Create final GeoJSON structure
             final_geojson = {

@@ -109,8 +109,8 @@ class KMLProcessor(BaseProcessor):
             current_dir = os.path.dirname(os.path.abspath(__file__))
             togeojson_path = os.path.join(current_dir, '..', 'togeojson', 'index.js')
 
-            # Use the JavaScript converter with file path and timing
-            conversion_start = time.time()
+            # Use the JavaScript converter with file path
+            # Note: Timing is handled by the base processor's process() method
             self.import_log.add(f"Converting {file_type_name} file to GeoJSON format", "File Conversion", DatabaseLogLevel.INFO)
             result = subprocess.run(
                 ['node', togeojson_path, file_path],
@@ -118,8 +118,6 @@ class KMLProcessor(BaseProcessor):
                 text=True,
                 timeout=self._calculate_timeout()
             )
-            conversion_duration = time.time() - conversion_start
-            self.import_log.add_timing(f"{file_type_name} conversion", conversion_duration, "File Conversion")
 
             if result.returncode != 0:
                 raise Exception(f"{file_type_name} file conversion failed")
