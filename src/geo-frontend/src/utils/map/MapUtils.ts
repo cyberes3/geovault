@@ -6,7 +6,8 @@
  */
 
 import type {MapConfig} from '@/types/geospatial';
-import {Style, Fill, Stroke, Circle} from 'ol/style';
+import {Style, Fill, Stroke, Circle, Icon} from 'ol/style';
+import {APIHOST} from '@/config.js';
 
 export class MapUtils {
     // Style cache to avoid creating duplicate Style objects
@@ -213,6 +214,59 @@ export class MapUtils {
     }
 
     /**
+     * Get icon URL from feature properties
+     * Checks multiple common property names for icon URLs
+     * @param properties - Feature properties object
+     * @returns Icon URL if found, null otherwise
+     */
+    private static getIconUrl(properties: any): string | null {
+        // Common property names that might contain icon hrefs
+        const iconPropertyNames = [
+            'icon',
+            'icon-href',
+            'iconUrl',
+            'icon_url',
+            'marker-icon',
+            'marker-symbol',
+            'symbol',
+        ];
+
+        for (const propName of iconPropertyNames) {
+            if (properties[propName] && typeof properties[propName] === 'string') {
+                const iconUrl = properties[propName].trim();
+                if (iconUrl) {
+                    return iconUrl;
+                }
+            }
+        }
+
+        return null;
+    }
+
+    /**
+     * Resolve icon URL to absolute URL
+     * Converts relative URLs (starting with /api/) to absolute URLs using APIHOST
+     * @param iconUrl - Icon URL (relative or absolute)
+     * @returns Absolute icon URL
+     */
+    private static resolveIconUrl(iconUrl: string): string {
+        // If already absolute URL, return as is
+        if (iconUrl.startsWith('http://') || iconUrl.startsWith('https://')) {
+            return iconUrl;
+        }
+
+        // If relative URL starting with /api/, prepend APIHOST
+        // The backend stores icons with path /api/data/icons/{hash}.png
+        // and the endpoint is /api/data/icons/{hash} (routed through api.urls)
+        if (iconUrl.startsWith('/api/')) {
+            return `${APIHOST}${iconUrl}`;
+        }
+
+        // Fallback: assume it's a relative path and prepend APIHOST
+        return `${APIHOST}${iconUrl.startsWith('/') ? '' : '/'}${iconUrl}`;
+    }
+
+    /**
      * Get style for a feature based on its geometry type and properties
      * This is a pure function extracted from Vue component to avoid reactivity overhead
      * Uses caching to avoid creating duplicate Style objects for features with same styling
@@ -233,8 +287,15 @@ export class MapUtils {
         let cacheKey: string;
 
         if (geometryType === 'Point') {
-            const fillColor = hexToColor(properties['marker-color'], '#ff0000');
-            cacheKey = `Point:${fillColor}:2`;
+            // Check for icon URL first
+            const iconUrl = this.getIconUrl(properties);
+            if (iconUrl) {
+                const resolvedIconUrl = this.resolveIconUrl(iconUrl);
+                cacheKey = `Point:icon:${resolvedIconUrl}`;
+            } else {
+                const fillColor = hexToColor(properties['marker-color'], '#ff0000');
+                cacheKey = `Point:${fillColor}:2`;
+            }
         } else if (geometryType === 'LineString') {
             const strokeColor = hexToColor(properties.stroke, '#ff0000');
             const strokeWidth = properties['stroke-width'] || 2;
@@ -269,19 +330,33 @@ export class MapUtils {
         let style: Style;
 
         if (geometryType === 'Point') {
-            const fillColor = hexToColor(properties['marker-color'], '#ff0000');
-            style = new Style({
-                image: new Circle({
-                    radius: 6,
-                    fill: new Fill({
-                        color: fillColor
-                    }),
-                    stroke: new Stroke({
-                        color: fillColor, // Use same color for stroke
-                        width: 2
+            // Check for icon URL first
+            const iconUrl = this.getIconUrl(properties);
+            if (iconUrl) {
+                const resolvedIconUrl = this.resolveIconUrl(iconUrl);
+                style = new Style({
+                    image: new Icon({
+                        src: resolvedIconUrl,
+                        scale: 0.4,
+                        anchor: [0.5, 1.0], // Anchor at bottom center of icon
                     })
-                })
-            });
+                });
+            } else {
+                // Fall back to circle style if no icon
+                const fillColor = hexToColor(properties['marker-color'], '#ff0000');
+                style = new Style({
+                    image: new Circle({
+                        radius: 6,
+                        fill: new Fill({
+                            color: fillColor
+                        }),
+                        stroke: new Stroke({
+                            color: fillColor, // Use same color for stroke
+                            width: 2
+                        })
+                    })
+                });
+            }
         } else if (geometryType === 'LineString') {
             const strokeColor = hexToColor(properties.stroke, '#ff0000');
             style = new Style({
