@@ -6,8 +6,13 @@
  */
 
 import type {MapConfig} from '@/types/geospatial';
+import {Style, Fill, Stroke, Circle} from 'ol/style';
 
 export class MapUtils {
+    // Style cache to avoid creating duplicate Style objects
+    // Key format: "geometryType:color1:color2:width:opacity"
+    private static styleCache: Map<string, Style> = new Map();
+
     /**
      * Count only polygon and line features (exclude points)
      * This is used for the tier system which only considers complex geometries
@@ -205,5 +210,124 @@ export class MapUtils {
 
         // Fallback to moderate zoom
         return 6;
+    }
+
+    /**
+     * Get style for a feature based on its geometry type and properties
+     * This is a pure function extracted from Vue component to avoid reactivity overhead
+     * Uses caching to avoid creating duplicate Style objects for features with same styling
+     * @param feature - OpenLayers feature
+     * @returns OpenLayers Style object
+     */
+    static getFeatureStyle(feature: any): Style {
+        const properties = feature.get('properties') || {};
+        const geometryType = feature.getGeometry().getType();
+
+        // Helper function to convert hex color to CSS color string
+        const hexToColor = (hexColor: string | undefined, defaultColor: string = '#ff0000'): string => {
+            if (!hexColor || typeof hexColor !== 'string') return defaultColor;
+            return hexColor;
+        };
+
+        // Create cache key based on geometry type and style properties
+        let cacheKey: string;
+
+        if (geometryType === 'Point') {
+            const fillColor = hexToColor(properties['marker-color'], '#ff0000');
+            cacheKey = `Point:${fillColor}:2`;
+        } else if (geometryType === 'LineString') {
+            const strokeColor = hexToColor(properties.stroke, '#ff0000');
+            const strokeWidth = properties['stroke-width'] || 2;
+            cacheKey = `LineString:${strokeColor}:${strokeWidth}`;
+        } else if (geometryType === 'Polygon') {
+            const strokeColor = hexToColor(properties.stroke, '#ff0000');
+            let fillColor = hexToColor(properties.fill, '#ff0000');
+            const strokeWidth = properties['stroke-width'] || 2;
+            const fillOpacity = properties['fill-opacity'] !== undefined ? properties['fill-opacity'] : 'none';
+
+            // Apply fill-opacity if specified
+            if (fillOpacity !== 'none') {
+                // Convert hex to RGB and apply opacity
+                const hex = fillColor.replace('#', '');
+                const r = parseInt(hex.substr(0, 2), 16);
+                const g = parseInt(hex.substr(2, 2), 16);
+                const b = parseInt(hex.substr(4, 2), 16);
+                fillColor = `rgba(${r}, ${g}, ${b}, ${fillOpacity})`;
+            }
+            cacheKey = `Polygon:${strokeColor}:${fillColor}:${strokeWidth}`;
+        } else {
+            // Default style for unknown geometry types
+            cacheKey = 'default';
+        }
+
+        // Check cache first
+        if (this.styleCache.has(cacheKey)) {
+            return this.styleCache.get(cacheKey)!;
+        }
+
+        // Create new style and cache it
+        let style: Style;
+
+        if (geometryType === 'Point') {
+            const fillColor = hexToColor(properties['marker-color'], '#ff0000');
+            style = new Style({
+                image: new Circle({
+                    radius: 6,
+                    fill: new Fill({
+                        color: fillColor
+                    }),
+                    stroke: new Stroke({
+                        color: fillColor, // Use same color for stroke
+                        width: 2
+                    })
+                })
+            });
+        } else if (geometryType === 'LineString') {
+            const strokeColor = hexToColor(properties.stroke, '#ff0000');
+            style = new Style({
+                stroke: new Stroke({
+                    color: strokeColor,
+                    width: properties['stroke-width'] || 2
+                })
+            });
+        } else if (geometryType === 'Polygon') {
+            const strokeColor = hexToColor(properties.stroke, '#ff0000');
+            let fillColor = hexToColor(properties.fill, '#ff0000');
+
+            // Apply fill-opacity if specified
+            if (properties['fill-opacity'] !== undefined) {
+                // Convert hex to RGB and apply opacity
+                const hex = fillColor.replace('#', '');
+                const r = parseInt(hex.substr(0, 2), 16);
+                const g = parseInt(hex.substr(2, 2), 16);
+                const b = parseInt(hex.substr(4, 2), 16);
+                fillColor = `rgba(${r}, ${g}, ${b}, ${properties['fill-opacity']})`;
+            }
+
+            style = new Style({
+                stroke: new Stroke({
+                    color: strokeColor,
+                    width: properties['stroke-width'] || 2
+                }),
+                fill: new Fill({
+                    color: fillColor
+                })
+            });
+        } else {
+            // Default style for unknown geometry types
+            style = new Style({
+                stroke: new Stroke({
+                    color: '#ff0000',
+                    width: 2
+                }),
+                fill: new Fill({
+                    color: 'rgba(255, 0, 0, 0.3)'
+                })
+            });
+        }
+
+        // Cache the style
+        this.styleCache.set(cacheKey, style);
+        return style;
     }
 }

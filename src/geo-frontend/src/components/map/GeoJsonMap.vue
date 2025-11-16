@@ -29,11 +29,11 @@
 </template>
 
 <script>
+import {markRaw} from 'vue'
 import {Map, View} from 'ol'
 import {OSM} from 'ol/source'
 import {Tile as TileLayer, Vector as VectorLayer} from 'ol/layer'
 import {Vector as VectorSource} from 'ol/source'
-import {Style, Fill, Stroke, Circle} from 'ol/style'
 import {GeoJSON} from 'ol/format'
 import {fromLonLat, toLonLat} from 'ol/proj'
 import {authMixin} from '@/assets/js/authMixin.js'
@@ -60,7 +60,8 @@ export default {
       MAX_FEATURES: 5000, // Maximum number of features to keep on the map
       featureTimestamps: {}, // Use plain object instead of Map
       featureIdCounter: 0, // Counter to generate unique IDs for features
-      currentZoom: null
+      currentZoom: null,
+      featureCountUpdatePending: false // Flag to batch feature count updates
     }
   },
   methods: {
@@ -79,23 +80,29 @@ export default {
       await this.getUserLocation()
 
       // Create vector source and layer
-      this.vectorSource = new VectorSource()
+      // Use markRaw to prevent Vue from making OpenLayers objects reactive
+      // This is critical for performance when adding thousands of features
+      this.vectorSource = markRaw(new VectorSource())
 
-      this.vectorLayer = new VectorLayer({
+      this.vectorLayer = markRaw(new VectorLayer({
         source: this.vectorSource,
-        style: (feature) => this.getFeatureStyle(feature),
+        style: (feature) => MapUtils.getFeatureStyle(feature),
         // Performance optimizations for complex polygon rendering
         renderBuffer: 100,  // Only render features within 100px of viewport
         updateWhileAnimating: true,  // Continue updating during animations
         updateWhileInteracting: true,  // Continue updating during interactions
-        declutter: true  // Disable label decluttering (enable if you have overlapping labels)
-      })
+        declutter: true,  // Disable label decluttering (enable if you have overlapping labels)
+        // Layer visibility optimizations for large datasets
+        minResolution: 0,  // Show at all zoom levels
+        maxResolution: Infinity  // No upper limit, but can be adjusted for performance
+      }))
 
       // Determine initial map center and zoom based on user location
       const mapConfig = this.getInitialMapConfig()
 
       // Create map
-      this.map = new Map({
+      // Use markRaw to prevent Vue from making the map object reactive
+      this.map = markRaw(new Map({
         target: this.$refs.mapContainer,
         layers: [
           new TileLayer({
@@ -107,7 +114,7 @@ export default {
           center: fromLonLat(mapConfig.center),
           zoom: mapConfig.zoom
         })
-      })
+      }))
 
       // Add event listeners
       this.map.getView().on('change:center', this.debouncedLoadData)
@@ -188,80 +195,6 @@ export default {
       return MapUtils.getLocationDisplayName(this.userLocation)
     },
 
-    getFeatureStyle(feature) {
-      const properties = feature.get('properties') || {}
-      const geometryType = feature.getGeometry().getType()
-      const name = properties.name || 'Unknown'
-
-      // Helper function to convert hex color to CSS color string
-      const hexToColor = (hexColor, defaultColor = '#ff0000') => {
-        if (!hexColor || typeof hexColor !== 'string') return defaultColor
-        return hexColor
-      }
-
-      if (geometryType === 'Point') {
-        // Points use marker-color or default red
-        const fillColor = hexToColor(properties['marker-color'], '#ff0000')
-
-        return new Style({
-          image: new Circle({
-            radius: 6,
-            fill: new Fill({
-              color: fillColor
-            }),
-            stroke: new Stroke({
-              color: fillColor, // Use same color for stroke
-              width: 2
-            })
-          })
-        })
-      } else if (geometryType === 'LineString') {
-        // Lines use stroke and stroke-width
-        const strokeColor = hexToColor(properties.stroke, '#ff0000')
-        return new Style({
-          stroke: new Stroke({
-            color: strokeColor,
-            width: properties['stroke-width'] || 2
-          })
-        })
-      } else if (geometryType === 'Polygon') {
-        // Polygons use stroke, stroke-width, fill, and fill-opacity
-        const strokeColor = hexToColor(properties.stroke, '#ff0000')
-        let fillColor = hexToColor(properties.fill, '#ff0000')
-
-        // Apply fill-opacity if specified
-        if (properties['fill-opacity'] !== undefined) {
-          // Convert hex to RGB and apply opacity
-          const hex = fillColor.replace('#', '')
-          const r = parseInt(hex.substr(0, 2), 16)
-          const g = parseInt(hex.substr(2, 2), 16)
-          const b = parseInt(hex.substr(4, 2), 16)
-          fillColor = `rgba(${r}, ${g}, ${b}, ${properties['fill-opacity']})`
-        }
-
-        return new Style({
-          stroke: new Stroke({
-            color: strokeColor,
-            width: properties['stroke-width'] || 2
-          }),
-          fill: new Fill({
-            color: fillColor
-          })
-        })
-      }
-
-      // Default style for unknown geometry types
-      return new Style({
-        stroke: new Stroke({
-          color: '#ff0000',
-          width: 2
-        }),
-        fill: new Fill({
-          color: 'rgba(255, 0, 0, 0.3)'
-        })
-      })
-    },
-
     getBoundingBoxKey(extent, zoom) {
       return MapUtils.getBoundingBoxKey(extent, zoom)
     },
@@ -335,16 +268,12 @@ export default {
           // Manually preserve properties from the original GeoJSON data
           features.forEach((feature, index) => {
             const originalFeature = data.data.features[index]
-            const processedFeature = processedData.features[index]
 
             if (originalFeature && originalFeature.properties) {
               // Set the properties explicitly
+              // Note: Individual properties are accessible via feature.get('properties')
+              // Setting them individually is redundant and adds overhead
               feature.set('properties', originalFeature.properties)
-
-              // Also set individual properties for easier access
-              Object.keys(originalFeature.properties).forEach(key => {
-                feature.set(key, originalFeature.properties[key])
-              })
             }
 
             // Set the geojson_hash for efficient duplicate detection
@@ -398,7 +327,8 @@ export default {
 
           this.loadedBounds.add(bboxKey)
 
-          this.updateFeatureCount()
+          // Batch feature count update to avoid reactivity overhead
+          this.scheduleFeatureCountUpdate()
           this.updateLastUpdateTime()
 
           // Update current zoom
@@ -439,6 +369,17 @@ export default {
       this.featureCount = this.vectorSource ? this.vectorSource.getFeatures().length : 0
     },
 
+    scheduleFeatureCountUpdate() {
+      // Batch feature count updates using nextTick to avoid triggering reactivity on every feature
+      if (!this.featureCountUpdatePending) {
+        this.featureCountUpdatePending = true
+        this.$nextTick(() => {
+          this.updateFeatureCount()
+          this.featureCountUpdatePending = false
+        })
+      }
+    },
+
     updateLastUpdateTime() {
       this.lastUpdateTime = new Date().toLocaleTimeString()
     },
@@ -474,7 +415,7 @@ export default {
       }
 
       console.log(`Removed ${featuresToRemove} oldest features to maintain limit of ${this.MAX_FEATURES}`)
-      this.updateFeatureCount()
+      this.scheduleFeatureCountUpdate()
     },
 
     addFeatureTimestamp(feature) {
@@ -489,7 +430,7 @@ export default {
       }
       this.featureTimestamps = {}
       this.loadedBounds.clear()
-      this.updateFeatureCount()
+      this.scheduleFeatureCountUpdate()
       console.log('Cleared all features from the map')
     },
 
