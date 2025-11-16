@@ -44,6 +44,13 @@ Running these two services requires a minimum of 25GB RAM, 6 CPU cores, 500GB, a
 ### Setup
 
 1. Install Docker
-2. Create the `/srv/docker-data` directory (should be running on SSDs)
-3. `docker-compose -f nominatim.yml up -d`
-4. `docker-compose -f overpass.yml up -d`
+2. `mkdir -p /srv/docker-data/nominatim/db /srv/docker-data/nominatim/flatnode /srv/docker-data/overpass`
+3. `docker-compose -f nominatim.yml up`
+4. `docker-compose -f overpass.yml up`
+
+`CTRL+C` the containers when they have finished building their databases and then do:
+
+```shell
+docker-compose -f nominatim.yml up -d
+docker-compose -f overpass.yml up -d
+```

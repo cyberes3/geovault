@@ -97,6 +97,14 @@
             Cancel
           </button>
           <button
+            type="button"
+            @click="handleDelete"
+            :disabled="isSaving"
+            class="px-4 py-2 text-sm font-medium text-white bg-red-600 border border-transparent rounded-md hover:bg-red-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-red-500 disabled:opacity-50 disabled:cursor-not-allowed"
+          >
+            Delete
+          </button>
+          <button
             type="submit"
             :disabled="isSaving"
             class="px-4 py-2 text-sm font-medium text-white bg-blue-600 border border-transparent rounded-md hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 disabled:opacity-50 disabled:cursor-not-allowed"
@@ -123,7 +131,7 @@ export default {
       default: null
     }
   },
-  emits: ['cancel', 'saved'],
+  emits: ['cancel', 'saved', 'deleted'],
   data() {
     return {
       formData: {
@@ -331,6 +339,56 @@ export default {
 
       } catch (error) {
         console.error('Error updating feature:', error)
+        this.errorMessage = `Error: ${error.message}`
+        this.isSaving = false
+      }
+    },
+
+    async handleDelete() {
+      // Get feature ID
+      const originalProperties = this.feature.get('properties') || {}
+      const featureId = originalProperties._id
+      if (!featureId) {
+        this.errorMessage = 'Feature ID not found. Cannot delete feature.'
+        return
+      }
+
+      // Show confirmation dialog
+      const featureName = originalProperties.name || 'this feature'
+      const confirmed = window.confirm(`Are you sure you want to delete "${featureName}"? This action cannot be undone.`)
+      
+      if (!confirmed) {
+        return
+      }
+
+      this.errorMessage = ''
+      this.successMessage = ''
+      this.isSaving = true
+
+      try {
+        // Send delete request
+        const response = await fetch(`${APIHOST}/api/data/feature/${featureId}/delete/`, {
+          method: 'DELETE',
+          headers: {
+            'Content-Type': 'application/json',
+            'X-CSRFToken': this.getCsrfToken()
+          },
+          credentials: 'include'
+        })
+
+        const data = await response.json()
+
+        if (!response.ok || !data.success) {
+          this.errorMessage = data.error || 'Failed to delete feature'
+          this.isSaving = false
+          return
+        }
+
+        // Emit deleted event
+        this.$emit('deleted')
+
+      } catch (error) {
+        console.error('Error deleting feature:', error)
         this.errorMessage = `Error: ${error.message}`
         this.isSaving = false
       }

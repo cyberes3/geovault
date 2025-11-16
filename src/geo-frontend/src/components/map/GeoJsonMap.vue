@@ -32,6 +32,7 @@
           :feature="selectedFeature"
           @cancel="handleCancelEdit"
           @saved="handleFeatureSaved"
+          @deleted="handleFeatureDeleted"
         />
       </div>
     </div>
@@ -361,6 +362,45 @@ export default {
       this.loadedBounds.clear()
       // Reload data for current view
       await this.loadDataForCurrentView()
+      // Update features in extent list
+      this.updateFeaturesInExtent()
+    },
+
+    // Handle feature deleted
+    async handleFeatureDeleted() {
+      this.isEditingFeature = false
+      
+      // Get the deleted feature ID
+      const featureId = this.selectedFeature?.get('properties')?._id
+      
+      // Remove the deleted feature from vector source if it exists
+      if (featureId && this.vectorSource) {
+        const existingFeatures = this.vectorSource.getFeatures()
+        const featureToRemove = existingFeatures.find(f => {
+          const props = f.get('properties') || {}
+          return props._id === featureId
+        })
+        
+        if (featureToRemove) {
+          this.vectorSource.removeFeature(featureToRemove)
+          
+          // Remove from feature timestamps if it exists
+          const featureId_key = this.getFeatureId(featureToRemove)
+          if (this.featureTimestamps[featureId_key]) {
+            delete this.featureTimestamps[featureId_key]
+          }
+        }
+      }
+      
+      // Clear selected feature
+      this.selectedFeature = null
+      
+      // Clear loaded bounds cache to force reload
+      this.loadedBounds.clear()
+      
+      // Reload data for current view to refresh the map
+      await this.loadDataForCurrentView()
+      
       // Update features in extent list
       this.updateFeaturesInExtent()
     },

@@ -831,8 +831,6 @@ def import_to_featurestore(request, item_id):
                 'code': 409
             }, status=409)
 
-    import_item.imported = True
-
     # Log import start
     logger.info(f"Starting import of {len(import_item.geofeatures)} features from '{import_item.original_filename}' for user {request.user.id}")
 
@@ -968,18 +966,21 @@ def import_to_featurestore(request, item_id):
         ))
         i += 1
 
+    # Track successful feature creation
+    successful_imports = 0
+
     # Bulk create all features at once for better performance
     if features_to_create:
         try:
             logger.info(f"Importing {len(features_to_create)} unique features to database for user {request.user.id}")
 
             FeatureStore.objects.bulk_create(features_to_create, batch_size=1000)
-            logger.info(f"Successfully imported {len(features_to_create)} features in bulk for user {request.user.id}")
+            successful_imports = len(features_to_create)
+            logger.info(f"Successfully imported {successful_imports} features in bulk for user {request.user.id}")
         except Exception as e:
             logger.warning(f"Bulk import failed for user {request.user.id}, falling back to individual imports: {str(e)}")
             logger.error(f"Bulk import error traceback: {traceback.format_exc()}")
             # Fallback to individual creation if bulk fails
-            successful_imports = 0
             for feature in features_to_create:
                 try:
                     feature.save()
@@ -995,25 +996,48 @@ def import_to_featurestore(request, item_id):
 
     # Log final summary
     total_processed = len(import_item.geofeatures)
-    total_imported = len(features_to_create)
-    total_skipped = total_processed - total_imported
+    total_imported = successful_imports
+    total_skipped = total_processed - len(features_to_create)  # Features skipped before creation attempt
 
-    logger.info(f"Import completed for user {request.user.id}: {total_imported} features imported, {total_skipped} skipped (already exist)")
+    # Only mark as imported and proceed with cleanup if at least one feature was successfully created
+    if successful_imports > 0:
+        logger.info(f"Import completed for user {request.user.id}: {total_imported} features imported, {total_skipped} skipped (already exist)")
 
-    # Delete logs before clearing the log_id
-    if import_item.log_id:
-        _delete_logs_by_log_id(str(import_item.log_id))
+        # Mark as imported only after successful feature creation
+        import_item.imported = True
 
-    # Erase some unneeded data since it's not needed anymore now that it's in the feature store.
-    import_item.geofeatures = []
-    import_item.log_id = None
+        # Delete logs before clearing the log_id
+        if import_item.log_id:
+            _delete_logs_by_log_id(str(import_item.log_id))
 
-    import_item.save()
-    
-    # Broadcast WebSocket event for item import
-    _broadcast_item_imported(request.user.id, item_id)
+        # Erase some unneeded data since it's not needed anymore now that it's in the feature store.
+        import_item.geofeatures = []
+        import_item.log_id = None
 
-    return JsonResponse({'success': True, 'msg': f'Successfully imported {total_imported} features ({total_skipped} already existed)'})
+        import_item.save()
+        
+        # Broadcast WebSocket event for item import
+        _broadcast_item_imported(request.user.id, item_id)
+
+        return JsonResponse({'success': True, 'msg': f'Successfully imported {total_imported} features ({total_skipped} already existed)'})
+    else:
+        # No features were successfully imported
+        logger.warning(f"Import failed for user {request.user.id}: No features were imported from '{import_item.original_filename}'")
+        
+        # Determine reason for failure
+        if len(features_to_create) == 0:
+            if total_processed == 0:
+                reason = "No features found in the file"
+            else:
+                reason = f"All {total_processed} features were skipped (duplicates, missing geometry, or unsupported types)"
+        else:
+            reason = f"Failed to create {len(features_to_create)} features in the database"
+        
+        return JsonResponse({
+            'success': False,
+            'msg': f'No features were imported. {reason}.',
+            'code': 400
+        }, status=400)
 
 
 def _hash_kml(b: str):
