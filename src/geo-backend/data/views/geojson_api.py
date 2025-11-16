@@ -22,6 +22,7 @@ class BboxQueryResult(NamedTuple):
     """Result of a bounding box query containing features and total count"""
     features: List[Dict]
     total_count: int
+    fallback_used: bool = False  # Indicates if fallback mechanism was triggered
 
 
 def _parse_bbox(bbox_str: str) -> tuple[float, ...] | None:
@@ -45,43 +46,54 @@ def _get_features_in_bbox(bbox: Tuple[float, float, float, float], user_id: int,
     # Log the bounding box for debugging
     logger.info(f"Querying features for bbox: {min_lon}, {min_lat}, {max_lon}, {max_lat} (zoom: {zoom_level})")
 
+    # Calculate spans for world-wide detection
+    lon_span = max_lon - min_lon if max_lon >= min_lon else (180 - min_lon) + (max_lon + 180)
+    lat_span = max_lat - min_lat
+
     # Check if this is a world-wide bbox that crosses the International Date Line
     # This happens when min_lon > max_lon (e.g., min_lon=134, max_lon=134 means we're crossing 180°/-180°)
     crosses_dateline = min_lon > max_lon
     
-    # Also check for world-wide extents that span most of the globe
-    # If the bbox spans more than 300 degrees of longitude, treat it as world-wide
-    world_wide_extent = (max_lon - min_lon) > 300 if not crosses_dateline else True
-    
-    # Additional check: if the bbox is very close to world-wide (spans > 350 degrees), treat as world-wide
-    if not world_wide_extent and not crosses_dateline:
-        world_wide_extent = (max_lon - min_lon) > 350
+    # Improved world-wide extent detection with more conservative thresholds
+    # Lower threshold from 300° to 280° for more conservative detection
+    # Also check latitude span (>170° indicates world-wide view)
+    world_wide_extent = False
+    if crosses_dateline:
+        world_wide_extent = True
+    else:
+        # Check longitude span (more conservative: 280° instead of 300°)
+        if lon_span > 280:
+            world_wide_extent = True
+        # Check latitude span (if lat span > 170°, treat as world-wide)
+        elif lat_span > 170:
+            world_wide_extent = True
+        # Additional check for very large extents (>270° longitude)
+        elif lon_span > 270:
+            world_wide_extent = True
 
     # Get the maximum features limit from settings
     max_features = getattr(settings, 'MAX_FEATURES_PER_REQUEST', -1)
 
+    # Base query with explicit NULL geometry exclusion and ordering
+    # Exclude features with NULL geometry to ensure consistent query behavior
+    # Order by id to ensure consistent results when slicing
+    base_query_filter = FeatureStore.objects.filter(user_id=user_id).exclude(geometry__isnull=True).order_by('id')
+
     if crosses_dateline or world_wide_extent:
         # Handle world-wide bbox that crosses the International Date Line or spans most of the globe
-        logger.info(f"World-wide extent detected: crosses_dateline={crosses_dateline}, world_wide_extent={world_wide_extent}")
-        
-        if crosses_dateline:
-            # Handle world-wide bbox that crosses the International Date Line
-            # For world-wide queries that cross the dateline, just get all features for the user
-            # since the bbox spans most of the globe anyway
-            logger.info("Dateline crossing detected - using all features for user")
-            base_query = FeatureStore.objects.filter(user_id=user_id)
-        else:
-            # For world-wide extents that don't cross the dateline, use a simpler approach
-            # Just query all features for the user (since the bbox spans most of the globe)
-            base_query = FeatureStore.objects.filter(user_id=user_id)
-
+        logger.info(f"World-wide extent detected: crosses_dateline={crosses_dateline}, world_wide_extent={world_wide_extent}, lon_span={lon_span:.1f}°, lat_span={lat_span:.1f}°")
+        base_query = base_query_filter
     else:
         # Normal bbox that doesn't cross the International Date Line
-        bbox_polygon = Polygon.from_bbox(bbox)
-        base_query = FeatureStore.objects.filter(
-            user_id=user_id,
-            geometry__intersects=bbox_polygon
-        )
+        # Use spatial query with error handling
+        try:
+            bbox_polygon = Polygon.from_bbox(bbox)
+            base_query = base_query_filter.filter(geometry__intersects=bbox_polygon)
+            logger.info(f"Using spatial query for normal bbox (lon_span={lon_span:.1f}°, lat_span={lat_span:.1f}°)")
+        except Exception as e:
+            logger.warning(f"Error creating bbox polygon or spatial query: {e}. Falling back to world-wide query.")
+            # Fallback to world-wide query if spatial query fails
+            base_query = base_query_filter
 
     # Get total count first (this is a lightweight operation)
     total_count = base_query.count()
@@ -109,8 +121,47 @@ def _get_features_in_bbox(bbox: Tuple[float, float, float, float], user_id: int,
             }
             geojson_features.append(geojson_feature)
 
-    logger.info(f"Returning {len(geojson_features)} features out of {total_count} total")
-    return BboxQueryResult(features=geojson_features, total_count=total_count)
+    # Fallback mechanism: if spatial query returned suspiciously few results for a large extent,
+    # fall back to world-wide query
+    fallback_used = False
+    if not (crosses_dateline or world_wide_extent):
+        # If we used a spatial query but got very few results for a large extent, something might be wrong
+        # Check if the extent is large (>200° longitude or >150° latitude) but we got very few results
+        is_large_extent = lon_span > 200 or lat_span > 150
+        suspicious_result = is_large_extent and total_count < 10 and total_count > 0
+        
+        if suspicious_result:
+            logger.warning(
+                f"Suspicious result: large extent (lon_span={lon_span:.1f}°, lat_span={lat_span:.1f}°) "
+                f"but only {total_count} features found. Falling back to world-wide query."
+            )
+            fallback_used = True
+            # Fall back to world-wide query
+            base_query = base_query_filter
+            total_count = base_query.count()
+            logger.info(f"Fallback query: Total features for user: {total_count}")
+            
+            # Re-apply limit if configured
+            if max_features > 0:
+                features_query = base_query[:max_features]
+            else:
+                features_query = base_query
+            
+            # Re-convert to GeoJSON format
+            geojson_features = []
+            for feature in features_query:
+                geojson_data = feature.geojson
+                if geojson_data and 'geometry' in geojson_data:
+                    geojson_feature = {
+                        "type": "Feature",
+                        "geometry": geojson_data.get('geometry'),
+                        "properties": geojson_data.get('properties', {}),
+                        "geojson_hash": feature.geojson_hash
+                    }
+                    geojson_features.append(geojson_feature)
+
+    logger.info(f"Returning {len(geojson_features)} features out of {total_count} total (fallback_used={fallback_used})")
+    return BboxQueryResult(features=geojson_features, total_count=total_count, fallback_used=fallback_used)
 
 
 @login_required_401
@@ -160,6 +211,7 @@ def get_geojson_data(request):
         query_result = _get_features_in_bbox(bbox, request.user.id, zoom_level)
         features = query_result.features
         total_features_in_bbox = query_result.total_count
+        fallback_used = query_result.fallback_used
 
         # Get the configured limit for comparison
         max_features = getattr(settings, 'MAX_FEATURES_PER_REQUEST', -1)
@@ -177,7 +229,8 @@ def get_geojson_data(request):
             'total_features_in_bbox': total_features_in_bbox,
             'max_features_limit': max_features,
             'zoom_level': zoom_level,
-            'timestamp': time.time()
+            'timestamp': time.time(),
+            'fallback_used': fallback_used
         }
 
         # Add warning if features were limited by configuration

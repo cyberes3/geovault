@@ -251,6 +251,14 @@ export default {
         const data = await response.json()
 
         if (data.success && data.data.features) {
+          // Log error if fallback mechanism was used
+          if (data.fallback_used) {
+            console.error(
+              'ERROR: Spatial query returned suspiciously few results for large extent. ' +
+              'Fell back to world-wide query. This may indicate a problem with the spatial query or extent calculation.'
+            )
+          }
+
           // Show warning if features were limited by configuration
           if (data.warning) {
             console.warn(data.warning)
