@@ -31,6 +31,7 @@
     <!-- Right Sidebar - Map Controls -->
     <MapControlsSidebar
       :selected-layer="selectedLayer"
+      :tile-sources="tileSources"
       :feature-count="featureCount"
       :max-features="MAX_FEATURES"
       :user-location="userLocation"
@@ -43,7 +44,7 @@
 <script>
 import {markRaw} from 'vue'
 import {Map, View} from 'ol'
-import {OSM} from 'ol/source'
+import {OSM, XYZ} from 'ol/source'
 import {Tile as TileLayer, Vector as VectorLayer} from 'ol/layer'
 import {Vector as VectorSource} from 'ol/source'
 import {GeoJSON} from 'ol/format'
@@ -79,9 +80,11 @@ export default {
       featuresInExtent: [], // Features currently visible in map extent
       featureListUpdateTimeout: null, // Debounce timeout for feature list updates
       selectedFeature: null, // Currently selected feature from map click
+      tileSources: [], // Available tile sources from backend
       // Configuration
       API_BASE_URL: '/api/data/geojson/',
       LOCATION_API_URL: '/api/data/location/user/',
+      TILE_SOURCES_API_URL: '/api/tiles/sources/',
       MAX_FEATURES: 5000, // Maximum number of features to keep on the map
       featureTimestamps: {}, // Use plain object instead of Map
       featureIdCounter: 0, // Counter to generate unique IDs for features
@@ -105,6 +108,38 @@ export default {
       return properties.name || 'Unnamed Feature'
     },
 
+    // Fetch tile sources configuration from backend
+    async fetchTileSources() {
+      try {
+        const response = await fetch(this.TILE_SOURCES_API_URL)
+        const data = await response.json()
+        
+        if (data.sources && Array.isArray(data.sources)) {
+          this.tileSources = data.sources
+          console.log('Loaded tile sources:', this.tileSources)
+          
+          // Set default layer if not already set or if current selection is invalid
+          if (!this.selectedLayer || !this.tileSources.find(s => s.id === this.selectedLayer)) {
+            if (this.tileSources.length > 0) {
+              this.selectedLayer = this.tileSources[0].id
+            }
+          }
+        } else {
+          console.error('Invalid tile sources response:', data)
+        }
+      } catch (error) {
+        console.error('Error fetching tile sources:', error)
+        // Fallback to default OSM if API fails
+        this.tileSources = [{
+          id: 'osm',
+          name: 'OpenStreetMap',
+          type: 'osm',
+          requires_proxy: false,
+          client_config: { type: 'osm' }
+        }]
+      }
+    },
+
     // Update map layer based on selection
     updateMapLayer(layerValue) {
       if (!this.map || !this.tileLayer) return
@@ -112,16 +147,37 @@ export default {
       // Update selected layer
       this.selectedLayer = layerValue
 
+      // Find the tile source configuration
+      const tileSource = this.tileSources.find(s => s.id === layerValue)
+      if (!tileSource) {
+        console.error(`Tile source not found: ${layerValue}`)
+        return
+      }
+
       // Remove current tile layer
       this.map.removeLayer(this.tileLayer)
 
-      // Create new tile layer based on selection
-      if (this.selectedLayer === 'osm') {
+      // Create new tile layer based on configuration
+      const clientConfig = tileSource.client_config || {}
+      
+      if (clientConfig.type === 'osm' || tileSource.type === 'osm') {
+        // OpenStreetMap source
         this.tileLayer = markRaw(new TileLayer({
           source: new OSM()
         }))
+      } else if (clientConfig.type === 'xyz' || tileSource.type === 'xyz') {
+        // XYZ tile source (may use proxy URL from client_config)
+        const url = clientConfig.url || '/api/tiles/{id}/{z}/{x}/{y}'.replace('{id}', layerValue)
+        const xyzSource = new XYZ({
+          url: url
+        })
+        this.tileLayer = markRaw(new TileLayer({
+          source: xyzSource
+        }))
+      } else {
+        console.error(`Unsupported tile source type: ${clientConfig.type || tileSource.type}`)
+        return
       }
-      // Future: Add other layer types here
 
       // Add new tile layer at the beginning (below vector layer)
       this.map.getLayers().insertAt(0, this.tileLayer)
@@ -625,9 +681,16 @@ export default {
     // Initialize featureTimestamps as empty object
     this.featureTimestamps = {}
 
+    // Fetch tile sources configuration first
+    await this.fetchTileSources()
 
     // Wait for map to be fully initialized before loading data
     await this.initializeMap()
+
+    // Update map layer to use the selected source (in case it's not the default OSM)
+    if (this.selectedLayer && this.tileSources.length > 0) {
+      this.updateMapLayer(this.selectedLayer)
+    }
 
     // Initial data load - now the map is ready
     this.loadDataForCurrentView()

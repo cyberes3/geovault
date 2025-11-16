@@ -13,7 +13,13 @@
         @change="$emit('layer-change', $event.target.value)"
         class="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500"
       >
-        <option value="osm">OpenStreetMap</option>
+        <option
+          v-for="source in tileSources"
+          :key="source.id"
+          :value="source.id"
+        >
+          {{ source.name }}
+        </option>
       </select>
     </div>
 
@@ -36,6 +42,11 @@ export default {
     selectedLayer: {
       type: String,
       required: true
+    },
+    tileSources: {
+      type: Array,
+      required: true,
+      default: () => []
     },
     featureCount: {
       type: Number,

@@ -18,7 +18,7 @@ from django.conf.urls import include
 from django.contrib import admin
 from django.urls import path, re_path
 
-from website.views import index, standalone_map
+from website.views import index, standalone_map, tile_proxy, get_tile_sources
 
 urlpatterns = [
     path('', index),
@@ -26,5 +26,7 @@ urlpatterns = [
     re_path(r"^account/", include("django.contrib.auth.urls")),
     path('admin/', admin.site.urls),
     path('', include("users.urls")),
-    path('api/data/', include("data.urls"))
+    path('api/data/', include("data.urls")),
+    path('api/tiles/sources/', get_tile_sources, name='get_tile_sources'),
+    path('api/tiles/<str:service>/<int:z>/<int:x>/<int:y>', tile_proxy, name='tile_proxy'),
 ]
