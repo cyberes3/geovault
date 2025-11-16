@@ -20,10 +20,18 @@
           </div>
         </div>
 
-        <!-- Feature Info Box -->
+        <!-- Feature Info Box or Edit Box -->
         <FeatureInfoBox
+          v-if="!isEditingFeature"
           :feature="selectedFeature"
           @close="selectedFeature = null"
+          @edit="handleEditFeature"
+        />
+        <FeatureEditBox
+          v-if="isEditingFeature"
+          :feature="selectedFeature"
+          @cancel="handleCancelEdit"
+          @saved="handleFeatureSaved"
         />
       </div>
     </div>
@@ -51,16 +59,19 @@ import {GeoJSON} from 'ol/format'
 import {fromLonLat, toLonLat} from 'ol/proj'
 import {authMixin} from '@/assets/js/authMixin.js'
 import {MapUtils} from '@/utils/map/MapUtils'
+import {APIHOST} from '@/config.js'
 import FeatureListSidebar from './FeatureListSidebar.vue'
 import MapControlsSidebar from './MapControlsSidebar.vue'
 import FeatureInfoBox from './FeatureInfoBox.vue'
+import FeatureEditBox from './FeatureEditBox.vue'
 
 export default {
   name: 'GeoJsonMap',
   components: {
     FeatureListSidebar,
     MapControlsSidebar,
-    FeatureInfoBox
+    FeatureInfoBox,
+    FeatureEditBox
   },
   mixins: [authMixin],
   data() {
@@ -90,7 +101,8 @@ export default {
       featureTimestamps: {}, // Use plain object instead of Map
       featureIdCounter: 0, // Counter to generate unique IDs for features
       currentZoom: null,
-      featureCountUpdatePending: false // Flag to batch feature count updates
+      featureCountUpdatePending: false, // Flag to batch feature count updates
+      isEditingFeature: false // Track if we're in edit mode
     }
   },
   methods: {
@@ -261,8 +273,97 @@ export default {
 
       // Show info box for the selected feature
       this.selectedFeature = feature
+      this.isEditingFeature = false // Reset edit mode when selecting a new feature
     },
 
+    // Handle edit button click
+    handleEditFeature() {
+      this.isEditingFeature = true
+    },
+
+    // Handle cancel edit
+    handleCancelEdit() {
+      this.isEditingFeature = false
+    },
+
+    // Handle feature saved
+    async handleFeatureSaved() {
+      this.isEditingFeature = false
+      
+      // Get the updated feature from the backend
+      const featureId = this.selectedFeature?.get('properties')?._id
+      if (featureId && this.vectorSource) {
+        try {
+          // Fetch the updated feature
+          const response = await fetch(`${APIHOST}/api/data/feature/${featureId}/`)
+          if (response.ok) {
+            const data = await response.json()
+            if (data.success && data.feature) {
+              // Find the existing feature in the vector source by ID
+              const existingFeatures = this.vectorSource.getFeatures()
+              const existingFeature = existingFeatures.find(f => {
+                const props = f.get('properties') || {}
+                return props._id === featureId
+              })
+              
+              if (existingFeature) {
+                // Update the existing feature with new data
+                const format = new GeoJSON()
+                const geojsonData = data.feature.geojson
+                
+                // Read the feature from GeoJSON
+                const updatedFeature = format.readFeature(geojsonData, {
+                  featureProjection: 'EPSG:3857',
+                  dataProjection: 'EPSG:4326'
+                })
+                
+                // Manually preserve properties from the GeoJSON data (same as loadDataForCurrentView)
+                // Create a new properties object to avoid reference issues
+                const properties = geojsonData && geojsonData.properties 
+                  ? { ...geojsonData.properties }
+                  : {}
+                
+                // Add the _id to properties for future updates
+                properties._id = featureId
+                updatedFeature.set('properties', properties)
+                
+                // Preserve geojson_hash if available
+                if (data.feature.geojson_hash) {
+                  updatedFeature.set('geojson_hash', data.feature.geojson_hash)
+                }
+                
+                // Replace the old feature with the updated one
+                this.vectorSource.removeFeature(existingFeature)
+                this.vectorSource.addFeature(updatedFeature)
+                
+                // Update selected feature if it's the one we just updated
+                if (this.selectedFeature === existingFeature) {
+                  this.selectedFeature = updatedFeature
+                }
+                
+                // Force style update
+                this.vectorLayer.changed()
+                this.textLayer.changed()
+                
+                // Update features in extent list
+                this.updateFeaturesInExtent()
+                return
+              }
+            }
+          }
+        } catch (error) {
+          console.error('Error fetching updated feature:', error)
+        }
+      }
+      
+      // Fallback: Refresh the map data to show updated feature
+      // Clear the loaded bounds to force a reload
+      this.loadedBounds.clear()
+      // Reload data for current view
+      await this.loadDataForCurrentView()
+      // Update features in extent list
+      this.updateFeaturesInExtent()
+    },
 
     async initializeMap() {
       // Get user location first
@@ -343,9 +444,11 @@ export default {
         
         if (clickedFeature) {
           this.selectedFeature = clickedFeature
+          this.isEditingFeature = false // Reset edit mode when selecting a new feature
         } else {
           // Clear selection if clicking on empty space
           this.selectedFeature = null
+          this.isEditingFeature = false
         }
       })
 

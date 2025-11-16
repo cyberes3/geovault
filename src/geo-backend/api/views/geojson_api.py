@@ -16,6 +16,7 @@ from django.views.decorators.http import require_http_methods
 from api.models import FeatureStore
 from geo_lib.feature_id import generate_feature_hash
 from geo_lib.website.auth import login_required_401
+from geo_lib.types.feature import PointFeature, LineStringFeature, MultiLineStringFeature, PolygonFeature
 
 logger = logging.getLogger(__name__)
 
@@ -115,10 +116,13 @@ def _get_features_in_bbox(bbox: Tuple[float, float, float, float], user_id: int,
         geojson_data = feature.geojson
         if geojson_data and 'geometry' in geojson_data:
             # Wrap the data in a proper GeoJSON Feature structure
+            # Include database ID in properties for frontend editing
+            properties = geojson_data.get('properties', {}).copy()
+            properties['_id'] = feature.id  # Add database ID for editing
             geojson_feature = {
                 "type": "Feature",
                 "geometry": geojson_data.get('geometry'),
-                "properties": geojson_data.get('properties', {}),
+                "properties": properties,
                 "geojson_hash": feature.geojson_hash
             }
             geojson_features.append(geojson_feature)
@@ -154,10 +158,13 @@ def _get_features_in_bbox(bbox: Tuple[float, float, float, float], user_id: int,
             for feature in features_query:
                 geojson_data = feature.geojson
                 if geojson_data and 'geometry' in geojson_data:
+                    # Include database ID in properties for frontend editing
+                    properties = geojson_data.get('properties', {}).copy()
+                    properties['_id'] = feature.id  # Add database ID for editing
                     geojson_feature = {
                         "type": "Feature",
                         "geometry": geojson_data.get('geometry'),
-                        "properties": geojson_data.get('properties', {}),
+                        "properties": properties,
                         "geojson_hash": feature.geojson_hash
                     }
                     geojson_features.append(geojson_feature)
@@ -263,12 +270,18 @@ def get_feature(request, feature_id):
         # Get the feature from database
         feature = FeatureStore.objects.get(id=feature_id, user=request.user)
 
+        # Include database ID in properties for frontend editing (same as _get_features_in_bbox)
+        geojson_data = feature.geojson.copy()
+        if geojson_data and 'properties' in geojson_data:
+            geojson_data['properties']['_id'] = feature.id
+
         # Return the feature data
         return JsonResponse({
             'success': True,
             'feature': {
                 'id': feature.id,
-                'geojson': feature.geojson,
+                'geojson': geojson_data,
+                'geojson_hash': feature.geojson_hash,
                 'timestamp': feature.timestamp.isoformat() if feature.timestamp else None
             }
         })
@@ -471,6 +484,74 @@ def update_feature(request, feature_id):
             return JsonResponse({
                 'success': False,
                 'error': 'Request body must be a valid GeoJSON Feature or geometry object',
+                'code': 400
+            }, status=400)
+
+        # Get original feature data to check for PNG icon URLs
+        original_geojson = feature.geojson
+        original_properties = original_geojson.get('properties', {})
+        new_properties = feature_data.get('properties', {})
+
+        # Check for custom PNG icon URLs in original feature
+        icon_property_names = ['icon', 'icon-href', 'iconUrl', 'icon_url', 'marker-icon', 'marker-symbol', 'symbol']
+        original_icon_url = None
+        for prop_name in icon_property_names:
+            if prop_name in original_properties and original_properties[prop_name]:
+                icon_url = original_properties[prop_name]
+                if isinstance(icon_url, str):
+                    # Check if it's a PNG icon (ends with .png or starts with /api/data/icons/)
+                    if icon_url.endswith('.png') or icon_url.startswith('/api/data/icons/'):
+                        original_icon_url = icon_url
+                        break
+
+        # Prevent changing custom PNG icon URLs
+        if original_icon_url:
+            for prop_name in icon_property_names:
+                if prop_name in new_properties:
+                    new_icon_url = new_properties[prop_name]
+                    if isinstance(new_icon_url, str) and new_icon_url != original_icon_url:
+                        # User tried to change the PNG icon URL - restore original
+                        new_properties[prop_name] = original_icon_url
+                        logger.warning(f"Attempted to change PNG icon URL for feature {feature_id}, restored original")
+
+        # Validate feature structure using the same validation as import conversion
+        try:
+            geom_type = feature_data.get('geometry', {}).get('type', '').lower()
+            feature_class = None
+            
+            match geom_type:
+                case 'point' | 'multipoint':
+                    feature_class = PointFeature
+                case 'linestring':
+                    feature_class = LineStringFeature
+                case 'multilinestring':
+                    feature_class = MultiLineStringFeature
+                case 'polygon' | 'multipolygon':
+                    feature_class = PolygonFeature
+                case _:
+                    return JsonResponse({
+                        'success': False,
+                        'error': f'Unsupported geometry type: {geom_type}',
+                        'code': 400
+                    }, status=400)
+
+            if feature_class is None:
+                return JsonResponse({
+                    'success': False,
+                    'error': 'Could not determine feature class for validation',
+                    'code': 400
+                }, status=400)
+
+            # Validate by instantiating the feature class (this will raise ValidationError if invalid)
+            validated_feature = feature_class(**feature_data)
+            # Convert back to dict for storage (this ensures proper structure)
+            feature_data = json.loads(validated_feature.model_dump_json())
+            
+        except Exception as e:
+            logger.error(f"Feature validation error for feature {feature_id}: {str(e)}")
+            return JsonResponse({
+                'success': False,
+                'error': f'Feature validation failed: {str(e)}',
                 'code': 400
             }, status=400)
 
