@@ -4,7 +4,6 @@ Defines common processing logic that all file type processors inherit.
 """
 
 import json
-import logging
 import os
 import subprocess
 import tempfile
@@ -20,8 +19,9 @@ from geo_lib.processing.geo_processor import (
 )
 from geo_lib.processing.logging import ImportLog, DatabaseLogLevel
 from geo_lib.security.file_validation import SecureFileValidator
+from geo_lib.logging.console import get_import_logger
 
-logger = logging.getLogger(__name__)
+logger = get_import_logger()
 
 
 class BaseProcessor(ABC):

@@ -3,7 +3,6 @@ Realtime WebSocket consumer for global real-time updates.
 """
 
 import json
-import logging
 
 from channels.generic.websocket import AsyncWebsocketConsumer
 from django.contrib.auth.models import AnonymousUser
@@ -12,8 +11,10 @@ from geo_lib.websocket.modules.delete_job_module import DeleteJobModule
 from geo_lib.websocket.modules.import_history_module import ImportHistoryModule
 from geo_lib.websocket.modules.import_queue_module import ImportQueueModule
 from geo_lib.websocket.modules.upload_job_module import UploadJobModule
+from geo_lib.logging.console import get_websocket_logger
+from geo_lib.utils.ip_utils import get_client_ip, get_user_identifier
 
-logger = logging.getLogger(__name__)
+logger = get_websocket_logger()
 
 
 class RealtimeConsumer(AsyncWebsocketConsumer):
@@ -35,9 +36,12 @@ class RealtimeConsumer(AsyncWebsocketConsumer):
         """Handle WebSocket connection."""
         # Get user from scope
         self.user = self.scope["user"]
+        path = self.scope.get('path', 'unknown')
+        client_ip = get_client_ip(self.scope)
 
         # Reject connection if user is not authenticated
         if isinstance(self.user, AnonymousUser):
+            logger.warning(f"WebSocket connection rejected: {path} - Anonymous@{client_ip}")
             await self.close()
             return
 
@@ -51,6 +55,10 @@ class RealtimeConsumer(AsyncWebsocketConsumer):
         )
 
         await self.accept()
+        
+        # Log successful connection
+        user_identifier = get_user_identifier(self.scope)
+        logger.info(f"WebSocket connected: {path} - {user_identifier}@{client_ip}")
 
         # Load modules now that user is available
         self._load_modules()
@@ -61,6 +69,11 @@ class RealtimeConsumer(AsyncWebsocketConsumer):
 
     async def disconnect(self, close_code):
         """Handle WebSocket disconnection."""
+        path = self.scope.get('path', 'unknown')
+        client_ip = get_client_ip(self.scope)
+        user_identifier = get_user_identifier(self.scope)
+        logger.info(f"WebSocket disconnected: {path} - {user_identifier}@{client_ip} - Close code: {close_code}")
+        
         # Leave room group
         await self.channel_layer.group_discard(
             self.room_group_name,

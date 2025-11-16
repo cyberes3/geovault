@@ -2,13 +2,13 @@
 IP-based geolocation service using MaxMind GeoIP2 database.
 """
 import os
-import logging
 import traceback
 from typing import Optional, Dict, Any
 import geoip2.database
 import geoip2.errors
+from geo_lib.logging.console import get_geocode_logger
 
-logger = logging.getLogger(__name__)
+logger = get_geocode_logger()
 
 
 class IPGeolocationService:
@@ -47,7 +47,7 @@ class IPGeolocationService:
         try:
             if os.path.exists(self.database_path):
                 self.reader = geoip2.database.Reader(self.database_path)
-                logger.info(f"MaxMind GeoIP2 database loaded from {self.database_path}")
+                # Database loaded successfully, no need to log
             else:
                 logger.warning(f"MaxMind GeoIP2 database not found at {self.database_path}")
                 self.reader = None
@@ -71,7 +71,7 @@ class IPGeolocationService:
         
         # Handle localhost and private IP addresses
         if self._is_private_ip(ip_address):
-            logger.info(f"Private IP address {ip_address} detected, returning default location")
+            # Private IP detected, returning default location (normal operation)
             return self._get_default_location()
         
         try:
@@ -93,7 +93,7 @@ class IPGeolocationService:
                     'continent': response.continent.name,
                     'continent_code': response.continent.code
                 }
-                logger.info(f"Location lookup successful for IP {ip_address}: {location_data.get('city', 'Unknown City')}, {location_data.get('state', 'Unknown State')}, {location_data.get('country', 'Unknown Country')}")
+                # Location lookup successful (normal operation)
             except AttributeError:
                 # Fall back to country database
                 response = self.reader.country(ip_address)
@@ -112,7 +112,7 @@ class IPGeolocationService:
                     'continent': response.continent.name,
                     'continent_code': response.continent.code
                 }
-                logger.info(f"Location lookup successful for IP {ip_address}: {location_data.get('country', 'Unknown Country')} (country-level only)")
+                # Location lookup successful (country-level only, normal operation)
             
             return location_data
             

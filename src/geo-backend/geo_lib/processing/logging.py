@@ -86,7 +86,8 @@ class RealTimeImportLog:
         self._messages: List[DatabaseLogMsg] = []
         self.user_id = user_id
         self.log_id = log_id  # This should be a UUID string
-        self._db_logger = logging.getLogger("MAIN").getChild("DBLOG")
+        from geo_lib.logging.console import get_database_logger
+        self._db_logger = get_database_logger()
     
     def add(self, msg: str, source: str, level=DatabaseLogLevel.INFO, duration: float = None):
         """Add a log message and immediately write it to the database."""

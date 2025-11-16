@@ -3,13 +3,13 @@ Upload status WebSocket module.
 Handles real-time status updates for a specific import item.
 """
 
-import logging
 from typing import Dict, Any, Optional
 
 from geo_lib.processing.status_tracker import status_tracker
 from geo_lib.websocket.base_module import BaseWebSocketModule
+from geo_lib.logging.console import get_websocket_logger
 
-logger = logging.getLogger(__name__)
+logger = get_websocket_logger()
 
 
 class UploadStatusModule(BaseWebSocketModule):

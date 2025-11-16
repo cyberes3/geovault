@@ -7,7 +7,6 @@ and XML security measures.
 """
 
 import io
-import logging
 import os
 import traceback
 import xml.etree.ElementTree as ET
@@ -22,8 +21,9 @@ from geo_lib.processing.file_types import (
     FileType, get_file_type_by_extension, validate_file_size, validate_mime_type, 
     validate_file_signature, get_allowed_elements, get_max_file_size
 )
+from geo_lib.logging.console import get_security_logger
 
-logger = logging.getLogger(__name__)
+logger = get_security_logger()
 
 
 class FileValidationError(Exception):

@@ -3,7 +3,6 @@ In-memory status tracker for asynchronous file processing.
 Tracks multiple concurrent file uploads and their processing status.
 """
 
-import logging
 import threading
 import time
 import uuid
@@ -11,7 +10,9 @@ from dataclasses import dataclass
 from enum import Enum
 from typing import Dict, Optional, Any
 
-logger = logging.getLogger(__name__)
+from geo_lib.logging.console import get_job_logger
+
+logger = get_job_logger()
 
 
 class ProcessingStatus(Enum):
@@ -76,7 +77,7 @@ class ProcessingStatusTracker:
             self._jobs[job_id] = job
             self._cleanup_old_jobs()
 
-        logger.info(f"Created {job_type.value} job {job_id} for file {filename}")
+        # Job creation logged at higher level if needed
         return job_id
 
     def get_job(self, job_id: str) -> Optional[ProcessingJob]:
@@ -106,7 +107,7 @@ class ProcessingStatusTracker:
             elif status in [ProcessingStatus.COMPLETED, ProcessingStatus.FAILED, ProcessingStatus.CANCELLED]:
                 job.completed_at = time.time()
 
-            logger.info(f"Updated job {job_id} status to {status.value}: {message}")
+            # Status updates are handled via WebSocket and database logging
             return True
 
     def set_job_result(self, job_id: str, result_data: Dict[str, Any],
@@ -158,7 +159,7 @@ class ProcessingStatusTracker:
             job.completed_at = time.time()
             job.message = "Job cancelled by user"
 
-            logger.info(f"Cancelled job {job_id}")
+            # Job cancellation logged at higher level if needed
             return True
 
     def _cleanup_old_jobs(self):
@@ -178,7 +179,7 @@ class ProcessingStatusTracker:
 
         for job_id in jobs_to_remove:
             del self._jobs[job_id]
-            logger.info(f"Cleaned up old job {job_id}")
+            # Job cleanup is internal maintenance, no need to log
 
     def get_stats(self) -> Dict[str, Any]:
         """Get statistics about current jobs."""

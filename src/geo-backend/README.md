@@ -1,4 +1,3 @@
-
 ## Install
 
 ```shell
@@ -28,7 +27,8 @@ ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT ALL ON SEQUENCES TO geoserver;
 
 ## Reverse Geocoding
 
-Reverse geocoding is performed to generate tags for features that help to mark where they are spacially. This requires that you host
+Reverse geocoding is performed to generate tags for features that help to mark where they are spacially. This requires
+that you host
 2 very heavy services.
 
 This feature is disabled by default via the <TODO> flag.
@@ -37,16 +37,19 @@ This feature is disabled by default via the <TODO> flag.
 
 [Overpass API](https://github.com/wiktorn/Overpass-API) is used to find all other features.
 
-Docker Compose files are provided  to help you get the services running with minimal pain.
+Docker Compose files are provided to help you get the services running with minimal pain.
 
 Running these two services requires a minimum of 25GB RAM, 6 CPU cores, 500GB, and SSDs.
+
+This could literally take days to set up, so be patient.
 
 ### Setup
 
 1. Install Docker
 2. `mkdir -p /srv/docker-data/nominatim/db /srv/docker-data/nominatim/flatnode /srv/docker-data/overpass`
 3. `docker-compose -f nominatim.yml up`
-4. `docker-compose -f overpass.yml up`
+4. `./download-overpass-data.sh`
+5. `docker-compose -f overpass.yml up`
 
 `CTRL+C` the containers when they have finished building their databases and then do:
 

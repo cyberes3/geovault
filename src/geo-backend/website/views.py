@@ -1,5 +1,4 @@
 import os
-import logging
 from pathlib import Path
 from datetime import datetime, timedelta
 from django.contrib.auth.decorators import login_required
@@ -9,8 +8,10 @@ from django.conf import settings
 from urllib.request import urlopen, Request
 from urllib.error import URLError
 from geo_lib.tile_sources import get_tile_source, get_tile_sources_for_client
+from geo_lib.logging.console import get_tile_logger, get_access_logger
 
-logger = logging.getLogger(__name__)
+tile_logger = get_tile_logger()
+access_logger = get_access_logger()
 
 
 @login_required
@@ -95,7 +96,7 @@ def ensure_cache_directory(cache_path):
             os.umask(original_umask)
         return True
     except OSError as e:
-        logger.warning(f"Failed to create cache directory {cache_dir}: {e}")
+        tile_logger.warning(f"Failed to create cache directory {cache_dir}: {e}")
         return False
 
 
@@ -126,7 +127,7 @@ def save_tile_to_cache(cache_path, tile_data):
         
         return True
     except OSError as e:
-        logger.warning(f"Failed to save tile to cache {cache_path}: {e}")
+        tile_logger.warning(f"Failed to save tile to cache {cache_path}: {e}")
         return False
 
 
@@ -143,7 +144,7 @@ def read_tile_from_cache(cache_path):
     try:
         return cache_path.read_bytes()
     except OSError as e:
-        logger.warning(f"Failed to read tile from cache {cache_path}: {e}")
+        tile_logger.warning(f"Failed to read tile from cache {cache_path}: {e}")
         return None
 
 
@@ -185,13 +186,13 @@ def tile_proxy(request, service, z, x, y):
             if is_tile_cached(cache_path):
                 tile_data = read_tile_from_cache(cache_path)
                 if tile_data:
-                    logger.debug(f"Tile cache hit: {service}/{z}/{x}/{y}")
+                    tile_logger.debug(f"Tile cache hit: {service}/{z}/{x}/{y}")
                     http_response = HttpResponse(tile_data, content_type='image/png')
                     http_response['Cache-Control'] = 'public, max-age=86400'  # Cache for 1 day
                     return http_response
         except Exception as e:
             # Log cache error but continue to fetch from source
-            logger.warning(f"Cache check failed for {service}/{z}/{x}/{y}: {e}")
+            tile_logger.warning(f"Cache check failed for {service}/{z}/{x}/{y}: {e}")
     
     # Cache miss or cache disabled - fetch from external service
     tile_url = url_template.format(z=z, x=x, y=y)
@@ -210,10 +211,10 @@ def tile_proxy(request, service, z, x, y):
             if settings.TILE_CACHE_ENABLED and cache_path:
                 try:
                     save_tile_to_cache(cache_path, tile_data)
-                    logger.debug(f"Tile cached: {service}/{z}/{x}/{y}")
+                    tile_logger.debug(f"Tile cached: {service}/{z}/{x}/{y}")
                 except Exception as e:
                     # Log cache save error but don't fail the request
-                    logger.warning(f"Failed to cache tile {service}/{z}/{x}/{y}: {e}")
+                    tile_logger.warning(f"Failed to cache tile {service}/{z}/{x}/{y}: {e}")
             
             # Return the tile with appropriate headers
             http_response = HttpResponse(tile_data, content_type=content_type)

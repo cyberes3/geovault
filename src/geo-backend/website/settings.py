@@ -60,6 +60,7 @@ MIDDLEWARE = [
     'django.contrib.auth.middleware.AuthenticationMiddleware',
     'django.contrib.messages.middleware.MessageMiddleware',
     'django.middleware.clickjacking.XFrameOptionsMiddleware',
+    'website.middleware.LoggingMiddleware',
     'website.middleware.CustomHeaderMiddleware',
 ]
 
@@ -252,37 +253,84 @@ LAKE_PROXIMITY_MILES = config.get_float('geocoding.lake_proximity_miles', 1.0)
 # Number of threads to use for parallel feature processing during import
 IMPORT_PROCESSING_THREADS = config.get_int('processing.import_threads', 10)
 
-# Logging configuration for security events
+# Logging configuration with activity tags
 LOGGING = {
     'version': 1,
-    'disable_existing_loggers': False,
+    'disable_existing_loggers': True,  # Disable default Django logging
     'formatters': {
-        'verbose': {
-            'format': '{levelname} {asctime} {module} {process:d} {thread:d} {message}',
+        'console': {
+            'format': '[{asctime}] {levelname} {message}',
             'style': '{',
-        },
-        'simple': {
-            'format': '{levelname} {message}',
-            'style': '{',
+            'datefmt': '%Y-%m-%d %H:%M:%S',
         },
     },
     'handlers': {
         'console': {
             'level': 'INFO',
             'class': 'logging.StreamHandler',
-            'formatter': 'simple',
+            'formatter': 'console',
         },
     },
     'loggers': {
-        'geo_lib.security': {
+        # Access logging - HTTP requests, API endpoints, views
+        'access': {
             'handlers': ['console'],
-            'level': 'WARNING',
-            'propagate': True,
+            'level': 'INFO',
+            'propagate': False,
         },
-        'django.security': {
+        # Import logging - File uploads, processing, import operations
+        'import': {
+            'handlers': ['console'],
+            'level': 'INFO',
+            'propagate': False,
+        },
+        # WebSocket logging - Connections, messages, disconnections
+        'websocket': {
+            'handlers': ['console'],
+            'level': 'INFO',
+            'propagate': False,
+        },
+        # Job logging - Background job processing
+        'job': {
+            'handlers': ['console'],
+            'level': 'INFO',
+            'propagate': False,
+        },
+        # Database logging - Database operations, queries
+        'database': {
+            'handlers': ['console'],
+            'level': 'INFO',
+            'propagate': False,
+        },
+        # Security logging - Security events, file validation
+        'security': {
             'handlers': ['console'],
             'level': 'WARNING',
-            'propagate': True,
+            'propagate': False,
+        },
+        # Tile logging - Tile proxy, caching operations
+        'tile': {
+            'handlers': ['console'],
+            'level': 'INFO',
+            'propagate': False,
+        },
+        # Geocode logging - Geocoding, reverse geocoding
+        'geocode': {
+            'handlers': ['console'],
+            'level': 'INFO',
+            'propagate': False,
+        },
+        # Startup logging - Server startup checks
+        'startup': {
+            'handlers': ['console'],
+            'level': 'INFO',
+            'propagate': False,
+        },
+        # Config logging - Configuration loading
+        'config': {
+            'handlers': ['console'],
+            'level': 'INFO',
+            'propagate': False,
         },
     },
 }

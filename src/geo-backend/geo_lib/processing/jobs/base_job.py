@@ -2,15 +2,15 @@
 Base job class for all asynchronous operations.
 """
 
-import logging
 import threading
 import traceback
 from abc import ABC, abstractmethod
 from typing import Dict, Any
 
 from geo_lib.processing.status_tracker import ProcessingStatusTracker, ProcessingStatus
+from geo_lib.logging.console import get_job_logger
 
-logger = logging.getLogger(__name__)
+logger = get_job_logger()
 
 
 class BaseJob(ABC):
@@ -59,7 +59,6 @@ class BaseJob(ABC):
         thread.start()
 
         self._active_threads[job_id] = thread
-        logger.info(f"Started background {self.get_job_type()} processing for job {job_id}")
         return True
 
     def _job_worker(self, job_id: str, kwargs: Dict[str, Any]):
@@ -70,7 +69,6 @@ class BaseJob(ABC):
             # Check if job was cancelled before starting processing
             job = self.status_tracker.get_job(job_id)
             if not job or job.status == ProcessingStatus.CANCELLED:
-                logger.info(f"Job {job_id} was cancelled before processing started")
                 return
 
             # Execute the job-specific processing
@@ -108,10 +106,7 @@ class BaseJob(ABC):
 
     def cancel_job(self, job_id: str) -> bool:
         """Cancel a job if it's not already completed."""
-        if self.status_tracker.cancel_job(job_id):
-            logger.info(f"Cancelled {self.get_job_type()} job {job_id}")
-            return True
-        return False
+        return self.status_tracker.cancel_job(job_id)
 
     def get_active_jobs(self) -> Dict[str, Any]:
         """Get statistics about current active jobs."""

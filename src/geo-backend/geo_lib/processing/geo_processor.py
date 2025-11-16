@@ -4,15 +4,15 @@ This module provides helper functions for processing various geospatial file for
 Main processing logic has been moved to the processors module.
 """
 
-import logging
 import re
 import xml.etree.ElementTree as ET
 
 import markdownify
 
 from geo_lib.processing.file_types import FileType
+from geo_lib.logging.console import get_import_logger
 
-logger = logging.getLogger(__name__)
+logger = get_import_logger()
 
 
 def html_to_markdown(html_content) -> str:

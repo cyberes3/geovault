@@ -3,7 +3,6 @@ Delete job processor for asynchronous item deletion.
 Handles cleanup of items that are still processing and associated resources.
 """
 
-import logging
 import time
 import traceback
 from typing import Dict, Any
@@ -13,8 +12,9 @@ from django.db import transaction
 from api.models import ImportQueue, DatabaseLogging
 from geo_lib.processing.jobs.base_job import BaseJob
 from geo_lib.processing.status_tracker import ProcessingStatus, JobType
+from geo_lib.logging.console import get_job_logger
 
-logger = logging.getLogger(__name__)
+logger = get_job_logger()
 
 
 class DeleteJob(BaseJob):

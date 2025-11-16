@@ -1,14 +1,14 @@
 """
 Reverse geocoding service using Overpass API and reverse-geocoder.
 """
-import logging
 import math
 from typing import Optional, Dict, Any, List
 import requests
 import reverse_geocoder as rg
 from django.conf import settings
+from geo_lib.logging.console import get_geocode_logger
 
-logger = logging.getLogger(__name__)
+logger = get_geocode_logger()
 
 def haversine_distance(lat1: float, lon1: float, lat2: float, lon2: float) -> float:
     R = 3958.8

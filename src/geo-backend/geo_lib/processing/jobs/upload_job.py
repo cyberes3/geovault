@@ -2,7 +2,6 @@
 Upload job processor for asynchronous file processing.
 """
 
-import logging
 import subprocess
 import time
 import traceback
@@ -18,8 +17,9 @@ from geo_lib.processing.logging import RealTimeImportLog, DatabaseLogLevel
 from geo_lib.processing.processors import get_processor
 from geo_lib.processing.status_tracker import ProcessingStatus
 from geo_lib.security.file_validation import SecureFileValidator, SecurityError, FileValidationError
+from geo_lib.logging.console import get_import_logger
 
-logger = logging.getLogger(__name__)
+logger = get_import_logger()
 
 
 class UploadJob(BaseJob):
@@ -83,7 +83,7 @@ class UploadJob(BaseJob):
             log_uuid = str(import_queue.log_id)
         except ImportQueue.DoesNotExist:
             # ImportQueue was deleted (likely by user deletion), stop processing
-            logger.info(f"ImportQueue {import_queue_id} was deleted, stopping processing for job {job_id}")
+            logger.warning(f"ImportQueue {import_queue_id} was deleted, stopping processing for job {job_id}")
             return
 
         # Create real-time logger
@@ -172,7 +172,6 @@ class UploadJob(BaseJob):
             # Check if job was cancelled after validation
             job = self.status_tracker.get_job(job_id)
             if job and job.status == ProcessingStatus.CANCELLED:
-                logger.info(f"Job {job_id} was cancelled after validation, stopping processing")
                 return
 
             # Update progress
@@ -205,7 +204,6 @@ class UploadJob(BaseJob):
             # Check if job was cancelled before conversion
             job = self.status_tracker.get_job(job_id)
             if job and job.status == ProcessingStatus.CANCELLED:
-                logger.info(f"Job {job_id} was cancelled before conversion, stopping processing")
                 return
 
             # Get file size for logging
@@ -262,7 +260,6 @@ class UploadJob(BaseJob):
             # Check if job was cancelled before database update
             job = self.status_tracker.get_job(job_id)
             if job and job.status == ProcessingStatus.CANCELLED:
-                logger.info(f"Job {job_id} was cancelled before database update, stopping processing")
                 return
 
             # Update existing import queue entry with timing
@@ -305,7 +302,8 @@ class UploadJob(BaseJob):
                 import_queue_id
             )
 
-            logger.info(f"Successfully completed processing for job {job_id}: {feature_count} features")
+            # Log completion with features and time
+            logger.info(f"Job {job_id} completed: {feature_count} features processed in {overall_duration:.1f}s")
 
         except (SecurityError, FileValidationError) as e:
             # Use the error message directly from the validation
@@ -364,7 +362,7 @@ class UploadJob(BaseJob):
             error_msg = "An error occurred during file processing"
             # Log detailed error internally only (not exposed to user via RealTimeImportLog)
             logger.error(f"Processing error in job {job_id}: {type(e).__name__}: {str(e)}")
-            logger.debug(f"Full traceback for job {job_id}: {traceback.format_exc()}")
+            logger.error(f"Full traceback for job {job_id}: {traceback.format_exc()}")
             realtime_log.add(error_msg, "UploadJob", DatabaseLogLevel.ERROR)
             self.status_tracker.update_job_status(
                 job_id, ProcessingStatus.FAILED,
@@ -422,7 +420,7 @@ class UploadJob(BaseJob):
             import_queue = ImportQueue.objects.get(id=job.import_queue_id)
         except ImportQueue.DoesNotExist:
             # ImportQueue was deleted (likely by user deletion), stop processing
-            logger.info(f"ImportQueue {job.import_queue_id} was deleted during processing, stopping for job {job_id}")
+            logger.warning(f"ImportQueue {job.import_queue_id} was deleted during processing, stopping for job {job_id}")
             return job.import_queue_id  # Return the ID even though we can't update it
 
         try:

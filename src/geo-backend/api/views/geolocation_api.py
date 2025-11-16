@@ -1,14 +1,14 @@
 """
 API endpoints for IP-based geolocation services.
 """
-import logging
 import traceback
 from django.http import JsonResponse
 from django.views.decorators.http import require_http_methods
 from geo_lib.website.auth import login_required_401
 from geo_lib.geolocation.ip_service import get_geolocation_service
+from geo_lib.logging.console import get_access_logger
 
-logger = logging.getLogger(__name__)
+logger = get_access_logger()
 
 
 @login_required_401
@@ -65,7 +65,6 @@ def get_user_location(request):
             }
         }
         
-        logger.info(f"Location API request successful for user {request.user.username} from IP {client_ip}")
         return JsonResponse(response_data)
         
     except Exception as e:

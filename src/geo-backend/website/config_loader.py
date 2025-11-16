@@ -6,11 +6,11 @@ Supports environment variable overrides for sensitive values.
 """
 import os
 import yaml
-import logging
 from pathlib import Path
 from typing import Dict, Any, Optional
+from geo_lib.logging.console import get_config_logger
 
-logger = logging.getLogger(__name__)
+logger = get_config_logger()
 
 
 class ConfigLoader:

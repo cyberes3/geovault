@@ -1,12 +1,12 @@
 from datetime import datetime
 from typing import List, Optional, Tuple
-import logging
 
 from geo_lib.types.feature import GeoFeatureSupported
 from geo_lib.geolocation.reverse_geocode import get_reverse_geocoding_service
 from geo_lib.processing.logging import DatabaseLogLevel
+from geo_lib.logging.console import get_import_logger
 
-logger = logging.getLogger(__name__)
+logger = get_import_logger()
 
 
 def get_representative_points(feature: GeoFeatureSupported) -> List[Tuple[float, float]]:

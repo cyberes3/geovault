@@ -2,11 +2,10 @@
 Delete job WebSocket module.
 """
 
-import logging
-
 from geo_lib.websocket.base_module import BaseWebSocketModule
+from geo_lib.logging.console import get_websocket_logger
 
-logger = logging.getLogger(__name__)
+logger = get_websocket_logger()
 
 
 class DeleteJobModule(BaseWebSocketModule):

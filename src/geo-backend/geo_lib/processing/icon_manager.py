@@ -5,7 +5,6 @@ Handles extraction from KMZ archives, fetching from remote URLs, and storage wit
 
 import hashlib
 import io
-import logging
 import os
 import re
 import xml.etree.ElementTree as ET
@@ -17,8 +16,9 @@ from urllib.request import urlopen, Request
 from urllib.error import URLError, HTTPError
 
 from django.conf import settings
+from geo_lib.logging.console import get_import_logger
 
-logger = logging.getLogger(__name__)
+logger = get_import_logger()
 
 # Valid image file extensions
 VALID_ICON_EXTENSIONS = {'.png', '.jpg', '.jpeg', '.gif', '.bmp', '.svg', '.webp', '.ico'}

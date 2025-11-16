@@ -10,10 +10,11 @@ data produce identical hashes, regardless of minor formatting differences like:
 
 import hashlib
 import json
-import logging
 from typing import Any, Dict
 
-logger = logging.getLogger(__name__)
+from geo_lib.logging.console import get_import_logger
+
+logger = get_import_logger()
 
 
 def norm_coords(c):

@@ -7,13 +7,13 @@ This module performs essential checks when the server starts up:
 3. PostGIS extension is installed
 """
 
-import logging
 import sys
 from django.db import connection
 from django.core.exceptions import ImproperlyConfigured
 from django.conf import settings
+from geo_lib.logging.console import get_startup_logger
 
-logger = logging.getLogger(__name__)
+logger = get_startup_logger()
 
 
 def check_database_connection():

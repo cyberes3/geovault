@@ -1,6 +1,5 @@
 import hashlib
 import json
-import logging
 import traceback
 import threading
 from concurrent.futures import ThreadPoolExecutor
@@ -23,8 +22,9 @@ from geo_lib.const_strings import CONST_INTERNAL_TAGS, filter_protected_tags, is
 from geo_lib.security.file_validation import SecureFileValidator
 from geo_lib.types.feature import PointFeature, PolygonFeature, LineStringFeature, MultiLineStringFeature
 from geo_lib.website.auth import login_required_401
+from geo_lib.logging.console import get_access_logger
 
-logger = logging.getLogger(__name__)
+logger = get_access_logger()
 
 
 def strip_icon_properties(feature: dict) -> dict:
@@ -833,27 +833,14 @@ def import_to_featurestore(request, item_id):
                 'code': 409
             }, status=409)
 
-    # Log import start
-    logger.info(f"Starting import of {len(import_item.geofeatures)} features from '{import_item.original_filename}' for user {request.user.id}")
-
     # Prepare features for bulk import
     features_to_create = []
     existing_hashes = set()
     current_batch_hashes = set()  # Track hashes in current import batch
 
     # Get existing feature hashes for this user to avoid duplicates
-    logger.info(f"Checking for duplicate features in user {request.user.id}'s feature library")
     existing_features = FeatureStore.objects.filter(user=request.user).values_list('geojson_hash', flat=True)
     existing_hashes.update(existing_features)
-    logger.info(f"User has {len(existing_hashes)} existing features in library")
-
-    # Log geometry type breakdown for debugging
-    geometry_types = {}
-    for feature in import_item.geofeatures:
-        if 'geometry' in feature and feature['geometry']:
-            geom_type = feature['geometry']['type']
-            geometry_types[geom_type] = geometry_types.get(geom_type, 0) + 1
-    logger.info(f"Importing {len(import_item.geofeatures)} features with geometry types: {geometry_types}")
 
     # Thread-safe duplicate checking
     duplicate_check_lock = threading.Lock()
@@ -925,7 +912,7 @@ def import_to_featurestore(request, item_id):
                 if feature_hash in existing_hashes or feature_hash in current_batch_hashes:
                     # Skip importing duplicate features
                     feature_name = geojson_data.get('properties', {}).get('name', 'Unnamed')
-                    logger.info(f"Skipping duplicate feature '{feature_name}' with hash {feature_hash[:16]}... for user {request.user.id}")
+                    # Skipping duplicate feature (normal operation)
                     return None
 
                 # Add to current batch hashes to prevent duplicates within the same import
@@ -1014,11 +1001,11 @@ def import_to_featurestore(request, item_id):
     # Bulk create all features at once for better performance
     if features_to_create:
         try:
-            logger.info(f"Importing {len(features_to_create)} unique features to database for user {request.user.id}")
+            # Importing features to database
 
             FeatureStore.objects.bulk_create(features_to_create, batch_size=1000)
             successful_imports = len(features_to_create)
-            logger.info(f"Successfully imported {successful_imports} features in bulk for user {request.user.id}")
+            # Features imported successfully
         except Exception as e:
             logger.warning(f"Bulk import failed for user {request.user.id}, falling back to individual imports: {str(e)}")
             logger.error(f"Bulk import error traceback: {traceback.format_exc()}")
@@ -1034,7 +1021,7 @@ def import_to_featurestore(request, item_id):
                     if "duplicate key" not in str(individual_error).lower():
                         logger.error(f"Unexpected error creating feature for user {request.user.id}: {individual_error}")
 
-            logger.info(f"Fallback import completed for user {request.user.id}: {successful_imports}/{len(features_to_create)} features imported")
+            # Fallback import completed
 
     # Log final summary
     total_processed = len(import_item.geofeatures)
@@ -1043,7 +1030,7 @@ def import_to_featurestore(request, item_id):
 
     # Only mark as imported and proceed with cleanup if at least one feature was successfully created
     if successful_imports > 0:
-        logger.info(f"Import completed for user {request.user.id}: {total_imported} features imported, {total_skipped} skipped (already exist)")
+        # Import completed
 
         # Mark as imported only after successful feature creation
         import_item.imported = True

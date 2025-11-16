@@ -3,10 +3,10 @@ Upload job WebSocket module.
 Handles upload job processing events (status updates, completion, etc.).
 """
 
-import logging
 from geo_lib.websocket.base_module import BaseWebSocketModule
+from geo_lib.logging.console import get_websocket_logger
 
-logger = logging.getLogger(__name__)
+logger = get_websocket_logger()
 
 
 class UploadJobModule(BaseWebSocketModule):

@@ -3,14 +3,15 @@ Upload status WebSocket consumer for specific import item updates.
 """
 
 import json
-import logging
 
 from channels.generic.websocket import AsyncWebsocketConsumer
 from django.contrib.auth.models import AnonymousUser
 
 from geo_lib.websocket.modules.upload_status_module import UploadStatusModule
+from geo_lib.logging.console import get_websocket_logger
+from geo_lib.utils.ip_utils import get_client_ip, get_user_identifier
 
-logger = logging.getLogger(__name__)
+logger = get_websocket_logger()
 
 
 class UploadStatusConsumer(AsyncWebsocketConsumer):
@@ -25,9 +26,12 @@ class UploadStatusConsumer(AsyncWebsocketConsumer):
         """Handle WebSocket connection."""
         # Get user from scope
         self.user = self.scope["user"]
+        path = self.scope.get('path', 'unknown')
+        client_ip = get_client_ip(self.scope)
 
         # Reject connection if user is not authenticated
         if isinstance(self.user, AnonymousUser):
+            logger.warning(f"WebSocket connection rejected: {path} - Anonymous@{client_ip}")
             await self.close()
             return
 
@@ -45,6 +49,10 @@ class UploadStatusConsumer(AsyncWebsocketConsumer):
 
             # Only accept the connection if the item exists and user owns it
             await self.accept()
+            
+            # Log successful connection
+            user_identifier = get_user_identifier(self.scope)
+            logger.info(f"WebSocket connected: {path} - {user_identifier}@{client_ip} - Item: {self.item_id}")
 
             # Create item-specific room group
             self.room_group_name = f"upload_status_{self.user.id}_{self.item_id}"
@@ -64,6 +72,8 @@ class UploadStatusConsumer(AsyncWebsocketConsumer):
         except ImportQueue.DoesNotExist:
             # Accept connection briefly to send error message, then close
             await self.accept()
+            user_identifier = get_user_identifier(self.scope)
+            logger.warning(f"WebSocket connection rejected: {path} - {user_identifier}@{client_ip} - Item {self.item_id} not found")
             await self.send(text_data=json.dumps({
                 'type': 'error',
                 'data': {
@@ -73,11 +83,18 @@ class UploadStatusConsumer(AsyncWebsocketConsumer):
             }))
             await self.close(code=4004)  # 4004 = 404 Not Found
         except Exception as e:
-            logger.error(f"Error in UploadStatusConsumer connect: {str(e)}")
+            user_identifier = get_user_identifier(self.scope)
+            logger.error(f"Error in UploadStatusConsumer connect: {path} - {user_identifier}@{client_ip} - {str(e)}")
             await self.close()
 
     async def disconnect(self, close_code):
         """Handle WebSocket disconnection."""
+        path = self.scope.get('path', 'unknown')
+        client_ip = get_client_ip(self.scope)
+        user_identifier = get_user_identifier(self.scope)
+        item_id = getattr(self, 'item_id', 'Unknown')
+        logger.info(f"WebSocket disconnected: {path} - {user_identifier}@{client_ip} - Item: {item_id} - Close code: {close_code}")
+        
         if self.room_group_name:
             # Leave room group
             await self.channel_layer.group_discard(

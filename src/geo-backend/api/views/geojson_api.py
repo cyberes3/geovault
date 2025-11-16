@@ -1,5 +1,4 @@
 import json
-import logging
 import os
 import time
 import traceback
@@ -22,8 +21,9 @@ from geo_lib.validation.geometry_validation import (
     normalize_and_validate_feature_update,
     GeometryValidationError
 )
+from geo_lib.logging.console import get_access_logger
 
-logger = logging.getLogger(__name__)
+logger = get_access_logger()
 
 
 class BboxQueryResult(NamedTuple):
@@ -50,9 +50,6 @@ def _get_features_in_bbox(bbox: Tuple[float, float, float, float], user_id: int,
     Returns both the features and the total count in a single optimized operation.
     """
     min_lon, min_lat, max_lon, max_lat = bbox
-
-    # Log the bounding box for debugging
-    logger.info(f"Querying features for bbox: {min_lon}, {min_lat}, {max_lon}, {max_lat} (zoom: {zoom_level})")
 
     # Calculate spans for world-wide detection
     lon_span = max_lon - min_lon if max_lon >= min_lon else (180 - min_lon) + (max_lon + 180)
@@ -89,7 +86,6 @@ def _get_features_in_bbox(bbox: Tuple[float, float, float, float], user_id: int,
 
     if crosses_dateline or world_wide_extent:
         # Handle world-wide bbox that crosses the International Date Line or spans most of the globe
-        logger.info(f"World-wide extent detected: crosses_dateline={crosses_dateline}, world_wide_extent={world_wide_extent}, lon_span={lon_span:.1f}°, lat_span={lat_span:.1f}°")
         base_query = base_query_filter
     else:
         # Normal bbox that doesn't cross the International Date Line
@@ -97,7 +93,6 @@ def _get_features_in_bbox(bbox: Tuple[float, float, float, float], user_id: int,
         try:
             bbox_polygon = Polygon.from_bbox(bbox)
             base_query = base_query_filter.filter(geometry__intersects=bbox_polygon)
-            logger.info(f"Using spatial query for normal bbox (lon_span={lon_span:.1f}°, lat_span={lat_span:.1f}°)")
         except Exception as e:
             logger.warning(f"Error creating bbox polygon or spatial query: {e}. Falling back to world-wide query.")
             # Fallback to world-wide query if spatial query fails
@@ -105,15 +100,12 @@ def _get_features_in_bbox(bbox: Tuple[float, float, float, float], user_id: int,
 
     # Get total count first (this is a lightweight operation)
     total_count = base_query.count()
-    logger.info(f"Total features in bbox: {total_count}")
 
     # Apply limit if configured (max_features = -1 means no limit)
     if max_features > 0:
         features_query = base_query[:max_features]
-        logger.info(f"Applied feature limit: {max_features}")
     else:
         features_query = base_query
-        logger.info("No feature limit applied")
 
     # Convert to GeoJSON format
     geojson_features = []
@@ -150,7 +142,6 @@ def _get_features_in_bbox(bbox: Tuple[float, float, float, float], user_id: int,
             # Fall back to world-wide query
             base_query = base_query_filter
             total_count = base_query.count()
-            logger.info(f"Fallback query: Total features for user: {total_count}")
             
             # Re-apply limit if configured
             if max_features > 0:
@@ -174,7 +165,6 @@ def _get_features_in_bbox(bbox: Tuple[float, float, float, float], user_id: int,
                     }
                     geojson_features.append(geojson_feature)
 
-    logger.info(f"Returning {len(geojson_features)} features out of {total_count} total (fallback_used={fallback_used})")
     return BboxQueryResult(features=geojson_features, total_count=total_count, fallback_used=fallback_used)
 
 
@@ -673,7 +663,7 @@ def update_feature(request, feature_id):
                 if geom_data['type'] == 'GeometryCollection':
                     # For GeometryCollection, we can't use GEOSGeometry, so skip geometry field update
                     # The geometry will be stored in the geojson field
-                    logger.info(f"GeometryCollection geometry for feature {feature_id} stored in geojson field only")
+                    pass
                 elif geom_data.get('coordinates'):
                     # Ensure coordinates have 3 dimensions for consistency
                     coords = geom_data['coordinates']

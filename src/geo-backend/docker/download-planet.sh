@@ -26,10 +26,7 @@ echo "This may take a while depending on your internet connection..."
 echo "File will be saved to: ${PLANET_PBF}"
 
 # Download with resume support in case of interruption
-wget -c -O "${PLANET_PBF}" "${PLANET_URL}" || {
-    echo "Download failed. Trying with curl..."
-    curl -L -o "${PLANET_PBF}" "${PLANET_URL}"
-}
+wget -c -O "${PLANET_PBF}" "${PLANET_URL}"
 
 if [ ! -f "${PLANET_PBF}" ]; then
     echo "Error: Download failed!"
