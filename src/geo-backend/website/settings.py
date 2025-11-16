@@ -203,6 +203,20 @@ TILE_CACHE_ENABLED = os.environ.get('TILE_CACHE_ENABLED', 'True').lower() == 'tr
 # Number of days before cached tiles expire (default: 30 days)
 TILE_CACHE_EXPIRY_DAYS = int(os.environ.get('TILE_CACHE_EXPIRY_DAYS', '30'))
 
+# Icon Processing Configuration
+# Enable or disable icon processing for KML/KMZ files (default: False)
+ICON_PROCESSING_ENABLED = os.environ.get('ICON_PROCESSING_ENABLED', 'False').lower() == 'true'
+
+# Directory where processed icons will be stored
+# Default: BASE_DIR / 'icons' (can be overridden via environment variable)
+ICON_STORAGE_DIR = Path(os.environ.get('ICON_STORAGE_DIR', BASE_DIR / 'icons'))
+
+# Maximum icon file size in bytes (default: 1MB)
+ICON_MAX_SIZE_BYTES = int(os.environ.get('ICON_MAX_SIZE_BYTES', '1048576'))
+
+# Timeout for fetching remote icons in seconds (default: 1 second)
+ICON_FETCH_TIMEOUT = float(os.environ.get('ICON_FETCH_TIMEOUT', '1.0'))
+
 # Logging configuration for security events
 LOGGING = {
     'version': 1,

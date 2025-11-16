@@ -1,13 +1,15 @@
 import json
 import logging
+import os
 import time
 import traceback
+from pathlib import Path
 from typing import List, Tuple, Dict, NamedTuple
 
 from django.conf import settings
 from django.contrib.gis.geos import Polygon, GEOSGeometry
 from django.db.models import Q
-from django.http import JsonResponse
+from django.http import HttpResponse, Http404, JsonResponse
 from django.views.decorators.csrf import csrf_protect
 from django.views.decorators.http import require_http_methods
 
@@ -528,3 +530,72 @@ def update_feature(request, feature_id):
             'error': 'Failed to update feature',
             'code': 500
         }, status=500)
+
+
+@require_http_methods(["GET"])
+def serve_icon(request, icon_hash):
+    """
+    Serve icon files from storage directory.
+    
+    URL parameter:
+    - icon_hash: Hash of the icon file (with extension, e.g., 'abc123def456.png')
+    """
+    try:
+        # Validate icon_hash format (should be hash + extension)
+        if not icon_hash or len(icon_hash) < 5:  # At least hash (64 chars) + extension (e.g., .png)
+            raise Http404("Invalid icon hash")
+        
+        # Extract hash and extension
+        # Icon hash format: {hash}{extension} (e.g., abc123def456.png)
+        # Hash is 64 characters (SHA-256), extension starts after that
+        # Find the last dot to separate hash from extension
+        if '.' not in icon_hash:
+            raise Http404("Invalid icon hash format - missing extension")
+        
+        # Split on last dot to get hash and extension
+        hash_part, extension = icon_hash.rsplit('.', 1)
+        extension = '.' + extension  # Add leading dot back
+        
+        # Validate hash length (should be 64 characters for SHA-256)
+        if len(hash_part) != 64:
+            raise Http404("Invalid icon hash format - hash length incorrect")
+        
+        # Validate extension
+        valid_extensions = {'.png', '.jpg', '.jpeg', '.gif', '.bmp', '.svg', '.webp', '.ico'}
+        if extension not in valid_extensions:
+            raise Http404("Invalid icon extension")
+        
+        # Get storage path
+        storage_dir = Path(settings.ICON_STORAGE_DIR)
+        icon_path = storage_dir / hash_part[0:2] / hash_part[2:4] / icon_hash
+        
+        # Check if file exists
+        if not icon_path.exists() or not icon_path.is_file():
+            raise Http404("Icon not found")
+        
+        # Read icon file
+        icon_data = icon_path.read_bytes()
+        
+        # Determine content type based on extension
+        content_types = {
+            '.png': 'image/png',
+            '.jpg': 'image/jpeg',
+            '.jpeg': 'image/jpeg',
+            '.gif': 'image/gif',
+            '.bmp': 'image/bmp',
+            '.svg': 'image/svg+xml',
+            '.webp': 'image/webp',
+            '.ico': 'image/x-icon',
+        }
+        content_type = content_types.get(extension, 'image/png')
+        
+        # Create response with appropriate headers
+        response = HttpResponse(icon_data, content_type=content_type)
+        response['Cache-Control'] = 'public, max-age=31536000'  # Cache for 1 year
+        return response
+        
+    except Http404:
+        raise
+    except Exception as e:
+        logger.error(f"Error serving icon {icon_hash}: {traceback.format_exc()}")
+        raise Http404("Icon not found")

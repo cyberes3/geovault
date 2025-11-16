@@ -11,6 +11,7 @@ import tempfile
 import time
 from typing import Dict, Any
 
+from geo_lib.processing.icon_manager import process_geojson_icons
 from geo_lib.processing.logging import DatabaseLogLevel
 from .base_processor import BaseProcessor
 
@@ -44,6 +45,7 @@ class KMLProcessor(BaseProcessor):
     def convert_to_geojson(self) -> Dict[str, Any]:
         """
         Convert KML file to GeoJSON using JavaScript togeojson library.
+        Also processes remote icons if icon processing is enabled.
         
         Returns:
             GeoJSON data as dictionary
@@ -57,7 +59,17 @@ class KMLProcessor(BaseProcessor):
             temp_file_path = temp_file.name
 
         try:
-            return self._convert_via_nodejs(temp_file_path, "KML")
+            geojson_data = self._convert_via_nodejs(temp_file_path, "KML")
+            
+            # Process icons in GeoJSON
+            geojson_data = process_geojson_icons(
+                geojson_data,
+                file_type='kml',
+                file_data=None,
+                kml_content=content
+            )
+            
+            return geojson_data
         finally:
             # Clean up temporary file
             os.unlink(temp_file_path)
