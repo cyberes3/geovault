@@ -792,6 +792,90 @@ export default {
       console.log('Cleared all features from the map')
     },
 
+    // Handle featureId from URL parameter
+    async handleUrlFeatureId() {
+      // Check for featureId in query parameters
+      const featureId = this.$route.query.featureId
+      if (!featureId) {
+        return
+      }
+
+      try {
+        // Fetch the feature from the API
+        const response = await fetch(`${APIHOST}/api/data/feature/${featureId}/`)
+        if (!response.ok) {
+          console.error(`Failed to fetch feature ${featureId}: ${response.statusText}`)
+          this.removeFeatureIdFromUrl()
+          return
+        }
+
+        const data = await response.json()
+        if (!data.success || !data.feature) {
+          console.error(`Feature ${featureId} not found or access denied`)
+          this.removeFeatureIdFromUrl()
+          return
+        }
+
+        // Convert GeoJSON to OpenLayers feature
+        const format = new GeoJSON()
+        const geojsonData = data.feature.geojson
+        
+        const feature = format.readFeature(geojsonData, {
+          featureProjection: 'EPSG:3857',
+          dataProjection: 'EPSG:4326'
+        })
+
+        // Preserve properties from the GeoJSON data
+        const properties = geojsonData && geojsonData.properties 
+          ? { ...geojsonData.properties }
+          : {}
+        
+        // Add the _id to properties
+        properties._id = featureId
+        feature.set('properties', properties)
+
+        // Preserve geojson_hash if available
+        if (data.feature.geojson_hash) {
+          feature.set('geojson_hash', data.feature.geojson_hash)
+        }
+
+        // Add feature to the map if it's not already there
+        // Check if feature already exists in vector source
+        const existingFeatures = this.vectorSource.getFeatures()
+        let featureToZoom = existingFeatures.find(f => {
+          const props = f.get('properties') || {}
+          return props._id === featureId
+        })
+
+        if (!featureToZoom) {
+          // Add the feature to the map
+          this.vectorSource.addFeature(feature)
+          this.addFeatureTimestamp(feature)
+          featureToZoom = feature
+        }
+
+        // Wait a bit for the map to render, then zoom to the feature
+        await this.$nextTick()
+        setTimeout(() => {
+          this.zoomToFeature(featureToZoom)
+          // Remove the featureId parameter from URL
+          this.removeFeatureIdFromUrl()
+        }, 100)
+      } catch (error) {
+        console.error(`Error fetching feature ${featureId}:`, error)
+        this.removeFeatureIdFromUrl()
+      }
+    },
+
+    // Remove featureId parameter from URL
+    removeFeatureIdFromUrl() {
+      const query = { ...this.$route.query }
+      delete query.featureId
+      this.$router.replace({
+        path: this.$route.path,
+        query: query
+      })
+    },
 
     // Cache functionality removed
   },
@@ -812,10 +896,17 @@ export default {
     }
 
     // Initial data load - now the map is ready
-    this.loadDataForCurrentView()
+    await this.loadDataForCurrentView()
 
     // Initial feature list update
     this.updateFeaturesInExtent()
+
+    // Check for featureId in URL parameters and zoom to it
+    // Wait a bit for the map to fully render before zooming
+    await this.$nextTick()
+    setTimeout(() => {
+      this.handleUrlFeatureId()
+    }, 200)
   },
 
   beforeUnmount() {

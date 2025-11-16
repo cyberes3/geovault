@@ -54,15 +54,25 @@
 
     <!-- Tags Section -->
     <div class="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
-      <h2 class="text-lg font-semibold text-gray-900 mb-4">Your Tags</h2>
+      <div class="flex items-center justify-between mb-4">
+        <h2 class="text-lg font-semibold text-gray-900">Your Tags</h2>
+        <router-link
+          v-if="filteredTags && filteredTags.length > 0"
+          to="/tags"
+          class="text-sm font-medium text-blue-600 hover:text-blue-800"
+        >
+          View All Tags →
+        </router-link>
+      </div>
       <div v-if="filteredTags && filteredTags.length > 0" class="flex flex-wrap gap-2">
-        <span
+        <router-link
           v-for="tag in filteredTags"
           :key="tag"
-          class="inline-flex items-center px-3 py-1 rounded-full text-sm font-medium bg-blue-100 text-blue-800 border border-blue-200"
+          to="/tags"
+          class="inline-flex items-center px-3 py-1 rounded-full text-sm font-medium bg-blue-100 text-blue-800 border border-blue-200 hover:bg-blue-200 transition-colors cursor-pointer"
         >
           {{ tag }}
-        </span>
+        </router-link>
       </div>
       <div v-else class="text-gray-500 text-sm">
         No tags found. Tags will appear here once you import features with tags.

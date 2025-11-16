@@ -303,6 +303,77 @@ def get_feature(request, feature_id):
 
 
 @login_required_401
+@require_http_methods(["GET"])
+def get_features_by_tag(request):
+    """
+    API endpoint to get all features grouped by user-generated tags.
+    Returns a dictionary where keys are tags and values are lists of features with that tag.
+    """
+    try:
+        # Get all features for the user
+        features = FeatureStore.objects.filter(user=request.user)
+        
+        # Dictionary to store features by tag
+        features_by_tag = {}
+        
+        # Iterate through all features
+        for feature in features:
+            geojson_data = feature.geojson
+            if not geojson_data or 'properties' not in geojson_data:
+                continue
+                
+            properties = geojson_data.get('properties', {})
+            tags = properties.get('tags', [])
+            
+            if not isinstance(tags, list):
+                continue
+            
+            # Filter out protected tags to only show user-generated tags
+            filtered_tags = filter_protected_tags(tags, CONST_INTERNAL_TAGS)
+            
+            # Include database ID in properties for frontend editing
+            feature_properties = properties.copy()
+            feature_properties['_id'] = feature.id
+            
+            # Create GeoJSON feature
+            geojson_feature = {
+                "type": "Feature",
+                "geometry": geojson_data.get('geometry'),
+                "properties": feature_properties,
+                "geojson_hash": feature.geojson_hash
+            }
+            
+            # Add feature to each tag's list
+            for tag in filtered_tags:
+                if isinstance(tag, str) and tag:  # Ensure tag is a non-empty string
+                    if tag not in features_by_tag:
+                        features_by_tag[tag] = []
+                    features_by_tag[tag].append(geojson_feature)
+        
+        # Sort tags alphabetically
+        sorted_tags = sorted(features_by_tag.keys())
+        
+        # Build response with sorted tags
+        response_data = {
+            'success': True,
+            'tags': {}
+        }
+        
+        for tag in sorted_tags:
+            response_data['tags'][tag] = features_by_tag[tag]
+        
+        return JsonResponse(response_data)
+        
+    except Exception:
+        logger.error(f"Error getting features by tag: {traceback.format_exc()}")
+        return JsonResponse({
+            'success': False,
+            'error': 'Failed to get features by tag',
+            'code': 500
+        }, status=500)
+
+
+@login_required_401
 @csrf_protect
 @require_http_methods(["PUT"])
 def update_feature_metadata(request, feature_id):

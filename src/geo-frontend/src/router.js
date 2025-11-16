@@ -31,6 +31,11 @@ const routes = [
         path: '/map',
         name: 'Map',
         component: () => import('./components/map/GeoJsonMap.vue'),
+    },
+    {
+        path: '/tags',
+        name: 'Tags',
+        component: () => import('./components/TagsPage.vue'),
     }
 ]
 
