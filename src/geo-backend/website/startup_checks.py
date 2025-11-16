@@ -83,9 +83,9 @@ def check_required_tables():
         bool: True if all tables exist, False otherwise
     """
     required_tables = [
-        'data_importqueue',
-        'data_featurestore', 
-        'data_databaselogging',
+        'api_importqueue',
+        'api_featurestore', 
+        'api_databaselogging',
         'auth_user',
         'django_migrations'
     ]
@@ -132,7 +132,7 @@ def check_spatial_tables():
             cursor.execute("""
                 SELECT column_name, data_type 
                 FROM information_schema.columns 
-                WHERE table_name = 'data_featurestore' 
+                WHERE table_name = 'api_featurestore' 
                 AND column_name = 'geometry'
             """)
             result = cursor.fetchone()

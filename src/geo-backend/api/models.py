@@ -2,6 +2,7 @@ import uuid
 
 from django.contrib.auth import get_user_model
 from django.contrib.gis.db import models
+from django.contrib.postgres.indexes import GistIndex
 from django.db import models as django_models
 
 
@@ -42,7 +43,7 @@ class FeatureStore(models.Model):
         indexes = [
             # Original indexes
             models.Index(fields=['user', 'timestamp']),
-            models.Index(fields=['geometry']),  # Spatial index
+            GistIndex(fields=['geometry'], name='featurestore_geometry_idx'),  # GIST spatial index
             models.Index(fields=['geojson_hash']),  # Index for hash-based lookups
             
             # NEW COMPOUND INDEXES FOR OPTIMIZED QUERIES (with short names)

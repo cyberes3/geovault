@@ -41,6 +41,7 @@ INSTALLED_APPS = [
     'django.contrib.messages',
     'django.contrib.staticfiles',
     'django.contrib.gis',
+    'django.contrib.postgres',
 ]
 
 MIDDLEWARE = [
@@ -205,11 +206,11 @@ TILE_CACHE_EXPIRY_DAYS = int(os.environ.get('TILE_CACHE_EXPIRY_DAYS', '30'))
 
 # Icon Processing Configuration
 # Enable or disable icon processing for KML/KMZ files (default: False)
-ICON_PROCESSING_ENABLED = os.environ.get('ICON_PROCESSING_ENABLED', 'False').lower() == 'true'
+ICON_PROCESSING_ENABLED = os.environ.get('ICON_PROCESSING_ENABLED', 'True').lower() == 'true'
 
 # Directory where processed icons will be stored
-# Default: BASE_DIR / 'icons' (can be overridden via environment variable)
-ICON_STORAGE_DIR = Path(os.environ.get('ICON_STORAGE_DIR', BASE_DIR / 'icons'))
+# Default: BASE_DIR / 'data' / 'icons' (can be overridden via environment variable)
+ICON_STORAGE_DIR = Path(os.environ.get('ICON_STORAGE_DIR', BASE_DIR / 'data' / 'icons'))
 
 # Maximum icon file size in bytes (default: 1MB)
 ICON_MAX_SIZE_BYTES = int(os.environ.get('ICON_MAX_SIZE_BYTES', '1048576'))

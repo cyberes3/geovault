@@ -14,3 +14,8 @@ python manage.py startup_checks
 # https://172.0.2.105:9191/pgadmin4
 # python3 manage.py clear_import_queue --force
 # python manage.py clear_all_data --confirm
+
+#DROP SCHEMA public CASCADE;
+#CREATE SCHEMA public;
+#GRANT ALL ON SCHEMA public TO postgres;
+#GRANT ALL ON SCHEMA public TO public;
