@@ -1,7 +1,13 @@
 <template>
-  <div class="w-full h-full">
-    <!-- Map Container -->
-    <div class="w-full h-full">
+  <div class="w-full h-full flex">
+    <!-- Left Sidebar - Feature List -->
+    <FeatureListSidebar
+      :features="featuresInExtent"
+      @feature-click="zoomToFeature"
+    />
+
+    <!-- Center - Map -->
+    <div class="flex-1 bg-gray-50 relative">
       <div class="relative w-full h-full">
         <!-- Map -->
         <div ref="mapContainer" class="w-full h-full"></div>
@@ -14,17 +20,23 @@
           </div>
         </div>
 
-        <!-- Feature Stats -->
-        <div class="absolute bottom-4 left-4 bg-white bg-opacity-90 px-4 py-2 rounded-lg shadow-md z-10 text-xs">
-          <div class="space-y-1">
-            <div>Features: <span class="font-medium">{{ featureCount }}</span> / <span class="font-medium">{{ MAX_FEATURES }}</span></div>
-            <div v-if="userLocation" class="text-gray-600">
-              📍 {{ getLocationDisplayName() }}
-            </div>
-          </div>
-        </div>
+        <!-- Feature Info Box -->
+        <FeatureInfoBox
+          :feature="selectedFeature"
+          @close="selectedFeature = null"
+        />
       </div>
     </div>
+
+    <!-- Right Sidebar - Map Controls -->
+    <MapControlsSidebar
+      :selected-layer="selectedLayer"
+      :feature-count="featureCount"
+      :max-features="MAX_FEATURES"
+      :user-location="userLocation"
+      :location-display-name="getLocationDisplayName()"
+      @layer-change="updateMapLayer"
+    />
   </div>
 </template>
 
@@ -38,15 +50,24 @@ import {GeoJSON} from 'ol/format'
 import {fromLonLat, toLonLat} from 'ol/proj'
 import {authMixin} from '@/assets/js/authMixin.js'
 import {MapUtils} from '@/utils/map/MapUtils'
+import FeatureListSidebar from './FeatureListSidebar.vue'
+import MapControlsSidebar from './MapControlsSidebar.vue'
+import FeatureInfoBox from './FeatureInfoBox.vue'
 
 export default {
   name: 'GeoJsonMap',
+  components: {
+    FeatureListSidebar,
+    MapControlsSidebar,
+    FeatureInfoBox
+  },
   mixins: [authMixin],
   data() {
     return {
       map: null,
       vectorSource: null,
       vectorLayer: null,
+      tileLayer: null, // Reference to the tile layer for updates
       isLoading: false,
       loadedBounds: new Set(),
       lastUpdateTime: null,
@@ -54,6 +75,10 @@ export default {
       loadTimeout: null,
       userLocation: null,
       currentAbortController: null, // AbortController for current request
+      selectedLayer: 'osm', // Currently selected map layer
+      featuresInExtent: [], // Features currently visible in map extent
+      featureListUpdateTimeout: null, // Debounce timeout for feature list updates
+      selectedFeature: null, // Currently selected feature from map click
       // Configuration
       API_BASE_URL: '/api/data/geojson/',
       LOCATION_API_URL: '/api/data/location/user/',
@@ -72,6 +97,113 @@ export default {
         feature._geoJsonMapId = `feature_${++this.featureIdCounter}_${Date.now()}`
       }
       return feature._geoJsonMapId
+    },
+
+    // Get feature name from properties (used for sorting)
+    getFeatureName(feature) {
+      const properties = feature.get('properties') || {}
+      return properties.name || 'Unnamed Feature'
+    },
+
+    // Update map layer based on selection
+    updateMapLayer(layerValue) {
+      if (!this.map || !this.tileLayer) return
+
+      // Update selected layer
+      this.selectedLayer = layerValue
+
+      // Remove current tile layer
+      this.map.removeLayer(this.tileLayer)
+
+      // Create new tile layer based on selection
+      if (this.selectedLayer === 'osm') {
+        this.tileLayer = markRaw(new TileLayer({
+          source: new OSM()
+        }))
+      }
+      // Future: Add other layer types here
+
+      // Add new tile layer at the beginning (below vector layer)
+      this.map.getLayers().insertAt(0, this.tileLayer)
+    },
+
+    // Update features in extent list
+    updateFeaturesInExtent() {
+      if (!this.map || !this.vectorSource) {
+        this.featuresInExtent = []
+        return
+      }
+
+      const view = this.map.getView()
+      const extent = view.calculateExtent()
+
+      // Buffer extent by 50 miles (approximately 80,467 meters)
+      // 50 miles * 1609.34 meters/mile = 80,467 meters
+      const bufferDistance = 50 * 1609.34
+      const bufferedExtent = [
+        extent[0] - bufferDistance, // minX
+        extent[1] - bufferDistance, // minY
+        extent[2] + bufferDistance, // maxX
+        extent[3] + bufferDistance  // maxY
+      ]
+
+      // Get all features from vector source
+      const allFeatures = this.vectorSource.getFeatures()
+
+      // Filter features that intersect with buffered extent (50 miles around current view)
+      const featuresInView = allFeatures.filter(feature => {
+        const geometry = feature.getGeometry()
+        if (!geometry) return false
+        return geometry.intersectsExtent(bufferedExtent)
+      })
+
+      // Sort features alphabetically by name
+      featuresInView.sort((a, b) => {
+        const nameA = this.getFeatureName(a).toLowerCase()
+        const nameB = this.getFeatureName(b).toLowerCase()
+        return nameA.localeCompare(nameB)
+      })
+
+      this.featuresInExtent = featuresInView
+    },
+
+    // Debounced update of features in extent
+    debouncedUpdateFeaturesInExtent() {
+      if (this.featureListUpdateTimeout) {
+        clearTimeout(this.featureListUpdateTimeout)
+      }
+      this.featureListUpdateTimeout = setTimeout(() => {
+        this.updateFeaturesInExtent()
+      }, 200) // 200ms debounce
+    },
+
+    // Zoom to a specific feature
+    zoomToFeature(feature) {
+      if (!this.map || !feature) return
+
+      const geometry = feature.getGeometry()
+      if (!geometry) return
+
+      const view = this.map.getView()
+      const extent = geometry.getExtent()
+      const geometryType = geometry.getType()
+
+      // Determine max zoom based on geometry type
+      // Points need more context, so limit zoom more
+      let maxZoom = 15
+      if (geometryType === 'Point' || geometryType === 'MultiPoint') {
+        maxZoom = 14 // Limit zoom for points to show surrounding area
+      }
+
+      // Fit the view to the feature's extent with padding
+      view.fit(extent, {
+        padding: [50, 50, 50, 50], // Add padding around the feature
+        duration: 500, // Animation duration in milliseconds
+        maxZoom: maxZoom // Limit maximum zoom level
+      })
+
+      // Show info box for the selected feature
+      this.selectedFeature = feature
     },
 
 
@@ -100,14 +232,17 @@ export default {
       // Determine initial map center and zoom based on user location
       const mapConfig = this.getInitialMapConfig()
 
+      // Create tile layer and store reference
+      this.tileLayer = markRaw(new TileLayer({
+        source: new OSM()
+      }))
+
       // Create map
       // Use markRaw to prevent Vue from making the map object reactive
       this.map = markRaw(new Map({
         target: this.$refs.mapContainer,
         layers: [
-          new TileLayer({
-            source: new OSM()
-          }),
+          this.tileLayer,
           this.vectorLayer
         ],
         view: new View({
@@ -116,9 +251,44 @@ export default {
         })
       }))
 
-      // Add event listeners
+      // Add event listeners for data loading
       this.map.getView().on('change:center', this.debouncedLoadData)
       this.map.getView().on('change:resolution', this.debouncedLoadData)
+
+      // Add event listeners for feature list updates
+      this.map.getView().on('change:center', this.debouncedUpdateFeaturesInExtent)
+      this.map.getView().on('change:resolution', this.debouncedUpdateFeaturesInExtent)
+
+      // Add click event listener for feature selection
+      this.map.on('click', (event) => {
+        const clickedFeature = this.map.forEachFeatureAtPixel(
+          event.pixel,
+          (feature) => feature,
+          {
+            hitTolerance: 5 // 5 pixel tolerance for easier clicking
+          }
+        )
+        
+        if (clickedFeature) {
+          this.selectedFeature = clickedFeature
+        } else {
+          // Clear selection if clicking on empty space
+          this.selectedFeature = null
+        }
+      })
+
+      // Change cursor when hovering over features
+      this.map.on('pointermove', (event) => {
+        const hasFeature = this.map.forEachFeatureAtPixel(
+          event.pixel,
+          (feature) => feature,
+          {
+            hitTolerance: 5
+          }
+        )
+        
+        this.map.getViewport().style.cursor = hasFeature ? 'pointer' : ''
+      })
 
       // Add debounced zoom change listener
       let zoomChangeTimeout = null
@@ -342,6 +512,9 @@ export default {
           // Update current zoom
           this.currentZoom = roundedZoom
 
+          // Update features in extent list after loading new features
+          this.debouncedUpdateFeaturesInExtent()
+
           console.log(`Loaded ${features.length} features for bbox: ${bboxString} (zoom: ${roundedZoom})`)
           if (data.total_features_in_bbox && data.total_features_in_bbox > features.length) {
             console.log(`Note: ${data.total_features_in_bbox - features.length} additional features not shown due to limit (${data.max_features_limit})`)
@@ -424,6 +597,8 @@ export default {
 
       console.log(`Removed ${featuresToRemove} oldest features to maintain limit of ${this.MAX_FEATURES}`)
       this.scheduleFeatureCountUpdate()
+      // Update feature list after removing features
+      this.debouncedUpdateFeaturesInExtent()
     },
 
     addFeatureTimestamp(feature) {
@@ -456,6 +631,9 @@ export default {
 
     // Initial data load - now the map is ready
     this.loadDataForCurrentView()
+
+    // Initial feature list update
+    this.updateFeaturesInExtent()
   },
 
   beforeUnmount() {
@@ -464,6 +642,10 @@ export default {
       clearTimeout(this.loadTimeout)
     }
 
+    // Clean up feature list update timeout
+    if (this.featureListUpdateTimeout) {
+      clearTimeout(this.featureListUpdateTimeout)
+    }
 
     // Cancel any pending API request
     if (this.currentAbortController) {
