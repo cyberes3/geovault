@@ -4,8 +4,7 @@ Inherits from KMLProcessor since KMZ is just a zipped KML file.
 """
 
 import io
-import os
-import tempfile
+import traceback
 import zipfile
 from typing import Dict, Any
 
@@ -30,39 +29,33 @@ class KMZProcessor(KMLProcessor):
         Returns:
             GeoJSON data as dictionary
         """
-        # Write KMZ data to temporary file for JavaScript converter
-        with tempfile.NamedTemporaryFile(suffix='.kmz', delete=False) as temp_file:
-            temp_file.write(self.file_data)
-            temp_file_path = temp_file.name
+        # Ensure file_data is bytes for KMZ
+        kmz_data = self.file_data if isinstance(self.file_data, bytes) else self.file_data.encode('utf-8')
 
+        # Convert using shared temp file helper (binary mode for KMZ)
+        geojson_data = self._convert_to_geojson(kmz_data, '.kmz', 'KMZ', is_text=False)
+
+        # Extract KML content from KMZ for icon processing
+        kml_content = None
         try:
-            # Use the parent's shared Node.js conversion logic
-            geojson_data = self._convert_via_nodejs(temp_file_path, "KMZ")
-            
-            # Extract KML content from KMZ for icon processing
-            kml_content = None
-            try:
-                with zipfile.ZipFile(io.BytesIO(self.file_data), 'r') as zip_file:
-                    # Find the first .kml file
-                    kml_entry = None
-                    for entry in zip_file.namelist():
-                        if entry.lower().endswith('.kml'):
-                            kml_entry = entry
-                            break
-                    if kml_entry:
-                        kml_content = zip_file.read(kml_entry).decode('utf-8')
-            except Exception as e:
-                logger.warning(f"Failed to extract KML from KMZ for icon processing: {str(e)}")
-            
-            # Process icons in GeoJSON
-            geojson_data = process_geojson_icons(
-                geojson_data,
-                file_type='kmz',
-                file_data=self.file_data if isinstance(self.file_data, bytes) else None,
-                kml_content=kml_content
-            )
-            
-            return geojson_data
-        finally:
-            # Clean up temporary file
-            os.unlink(temp_file_path)
+            with zipfile.ZipFile(io.BytesIO(kmz_data), 'r') as zip_file:
+                # Find the first .kml file
+                kml_entry = None
+                for entry in zip_file.namelist():
+                    if entry.lower().endswith('.kml'):
+                        kml_entry = entry
+                        break
+                if kml_entry:
+                    kml_content = zip_file.read(kml_entry).decode('utf-8')
+        except Exception as e:
+            logger.warning(f"Failed to extract KML from KMZ for icon processing: {traceback.format_exc()}")
+
+        # Process icons in GeoJSON
+        geojson_data = process_geojson_icons(
+            geojson_data,
+            file_type='kmz',
+            file_data=kmz_data,
+            kml_content=kml_content
+        )
+
+        return geojson_data

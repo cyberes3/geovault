@@ -3,7 +3,11 @@ Base processor class for unified file import pipeline.
 Defines common processing logic that all file type processors inherit.
 """
 
+import json
 import logging
+import os
+import subprocess
+import tempfile
 import time
 from abc import ABC, abstractmethod
 from concurrent.futures import ThreadPoolExecutor
@@ -123,25 +127,25 @@ class BaseProcessor(ABC):
         processed_features = []
         skipped_count = 0
         was_geometry_collection = False
-        
+
         # Split GeometryCollection into separate features
         split_features = split_geometry_collection(feature)
-        
+
         # Check if this was a geometry collection
         if len(split_features) > 1:
             was_geometry_collection = True
-        
+
         # Skip features with no valid geometry
         if not split_features:
             skipped_count += 1
             return processed_features, feature_log, skipped_count, was_geometry_collection
-        
+
         for split_feature in split_features:
             if split_feature['geometry']['type'] in ['Point', 'MultiPoint', 'LineString', 'MultiLineString', 'Polygon', 'MultiPolygon']:
                 try:
                     # Generate properties with appropriate styling based on file type and feature geometry
                     split_feature['properties'] = geojson_property_generation(split_feature)
-                    
+
                     # Add geocoding tags for points and lines
                     from django.conf import settings
                     if getattr(settings, 'REVERSE_GEOCODING_ENABLED', True):
@@ -151,7 +155,7 @@ class BaseProcessor(ABC):
                                 from geo_lib.geolocation.reverse_geocode import get_reverse_geocoding_service
                                 from geo_lib.processing.tagging import get_representative_points
                                 from geo_lib.types.feature import PointFeature, LineStringFeature, MultiLineStringFeature
-                                
+
                                 # Convert to feature instance to get representative points
                                 feature_class = None
                                 if geometry_type in ['point', 'multipoint']:
@@ -160,19 +164,19 @@ class BaseProcessor(ABC):
                                     feature_class = LineStringFeature
                                 elif geometry_type == 'multilinestring':
                                     feature_class = MultiLineStringFeature
-                                
+
                                 if feature_class:
                                     feature_instance = feature_class(**split_feature)
                                     points = get_representative_points(feature_instance)
-                                    
+
                                     if points:
                                         geocoding_service = get_reverse_geocoding_service()
                                         all_location_tags = set()
-                                        
+
                                         for lat, lon in points:
                                             location_tags = geocoding_service.get_location_tags(lat, lon)
                                             all_location_tags.update(location_tags)
-                                        
+
                                         # Add geocoding tags to existing tags
                                         existing_tags = split_feature['properties'].get('tags', [])
                                         if not isinstance(existing_tags, list):
@@ -186,7 +190,7 @@ class BaseProcessor(ABC):
                                     DatabaseLogLevel.WARNING
                                 )
                                 logger.warning(f"Geocoding failed for feature '{feature_name}': {geocode_error}")
-                    
+
                     # Convert to our property format
                     from geo_lib.types.geojson import GeojsonRawProperty
                     split_feature['properties'] = GeojsonRawProperty(**split_feature['properties']).model_dump()
@@ -199,7 +203,7 @@ class BaseProcessor(ABC):
             else:
                 feature_log.add(f'Skipping unsupported geometry type: {split_feature["geometry"]["type"]}', 'Feature Processing', DatabaseLogLevel.WARNING)
                 skipped_count += 1
-        
+
         return processed_features, feature_log, skipped_count, was_geometry_collection
 
     def process_features(self, geojson_data: Dict[str, Any]) -> Tuple[list, ImportLog]:
@@ -242,13 +246,13 @@ class BaseProcessor(ABC):
 
         # Get number of threads from settings
         num_threads = getattr(settings, 'IMPORT_PROCESSING_THREADS', 4)
-        
+
         # Process features in parallel using ThreadPoolExecutor
         if len(features) > 0:
             with ThreadPoolExecutor(max_workers=num_threads) as executor:
                 # Process all features in parallel and collect results
                 results = executor.map(self._process_single_feature, features)
-                
+
                 # Collect results from all workers
                 for result_features, result_log, result_skipped, was_geometry_collection in results:
                     processed_features.extend(result_features)
@@ -329,6 +333,95 @@ class BaseProcessor(ABC):
 
         self.import_log.add(f'Calculated timeout: {timeout_seconds}s for {file_size_mb:.1f}MB file', 'Processing', DatabaseLogLevel.DEBUG)
         return timeout_seconds
+
+    def _decode_content(self) -> str:
+        """
+        Decode file data to string if needed.
+        Common helper for processors that need string content.
+        
+        Returns:
+            File content as string
+        """
+        if isinstance(self.file_data, str):
+            return self.file_data
+        else:
+            return self.file_data.decode('utf-8')
+
+    def _convert_to_geojson(self, content: Union[str, bytes], suffix: str, file_type_name: str, is_text: bool = True) -> Dict[str, Any]:
+        """
+        Convert file to GeoJSON using a temporary file.
+        Handles temp file creation, conversion, and cleanup.
+        
+        Args:
+            content: File content as string or bytes
+            suffix: File suffix (e.g., '.gpx', '.kml', '.kmz')
+            file_type_name: Name of file type for logging (e.g., "GPX", "KML", "KMZ")
+            is_text: Whether to write in text mode (True) or binary mode (False)
+            
+        Returns:
+            GeoJSON data as dictionary
+        """
+        # Create temporary file with appropriate mode
+        if is_text:
+            with tempfile.NamedTemporaryFile(mode='w', suffix=suffix, delete=False, encoding='utf-8') as temp_file:
+                temp_file.write(content)
+                temp_file_path = temp_file.name
+        else:
+            with tempfile.NamedTemporaryFile(suffix=suffix, delete=False) as temp_file:
+                temp_file.write(content)
+                temp_file_path = temp_file.name
+
+        try:
+            # Use the shared Node.js conversion logic
+            geojson_data = self._convert_via_nodejs(temp_file_path, file_type_name)
+            return geojson_data
+        finally:
+            # Clean up temporary file
+            os.unlink(temp_file_path)
+
+    def _convert_via_nodejs(self, file_path: str, file_type_name: str) -> Dict[str, Any]:
+        """
+        Convert file to GeoJSON using JavaScript togeojson library.
+        Common conversion logic shared between KML, KMZ, and GPX processors.
+        
+        Args:
+            file_path: Path to the file to convert
+            file_type_name: Name of file type for logging (e.g., "KML", "KMZ", "GPX")
+            
+        Returns:
+            GeoJSON data as dictionary
+        """
+        try:
+            # Get the path to the togeojson converter
+            current_dir = os.path.dirname(os.path.abspath(__file__))
+            togeojson_path = os.path.join(current_dir, '..', 'togeojson', 'index.js')
+
+            # Use the JavaScript converter with file path
+            # Note: Timing is handled by the base processor's process() method
+            self.import_log.add(f"Converting {file_type_name} file to GeoJSON format", "File Conversion", DatabaseLogLevel.INFO)
+            result = subprocess.run(
+                ['node', togeojson_path, file_path],
+                capture_output=True,
+                text=True,
+                timeout=self._calculate_timeout()
+            )
+
+            if result.returncode != 0:
+                raise Exception(f"{file_type_name} file conversion failed")
+
+            geojson_data = json.loads(result.stdout)
+            return geojson_data
+
+        except subprocess.TimeoutExpired:
+            self.import_log.add(f"{file_type_name} conversion timed out after {self._calculate_timeout()}s", "File Conversion", DatabaseLogLevel.ERROR)
+            raise Exception(f"{file_type_name} file conversion timed out")
+        except json.JSONDecodeError as e:
+            self.import_log.add(f"{file_type_name} conversion produced invalid output - file may be corrupted", "File Conversion", DatabaseLogLevel.ERROR)
+            raise Exception(f"{file_type_name} file conversion failed")
+        except Exception as e:
+            self.import_log.add(f"{file_type_name} conversion failed: {type(e).__name__}", "File Conversion", DatabaseLogLevel.ERROR)
+            logger.error(f"{file_type_name} conversion error: {str(e)}")
+            raise
 
     def get_file_metadata(self) -> Dict[str, Any]:
         """
