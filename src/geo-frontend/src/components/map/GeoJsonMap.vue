@@ -67,7 +67,8 @@ export default {
     return {
       map: null,
       vectorSource: null,
-      vectorLayer: null,
+      vectorLayer: null, // Layer for icons/images (no declutter)
+      textLayer: null, // Layer for text labels (with declutter)
       tileLayer: null, // Reference to the tile layer for updates
       isLoading: false,
       loadedBounds: new Set(),
@@ -267,22 +268,36 @@ export default {
       // Get user location first
       await this.getUserLocation()
 
-      // Create vector source and layer
+      // Create vector source and two separate layers
       // Use markRaw to prevent Vue from making OpenLayers objects reactive
       // This is critical for performance when adding thousands of features
       this.vectorSource = markRaw(new VectorSource())
 
+      // Layer for icons/images - no declutter, so icons can overlap
       this.vectorLayer = markRaw(new VectorLayer({
         source: this.vectorSource,
-        style: (feature) => MapUtils.getFeatureStyle(feature),
+        style: (feature) => MapUtils.getFeatureIconStyle(feature),
         // Performance optimizations for complex polygon rendering
         renderBuffer: 100,  // Only render features within 100px of viewport
         updateWhileAnimating: true,  // Continue updating during animations
         updateWhileInteracting: true,  // Continue updating during interactions
-        declutter: true,  // Disable label decluttering (enable if you have overlapping labels)
+        declutter: false,  // Allow icons to overlap
         // Layer visibility optimizations for large datasets
         minResolution: 0,  // Show at all zoom levels
         maxResolution: Infinity  // No upper limit, but can be adjusted for performance
+      }))
+
+      // Layer for text labels - with declutter, so overlapping labels are hidden
+      this.textLayer = markRaw(new VectorLayer({
+        source: this.vectorSource,
+        style: (feature) => MapUtils.getFeatureTextStyle(feature),
+        // Performance optimizations
+        renderBuffer: 100,
+        updateWhileAnimating: true,
+        updateWhileInteracting: true,
+        declutter: true,  // Declutter overlapping text labels
+        minResolution: 0,
+        maxResolution: Infinity
       }))
 
       // Determine initial map center and zoom based on user location
@@ -299,7 +314,8 @@ export default {
         target: this.$refs.mapContainer,
         layers: [
           this.tileLayer,
-          this.vectorLayer
+          this.vectorLayer,  // Icons layer (rendered first, below text)
+          this.textLayer    // Text labels layer (rendered on top, with declutter)
         ],
         view: new View({
           center: fromLonLat(mapConfig.center),

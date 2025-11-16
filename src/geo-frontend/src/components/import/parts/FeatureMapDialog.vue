@@ -159,7 +159,8 @@ export default {
 
       this.vectorLayer = new VectorLayer({
         source: this.vectorSource,
-        style: (feature) => this.getFeatureStyle(feature)
+        style: (feature) => this.getFeatureStyle(feature),
+        declutter: true  // Declutter overlapping text labels (icons will still overlap)
       })
 
       // Create map

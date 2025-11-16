@@ -6,13 +6,10 @@
  */
 
 import type {MapConfig} from '@/types/geospatial';
-import {Style, Fill, Stroke, Circle, Icon} from 'ol/style';
+import {Style, Fill, Stroke, Circle, Icon, Text} from 'ol/style';
 import {APIHOST} from '@/config.js';
 
 export class MapUtils {
-    // Style cache to avoid creating duplicate Style objects
-    // Key format: "geometryType:color1:color2:width:opacity"
-    private static styleCache: Map<string, Style> = new Map();
 
     /**
      * Count only polygon and line features (exclude points)
@@ -269,13 +266,13 @@ export class MapUtils {
     /**
      * Get style for a feature based on its geometry type and properties
      * This is a pure function extracted from Vue component to avoid reactivity overhead
-     * Uses caching to avoid creating duplicate Style objects for features with same styling
      * @param feature - OpenLayers feature
      * @returns OpenLayers Style object
      */
     static getFeatureStyle(feature: any): Style {
         const properties = feature.get('properties') || {};
         const geometryType = feature.getGeometry().getType();
+        const name = properties.name || 'Unnamed Feature';
 
         // Helper function to convert hex color to CSS color string
         const hexToColor = (hexColor: string | undefined, defaultColor: string = '#ff0000'): string => {
@@ -283,50 +280,55 @@ export class MapUtils {
             return hexColor;
         };
 
-        // Create cache key based on geometry type and style properties
-        let cacheKey: string;
+        // Create text style for labels (different positioning for each geometry type)
+        let textStyle: Text;
 
         if (geometryType === 'Point') {
-            // Check for icon URL first
-            const iconUrl = this.getIconUrl(properties);
-            if (iconUrl) {
-                const resolvedIconUrl = this.resolveIconUrl(iconUrl);
-                cacheKey = `Point:icon:${resolvedIconUrl}`;
-            } else {
-                const fillColor = hexToColor(properties['marker-color'], '#ff0000');
-                cacheKey = `Point:${fillColor}:2`;
-            }
-        } else if (geometryType === 'LineString') {
-            const strokeColor = hexToColor(properties.stroke, '#ff0000');
-            const strokeWidth = properties['stroke-width'] || 2;
-            cacheKey = `LineString:${strokeColor}:${strokeWidth}`;
+            // Points: text below, closer to the point
+            textStyle = new Text({
+                text: name,
+                font: '12px Arial',
+                fill: new Fill({
+                    color: '#000000'
+                }),
+                stroke: new Stroke({
+                    color: '#ffffff',
+                    width: 3
+                }),
+                offsetY: 8
+            });
         } else if (geometryType === 'Polygon') {
-            const strokeColor = hexToColor(properties.stroke, '#ff0000');
-            let fillColor = hexToColor(properties.fill, '#ff0000');
-            const strokeWidth = properties['stroke-width'] || 2;
-            const fillOpacity = properties['fill-opacity'] !== undefined ? properties['fill-opacity'] : 'none';
-
-            // Apply fill-opacity if specified
-            if (fillOpacity !== 'none') {
-                // Convert hex to RGB and apply opacity
-                const hex = fillColor.replace('#', '');
-                const r = parseInt(hex.substr(0, 2), 16);
-                const g = parseInt(hex.substr(2, 2), 16);
-                const b = parseInt(hex.substr(4, 2), 16);
-                fillColor = `rgba(${r}, ${g}, ${b}, ${fillOpacity})`;
-            }
-            cacheKey = `Polygon:${strokeColor}:${fillColor}:${strokeWidth}`;
+            // Polygons: text centered in the polygon
+            textStyle = new Text({
+                text: name,
+                font: '12px Arial',
+                fill: new Fill({
+                    color: '#000000'
+                }),
+                stroke: new Stroke({
+                    color: '#ffffff',
+                    width: 3
+                }),
+                placement: 'point', // Centers text on polygon centroid
+                offsetY: 0
+            });
         } else {
-            // Default style for unknown geometry types
-            cacheKey = 'default';
+            // Lines and other types: text below
+            textStyle = new Text({
+                text: name,
+                font: '12px Arial',
+                fill: new Fill({
+                    color: '#000000'
+                }),
+                stroke: new Stroke({
+                    color: '#ffffff',
+                    width: 3
+                }),
+                offsetY: 10
+            });
         }
 
-        // Check cache first
-        if (this.styleCache.has(cacheKey)) {
-            return this.styleCache.get(cacheKey)!;
-        }
-
-        // Create new style and cache it
+        // Create style based on geometry type
         let style: Style;
 
         if (geometryType === 'Point') {
@@ -339,11 +341,26 @@ export class MapUtils {
                         src: resolvedIconUrl,
                         scale: 0.4,
                         anchor: [0.5, 1.0], // Anchor at bottom center of icon
-                    })
+                    }),
+                    text: textStyle
                 });
             } else {
                 // Fall back to circle style if no icon
+                // Note: Circle styles are vector graphics, not PNG files
                 const fillColor = hexToColor(properties['marker-color'], '#ff0000');
+                // Create separate text style for default circle icons with more offset
+                const circleTextStyle = new Text({
+                    text: name,
+                    font: '12px Arial',
+                    fill: new Fill({
+                        color: '#000000'
+                    }),
+                    stroke: new Stroke({
+                        color: '#ffffff',
+                        width: 3
+                    }),
+                    offsetY: 15 // Move text further down for default circle icons
+                });
                 style = new Style({
                     image: new Circle({
                         radius: 6,
@@ -354,7 +371,8 @@ export class MapUtils {
                             color: fillColor, // Use same color for stroke
                             width: 2
                         })
-                    })
+                    }),
+                    text: circleTextStyle
                 });
             }
         } else if (geometryType === 'LineString') {
@@ -363,7 +381,8 @@ export class MapUtils {
                 stroke: new Stroke({
                     color: strokeColor,
                     width: properties['stroke-width'] || 2
-                })
+                }),
+                text: textStyle
             });
         } else if (geometryType === 'Polygon') {
             const strokeColor = hexToColor(properties.stroke, '#ff0000');
@@ -386,7 +405,8 @@ export class MapUtils {
                 }),
                 fill: new Fill({
                     color: fillColor
-                })
+                }),
+                text: textStyle
             });
         } else {
             // Default style for unknown geometry types
@@ -397,12 +417,165 @@ export class MapUtils {
                 }),
                 fill: new Fill({
                     color: 'rgba(255, 0, 0, 0.3)'
-                })
+                }),
+                text: textStyle
             });
         }
 
-        // Cache the style
-        this.styleCache.set(cacheKey, style);
         return style;
+    }
+
+    /**
+     * Get icon-only style for a feature (no text labels)
+     * Used for rendering icons on a separate layer without decluttering
+     * @param feature - OpenLayers feature
+     * @returns OpenLayers Style object with only icon/image
+     */
+    static getFeatureIconStyle(feature: any): Style {
+        const properties = feature.get('properties') || {};
+        const geometryType = feature.getGeometry().getType();
+
+        // Helper function to convert hex color to CSS color string
+        const hexToColor = (hexColor: string | undefined, defaultColor: string = '#ff0000'): string => {
+            if (!hexColor || typeof hexColor !== 'string') return defaultColor;
+            return hexColor;
+        };
+
+        if (geometryType === 'Point') {
+            // Check for icon URL first
+            const iconUrl = this.getIconUrl(properties);
+            if (iconUrl) {
+                const resolvedIconUrl = this.resolveIconUrl(iconUrl);
+                return new Style({
+                    image: new Icon({
+                        src: resolvedIconUrl,
+                        scale: 0.4,
+                        anchor: [0.5, 1.0], // Anchor at bottom center of icon
+                    })
+                });
+            } else {
+                // Fall back to circle style if no icon
+                const fillColor = hexToColor(properties['marker-color'], '#ff0000');
+                return new Style({
+                    image: new Circle({
+                        radius: 6,
+                        fill: new Fill({
+                            color: fillColor
+                        }),
+                        stroke: new Stroke({
+                            color: fillColor, // Use same color for stroke
+                            width: 2
+                        })
+                    })
+                });
+            }
+        } else if (geometryType === 'LineString') {
+            const strokeColor = hexToColor(properties.stroke, '#ff0000');
+            return new Style({
+                stroke: new Stroke({
+                    color: strokeColor,
+                    width: properties['stroke-width'] || 2
+                })
+            });
+        } else if (geometryType === 'Polygon') {
+            const strokeColor = hexToColor(properties.stroke, '#ff0000');
+            let fillColor = hexToColor(properties.fill, '#ff0000');
+
+            // Apply fill-opacity if specified
+            if (properties['fill-opacity'] !== undefined) {
+                // Convert hex to RGB and apply opacity
+                const hex = fillColor.replace('#', '');
+                const r = parseInt(hex.substr(0, 2), 16);
+                const g = parseInt(hex.substr(2, 2), 16);
+                const b = parseInt(hex.substr(4, 2), 16);
+                fillColor = `rgba(${r}, ${g}, ${b}, ${properties['fill-opacity']})`;
+            }
+
+            return new Style({
+                stroke: new Stroke({
+                    color: strokeColor,
+                    width: properties['stroke-width'] || 2
+                }),
+                fill: new Fill({
+                    color: fillColor
+                })
+            });
+        } else {
+            // Default style for unknown geometry types
+            return new Style({
+                stroke: new Stroke({
+                    color: '#ff0000',
+                    width: 2
+                }),
+                fill: new Fill({
+                    color: 'rgba(255, 0, 0, 0.3)'
+                })
+            });
+        }
+    }
+
+    /**
+     * Get text-only style for a feature (no icon/image)
+     * Used for rendering labels on a separate layer with decluttering
+     * @param feature - OpenLayers feature
+     * @returns OpenLayers Style object with only text
+     */
+    static getFeatureTextStyle(feature: any): Style {
+        const properties = feature.get('properties') || {};
+        const geometryType = feature.getGeometry().getType();
+        const name = properties.name || 'Unnamed Feature';
+
+        // Create text style for labels (different positioning for each geometry type)
+        let textStyle: Text;
+
+        if (geometryType === 'Point') {
+            // Points: text below, closer to the point
+            const iconUrl = this.getIconUrl(properties);
+            textStyle = new Text({
+                text: name,
+                font: '12px Arial',
+                fill: new Fill({
+                    color: '#000000'
+                }),
+                stroke: new Stroke({
+                    color: '#ffffff',
+                    width: 3
+                }),
+                offsetY: iconUrl ? 8 : 15 // More offset for default circle icons
+            });
+        } else if (geometryType === 'Polygon') {
+            // Polygons: text centered in the polygon
+            textStyle = new Text({
+                text: name,
+                font: '12px Arial',
+                fill: new Fill({
+                    color: '#000000'
+                }),
+                stroke: new Stroke({
+                    color: '#ffffff',
+                    width: 3
+                }),
+                placement: 'point', // Centers text on polygon centroid
+                offsetY: 0
+            });
+        } else {
+            // Lines and other types: text below
+            textStyle = new Text({
+                text: name,
+                font: '12px Arial',
+                fill: new Fill({
+                    color: '#000000'
+                }),
+                stroke: new Stroke({
+                    color: '#ffffff',
+                    width: 3
+                }),
+                offsetY: 10
+            });
+        }
+
+        return new Style({
+            text: textStyle
+        });
     }
 }

@@ -12,7 +12,7 @@ import xml.etree.ElementTree as ET
 import zipfile
 from pathlib import Path
 from typing import Dict, List, Optional, Tuple
-from urllib.parse import urlparse
+from urllib.parse import urlparse, parse_qs, unquote
 from urllib.request import urlopen, Request
 from urllib.error import URLError, HTTPError
 
@@ -310,6 +310,9 @@ def process_geojson_icons(geojson_data: dict, file_type: str, file_data: Optiona
     if kml_content:
         icon_hrefs = extract_icon_hrefs_from_kml(kml_content)
         for href in icon_hrefs:
+            # Skip CalTopo URLs - they will be handled by extracting color
+            if _extract_color_from_caltopo_url(href):
+                continue
             new_href = process_icon_href(href, file_type, file_data)
             if new_href:
                 href_mapping[href] = new_href
@@ -366,6 +369,51 @@ def extract_icon_hrefs_from_kml(kml_content: str) -> List[str]:
         return []
 
 
+def _extract_color_from_caltopo_url(url: str) -> Optional[str]:
+    """
+    Extract color from CalTopo icon URL.
+    
+    CalTopo URLs have format: http://caltopo.com/icon.png?cfg=point%2CFF0000%231.0
+    After decoding: cfg=point,FF0000#1.0
+    The color is the hex value (FF0000) which should be converted to #FF0000
+    
+    Args:
+        url: Icon URL from CalTopo
+        
+    Returns:
+        Hex color string (e.g., '#FF0000') or None if not a CalTopo URL or color can't be extracted
+    """
+    try:
+        parsed = urlparse(url)
+        
+        # Check if it's a CalTopo URL
+        if 'caltopo.com' not in parsed.netloc.lower():
+            return None
+        
+        # Parse query parameters
+        query_params = parse_qs(parsed.query)
+        
+        # Get cfg parameter
+        if 'cfg' not in query_params:
+            return None
+        
+        cfg_value = query_params['cfg'][0]
+        # URL decode
+        cfg_decoded = unquote(cfg_value)
+        
+        # Format is typically: point,COLOR#SCALE or similar
+        # Look for hex color pattern (6 hex digits)
+        color_match = re.search(r'([0-9A-Fa-f]{6})', cfg_decoded)
+        if color_match:
+            hex_color = color_match.group(1).upper()
+            return f'#{hex_color}'
+        
+        return None
+    except Exception as e:
+        logger.debug(f"Failed to extract color from CalTopo URL {url}: {str(e)}")
+        return None
+
+
 def _process_properties_icons(properties: dict, file_type: str, file_data: Optional[bytes] = None, href_mapping: Optional[Dict[str, str]] = None) -> None:
     """
     Process icon hrefs in properties dictionary.
@@ -397,9 +445,26 @@ def _process_properties_icons(properties: dict, file_type: str, file_data: Optio
         if prop_name in properties and properties[prop_name]:
             href = properties[prop_name]
             if isinstance(href, str):
+                # Check if this is a CalTopo URL - if so, extract color and remove icon
+                color = _extract_color_from_caltopo_url(href)
+                if color:
+                    # Set marker-color and remove icon property
+                    properties['marker-color'] = color
+                    del properties[prop_name]
+                    logger.debug(f"Replaced CalTopo icon with marker-color: {color}")
+                    continue
+                
                 # Check mapping first if available
                 if href_mapping and href in href_mapping:
-                    properties[prop_name] = href_mapping[href]
+                    mapped_href = href_mapping[href]
+                    # Check if mapped href is also a CalTopo URL (shouldn't happen, but be safe)
+                    mapped_color = _extract_color_from_caltopo_url(mapped_href)
+                    if mapped_color:
+                        properties['marker-color'] = mapped_color
+                        del properties[prop_name]
+                        logger.debug(f"Replaced mapped CalTopo icon with marker-color: {mapped_color}")
+                        continue
+                    properties[prop_name] = mapped_href
                 else:
                     # Process directly
                     new_href = process_icon_href(href, file_type, file_data)

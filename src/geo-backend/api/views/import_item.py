@@ -791,7 +791,8 @@ def import_to_featurestore(request, item_id):
     try:
         if request.body:
             data = json.loads(request.body)
-            import_custom_icons = data.get('import_custom_icons', True)
+            if isinstance(data, dict):
+                import_custom_icons = data.get('import_custom_icons', True)
     except (json.JSONDecodeError, ValueError) as e:
         logger.warning(f"Failed to parse request body for import_custom_icons: {str(e)}, using default True")
 
