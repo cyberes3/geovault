@@ -22,12 +22,21 @@ class IPGeolocationService:
         
         Args:
             database_path: Path to the MaxMind GeoIP2 City database file.
-                          If None, will look for it in the default location.
+                          If None, will look for it in Django settings or default location.
         """
         if database_path is None:
-            # Default path - can be configured via environment variable
-            database_path = os.environ.get('MAXMIND_DATABASE_PATH', 
-                                         '/var/lib/GeoIP/GeoLite2-Country.mmdb')
+            # Try to get from Django settings first
+            try:
+                from django.conf import settings
+                database_path = getattr(settings, 'MAXMIND_DATABASE_PATH', None)
+            except Exception:
+                # Django not initialized yet, fall back to environment variable
+                database_path = None
+            
+            # Fall back to environment variable if not in settings
+            if database_path is None:
+                database_path = os.environ.get('MAXMIND_DATABASE_PATH', 
+                                             '/var/lib/GeoIP/GeoLite2-Country.mmdb')
         
         self.database_path = database_path
         self.reader = None

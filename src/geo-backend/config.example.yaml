@@ -1,0 +1,109 @@
+# GeoServer Configuration File
+# Copy this file to config.yaml and customize for your environment.
+# The config.yaml file should NOT be committed to version control.
+
+# Security & Deployment Settings
+security:
+  # Django secret key (REQUIRED for production)
+  # Can be overridden with SECRET_KEY environment variable
+  secret_key: "django-insecure-change-this-in-production"
+  
+  # Debug mode (set to false in production)
+  debug: true
+  
+  # Allowed hosts for Django (list of domain names/IPs)
+  allowed_hosts:
+    - localhost
+    - 127.0.0.1
+  
+  # CSRF trusted origins (for CORS)
+  csrf_trusted_origins:
+    - "http://localhost:5173"
+
+# Database Configuration
+database:
+  engine: "django.contrib.gis.db.backends.postgis"
+  name: "geoserver"
+  user: "geoserver"
+  # Password can be overridden with DB_PASSWORD environment variable
+  password: "your-database-password"
+  host: "172.0.2.105"
+  port: "5432"  # Default PostgreSQL port
+
+# Redis/WebSocket Configuration
+redis:
+  host: "127.0.0.1"
+  port: 6379
+
+# API Configuration
+api:
+  # Maximum number of features to return in a single API request
+  # Set to -1 for no limit, or any positive integer to limit features
+  max_features_per_request: -1
+
+# Tile Cache Configuration
+tiles:
+  # Directory where proxied tiles will be cached on disk
+  cache_dir: "/tmp/geoserver-tiles"
+  
+  # Enable or disable tile caching
+  cache_enabled: true
+  
+  # Number of days before cached tiles expire
+  cache_expiry_days: 30
+
+# Icon Processing Configuration
+icons:
+  # Enable or disable icon processing for KML/KMZ files
+  processing_enabled: true
+  
+  # Directory where processed icons will be stored
+  # Relative paths are relative to geo-backend directory
+  storage_dir: "data/icons"
+  
+  # Maximum icon file size in bytes (default: 1MB)
+  max_size_bytes: 1048576
+  
+  # Timeout for fetching remote icons in seconds
+  fetch_timeout: 1.0
+
+# Reverse Geocoding Configuration
+geocoding:
+  # Overpass API server URL
+  overpass_api_url: "https://overpass-api.de/api/interpreter"
+  
+  # Nominatim API server URL
+  nominatim_api_url: "https://nominatim.openstreetmap.org"
+  
+  # Enable or disable reverse geocoding
+  enabled: true
+  
+  # Distance thresholds for proximity tags (in miles)
+  city_proximity_miles: 5.0
+  lake_proximity_miles: 1.0
+
+# Processing Configuration
+processing:
+  # Number of threads to use for parallel feature processing during import
+  import_threads: 10
+  
+  # File upload limits (in bytes)
+  file_upload_max_memory_size: 2097152  # 2MB
+  data_upload_max_memory_size: 2097152  # 2MB
+
+# File Validation Configuration
+validation:
+  # Enable secure XML parsing
+  secure_xml_parsing: true
+  
+  # Enable file signature validation
+  enable_file_signature_validation: true
+  
+  # Enable MIME type validation
+  enable_mime_type_validation: true
+
+# MaxMind IP Geolocation Configuration
+maxmind:
+  # Path to MaxMind GeoIP2 database file
+  database_path: "/var/lib/GeoIP/GeoLite2-Country.mmdb"
+

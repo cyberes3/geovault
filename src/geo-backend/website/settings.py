@@ -11,21 +11,29 @@ https://docs.djangoproject.com/en/5.0/ref/settings/
 """
 import os
 from pathlib import Path
+from website.config_loader import get_config_loader
 
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
 BASE_DIR = Path(__file__).resolve().parent.parent
 
+# Load configuration from YAML file
+config = get_config_loader()
+
 # Quick-start development settings - unsuitable for production
 # See https://docs.djangoproject.com/en/5.0/howto/deployment/checklist/
 
-# TODO: user config
 # SECURITY WARNING: keep the secret key used in production secret!
-SECRET_KEY = 'django-insecure-f(1zo%f)wm*rl97q0^3!9exd%(s8mz92nagf4q7c2cno&bmyx='
+# Can be overridden with SECRET_KEY environment variable
+SECRET_KEY = config.get_with_env_override(
+    'security.secret_key',
+    'SECRET_KEY',
+    'django-insecure-f(1zo%f)wm*rl97q0^3!9exd%(s8mz92nagf4q7c2cno&bmyx='
+)
 
 # SECURITY WARNING: don't run with debug turned on in production!
-DEBUG = True
+DEBUG = config.get_bool('security.debug', True)
 
-ALLOWED_HOSTS = ['localhost', '127.0.0.1']  # Configure for production
+ALLOWED_HOSTS = config.get_list('security.allowed_hosts', ['localhost', '127.0.0.1'])
 
 # Application definition
 
@@ -79,16 +87,14 @@ ASGI_APPLICATION = 'website.asgi.application'
 # Database
 # https://docs.djangoproject.com/en/5.0/ref/settings/#databases
 
-
-# TODO: user config
 DATABASES = {
     'default': {
-        'ENGINE': 'django.contrib.gis.db.backends.postgis',
-        'NAME': 'geoserver',
-        'USER': 'geoserver',
-        'PASSWORD': 'juu1waigu1pookee1ohcierahMoofie3',
-        'HOST': '172.0.2.105',
-        'PORT': '',
+        'ENGINE': config.get_str('database.engine', 'django.contrib.gis.db.backends.postgis'),
+        'NAME': config.get_str('database.name', 'geoserver'),
+        'USER': config.get_str('database.user', 'geoserver'),
+        'PASSWORD': config.get_with_env_override('database.password', 'DB_PASSWORD', ''),
+        'HOST': config.get_str('database.host', 'localhost'),
+        'PORT': config.get_str('database.port', '5432'),
     }
 }
 # Password validation
@@ -137,7 +143,10 @@ CHANNEL_LAYERS = {
     'default': {
         'BACKEND': 'channels_redis.core.RedisChannelLayer',
         'CONFIG': {
-            "hosts": [('127.0.0.1', 6379)],
+            "hosts": [(
+                config.get_str('redis.host', '127.0.0.1'),
+                config.get_int('redis.port', 6379)
+            )],
         },
     },
 }
@@ -160,7 +169,7 @@ APPEND_SLASH = True
 
 LOGIN_URL = '/account/login'
 
-CSRF_TRUSTED_ORIGINS = ['http://localhost:5173']
+CSRF_TRUSTED_ORIGINS = config.get_list('security.csrf_trusted_origins', ['http://localhost:5173'])
 
 # Security Settings
 SECURE_BROWSER_XSS_FILTER = True
@@ -172,13 +181,13 @@ SECURE_HSTS_PRELOAD = True
 
 # File Upload Security Settings
 # Note: File type configurations are now centralized in geo_lib.processing.file_types
-FILE_UPLOAD_MAX_MEMORY_SIZE = 2 * 1024 * 1024  # 2MB
-DATA_UPLOAD_MAX_MEMORY_SIZE = 2 * 1024 * 1024  # 2MB
+FILE_UPLOAD_MAX_MEMORY_SIZE = config.get_int('processing.file_upload_max_memory_size', 2 * 1024 * 1024)  # 2MB
+DATA_UPLOAD_MAX_MEMORY_SIZE = config.get_int('processing.data_upload_max_memory_size', 2 * 1024 * 1024)  # 2MB
 
 # Security validation settings
-SECURE_XML_PARSING = True
-ENABLE_FILE_SIGNATURE_VALIDATION = True
-ENABLE_MIME_TYPE_VALIDATION = True
+SECURE_XML_PARSING = config.get_bool('validation.secure_xml_parsing', True)
+ENABLE_FILE_SIGNATURE_VALIDATION = config.get_bool('validation.enable_file_signature_validation', True)
+ENABLE_MIME_TYPE_VALIDATION = config.get_bool('validation.enable_mime_type_validation', True)
 
 # GeoJSON API Configuration
 # Maximum number of features to return in a single API request
@@ -191,52 +200,57 @@ ENABLE_MIME_TYPE_VALIDATION = True
 #
 # When a limit is applied, the API will return a warning in the response
 # indicating how many features were limited.
-MAX_FEATURES_PER_REQUEST = -1
+MAX_FEATURES_PER_REQUEST = config.get_int('api.max_features_per_request', -1)
 
 # Tile Proxy Cache Configuration
 # Directory where proxied tiles will be cached on disk
-# Default: /tmp/geoserver-tiles (can be overridden via environment variable)
-TILE_CACHE_DIR = os.environ.get('TILE_CACHE_DIR', '/tmp/geoserver-tiles')
+TILE_CACHE_DIR = config.get_with_env_override('tiles.cache_dir', 'TILE_CACHE_DIR', '/tmp/geoserver-tiles')
 
-# Enable or disable tile caching (default: True)
-TILE_CACHE_ENABLED = os.environ.get('TILE_CACHE_ENABLED', 'True').lower() == 'true'
+# Enable or disable tile caching
+TILE_CACHE_ENABLED = config.get_bool_with_env_override('tiles.cache_enabled', 'TILE_CACHE_ENABLED', True)
 
-# Number of days before cached tiles expire (default: 30 days)
-TILE_CACHE_EXPIRY_DAYS = int(os.environ.get('TILE_CACHE_EXPIRY_DAYS', '30'))
+# Number of days before cached tiles expire
+TILE_CACHE_EXPIRY_DAYS = config.get_int('tiles.cache_expiry_days', 30)
 
 # Icon Processing Configuration
-# Enable or disable icon processing for KML/KMZ files (default: False)
-ICON_PROCESSING_ENABLED = os.environ.get('ICON_PROCESSING_ENABLED', 'True').lower() == 'true'
+# Enable or disable icon processing for KML/KMZ files
+_icon_storage_dir = config.get_with_env_override('icons.storage_dir', 'ICON_STORAGE_DIR', None)
+if _icon_storage_dir:
+    icon_path = Path(_icon_storage_dir)
+    # If relative path, make it relative to BASE_DIR
+    if not icon_path.is_absolute():
+        ICON_STORAGE_DIR = BASE_DIR / icon_path
+    else:
+        ICON_STORAGE_DIR = icon_path
+else:
+    ICON_STORAGE_DIR = BASE_DIR / 'data' / 'icons'
 
-# Directory where processed icons will be stored
-# Default: BASE_DIR / 'data' / 'icons' (can be overridden via environment variable)
-ICON_STORAGE_DIR = Path(os.environ.get('ICON_STORAGE_DIR', BASE_DIR / 'data' / 'icons'))
+ICON_PROCESSING_ENABLED = config.get_bool_with_env_override('icons.processing_enabled', 'ICON_PROCESSING_ENABLED', True)
 
 # Maximum icon file size in bytes (default: 1MB)
-ICON_MAX_SIZE_BYTES = int(os.environ.get('ICON_MAX_SIZE_BYTES', '1048576'))
+ICON_MAX_SIZE_BYTES = config.get_int('icons.max_size_bytes', 1048576)
 
-# Timeout for fetching remote icons in seconds (default: 1 second)
-ICON_FETCH_TIMEOUT = float(os.environ.get('ICON_FETCH_TIMEOUT', '1.0'))
+# Timeout for fetching remote icons in seconds
+ICON_FETCH_TIMEOUT = config.get_float('icons.fetch_timeout', 1.0)
 
 # Reverse Geocoding Configuration
-# Overpass API server URL (default: public OSM Overpass)
-OVERPASS_API_URL = os.environ.get('OVERPASS_API_URL', 'https://overpass-api.de/api/interpreter')
+# Overpass API server URL
+OVERPASS_API_URL = config.get_with_env_override('geocoding.overpass_api_url', 'OVERPASS_API_URL', 'https://overpass-api.de/api/interpreter')
 
-# Nominatim API server URL (default: public Nominatim)
+# Nominatim API server URL
 # Nominatim is better at identifying cities/towns from administrative boundaries
-NOMINATIM_API_URL = os.environ.get('NOMINATIM_API_URL', 'https://nominatim.openstreetmap.org')
+NOMINATIM_API_URL = config.get_with_env_override('geocoding.nominatim_api_url', 'NOMINATIM_API_URL', 'https://nominatim.openstreetmap.org')
 
-# Enable or disable reverse geocoding (default: True)
-REVERSE_GEOCODING_ENABLED = os.environ.get('REVERSE_GEOCODING_ENABLED', 'True').lower() == 'true'
+# Enable or disable reverse geocoding
+REVERSE_GEOCODING_ENABLED = config.get_bool_with_env_override('geocoding.enabled', 'REVERSE_GEOCODING_ENABLED', True)
 
 # Distance thresholds for proximity tags (in miles)
-CITY_PROXIMITY_MILES = float(os.environ.get('CITY_PROXIMITY_MILES', '5.0'))
-LAKE_PROXIMITY_MILES = float(os.environ.get('LAKE_PROXIMITY_MILES', '1.0'))
+CITY_PROXIMITY_MILES = config.get_float('geocoding.city_proximity_miles', 5.0)
+LAKE_PROXIMITY_MILES = config.get_float('geocoding.lake_proximity_miles', 1.0)
 
 # Import Processing Configuration
 # Number of threads to use for parallel feature processing during import
-# Default: 4 threads (can be overridden via environment variable)
-IMPORT_PROCESSING_THREADS = int(os.environ.get('IMPORT_PROCESSING_THREADS', '10'))
+IMPORT_PROCESSING_THREADS = config.get_int('processing.import_threads', 10)
 
 # Logging configuration for security events
 LOGGING = {
@@ -272,3 +286,6 @@ LOGGING = {
         },
     },
 }
+
+# MaxMind IP Geolocation Configuration
+MAXMIND_DATABASE_PATH = config.get_str('maxmind.database_path', '/var/lib/GeoIP/GeoLite2-Country.mmdb')
