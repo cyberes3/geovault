@@ -1,27 +1,26 @@
 import hashlib
 import json
-import traceback
 import threading
+import traceback
 from concurrent.futures import ThreadPoolExecutor
 from typing import List, Dict, Tuple, Any, Optional
 
 from django import forms
 from django.contrib.gis.geos import GEOSGeometry
-from django.core.serializers.json import DjangoJSONEncoder
 from django.http import HttpResponse, JsonResponse
 from django.views.decorators.csrf import csrf_protect
 from django.views.decorators.http import require_http_methods
 
 from api.models import ImportQueue, FeatureStore, DatabaseLogging
-from geo_lib.feature_id import generate_feature_hash
-from geo_lib.processing.jobs import upload_job, delete_job
-from geo_lib.processing.status_tracker import status_tracker
-from geo_lib.processing.logging import ImportLog, DatabaseLogLevel
 from geo_lib.const_strings import CONST_INTERNAL_TAGS, filter_protected_tags, is_protected_tag
+from geo_lib.feature_id import generate_feature_hash
+from geo_lib.logging.console import get_access_logger
+from geo_lib.processing.jobs import upload_job, delete_job
+from geo_lib.processing.logging import ImportLog, DatabaseLogLevel
+from geo_lib.processing.status_tracker import status_tracker
 from geo_lib.security.file_validation import SecureFileValidator
 from geo_lib.types.feature import PointFeature, PolygonFeature, LineStringFeature, MultiLineStringFeature
 from geo_lib.website.auth import login_required_401
-from geo_lib.logging.console import get_access_logger
 
 logger = get_access_logger()
 
@@ -38,7 +37,7 @@ def strip_icon_properties(feature: dict) -> dict:
     """
     if not isinstance(feature, dict) or 'properties' not in feature:
         return feature
-    
+
     # Common property names that might contain icon hrefs
     icon_property_names = [
         'marker-symbol',
@@ -50,12 +49,12 @@ def strip_icon_properties(feature: dict) -> dict:
         'symbol',
         'styleUrl',  # KML style URLs might reference icons
     ]
-    
+
     # Remove icon properties
     for prop_name in icon_property_names:
         if prop_name in feature['properties']:
             del feature['properties'][prop_name]
-    
+
     # Also check nested structures (e.g., style objects)
     def remove_icons_from_dict(d):
         if not isinstance(d, dict):
@@ -69,9 +68,9 @@ def strip_icon_properties(feature: dict) -> dict:
                 for item in value:
                     if isinstance(item, dict):
                         remove_icons_from_dict(item)
-    
+
     remove_icons_from_dict(feature['properties'])
-    
+
     return feature
 
 
@@ -606,16 +605,16 @@ def delete_import_item(request, id):
 
         # Start async delete job
         job_id = delete_job.start_delete_job(id, request.user.id, queue.original_filename)
-        
+
         if job_id:
             return JsonResponse({
-                'success': True, 
+                'success': True,
                 'msg': 'Delete job started',
                 'job_id': job_id
             })
         else:
             return JsonResponse({
-                'success': False, 
+                'success': False,
                 'msg': 'Failed to start delete job'
             }, status=500)
     return HttpResponse(status=405)
@@ -696,14 +695,14 @@ def update_import_item(request, item_id):
             if not isinstance(original_tags, list):
                 original_tags = []
             protected_tags = [tag for tag in original_tags if is_protected_tag(tag, CONST_INTERNAL_TAGS)]
-            
+
             # Filter protected tags from incoming feature
             updated_feature = updates_by_id[feature_id]
             new_tags = updated_feature.get('properties', {}).get('tags', [])
             if not isinstance(new_tags, list):
                 new_tags = []
             filtered_tags = filter_protected_tags(new_tags, CONST_INTERNAL_TAGS)
-            
+
             # Combine filtered user tags with preserved protected tags
             updated_feature['properties']['tags'] = filtered_tags + protected_tags
             queue.geofeatures[i] = updated_feature
@@ -759,7 +758,7 @@ def import_to_featurestore(request, item_id):
             imported=False,
             timestamp__lt=import_item.timestamp
         ).order_by('timestamp').first()
-        
+
         if earlier_duplicates:
             return JsonResponse({
                 'success': False,
@@ -778,12 +777,12 @@ def import_to_featurestore(request, item_id):
 
     # Thread-safe duplicate checking
     duplicate_check_lock = threading.Lock()
-    
+
     def process_feature_with_index(args: Tuple[int, Dict[str, Any]]) -> Optional[FeatureStore]:
         """Wrapper to unpack index and feature for executor.map()"""
         feature_index, feature = args
         return process_single_feature_for_import(feature, feature_index)
-    
+
     def process_single_feature_for_import(feature: Dict[str, Any], feature_index: int) -> Optional[FeatureStore]:
         """
         Process a single feature for import, including validation, tag generation, and FeatureStore creation.
@@ -820,7 +819,7 @@ def import_to_featurestore(request, item_id):
                     feature_name = feature.get('properties', {}).get('name', 'Unnamed')
                     logger.warning(f"Skipping feature {feature_index} '{feature_name}' due to unsupported geometry type: {geometry_type}")
                     return None
-            
+
             assert c is not None
 
             # Strip icon properties if import_custom_icons is False
@@ -911,7 +910,7 @@ def import_to_featurestore(request, item_id):
     # Get number of threads from settings
     from django.conf import settings
     num_threads = getattr(settings, 'IMPORT_PROCESSING_THREADS', 4)
-    
+
     # Process features in parallel using ThreadPoolExecutor
     if len(import_item.geofeatures) > 0:
         with ThreadPoolExecutor(max_workers=num_threads) as executor:
@@ -920,7 +919,7 @@ def import_to_featurestore(request, item_id):
                 process_feature_with_index,
                 enumerate(import_item.geofeatures)
             )
-            
+
             # Collect results from all workers
             for feature_store in results:
                 if feature_store is not None:
@@ -975,7 +974,7 @@ def import_to_featurestore(request, item_id):
         import_item.log_id = None
 
         import_item.save()
-        
+
         # Broadcast WebSocket event for item import
         _broadcast_item_imported(request.user.id, item_id)
 
@@ -983,7 +982,7 @@ def import_to_featurestore(request, item_id):
     else:
         # No features were successfully imported
         logger.warning(f"Import failed for user {request.user.id}: No features were imported from '{import_item.original_filename}'")
-        
+
         # Determine reason for failure
         if len(features_to_create) == 0:
             if total_processed == 0:
@@ -992,7 +991,7 @@ def import_to_featurestore(request, item_id):
                 reason = f"All {total_processed} features were skipped (duplicates, missing geometry, or unsupported types)"
         else:
             reason = f"Failed to create {len(features_to_create)} features in the database"
-        
+
         return JsonResponse({
             'success': False,
             'msg': f'No features were imported. {reason}.',
@@ -1010,7 +1009,7 @@ def _broadcast_item_deleted(user_id: int, item_id: int):
     """Broadcast WebSocket event when an item is deleted."""
     from channels.layers import get_channel_layer
     from asgiref.sync import async_to_sync
-    
+
     channel_layer = get_channel_layer()
     if channel_layer:
         # Broadcast to general realtime channel
@@ -1021,7 +1020,7 @@ def _broadcast_item_deleted(user_id: int, item_id: int):
                 'data': {'id': item_id}
             }
         )
-        
+
         # Also broadcast to upload status channel for this specific item
         async_to_sync(channel_layer.group_send)(
             f"upload_status_{user_id}_{item_id}",
@@ -1036,7 +1035,7 @@ def _broadcast_items_deleted(user_id: int, item_ids: list):
     """Broadcast WebSocket event when multiple items are deleted."""
     from channels.layers import get_channel_layer
     from asgiref.sync import async_to_sync
-    
+
     channel_layer = get_channel_layer()
     if channel_layer:
         async_to_sync(channel_layer.group_send)(
@@ -1053,7 +1052,7 @@ def _broadcast_item_imported(user_id: int, item_id: int):
     from channels.layers import get_channel_layer
     from asgiref.sync import async_to_sync
     from api.models import ImportQueue
-    
+
     channel_layer = get_channel_layer()
     if channel_layer:
         # Get item details for history broadcast
@@ -1066,7 +1065,7 @@ def _broadcast_item_imported(user_id: int, item_id: int):
             }
         except ImportQueue.DoesNotExist:
             item_data = {'id': item_id}
-        
+
         # Broadcast to import queue module
         async_to_sync(channel_layer.group_send)(
             f"realtime_{user_id}",
@@ -1075,7 +1074,7 @@ def _broadcast_item_imported(user_id: int, item_id: int):
                 'data': {'id': item_id}
             }
         )
-        
+
         # Broadcast to import history module
         async_to_sync(channel_layer.group_send)(
             f"realtime_{user_id}",

@@ -1,7 +1,13 @@
 from django.urls import path
 
-from api.views.geojson_api import get_geojson_data, get_feature, update_feature, update_feature_metadata, delete_feature, serve_icon, upload_icon, get_config, get_features_by_tag, search_features
+from api.views.bbox_query import get_geojson_data
+from api.views.config import get_config
+from api.views.feature_delete import delete_feature
+from api.views.feature_retrieval import get_feature
+from api.views.feature_search import get_features_by_tag, search_features
+from api.views.feature_update import update_feature, update_feature_metadata
 from api.views.geolocation_api import get_user_location, get_location_by_ip
+from api.views.icon_management import serve_icon, upload_icon
 from api.views.import_item import upload_item, get_processing_status, get_user_processing_jobs, delete_import_item, update_import_item, fetch_import_history_item, \
     import_to_featurestore
 
