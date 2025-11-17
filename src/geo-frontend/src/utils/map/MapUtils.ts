@@ -168,9 +168,10 @@ export class MapUtils {
      * Get icon-only style for a feature (no text labels)
      * Used for rendering icons on a separate layer without decluttering
      * @param feature - OpenLayers feature
-     * @returns OpenLayers Style object with only icon/image
+     * @param resolution - Map resolution (meters per pixel)
+     * @returns OpenLayers Style object with only icon/image, or null to hide feature
      */
-    static getFeatureIconStyle(feature: any): Style {
+    static getFeatureIconStyle(feature: any, resolution?: number): Style | null {
         const properties = feature.get('properties') || {};
         const geometryType = feature.getGeometry().getType();
 
@@ -196,8 +197,8 @@ export class MapUtils {
             return this.getDefaultIconStyle(properties);
         } else if (geometryType === 'LineString') {
             return this.createLineStringStyle(properties);
-        } else if (geometryType === 'Polygon') {
-            return this.createPolygonStyle(properties);
+        } else if (geometryType === 'Polygon' || geometryType === 'MultiPolygon') {
+            return this.createPolygonStyle(feature, properties, resolution);
         } else {
             // Default style for unknown geometry types
             return this.createDefaultStyle();
@@ -455,11 +456,38 @@ export class MapUtils {
 
     /**
      * Create Polygon style
+     * @param feature - OpenLayers feature
      * @param properties - Feature properties
+     * @param resolution - Map resolution (meters per pixel), optional
      * @param textStyle - Optional text style for labels
-     * @returns OpenLayers Style object
+     * @returns OpenLayers Style object, or null to hide feature if too small
      */
-    private static createPolygonStyle(properties: any, textStyle?: Text): Style {
+    private static createPolygonStyle(feature: any, properties: any, resolution?: number, textStyle?: Text): Style | null {
+        // Check minimum size threshold to prevent flickering at low zoom levels
+        // If resolution is provided and polygon is smaller than 2 pixels, hide it
+        // Note: Returning null only hides rendering; the feature remains in the vector source
+        // and will still appear in the "features in view" list
+        if (resolution !== undefined && resolution > 0) {
+            const geometry = feature.getGeometry();
+            if (geometry) {
+                const extent = geometry.getExtent();
+                const widthMeters = extent[2] - extent[0];  // maxX - minX
+                const heightMeters = extent[3] - extent[1]; // maxY - minY
+                
+                // Convert to screen pixels (meters / meters per pixel = pixels)
+                const widthPixels = widthMeters / resolution;
+                const heightPixels = heightMeters / resolution;
+                
+                // Hide polygon if either dimension is less than 2 pixels
+                // This prevents flickering when polygons fold into themselves at low zoom
+                // The feature will still be visible in the features list sidebar
+                const minPixelSize = 2;
+                if (widthPixels < minPixelSize || heightPixels < minPixelSize) {
+                    return null;
+                }
+            }
+        }
+
         const strokeColor = this.hexToColor(properties.stroke, '#ff0000');
         let fillColor = this.hexToColor(properties.fill, '#ff0000');
 

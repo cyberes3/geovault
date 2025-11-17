@@ -198,6 +198,8 @@ export default {
     },
 
     // Update features in extent list
+    // Note: This includes all features in the vector source that intersect the extent,
+    // regardless of whether they are currently rendered (e.g., small polygons hidden at low zoom)
     updateFeaturesInExtent() {
       if (!this.map || !this.vectorSource) {
         this.featuresInExtent = []
@@ -217,7 +219,7 @@ export default {
         extent[3] + bufferDistance  // maxY
       ]
 
-      // Get all features from vector source
+      // Get all features from vector source (includes features hidden from rendering)
       const allFeatures = this.vectorSource.getFeatures()
 
       // Filter features that intersect with buffered extent (50 miles around current view)
@@ -417,7 +419,7 @@ export default {
       // Layer for icons/images - no declutter, so icons can overlap
       this.vectorLayer = markRaw(new VectorLayer({
         source: this.vectorSource,
-        style: (feature) => MapUtils.getFeatureIconStyle(feature),
+        style: (feature, resolution) => MapUtils.getFeatureIconStyle(feature, resolution),
         // Performance optimizations for complex polygon rendering
         renderBuffer: 100,  // Only render features within 100px of viewport
         updateWhileAnimating: true,  // Continue updating during animations
