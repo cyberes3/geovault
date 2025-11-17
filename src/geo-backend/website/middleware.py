@@ -18,33 +18,12 @@ class LoggingMiddleware:
         user_identifier = get_user_identifier(request)
         client_ip = get_client_ip(request)
         
-        # Log API requests only (static resources will be logged by nginx)
-        if request.path.startswith('/api/'):
-            query_string = request.GET.urlencode()
-            if query_string:
-                log_msg = f"{request.method} {request.path}?{query_string} - {user_identifier}@{client_ip}"
-            else:
-                log_msg = f"{request.method} {request.path} - {user_identifier}@{client_ip}"
-            access_logger.info(log_msg)
-        
         try:
             response = self.get_response(request)
         except Exception as e:
-            # Log the exception with full traceback
-            exception_type = type(e).__name__
-            exception_message = str(e)
+            # Log just the traceback
             traceback_str = traceback.format_exc()
-            
-            query_string = request.GET.urlencode()
-            if query_string:
-                error_context = f"{request.method} {request.path}?{query_string} - {user_identifier}@{client_ip}"
-            else:
-                error_context = f"{request.method} {request.path} - {user_identifier}@{client_ip}"
-            
-            access_logger.error(f"Unhandled exception in {error_context}")
-            access_logger.error(f"Exception type: {exception_type}")
-            access_logger.error(f"Exception message: {exception_message}")
-            access_logger.error(f"Full traceback:\n{traceback_str}")
+            access_logger.error(traceback_str)
             
             # Return appropriate error response based on request path
             if request.path.startswith('/api/'):
@@ -58,14 +37,20 @@ class LoggingMiddleware:
                 # Return generic 500 for non-API endpoints
                 return HttpResponse('Internal Server Error', status=500)
         
-        # Log errors for all requests
-        if response.status_code >= 400:
+        # Log API requests and errors
+        if request.path.startswith('/api/'):
             query_string = request.GET.urlencode()
             if query_string:
-                error_msg = f"{request.method} {request.path}?{query_string} - {user_identifier}@{client_ip} - Status: {response.status_code}"
+                log_msg = f"{request.method} {request.path}?{query_string} - {user_identifier}@{client_ip}"
             else:
-                error_msg = f"{request.method} {request.path} - {user_identifier}@{client_ip} - Status: {response.status_code}"
-            access_logger.warning(error_msg)
+                log_msg = f"{request.method} {request.path} - {user_identifier}@{client_ip}"
+            
+            if response.status_code >= 400:
+                # Log errors with status
+                access_logger.warning(f"{log_msg} - Status: {response.status_code}")
+            else:
+                # Log successful requests
+                access_logger.info(log_msg)
         
         return response
 

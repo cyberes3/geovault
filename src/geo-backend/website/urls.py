@@ -19,6 +19,10 @@ from django.contrib import admin
 from django.urls import path, re_path
 
 from website.views import index, standalone_map, tile_proxy, get_tile_sources
+from website.exception_handler import custom_exception_handler
+
+# Set custom exception handler
+handler500 = custom_exception_handler
 
 urlpatterns = [
     path('', index),
