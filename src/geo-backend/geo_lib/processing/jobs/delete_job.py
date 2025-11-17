@@ -38,7 +38,6 @@ class DeleteJob(BaseJob):
         Returns:
             Job ID for tracking the deletion
         """
-        asdasd
         # Create delete job
         job_id = self.status_tracker.create_job(filename, user_id, JobType.DELETE)
 
