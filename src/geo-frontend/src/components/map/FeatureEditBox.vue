@@ -192,9 +192,10 @@ export default {
       if (!geometry) return null
       return geometry.getType()
     },
-    // Note: MultiPoint and MultiPolygon are split into individual Point/Polygon features
-    // during import/processing, so they should not appear in the frontend after processing.
-    // These checks are kept for defensive purposes and backward compatibility.
+    // Note: MultiPoint and MultiPolygon should not appear in processed features.
+    // KML's MultiGeometry converts to GeometryCollection (not MultiPoint/MultiPolygon).
+    // If they do appear, the backend will error/assert. These checks are kept for
+    // defensive purposes and backward compatibility.
     isPoint() {
       return this.geometryType === 'Point' || this.geometryType === 'MultiPoint'
     },
@@ -389,8 +390,8 @@ export default {
             }
 
             // Update only the coordinates/geometries in the existing geometry
-            // Note: MultiPoint and MultiPolygon are split during import, so they should not
-            // appear here. If they do, the backend will handle validation/error handling.
+            // Note: MultiPoint and MultiPolygon should not appear (KML converts to GeometryCollection).
+            // If they do appear, the backend will error/assert.
             if (currentGeometry.type === 'GeometryCollection') {
               // For GeometryCollection, update geometries array
               featureData.geometry.geometries = coordinatesData

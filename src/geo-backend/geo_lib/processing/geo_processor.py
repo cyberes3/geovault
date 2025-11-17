@@ -196,6 +196,13 @@ def geojson_property_generation(feature: dict) -> dict:
     if 'description' in properties and properties['description']:
         properties['description'] = html_to_markdown(properties['description'])
 
+    # Normalize stroke-width to 2 for polygon borders and lines
+    geometry = feature.get('geometry', {})
+    geometry_type = geometry.get('type', '').lower() if geometry else ''
+    
+    if geometry_type in ['polygon', 'multipolygon', 'linestring', 'multilinestring']:
+        properties['stroke-width'] = 2
+
     return properties
 
 
