@@ -1,6 +1,8 @@
 from datetime import datetime
 from typing import List, Optional, Tuple
 
+from django.conf import settings
+
 from geo_lib.types.feature import GeoFeatureSupported
 from geo_lib.geolocation.reverse_geocode import get_reverse_geocoding_service
 from geo_lib.processing.logging import DatabaseLogLevel
@@ -78,43 +80,45 @@ def generate_auto_tags(feature: GeoFeatureSupported, import_log=None) -> List[st
     # Add geocoding tags for points and lines only
     geometry_type = feature.geometry.type.value.lower()
     if geometry_type in ['point', 'multipoint', 'linestring', 'multilinestring']:
-        try:
-            points = get_representative_points(feature)
-            if points:
-                geocoding_service = get_reverse_geocoding_service()
-                all_location_tags = set()
-                
-                for lat, lon in points:
-                    try:
-                        location_tags = geocoding_service.get_location_tags(lat, lon, import_log)
-                        all_location_tags.update(location_tags)
-                    except Exception as geocode_point_error:
-                        error_msg = f"Geocoding failed at coordinates ({lat}, {lon}): {str(geocode_point_error)}"
-                        logger.warning(error_msg)
-                        if import_log:
+        # Check if geocoding is enabled before attempting to geocode
+        if getattr(settings, 'REVERSE_GEOCODING_ENABLED', True):
+            try:
+                points = get_representative_points(feature)
+                if points:
+                    geocoding_service = get_reverse_geocoding_service()
+                    all_location_tags = set()
+                    
+                    for lat, lon in points:
+                        try:
+                            location_tags = geocoding_service.get_location_tags(lat, lon, import_log)
+                            all_location_tags.update(location_tags)
+                        except Exception as geocode_point_error:
+                            error_msg = f"Geocoding failed at coordinates ({lat}, {lon}): {str(geocode_point_error)}"
+                            logger.warning(error_msg)
+                            if import_log:
+                                import_log.add(
+                                    error_msg,
+                                    "Geocoding",
+                                    DatabaseLogLevel.WARNING
+                                )
+                    
+                    tags.extend(sorted(all_location_tags))
+                    
+                    if import_log:
+                        tag_count = len(all_location_tags)
+                        if tag_count > 0:
                             import_log.add(
-                                error_msg,
+                                f"Added {tag_count} geocoding tag(s) to feature",
                                 "Geocoding",
-                                DatabaseLogLevel.WARNING
+                                DatabaseLogLevel.INFO
                             )
-                
-                tags.extend(sorted(all_location_tags))
-                
+            except Exception as e:
+                logger.warning(f"Failed to geocode feature for tagging: {e}")
                 if import_log:
-                    tag_count = len(all_location_tags)
-                    if tag_count > 0:
-                        import_log.add(
-                            f"Added {tag_count} geocoding tag(s) to feature",
-                            "Geocoding",
-                            DatabaseLogLevel.INFO
-                        )
-        except Exception as e:
-            logger.warning(f"Failed to geocode feature for tagging: {e}")
-            if import_log:
-                import_log.add(
-                    f"Geocoding failed: {str(e)}",
-                    "Geocoding",
-                    DatabaseLogLevel.WARNING
-                )
+                    import_log.add(
+                        f"Geocoding failed: {str(e)}",
+                        "Geocoding",
+                        DatabaseLogLevel.WARNING
+                    )
     
     return [str(x) for x in tags]

@@ -232,7 +232,6 @@
 import {mapState} from "vuex";
 import {authMixin} from "@/assets/js/authMixin.js";
 import axios from "axios";
-import {IMPORT_BULK_DELETE_URL} from "@/assets/js/import/url.js";
 import {ImportQueueItem} from "@/assets/js/types/import-types";
 import {getCookie} from "@/assets/js/auth.js";
 import {realtimeSocket} from "@/assets/js/websocket/realtimeSocket.js";
@@ -298,6 +297,9 @@ export default {
       deletingItems: new Set(), // Track items currently being deleted
       importingItems: new Set(), // Track items currently being imported individually
       deleteJobIds: new Map(), // Track delete job IDs for each item
+      bulkImportJobId: null, // Track current bulk import job ID
+      bulkDeleteJobId: null, // Track current bulk delete job ID
+      bulkJobHandlers: [], // Store handler references for cleanup
     }
   },
   watch: {
@@ -522,70 +524,34 @@ export default {
       }
 
       this.isBulkImporting = true;
-      const csrftoken = getCookie('csrftoken');
       const itemIds = Array.from(this.selectedItems);
-      let successCount = 0;
-      let errorCount = 0;
-      const errors = [];
 
-      // Mark all items as importing immediately (before API calls) to disable buttons
+      // Mark all items as importing immediately to disable buttons
       itemIds.forEach(itemId => {
         this.importingItems.add(itemId);
       });
       this.$forceUpdate();
 
       try {
-        // Import each selected item
-        for (const itemId of itemIds) {
-          try {
-            const response = await axios.post(`/api/data/item/import/perform/${itemId}`, [], {
-              headers: {
-                'X-CSRFToken': csrftoken
-              }
-            });
-
-            if (response.data.success) {
-              successCount++;
-            } else {
-              errorCount++;
-              errors.push(`Item ${itemId}: ${response.data.msg}`);
-              // Remove from importingItems on failure
-              this.importingItems.delete(itemId);
-            }
-          } catch (error) {
-            errorCount++;
-            errors.push(`Item ${itemId}: ${error.message}`);
-            // Remove from importingItems on error
-            this.importingItems.delete(itemId);
-          }
-        }
-
-        // Remove all items from importingItems (successful ones will be removed by refresh, but clean up failed ones)
-        itemIds.forEach(itemId => {
-          this.importingItems.delete(itemId);
+        // Send WebSocket message to start bulk import
+        realtimeSocket.send('bulk_import_job', 'start_bulk_import', {
+          item_ids: itemIds,
+          import_custom_icons: true
         });
 
-        // Show results
-        if (errorCount === 0) {
-          alert(`Successfully imported ${successCount} item${successCount === 1 ? '' : 's'}!`);
-        } else {
-          const errorMessage = `Imported ${successCount} item${successCount === 1 ? '' : 's'} successfully, but ${errorCount} failed:\n\n${errors.join('\n')}`;
-          alert(errorMessage);
-        }
-
-        // Refresh the queue and clear selection
-        this.$store.dispatch('refreshImportQueue');
+        // Clear selection immediately
         this.clearSelection();
 
       } catch (error) {
-        // Remove all items from importingItems on error
+        console.error('Bulk import error:', error);
+        // Remove items from importingItems on error
         itemIds.forEach(itemId => {
           this.importingItems.delete(itemId);
         });
-        alert(`Bulk import failed: ${error.message}`);
+        // Error will be reflected in table status icons after refresh
         this.$forceUpdate();
       } finally {
-        this.isBulkImporting = false;
+        // Note: isBulkImporting will be set to false when the job completes via WebSocket
       }
     },
     async bulkDelete() {
@@ -621,43 +587,22 @@ export default {
       }
 
       this.isBulkDeleting = true;
-      const csrftoken = getCookie('csrftoken');
       const itemIds = Array.from(this.selectedItems);
 
-      // Mark all items as deleting immediately (before API call) to disable buttons
+      // Mark all items as deleting immediately to disable buttons
       itemIds.forEach(itemId => {
         this.deletingItems.add(itemId);
       });
       this.$forceUpdate();
 
       try {
-        const response = await axios.delete(IMPORT_BULK_DELETE_URL, {
-          data: { ids: itemIds },
-          headers: {
-            'X-CSRFToken': csrftoken
-          }
+        // Send WebSocket message to start bulk delete
+        realtimeSocket.send('bulk_delete_job', 'start_bulk_delete', {
+          item_ids: itemIds
         });
 
-        if (response.data.success && response.data.job_ids) {
-          // Store job IDs for tracking
-          response.data.job_ids.forEach((jobId, index) => {
-            if (index < itemIds.length) {
-              this.deleteJobIds.set(itemIds[index], jobId);
-            }
-          });
-
-          // Clear selection
-          this.clearSelection();
-
-          // Show success message
-          alert(`Started deletion of ${response.data.started_count} item${response.data.started_count === 1 ? '' : 's'}!`);
-        } else {
-          // If API call failed, remove items from deletingItems
-          itemIds.forEach(itemId => {
-            this.deletingItems.delete(itemId);
-          });
-          throw new Error(response.data.msg || 'Unknown error occurred');
-        }
+        // Clear selection immediately
+        this.clearSelection();
 
       } catch (error) {
         console.error('Bulk delete error:', error);
@@ -665,10 +610,10 @@ export default {
         itemIds.forEach(itemId => {
           this.deletingItems.delete(itemId);
         });
-        alert(`Bulk delete failed: ${error.response?.data?.msg || error.message}`);
+        // Error will be reflected in table status icons after refresh
         this.$forceUpdate();
       } finally {
-        this.isBulkDeleting = false;
+        // Note: isBulkDeleting will be set to false when the job completes via WebSocket
       }
     },
     setupRealtimeConnection() {
@@ -685,6 +630,134 @@ export default {
         }
       });
     },
+    setupBulkJobHandlers() {
+      // Clear any existing handlers
+      this.cleanupBulkJobHandlers();
+      
+      // Define handlers
+      const bulkImportJobStarted = (data) => {
+        this.bulkImportJobId = data.job_id;
+        console.log('Bulk import job started:', data.job_id);
+      };
+
+      const bulkImportStatusUpdated = (data) => {
+        // Update progress if needed
+        if (data.current_item_id) {
+          // Item is being processed, keep it in importingItems
+          this.importingItems.add(data.current_item_id);
+          this.$forceUpdate();
+        }
+      };
+
+      const bulkImportCompleted = (data) => {
+        this.isBulkImporting = false;
+        this.bulkImportJobId = null;
+        
+        // Remove all items from importingItems
+        const itemIds = data.item_ids || [];
+        itemIds.forEach(itemId => {
+          this.importingItems.delete(itemId);
+        });
+        
+        // Refresh the queue to update status icons
+        this.$store.dispatch('refreshImportQueue');
+        
+        this.$forceUpdate();
+      };
+
+      const bulkImportFailed = (data) => {
+        this.isBulkImporting = false;
+        this.bulkImportJobId = null;
+        
+        // Remove all items from importingItems
+        const itemIds = data.item_ids || [];
+        itemIds.forEach(itemId => {
+          this.importingItems.delete(itemId);
+        });
+        
+        // Refresh the queue to update status icons
+        this.$store.dispatch('refreshImportQueue');
+        
+        this.$forceUpdate();
+      };
+
+      const bulkDeleteJobStarted = (data) => {
+        this.bulkDeleteJobId = data.job_id;
+        console.log('Bulk delete job started:', data.job_id);
+      };
+
+      const bulkDeleteStatusUpdated = (data) => {
+        // Update progress if needed
+        if (data.current_item_id) {
+          // Item is being processed, keep it in deletingItems
+          this.deletingItems.add(data.current_item_id);
+          this.$forceUpdate();
+        }
+      };
+
+      const bulkDeleteCompleted = (data) => {
+        this.isBulkDeleting = false;
+        this.bulkDeleteJobId = null;
+        
+        // Remove all items from deletingItems
+        const itemIds = data.item_ids || [];
+        itemIds.forEach(itemId => {
+          this.deletingItems.delete(itemId);
+        });
+        
+        // Refresh the queue to update status icons
+        this.$store.dispatch('refreshImportQueue');
+        
+        this.$forceUpdate();
+      };
+
+      const bulkDeleteFailed = (data) => {
+        this.isBulkDeleting = false;
+        this.bulkDeleteJobId = null;
+        
+        // Remove all items from deletingItems
+        const itemIds = data.item_ids || [];
+        itemIds.forEach(itemId => {
+          this.deletingItems.delete(itemId);
+        });
+        
+        // Refresh the queue to update status icons
+        this.$store.dispatch('refreshImportQueue');
+        
+        this.$forceUpdate();
+      };
+
+      // Subscribe to bulk import job events
+      realtimeSocket.subscribe('bulk_import_job', 'job_started', bulkImportJobStarted);
+      realtimeSocket.subscribe('bulk_import_job', 'status_updated', bulkImportStatusUpdated);
+      realtimeSocket.subscribe('bulk_import_job', 'completed', bulkImportCompleted);
+      realtimeSocket.subscribe('bulk_import_job', 'failed', bulkImportFailed);
+
+      // Subscribe to bulk delete job events
+      realtimeSocket.subscribe('bulk_delete_job', 'job_started', bulkDeleteJobStarted);
+      realtimeSocket.subscribe('bulk_delete_job', 'status_updated', bulkDeleteStatusUpdated);
+      realtimeSocket.subscribe('bulk_delete_job', 'completed', bulkDeleteCompleted);
+      realtimeSocket.subscribe('bulk_delete_job', 'failed', bulkDeleteFailed);
+
+      // Store handlers for cleanup
+      this.bulkJobHandlers = [
+        { module: 'bulk_import_job', event: 'job_started', handler: bulkImportJobStarted },
+        { module: 'bulk_import_job', event: 'status_updated', handler: bulkImportStatusUpdated },
+        { module: 'bulk_import_job', event: 'completed', handler: bulkImportCompleted },
+        { module: 'bulk_import_job', event: 'failed', handler: bulkImportFailed },
+        { module: 'bulk_delete_job', event: 'job_started', handler: bulkDeleteJobStarted },
+        { module: 'bulk_delete_job', event: 'status_updated', handler: bulkDeleteStatusUpdated },
+        { module: 'bulk_delete_job', event: 'completed', handler: bulkDeleteCompleted },
+        { module: 'bulk_delete_job', event: 'failed', handler: bulkDeleteFailed },
+      ];
+    },
+    cleanupBulkJobHandlers() {
+      // Unsubscribe from all bulk job events
+      this.bulkJobHandlers.forEach(({ module, event, handler }) => {
+        realtimeSocket.unsubscribe(module, event, handler);
+      });
+      this.bulkJobHandlers = [];
+    },
   },
   async created() {
     // If we already have data in the store, mark as initially loaded
@@ -700,7 +773,8 @@ export default {
     // Subscribe to manual refresh mutations
     this.subscribeToRefreshMutation()
 
-    // Delete job events are now handled directly by store actions
+    // Setup bulk job WebSocket handlers
+    this.setupBulkJobHandlers()
 
     // Subscribe to import queue updates to handle loading completion
     this.subscribeToImportQueueUpdates();
@@ -709,6 +783,9 @@ export default {
     // WebSocket is already connected in created()
   },
   beforeDestroy() {
+    // Unsubscribe from bulk job events
+    this.cleanupBulkJobHandlers();
+    
     // Clear deleted items when component is destroyed (user navigates away)
     this.clearDeletedItems();
     // Clear selected items when component is destroyed

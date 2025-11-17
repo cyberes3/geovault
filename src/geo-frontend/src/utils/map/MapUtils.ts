@@ -6,7 +6,7 @@
  */
 
 import type {MapConfig} from '@/types/geospatial';
-import {Style, Fill, Stroke, Circle, Icon, Text} from 'ol/style';
+import {Circle, Fill, Icon, Stroke, Style, Text} from 'ol/style';
 import {APIHOST} from '@/config.js';
 
 export class MapUtils {
@@ -165,6 +165,77 @@ export class MapUtils {
     }
 
     /**
+     * Get icon-only style for a feature (no text labels)
+     * Used for rendering icons on a separate layer without decluttering
+     * @param feature - OpenLayers feature
+     * @returns OpenLayers Style object with only icon/image
+     */
+    static getFeatureIconStyle(feature: any): Style {
+        const properties = feature.get('properties') || {};
+        const geometryType = feature.getGeometry().getType();
+
+        if (geometryType === 'Point') {
+            // Check if icon previously failed to load
+            const iconFailed = feature.get('_iconFailed');
+            if (iconFailed) {
+                return this.getDefaultIconStyle(properties);
+            }
+
+            // Check for icon URL first
+            const iconUrl = this.getIconUrl(properties);
+            if (iconUrl) {
+                const icon = this.createIconStyle(iconUrl, feature);
+                if (icon) {
+                    return new Style({
+                        image: icon
+                    });
+                }
+            }
+
+            // Fall back to circle style if no icon (no black border for normal points)
+            return this.getDefaultIconStyle(properties);
+        } else if (geometryType === 'LineString') {
+            return this.createLineStringStyle(properties);
+        } else if (geometryType === 'Polygon') {
+            return this.createPolygonStyle(properties);
+        } else {
+            // Default style for unknown geometry types
+            return this.createDefaultStyle();
+        }
+    }
+
+    /**
+     * Get text-only style for a feature (no icon/image)
+     * Used for rendering labels on a separate layer with decluttering
+     * @param feature - OpenLayers feature
+     * @returns OpenLayers Style object with only text
+     */
+    static getFeatureTextStyle(feature: any): Style {
+        const properties = feature.get('properties') || {};
+        const geometryType = feature.getGeometry().getType();
+        const name = properties.name || 'Unnamed Feature';
+
+        // Create text style for labels (different positioning for each geometry type)
+        let textStyle: Text;
+
+        if (geometryType === 'Point') {
+            // Points: text below, closer to the point
+            // Use offsetY: 8 for PNG icons, offsetY: 15 for default circle icons (non-PNG)
+            const iconUrl = this.getIconUrl(properties);
+            const iconFailed = feature.get('_iconFailed');
+            const hasWorkingIcon = iconUrl && !iconFailed;
+            const offsetY = hasWorkingIcon ? 8 : 15;
+            textStyle = this.createTextStyle(name, geometryType, offsetY);
+        } else {
+            textStyle = this.createTextStyle(name, geometryType);
+        }
+
+        return new Style({
+            text: textStyle
+        });
+    }
+
+    /**
      * Get state extent configuration
      * @param location - Location data
      * @returns Map configuration
@@ -264,371 +335,195 @@ export class MapUtils {
     }
 
     /**
-     * Get style for a feature based on its geometry type and properties
-     * This is a pure function extracted from Vue component to avoid reactivity overhead
-     * @param feature - OpenLayers feature
-     * @returns OpenLayers Style object
+     * Convert hex color to CSS color string
+     * @param hexColor - Hex color string (e.g., '#ff0000')
+     * @param defaultColor - Default color if hexColor is invalid
+     * @returns CSS color string
      */
-    static getFeatureStyle(feature: any): Style {
-        const properties = feature.get('properties') || {};
-        const geometryType = feature.getGeometry().getType();
-        const name = properties.name || 'Unnamed Feature';
-
-        // Helper function to convert hex color to CSS color string
-        const hexToColor = (hexColor: string | undefined, defaultColor: string = '#ff0000'): string => {
-            if (!hexColor || typeof hexColor !== 'string') return defaultColor;
-            return hexColor;
-        };
-
-        // Create text style for labels (different positioning for each geometry type)
-        let textStyle: Text;
-
-        if (geometryType === 'Point') {
-            // Points: text below, closer to the point
-            textStyle = new Text({
-                text: name,
-                font: '12px Arial',
-                fill: new Fill({
-                    color: '#000000'
-                }),
-                stroke: new Stroke({
-                    color: '#ffffff',
-                    width: 3
-                }),
-                offsetY: 8
-            });
-        } else if (geometryType === 'Polygon') {
-            // Polygons: text centered in the polygon
-            textStyle = new Text({
-                text: name,
-                font: '12px Arial',
-                fill: new Fill({
-                    color: '#000000'
-                }),
-                stroke: new Stroke({
-                    color: '#ffffff',
-                    width: 3
-                }),
-                placement: 'point', // Centers text on polygon centroid
-                offsetY: 0
-            });
-        } else {
-            // Lines and other types: text below
-            textStyle = new Text({
-                text: name,
-                font: '12px Arial',
-                fill: new Fill({
-                    color: '#000000'
-                }),
-                stroke: new Stroke({
-                    color: '#ffffff',
-                    width: 3
-                }),
-                offsetY: 10
-            });
-        }
-
-        // Create style based on geometry type
-        let style: Style;
-
-        if (geometryType === 'Point') {
-            // Check if icon previously failed to load
-            const iconFailed = feature.get('_iconFailed');
-            
-            // Check for icon URL first
-            const iconUrl = this.getIconUrl(properties);
-            if (iconUrl && !iconFailed) {
-                const resolvedIconUrl = this.resolveIconUrl(iconUrl);
-                
-                // Preload image to detect loading failures
-                const img = new Image();
-                img.onerror = () => {
-                    // Mark feature as having failed icon load
-                    feature.set('_iconFailed', true);
-                    // Trigger style update by changing a property
-                    feature.changed();
-                };
-                img.src = resolvedIconUrl;
-                
-                const icon = new Icon({
-                    src: resolvedIconUrl,
-                    scale: 0.4,
-                    anchor: [0.5, 1.0], // Anchor at bottom center of icon
-                });
-
-                style = new Style({
-                    image: icon,
-                    text: textStyle // offsetY: 8 for PNG icons
-                });
-            } else {
-                // Fall back to circle style if no icon or icon failed to load
-                // Note: Circle styles are vector graphics, not PNG files
-                const fillColor = hexToColor(properties['marker-color'], '#ff0000');
-                // Create separate text style for default circle icons with more offset
-                const circleTextStyle = new Text({
-                    text: name,
-                    font: '12px Arial',
-                    fill: new Fill({
-                        color: '#000000'
-                    }),
-                    stroke: new Stroke({
-                        color: '#ffffff',
-                        width: 3
-                    }),
-                    offsetY: 15 // Move text further down for default circle icons
-                });
-                style = new Style({
-                    image: new Circle({
-                        radius: 6,
-                        fill: new Fill({
-                            color: fillColor
-                        }),
-                        stroke: new Stroke({
-                            color: iconFailed ? '#000000' : fillColor, // Black border only if icon failed, otherwise same as fill
-                            width: 2
-                        })
-                    }),
-                    text: circleTextStyle
-                });
-            }
-        } else if (geometryType === 'LineString') {
-            const strokeColor = hexToColor(properties.stroke, '#ff0000');
-            style = new Style({
-                stroke: new Stroke({
-                    color: strokeColor,
-                    width: properties['stroke-width'] || 2
-                }),
-                text: textStyle
-            });
-        } else if (geometryType === 'Polygon') {
-            const strokeColor = hexToColor(properties.stroke, '#ff0000');
-            let fillColor = hexToColor(properties.fill, '#ff0000');
-
-            // Apply fill-opacity if specified
-            if (properties['fill-opacity'] !== undefined) {
-                // Convert hex to RGB and apply opacity
-                const hex = fillColor.replace('#', '');
-                const r = parseInt(hex.substr(0, 2), 16);
-                const g = parseInt(hex.substr(2, 2), 16);
-                const b = parseInt(hex.substr(4, 2), 16);
-                fillColor = `rgba(${r}, ${g}, ${b}, ${properties['fill-opacity']})`;
-            }
-
-            style = new Style({
-                stroke: new Stroke({
-                    color: strokeColor,
-                    width: properties['stroke-width'] || 2
-                }),
-                fill: new Fill({
-                    color: fillColor
-                }),
-                text: textStyle
-            });
-        } else {
-            // Default style for unknown geometry types
-            style = new Style({
-                stroke: new Stroke({
-                    color: '#ff0000',
-                    width: 2
-                }),
-                fill: new Fill({
-                    color: 'rgba(255, 0, 0, 0.3)'
-                }),
-                text: textStyle
-            });
-        }
-
-        return style;
+    private static hexToColor(hexColor: string | undefined, defaultColor: string = '#ff0000'): string {
+        if (!hexColor || typeof hexColor !== 'string') return defaultColor;
+        return hexColor;
     }
 
     /**
-     * Get default fallback icon style (red circle with optional black border)
-     * Used when custom icon fails to load or no icon is specified
-     * @param properties - Feature properties
-     * @param iconFailed - Whether the icon failed to load (true = black border, false = same color as fill)
-     * @returns OpenLayers Style with default circle icon
+     * Create text style for feature labels
+     * @param name - Feature name text
+     * @param geometryType - Geometry type (Point, Polygon, LineString, etc.)
+     * @param offsetY - Vertical offset for text (default based on geometry type)
+     * @param placement - Text placement option ('point' for polygon centroid)
+     * @returns OpenLayers Text style
      */
-    private static getDefaultIconStyle(properties: any, iconFailed: boolean = false): Style {
-        const hexToColor = (hexColor: string | undefined, defaultColor: string = '#ff0000'): string => {
-            if (!hexColor || typeof hexColor !== 'string') return defaultColor;
-            return hexColor;
+    private static createTextStyle(
+        name: string,
+        geometryType: string,
+        offsetY?: number,
+        placement?: string
+    ): Text {
+        // Default offsets based on geometry type
+        let defaultOffsetY: number;
+        let defaultPlacement: string | undefined;
+
+        if (geometryType === 'Point') {
+            defaultOffsetY = offsetY !== undefined ? offsetY : 8;
+        } else if (geometryType === 'Polygon') {
+            defaultOffsetY = offsetY !== undefined ? offsetY : 0;
+            defaultPlacement = placement !== undefined ? placement : 'point';
+        } else {
+            defaultOffsetY = offsetY !== undefined ? offsetY : 10;
+        }
+
+        const textStyleConfig: any = {
+            text: name,
+            font: '12px Arial',
+            fill: new Fill({
+                color: '#000000'
+            }),
+            stroke: new Stroke({
+                color: '#ffffff',
+                width: 3
+            }),
+            offsetY: defaultOffsetY
         };
-        const fillColor = hexToColor(properties['marker-color'], '#ff0000');
-        return new Style({
-            image: new Circle({
-                radius: 6,
-                fill: new Fill({
-                    color: fillColor
-                }),
-                stroke: new Stroke({
-                    color: iconFailed ? '#000000' : fillColor, // Black border only if icon failed, otherwise same as fill
-                    width: 2
-                })
-            })
+
+        if (defaultPlacement) {
+            textStyleConfig.placement = defaultPlacement;
+        }
+
+        return new Text(textStyleConfig);
+    }
+
+    /**
+     * Apply fill-opacity to a hex color, converting it to RGBA
+     * @param hexColor - Hex color string (e.g., '#ff0000')
+     * @param opacity - Opacity value (0-1)
+     * @returns RGBA color string
+     */
+    private static applyFillOpacity(hexColor: string, opacity: number): string {
+        const hex = hexColor.replace('#', '');
+        const r = parseInt(hex.slice(0, 2), 16);
+        const g = parseInt(hex.slice(2, 4), 16);
+        const b = parseInt(hex.slice(4, 6), 16);
+        return `rgba(${r}, ${g}, ${b}, ${opacity})`;
+    }
+
+    /**
+     * Create icon style with error handling
+     * Preloads image to detect loading failures and marks feature accordingly
+     * @param iconUrl - Icon URL (relative or absolute)
+     * @param feature - OpenLayers feature
+     * @returns Icon style or null if icon failed to load
+     */
+    private static createIconStyle(iconUrl: string, feature: any): Icon | null {
+        const resolvedIconUrl = this.resolveIconUrl(iconUrl);
+
+        // Preload image to detect loading failures
+        const img = new Image();
+        img.onerror = () => {
+            // Mark feature as having failed icon load
+            feature.set('_iconFailed', true);
+            // Trigger style update by changing a property
+            feature.changed();
+        };
+        img.src = resolvedIconUrl;
+
+        return new Icon({
+            src: resolvedIconUrl,
+            scale: 0.4,
+            anchor: [0.5, 1.0], // Anchor at bottom center of icon
         });
     }
 
     /**
-     * Get icon-only style for a feature (no text labels)
-     * Used for rendering icons on a separate layer without decluttering
-     * @param feature - OpenLayers feature
-     * @returns OpenLayers Style object with only icon/image
+     * Create LineString style
+     * @param properties - Feature properties
+     * @param textStyle - Optional text style for labels
+     * @returns OpenLayers Style object
      */
-    static getFeatureIconStyle(feature: any): Style {
-        const properties = feature.get('properties') || {};
-        const geometryType = feature.getGeometry().getType();
-
-        // Helper function to convert hex color to CSS color string
-        const hexToColor = (hexColor: string | undefined, defaultColor: string = '#ff0000'): string => {
-            if (!hexColor || typeof hexColor !== 'string') return defaultColor;
-            return hexColor;
+    private static createLineStringStyle(properties: any, textStyle?: Text): Style {
+        const strokeColor = this.hexToColor(properties.stroke, '#ff0000');
+        const styleConfig: any = {
+            stroke: new Stroke({
+                color: strokeColor,
+                width: properties['stroke-width'] || 2
+            })
         };
-
-        if (geometryType === 'Point') {
-            // Check if icon previously failed to load
-            const iconFailed = feature.get('_iconFailed');
-            if (iconFailed) {
-                return this.getDefaultIconStyle(properties, true); // Pass true to indicate icon failed
-            }
-
-            // Check for icon URL first
-            const iconUrl = this.getIconUrl(properties);
-            if (iconUrl) {
-                const resolvedIconUrl = this.resolveIconUrl(iconUrl);
-                
-                // Preload image to detect loading failures
-                const img = new Image();
-                img.onerror = () => {
-                    // Mark feature as having failed icon load
-                    feature.set('_iconFailed', true);
-                    // Trigger style update by changing a property
-                    feature.changed();
-                };
-                img.src = resolvedIconUrl;
-                
-                const icon = new Icon({
-                    src: resolvedIconUrl,
-                    scale: 0.4,
-                    anchor: [0.5, 1.0], // Anchor at bottom center of icon
-                });
-
-                return new Style({
-                    image: icon
-                });
-            } else {
-                // Fall back to circle style if no icon (no black border for normal points)
-                return this.getDefaultIconStyle(properties, false); // Pass false - no icon, but didn't fail
-            }
-        } else if (geometryType === 'LineString') {
-            const strokeColor = hexToColor(properties.stroke, '#ff0000');
-            return new Style({
-                stroke: new Stroke({
-                    color: strokeColor,
-                    width: properties['stroke-width'] || 2
-                })
-            });
-        } else if (geometryType === 'Polygon') {
-            const strokeColor = hexToColor(properties.stroke, '#ff0000');
-            let fillColor = hexToColor(properties.fill, '#ff0000');
-
-            // Apply fill-opacity if specified
-            if (properties['fill-opacity'] !== undefined) {
-                // Convert hex to RGB and apply opacity
-                const hex = fillColor.replace('#', '');
-                const r = parseInt(hex.substr(0, 2), 16);
-                const g = parseInt(hex.substr(2, 2), 16);
-                const b = parseInt(hex.substr(4, 2), 16);
-                fillColor = `rgba(${r}, ${g}, ${b}, ${properties['fill-opacity']})`;
-            }
-
-            return new Style({
-                stroke: new Stroke({
-                    color: strokeColor,
-                    width: properties['stroke-width'] || 2
-                }),
-                fill: new Fill({
-                    color: fillColor
-                })
-            });
-        } else {
-            // Default style for unknown geometry types
-            return new Style({
-                stroke: new Stroke({
-                    color: '#ff0000',
-                    width: 2
-                }),
-                fill: new Fill({
-                    color: 'rgba(255, 0, 0, 0.3)'
-                })
-            });
+        if (textStyle) {
+            styleConfig.text = textStyle;
         }
+        return new Style(styleConfig);
     }
 
     /**
-     * Get text-only style for a feature (no icon/image)
-     * Used for rendering labels on a separate layer with decluttering
-     * @param feature - OpenLayers feature
-     * @returns OpenLayers Style object with only text
+     * Create Polygon style
+     * @param properties - Feature properties
+     * @param textStyle - Optional text style for labels
+     * @returns OpenLayers Style object
      */
-    static getFeatureTextStyle(feature: any): Style {
-        const properties = feature.get('properties') || {};
-        const geometryType = feature.getGeometry().getType();
-        const name = properties.name || 'Unnamed Feature';
+    private static createPolygonStyle(properties: any, textStyle?: Text): Style {
+        const strokeColor = this.hexToColor(properties.stroke, '#ff0000');
+        let fillColor = this.hexToColor(properties.fill, '#ff0000');
 
-        // Create text style for labels (different positioning for each geometry type)
-        let textStyle: Text;
-
-        if (geometryType === 'Point') {
-            // Points: text below, closer to the point
-            const iconUrl = this.getIconUrl(properties);
-            const iconFailed = feature.get('_iconFailed');
-            // Use offsetY: 8 for PNG icons, offsetY: 15 for default circle icons (non-PNG)
-            const hasWorkingIcon = iconUrl && !iconFailed;
-            textStyle = new Text({
-                text: name,
-                font: '12px Arial',
-                fill: new Fill({
-                    color: '#000000'
-                }),
-                stroke: new Stroke({
-                    color: '#ffffff',
-                    width: 3
-                }),
-                offsetY: hasWorkingIcon ? 8 : 15 // More offset for default circle icons
-            });
-        } else if (geometryType === 'Polygon') {
-            // Polygons: text centered in the polygon
-            textStyle = new Text({
-                text: name,
-                font: '12px Arial',
-                fill: new Fill({
-                    color: '#000000'
-                }),
-                stroke: new Stroke({
-                    color: '#ffffff',
-                    width: 3
-                }),
-                placement: 'point', // Centers text on polygon centroid
-                offsetY: 0
-            });
-        } else {
-            // Lines and other types: text below
-            textStyle = new Text({
-                text: name,
-                font: '12px Arial',
-                fill: new Fill({
-                    color: '#000000'
-                }),
-                stroke: new Stroke({
-                    color: '#ffffff',
-                    width: 3
-                }),
-                offsetY: 10
-            });
+        // Apply fill-opacity if specified
+        if (properties['fill-opacity'] !== undefined) {
+            fillColor = this.applyFillOpacity(fillColor, properties['fill-opacity']);
         }
 
+        const styleConfig: any = {
+            stroke: new Stroke({
+                color: strokeColor,
+                width: properties['stroke-width'] || 2
+            }),
+            fill: new Fill({
+                color: fillColor
+            })
+        };
+        if (textStyle) {
+            styleConfig.text = textStyle;
+        }
+        return new Style(styleConfig);
+    }
+
+    /**
+     * Create default style for unknown geometry types
+     * @param textStyle - Optional text style for labels
+     * @returns OpenLayers Style object
+     */
+    private static createDefaultStyle(textStyle?: Text): Style {
+        const styleConfig: any = {
+            stroke: new Stroke({
+                color: '#ff0000',
+                width: 2
+            }),
+            fill: new Fill({
+                color: 'rgba(255, 0, 0, 0.3)'
+            })
+        };
+        if (textStyle) {
+            styleConfig.text = textStyle;
+        }
+        return new Style(styleConfig);
+    }
+
+    /**
+     * Get default fallback icon style (red circle)
+     * Used when custom icon fails to load or no icon is specified
+     * @param properties - Feature properties
+     * @param iconFailed - Whether the icon failed to load (unused, kept for API compatibility)
+     * @returns OpenLayers Style with default circle icon
+     */
+    private static getDefaultIconStyle(properties: any): Style {
+        const fillColor = this.hexToColor(properties['marker-color'], '#ff0000');
         return new Style({
-            text: textStyle
+            image: new Circle({
+                radius: 3,
+                fill: new Fill({
+                    color: fillColor
+                }),
+                stroke: new Stroke({
+                    color: fillColor, // Same color as fill for all cases
+                    width: 2
+                })
+            })
         });
     }
 }

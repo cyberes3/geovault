@@ -31,6 +31,10 @@ class ReverseGeocodingService:
 
     def is_point_in_water(self, latitude: float, longitude: float) -> bool:
         """Check if a point is in water using Overpass API."""
+        # Check if geocoding is enabled
+        if not getattr(settings, 'REVERSE_GEOCODING_ENABLED', True):
+            return False
+        
         try:
             query = f"""[out:json][timeout:10];
 (
@@ -65,6 +69,10 @@ out count;"""
             longitude: Longitude coordinate
             import_log: Optional ImportLog for database logging
         """
+        # Check if geocoding is enabled
+        if not getattr(settings, 'REVERSE_GEOCODING_ENABLED', True):
+            return None
+        
         try:
             # Get administrative boundaries for state, country, and county only
             query = f"""[out:json][timeout:10];
@@ -179,6 +187,10 @@ out tags;"""
             longitude: Longitude coordinate
             import_log: Optional ImportLog for database logging
         """
+        # Check if geocoding is enabled
+        if not getattr(settings, 'REVERSE_GEOCODING_ENABLED', True):
+            return None
+        
         try:
             url = f"{self.nominatim_url}/reverse"
             params = {
@@ -318,6 +330,10 @@ out tags;"""
 
     def search_protected_areas_overpass(self, latitude: float, longitude: float) -> List[Dict[str, Any]]:
         """Search for protected areas using Overpass API with point-in-polygon queries."""
+        # Check if geocoding is enabled
+        if not getattr(settings, 'REVERSE_GEOCODING_ENABLED', True):
+            return []
+        
         try:
             query = f"""[out:json][timeout:10];
 (
@@ -361,6 +377,10 @@ out tags;"""
 
     def search_lakes(self, latitude: float, longitude: float, proximity_miles: float = 1.0) -> List[Dict[str, Any]]:
         """Search for lakes and water bodies within proximity_miles of the point."""
+        # Check if geocoding is enabled
+        if not getattr(settings, 'REVERSE_GEOCODING_ENABLED', True):
+            return []
+        
         try:
             radius_meters = int(proximity_miles * 1609.34)
             query_inside = f"""[out:json][timeout:10];

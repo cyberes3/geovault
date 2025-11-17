@@ -19,8 +19,10 @@ from geo_lib.processing.geo_processor import (
 )
 from geo_lib.processing.logging import ImportLog, DatabaseLogLevel
 from geo_lib.processing.status_tracker import ProcessingStatusTracker, ProcessingStatus
+from geo_lib.processing.tagging import generate_auto_tags
 from geo_lib.security.file_validation import SecureFileValidator
 from geo_lib.logging.console import get_import_logger
+from geo_lib.types.feature import PointFeature, LineStringFeature, MultiLineStringFeature, PolygonFeature
 
 logger = get_import_logger()
 
@@ -162,77 +164,56 @@ class BaseProcessor(ABC):
                     # Generate properties with appropriate styling based on file type and feature geometry
                     split_feature['properties'] = geojson_property_generation(split_feature)
 
-                    # Add geocoding tags for points and lines
-                    from django.conf import settings
-                    if getattr(settings, 'REVERSE_GEOCODING_ENABLED', True):
+                    # Generate all auto tags (type, import-year, import-month, geocoding) using generate_auto_tags()
+                    # Check for cancellation before tag generation
+                    if self._is_cancelled():
+                        break
+                    
+                    try:
                         geometry_type = split_feature['geometry']['type'].lower()
-                        if geometry_type in ['point', 'multipoint', 'linestring', 'multilinestring']:
-                            try:
-                                from geo_lib.geolocation.reverse_geocode import get_reverse_geocoding_service
-                                from geo_lib.processing.tagging import get_representative_points
-                                from geo_lib.types.feature import PointFeature, LineStringFeature, MultiLineStringFeature
-
-                                # Convert to feature instance to get representative points
-                                feature_class = None
-                                if geometry_type in ['point', 'multipoint']:
-                                    feature_class = PointFeature
-                                elif geometry_type == 'linestring':
-                                    feature_class = LineStringFeature
-                                elif geometry_type == 'multilinestring':
-                                    feature_class = MultiLineStringFeature
-
-                                if feature_class:
-                                    feature_instance = feature_class(**split_feature)
-                                    points = get_representative_points(feature_instance)
-
-                                    if points:
-                                        # Check for cancellation before starting geocoding
-                                        if self._is_cancelled():
-                                            break
-                                        
-                                        geocoding_service = get_reverse_geocoding_service()
-                                        all_location_tags = set()
-
-                                        for lat, lon in points:
-                                            # Check for cancellation during geocoding loop
-                                            if self._is_cancelled():
-                                                break
-                                            
-                                            try:
-                                                # Check again before making the API call
-                                                if self._is_cancelled():
-                                                    break
-                                                location_tags = geocoding_service.get_location_tags(lat, lon, feature_log)
-                                                # Check for cancellation after geocoding completes
-                                                if self._is_cancelled():
-                                                    break
-                                                all_location_tags.update(location_tags)
-                                            except Exception as geocode_point_error:
-                                                # Only log if not cancelled
-                                                if not self._is_cancelled():
-                                                    feature_name = split_feature.get('properties', {}).get('name', 'Unnamed')
-                                                    feature_log.add(
-                                                        f"Geocoding failed for feature '{feature_name}' at coordinates ({lat}, {lon}): {str(geocode_point_error)}",
-                                                        "Geocoding",
-                                                        DatabaseLogLevel.WARNING
-                                                    )
-                                                    logger.warning(f"Geocoding failed for feature '{feature_name}' at ({lat}, {lon}): {geocode_point_error}")
-
-                                        # Only add tags if not cancelled
-                                        if not self._is_cancelled():
-                                            # Add geocoding tags to existing tags
-                                            existing_tags = split_feature['properties'].get('tags', [])
-                                            if not isinstance(existing_tags, list):
-                                                existing_tags = []
-                                            split_feature['properties']['tags'] = existing_tags + sorted(all_location_tags)
-                            except Exception as geocode_error:
-                                feature_name = split_feature.get('properties', {}).get('name', 'Unnamed')
-                                feature_log.add(
-                                    f"Geocoding failed for feature '{feature_name}': {str(geocode_error)}",
-                                    "Geocoding",
-                                    DatabaseLogLevel.WARNING
-                                )
-                                logger.warning(f"Geocoding failed for feature '{feature_name}': {geocode_error}")
+                        
+                        # Determine the appropriate feature class
+                        feature_class = None
+                        if geometry_type in ['point', 'multipoint']:
+                            feature_class = PointFeature
+                        elif geometry_type == 'linestring':
+                            feature_class = LineStringFeature
+                        elif geometry_type == 'multilinestring':
+                            feature_class = MultiLineStringFeature
+                        elif geometry_type in ['polygon', 'multipolygon']:
+                            feature_class = PolygonFeature
+                        
+                        if feature_class:
+                            # Create feature instance for tag generation
+                            feature_instance = feature_class(**split_feature)
+                            
+                            # Check for cancellation before generating tags
+                            if self._is_cancelled():
+                                break
+                            
+                            # Generate all auto tags (includes type, import-year, import-month, and geocoding)
+                            auto_tags = generate_auto_tags(feature_instance, feature_log)
+                            
+                            # Check for cancellation after tag generation
+                            if self._is_cancelled():
+                                break
+                            
+                            # Merge auto tags with existing tags, avoiding duplicates
+                            existing_tags = split_feature['properties'].get('tags', [])
+                            if not isinstance(existing_tags, list):
+                                existing_tags = []
+                            # Combine existing tags with auto tags, avoiding duplicates
+                            all_tags = list(existing_tags) + [tag for tag in auto_tags if tag not in existing_tags]
+                            split_feature['properties']['tags'] = all_tags
+                    except Exception as tag_error:
+                        # Log error but don't fail the feature processing
+                        feature_name = split_feature.get('properties', {}).get('name', 'Unnamed')
+                        feature_log.add(
+                            f"Tag generation failed for feature '{feature_name}': {str(tag_error)}",
+                            "Tag Generation",
+                            DatabaseLogLevel.WARNING
+                        )
+                        logger.warning(f"Tag generation failed for feature '{feature_name}': {tag_error}")
 
                     # Check for cancellation before finalizing feature
                     if self._is_cancelled():

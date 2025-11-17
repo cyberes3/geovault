@@ -28,6 +28,8 @@ class JobType(Enum):
     """Type of job being processed."""
     UPLOAD = "upload"  # File upload job
     DELETE = "delete"  # Item deletion job
+    BULK_IMPORT = "bulk_import"  # Bulk import job
+    BULK_DELETE = "bulk_delete"  # Bulk delete job
 
 
 @dataclass

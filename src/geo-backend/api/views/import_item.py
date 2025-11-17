@@ -17,7 +17,6 @@ from geo_lib.feature_id import generate_feature_hash
 from geo_lib.processing.jobs import upload_job, delete_job
 from geo_lib.processing.status_tracker import status_tracker
 from geo_lib.processing.logging import ImportLog, DatabaseLogLevel
-from geo_lib.processing.tagging import generate_auto_tags
 from geo_lib.const_strings import CONST_INTERNAL_TAGS, filter_protected_tags, is_protected_tag
 from geo_lib.security.file_validation import SecureFileValidator
 from geo_lib.types.feature import PointFeature, PolygonFeature, LineStringFeature, MultiLineStringFeature
@@ -624,71 +623,6 @@ def delete_import_item(request, id):
 
 @login_required_401
 @csrf_protect
-@require_http_methods(["DELETE"])
-def bulk_delete_import_items(request):
-    """Bulk delete multiple import queue items using async jobs"""
-    try:
-        data = json.loads(request.body)
-        if not isinstance(data, dict) or 'ids' not in data:
-            return JsonResponse({'success': False, 'msg': 'Invalid data format. Expected {"ids": [1, 2, 3]}', 'code': 400}, status=400)
-
-        item_ids = data['ids']
-        if not isinstance(item_ids, list):
-            return JsonResponse({'success': False, 'msg': 'ids must be a list', 'code': 400}, status=400)
-
-        if not item_ids:
-            return JsonResponse({'success': False, 'msg': 'No items to delete', 'code': 400}, status=400)
-
-        # Validate that all IDs are integers
-        try:
-            item_ids = [int(id) for id in item_ids]
-        except (ValueError, TypeError):
-            return JsonResponse({'success': False, 'msg': 'All IDs must be integers', 'code': 400}, status=400)
-
-        # Get all items that belong to the current user
-        items = ImportQueue.objects.filter(id__in=item_ids, user=request.user)
-        found_ids = list(items.values_list('id', flat=True))
-
-        # Check if any requested IDs were not found or don't belong to the user
-        missing_ids = set(item_ids) - set(found_ids)
-        if missing_ids:
-            return JsonResponse({
-                'success': False,
-                'msg': f'Items not found or not authorized: {list(missing_ids)}',
-                'code': 404
-            }, status=400)
-
-        # Start delete jobs for each item
-        job_ids = []
-        for item in items:
-            job_id = delete_job.start_delete_job(item.id, request.user.id, item.original_filename)
-            if job_id:
-                job_ids.append(job_id)
-
-        if job_ids:
-            return JsonResponse({
-                'success': True,
-                'msg': f'Started {len(job_ids)} delete job{"s" if len(job_ids) != 1 else ""}',
-                'job_ids': job_ids,
-                'started_count': len(job_ids)
-            })
-        else:
-            return JsonResponse({
-                'success': False,
-                'msg': 'Failed to start any delete jobs'
-            }, status=500)
-
-    except json.JSONDecodeError:
-        return JsonResponse({'success': False, 'msg': 'Invalid JSON data', 'code': 400}, status=400)
-    except Exception as e:
-        # Log internal error details for debugging, but don't expose to user
-        logger.error(f'Bulk delete error: {type(e).__name__}: {str(e)}')
-        logger.error(f'Bulk delete error traceback: {traceback.format_exc()}')
-        return JsonResponse({'success': False, 'msg': 'Internal server error occurred', 'code': 500}, status=500)
-
-
-@login_required_401
-@csrf_protect
 @require_http_methods(["PUT", "PATCH"])
 def update_import_item(request, item_id):
     try:
@@ -894,12 +828,9 @@ def import_to_featurestore(request, item_id):
                 feature = strip_icon_properties(feature.copy())
 
             feature_instance = c(**feature)
-            # Generate auto tags (includes geocoding for points and lines)
+            # Tags are already generated during processing step, just use existing tags
             existing_tags = feature_instance.properties.tags or []
-            auto_tags = generate_auto_tags(feature_instance)
-            # Merge tags, avoiding duplicates
-            all_tags = list(existing_tags) + [tag for tag in auto_tags if tag not in existing_tags]
-            feature_instance.properties.tags = all_tags
+            feature_instance.properties.tags = existing_tags
 
             # Create the GeoJSON data
             geojson_data = json.loads(feature_instance.model_dump_json())

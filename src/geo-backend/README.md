@@ -50,6 +50,7 @@ This could literally take days to set up, so be patient.
 3. `docker-compose -f nominatim.yml up`
 4. `./download-overpass-data.sh`
 5. `docker-compose -f overpass.yml up`
+6. Wait 2 days and come back
 
 `CTRL+C` the containers when they have finished building their databases and then do:
 

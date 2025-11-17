@@ -11,6 +11,8 @@ from geo_lib.websocket.modules.delete_job_module import DeleteJobModule
 from geo_lib.websocket.modules.import_history_module import ImportHistoryModule
 from geo_lib.websocket.modules.import_queue_module import ImportQueueModule
 from geo_lib.websocket.modules.upload_job_module import UploadJobModule
+from geo_lib.websocket.modules.bulk_import_job_module import BulkImportJobModule
+from geo_lib.websocket.modules.bulk_delete_job_module import BulkDeleteJobModule
 from geo_lib.logging.console import get_websocket_logger
 from geo_lib.utils.ip_utils import get_client_ip, get_user_identifier
 
@@ -30,6 +32,8 @@ class RealtimeConsumer(AsyncWebsocketConsumer):
         self.modules['import_history'] = ImportHistoryModule(self)
         self.modules['upload_job'] = UploadJobModule(self)
         self.modules['delete_job'] = DeleteJobModule(self)
+        self.modules['bulk_import_job'] = BulkImportJobModule(self)
+        self.modules['bulk_delete_job'] = BulkDeleteJobModule(self)
         # Add more modules here as they are created
 
     async def connect(self):
