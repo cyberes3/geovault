@@ -192,6 +192,9 @@ export default {
       if (!geometry) return null
       return geometry.getType()
     },
+    // Note: MultiPoint and MultiPolygon are split into individual Point/Polygon features
+    // during import/processing, so they should not appear in the frontend after processing.
+    // These checks are kept for defensive purposes and backward compatibility.
     isPoint() {
       return this.geometryType === 'Point' || this.geometryType === 'MultiPoint'
     },
@@ -386,6 +389,8 @@ export default {
             }
 
             // Update only the coordinates/geometries in the existing geometry
+            // Note: MultiPoint and MultiPolygon are split during import, so they should not
+            // appear here. If they do, the backend will handle validation/error handling.
             if (currentGeometry.type === 'GeometryCollection') {
               // For GeometryCollection, update geometries array
               featureData.geometry.geometries = coordinatesData

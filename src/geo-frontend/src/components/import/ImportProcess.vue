@@ -1136,6 +1136,9 @@ export default {
         }
       });
     },
+    // Note: MultiPoint and MultiPolygon features are displayed during import preview
+    // but will be automatically split into individual Point/Polygon features during
+    // backend processing before final import.
     parseGeoJson(item) {
       switch (item.geometry.type) {
         case GeoFeatureTypeStrings.Point:

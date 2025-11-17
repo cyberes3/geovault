@@ -4,6 +4,7 @@ Batch loading features on map (split into chunks of 100, account for vertices in
 Up to 3 concurrent feature loading requests. Have a 5 second timeout. Don't cancel requests when the user scrolls map
 Error message on map when loading fails
 Error message on map when an exception is encountered
+Allow uploading custom PNG icons
 
 Later:
 For tracks, set the created date to the timestamp of the first point in the track

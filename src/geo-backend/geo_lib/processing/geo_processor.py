@@ -199,31 +199,64 @@ def geojson_property_generation(feature: dict) -> dict:
     return properties
 
 
-def split_geometry_collection(feature: dict) -> list:
-    """Split GeometryCollection into separate features."""
+def split_complex_geometries(feature: dict) -> list:
+    """
+    Split GeometryCollection into separate features.
+    
+    KML's MultiGeometry converts to GeometryCollection in GeoJSON, so this is the expected
+    complex geometry type. MultiPoint and MultiPolygon should not appear and will trigger
+    an assertion error if encountered.
+    
+    Args:
+        feature: GeoJSON feature dictionary
+        
+    Returns:
+        List of feature dictionaries (single-item list if not splittable)
+        
+    Raises:
+        AssertionError: If MultiPoint or MultiPolygon geometry types are encountered
+    """
     # Handle features with None geometry - skip these as they have no spatial data
     if not feature.get('geometry') or feature['geometry'] is None:
         return []
 
-    if feature['geometry']['type'] != 'GeometryCollection':
-        return [feature]
+    geometry_type = feature['geometry']['type']
+    
+    # Assert that MultiPoint should not appear (KML converts to GeometryCollection)
+    if geometry_type == 'MultiPoint':
+        feature_name = feature.get('properties', {}).get('name', 'Unnamed')
+        error_msg = f"Unexpected MultiPoint geometry in feature '{feature_name}'. KML MultiGeometry should convert to GeometryCollection."
+        logger.error(error_msg)
+        assert False, error_msg
+    
+    # Assert that MultiPolygon should not appear (KML converts to GeometryCollection)
+    if geometry_type == 'MultiPolygon':
+        feature_name = feature.get('properties', {}).get('name', 'Unnamed')
+        error_msg = f"Unexpected MultiPolygon geometry in feature '{feature_name}'. KML MultiGeometry should convert to GeometryCollection."
+        logger.error(error_msg)
+        assert False, error_msg
+    
+    # Split GeometryCollection into separate features
+    if geometry_type == 'GeometryCollection':
+        features = []
+        geometries = feature['geometry']['geometries']
 
-    features = []
-    geometries = feature['geometry']['geometries']
+        # Prioritize polygons over other geometries
+        polygon_geometries = [g for g in geometries if g['type'] == 'Polygon']
+        other_geometries = [g for g in geometries if g['type'] in ['Point', 'LineString']]
 
-    # Prioritize polygons over other geometries
-    polygon_geometries = [g for g in geometries if g['type'] == 'Polygon']
-    other_geometries = [g for g in geometries if g['type'] in ['Point', 'LineString']]
+        # Use polygons if available, otherwise use other geometries
+        geometries_to_use = polygon_geometries if polygon_geometries else other_geometries
 
-    # Use polygons if available, otherwise use other geometries
-    geometries_to_use = polygon_geometries if polygon_geometries else other_geometries
+        for geom in geometries_to_use:
+            new_feature = {
+                'type': 'Feature',
+                'geometry': geom,
+                'properties': feature['properties'].copy()
+            }
+            features.append(new_feature)
 
-    for geom in geometries_to_use:
-        new_feature = {
-            'type': 'Feature',
-            'geometry': geom,
-            'properties': feature['properties'].copy()
-        }
-        features.append(new_feature)
-
-    return features
+        return features
+    
+    # For all other geometry types, return as-is
+    return [feature]

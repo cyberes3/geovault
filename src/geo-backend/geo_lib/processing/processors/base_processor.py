@@ -15,7 +15,7 @@ from typing import Dict, Any, Tuple, Union, List, Optional
 from geo_lib.processing.file_types import FileType, detect_file_type
 from geo_lib.processing.geo_processor import (
     geojson_property_generation,
-    split_geometry_collection
+    split_complex_geometries
 )
 from geo_lib.processing.logging import ImportLog, DatabaseLogLevel
 from geo_lib.processing.status_tracker import ProcessingStatusTracker, ProcessingStatus
@@ -124,14 +124,14 @@ class BaseProcessor(ABC):
 
     def _process_single_feature(self, feature: Dict[str, Any]) -> Tuple[List[Dict[str, Any]], ImportLog, int, bool]:
         """
-        Process a single feature, including splitting geometry collections and geocoding.
+        Process a single feature, including splitting complex geometries and geocoding.
         This is a worker function designed to be called in parallel.
         
         Args:
             feature: Single feature dictionary from GeoJSON
             
         Returns:
-            Tuple of (processed_features_list, feature_log, skipped_count, was_geometry_collection)
+            Tuple of (processed_features_list, feature_log, skipped_count, was_split)
         """
         # Check for cancellation at the very start
         if self._is_cancelled():
@@ -140,19 +140,19 @@ class BaseProcessor(ABC):
         feature_log = ImportLog()
         processed_features = []
         skipped_count = 0
-        was_geometry_collection = False
+        was_split = False
 
-        # Split GeometryCollection into separate features
-        split_features = split_geometry_collection(feature)
+        # Split complex geometries (GeometryCollection, MultiPoint, MultiPolygon) into separate features
+        split_features = split_complex_geometries(feature)
 
-        # Check if this was a geometry collection
+        # Check if this feature was split
         if len(split_features) > 1:
-            was_geometry_collection = True
+            was_split = True
 
         # Skip features with no valid geometry
         if not split_features:
             skipped_count += 1
-            return processed_features, feature_log, skipped_count, was_geometry_collection
+            return processed_features, feature_log, skipped_count, was_split
 
         for split_feature in split_features:
             # Check for cancellation before processing each split feature
@@ -232,7 +232,7 @@ class BaseProcessor(ABC):
                 feature_log.add(f'Skipping unsupported geometry type: {split_feature["geometry"]["type"]}', 'Feature Processing', DatabaseLogLevel.WARNING)
                 skipped_count += 1
 
-        return processed_features, feature_log, skipped_count, was_geometry_collection
+        return processed_features, feature_log, skipped_count, was_split
 
     def _is_cancelled(self) -> bool:
         """
@@ -283,10 +283,10 @@ class BaseProcessor(ABC):
         geocoding_count = 0
         if geocoding_enabled:
             for feature in features:
-                split_features = split_geometry_collection(feature)
+                split_features = split_complex_geometries(feature)
                 for split_feature in split_features:
                     geometry_type = split_feature.get('geometry', {}).get('type', '').lower()
-                    if geometry_type in ['point', 'multipoint', 'linestring', 'multilinestring']:
+                    if geometry_type in ['point', 'linestring', 'multilinestring']:
                         geocoding_count += 1
             if geocoding_count > 0:
                 feature_log.add(f"Geocoding {geocoding_count} feature(s)", "Geocoding", DatabaseLogLevel.INFO)
@@ -328,12 +328,19 @@ class BaseProcessor(ABC):
                     # Only process results if not cancelled
                     if not cancelled:
                         try:
-                            result_features, result_log, result_skipped, was_geometry_collection = future.result()
+                            result_features, result_log, result_skipped, was_split = future.result()
                             processed_features.extend(result_features)
                             feature_log.extend(result_log)
                             skipped_count += result_skipped
-                            if was_geometry_collection:
-                                geometry_collection_count += 1
+                            
+                            # Track what type of split occurred by checking the original feature
+                            if was_split:
+                                original_feature = future_to_feature[future]
+                                original_geom_type = original_feature.get('geometry', {}).get('type', '')
+                                if original_geom_type == 'GeometryCollection':
+                                    geometry_collection_count += 1
+                                # MultiPoint and MultiPolygon should not appear (they should be GeometryCollection)
+                                # If they do, split_complex_geometries() will assert/error
                             completed_count += 1
                         except Exception as e:
                             feature = future_to_feature[future]
@@ -357,7 +364,7 @@ class BaseProcessor(ABC):
             feature_log.add(f"Processing was cancelled. Processed {len(processed_features)} features before cancellation", "Feature Processing", DatabaseLogLevel.WARNING)
         else:
             if geometry_collection_count > 0:
-                feature_log.add(f"Split {geometry_collection_count} geometry collections into individual features", "Feature Processing", DatabaseLogLevel.INFO)
+                feature_log.add(f"Split {geometry_collection_count} geometry collection(s) into individual features", "Feature Processing", DatabaseLogLevel.INFO)
 
             if skipped_count > 0:
                 feature_log.add(f"Skipped {skipped_count} features (invalid geometry or unsupported type)", "Feature Processing", DatabaseLogLevel.INFO)
