@@ -5,23 +5,24 @@ import traceback
 from pathlib import Path
 from typing import List, Tuple, Dict, NamedTuple
 
+from django import forms
 from django.conf import settings
 from django.contrib.gis.geos import Polygon, GEOSGeometry
-from django.db.models import Q
 from django.http import HttpResponse, Http404, JsonResponse
 from django.views.decorators.csrf import csrf_protect
 from django.views.decorators.http import require_http_methods
 
 from api.models import FeatureStore
-from geo_lib.feature_id import generate_feature_hash
-from geo_lib.website.auth import login_required_401
-from geo_lib.types.feature import PointFeature, LineStringFeature, MultiLineStringFeature, PolygonFeature
 from geo_lib.const_strings import CONST_INTERNAL_TAGS, filter_protected_tags, is_protected_tag
+from geo_lib.feature_id import generate_feature_hash
+from geo_lib.logging.console import get_access_logger
+from geo_lib.processing.icon_manager import store_icon
+from geo_lib.types.feature import PointFeature, LineStringFeature, MultiLineStringFeature, PolygonFeature
 from geo_lib.validation.geometry_validation import (
     normalize_and_validate_feature_update,
     GeometryValidationError
 )
-from geo_lib.logging.console import get_access_logger
+from geo_lib.website.auth import login_required_401
 
 logger = get_access_logger()
 
@@ -58,7 +59,7 @@ def _get_features_in_bbox(bbox: Tuple[float, float, float, float], user_id: int,
     # Check if this is a world-wide bbox that crosses the International Date Line
     # This happens when min_lon > max_lon (e.g., min_lon=134, max_lon=134 means we're crossing 180°/-180°)
     crosses_dateline = min_lon > max_lon
-    
+
     # Improved world-wide extent detection with more conservative thresholds
     # Lower threshold from 300° to 280° for more conservative detection
     # Also check latitude span (>170° indicates world-wide view)
@@ -132,7 +133,7 @@ def _get_features_in_bbox(bbox: Tuple[float, float, float, float], user_id: int,
         # Check if the extent is large (>200° longitude or >150° latitude) but we got very few results
         is_large_extent = lon_span > 200 or lat_span > 150
         suspicious_result = is_large_extent and total_count < 10 and total_count > 0
-        
+
         if suspicious_result:
             logger.warning(
                 f"Suspicious result: large extent (lon_span={lon_span:.1f}°, lat_span={lat_span:.1f}°) "
@@ -142,13 +143,13 @@ def _get_features_in_bbox(bbox: Tuple[float, float, float, float], user_id: int,
             # Fall back to world-wide query
             base_query = base_query_filter
             total_count = base_query.count()
-            
+
             # Re-apply limit if configured
             if max_features > 0:
                 features_query = base_query[:max_features]
             else:
                 features_query = base_query
-            
+
             # Re-convert to GeoJSON format
             geojson_features = []
             for feature in features_query:
@@ -306,29 +307,29 @@ def get_features_by_tag(request):
     try:
         # Get all features for the user
         features = FeatureStore.objects.filter(user=request.user)
-        
+
         # Dictionary to store features by tag
         features_by_tag = {}
-        
+
         # Iterate through all features
         for feature in features:
             geojson_data = feature.geojson
             if not geojson_data or 'properties' not in geojson_data:
                 continue
-                
+
             properties = geojson_data.get('properties', {})
             tags = properties.get('tags', [])
-            
+
             if not isinstance(tags, list):
                 continue
-            
+
             # Filter out protected tags to only show user-generated tags
             filtered_tags = filter_protected_tags(tags, CONST_INTERNAL_TAGS)
-            
+
             # Include database ID in properties for frontend editing
             feature_properties = properties.copy()
             feature_properties['_id'] = feature.id
-            
+
             # Create GeoJSON feature
             geojson_feature = {
                 "type": "Feature",
@@ -336,28 +337,28 @@ def get_features_by_tag(request):
                 "properties": feature_properties,
                 "geojson_hash": feature.geojson_hash
             }
-            
+
             # Add feature to each tag's list
             for tag in filtered_tags:
                 if isinstance(tag, str) and tag:  # Ensure tag is a non-empty string
                     if tag not in features_by_tag:
                         features_by_tag[tag] = []
                     features_by_tag[tag].append(geojson_feature)
-        
+
         # Sort tags alphabetically
         sorted_tags = sorted(features_by_tag.keys())
-        
+
         # Build response with sorted tags
         response_data = {
             'success': True,
             'tags': {}
         }
-        
+
         for tag in sorted_tags:
             response_data['tags'][tag] = features_by_tag[tag]
-        
+
         return JsonResponse(response_data)
-        
+
     except Exception:
         logger.error(f"Error getting features by tag: {traceback.format_exc()}")
         return JsonResponse({
@@ -445,16 +446,16 @@ def update_feature_metadata(request, feature_id):
                         'error': 'all tags must be strings',
                         'code': 400
                     }, status=400)
-            
+
             # Filter out protected tags from incoming tags
             filtered_tags = filter_protected_tags(metadata['tags'], CONST_INTERNAL_TAGS)
-            
+
             # Preserve existing protected tags from the original feature
             original_tags = geojson_data.get('properties', {}).get('tags', [])
             if not isinstance(original_tags, list):
                 original_tags = []
             protected_tags = [tag for tag in original_tags if is_protected_tag(tag, CONST_INTERNAL_TAGS)]
-            
+
             # Combine filtered user tags with preserved protected tags
             geojson_data['properties']['tags'] = filtered_tags + protected_tags
             updated_fields.append('tags')
@@ -549,7 +550,7 @@ def update_feature(request, feature_id):
         # Get original feature data for reference
         original_geojson = feature.geojson
         original_properties = original_geojson.get('properties', {})
-        
+
         # Normalize and validate Feature or geometry object
         try:
             feature_data = normalize_and_validate_feature_update(feature_data, original_properties)
@@ -562,19 +563,19 @@ def update_feature(request, feature_id):
 
         # Get new properties (if geometry-only update, properties were already set to original)
         new_properties = feature_data.get('properties', {})
-        
+
         # Preserve protected tags from original feature
         original_tags = original_properties.get('tags', [])
         if not isinstance(original_tags, list):
             original_tags = []
         protected_tags = [tag for tag in original_tags if is_protected_tag(tag, CONST_INTERNAL_TAGS)]
-        
+
         # Filter protected tags from incoming tags
         new_tags = new_properties.get('tags', [])
         if not isinstance(new_tags, list):
             new_tags = []
         filtered_tags = filter_protected_tags(new_tags, CONST_INTERNAL_TAGS)
-        
+
         # Combine filtered user tags with preserved protected tags
         new_properties['tags'] = filtered_tags + protected_tags
 
@@ -590,21 +591,36 @@ def update_feature(request, feature_id):
                         original_icon_url = icon_url
                         break
 
-        # Prevent changing custom PNG icon URLs
+        # Handle icon URL changes
+        # Allow: removing icons (null/empty), setting new icons from upload endpoint, keeping same icon
+        # Prevent: manually changing existing icon URLs to different values
         if original_icon_url:
-            for prop_name in icon_property_names:
-                if prop_name in new_properties:
-                    new_icon_url = new_properties[prop_name]
-                    if isinstance(new_icon_url, str) and new_icon_url != original_icon_url:
-                        # User tried to change the PNG icon URL - restore original
-                        new_properties[prop_name] = original_icon_url
-                        logger.warning(f"Attempted to change PNG icon URL for feature {feature_id}, restored original")
+            # Check if icon is being removed (main 'icon' property is empty)
+            if new_properties.get('icon') == '':
+                # Icon is being removed - clear all icon properties and ensure marker-color is set
+                for prop_name in icon_property_names:
+                    new_properties[prop_name] = ''
+                if 'marker-color' not in new_properties or not new_properties.get('marker-color'):
+                    new_properties['marker-color'] = original_properties.get('marker-color', '#ff0000')
+            else:
+                # Icon is not being removed - prevent manual URL changes
+                for prop_name in icon_property_names:
+                    if prop_name in new_properties:
+                        new_icon_url = new_properties[prop_name]
+                        # Allow keeping the same icon or setting new icon from upload endpoint
+                        if (isinstance(new_icon_url, str) and
+                                (new_icon_url == original_icon_url or new_icon_url.startswith('/api/data/icons/'))):
+                            continue
+                        # Prevent manually changing to a different URL (must use upload endpoint)
+                        if isinstance(new_icon_url, str) and new_icon_url != original_icon_url:
+                            new_properties[prop_name] = original_icon_url
+                            logger.warning(f"Attempted to manually change icon URL for feature {feature_id}, restored original")
 
         # Validate feature structure using the same validation as import conversion
         try:
             geom_type = feature_data.get('geometry', {}).get('type', '').lower()
             feature_class = None
-            
+
             # GeometryCollection is not supported by the feature classes, but we allow it
             if geom_type == 'geometrycollection':
                 # For GeometryCollection, we do basic validation but skip feature class validation
@@ -640,7 +656,7 @@ def update_feature(request, feature_id):
                 validated_feature = feature_class(**feature_data)
                 # Convert back to dict for storage (this ensures proper structure)
                 feature_data = json.loads(validated_feature.model_dump_json())
-            
+
         except Exception as e:
             logger.error(f"Feature validation error for feature {feature_id}: {str(e)}")
             return JsonResponse({
@@ -726,16 +742,16 @@ def delete_feature(request, feature_id):
     try:
         # Get the feature from database and verify user ownership
         feature = FeatureStore.objects.get(id=feature_id, user=request.user)
-        
+
         # Delete the feature
         feature.delete()
-        
+
         return JsonResponse({
             'success': True,
             'message': 'Feature deleted successfully',
             'feature_id': feature_id
         })
-        
+
     except FeatureStore.DoesNotExist:
         return JsonResponse({
             'success': False,
@@ -764,6 +780,94 @@ def get_config(request):
     })
 
 
+class IconUploadForm(forms.Form):
+    """Form for icon file upload"""
+    file = forms.FileField()
+
+
+@login_required_401
+@csrf_protect
+@require_http_methods(["POST"])
+def upload_icon(request):
+    """
+    API endpoint to upload a custom icon file.
+    
+    Request: POST with multipart/form-data containing 'file' field
+    Returns: JSON with success status and icon URL path
+    """
+    try:
+        if not request.FILES:
+            return JsonResponse({
+                'success': False,
+                'error': 'No file provided',
+                'code': 400
+            }, status=400)
+
+        form = IconUploadForm(request.POST, request.FILES)
+        if not form.is_valid():
+            return JsonResponse({
+                'success': False,
+                'error': 'Invalid form data',
+                'code': 400
+            }, status=400)
+
+        uploaded_file = request.FILES['file']
+        file_name = uploaded_file.name
+
+        # Validate file extension (only PNG, JPG, ICO allowed for uploads)
+        file_ext = os.path.splitext(file_name)[1].lower()
+        if file_ext not in settings.ICON_UPLOAD_ALLOWED_EXTENSIONS:
+            return JsonResponse({
+                'success': False,
+                'error': f'Invalid file extension. Allowed extensions: {", ".join(sorted(settings.ICON_UPLOAD_ALLOWED_EXTENSIONS))}',
+                'code': 400
+            }, status=400)
+
+        # Read file data
+        try:
+            icon_data = uploaded_file.read()
+        except Exception as e:
+            logger.error(f"Error reading uploaded icon file: {str(e)}")
+            return JsonResponse({
+                'success': False,
+                'error': 'Failed to read file',
+                'code': 500
+            }, status=500)
+
+        # Validate file size (500KB limit for uploads)
+        if len(icon_data) > settings.ICON_UPLOAD_MAX_SIZE_BYTES:
+            max_size_mb = settings.ICON_UPLOAD_MAX_SIZE_BYTES / 1024
+            return JsonResponse({
+                'success': False,
+                'error': f'File size exceeds maximum allowed size of {max_size_mb:.0f}KB',
+                'code': 400
+            }, status=400)
+
+        # Store icon using existing icon manager
+        icon_url = store_icon(icon_data, file_name)
+
+        if not icon_url:
+            return JsonResponse({
+                'success': False,
+                'error': 'Failed to store icon',
+                'code': 500
+            }, status=500)
+
+        return JsonResponse({
+            'success': True,
+            'icon_url': icon_url,
+            'code': 200
+        }, status=200)
+
+    except Exception as e:
+        logger.error(f"Error uploading icon: {traceback.format_exc()}")
+        return JsonResponse({
+            'success': False,
+            'error': f'Internal server error: {str(e)}',
+            'code': 500
+        }, status=500)
+
+
 @require_http_methods(["GET"])
 def serve_icon(request, icon_hash):
     """
@@ -776,38 +880,38 @@ def serve_icon(request, icon_hash):
         # Validate icon_hash format (should be hash + extension)
         if not icon_hash or len(icon_hash) < 5:  # At least hash (64 chars) + extension (e.g., .png)
             raise Http404("Invalid icon hash")
-        
+
         # Extract hash and extension
         # Icon hash format: {hash}{extension} (e.g., abc123def456.png)
         # Hash is 64 characters (SHA-256), extension starts after that
         # Find the last dot to separate hash from extension
         if '.' not in icon_hash:
             raise Http404("Invalid icon hash format - missing extension")
-        
+
         # Split on last dot to get hash and extension
         hash_part, extension = icon_hash.rsplit('.', 1)
         extension = '.' + extension  # Add leading dot back
-        
+
         # Validate hash length (should be 64 characters for SHA-256)
         if len(hash_part) != 64:
             raise Http404("Invalid icon hash format - hash length incorrect")
-        
+
         # Validate extension
         valid_extensions = {'.png', '.jpg', '.jpeg', '.gif', '.bmp', '.svg', '.webp', '.ico'}
         if extension not in valid_extensions:
             raise Http404("Invalid icon extension")
-        
+
         # Get storage path
         storage_dir = Path(settings.ICON_STORAGE_DIR)
         icon_path = storage_dir / hash_part[0:2] / hash_part[2:4] / icon_hash
-        
+
         # Check if file exists
         if not icon_path.exists() or not icon_path.is_file():
             raise Http404("Icon not found")
-        
+
         # Read icon file
         icon_data = icon_path.read_bytes()
-        
+
         # Determine content type based on extension
         content_types = {
             '.png': 'image/png',
@@ -820,12 +924,12 @@ def serve_icon(request, icon_hash):
             '.ico': 'image/x-icon',
         }
         content_type = content_types.get(extension, 'image/png')
-        
+
         # Create response with appropriate headers
         response = HttpResponse(icon_data, content_type=content_type)
         response['Cache-Control'] = 'public, max-age=31536000'  # Cache for 1 year
         return response
-        
+
     except Http404:
         raise
     except Exception as e:

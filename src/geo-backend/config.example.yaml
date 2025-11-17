@@ -60,10 +60,7 @@ icons:
   # Directory where processed icons will be stored
   # Relative paths are relative to geo-backend directory
   storage_dir: "data/icons"
-  
-  # Maximum icon file size in bytes (default: 1MB)
-  max_size_bytes: 1048576
-  
+
   # Timeout for fetching remote icons in seconds
   fetch_timeout: 1.0
 

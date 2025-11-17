@@ -228,8 +228,14 @@ else:
 
 ICON_PROCESSING_ENABLED = config.get_bool_with_env_override('icons.processing_enabled', 'ICON_PROCESSING_ENABLED', True)
 
-# Maximum icon file size in bytes (default: 1MB)
+# Maximum icon file size in bytes (default: 1MB) - for KML/KMZ processing
 ICON_MAX_SIZE_BYTES = config.get_int('icons.max_size_bytes', 1048576)
+
+# Maximum icon file size for user uploads (500KB)
+ICON_UPLOAD_MAX_SIZE_BYTES = 512000  # 500KB
+
+# Allowed icon extensions for user uploads (restricted subset)
+ICON_UPLOAD_ALLOWED_EXTENSIONS = {'.png', '.jpg', '.jpeg', '.ico'}
 
 # Timeout for fetching remote icons in seconds
 ICON_FETCH_TIMEOUT = config.get_float('icons.fetch_timeout', 1.0)

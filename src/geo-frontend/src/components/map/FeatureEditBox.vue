@@ -46,8 +46,62 @@
           ></textarea>
         </div>
 
+        <!-- Icon Upload Section (for points) -->
+        <div v-if="isPoint">
+          <label class="block text-sm font-medium text-gray-700 mb-1">Icon</label>
+          
+          <!-- Current Icon Preview -->
+          <div v-if="hasPngIcon && currentIconUrl" class="mb-2">
+            <div class="flex items-center space-x-2">
+              <img 
+                :src="resolveIconUrl(currentIconUrl)" 
+                alt="Current icon" 
+                class="w-8 h-8 object-contain border border-gray-300 rounded"
+                @error="handleIconError"
+              />
+              <span class="text-sm text-gray-600">Current icon</span>
+              <button
+                type="button"
+                @click="handleRemoveIcon"
+                class="ml-auto text-sm text-red-600 hover:text-red-800"
+              >
+                Remove
+              </button>
+            </div>
+          </div>
+
+          <!-- Icon Upload Input -->
+          <div class="space-y-2">
+            <input
+              ref="iconFileInput"
+              type="file"
+              accept=".png,.jpg,.jpeg,.ico"
+              @change="handleIconFileSelect"
+              class="block w-full text-sm text-gray-500 file:mr-4 file:py-2 file:px-4 file:rounded-md file:border-0 file:text-sm file:font-semibold file:bg-blue-50 file:text-blue-700 hover:file:bg-blue-100"
+            />
+            <p class="text-xs text-gray-500">
+              Supported formats: PNG, JPG, ICO (max 500KB)
+            </p>
+          </div>
+
+          <!-- Icon Preview (for newly selected file) -->
+          <div v-if="iconPreviewUrl" class="mt-2">
+            <img 
+              :src="iconPreviewUrl" 
+              alt="Icon preview" 
+              class="w-8 h-8 object-contain border border-gray-300 rounded"
+            />
+            <p class="text-xs text-gray-600 mt-1">Preview</p>
+          </div>
+
+          <!-- Icon Upload Error -->
+          <div v-if="iconUploadError" class="mt-2 p-2 bg-red-50 border border-red-200 rounded-md">
+            <p class="text-xs text-red-800">{{ iconUploadError }}</p>
+          </div>
+        </div>
+
         <!-- Icon Color Field (only for points with no PNG icon) -->
-        <div v-if="isPoint && !hasPngIcon">
+        <div v-if="isPoint && !hasPngIcon && !uploadedIconFile">
           <label class="block text-sm font-medium text-gray-700 mb-1">Icon Color</label>
           <div class="flex items-center space-x-2">
             <input
@@ -182,7 +236,12 @@ export default {
       isSaving: false,
       errorMessage: '',
       successMessage: '',
-      protectedTags: []
+      protectedTags: [],
+      uploadedIconFile: null,
+      iconPreviewUrl: null,
+      iconUploadError: '',
+      currentIconUrl: null,
+      iconRemoved: false
     }
   },
   computed: {
@@ -252,24 +311,169 @@ export default {
 
       // Check for PNG icon
       this.hasPngIcon = this.checkForPngIcon(properties)
+      
+      // Store current icon URL for display
+      this.currentIconUrl = this.getCurrentIconUrl(properties)
 
       // Initialize raw JSON
       this.updateRawJson()
+      
+      // Reset icon upload state
+      this.uploadedIconFile = null
+      this.iconPreviewUrl = null
+      this.iconUploadError = ''
+      this.iconRemoved = false
     },
 
     checkForPngIcon(properties) {
       const iconPropertyNames = ['icon', 'icon-href', 'iconUrl', 'icon_url', 'marker-icon', 'marker-symbol', 'symbol']
+      const validIconExtensions = ['.png', '.jpg', '.jpeg', '.gif', '.bmp', '.svg', '.webp', '.ico']
 
       for (const propName of iconPropertyNames) {
         if (properties[propName] && typeof properties[propName] === 'string') {
           const iconUrl = properties[propName].trim()
-          // Check if it's a PNG icon (ends with .png or starts with /api/data/icons/)
-          if (iconUrl.endsWith('.png') || iconUrl.startsWith('/api/data/icons/')) {
+          // Check if it's an icon (ends with valid extension or starts with /api/data/icons/)
+          if (iconUrl.startsWith('/api/data/icons/')) {
             return true
+          }
+          // Check if it ends with a valid icon extension
+          const lowerUrl = iconUrl.toLowerCase()
+          for (const ext of validIconExtensions) {
+            if (lowerUrl.endsWith(ext)) {
+              return true
+            }
           }
         }
       }
       return false
+    },
+
+    getCurrentIconUrl(properties) {
+      const iconPropertyNames = ['icon', 'icon-href', 'iconUrl', 'icon_url', 'marker-icon', 'marker-symbol', 'symbol']
+      const validIconExtensions = ['.png', '.jpg', '.jpeg', '.gif', '.bmp', '.svg', '.webp', '.ico']
+      
+      for (const propName of iconPropertyNames) {
+        if (properties[propName] && typeof properties[propName] === 'string') {
+          const iconUrl = properties[propName].trim()
+          if (iconUrl) {
+            // Check if it starts with /api/data/icons/ (uploaded icon)
+            if (iconUrl.startsWith('/api/data/icons/')) {
+              return iconUrl
+            }
+            // Check if it ends with a valid icon extension
+            const lowerUrl = iconUrl.toLowerCase()
+            for (const ext of validIconExtensions) {
+              if (lowerUrl.endsWith(ext)) {
+                return iconUrl
+              }
+            }
+          }
+        }
+      }
+      return null
+    },
+
+    resolveIconUrl(iconUrl) {
+      // If already absolute URL, return as is
+      if (iconUrl.startsWith('http://') || iconUrl.startsWith('https://')) {
+        return iconUrl
+      }
+      // If relative URL starting with /api/, prepend APIHOST
+      if (iconUrl.startsWith('/api/')) {
+        return `${APIHOST}${iconUrl}`
+      }
+      // Fallback: assume it's a relative path and prepend APIHOST
+      return `${APIHOST}${iconUrl.startsWith('/') ? '' : '/'}${iconUrl}`
+    },
+
+    handleIconError(event) {
+      // Hide broken image
+      if (event.target && event.target.parentElement) {
+        event.target.style.display = 'none'
+      }
+    },
+
+    handleIconFileSelect(event) {
+      this.iconUploadError = ''
+      this.iconPreviewUrl = null
+      this.uploadedIconFile = null
+
+      const file = event.target.files[0]
+      if (!file) {
+        return
+      }
+
+      // Validate file extension (only PNG, JPG, ICO allowed)
+      const validExtensions = ['.png', '.jpg', '.jpeg', '.ico']
+      const fileExt = '.' + file.name.split('.').pop().toLowerCase()
+      if (!validExtensions.includes(fileExt)) {
+        this.iconUploadError = `Invalid file type. Allowed: ${validExtensions.join(', ')}`
+        event.target.value = '' // Clear the input
+        return
+      }
+
+      // Validate file size (500KB = 512000 bytes)
+      const maxSize = 512000
+      if (file.size > maxSize) {
+        this.iconUploadError = `File size exceeds maximum allowed size of 500KB`
+        event.target.value = '' // Clear the input
+        return
+      }
+
+      // Create preview URL
+      this.uploadedIconFile = file
+      const reader = new FileReader()
+      reader.onload = (e) => {
+        this.iconPreviewUrl = e.target.result
+      }
+      reader.readAsDataURL(file)
+    },
+
+    handleRemoveIcon() {
+      this.uploadedIconFile = null
+      this.iconPreviewUrl = null
+      this.iconUploadError = ''
+      this.currentIconUrl = null
+      this.hasPngIcon = false
+      this.iconRemoved = true
+      
+      // Clear file input
+      if (this.$refs.iconFileInput) {
+        this.$refs.iconFileInput.value = ''
+      }
+    },
+
+    async uploadIcon() {
+      if (!this.uploadedIconFile) {
+        return null
+      }
+
+      try {
+        const formData = new FormData()
+        formData.append('file', this.uploadedIconFile)
+
+        const response = await fetch(`${APIHOST}/api/data/icons/upload/`, {
+          method: 'POST',
+          headers: {
+            'X-CSRFToken': this.getCsrfToken()
+          },
+          credentials: 'include',
+          body: formData
+        })
+
+        const data = await response.json()
+
+        if (!response.ok || !data.success) {
+          this.iconUploadError = data.error || 'Failed to upload icon'
+          return null
+        }
+
+        return data.icon_url
+      } catch (error) {
+        console.error('Error uploading icon:', error)
+        this.iconUploadError = `Error: ${error.message}`
+        return null
+      }
     },
 
     updateRawJson() {
@@ -343,6 +547,7 @@ export default {
     async handleSubmit() {
       this.errorMessage = ''
       this.successMessage = ''
+      this.iconUploadError = ''
       this.isSaving = true
 
       try {
@@ -353,6 +558,17 @@ export default {
           this.errorMessage = 'Feature ID not found. Cannot update feature.'
           this.isSaving = false
           return
+        }
+
+        // Upload icon first if a new icon file was selected
+        let uploadedIconUrl = null
+        if (this.uploadedIconFile) {
+          uploadedIconUrl = await this.uploadIcon()
+          if (!uploadedIconUrl) {
+            // Error already set in uploadIcon method
+            this.isSaving = false
+            return
+          }
         }
 
         // Build feature from form data and current feature
@@ -423,9 +639,33 @@ export default {
           tags: filteredTags
         }
 
-        // Update marker color for points if no PNG icon
-        if (this.isPoint && !this.hasPngIcon) {
-          formFieldUpdates['marker-color'] = this.formData.markerColor
+        // Handle icon for points
+        if (this.isPoint) {
+          // If icon was uploaded, set it
+          if (uploadedIconUrl) {
+            // Set icon in the first available property name
+            formFieldUpdates['icon'] = uploadedIconUrl
+            // Also clear marker-color since we have an icon
+            delete formFieldUpdates['marker-color']
+          } 
+          // If icon was removed (user clicked remove button)
+          else if (this.iconRemoved) {
+            // Remove icon by setting it to empty string
+            formFieldUpdates['icon'] = ''
+            // Also remove from other possible icon property names
+            formFieldUpdates['icon-href'] = ''
+            formFieldUpdates['iconUrl'] = ''
+            formFieldUpdates['icon_url'] = ''
+            formFieldUpdates['marker-icon'] = ''
+            formFieldUpdates['marker-symbol'] = ''
+            formFieldUpdates['symbol'] = ''
+            // Restore marker-color
+            formFieldUpdates['marker-color'] = this.formData.markerColor
+          }
+          // If no icon and no uploaded icon, use marker color
+          else if (!this.hasPngIcon && !uploadedIconUrl) {
+            formFieldUpdates['marker-color'] = this.formData.markerColor
+          }
         }
 
         // Update stroke and stroke-width for lines and polygons
@@ -476,6 +716,18 @@ export default {
         // Restore _id since we removed it before sending
         properties._id = featureId
         this.feature.set('properties', properties)
+        
+        // Update icon state if icon was uploaded or removed
+        if (this.isPoint) {
+          if (uploadedIconUrl) {
+            this.currentIconUrl = uploadedIconUrl
+            this.hasPngIcon = true
+            this.iconRemoved = false
+          } else if (this.iconRemoved) {
+            this.currentIconUrl = null
+            this.hasPngIcon = false
+          }
+        }
         
         // Trigger feature change to update any listeners
         this.feature.changed()
