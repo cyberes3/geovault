@@ -212,10 +212,16 @@ class UploadJob(BaseJob):
 
             # Convert to GeoJSON with timing using new processor API
             conversion_start = time.time()
-            processor = get_processor(file_data, filename)
+            processor = get_processor(file_data, filename, job_id=job_id, status_tracker=self.status_tracker)
             geojson_data, processing_log = processor.process()
             conversion_duration = time.time() - conversion_start
             realtime_log.add_timing("GeoJSON conversion", conversion_duration, "UploadJob")
+
+            # Check if job was cancelled during processing
+            job = self.status_tracker.get_job(job_id)
+            if job and job.status == ProcessingStatus.CANCELLED:
+                logger.info(f"Job {job_id} was cancelled during GeoJSON conversion/processing")
+                return
 
             # Add processing log messages to real-time log
             realtime_log.extend(processing_log)
@@ -455,6 +461,13 @@ class UploadJob(BaseJob):
                 }
                 geojson_hash = hash_normalized_geojson(geojson_for_hash)
 
+                # Check for cancellation before duplicate detection
+                job = self.status_tracker.get_job(job_id)
+                if job and job.status == ProcessingStatus.CANCELLED:
+                    logger.info(f"Job {job_id} was cancelled before duplicate detection")
+                    processing_log.add("Processing cancelled before duplicate detection", "UploadJob", DatabaseLogLevel.WARNING)
+                    return import_queue.id
+
                 # Update progress for duplicate detection
                 self.status_tracker.update_job_status(
                     job_id, ProcessingStatus.PROCESSING,
@@ -479,6 +492,13 @@ class UploadJob(BaseJob):
                 unique_internal_features, internal_duplicate_count, internal_duplicate_log = strip_duplicate_features(processed_features)
                 processing_log.extend(internal_duplicate_log)
 
+                # Check for cancellation after internal duplicate detection
+                job = self.status_tracker.get_job(job_id)
+                if job and job.status == ProcessingStatus.CANCELLED:
+                    logger.info(f"Job {job_id} was cancelled after internal duplicate detection")
+                    processing_log.add("Processing cancelled after internal duplicate detection", "UploadJob", DatabaseLogLevel.WARNING)
+                    return import_queue.id
+
                 # Then check for coordinate duplicates against existing features
                 processing_log.add("Checking for coordinate duplicates against existing features in your library", "UploadJob", DatabaseLogLevel.INFO)
                 duplicate_detection_start = time.time()
@@ -487,6 +507,13 @@ class UploadJob(BaseJob):
                 processing_log.extend(duplicate_log)
                 processing_log.add_timing("Duplicate detection", duplicate_detection_duration, "UploadJob")
 
+                # Check for cancellation after duplicate detection
+                job = self.status_tracker.get_job(job_id)
+                if job and job.status == ProcessingStatus.CANCELLED:
+                    logger.info(f"Job {job_id} was cancelled after duplicate detection")
+                    processing_log.add("Processing cancelled after duplicate detection", "UploadJob", DatabaseLogLevel.WARNING)
+                    return import_queue.id
+
                 # Log summary of duplicate detection results
                 total_duplicates = internal_duplicate_count + len(duplicate_features)
                 processing_log.add(f"Duplicate detection completed: {internal_duplicate_count} internal duplicates, {len(duplicate_features)} existing duplicates", "UploadJob", DatabaseLogLevel.INFO)
@@ -494,6 +521,13 @@ class UploadJob(BaseJob):
                 # Use the original processed_features (not unique_features) to preserve all features
                 # The duplicate_features list contains the duplicate information we need
                 processing_log.add(f"Total duplicate features found: {total_duplicates}", "UploadJob", DatabaseLogLevel.INFO)
+
+                # Check for cancellation before database save
+                job = self.status_tracker.get_job(job_id)
+                if job and job.status == ProcessingStatus.CANCELLED:
+                    logger.info(f"Job {job_id} was cancelled before database save")
+                    processing_log.add("Processing cancelled before database save", "UploadJob", DatabaseLogLevel.WARNING)
+                    return import_queue.id
 
                 # Update progress for database save
                 self.status_tracker.update_job_status(

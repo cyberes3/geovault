@@ -9,8 +9,8 @@ import subprocess
 import tempfile
 import time
 from abc import ABC, abstractmethod
-from concurrent.futures import ThreadPoolExecutor
-from typing import Dict, Any, Tuple, Union, List
+from concurrent.futures import ThreadPoolExecutor, as_completed
+from typing import Dict, Any, Tuple, Union, List, Optional
 
 from geo_lib.processing.file_types import FileType, detect_file_type
 from geo_lib.processing.geo_processor import (
@@ -18,6 +18,7 @@ from geo_lib.processing.geo_processor import (
     split_geometry_collection
 )
 from geo_lib.processing.logging import ImportLog, DatabaseLogLevel
+from geo_lib.processing.status_tracker import ProcessingStatusTracker, ProcessingStatus
 from geo_lib.security.file_validation import SecureFileValidator
 from geo_lib.logging.console import get_import_logger
 
@@ -30,13 +31,17 @@ class BaseProcessor(ABC):
     Defines the common processing pipeline that all file types follow.
     """
 
-    def __init__(self, file_data: Union[bytes, str], filename: str = ""):
+    def __init__(self, file_data: Union[bytes, str], filename: str = "", 
+                 job_id: Optional[str] = None, 
+                 status_tracker: Optional[ProcessingStatusTracker] = None):
         """
         Initialize the processor.
         
         Args:
             file_data: File content as bytes or string
             filename: Original filename for context
+            job_id: Optional job ID for cancellation checking
+            status_tracker: Optional status tracker for cancellation checking
         """
         self.file_data = file_data
         self.filename = filename
@@ -44,6 +49,9 @@ class BaseProcessor(ABC):
         self.file_type = None
         self.geojson_data = None
         self.processed_features = []
+        self.job_id = job_id
+        self.status_tracker = status_tracker
+        self._executor = None  # Store executor reference for proper shutdown
 
     def detect_file_type(self) -> FileType:
         """
@@ -123,6 +131,10 @@ class BaseProcessor(ABC):
         Returns:
             Tuple of (processed_features_list, feature_log, skipped_count, was_geometry_collection)
         """
+        # Check for cancellation at the very start
+        if self._is_cancelled():
+            return [], ImportLog(), 0, False
+
         feature_log = ImportLog()
         processed_features = []
         skipped_count = 0
@@ -141,6 +153,10 @@ class BaseProcessor(ABC):
             return processed_features, feature_log, skipped_count, was_geometry_collection
 
         for split_feature in split_features:
+            # Check for cancellation before processing each split feature
+            if self._is_cancelled():
+                break
+                
             if split_feature['geometry']['type'] in ['Point', 'MultiPoint', 'LineString', 'MultiLineString', 'Polygon', 'MultiPolygon']:
                 try:
                     # Generate properties with appropriate styling based on file type and feature geometry
@@ -170,18 +186,45 @@ class BaseProcessor(ABC):
                                     points = get_representative_points(feature_instance)
 
                                     if points:
+                                        # Check for cancellation before starting geocoding
+                                        if self._is_cancelled():
+                                            break
+                                        
                                         geocoding_service = get_reverse_geocoding_service()
                                         all_location_tags = set()
 
                                         for lat, lon in points:
-                                            location_tags = geocoding_service.get_location_tags(lat, lon)
-                                            all_location_tags.update(location_tags)
+                                            # Check for cancellation during geocoding loop
+                                            if self._is_cancelled():
+                                                break
+                                            
+                                            try:
+                                                # Check again before making the API call
+                                                if self._is_cancelled():
+                                                    break
+                                                location_tags = geocoding_service.get_location_tags(lat, lon, feature_log)
+                                                # Check for cancellation after geocoding completes
+                                                if self._is_cancelled():
+                                                    break
+                                                all_location_tags.update(location_tags)
+                                            except Exception as geocode_point_error:
+                                                # Only log if not cancelled
+                                                if not self._is_cancelled():
+                                                    feature_name = split_feature.get('properties', {}).get('name', 'Unnamed')
+                                                    feature_log.add(
+                                                        f"Geocoding failed for feature '{feature_name}' at coordinates ({lat}, {lon}): {str(geocode_point_error)}",
+                                                        "Geocoding",
+                                                        DatabaseLogLevel.WARNING
+                                                    )
+                                                    logger.warning(f"Geocoding failed for feature '{feature_name}' at ({lat}, {lon}): {geocode_point_error}")
 
-                                        # Add geocoding tags to existing tags
-                                        existing_tags = split_feature['properties'].get('tags', [])
-                                        if not isinstance(existing_tags, list):
-                                            existing_tags = []
-                                        split_feature['properties']['tags'] = existing_tags + sorted(all_location_tags)
+                                        # Only add tags if not cancelled
+                                        if not self._is_cancelled():
+                                            # Add geocoding tags to existing tags
+                                            existing_tags = split_feature['properties'].get('tags', [])
+                                            if not isinstance(existing_tags, list):
+                                                existing_tags = []
+                                            split_feature['properties']['tags'] = existing_tags + sorted(all_location_tags)
                             except Exception as geocode_error:
                                 feature_name = split_feature.get('properties', {}).get('name', 'Unnamed')
                                 feature_log.add(
@@ -191,6 +234,10 @@ class BaseProcessor(ABC):
                                 )
                                 logger.warning(f"Geocoding failed for feature '{feature_name}': {geocode_error}")
 
+                    # Check for cancellation before finalizing feature
+                    if self._is_cancelled():
+                        break
+                    
                     # Convert to our property format
                     from geo_lib.types.geojson import GeojsonRawProperty
                     split_feature['properties'] = GeojsonRawProperty(**split_feature['properties']).model_dump()
@@ -206,11 +253,25 @@ class BaseProcessor(ABC):
 
         return processed_features, feature_log, skipped_count, was_geometry_collection
 
+    def _is_cancelled(self) -> bool:
+        """
+        Check if the current job has been cancelled.
+        
+        Returns:
+            True if job is cancelled, False otherwise
+        """
+        if self.job_id and self.status_tracker:
+            job = self.status_tracker.get_job(self.job_id)
+            if job and job.status == ProcessingStatus.CANCELLED:
+                return True
+        return False
+
     def process_features(self, geojson_data: Dict[str, Any]) -> Tuple[list, ImportLog]:
         """
         Process features from GeoJSON data.
         Common feature processing logic used by all file types.
         Uses parallel processing via ThreadPoolExecutor for improved performance.
+        Supports cancellation checking during processing.
         
         Args:
             geojson_data: GeoJSON data dictionary
@@ -230,6 +291,11 @@ class BaseProcessor(ABC):
 
         feature_log.add(f"Processing {len(features)} raw features from file", "Feature Processing", DatabaseLogLevel.INFO)
 
+        # Check for cancellation before starting
+        if self._is_cancelled():
+            feature_log.add("Processing cancelled before feature processing started", "Feature Processing", DatabaseLogLevel.WARNING)
+            return processed_features, feature_log
+
         # Count features that will be geocoded (points and lines only)
         from django.conf import settings
         geocoding_enabled = getattr(settings, 'REVERSE_GEOCODING_ENABLED', True)
@@ -248,27 +314,74 @@ class BaseProcessor(ABC):
         num_threads = getattr(settings, 'IMPORT_PROCESSING_THREADS', 4)
 
         # Process features in parallel using ThreadPoolExecutor
+        # Use submit() instead of map() to allow cancellation checking between tasks
         if len(features) > 0:
-            with ThreadPoolExecutor(max_workers=num_threads) as executor:
-                # Process all features in parallel and collect results
-                results = executor.map(self._process_single_feature, features)
+            self._executor = ThreadPoolExecutor(max_workers=num_threads)
+            executor_shutdown_called = False
+            try:
+                # Submit all tasks
+                future_to_feature = {
+                    self._executor.submit(self._process_single_feature, feature): feature 
+                    for feature in features
+                }
 
-                # Collect results from all workers
-                for result_features, result_log, result_skipped, was_geometry_collection in results:
-                    processed_features.extend(result_features)
-                    feature_log.extend(result_log)
-                    skipped_count += result_skipped
-                    if was_geometry_collection:
-                        geometry_collection_count += 1
+                # Collect results as they complete, checking for cancellation
+                completed_count = 0
+                cancelled = False
+                for future in as_completed(future_to_feature):
+                    # Check for cancellation before processing each result
+                    if self._is_cancelled():
+                        if not cancelled:
+                            feature_log.add(f"Processing cancelled after {completed_count} features", "Feature Processing", DatabaseLogLevel.WARNING)
+                            cancelled = True
+                            # Cancel remaining futures (they'll finish but we won't process results)
+                            for remaining_future in future_to_feature:
+                                if not remaining_future.done():
+                                    remaining_future.cancel()
+                            # Shutdown executor without waiting for remaining tasks
+                            self._executor.shutdown(wait=False)
+                            executor_shutdown_called = True
+                            # Break immediately - don't process any more results
+                            break
+
+                    # Only process results if not cancelled
+                    if not cancelled:
+                        try:
+                            result_features, result_log, result_skipped, was_geometry_collection = future.result()
+                            processed_features.extend(result_features)
+                            feature_log.extend(result_log)
+                            skipped_count += result_skipped
+                            if was_geometry_collection:
+                                geometry_collection_count += 1
+                            completed_count += 1
+                        except Exception as e:
+                            feature = future_to_feature[future]
+                            feature_name = feature.get('properties', {}).get('name', 'Unnamed')
+                            logger.error(f"Error processing feature '{feature_name}': {str(e)}")
+                            feature_log.add(f"Error processing feature '{feature_name}': {str(e)}", "Feature Processing", DatabaseLogLevel.ERROR)
+                            skipped_count += 1
+                            completed_count += 1
+                    else:
+                        # Cancellation detected - skip processing this result
+                        completed_count += 1
+            finally:
+                # Ensure executor is always properly shut down
+                if not executor_shutdown_called:
+                    # If not already shut down, wait for all tasks to complete
+                    self._executor.shutdown(wait=True)
+                self._executor = None  # Clear reference
 
         # Log summary
-        if geometry_collection_count > 0:
-            feature_log.add(f"Split {geometry_collection_count} geometry collections into individual features", "Feature Processing", DatabaseLogLevel.INFO)
+        if self._is_cancelled():
+            feature_log.add(f"Processing was cancelled. Processed {len(processed_features)} features before cancellation", "Feature Processing", DatabaseLogLevel.WARNING)
+        else:
+            if geometry_collection_count > 0:
+                feature_log.add(f"Split {geometry_collection_count} geometry collections into individual features", "Feature Processing", DatabaseLogLevel.INFO)
 
-        if skipped_count > 0:
-            feature_log.add(f"Skipped {skipped_count} features (invalid geometry or unsupported type)", "Feature Processing", DatabaseLogLevel.INFO)
+            if skipped_count > 0:
+                feature_log.add(f"Skipped {skipped_count} features (invalid geometry or unsupported type)", "Feature Processing", DatabaseLogLevel.INFO)
 
-        feature_log.add(f"Successfully processed {len(processed_features)} features", "Feature Processing", DatabaseLogLevel.INFO)
+            feature_log.add(f"Successfully processed {len(processed_features)} features", "Feature Processing", DatabaseLogLevel.INFO)
 
         return processed_features, feature_log
 
@@ -276,6 +389,7 @@ class BaseProcessor(ABC):
         """
         Main processing pipeline orchestrator.
         Calls all processing steps in order.
+        Checks for cancellation at each step.
         
         Returns:
             Tuple of (geojson_data, import_log)
@@ -287,15 +401,30 @@ class BaseProcessor(ABC):
             detection_duration = time.time() - detection_start
             self.import_log.add_timing("File type detection", detection_duration, "Processing")
 
+            # Check for cancellation
+            if self._is_cancelled():
+                self.import_log.add("Processing cancelled during file type detection", "Processing", DatabaseLogLevel.WARNING)
+                return {'type': 'FeatureCollection', 'features': []}, self.import_log
+
             # Step 2: Validate file
             if not self.validate():
                 raise Exception("File validation failed")
+
+            # Check for cancellation
+            if self._is_cancelled():
+                self.import_log.add("Processing cancelled during file validation", "Processing", DatabaseLogLevel.WARNING)
+                return {'type': 'FeatureCollection', 'features': []}, self.import_log
 
             # Step 3: Convert to GeoJSON
             conversion_start = time.time()
             self.geojson_data = self.convert_to_geojson()
             conversion_duration = time.time() - conversion_start
             self.import_log.add_timing(f"{file_type.value.upper()} conversion", conversion_duration, "File Conversion")
+
+            # Check for cancellation
+            if self._is_cancelled():
+                self.import_log.add("Processing cancelled during GeoJSON conversion", "Processing", DatabaseLogLevel.WARNING)
+                return {'type': 'FeatureCollection', 'features': []}, self.import_log
 
             # Step 4: Process features
             feature_processing_start = time.time()
@@ -314,8 +443,10 @@ class BaseProcessor(ABC):
             return final_geojson, self.import_log
 
         except Exception as e:
-            self.import_log.add(f"Processing failed: {str(e)}", "Processing", DatabaseLogLevel.ERROR)
-            logger.error(f"Processing error: {str(e)}")
+            # Don't log error if job was cancelled
+            if not self._is_cancelled():
+                self.import_log.add(f"Processing failed: {str(e)}", "Processing", DatabaseLogLevel.ERROR)
+                logger.error(f"Processing error: {str(e)}")
             raise
 
     def _calculate_timeout(self) -> int:

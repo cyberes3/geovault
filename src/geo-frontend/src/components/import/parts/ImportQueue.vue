@@ -5,7 +5,7 @@
       <div class="flex items-center space-x-3">
         <button
           @click="bulkImport"
-          :disabled="selectedItems.size === 0 || isBulkImporting"
+          :disabled="validImportableCount === 0 || isBulkImporting"
           class="inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md text-white bg-green-600 hover:bg-green-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-green-500 transition-colors duration-200 disabled:opacity-50 disabled:cursor-not-allowed"
         >
           <svg v-if="isBulkImporting" class="animate-spin -ml-1 mr-2 h-4 w-4" fill="none" viewBox="0 0 24 24">
@@ -15,7 +15,7 @@
           <svg v-else class="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12"></path>
           </svg>
-          {{ isBulkImporting ? 'Importing...' : `Import ${selectedItems.size} Item${selectedItems.size === 1 ? '' : 's'}` }}
+          {{ isBulkImporting ? 'Importing...' : `Import ${validImportableCount} Item${validImportableCount === 1 ? '' : 's'}` }}
         </button>
         <button
           @click="bulkDelete"
@@ -108,7 +108,7 @@
               type="checkbox"
               :checked="selectedItems.has(item.id)"
               @change="toggleItemSelection(item.id)"
-              :disabled="item.imported || item.processing === true || (item.processing === false && item.feature_count === -1) || item.deleting || item.duplicate_status === 'duplicate_in_queue'"
+              :disabled="item.imported || item.processing === true || (item.processing === false && item.feature_count === -1) || item.deleting"
               class="h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300 rounded disabled:opacity-50 disabled:cursor-not-allowed"
             />
           </td>
@@ -123,8 +123,8 @@
               </div>
               <div class="ml-4">
                 <div class="text-sm font-medium text-gray-900">
-                  <!-- Disable link only for duplicates in queue -->
-                  <a v-if="item.duplicate_status !== 'duplicate_in_queue'" 
+                  <!-- Disable link for duplicates in queue or when operations are in progress -->
+                  <a v-if="item.duplicate_status !== 'duplicate_in_queue' && !isAnyOperationInProgress && !item.deleting" 
                      :href="`/#/import/process/${item.id}`" 
                      class="text-blue-600 hover:text-blue-900">
                     {{ item.original_filename }}
@@ -192,7 +192,7 @@
           </td>
           <td class="px-6 py-4 whitespace-nowrap text-center text-sm font-medium">
             <button
-              :disabled="item.deleting"
+              :disabled="item.deleting || isAnyOperationInProgress"
               class="inline-flex items-center px-3 py-1.5 border border-transparent text-xs font-medium rounded-md text-white bg-red-600 hover:bg-red-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-red-500 transition-colors duration-200 disabled:opacity-50 disabled:cursor-not-allowed disabled:bg-gray-400 disabled:hover:bg-gray-400"
               @click="deleteItem(item, index)"
             >
@@ -244,6 +244,21 @@ export default {
     },
     isIndeterminate() {
       return this.selectedItems.size > 0 && this.selectedItems.size < this.filteredImportQueue.length;
+    },
+    validImportableCount() {
+      // Count items that can actually be imported (same logic as bulkImport)
+      let count = 0;
+      this.selectedItems.forEach(itemId => {
+        const item = this.filteredImportQueue.find(i => i.id === itemId);
+        if (item && !item.imported && !item.processing_failed && !(item.processing === true || (item.processing === false && item.feature_count === -1)) && item.duplicate_status !== 'duplicate_in_queue') {
+          count++;
+        }
+      });
+      return count;
+    },
+    isAnyOperationInProgress() {
+      // Check if any bulk import or delete operation is in progress
+      return this.isBulkImporting || this.isBulkDeleting;
     }
   },
   components: {},
@@ -396,8 +411,9 @@ export default {
     },
     selectAll() {
       this.filteredImportQueue.forEach(item => {
-        // Select items that are not imported, not currently processing, not being deleted, and not file-level duplicates in queue
-        if (!item.imported && !(item.processing === true || (item.processing === false && item.feature_count === -1)) && !item.deleting && item.duplicate_status !== 'duplicate_in_queue') {
+        // Select items that are not imported, not currently processing, and not being deleted
+        // Note: Duplicates can be selected for bulk deletion, but will be excluded from bulk import
+        if (!item.imported && !(item.processing === true || (item.processing === false && item.feature_count === -1)) && !item.deleting) {
           this.selectedItems.add(item.id);
         }
       });

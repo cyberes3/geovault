@@ -85,8 +85,18 @@ def generate_auto_tags(feature: GeoFeatureSupported, import_log=None) -> List[st
                 all_location_tags = set()
                 
                 for lat, lon in points:
-                    location_tags = geocoding_service.get_location_tags(lat, lon)
-                    all_location_tags.update(location_tags)
+                    try:
+                        location_tags = geocoding_service.get_location_tags(lat, lon, import_log)
+                        all_location_tags.update(location_tags)
+                    except Exception as geocode_point_error:
+                        error_msg = f"Geocoding failed at coordinates ({lat}, {lon}): {str(geocode_point_error)}"
+                        logger.warning(error_msg)
+                        if import_log:
+                            import_log.add(
+                                error_msg,
+                                "Geocoding",
+                                DatabaseLogLevel.WARNING
+                            )
                 
                 tags.extend(sorted(all_location_tags))
                 

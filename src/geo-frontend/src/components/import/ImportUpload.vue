@@ -260,7 +260,7 @@ export default {
       } else if (this.uploadProgress > 0 && this.uploadProgress < 100) {
         return `Uploading ${this.currentFileIndex + 1}/${this.totalFiles} items...`
       } else if (this.uploadProgress === 100 && this.isProcessing && !this.uploadMsg) {
-        return `Processing ${this.currentFileIndex + 1}/${this.totalFiles} items...`
+        return `Uploading ${this.currentFileIndex + 1}/${this.totalFiles} items...`
       } else if (this.uploadProgress === 100 && this.overallProgress < 100 && !this.uploadMsg && !this.isProcessing) {
         return `Uploaded ${this.currentFileIndex + 1}/${this.totalFiles} items...`
       } else if (this.overallProgress === 100 && !this.uploadMsg) {

@@ -64,19 +64,31 @@ class BaseJob(ABC):
     def _job_worker(self, job_id: str, kwargs: Dict[str, Any]):
         """
         Worker function that runs in a background thread to process the job.
+        Checks for cancellation before and during processing.
         """
         try:
             # Check if job was cancelled before starting processing
             job = self.status_tracker.get_job(job_id)
             if not job or job.status == ProcessingStatus.CANCELLED:
+                logger.info(f"Job {job_id} was cancelled before processing started")
                 return
 
             # Execute the job-specific processing
             self._execute_job(job_id, kwargs)
 
+            # Check if job was cancelled after processing
+            job = self.status_tracker.get_job(job_id)
+            if job and job.status == ProcessingStatus.CANCELLED:
+                logger.info(f"Job {job_id} was cancelled during processing")
+
         except Exception as e:
-            logger.error(f"Error in {self.get_job_type()} job {job_id}: {traceback.format_exc()}")
-            self._handle_job_error(job_id, str(e))
+            # Don't log error if job was cancelled
+            job = self.status_tracker.get_job(job_id)
+            if job and job.status == ProcessingStatus.CANCELLED:
+                logger.info(f"Job {job_id} was cancelled, stopping error handling")
+            else:
+                logger.error(f"Error in {self.get_job_type()} job {job_id}: {traceback.format_exc()}")
+                self._handle_job_error(job_id, str(e))
 
         finally:
             # Clean up thread reference
