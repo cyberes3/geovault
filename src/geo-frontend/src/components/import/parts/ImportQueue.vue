@@ -5,7 +5,7 @@
       <div class="flex items-center space-x-3">
         <button
           @click="bulkImport"
-          :disabled="validImportableCount === 0 || isBulkImporting"
+          :disabled="validImportableCount === 0 || isBulkImporting || isBulkDeleting"
           class="inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md text-white bg-green-600 hover:bg-green-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-green-500 transition-colors duration-200 disabled:opacity-50 disabled:cursor-not-allowed"
         >
           <svg v-if="isBulkImporting" class="animate-spin -ml-1 mr-2 h-4 w-4" fill="none" viewBox="0 0 24 24">
@@ -19,7 +19,7 @@
         </button>
         <button
           @click="bulkDelete"
-          :disabled="selectedItems.size === 0 || isBulkDeleting"
+          :disabled="selectedItems.size === 0 || isBulkDeleting || isBulkImporting"
           class="inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md text-white bg-red-600 hover:bg-red-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-red-500 transition-colors duration-200 disabled:opacity-50 disabled:cursor-not-allowed"
         >
           <svg v-if="isBulkDeleting" class="animate-spin -ml-1 mr-2 h-4 w-4" fill="none" viewBox="0 0 24 24">
@@ -102,13 +102,13 @@
         </tr>
 
         <!-- Actual data rows -->
-        <tr v-for="(item, index) in filteredImportQueue" :key="`item-${index}`" :class="item.deleting ? 'opacity-50 bg-gray-100' : 'hover:bg-gray-50'">
+        <tr v-for="(item, index) in filteredImportQueue" :key="`item-${index}`" :class="(item.deleting || item.importing) ? 'opacity-50 bg-gray-100' : 'hover:bg-gray-50'">
           <td class="px-6 py-4 whitespace-nowrap">
             <input
               type="checkbox"
               :checked="selectedItems.has(item.id)"
               @change="toggleItemSelection(item.id)"
-              :disabled="item.imported || item.processing === true || (item.processing === false && item.feature_count === -1) || item.deleting"
+              :disabled="item.imported || item.processing === true || (item.processing === false && item.feature_count === -1) || item.deleting || item.importing"
               class="h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300 rounded disabled:opacity-50 disabled:cursor-not-allowed"
             />
           </td>
@@ -123,8 +123,8 @@
               </div>
               <div class="ml-4">
                 <div class="text-sm font-medium text-gray-900">
-                  <!-- Disable link for duplicates in queue or when operations are in progress -->
-                  <a v-if="item.duplicate_status !== 'duplicate_in_queue' && !isAnyOperationInProgress && !item.deleting" 
+                  <!-- Disable link for duplicates in queue or when this specific item is being imported/deleted -->
+                  <a v-if="item.duplicate_status !== 'duplicate_in_queue' && !item.deleting && !item.importing" 
                      :href="`/#/import/process/${item.id}`" 
                      class="text-blue-600 hover:text-blue-900">
                     {{ item.original_filename }}
@@ -149,6 +149,13 @@
                 <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
               </svg>
               Deleting
+            </span>
+            <span v-else-if="item.importing" class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-blue-100 text-blue-800">
+              <svg class="animate-spin -ml-1 mr-1 h-3 w-3" fill="none" viewBox="0 0 24 24">
+                <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+                <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+              </svg>
+              Importing
             </span>
             <span v-else-if="item.imported" class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-800">
               <svg class="w-3 h-3 mr-1" fill="currentColor" viewBox="0 0 20 20">
@@ -191,16 +198,29 @@
             </span>
           </td>
           <td class="px-6 py-4 whitespace-nowrap text-center text-sm font-medium">
-            <button
-              :disabled="item.deleting || isAnyOperationInProgress"
-              class="inline-flex items-center px-3 py-1.5 border border-transparent text-xs font-medium rounded-md text-white bg-red-600 hover:bg-red-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-red-500 transition-colors duration-200 disabled:opacity-50 disabled:cursor-not-allowed disabled:bg-gray-400 disabled:hover:bg-gray-400"
-              @click="deleteItem(item, index)"
-            >
-              <svg class="w-3 h-3 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"></path>
-              </svg>
-              Delete
-            </button>
+            <div class="flex items-center justify-center space-x-2">
+              <button
+                v-if="!item.imported && !item.processing_failed && !(item.processing === true || (item.processing === false && item.feature_count === -1)) && item.duplicate_status !== 'duplicate_in_queue'"
+                :disabled="item.deleting || item.importing"
+                class="inline-flex items-center px-3 py-1.5 border border-transparent text-xs font-medium rounded-md text-white bg-green-600 hover:bg-green-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-green-500 transition-colors duration-200 disabled:opacity-50 disabled:cursor-not-allowed disabled:bg-gray-400 disabled:hover:bg-gray-400"
+                @click="importItem(item, index)"
+              >
+                <svg class="w-3 h-3 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12"></path>
+                </svg>
+                Import
+              </button>
+              <button
+                :disabled="item.deleting || item.importing"
+                class="inline-flex items-center px-3 py-1.5 border border-transparent text-xs font-medium rounded-md text-white bg-red-600 hover:bg-red-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-red-500 transition-colors duration-200 disabled:opacity-50 disabled:cursor-not-allowed disabled:bg-gray-400 disabled:hover:bg-gray-400"
+                @click="deleteItem(item, index)"
+              >
+                <svg class="w-3 h-3 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"></path>
+                </svg>
+                Delete
+              </button>
+            </div>
           </td>
         </tr>
       </tbody>
@@ -227,12 +247,13 @@ export default {
   computed: {
     ...mapState(["userInfo", "importQueue", "websocketConnected"]),
     filteredImportQueue() {
-      // Filter out items that have been locally deleted and add deleting state
+      // Filter out items that have been locally deleted and add deleting/importing state
       return this.importQueue
         .filter(item => !this.deletedItems.has(item.id))
         .map(item => ({
           ...item,
-          deleting: this.deletingItems.has(item.id)
+          deleting: this.deletingItems.has(item.id),
+          importing: this.importingItems.has(item.id)
         }));
     },
     combinedLoading() {
@@ -275,6 +296,7 @@ export default {
       isBulkDeleting: false, // Track bulk delete state
       refreshInterval: null, // Auto-refresh interval
       deletingItems: new Set(), // Track items currently being deleted
+      importingItems: new Set(), // Track items currently being imported individually
       deleteJobIds: new Map(), // Track delete job IDs for each item
     }
   },
@@ -346,6 +368,45 @@ export default {
         }
       }
     },
+    async importItem(item, index) {
+      if (item.imported || item.processing_failed || (item.processing === true || (item.processing === false && item.feature_count === -1)) || item.duplicate_status === 'duplicate_in_queue') {
+        return;
+      }
+
+      const confirmMessage = `Are you sure you want to import "${item.original_filename}" (#${item.id}) without reviewing it?`;
+      if (!window.confirm(confirmMessage)) {
+        return;
+      }
+
+      // Mark item as importing
+      this.importingItems.add(item.id);
+      this.$forceUpdate();
+
+      const csrftoken = getCookie('csrftoken');
+
+      try {
+        const response = await axios.post(`/api/data/item/import/perform/${item.id}`, [], {
+          headers: {
+            'X-CSRFToken': csrftoken
+          }
+        });
+
+        if (response.data.success) {
+          alert(`Successfully imported "${item.original_filename}"!`);
+          // Refresh the queue
+          this.$store.dispatch('refreshImportQueue');
+        } else {
+          alert(`Failed to import: ${response.data.msg}`);
+        }
+      } catch (error) {
+        console.error(`Failed to import item ${item.id}:`, error);
+        alert(`Failed to import: ${error.message}`);
+      } finally {
+        // Remove from importing items
+        this.importingItems.delete(item.id);
+        this.$forceUpdate();
+      }
+    },
     async deleteItem(item, index) {
       if (window.confirm(`Delete "${item.original_filename}" (#${item.id})`)) {
         // Mark item as deleting
@@ -384,6 +445,7 @@ export default {
       this.deletedItems.clear();
       this.deletedItemTimeouts.clear();
       this.deletingItems.clear();
+      this.importingItems.clear();
       this.deleteJobIds.clear();
     },
     // Bulk import methods
@@ -411,9 +473,9 @@ export default {
     },
     selectAll() {
       this.filteredImportQueue.forEach(item => {
-        // Select items that are not imported, not currently processing, and not being deleted
+        // Select items that are not imported, not currently processing, and not being deleted or imported
         // Note: Duplicates can be selected for bulk deletion, but will be excluded from bulk import
-        if (!item.imported && !(item.processing === true || (item.processing === false && item.feature_count === -1)) && !item.deleting) {
+        if (!item.imported && !(item.processing === true || (item.processing === false && item.feature_count === -1)) && !item.deleting && !item.importing) {
           this.selectedItems.add(item.id);
         }
       });
@@ -461,13 +523,20 @@ export default {
 
       this.isBulkImporting = true;
       const csrftoken = getCookie('csrftoken');
+      const itemIds = Array.from(this.selectedItems);
       let successCount = 0;
       let errorCount = 0;
       const errors = [];
 
+      // Mark all items as importing immediately (before API calls) to disable buttons
+      itemIds.forEach(itemId => {
+        this.importingItems.add(itemId);
+      });
+      this.$forceUpdate();
+
       try {
         // Import each selected item
-        for (const itemId of this.selectedItems) {
+        for (const itemId of itemIds) {
           try {
             const response = await axios.post(`/api/data/item/import/perform/${itemId}`, [], {
               headers: {
@@ -480,12 +549,21 @@ export default {
             } else {
               errorCount++;
               errors.push(`Item ${itemId}: ${response.data.msg}`);
+              // Remove from importingItems on failure
+              this.importingItems.delete(itemId);
             }
           } catch (error) {
             errorCount++;
             errors.push(`Item ${itemId}: ${error.message}`);
+            // Remove from importingItems on error
+            this.importingItems.delete(itemId);
           }
         }
+
+        // Remove all items from importingItems (successful ones will be removed by refresh, but clean up failed ones)
+        itemIds.forEach(itemId => {
+          this.importingItems.delete(itemId);
+        });
 
         // Show results
         if (errorCount === 0) {
@@ -500,7 +578,12 @@ export default {
         this.clearSelection();
 
       } catch (error) {
+        // Remove all items from importingItems on error
+        itemIds.forEach(itemId => {
+          this.importingItems.delete(itemId);
+        });
         alert(`Bulk import failed: ${error.message}`);
+        this.$forceUpdate();
       } finally {
         this.isBulkImporting = false;
       }
@@ -541,6 +624,12 @@ export default {
       const csrftoken = getCookie('csrftoken');
       const itemIds = Array.from(this.selectedItems);
 
+      // Mark all items as deleting immediately (before API call) to disable buttons
+      itemIds.forEach(itemId => {
+        this.deletingItems.add(itemId);
+      });
+      this.$forceUpdate();
+
       try {
         const response = await axios.delete(IMPORT_BULK_DELETE_URL, {
           data: { ids: itemIds },
@@ -550,11 +639,6 @@ export default {
         });
 
         if (response.data.success && response.data.job_ids) {
-          // Mark all items as deleting
-          itemIds.forEach(itemId => {
-            this.deletingItems.add(itemId);
-          });
-
           // Store job IDs for tracking
           response.data.job_ids.forEach((jobId, index) => {
             if (index < itemIds.length) {
@@ -567,16 +651,22 @@ export default {
 
           // Show success message
           alert(`Started deletion of ${response.data.started_count} item${response.data.started_count === 1 ? '' : 's'}!`);
-
-          // Force reactivity update
-          this.$forceUpdate();
         } else {
+          // If API call failed, remove items from deletingItems
+          itemIds.forEach(itemId => {
+            this.deletingItems.delete(itemId);
+          });
           throw new Error(response.data.msg || 'Unknown error occurred');
         }
 
       } catch (error) {
         console.error('Bulk delete error:', error);
+        // Remove items from deletingItems on error
+        itemIds.forEach(itemId => {
+          this.deletingItems.delete(itemId);
+        });
         alert(`Bulk delete failed: ${error.response?.data?.msg || error.message}`);
+        this.$forceUpdate();
       } finally {
         this.isBulkDeleting = false;
       }
