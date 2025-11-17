@@ -46,8 +46,8 @@
           ></textarea>
         </div>
 
-        <!-- Icon Color Field (only if no PNG icon) -->
-        <div v-if="!hasPngIcon">
+        <!-- Icon Color Field (only for points with no PNG icon) -->
+        <div v-if="isPoint && !hasPngIcon">
           <label class="block text-sm font-medium text-gray-700 mb-1">Icon Color</label>
           <div class="flex items-center space-x-2">
             <input
@@ -63,6 +63,40 @@
               pattern="^#[0-9A-Fa-f]{6}$"
             />
           </div>
+        </div>
+
+        <!-- Line/Polygon Color and Width Fields -->
+        <div v-if="isLine || isPolygon">
+          <label class="block text-sm font-medium text-gray-700 mb-1">Border Color</label>
+          <div class="flex items-center space-x-2">
+            <input
+              v-model="formData.strokeColor"
+              type="color"
+              class="h-10 w-20 border border-gray-300 rounded cursor-pointer"
+              @input="onStrokeColorChange"
+            />
+            <input
+              v-model="formData.strokeColor"
+              type="text"
+              class="flex-1 px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500"
+              placeholder="#ff0000"
+              pattern="^#[0-9A-Fa-f]{6}$"
+              @input="onStrokeColorChange"
+            />
+          </div>
+        </div>
+
+        <!-- Width Field (for lines and polygons) -->
+        <div v-if="isLine || isPolygon">
+          <label class="block text-sm font-medium text-gray-700 mb-1">Border Width</label>
+          <input
+            v-model.number="formData.strokeWidth"
+            type="number"
+            min="1"
+            max="20"
+            step="1"
+            class="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500"
+          />
         </div>
 
         <!-- Raw JSON Field (Coordinates Only) -->
@@ -137,7 +171,10 @@ export default {
         name: '',
         description: '',
         tags: [],
-        markerColor: '#ff0000'
+        markerColor: '#ff0000',
+        strokeColor: '#ff0000',
+        strokeWidth: 2,
+        fillColor: '#ff0000'
       },
       tagsInput: '',
       rawJsonInput: '',
@@ -146,6 +183,23 @@ export default {
       errorMessage: '',
       successMessage: '',
       protectedTags: []
+    }
+  },
+  computed: {
+    geometryType() {
+      if (!this.feature) return null
+      const geometry = this.feature.getGeometry()
+      if (!geometry) return null
+      return geometry.getType()
+    },
+    isPoint() {
+      return this.geometryType === 'Point' || this.geometryType === 'MultiPoint'
+    },
+    isLine() {
+      return this.geometryType === 'LineString' || this.geometryType === 'MultiLineString'
+    },
+    isPolygon() {
+      return this.geometryType === 'Polygon' || this.geometryType === 'MultiPolygon'
     }
   },
   async mounted() {
@@ -175,6 +229,22 @@ export default {
       this.formData.tags = filterProtectedTags(allTags, this.protectedTags)
       this.tagsInput = this.formData.tags.join(', ')
       this.formData.markerColor = properties['marker-color'] || '#ff0000'
+
+      // Initialize stroke color and width for lines and polygons
+      this.formData.strokeColor = properties.stroke || '#ff0000'
+      this.formData.strokeWidth = properties['stroke-width'] || 2
+
+      // Initialize fill color for polygons
+      if (this.isPolygon) {
+        // If fill exists, use it; otherwise calculate from stroke with 10% opacity
+        if (properties.fill) {
+          // Extract hex from fill if it's rgba, otherwise use as-is
+          this.formData.fillColor = this.extractHexFromColor(properties.fill) || properties.fill
+        } else {
+          // Default: use stroke color as base for fill
+          this.formData.fillColor = this.formData.strokeColor
+        }
+      }
 
       // Check for PNG icon
       this.hasPngIcon = this.checkForPngIcon(properties)
@@ -224,6 +294,46 @@ export default {
     parseTags(tagsString) {
       if (!tagsString || !tagsString.trim()) return []
       return tagsString.split(',').map(tag => tag.trim()).filter(tag => tag.length > 0)
+    },
+
+    hexToRgba(hexColor, opacity) {
+      // Convert hex color to RGBA string
+      const hex = hexColor.replace('#', '')
+      const r = parseInt(hex.slice(0, 2), 16)
+      const g = parseInt(hex.slice(2, 4), 16)
+      const b = parseInt(hex.slice(4, 6), 16)
+      return `rgba(${r}, ${g}, ${b}, ${opacity})`
+    },
+
+    extractHexFromColor(colorString) {
+      // Extract hex color from rgba string or return hex if already hex
+      if (!colorString) return null
+      
+      // If it's already a hex color, return it
+      if (colorString.startsWith('#')) {
+        return colorString
+      }
+      
+      // If it's rgba, extract RGB values and convert to hex
+      const rgbaMatch = colorString.match(/rgba?\((\d+),\s*(\d+),\s*(\d+)/)
+      if (rgbaMatch) {
+        const r = parseInt(rgbaMatch[1])
+        const g = parseInt(rgbaMatch[2])
+        const b = parseInt(rgbaMatch[3])
+        return `#${[r, g, b].map(x => {
+          const hex = x.toString(16)
+          return hex.length === 1 ? '0' + hex : hex
+        }).join('')}`
+      }
+      
+      return null
+    },
+
+    onStrokeColorChange() {
+      // When stroke color changes for polygons, automatically update fill to 10% opacity
+      if (this.isPolygon) {
+        this.formData.fillColor = this.formData.strokeColor
+      }
     },
 
     async handleSubmit() {
@@ -307,9 +417,22 @@ export default {
           tags: filteredTags
         }
 
-        // Update marker color if no PNG icon
-        if (!this.hasPngIcon) {
+        // Update marker color for points if no PNG icon
+        if (this.isPoint && !this.hasPngIcon) {
           formFieldUpdates['marker-color'] = this.formData.markerColor
+        }
+
+        // Update stroke and stroke-width for lines and polygons
+        if (this.isLine || this.isPolygon) {
+          formFieldUpdates.stroke = this.formData.strokeColor
+          formFieldUpdates['stroke-width'] = this.formData.strokeWidth
+        }
+
+        // Update fill and fill-opacity for polygons
+        if (this.isPolygon) {
+          // Use the stroke color as the base fill color, with 10% opacity
+          formFieldUpdates.fill = this.formData.strokeColor
+          formFieldUpdates['fill-opacity'] = 0.1
         }
 
         // Merge form field updates into properties, with form fields taking precedence
@@ -340,7 +463,19 @@ export default {
           return
         }
 
+        // Update the feature object's properties immediately so reopening the dialog shows correct values
+        const properties = this.feature.get('properties') || {}
+        // Update properties with the form field updates (same as what we sent to the server)
+        Object.assign(properties, formFieldUpdates)
+        // Restore _id since we removed it before sending
+        properties._id = featureId
+        this.feature.set('properties', properties)
+        
+        // Trigger feature change to update any listeners
+        this.feature.changed()
+
         this.successMessage = 'Feature updated successfully!'
+        this.isSaving = false
 
         // Emit saved event after a short delay
         setTimeout(() => {
