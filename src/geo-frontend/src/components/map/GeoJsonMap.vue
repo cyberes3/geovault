@@ -256,6 +256,32 @@ export default {
       const geometry = feature.getGeometry()
       if (!geometry) return
 
+      // Ensure feature is on the map (for search results that might not be loaded)
+      if (this.vectorSource && !this.vectorSource.getFeatures().includes(feature)) {
+        // Check if feature with same ID already exists
+        const featureId = feature.get('properties')?._id
+        if (featureId) {
+          const existingFeatures = this.vectorSource.getFeatures()
+          const existingFeature = existingFeatures.find(f => {
+            const props = f.get('properties') || {}
+            return props._id === featureId
+          })
+          
+          if (existingFeature) {
+            // Use existing feature instead
+            feature = existingFeature
+          } else {
+            // Add new feature to map
+            this.vectorSource.addFeature(feature)
+            this.addFeatureTimestamp(feature)
+          }
+        } else {
+          // Add feature to map even without ID
+          this.vectorSource.addFeature(feature)
+          this.addFeatureTimestamp(feature)
+        }
+      }
+
       const view = this.map.getView()
       const extent = geometry.getExtent()
       const geometryType = geometry.getType()

@@ -8,6 +8,7 @@ from typing import List, Tuple, Dict, NamedTuple
 from django import forms
 from django.conf import settings
 from django.contrib.gis.geos import Polygon, GEOSGeometry
+from django.db.models import Q
 from django.http import HttpResponse, Http404, JsonResponse
 from django.views.decorators.csrf import csrf_protect
 from django.views.decorators.http import require_http_methods
@@ -364,6 +365,82 @@ def get_features_by_tag(request):
         return JsonResponse({
             'success': False,
             'error': 'Failed to get features by tag',
+            'code': 500
+        }, status=500)
+
+
+@login_required_401
+@require_http_methods(["GET"])
+def search_features(request):
+    """
+    API endpoint to search features by name, description, or tags.
+    Searches across all user's features, not just those in view.
+    
+    Query parameters:
+    - query: search text (required)
+    """
+    # Get query parameter
+    query = request.GET.get('query', '').strip()
+    
+    if not query:
+        return JsonResponse({
+            'success': False,
+            'error': 'query parameter is required',
+            'code': 400
+        }, status=400)
+    
+    try:
+        # Base query for user's features
+        base_query = FeatureStore.objects.filter(user=request.user).exclude(geometry__isnull=True)
+        
+        # Build search query using Q objects for OR conditions
+        # Search in name, description, and tags fields
+        # Use PostgreSQL JSON field lookups with case-insensitive contains
+        search_q = (
+            Q(geojson__properties__name__icontains=query) |
+            Q(geojson__properties__description__icontains=query) |
+            Q(geojson__properties__tags__icontains=query)
+        )
+        
+        # Apply search filter
+        features_query = base_query.filter(search_q).order_by('id')
+        
+        # Convert to GeoJSON format
+        geojson_features = []
+        for feature in features_query:
+            geojson_data = feature.geojson
+            if geojson_data and 'geometry' in geojson_data:
+                # Include database ID in properties for frontend editing
+                properties = geojson_data.get('properties', {}).copy()
+                properties['_id'] = feature.id
+                geojson_feature = {
+                    "type": "Feature",
+                    "geometry": geojson_data.get('geometry'),
+                    "properties": properties,
+                    "geojson_hash": feature.geojson_hash
+                }
+                geojson_features.append(geojson_feature)
+        
+        # Create GeoJSON FeatureCollection
+        geojson_data = {
+            "type": "FeatureCollection",
+            "features": geojson_features
+        }
+        
+        response_data = {
+            'success': True,
+            'data': geojson_data,
+            'feature_count': len(geojson_features),
+            'query': query
+        }
+        
+        return JsonResponse(response_data)
+        
+    except Exception:
+        logger.error(f"Error searching features: {traceback.format_exc()}")
+        return JsonResponse({
+            'success': False,
+            'error': 'Failed to search features',
             'code': 500
         }, status=500)
 

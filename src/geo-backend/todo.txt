@@ -5,6 +5,8 @@ Up to 3 concurrent feature loading requests. Have a 5 second timeout. Don't canc
 Error message on map when loading fails
 Error message on map when an exception is encountered
 Allow uploading custom PNG icons
+Handle clicking where multiple points are (see how caltopo does it)
+Allow skipping items during import
 
 Later:
 For tracks, set the created date to the timestamp of the first point in the track

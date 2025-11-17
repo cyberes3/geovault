@@ -41,7 +41,7 @@ Docker Compose files are provided to help you get the services running with mini
 
 Running these two services requires a minimum of 25GB RAM, 6 CPU cores, 500GB, and SSDs.
 
-This could literally take days to set up, so be patient.
+This could literally take days to import the data up, so be patient.
 
 ### Setup
 
@@ -52,7 +52,8 @@ This could literally take days to set up, so be patient.
 5. `docker-compose -f overpass.yml up`
 6. Wait 2 days and come back
 
-`CTRL+C` the containers when they have finished building their databases and then do:
+This will run the containers in the foreground so you can monitor their progress. `CTRL+C` the containers when they have
+finished building their databases and then start them normally:
 
 ```shell
 docker-compose -f nominatim.yml up -d
