@@ -215,8 +215,17 @@
 import {APIHOST} from '@/config.js'
 import {GeoJSON} from 'ol/format'
 import { getProtectedTags } from '@/utils/configService.js'
-import { filterProtectedTags } from '@/utils/tagUtils.js'
+import { filterProtectedTags, isProtectedTag } from '@/utils/tagUtils.js'
 import IconPickerDialog from './IconPickerDialog.vue'
+
+// Helper functions for icon type checking
+function isSystemIcon(iconUrl) {
+  return iconUrl.startsWith('/api/data/icons/system/')
+}
+
+function isUserIcon(iconUrl) {
+  return iconUrl.startsWith('/api/data/icons/user/')
+}
 
 export default {
   name: 'FeatureEditBox',
@@ -276,7 +285,7 @@ export default {
       return this.geometryType === 'Polygon' || this.geometryType === 'MultiPolygon'
     },
     isBuiltInIcon() {
-      return this.currentIconUrl && this.currentIconUrl.startsWith('assets/')
+      return this.currentIconUrl && isSystemIcon(this.currentIconUrl)
     }
   },
   async mounted() {
@@ -346,8 +355,8 @@ export default {
       for (const propName of iconPropertyNames) {
         if (properties[propName] && typeof properties[propName] === 'string') {
           const iconUrl = properties[propName].trim()
-          // Check if it's an icon (ends with valid extension or starts with /api/data/icons/ or assets/)
-          if (iconUrl.startsWith('/api/data/icons/') || iconUrl.startsWith('assets/')) {
+          // Check if it's an icon (ends with valid extension or is a system/user icon)
+          if (isSystemIcon(iconUrl) || isUserIcon(iconUrl)) {
             return true
           }
           // Check if it ends with a valid icon extension
@@ -370,8 +379,8 @@ export default {
         if (properties[propName] && typeof properties[propName] === 'string') {
           const iconUrl = properties[propName].trim()
           if (iconUrl) {
-            // Check if it starts with /api/data/icons/ (uploaded icon) or assets/ (preset icon)
-            if (iconUrl.startsWith('/api/data/icons/') || iconUrl.startsWith('assets/')) {
+            // Check if it's a system or user icon
+            if (isSystemIcon(iconUrl) || isUserIcon(iconUrl)) {
               return iconUrl
             }
             // Check if it ends with a valid icon extension
@@ -671,14 +680,14 @@ export default {
           }
           // If icon was selected from picker (preset or uploaded)
           else if (this.currentIconUrl && !this.iconRemoved) {
-            // Check if it's a preset icon (starts with assets/) or uploaded icon (starts with /api/data/icons/)
-            if (this.currentIconUrl.startsWith('assets/') || this.currentIconUrl.startsWith('/api/data/icons/')) {
+            // Check if it's a system or user icon
+            if (isSystemIcon(this.currentIconUrl) || isUserIcon(this.currentIconUrl)) {
               formFieldUpdates['icon'] = this.currentIconUrl
-              // For built-in icons, save marker-color for recoloring
-              if (this.currentIconUrl.startsWith('assets/')) {
+              // For system icons, save marker-color for recoloring
+              if (isSystemIcon(this.currentIconUrl)) {
                 formFieldUpdates['marker-color'] = this.formData.markerColor
               } else {
-                // Uploaded icons can't be recolored
+                // User icons can't be recolored
                 delete formFieldUpdates['marker-color']
               }
             }
@@ -746,8 +755,21 @@ export default {
 
         // Update the feature object's properties immediately so reopening the dialog shows correct values
         const properties = this.feature.get('properties') || {}
-        // Update properties with the form field updates (same as what we sent to the server)
-        Object.assign(properties, formFieldUpdates)
+        
+        // Preserve protected tags from the original feature (same logic as backend)
+        // Use originalProperties to get tags before any modifications
+        const originalTags = Array.isArray(originalProperties.tags) ? originalProperties.tags : []
+        const protectedTags = originalTags.filter(tag => isProtectedTag(tag, this.protectedTags))
+        
+        // Combine filtered user tags with preserved protected tags (same as backend does)
+        const tagsWithProtected = [...filteredTags, ...protectedTags]
+        
+        // Update properties with the form field updates, but use tags with protected tags preserved
+        const updatedFormFieldUpdates = {
+          ...formFieldUpdates,
+          tags: tagsWithProtected
+        }
+        Object.assign(properties, updatedFormFieldUpdates)
         // Restore _id since we removed it before sending
         properties._id = featureId
         this.feature.set('properties', properties)
@@ -761,7 +783,7 @@ export default {
           } else if (this.iconRemoved) {
             this.currentIconUrl = null
             this.hasPngIcon = false
-          } else if (this.currentIconUrl && (this.currentIconUrl.startsWith('assets/') || this.currentIconUrl.startsWith('/api/data/icons/'))) {
+          } else if (this.currentIconUrl && (isSystemIcon(this.currentIconUrl) || isUserIcon(this.currentIconUrl))) {
             // Icon was selected from picker (preset or uploaded) - state already set in handleIconSelected
             this.hasPngIcon = true
             this.iconRemoved = false
@@ -844,16 +866,14 @@ export default {
       this.iconPreviewUrl = null
       this.iconUploadError = ''
       
-      // If it's a preset icon (starts with assets/), we need to handle it differently
-      // For preset icons, we'll set it directly as the icon URL
-      // For uploaded icons (starts with /api/data/icons/), it's already handled
-      if (iconUrl.startsWith('assets/')) {
-        // Preset icon - set it directly
+      // Handle system and user icons
+      if (isSystemIcon(iconUrl)) {
+        // System icon - set it directly
         this.currentIconUrl = iconUrl
         this.hasPngIcon = true
         this.iconRemoved = false
-      } else if (iconUrl.startsWith('/api/data/icons/')) {
-        // Uploaded icon - same as before
+      } else if (isUserIcon(iconUrl)) {
+        // User icon
         this.currentIconUrl = iconUrl
         this.hasPngIcon = true
         this.iconRemoved = false

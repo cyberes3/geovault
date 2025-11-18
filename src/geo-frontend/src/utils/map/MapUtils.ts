@@ -12,6 +12,24 @@ import {APIHOST} from '@/config.js';
 export class MapUtils {
 
     /**
+     * Check if an icon URL is a system (built-in) icon
+     * @param iconUrl - Icon URL to check
+     * @returns true if the icon is a system icon
+     */
+    private static isSystemIcon(iconUrl: string): boolean {
+        return iconUrl.startsWith('/api/data/icons/system/');
+    }
+
+    /**
+     * Check if an icon URL is a user (uploaded) icon
+     * @param iconUrl - Icon URL to check
+     * @returns true if the icon is a user icon
+     */
+    private static isUserIcon(iconUrl: string): boolean {
+        return iconUrl.startsWith('/api/data/icons/user/');
+    }
+
+    /**
      * Count only polygon and line features (exclude points)
      * This is used for the tier system which only considers complex geometries
      * @param features - Array of OpenLayers features
@@ -429,7 +447,7 @@ export class MapUtils {
      * @returns Icon style or null if icon failed to load
      */
     private static createIconStyle(iconUrl: string, feature: any, properties: any, minSize: number = 20): Icon | null {
-        const isBuiltInIcon = iconUrl.startsWith('assets/');
+        const isBuiltInIcon = this.isSystemIcon(iconUrl);
         const markerColor = properties['marker-color'];
 
         // Check if feature already has a calculated scale from previous load
@@ -444,13 +462,13 @@ export class MapUtils {
             // edge pixels with low alpha values appear as black spots. CalTopo also uses
             // backend recoloring: https://caltopo.com/icon.png?cfg=campfire%2CFF0000%231
             
-            // Extract icon filename from path (e.g., '/api/data/icons/caltopo/4wd.png' -> '4wd.png')
-            const iconPathParts = iconUrl.split('/');
-            const iconFilename = iconPathParts[iconPathParts.length - 1];
+            // Extract icon path relative to assets/icons/ for recolor endpoint
+            // Extract path after /api/data/icons/system/ (e.g., 'caltopo/4wd.png')
+            const iconPathForRecolor = iconUrl.replace('/api/data/icons/system/', '');
             
             // Construct server-side recoloring URL
             const encodedColor = encodeURIComponent(markerColor);
-            const encodedIcon = encodeURIComponent(iconFilename);
+            const encodedIcon = encodeURIComponent(iconPathForRecolor);
             iconSrc = `${APIHOST}/api/data/icons/recolor/?icon=${encodedIcon}&color=${encodedColor}`;
         } else {
             // Use original icon URL

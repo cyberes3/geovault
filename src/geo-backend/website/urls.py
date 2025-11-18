@@ -33,5 +33,5 @@ urlpatterns = [
     path('api/data/', include("api.urls")),
     path('api/tiles/sources/', get_tile_sources, name='get_tile_sources'),
     path('api/tiles/<str:service>/<int:z>/<int:x>/<int:y>', tile_proxy, name='tile_proxy'),
-    re_path(r'^assets/(?P<path>.*)$', serve_assets, name='serve_assets'),
+    # re_path(r'^assets/(?P<path>.*)$', serve_assets, name='serve_assets'),
 ]

@@ -107,9 +107,9 @@ def upload_icon(request):
 
 
 @require_http_methods(["GET"])
-def serve_icon(request, icon_hash):
+def serve_user_icon(request, icon_hash):
     """
-    Serve icon files from storage directory.
+    Serve uploaded icon files from storage directory.
     
     URL parameter:
     - icon_hash: Hash of the icon file (with extension, e.g., 'abc123def456.png')
@@ -176,15 +176,12 @@ def serve_icon(request, icon_hash):
 
 
 @require_http_methods(["GET"])
-def serve_asset_icon(request, path):
+def serve_system_icon(request, path):
     """
     Serve built-in icon files from assets directory.
     
     URL parameter:
     - path: Relative path within assets/icons/ (e.g., 'caltopo/tidepool.png')
-    
-    Note: This route handles paths with slashes. Hash-based icons (64-char hash + extension)
-    are handled by serve_icon route which comes before this in the URL patterns.
     """
     try:
         # Security: Prevent directory traversal
@@ -234,7 +231,7 @@ def serve_asset_icon(request, path):
     except Http404:
         raise
     except Exception as e:
-        logger.error(f"Error serving asset icon {path}: {traceback.format_exc()}")
+        logger.error(f"Error serving system icon {path}: {traceback.format_exc()}")
         raise Http404("Icon not found")
 
 
@@ -244,18 +241,18 @@ def recolor_icon(request):
     Recolor a built-in icon by replacing dark pixels with the specified color.
     
     Query parameters:
-    - icon: Icon filename (e.g., '4wd.png')
+    - icon: Icon path relative to assets/icons/ (e.g., 'caltopo/4wd.png')
     - color: Hex color string (e.g., '#00ff30')
     
     Returns: PNG image with recolored pixels
     """
     try:
         # Get query parameters
-        icon_name = request.GET.get('icon', '').strip()
+        icon_path_param = request.GET.get('icon', '').strip()
         color = request.GET.get('color', '').strip()
         
-        # Validate icon name
-        if not icon_name:
+        # Validate icon path
+        if not icon_path_param:
             return JsonResponse({
                 'success': False,
                 'error': 'Missing required parameter: icon',
@@ -271,22 +268,21 @@ def recolor_icon(request):
             }, status=400)
         
         # Security: Prevent directory traversal
-        if '/' in icon_name or '\\' in icon_name or '..' in icon_name:
+        if '..' in icon_path_param or icon_path_param.startswith('/'):
             return JsonResponse({
                 'success': False,
-                'error': 'Invalid icon name',
+                'error': 'Invalid icon path',
                 'code': 400
             }, status=400)
         
         # Get icon path from assets directory
-        assets_dir = Path(settings.BASE_DIR) / 'assets' / 'icons' / 'caltopo'
-        icon_path = assets_dir / icon_name
+        assets_icons_dir = Path(settings.BASE_DIR) / 'assets' / 'icons'
+        icon_path = (assets_icons_dir / icon_path_param).resolve()
         
-        # Validate path is within assets directory (prevent directory traversal)
+        # Validate path is within assets/icons directory (prevent directory traversal)
         try:
-            assets_dir_resolved = assets_dir.resolve()
-            icon_path_resolved = icon_path.resolve()
-            if not str(icon_path_resolved).startswith(str(assets_dir_resolved)):
+            assets_icons_dir_resolved = assets_icons_dir.resolve()
+            if not str(icon_path).startswith(str(assets_icons_dir_resolved)):
                 return JsonResponse({
                     'success': False,
                     'error': 'Invalid icon path',
@@ -301,7 +297,7 @@ def recolor_icon(request):
         
         # Check if icon exists
         if not icon_path.exists() or not icon_path.is_file():
-            raise Http404(f"Icon not found: {icon_name}")
+            raise Http404(f"Icon not found: {icon_path_param}")
         
         # Load image using PIL
         try:
@@ -310,7 +306,7 @@ def recolor_icon(request):
             if img.mode != 'RGBA':
                 img = img.convert('RGBA')
         except Exception as e:
-            logger.error(f"Error loading icon {icon_name}: {str(e)}")
+            logger.error(f"Error loading icon {icon_path_param}: {str(e)}")
             return JsonResponse({
                 'success': False,
                 'error': f'Failed to load icon: {str(e)}',
@@ -370,3 +366,33 @@ def recolor_icon(request):
             'error': f'Internal server error: {str(e)}',
             'code': 500
         }, status=500)
+
+
+@require_http_methods(["GET"])
+def serve_icon_registry(request):
+    """
+    Serve the icon registry JSON file.
+    
+    Returns: JSON file containing icon registry with all available system icons
+    """
+    try:
+        # Get path to icon registry file
+        registry_path = Path(settings.BASE_DIR) / 'assets' / 'icons' / 'icon-registry.json'
+        
+        # Check if file exists
+        if not registry_path.exists() or not registry_path.is_file():
+            raise Http404("Icon registry not found")
+        
+        # Read JSON file
+        registry_data = registry_path.read_text(encoding='utf-8')
+        
+        # Create response with JSON content type
+        response = HttpResponse(registry_data, content_type='application/json')
+        response['Cache-Control'] = 'public, max-age=3600'  # Cache for 1 hour
+        return response
+        
+    except Http404:
+        raise
+    except Exception as e:
+        logger.error(f"Error serving icon registry: {traceback.format_exc()}")
+        raise Http404("Icon registry not found")

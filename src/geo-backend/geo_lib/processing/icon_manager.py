@@ -193,7 +193,7 @@ def store_icon(icon_data: bytes, original_path: str) -> Optional[str]:
         original_path: Original icon path/URL for extension detection
         
     Returns:
-        Local URL path for icon (e.g., '/api/data/icons/{hash}.png'), or None if storage fails
+        Local URL path for icon (e.g., '/api/data/icons/user/{hash}.png'), or None if storage fails
     """
     try:
         # Validate size
@@ -222,7 +222,7 @@ def store_icon(icon_data: bytes, original_path: str) -> Optional[str]:
             logger.debug(f"Stored icon: {storage_path}")
         
         # Return URL path
-        return f"/api/data/icons/{icon_hash}{extension}"
+        return f"/api/data/icons/user/{icon_hash}{extension}"
         
     except Exception as e:
         logger.error(f"Failed to store icon: {str(e)}")

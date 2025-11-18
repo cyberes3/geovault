@@ -229,7 +229,7 @@ export default {
     async loadIconRegistry() {
       this.isLoading = true
       try {
-        const response = await fetch(`${APIHOST}/assets/icons/icon-registry.json`)
+        const response = await fetch(`${APIHOST}/api/data/icons/registry/`)
         if (!response.ok) {
           throw new Error(`Failed to load icon registry: ${response.statusText}`)
         }
