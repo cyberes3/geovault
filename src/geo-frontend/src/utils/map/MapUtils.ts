@@ -314,7 +314,7 @@ export class MapUtils {
 
     /**
      * Resolve icon URL to absolute URL
-     * Converts relative URLs (starting with /api/ or assets/) to absolute URLs using APIHOST
+     * Converts relative URLs to absolute URLs using APIHOST
      * @param iconUrl - Icon URL (relative or absolute)
      * @returns Absolute icon URL
      */
@@ -331,12 +331,12 @@ export class MapUtils {
             return `${APIHOST}${iconUrl}`;
         }
 
-        // If relative URL starting with /assets/, prepend APIHOST
+        // If relative URL starting with /assets/, prepend APIHOST (for non-icon assets)
         if (iconUrl.startsWith('/assets/')) {
             return `${APIHOST}${iconUrl}`;
         }
 
-        // If relative URL starting with assets/, prepend /assets/
+        // If relative URL starting with assets/, prepend /assets/ (for non-icon assets)
         if (iconUrl.startsWith('assets/')) {
             return `${APIHOST}/${iconUrl}`;
         }
@@ -444,7 +444,7 @@ export class MapUtils {
             // edge pixels with low alpha values appear as black spots. CalTopo also uses
             // backend recoloring: https://caltopo.com/icon.png?cfg=campfire%2CFF0000%231
             
-            // Extract icon filename from path (e.g., 'assets/icons/caltopo/4wd.png' -> '4wd.png')
+            // Extract icon filename from path (e.g., '/api/data/icons/caltopo/4wd.png' -> '4wd.png')
             const iconPathParts = iconUrl.split('/');
             const iconFilename = iconPathParts[iconPathParts.length - 1];
             

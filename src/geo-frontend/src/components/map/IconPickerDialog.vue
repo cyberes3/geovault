@@ -258,16 +258,12 @@ export default {
       if (iconUrl.startsWith('http://') || iconUrl.startsWith('https://')) {
         return iconUrl
       }
-      // If relative URL starting with /assets/, prepend APIHOST
-      if (iconUrl.startsWith('/assets/')) {
+      // If relative URL starting with /api/, prepend APIHOST
+      if (iconUrl.startsWith('/api/')) {
         return `${APIHOST}${iconUrl}`
       }
-      // If relative URL starting with assets/, prepend /assets/
-      if (iconUrl.startsWith('assets/')) {
-        return `${APIHOST}/${iconUrl}`
-      }
-      // Fallback: assume it's a relative path
-      return `${APIHOST}/assets/${iconUrl}`
+      // Fallback: assume it's a relative path and prepend APIHOST
+      return `${APIHOST}${iconUrl.startsWith('/') ? '' : '/'}${iconUrl}`
     },
     selectIcon(iconUrl) {
       this.selectedIconUrl = iconUrl

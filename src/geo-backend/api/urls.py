@@ -7,7 +7,7 @@ from api.views.feature_retrieval import get_feature
 from api.views.feature_search import get_features_by_tag, search_features
 from api.views.feature_update import update_feature, update_feature_metadata
 from api.views.geolocation_api import get_user_location, get_location_by_ip
-from api.views.icon_management import serve_icon, upload_icon, recolor_icon
+from api.views.icon_management import serve_icon, serve_asset_icon, upload_icon, recolor_icon
 from api.views.import_item import upload_item, get_processing_status, get_user_processing_jobs, delete_import_item, update_import_item, fetch_import_history_item, \
     import_to_featurestore
 
@@ -32,6 +32,9 @@ urlpatterns = [
     # Icon endpoints
     path('icons/upload/', upload_icon),
     path('icons/recolor/', recolor_icon, name='recolor_icon'),
+    # Path-based icons (with slashes, e.g., caltopo/tidepool.png) - must come before hash route
+    path('icons/<path:path>', serve_asset_icon, name='serve_asset_icon'),
+    # Hash-based icons (64-char hash + extension, e.g., abc123...def456.png)
     path('icons/<str:icon_hash>', serve_icon, name='serve_icon'),
     # Geolocation API endpoints
     path('location/user/', get_user_location),

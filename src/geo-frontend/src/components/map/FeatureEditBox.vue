@@ -5,7 +5,8 @@
         <h3 class="text-lg font-semibold text-gray-900">Edit Feature</h3>
         <button
           @click="$emit('cancel')"
-          class="ml-2 text-gray-400 hover:text-gray-600"
+          :disabled="isSaving"
+          class="ml-2 text-gray-400 hover:text-gray-600 disabled:opacity-50 disabled:cursor-not-allowed"
         >
           <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path>
@@ -20,7 +21,8 @@
           <input
             v-model="formData.name"
             type="text"
-            class="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500"
+            :disabled="isSaving"
+            class="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500 disabled:bg-gray-100 disabled:cursor-not-allowed"
             required
           />
         </div>
@@ -31,7 +33,8 @@
           <input
             v-model="tagsInput"
             type="text"
-            class="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500"
+            :disabled="isSaving"
+            class="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500 disabled:bg-gray-100 disabled:cursor-not-allowed"
             placeholder="tag1, tag2, tag3"
           />
         </div>
@@ -42,7 +45,8 @@
           <textarea
             v-model="formData.description"
             rows="3"
-            class="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500"
+            :disabled="isSaving"
+            class="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500 disabled:bg-gray-100 disabled:cursor-not-allowed"
           ></textarea>
         </div>
 
@@ -63,7 +67,8 @@
               <button
                 type="button"
                 @click="handleRemoveIcon"
-                class="ml-auto text-sm text-red-600 hover:text-red-800"
+                :disabled="isSaving"
+                class="ml-auto text-sm text-red-600 hover:text-red-800 disabled:opacity-50 disabled:cursor-not-allowed"
               >
                 Remove
               </button>
@@ -75,7 +80,8 @@
             <button
               type="button"
               @click="openIconPicker"
-              class="w-full px-4 py-2 text-sm font-medium text-white bg-blue-600 border border-transparent rounded-md hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500"
+              :disabled="isSaving"
+              class="w-full px-4 py-2 text-sm font-medium text-white bg-blue-600 border border-transparent rounded-md hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 disabled:opacity-50 disabled:cursor-not-allowed"
             >
               Choose Icon
             </button>
@@ -107,12 +113,14 @@
             <input
               v-model="formData.markerColor"
               type="color"
-              class="h-10 w-20 border border-gray-300 rounded cursor-pointer"
+              :disabled="isSaving"
+              class="h-10 w-20 border border-gray-300 rounded cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
             />
             <input
               v-model="formData.markerColor"
               type="text"
-              class="flex-1 px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500"
+              :disabled="isSaving"
+              class="flex-1 px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500 disabled:bg-gray-100 disabled:cursor-not-allowed"
               placeholder="#ff0000"
               pattern="^#[0-9A-Fa-f]{6}$"
             />
@@ -132,13 +140,15 @@
             <input
               v-model="formData.strokeColor"
               type="color"
-              class="h-10 w-20 border border-gray-300 rounded cursor-pointer"
+              :disabled="isSaving"
+              class="h-10 w-20 border border-gray-300 rounded cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
               @input="onStrokeColorChange"
             />
             <input
               v-model="formData.strokeColor"
               type="text"
-              class="flex-1 px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500"
+              :disabled="isSaving"
+              class="flex-1 px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500 disabled:bg-gray-100 disabled:cursor-not-allowed"
               placeholder="#ff0000"
               pattern="^#[0-9A-Fa-f]{6}$"
               @input="onStrokeColorChange"
@@ -152,7 +162,8 @@
           <textarea
             v-model="rawJsonInput"
             rows="6"
-            class="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500 font-mono text-xs"
+            :disabled="isSaving"
+            class="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500 font-mono text-xs disabled:bg-gray-100 disabled:cursor-not-allowed"
             placeholder="[]"
           ></textarea>
         </div>
@@ -162,17 +173,13 @@
           <p class="text-sm text-red-800">{{ errorMessage }}</p>
         </div>
 
-        <!-- Success Message -->
-        <div v-if="successMessage" class="p-3 bg-green-50 border border-green-200 rounded-md">
-          <p class="text-sm text-green-800">{{ successMessage }}</p>
-        </div>
-
         <!-- Action Buttons -->
         <div class="flex justify-end space-x-2 pt-2">
           <button
             type="button"
             @click="$emit('cancel')"
-            class="px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-md hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500"
+            :disabled="isSaving"
+            class="px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-md hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 disabled:opacity-50 disabled:cursor-not-allowed"
           >
             Cancel
           </button>
@@ -239,7 +246,6 @@ export default {
       hasPngIcon: false,
       isSaving: false,
       errorMessage: '',
-      successMessage: '',
       protectedTags: [],
       uploadedIconFile: null,
       iconPreviewUrl: null,
@@ -390,11 +396,11 @@ export default {
       if (iconUrl.startsWith('/api/')) {
         return `${APIHOST}${iconUrl}`
       }
-      // If relative URL starting with /assets/, prepend APIHOST
+      // If relative URL starting with /assets/, prepend APIHOST (for non-icon assets)
       if (iconUrl.startsWith('/assets/')) {
         return `${APIHOST}${iconUrl}`
       }
-      // If relative URL starting with assets/, prepend /assets/
+      // If relative URL starting with assets/, prepend /assets/ (for non-icon assets)
       if (iconUrl.startsWith('assets/')) {
         return `${APIHOST}/${iconUrl}`
       }
@@ -562,7 +568,6 @@ export default {
 
     async handleSubmit() {
       this.errorMessage = ''
-      this.successMessage = ''
       this.iconUploadError = ''
       this.isSaving = true
 
@@ -766,13 +771,9 @@ export default {
         // Trigger feature change to update any listeners
         this.feature.changed()
 
-        this.successMessage = 'Feature updated successfully!'
+        // Close dialog immediately on success (no message)
         this.isSaving = false
-
-        // Emit saved event after a short delay
-        setTimeout(() => {
-          this.$emit('saved')
-        }, 1000)
+        this.$emit('saved')
 
       } catch (error) {
         console.error('Error updating feature:', error)

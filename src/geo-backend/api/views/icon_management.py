@@ -176,6 +176,76 @@ def serve_icon(request, icon_hash):
 
 
 @require_http_methods(["GET"])
+def serve_asset_icon(request, path):
+    """
+    Serve built-in icon files from assets directory.
+    
+    URL parameter:
+    - path: Relative path within assets/icons/ (e.g., 'caltopo/tidepool.png')
+    
+    Note: This route handles paths with slashes. Hash-based icons (64-char hash + extension)
+    are handled by serve_icon route which comes after this in the URL patterns.
+    """
+    try:
+        # Check if this looks like a hash (no slashes, 64 chars before extension)
+        # If so, let serve_icon handle it by raising 404
+        if '/' not in path and '.' in path:
+            hash_part, extension = path.rsplit('.', 1)
+            if len(hash_part) == 64:  # SHA-256 hash length
+                raise Http404("Not an asset icon path")  # Let serve_icon handle it
+        
+        # Security: Prevent directory traversal
+        if '..' in path or path.startswith('/'):
+            raise Http404("Invalid icon path")
+        
+        # Get assets icons directory path
+        assets_icons_dir = Path(settings.BASE_DIR) / 'assets' / 'icons'
+        
+        # Build the full file path
+        file_path = (assets_icons_dir / path).resolve()
+        
+        # Security check: ensure the file is within the assets/icons directory
+        try:
+            assets_icons_dir_resolved = assets_icons_dir.resolve()
+            if not str(file_path).startswith(str(assets_icons_dir_resolved)):
+                raise Http404("Invalid icon path")
+        except (OSError, ValueError):
+            raise Http404("Invalid icon path")
+        
+        # Check if file exists
+        if not file_path.exists() or not file_path.is_file():
+            raise Http404("Icon not found")
+        
+        # Read icon file
+        icon_data = file_path.read_bytes()
+        
+        # Determine content type based on extension
+        content_types = {
+            '.png': 'image/png',
+            '.jpg': 'image/jpeg',
+            '.jpeg': 'image/jpeg',
+            '.gif': 'image/gif',
+            '.bmp': 'image/bmp',
+            '.svg': 'image/svg+xml',
+            '.webp': 'image/webp',
+            '.ico': 'image/x-icon',
+        }
+        suffix = file_path.suffix.lower()
+        content_type = content_types.get(suffix, 'image/png')
+        
+        # Create response with appropriate headers
+        response = HttpResponse(icon_data, content_type=content_type)
+        response['Cache-Control'] = 'public, max-age=31536000'  # Cache for 1 year
+        return response
+        
+    except Http404:
+        raise
+    except Exception as e:
+        logger.error(f"Error serving asset icon {path}: {traceback.format_exc()}")
+        raise Http404("Icon not found")
+
+
+@require_http_methods(["GET"])
 def recolor_icon(request):
     """
     Recolor a built-in icon by replacing dark pixels with the specified color.

@@ -118,8 +118,8 @@ def generate_registry(icons_dir, output_file):
         base_name, style = extract_style_and_base(filename)
         category = categorize_icon(filename, base_name)
         
-        # Relative path from assets/icons/
-        url = f"assets/icons/caltopo/{filename}"
+        # Use icon route format: /api/data/icons/caltopo/{filename}
+        url = f"/api/data/icons/caltopo/{filename}"
         
         icon_entry = {
             'url': url,
@@ -151,10 +151,10 @@ def generate_registry(icons_dir, output_file):
 if __name__ == '__main__':
     import sys
     
-    # Get script directory
+    # Get script directory (backend root)
     script_dir = Path(__file__).parent
-    icons_dir = script_dir / 'caltopo'
-    output_file = script_dir / 'icon-registry.json'
+    icons_dir = script_dir / 'assets' / 'icons' / 'caltopo'
+    output_file = script_dir / 'assets' / 'icons' / 'icon-registry.json'
     
     try:
         generate_registry(icons_dir, output_file)
