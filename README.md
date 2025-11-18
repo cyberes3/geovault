@@ -1,6 +1,6 @@
 # geoserver
 
-*Service to organize unified spatial data.*
+*Platform to organize your personal spatial data in a unified database.*
 
 
 
