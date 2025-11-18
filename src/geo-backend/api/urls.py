@@ -32,10 +32,11 @@ urlpatterns = [
     # Icon endpoints
     path('icons/upload/', upload_icon),
     path('icons/recolor/', recolor_icon, name='recolor_icon'),
-    # Path-based icons (with slashes, e.g., caltopo/tidepool.png) - must come before hash route
-    path('icons/<path:path>', serve_asset_icon, name='serve_asset_icon'),
-    # Hash-based icons (64-char hash + extension, e.g., abc123...def456.png)
+    # Hash-based icons (64-char hash + extension, e.g., abc123...def456.png) - must come before path route
+    # <str:> only matches non-slash paths, so this will only match hash-based icons
     path('icons/<str:icon_hash>', serve_icon, name='serve_icon'),
+    # Path-based icons (with slashes, e.g., caltopo/tidepool.png)
+    path('icons/<path:path>', serve_asset_icon, name='serve_asset_icon'),
     # Geolocation API endpoints
     path('location/user/', get_user_location),
     path('location/ip/', get_location_by_ip),

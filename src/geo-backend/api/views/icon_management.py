@@ -184,16 +184,9 @@ def serve_asset_icon(request, path):
     - path: Relative path within assets/icons/ (e.g., 'caltopo/tidepool.png')
     
     Note: This route handles paths with slashes. Hash-based icons (64-char hash + extension)
-    are handled by serve_icon route which comes after this in the URL patterns.
+    are handled by serve_icon route which comes before this in the URL patterns.
     """
     try:
-        # Check if this looks like a hash (no slashes, 64 chars before extension)
-        # If so, let serve_icon handle it by raising 404
-        if '/' not in path and '.' in path:
-            hash_part, extension = path.rsplit('.', 1)
-            if len(hash_part) == 64:  # SHA-256 hash length
-                raise Http404("Not an asset icon path")  # Let serve_icon handle it
-        
         # Security: Prevent directory traversal
         if '..' in path or path.startswith('/'):
             raise Http404("Invalid icon path")
