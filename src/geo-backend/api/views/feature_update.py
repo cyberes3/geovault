@@ -231,42 +231,73 @@ def update_feature(request, feature_id):
         # Combine filtered user tags with preserved protected tags
         new_properties['tags'] = filtered_tags + protected_tags
 
-        # Check for custom PNG icon URLs in original feature
+        # Check for icon URLs in original feature (built-in, uploaded, or custom)
         icon_property_names = ['icon', 'icon-href', 'iconUrl', 'icon_url', 'marker-icon', 'marker-symbol', 'symbol']
         original_icon_url = None
         for prop_name in icon_property_names:
             if prop_name in original_properties and original_properties[prop_name]:
                 icon_url = original_properties[prop_name]
-                if isinstance(icon_url, str):
-                    # Check if it's a PNG icon (ends with .png or starts with /api/data/icons/)
-                    if icon_url.endswith('.png') or icon_url.startswith('/api/data/icons/'):
+                if isinstance(icon_url, str) and icon_url.strip():
+                    # Check if it's an icon (built-in, uploaded, or ends with image extension)
+                    if (icon_url.startswith('assets/') or 
+                            icon_url.startswith('/api/data/icons/') or 
+                            icon_url.endswith(('.png', '.jpg', '.jpeg', '.gif', '.bmp', '.svg', '.webp', '.ico'))):
                         original_icon_url = icon_url
                         break
 
         # Handle icon URL changes
-        # Allow: removing icons (null/empty), setting new icons from upload endpoint, keeping same icon
-        # Prevent: manually changing existing icon URLs to different values
+        # Allow: removing icons (null/empty), setting new built-in icons (assets/), 
+        #        setting new uploaded icons (/api/data/icons/), keeping same icon
+        # Prevent: manually changing existing icon URLs to arbitrary external URLs
+        new_icon_url = new_properties.get('icon', '')
+        
         if original_icon_url:
             # Check if icon is being removed (main 'icon' property is empty)
-            if new_properties.get('icon') == '':
+            if new_icon_url == '':
                 # Icon is being removed - clear all icon properties and ensure marker-color is set
                 for prop_name in icon_property_names:
                     new_properties[prop_name] = ''
                 if 'marker-color' not in new_properties or not new_properties.get('marker-color'):
                     new_properties['marker-color'] = original_properties.get('marker-color', '#ff0000')
-            else:
-                # Icon is not being removed - prevent manual URL changes
-                for prop_name in icon_property_names:
-                    if prop_name in new_properties:
-                        new_icon_url = new_properties[prop_name]
-                        # Allow keeping the same icon or setting new icon from upload endpoint
-                        if (isinstance(new_icon_url, str) and
-                                (new_icon_url == original_icon_url or new_icon_url.startswith('/api/data/icons/'))):
-                            continue
-                        # Prevent manually changing to a different URL (must use upload endpoint)
-                        if isinstance(new_icon_url, str) and new_icon_url != original_icon_url:
-                            new_properties[prop_name] = original_icon_url
-                            logger.warning(f"Attempted to manually change icon URL for feature {feature_id}, restored original")
+            elif isinstance(new_icon_url, str) and new_icon_url.strip():
+                # Icon is being changed - validate new icon URL
+                # Allow: same icon, built-in icons (assets/), uploaded icons (/api/data/icons/)
+                if (new_icon_url == original_icon_url or 
+                        new_icon_url.startswith('assets/') or 
+                        new_icon_url.startswith('/api/data/icons/')):
+                    # Valid icon change - clear other icon property names to avoid conflicts
+                    for prop_name in icon_property_names:
+                        if prop_name != 'icon' and prop_name in new_properties:
+                            del new_properties[prop_name]
+                else:
+                    # Invalid external URL - restore original icon
+                    new_properties['icon'] = original_icon_url
+                    # Clear other icon properties
+                    for prop_name in icon_property_names:
+                        if prop_name != 'icon':
+                            new_properties[prop_name] = ''
+                    logger.warning(f"Attempted to manually change icon URL for feature {feature_id}, restored original")
+        else:
+            # No original icon - validate that new icons are built-in or uploaded (not external URLs)
+            if isinstance(new_icon_url, str) and new_icon_url.strip():
+                # Only allow built-in icons (assets/) or uploaded icons (/api/data/icons/)
+                if not (new_icon_url.startswith('assets/') or new_icon_url.startswith('/api/data/icons/')):
+                    # Remove invalid external icon URL
+                    new_properties['icon'] = ''
+                    # Clear other icon properties
+                    for prop_name in icon_property_names:
+                        if prop_name != 'icon':
+                            new_properties[prop_name] = ''
+                    logger.warning(f"Attempted to set external icon URL for feature {feature_id}, removed (only built-in and uploaded icons allowed)")
+
+        # Prevent stroke-width changes for lines and polygons (normalized on import)
+        geom_type = feature_data.get('geometry', {}).get('type', '').lower()
+        if geom_type in ['linestring', 'multilinestring', 'polygon', 'multipolygon']:
+            # Restore original stroke-width value (normalized to 2 on import)
+            original_stroke_width = original_properties.get('stroke-width', 2)
+            if 'stroke-width' in new_properties and new_properties.get('stroke-width') != original_stroke_width:
+                new_properties['stroke-width'] = original_stroke_width
+                logger.warning(f"Attempted to change stroke-width for feature {feature_id}, restored original value (normalized on import)")
 
         # Validate feature structure using the same validation as import conversion
         try:

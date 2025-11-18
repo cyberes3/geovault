@@ -3,7 +3,7 @@ from pathlib import Path
 from datetime import datetime, timedelta
 from django.contrib.auth.decorators import login_required
 from django.shortcuts import render
-from django.http import HttpResponse, JsonResponse
+from django.http import HttpResponse, JsonResponse, Http404
 from django.conf import settings
 from urllib.request import urlopen, Request
 from urllib.error import URLError
@@ -235,3 +235,62 @@ def get_tile_sources(request):
     """
     sources = get_tile_sources_for_client()
     return JsonResponse({'sources': sources})
+
+
+def serve_assets(request, path):
+    """
+    Serve files from the assets directory under /assets/ URL path.
+    
+    Args:
+        request: Django request object
+        path: Relative path within the assets directory (e.g., 'icons/icon-registry.json')
+    
+    Returns:
+        HttpResponse with file content or 404 if not found
+    """
+    # Get the assets directory path
+    assets_dir = Path(settings.BASE_DIR) / 'assets'
+    
+    # Build the full file path
+    # Normalize the path to prevent directory traversal attacks
+    file_path = (assets_dir / path).resolve()
+    
+    # Security check: ensure the file is within the assets directory
+    try:
+        assets_dir_resolved = assets_dir.resolve()
+        if not str(file_path).startswith(str(assets_dir_resolved)):
+            raise Http404("Invalid path")
+    except (OSError, ValueError):
+        raise Http404("Invalid path")
+    
+    # Check if file exists
+    if not file_path.exists() or not file_path.is_file():
+        raise Http404("File not found")
+    
+    # Determine content type based on file extension
+    content_types = {
+        '.png': 'image/png',
+        '.jpg': 'image/jpeg',
+        '.jpeg': 'image/jpeg',
+        '.gif': 'image/gif',
+        '.bmp': 'image/bmp',
+        '.svg': 'image/svg+xml',
+        '.webp': 'image/webp',
+        '.ico': 'image/x-icon',
+        '.json': 'application/json',
+        '.css': 'text/css',
+        '.js': 'application/javascript',
+        '.html': 'text/html',
+    }
+    
+    suffix = file_path.suffix.lower()
+    content_type = content_types.get(suffix, 'application/octet-stream')
+    
+    # Read and serve the file
+    try:
+        file_data = file_path.read_bytes()
+        response = HttpResponse(file_data, content_type=content_type)
+        response['Cache-Control'] = 'public, max-age=31536000'  # Cache for 1 year
+        return response
+    except OSError:
+        raise Http404("File not found")

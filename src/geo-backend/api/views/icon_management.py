@@ -1,5 +1,7 @@
 import os
+import re
 import traceback
+from io import BytesIO
 from pathlib import Path
 
 from django import forms
@@ -7,6 +9,7 @@ from django.conf import settings
 from django.http import HttpResponse, Http404, JsonResponse
 from django.views.decorators.csrf import csrf_protect
 from django.views.decorators.http import require_http_methods
+from PIL import Image
 
 from geo_lib.logging.console import get_access_logger
 from geo_lib.processing.icon_manager import store_icon
@@ -170,3 +173,137 @@ def serve_icon(request, icon_hash):
     except Exception as e:
         logger.error(f"Error serving icon {icon_hash}: {traceback.format_exc()}")
         raise Http404("Icon not found")
+
+
+@require_http_methods(["GET"])
+def recolor_icon(request):
+    """
+    Recolor a built-in icon by replacing dark pixels with the specified color.
+    
+    Query parameters:
+    - icon: Icon filename (e.g., '4wd.png')
+    - color: Hex color string (e.g., '#00ff30')
+    
+    Returns: PNG image with recolored pixels
+    """
+    try:
+        # Get query parameters
+        icon_name = request.GET.get('icon', '').strip()
+        color = request.GET.get('color', '').strip()
+        
+        # Validate icon name
+        if not icon_name:
+            return JsonResponse({
+                'success': False,
+                'error': 'Missing required parameter: icon',
+                'code': 400
+            }, status=400)
+        
+        # Validate color format (hex color: #RRGGBB)
+        if not color or not re.match(r'^#[0-9A-Fa-f]{6}$', color):
+            return JsonResponse({
+                'success': False,
+                'error': 'Invalid color format. Must be hex color (e.g., #00ff30)',
+                'code': 400
+            }, status=400)
+        
+        # Security: Prevent directory traversal
+        if '/' in icon_name or '\\' in icon_name or '..' in icon_name:
+            return JsonResponse({
+                'success': False,
+                'error': 'Invalid icon name',
+                'code': 400
+            }, status=400)
+        
+        # Get icon path from assets directory
+        assets_dir = Path(settings.BASE_DIR) / 'assets' / 'icons' / 'caltopo'
+        icon_path = assets_dir / icon_name
+        
+        # Validate path is within assets directory (prevent directory traversal)
+        try:
+            assets_dir_resolved = assets_dir.resolve()
+            icon_path_resolved = icon_path.resolve()
+            if not str(icon_path_resolved).startswith(str(assets_dir_resolved)):
+                return JsonResponse({
+                    'success': False,
+                    'error': 'Invalid icon path',
+                    'code': 400
+                }, status=400)
+        except (OSError, ValueError):
+            return JsonResponse({
+                'success': False,
+                'error': 'Invalid icon path',
+                'code': 400
+            }, status=400)
+        
+        # Check if icon exists
+        if not icon_path.exists() or not icon_path.is_file():
+            raise Http404(f"Icon not found: {icon_name}")
+        
+        # Load image using PIL
+        try:
+            img = Image.open(icon_path)
+            # Convert to RGBA if not already (ensures we have alpha channel)
+            if img.mode != 'RGBA':
+                img = img.convert('RGBA')
+        except Exception as e:
+            logger.error(f"Error loading icon {icon_name}: {str(e)}")
+            return JsonResponse({
+                'success': False,
+                'error': f'Failed to load icon: {str(e)}',
+                'code': 500
+            }, status=500)
+        
+        # Parse color
+        hex_color = color.replace('#', '')
+        r = int(hex_color[0:2], 16)
+        g = int(hex_color[2:4], 16)
+        b = int(hex_color[4:6], 16)
+        
+        # Get image data
+        pixels = img.load()
+        width, height = img.size
+        
+        # Threshold for converting to pure black/white (brightness < 200)
+        brightness_threshold = 200
+        
+        # Recolor dark pixels
+        pixels_recolored = 0
+        total_pixels = 0
+        
+        for y in range(height):
+            for x in range(width):
+                pixel = pixels[x, y]
+                pixel_r, pixel_g, pixel_b, pixel_a = pixel
+                
+                # Only process non-transparent pixels
+                if pixel_a > 0:
+                    total_pixels += 1
+                    # Calculate brightness using relative luminance
+                    brightness = 0.299 * pixel_r + 0.587 * pixel_g + 0.114 * pixel_b
+                    
+                    # If pixel is dark enough, replace with target color
+                    if brightness < brightness_threshold:
+                        pixels[x, y] = (r, g, b, pixel_a)  # Keep original alpha
+                        pixels_recolored += 1
+        
+        # Convert image to PNG bytes
+        output = BytesIO()
+        img.save(output, format='PNG')
+        output.seek(0)
+        image_data = output.read()
+        
+        # Create response
+        response = HttpResponse(image_data, content_type='image/png')
+        response['Cache-Control'] = 'public, max-age=3600'  # Cache for 1 hour
+        return response
+        
+    except Http404:
+        raise
+    except Exception as e:
+        logger.error(f"Error recoloring icon: {traceback.format_exc()}")
+        return JsonResponse({
+            'success': False,
+            'error': f'Internal server error: {str(e)}',
+            'code': 500
+        }, status=500)

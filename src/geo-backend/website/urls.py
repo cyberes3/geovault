@@ -18,7 +18,7 @@ from django.conf.urls import include
 from django.contrib import admin
 from django.urls import path, re_path
 
-from website.views import index, standalone_map, tile_proxy, get_tile_sources
+from website.views import index, standalone_map, tile_proxy, get_tile_sources, serve_assets
 from website.exception_handler import custom_exception_handler
 
 # Set custom exception handler
@@ -33,4 +33,5 @@ urlpatterns = [
     path('api/data/', include("api.urls")),
     path('api/tiles/sources/', get_tile_sources, name='get_tile_sources'),
     path('api/tiles/<str:service>/<int:z>/<int:x>/<int:y>', tile_proxy, name='tile_proxy'),
+    re_path(r'^assets/(?P<path>.*)$', serve_assets, name='serve_assets'),
 ]

@@ -164,6 +164,7 @@ LOGOUT_REDIRECT_URL = '/#/'
 
 STATICFILES_DIRS = [
     os.path.join(BASE_DIR, '../geo-frontend/dist/static'),
+    os.path.join(BASE_DIR, 'assets'),
 ]
 
 APPEND_SLASH = True

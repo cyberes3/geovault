@@ -82,3 +82,4 @@ class BulkDeleteJobModule(BaseWebSocketModule):
         """Handle bulk_delete_job_failed event."""
         await self.send_to_client('failed', event['data'])
 
+

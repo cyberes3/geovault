@@ -185,7 +185,7 @@ export class MapUtils {
             // Check for icon URL first
             const iconUrl = this.getIconUrl(properties);
             if (iconUrl) {
-                const icon = this.createIconStyle(iconUrl, feature);
+                const icon = this.createIconStyle(iconUrl, feature, properties);
                 if (icon) {
                     return new Style({
                         image: icon
@@ -314,7 +314,7 @@ export class MapUtils {
 
     /**
      * Resolve icon URL to absolute URL
-     * Converts relative URLs (starting with /api/) to absolute URLs using APIHOST
+     * Converts relative URLs (starting with /api/ or assets/) to absolute URLs using APIHOST
      * @param iconUrl - Icon URL (relative or absolute)
      * @returns Absolute icon URL
      */
@@ -329,6 +329,16 @@ export class MapUtils {
         // and the endpoint is /api/data/icons/{hash} (routed through api.urls)
         if (iconUrl.startsWith('/api/')) {
             return `${APIHOST}${iconUrl}`;
+        }
+
+        // If relative URL starting with /assets/, prepend APIHOST
+        if (iconUrl.startsWith('/assets/')) {
+            return `${APIHOST}${iconUrl}`;
+        }
+
+        // If relative URL starting with assets/, prepend /assets/
+        if (iconUrl.startsWith('assets/')) {
+            return `${APIHOST}/${iconUrl}`;
         }
 
         // Fallback: assume it's a relative path and prepend APIHOST
@@ -410,26 +420,81 @@ export class MapUtils {
     /**
      * Create icon style with error handling
      * Preloads image to detect loading failures and marks feature accordingly
+     * Ensures icon has a minimum size by calculating appropriate scale
+     * Supports server-side recoloring for built-in icons if marker-color is specified
      * @param iconUrl - Icon URL (relative or absolute)
      * @param feature - OpenLayers feature
+     * @param properties - Feature properties (for marker-color)
+     * @param minSize - Minimum size in pixels (default: 20)
      * @returns Icon style or null if icon failed to load
      */
-    private static createIconStyle(iconUrl: string, feature: any): Icon | null {
-        const resolvedIconUrl = this.resolveIconUrl(iconUrl);
+    private static createIconStyle(iconUrl: string, feature: any, properties: any, minSize: number = 20): Icon | null {
+        const isBuiltInIcon = iconUrl.startsWith('assets/');
+        const markerColor = properties['marker-color'];
 
-        // Preload image to detect loading failures
+        // Check if feature already has a calculated scale from previous load
+        let calculatedScale = feature.get('_iconScale');
+
+        // Determine icon source URL
+        let iconSrc: string;
+        
+        if (isBuiltInIcon && markerColor) {
+            // NOTE: Can't recolor in JS, it's fucked. Must use server-side PIL processing.
+            // Even with binary PNG decoding (bypassing Canvas rendering), semi-transparent
+            // edge pixels with low alpha values appear as black spots. CalTopo also uses
+            // backend recoloring: https://caltopo.com/icon.png?cfg=campfire%2CFF0000%231
+            
+            // Extract icon filename from path (e.g., 'assets/icons/caltopo/4wd.png' -> '4wd.png')
+            const iconPathParts = iconUrl.split('/');
+            const iconFilename = iconPathParts[iconPathParts.length - 1];
+            
+            // Construct server-side recoloring URL
+            const encodedColor = encodeURIComponent(markerColor);
+            const encodedIcon = encodeURIComponent(iconFilename);
+            iconSrc = `${APIHOST}/api/data/icons/recolor/?icon=${encodedIcon}&color=${encodedColor}`;
+        } else {
+            // Use original icon URL
+            iconSrc = this.resolveIconUrl(iconUrl);
+        }
+
+        // Preload image to detect loading failures and get dimensions
         const img = new Image();
+        
+        img.onload = () => {
+            const naturalSize = Math.max(img.naturalWidth, img.naturalHeight);
+            if (naturalSize > 0) {
+                // Calculate scale needed to reach minimum size
+                const scale = Math.max(minSize / naturalSize, 0.4);
+                feature.set('_iconScale', scale);
+                // Trigger style update to apply new scale
+                feature.changed();
+            }
+        };
+        
         img.onerror = () => {
             // Mark feature as having failed icon load
             feature.set('_iconFailed', true);
             // Trigger style update by changing a property
             feature.changed();
         };
-        img.src = resolvedIconUrl;
+        
+        img.src = iconSrc;
+
+        // If image is already loaded (cached), calculate scale immediately
+        if (img.complete && img.naturalWidth > 0) {
+            const naturalSize = Math.max(img.naturalWidth, img.naturalHeight);
+            if (naturalSize > 0) {
+                calculatedScale = Math.max(minSize / naturalSize, 0.4);
+                feature.set('_iconScale', calculatedScale);
+            }
+        }
+
+        // Use stored scale if available, otherwise use default
+        const finalScale = calculatedScale !== undefined ? calculatedScale : 0.4;
 
         return new Icon({
-            src: resolvedIconUrl,
-            scale: 0.4,
+            src: iconSrc,
+            scale: finalScale,
             anchor: [0.5, 1.0], // Anchor at bottom center of icon
         });
     }

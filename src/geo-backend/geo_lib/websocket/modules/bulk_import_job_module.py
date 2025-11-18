@@ -84,3 +84,4 @@ class BulkImportJobModule(BaseWebSocketModule):
         """Handle bulk_import_job_failed event."""
         await self.send_to_client('failed', event['data'])
 
+

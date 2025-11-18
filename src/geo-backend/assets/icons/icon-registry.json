@@ -1,0 +1,5510 @@
+{
+  "points": [
+    {
+      "url": "assets/icons/caltopo/flag-1.png",
+      "filename": "flag-1",
+      "style": "standard",
+      "base_name": "flag-1"
+    },
+    {
+      "url": "assets/icons/caltopo/flag-2.png",
+      "filename": "flag-2",
+      "style": "standard",
+      "base_name": "flag-2"
+    },
+    {
+      "url": "assets/icons/caltopo/pin.png",
+      "filename": "pin",
+      "style": "standard",
+      "base_name": "pin"
+    },
+    {
+      "url": "assets/icons/caltopo/placemark2.png",
+      "filename": "placemark2",
+      "style": "standard",
+      "base_name": "placemark2"
+    }
+  ],
+  "letters": [
+    {
+      "url": "assets/icons/caltopo/circle-1.png",
+      "filename": "circle-1",
+      "style": "standard",
+      "base_name": "circle-1"
+    },
+    {
+      "url": "assets/icons/caltopo/circle-2.png",
+      "filename": "circle-2",
+      "style": "standard",
+      "base_name": "circle-2"
+    },
+    {
+      "url": "assets/icons/caltopo/circle-3.png",
+      "filename": "circle-3",
+      "style": "standard",
+      "base_name": "circle-3"
+    },
+    {
+      "url": "assets/icons/caltopo/circle-4.png",
+      "filename": "circle-4",
+      "style": "standard",
+      "base_name": "circle-4"
+    },
+    {
+      "url": "assets/icons/caltopo/circle-5.png",
+      "filename": "circle-5",
+      "style": "standard",
+      "base_name": "circle-5"
+    },
+    {
+      "url": "assets/icons/caltopo/circle-6.png",
+      "filename": "circle-6",
+      "style": "standard",
+      "base_name": "circle-6"
+    },
+    {
+      "url": "assets/icons/caltopo/circle-7.png",
+      "filename": "circle-7",
+      "style": "standard",
+      "base_name": "circle-7"
+    },
+    {
+      "url": "assets/icons/caltopo/circle-8.png",
+      "filename": "circle-8",
+      "style": "standard",
+      "base_name": "circle-8"
+    },
+    {
+      "url": "assets/icons/caltopo/circle-9.png",
+      "filename": "circle-9",
+      "style": "standard",
+      "base_name": "circle-9"
+    },
+    {
+      "url": "assets/icons/caltopo/circle-10.png",
+      "filename": "circle-10",
+      "style": "standard",
+      "base_name": "circle-10"
+    },
+    {
+      "url": "assets/icons/caltopo/circle-a.png",
+      "filename": "circle-a",
+      "style": "standard",
+      "base_name": "circle-a"
+    },
+    {
+      "url": "assets/icons/caltopo/circle-b.png",
+      "filename": "circle-b",
+      "style": "standard",
+      "base_name": "circle-b"
+    },
+    {
+      "url": "assets/icons/caltopo/circle-c.png",
+      "filename": "circle-c",
+      "style": "standard",
+      "base_name": "circle-c"
+    },
+    {
+      "url": "assets/icons/caltopo/circle-d.png",
+      "filename": "circle-d",
+      "style": "standard",
+      "base_name": "circle-d"
+    },
+    {
+      "url": "assets/icons/caltopo/circle-e.png",
+      "filename": "circle-e",
+      "style": "standard",
+      "base_name": "circle-e"
+    },
+    {
+      "url": "assets/icons/caltopo/circle-f.png",
+      "filename": "circle-f",
+      "style": "standard",
+      "base_name": "circle-f"
+    },
+    {
+      "url": "assets/icons/caltopo/circle-g.png",
+      "filename": "circle-g",
+      "style": "standard",
+      "base_name": "circle-g"
+    },
+    {
+      "url": "assets/icons/caltopo/circle-h.png",
+      "filename": "circle-h",
+      "style": "standard",
+      "base_name": "circle-h"
+    },
+    {
+      "url": "assets/icons/caltopo/circle-i.png",
+      "filename": "circle-i",
+      "style": "standard",
+      "base_name": "circle-i"
+    },
+    {
+      "url": "assets/icons/caltopo/circle-j.png",
+      "filename": "circle-j",
+      "style": "standard",
+      "base_name": "circle-j"
+    },
+    {
+      "url": "assets/icons/caltopo/circle-k.png",
+      "filename": "circle-k",
+      "style": "standard",
+      "base_name": "circle-k"
+    },
+    {
+      "url": "assets/icons/caltopo/circle-l.png",
+      "filename": "circle-l",
+      "style": "standard",
+      "base_name": "circle-l"
+    },
+    {
+      "url": "assets/icons/caltopo/circle-m.png",
+      "filename": "circle-m",
+      "style": "standard",
+      "base_name": "circle-m"
+    },
+    {
+      "url": "assets/icons/caltopo/circle-n.png",
+      "filename": "circle-n",
+      "style": "standard",
+      "base_name": "circle-n"
+    },
+    {
+      "url": "assets/icons/caltopo/circle-o.png",
+      "filename": "circle-o",
+      "style": "standard",
+      "base_name": "circle-o"
+    },
+    {
+      "url": "assets/icons/caltopo/circle-p.png",
+      "filename": "circle-p",
+      "style": "standard",
+      "base_name": "circle-p"
+    },
+    {
+      "url": "assets/icons/caltopo/circle-q.png",
+      "filename": "circle-q",
+      "style": "standard",
+      "base_name": "circle-q"
+    },
+    {
+      "url": "assets/icons/caltopo/circle-r.png",
+      "filename": "circle-r",
+      "style": "standard",
+      "base_name": "circle-r"
+    },
+    {
+      "url": "assets/icons/caltopo/circle-s.png",
+      "filename": "circle-s",
+      "style": "standard",
+      "base_name": "circle-s"
+    },
+    {
+      "url": "assets/icons/caltopo/circle-t.png",
+      "filename": "circle-t",
+      "style": "standard",
+      "base_name": "circle-t"
+    },
+    {
+      "url": "assets/icons/caltopo/circle-u.png",
+      "filename": "circle-u",
+      "style": "standard",
+      "base_name": "circle-u"
+    },
+    {
+      "url": "assets/icons/caltopo/circle-v.png",
+      "filename": "circle-v",
+      "style": "standard",
+      "base_name": "circle-v"
+    },
+    {
+      "url": "assets/icons/caltopo/circle-w.png",
+      "filename": "circle-w",
+      "style": "standard",
+      "base_name": "circle-w"
+    },
+    {
+      "url": "assets/icons/caltopo/circle-x.png",
+      "filename": "circle-x",
+      "style": "standard",
+      "base_name": "circle-x"
+    },
+    {
+      "url": "assets/icons/caltopo/circle-y.png",
+      "filename": "circle-y",
+      "style": "standard",
+      "base_name": "circle-y"
+    },
+    {
+      "url": "assets/icons/caltopo/circle-z.png",
+      "filename": "circle-z",
+      "style": "standard",
+      "base_name": "circle-z"
+    }
+  ],
+  "recreation": [
+    {
+      "url": "assets/icons/caltopo/4wd_circle.png",
+      "filename": "4wd_circle",
+      "style": "circle",
+      "base_name": "4wd"
+    },
+    {
+      "url": "assets/icons/caltopo/4wd_diamond.png",
+      "filename": "4wd_diamond",
+      "style": "diamond",
+      "base_name": "4wd"
+    },
+    {
+      "url": "assets/icons/caltopo/4wd_hexagon.png",
+      "filename": "4wd_hexagon",
+      "style": "hexagon",
+      "base_name": "4wd"
+    },
+    {
+      "url": "assets/icons/caltopo/4wd_pentagon.png",
+      "filename": "4wd_pentagon",
+      "style": "pentagon",
+      "base_name": "4wd"
+    },
+    {
+      "url": "assets/icons/caltopo/4wd_placemark.png",
+      "filename": "4wd_placemark",
+      "style": "placemark",
+      "base_name": "4wd"
+    },
+    {
+      "url": "assets/icons/caltopo/4wd_square.png",
+      "filename": "4wd_square",
+      "style": "square",
+      "base_name": "4wd"
+    },
+    {
+      "url": "assets/icons/caltopo/4wd_square-rounded.png",
+      "filename": "4wd_square-rounded",
+      "style": "square-rounded",
+      "base_name": "4wd"
+    },
+    {
+      "url": "assets/icons/caltopo/4wd.png",
+      "filename": "4wd",
+      "style": "standard",
+      "base_name": "4wd"
+    },
+    {
+      "url": "assets/icons/caltopo/4wd_triangle.png",
+      "filename": "4wd_triangle",
+      "style": "triangle",
+      "base_name": "4wd"
+    },
+    {
+      "url": "assets/icons/caltopo/a_0.png",
+      "filename": "a_0",
+      "style": "standard",
+      "base_name": "a_0"
+    },
+    {
+      "url": "assets/icons/caltopo/a_1.png",
+      "filename": "a_1",
+      "style": "standard",
+      "base_name": "a_1"
+    },
+    {
+      "url": "assets/icons/caltopo/a_2.png",
+      "filename": "a_2",
+      "style": "standard",
+      "base_name": "a_2"
+    },
+    {
+      "url": "assets/icons/caltopo/a_3.png",
+      "filename": "a_3",
+      "style": "standard",
+      "base_name": "a_3"
+    },
+    {
+      "url": "assets/icons/caltopo/a_4.png",
+      "filename": "a_4",
+      "style": "standard",
+      "base_name": "a_4"
+    },
+    {
+      "url": "assets/icons/caltopo/aed_circle.png",
+      "filename": "aed_circle",
+      "style": "circle",
+      "base_name": "aed"
+    },
+    {
+      "url": "assets/icons/caltopo/aed_diamond.png",
+      "filename": "aed_diamond",
+      "style": "diamond",
+      "base_name": "aed"
+    },
+    {
+      "url": "assets/icons/caltopo/aed_hexagon.png",
+      "filename": "aed_hexagon",
+      "style": "hexagon",
+      "base_name": "aed"
+    },
+    {
+      "url": "assets/icons/caltopo/aed_pentagon.png",
+      "filename": "aed_pentagon",
+      "style": "pentagon",
+      "base_name": "aed"
+    },
+    {
+      "url": "assets/icons/caltopo/aed_placemark.png",
+      "filename": "aed_placemark",
+      "style": "placemark",
+      "base_name": "aed"
+    },
+    {
+      "url": "assets/icons/caltopo/aed_square.png",
+      "filename": "aed_square",
+      "style": "square",
+      "base_name": "aed"
+    },
+    {
+      "url": "assets/icons/caltopo/aed_square-rounded.png",
+      "filename": "aed_square-rounded",
+      "style": "square-rounded",
+      "base_name": "aed"
+    },
+    {
+      "url": "assets/icons/caltopo/aed.png",
+      "filename": "aed",
+      "style": "standard",
+      "base_name": "aed"
+    },
+    {
+      "url": "assets/icons/caltopo/aed_triangle.png",
+      "filename": "aed_triangle",
+      "style": "triangle",
+      "base_name": "aed"
+    },
+    {
+      "url": "assets/icons/caltopo/airport_circle.png",
+      "filename": "airport_circle",
+      "style": "circle",
+      "base_name": "airport"
+    },
+    {
+      "url": "assets/icons/caltopo/airport_diamond.png",
+      "filename": "airport_diamond",
+      "style": "diamond",
+      "base_name": "airport"
+    },
+    {
+      "url": "assets/icons/caltopo/airport_hexagon.png",
+      "filename": "airport_hexagon",
+      "style": "hexagon",
+      "base_name": "airport"
+    },
+    {
+      "url": "assets/icons/caltopo/airport_pentagon.png",
+      "filename": "airport_pentagon",
+      "style": "pentagon",
+      "base_name": "airport"
+    },
+    {
+      "url": "assets/icons/caltopo/airport_placemark.png",
+      "filename": "airport_placemark",
+      "style": "placemark",
+      "base_name": "airport"
+    },
+    {
+      "url": "assets/icons/caltopo/airport_square.png",
+      "filename": "airport_square",
+      "style": "square",
+      "base_name": "airport"
+    },
+    {
+      "url": "assets/icons/caltopo/airport_square-rounded.png",
+      "filename": "airport_square-rounded",
+      "style": "square-rounded",
+      "base_name": "airport"
+    },
+    {
+      "url": "assets/icons/caltopo/airport.png",
+      "filename": "airport",
+      "style": "standard",
+      "base_name": "airport"
+    },
+    {
+      "url": "assets/icons/caltopo/airport_triangle.png",
+      "filename": "airport_triangle",
+      "style": "triangle",
+      "base_name": "airport"
+    },
+    {
+      "url": "assets/icons/caltopo/anchorage_circle.png",
+      "filename": "anchorage_circle",
+      "style": "circle",
+      "base_name": "anchorage"
+    },
+    {
+      "url": "assets/icons/caltopo/anchorage_diamond.png",
+      "filename": "anchorage_diamond",
+      "style": "diamond",
+      "base_name": "anchorage"
+    },
+    {
+      "url": "assets/icons/caltopo/anchorage_hexagon.png",
+      "filename": "anchorage_hexagon",
+      "style": "hexagon",
+      "base_name": "anchorage"
+    },
+    {
+      "url": "assets/icons/caltopo/anchorage_pentagon.png",
+      "filename": "anchorage_pentagon",
+      "style": "pentagon",
+      "base_name": "anchorage"
+    },
+    {
+      "url": "assets/icons/caltopo/anchorage_placemark.png",
+      "filename": "anchorage_placemark",
+      "style": "placemark",
+      "base_name": "anchorage"
+    },
+    {
+      "url": "assets/icons/caltopo/anchorage_square.png",
+      "filename": "anchorage_square",
+      "style": "square",
+      "base_name": "anchorage"
+    },
+    {
+      "url": "assets/icons/caltopo/anchorage_square-rounded.png",
+      "filename": "anchorage_square-rounded",
+      "style": "square-rounded",
+      "base_name": "anchorage"
+    },
+    {
+      "url": "assets/icons/caltopo/anchorage.png",
+      "filename": "anchorage",
+      "style": "standard",
+      "base_name": "anchorage"
+    },
+    {
+      "url": "assets/icons/caltopo/anchorage_triangle.png",
+      "filename": "anchorage_triangle",
+      "style": "triangle",
+      "base_name": "anchorage"
+    },
+    {
+      "url": "assets/icons/caltopo/assignment-branch.png",
+      "filename": "assignment-branch",
+      "style": "standard",
+      "base_name": "assignment-branch"
+    },
+    {
+      "url": "assets/icons/caltopo/assignment-division.png",
+      "filename": "assignment-division",
+      "style": "standard",
+      "base_name": "assignment-division"
+    },
+    {
+      "url": "assets/icons/caltopo/assignment-zone.png",
+      "filename": "assignment-zone",
+      "style": "standard",
+      "base_name": "assignment-zone"
+    },
+    {
+      "url": "assets/icons/caltopo/atm_circle.png",
+      "filename": "atm_circle",
+      "style": "circle",
+      "base_name": "atm"
+    },
+    {
+      "url": "assets/icons/caltopo/atm_diamond.png",
+      "filename": "atm_diamond",
+      "style": "diamond",
+      "base_name": "atm"
+    },
+    {
+      "url": "assets/icons/caltopo/atm_hexagon.png",
+      "filename": "atm_hexagon",
+      "style": "hexagon",
+      "base_name": "atm"
+    },
+    {
+      "url": "assets/icons/caltopo/atm_pentagon.png",
+      "filename": "atm_pentagon",
+      "style": "pentagon",
+      "base_name": "atm"
+    },
+    {
+      "url": "assets/icons/caltopo/atm_placemark.png",
+      "filename": "atm_placemark",
+      "style": "placemark",
+      "base_name": "atm"
+    },
+    {
+      "url": "assets/icons/caltopo/atm_square.png",
+      "filename": "atm_square",
+      "style": "square",
+      "base_name": "atm"
+    },
+    {
+      "url": "assets/icons/caltopo/atm_square-rounded.png",
+      "filename": "atm_square-rounded",
+      "style": "square-rounded",
+      "base_name": "atm"
+    },
+    {
+      "url": "assets/icons/caltopo/atm.png",
+      "filename": "atm",
+      "style": "standard",
+      "base_name": "atm"
+    },
+    {
+      "url": "assets/icons/caltopo/atm_triangle.png",
+      "filename": "atm_triangle",
+      "style": "triangle",
+      "base_name": "atm"
+    },
+    {
+      "url": "assets/icons/caltopo/atv_circle.png",
+      "filename": "atv_circle",
+      "style": "circle",
+      "base_name": "atv"
+    },
+    {
+      "url": "assets/icons/caltopo/atv_diamond.png",
+      "filename": "atv_diamond",
+      "style": "diamond",
+      "base_name": "atv"
+    },
+    {
+      "url": "assets/icons/caltopo/atv_hexagon.png",
+      "filename": "atv_hexagon",
+      "style": "hexagon",
+      "base_name": "atv"
+    },
+    {
+      "url": "assets/icons/caltopo/atv_pentagon.png",
+      "filename": "atv_pentagon",
+      "style": "pentagon",
+      "base_name": "atv"
+    },
+    {
+      "url": "assets/icons/caltopo/atv_placemark.png",
+      "filename": "atv_placemark",
+      "style": "placemark",
+      "base_name": "atv"
+    },
+    {
+      "url": "assets/icons/caltopo/atv_square.png",
+      "filename": "atv_square",
+      "style": "square",
+      "base_name": "atv"
+    },
+    {
+      "url": "assets/icons/caltopo/atv_square-rounded.png",
+      "filename": "atv_square-rounded",
+      "style": "square-rounded",
+      "base_name": "atv"
+    },
+    {
+      "url": "assets/icons/caltopo/atv.png",
+      "filename": "atv",
+      "style": "standard",
+      "base_name": "atv"
+    },
+    {
+      "url": "assets/icons/caltopo/atv_triangle.png",
+      "filename": "atv_triangle",
+      "style": "triangle",
+      "base_name": "atv"
+    },
+    {
+      "url": "assets/icons/caltopo/automobile_circle.png",
+      "filename": "automobile_circle",
+      "style": "circle",
+      "base_name": "automobile"
+    },
+    {
+      "url": "assets/icons/caltopo/automobile_diamond.png",
+      "filename": "automobile_diamond",
+      "style": "diamond",
+      "base_name": "automobile"
+    },
+    {
+      "url": "assets/icons/caltopo/automobile_hexagon.png",
+      "filename": "automobile_hexagon",
+      "style": "hexagon",
+      "base_name": "automobile"
+    },
+    {
+      "url": "assets/icons/caltopo/automobile_pentagon.png",
+      "filename": "automobile_pentagon",
+      "style": "pentagon",
+      "base_name": "automobile"
+    },
+    {
+      "url": "assets/icons/caltopo/automobile_placemark.png",
+      "filename": "automobile_placemark",
+      "style": "placemark",
+      "base_name": "automobile"
+    },
+    {
+      "url": "assets/icons/caltopo/automobile_square.png",
+      "filename": "automobile_square",
+      "style": "square",
+      "base_name": "automobile"
+    },
+    {
+      "url": "assets/icons/caltopo/automobile_square-rounded.png",
+      "filename": "automobile_square-rounded",
+      "style": "square-rounded",
+      "base_name": "automobile"
+    },
+    {
+      "url": "assets/icons/caltopo/automobile.png",
+      "filename": "automobile",
+      "style": "standard",
+      "base_name": "automobile"
+    },
+    {
+      "url": "assets/icons/caltopo/automobile_triangle.png",
+      "filename": "automobile_triangle",
+      "style": "triangle",
+      "base_name": "automobile"
+    },
+    {
+      "url": "assets/icons/caltopo/beach_circle.png",
+      "filename": "beach_circle",
+      "style": "circle",
+      "base_name": "beach"
+    },
+    {
+      "url": "assets/icons/caltopo/beach_diamond.png",
+      "filename": "beach_diamond",
+      "style": "diamond",
+      "base_name": "beach"
+    },
+    {
+      "url": "assets/icons/caltopo/beach_hexagon.png",
+      "filename": "beach_hexagon",
+      "style": "hexagon",
+      "base_name": "beach"
+    },
+    {
+      "url": "assets/icons/caltopo/beach_pentagon.png",
+      "filename": "beach_pentagon",
+      "style": "pentagon",
+      "base_name": "beach"
+    },
+    {
+      "url": "assets/icons/caltopo/beach_placemark.png",
+      "filename": "beach_placemark",
+      "style": "placemark",
+      "base_name": "beach"
+    },
+    {
+      "url": "assets/icons/caltopo/beach_square.png",
+      "filename": "beach_square",
+      "style": "square",
+      "base_name": "beach"
+    },
+    {
+      "url": "assets/icons/caltopo/beach_square-rounded.png",
+      "filename": "beach_square-rounded",
+      "style": "square-rounded",
+      "base_name": "beach"
+    },
+    {
+      "url": "assets/icons/caltopo/beach.png",
+      "filename": "beach",
+      "style": "standard",
+      "base_name": "beach"
+    },
+    {
+      "url": "assets/icons/caltopo/beach_triangle.png",
+      "filename": "beach_triangle",
+      "style": "triangle",
+      "base_name": "beach"
+    },
+    {
+      "url": "assets/icons/caltopo/bicycling_circle.png",
+      "filename": "bicycling_circle",
+      "style": "circle",
+      "base_name": "bicycling"
+    },
+    {
+      "url": "assets/icons/caltopo/bicycling_diamond.png",
+      "filename": "bicycling_diamond",
+      "style": "diamond",
+      "base_name": "bicycling"
+    },
+    {
+      "url": "assets/icons/caltopo/bicycling_hexagon.png",
+      "filename": "bicycling_hexagon",
+      "style": "hexagon",
+      "base_name": "bicycling"
+    },
+    {
+      "url": "assets/icons/caltopo/bicycling_pentagon.png",
+      "filename": "bicycling_pentagon",
+      "style": "pentagon",
+      "base_name": "bicycling"
+    },
+    {
+      "url": "assets/icons/caltopo/bicycling_placemark.png",
+      "filename": "bicycling_placemark",
+      "style": "placemark",
+      "base_name": "bicycling"
+    },
+    {
+      "url": "assets/icons/caltopo/bicycling_square.png",
+      "filename": "bicycling_square",
+      "style": "square",
+      "base_name": "bicycling"
+    },
+    {
+      "url": "assets/icons/caltopo/bicycling_square-rounded.png",
+      "filename": "bicycling_square-rounded",
+      "style": "square-rounded",
+      "base_name": "bicycling"
+    },
+    {
+      "url": "assets/icons/caltopo/bicycling.png",
+      "filename": "bicycling",
+      "style": "standard",
+      "base_name": "bicycling"
+    },
+    {
+      "url": "assets/icons/caltopo/bicycling_triangle.png",
+      "filename": "bicycling_triangle",
+      "style": "triangle",
+      "base_name": "bicycling"
+    },
+    {
+      "url": "assets/icons/caltopo/bicycling-downhill_circle.png",
+      "filename": "bicycling-downhill_circle",
+      "style": "circle",
+      "base_name": "bicycling-downhill"
+    },
+    {
+      "url": "assets/icons/caltopo/bicycling-downhill_diamond.png",
+      "filename": "bicycling-downhill_diamond",
+      "style": "diamond",
+      "base_name": "bicycling-downhill"
+    },
+    {
+      "url": "assets/icons/caltopo/bicycling-downhill_hexagon.png",
+      "filename": "bicycling-downhill_hexagon",
+      "style": "hexagon",
+      "base_name": "bicycling-downhill"
+    },
+    {
+      "url": "assets/icons/caltopo/bicycling-downhill_pentagon.png",
+      "filename": "bicycling-downhill_pentagon",
+      "style": "pentagon",
+      "base_name": "bicycling-downhill"
+    },
+    {
+      "url": "assets/icons/caltopo/bicycling-downhill_placemark.png",
+      "filename": "bicycling-downhill_placemark",
+      "style": "placemark",
+      "base_name": "bicycling-downhill"
+    },
+    {
+      "url": "assets/icons/caltopo/bicycling-downhill_square.png",
+      "filename": "bicycling-downhill_square",
+      "style": "square",
+      "base_name": "bicycling-downhill"
+    },
+    {
+      "url": "assets/icons/caltopo/bicycling-downhill_square-rounded.png",
+      "filename": "bicycling-downhill_square-rounded",
+      "style": "square-rounded",
+      "base_name": "bicycling-downhill"
+    },
+    {
+      "url": "assets/icons/caltopo/bicycling-downhill.png",
+      "filename": "bicycling-downhill",
+      "style": "standard",
+      "base_name": "bicycling-downhill"
+    },
+    {
+      "url": "assets/icons/caltopo/bicycling-downhill_triangle.png",
+      "filename": "bicycling-downhill_triangle",
+      "style": "triangle",
+      "base_name": "bicycling-downhill"
+    },
+    {
+      "url": "assets/icons/caltopo/bicycling-no_circle.png",
+      "filename": "bicycling-no_circle",
+      "style": "circle",
+      "base_name": "bicycling-no"
+    },
+    {
+      "url": "assets/icons/caltopo/bicycling-no_diamond.png",
+      "filename": "bicycling-no_diamond",
+      "style": "diamond",
+      "base_name": "bicycling-no"
+    },
+    {
+      "url": "assets/icons/caltopo/bicycling-no_hexagon.png",
+      "filename": "bicycling-no_hexagon",
+      "style": "hexagon",
+      "base_name": "bicycling-no"
+    },
+    {
+      "url": "assets/icons/caltopo/bicycling-no_pentagon.png",
+      "filename": "bicycling-no_pentagon",
+      "style": "pentagon",
+      "base_name": "bicycling-no"
+    },
+    {
+      "url": "assets/icons/caltopo/bicycling-no_placemark.png",
+      "filename": "bicycling-no_placemark",
+      "style": "placemark",
+      "base_name": "bicycling-no"
+    },
+    {
+      "url": "assets/icons/caltopo/bicycling-no_square.png",
+      "filename": "bicycling-no_square",
+      "style": "square",
+      "base_name": "bicycling-no"
+    },
+    {
+      "url": "assets/icons/caltopo/bicycling-no_square-rounded.png",
+      "filename": "bicycling-no_square-rounded",
+      "style": "square-rounded",
+      "base_name": "bicycling-no"
+    },
+    {
+      "url": "assets/icons/caltopo/bicycling-no.png",
+      "filename": "bicycling-no",
+      "style": "standard",
+      "base_name": "bicycling-no"
+    },
+    {
+      "url": "assets/icons/caltopo/bicycling-no_triangle.png",
+      "filename": "bicycling-no_triangle",
+      "style": "triangle",
+      "base_name": "bicycling-no"
+    },
+    {
+      "url": "assets/icons/caltopo/bicycling-uphill_circle.png",
+      "filename": "bicycling-uphill_circle",
+      "style": "circle",
+      "base_name": "bicycling-uphill"
+    },
+    {
+      "url": "assets/icons/caltopo/bicycling-uphill_diamond.png",
+      "filename": "bicycling-uphill_diamond",
+      "style": "diamond",
+      "base_name": "bicycling-uphill"
+    },
+    {
+      "url": "assets/icons/caltopo/bicycling-uphill_hexagon.png",
+      "filename": "bicycling-uphill_hexagon",
+      "style": "hexagon",
+      "base_name": "bicycling-uphill"
+    },
+    {
+      "url": "assets/icons/caltopo/bicycling-uphill_pentagon.png",
+      "filename": "bicycling-uphill_pentagon",
+      "style": "pentagon",
+      "base_name": "bicycling-uphill"
+    },
+    {
+      "url": "assets/icons/caltopo/bicycling-uphill_placemark.png",
+      "filename": "bicycling-uphill_placemark",
+      "style": "placemark",
+      "base_name": "bicycling-uphill"
+    },
+    {
+      "url": "assets/icons/caltopo/bicycling-uphill_square.png",
+      "filename": "bicycling-uphill_square",
+      "style": "square",
+      "base_name": "bicycling-uphill"
+    },
+    {
+      "url": "assets/icons/caltopo/bicycling-uphill_square-rounded.png",
+      "filename": "bicycling-uphill_square-rounded",
+      "style": "square-rounded",
+      "base_name": "bicycling-uphill"
+    },
+    {
+      "url": "assets/icons/caltopo/bicycling-uphill.png",
+      "filename": "bicycling-uphill",
+      "style": "standard",
+      "base_name": "bicycling-uphill"
+    },
+    {
+      "url": "assets/icons/caltopo/bicycling-uphill_triangle.png",
+      "filename": "bicycling-uphill_triangle",
+      "style": "triangle",
+      "base_name": "bicycling-uphill"
+    },
+    {
+      "url": "assets/icons/caltopo/binoc_circle.png",
+      "filename": "binoc_circle",
+      "style": "circle",
+      "base_name": "binoc"
+    },
+    {
+      "url": "assets/icons/caltopo/binoc_diamond.png",
+      "filename": "binoc_diamond",
+      "style": "diamond",
+      "base_name": "binoc"
+    },
+    {
+      "url": "assets/icons/caltopo/binoc_hexagon.png",
+      "filename": "binoc_hexagon",
+      "style": "hexagon",
+      "base_name": "binoc"
+    },
+    {
+      "url": "assets/icons/caltopo/binoc_pentagon.png",
+      "filename": "binoc_pentagon",
+      "style": "pentagon",
+      "base_name": "binoc"
+    },
+    {
+      "url": "assets/icons/caltopo/binoc_placemark.png",
+      "filename": "binoc_placemark",
+      "style": "placemark",
+      "base_name": "binoc"
+    },
+    {
+      "url": "assets/icons/caltopo/binoc_square.png",
+      "filename": "binoc_square",
+      "style": "square",
+      "base_name": "binoc"
+    },
+    {
+      "url": "assets/icons/caltopo/binoc_square-rounded.png",
+      "filename": "binoc_square-rounded",
+      "style": "square-rounded",
+      "base_name": "binoc"
+    },
+    {
+      "url": "assets/icons/caltopo/binoc.png",
+      "filename": "binoc",
+      "style": "standard",
+      "base_name": "binoc"
+    },
+    {
+      "url": "assets/icons/caltopo/binoc_triangle.png",
+      "filename": "binoc_triangle",
+      "style": "triangle",
+      "base_name": "binoc"
+    },
+    {
+      "url": "assets/icons/caltopo/boatlaunch_circle.png",
+      "filename": "boatlaunch_circle",
+      "style": "circle",
+      "base_name": "boatlaunch"
+    },
+    {
+      "url": "assets/icons/caltopo/boatlaunch_diamond.png",
+      "filename": "boatlaunch_diamond",
+      "style": "diamond",
+      "base_name": "boatlaunch"
+    },
+    {
+      "url": "assets/icons/caltopo/boatlaunch_hexagon.png",
+      "filename": "boatlaunch_hexagon",
+      "style": "hexagon",
+      "base_name": "boatlaunch"
+    },
+    {
+      "url": "assets/icons/caltopo/boatlaunch_pentagon.png",
+      "filename": "boatlaunch_pentagon",
+      "style": "pentagon",
+      "base_name": "boatlaunch"
+    },
+    {
+      "url": "assets/icons/caltopo/boatlaunch_placemark.png",
+      "filename": "boatlaunch_placemark",
+      "style": "placemark",
+      "base_name": "boatlaunch"
+    },
+    {
+      "url": "assets/icons/caltopo/boatlaunch_square.png",
+      "filename": "boatlaunch_square",
+      "style": "square",
+      "base_name": "boatlaunch"
+    },
+    {
+      "url": "assets/icons/caltopo/boatlaunch_square-rounded.png",
+      "filename": "boatlaunch_square-rounded",
+      "style": "square-rounded",
+      "base_name": "boatlaunch"
+    },
+    {
+      "url": "assets/icons/caltopo/boatlaunch.png",
+      "filename": "boatlaunch",
+      "style": "standard",
+      "base_name": "boatlaunch"
+    },
+    {
+      "url": "assets/icons/caltopo/boatlaunch_triangle.png",
+      "filename": "boatlaunch_triangle",
+      "style": "triangle",
+      "base_name": "boatlaunch"
+    },
+    {
+      "url": "assets/icons/caltopo/busstop_circle.png",
+      "filename": "busstop_circle",
+      "style": "circle",
+      "base_name": "busstop"
+    },
+    {
+      "url": "assets/icons/caltopo/busstop_diamond.png",
+      "filename": "busstop_diamond",
+      "style": "diamond",
+      "base_name": "busstop"
+    },
+    {
+      "url": "assets/icons/caltopo/busstop_hexagon.png",
+      "filename": "busstop_hexagon",
+      "style": "hexagon",
+      "base_name": "busstop"
+    },
+    {
+      "url": "assets/icons/caltopo/busstop_pentagon.png",
+      "filename": "busstop_pentagon",
+      "style": "pentagon",
+      "base_name": "busstop"
+    },
+    {
+      "url": "assets/icons/caltopo/busstop_placemark.png",
+      "filename": "busstop_placemark",
+      "style": "placemark",
+      "base_name": "busstop"
+    },
+    {
+      "url": "assets/icons/caltopo/busstop_square.png",
+      "filename": "busstop_square",
+      "style": "square",
+      "base_name": "busstop"
+    },
+    {
+      "url": "assets/icons/caltopo/busstop_square-rounded.png",
+      "filename": "busstop_square-rounded",
+      "style": "square-rounded",
+      "base_name": "busstop"
+    },
+    {
+      "url": "assets/icons/caltopo/busstop.png",
+      "filename": "busstop",
+      "style": "standard",
+      "base_name": "busstop"
+    },
+    {
+      "url": "assets/icons/caltopo/busstop_triangle.png",
+      "filename": "busstop_triangle",
+      "style": "triangle",
+      "base_name": "busstop"
+    },
+    {
+      "url": "assets/icons/caltopo/c_ring.png",
+      "filename": "c_ring",
+      "style": "standard",
+      "base_name": "c_ring"
+    },
+    {
+      "url": "assets/icons/caltopo/c_target1.png",
+      "filename": "c_target1",
+      "style": "standard",
+      "base_name": "c_target1"
+    },
+    {
+      "url": "assets/icons/caltopo/c_target2.png",
+      "filename": "c_target2",
+      "style": "standard",
+      "base_name": "c_target2"
+    },
+    {
+      "url": "assets/icons/caltopo/c_target3.png",
+      "filename": "c_target3",
+      "style": "standard",
+      "base_name": "c_target3"
+    },
+    {
+      "url": "assets/icons/caltopo/campfire_circle.png",
+      "filename": "campfire_circle",
+      "style": "circle",
+      "base_name": "campfire"
+    },
+    {
+      "url": "assets/icons/caltopo/campfire_diamond.png",
+      "filename": "campfire_diamond",
+      "style": "diamond",
+      "base_name": "campfire"
+    },
+    {
+      "url": "assets/icons/caltopo/campfire_hexagon.png",
+      "filename": "campfire_hexagon",
+      "style": "hexagon",
+      "base_name": "campfire"
+    },
+    {
+      "url": "assets/icons/caltopo/campfire_pentagon.png",
+      "filename": "campfire_pentagon",
+      "style": "pentagon",
+      "base_name": "campfire"
+    },
+    {
+      "url": "assets/icons/caltopo/campfire_placemark.png",
+      "filename": "campfire_placemark",
+      "style": "placemark",
+      "base_name": "campfire"
+    },
+    {
+      "url": "assets/icons/caltopo/campfire_square.png",
+      "filename": "campfire_square",
+      "style": "square",
+      "base_name": "campfire"
+    },
+    {
+      "url": "assets/icons/caltopo/campfire_square-rounded.png",
+      "filename": "campfire_square-rounded",
+      "style": "square-rounded",
+      "base_name": "campfire"
+    },
+    {
+      "url": "assets/icons/caltopo/campfire.png",
+      "filename": "campfire",
+      "style": "standard",
+      "base_name": "campfire"
+    },
+    {
+      "url": "assets/icons/caltopo/campfire_triangle.png",
+      "filename": "campfire_triangle",
+      "style": "triangle",
+      "base_name": "campfire"
+    },
+    {
+      "url": "assets/icons/caltopo/camping_circle.png",
+      "filename": "camping_circle",
+      "style": "circle",
+      "base_name": "camping"
+    },
+    {
+      "url": "assets/icons/caltopo/camping_diamond.png",
+      "filename": "camping_diamond",
+      "style": "diamond",
+      "base_name": "camping"
+    },
+    {
+      "url": "assets/icons/caltopo/camping_hexagon.png",
+      "filename": "camping_hexagon",
+      "style": "hexagon",
+      "base_name": "camping"
+    },
+    {
+      "url": "assets/icons/caltopo/camping_pentagon.png",
+      "filename": "camping_pentagon",
+      "style": "pentagon",
+      "base_name": "camping"
+    },
+    {
+      "url": "assets/icons/caltopo/camping_placemark.png",
+      "filename": "camping_placemark",
+      "style": "placemark",
+      "base_name": "camping"
+    },
+    {
+      "url": "assets/icons/caltopo/camping_square.png",
+      "filename": "camping_square",
+      "style": "square",
+      "base_name": "camping"
+    },
+    {
+      "url": "assets/icons/caltopo/camping_square-rounded.png",
+      "filename": "camping_square-rounded",
+      "style": "square-rounded",
+      "base_name": "camping"
+    },
+    {
+      "url": "assets/icons/caltopo/camping.png",
+      "filename": "camping",
+      "style": "standard",
+      "base_name": "camping"
+    },
+    {
+      "url": "assets/icons/caltopo/camping_triangle.png",
+      "filename": "camping_triangle",
+      "style": "triangle",
+      "base_name": "camping"
+    },
+    {
+      "url": "assets/icons/caltopo/canoeing-1_circle.png",
+      "filename": "canoeing-1_circle",
+      "style": "circle",
+      "base_name": "canoeing-1"
+    },
+    {
+      "url": "assets/icons/caltopo/canoeing-1_diamond.png",
+      "filename": "canoeing-1_diamond",
+      "style": "diamond",
+      "base_name": "canoeing-1"
+    },
+    {
+      "url": "assets/icons/caltopo/canoeing-1_hexagon.png",
+      "filename": "canoeing-1_hexagon",
+      "style": "hexagon",
+      "base_name": "canoeing-1"
+    },
+    {
+      "url": "assets/icons/caltopo/canoeing-1_pentagon.png",
+      "filename": "canoeing-1_pentagon",
+      "style": "pentagon",
+      "base_name": "canoeing-1"
+    },
+    {
+      "url": "assets/icons/caltopo/canoeing-1_placemark.png",
+      "filename": "canoeing-1_placemark",
+      "style": "placemark",
+      "base_name": "canoeing-1"
+    },
+    {
+      "url": "assets/icons/caltopo/canoeing-1_square.png",
+      "filename": "canoeing-1_square",
+      "style": "square",
+      "base_name": "canoeing-1"
+    },
+    {
+      "url": "assets/icons/caltopo/canoeing-1_square-rounded.png",
+      "filename": "canoeing-1_square-rounded",
+      "style": "square-rounded",
+      "base_name": "canoeing-1"
+    },
+    {
+      "url": "assets/icons/caltopo/canoeing-1.png",
+      "filename": "canoeing-1",
+      "style": "standard",
+      "base_name": "canoeing-1"
+    },
+    {
+      "url": "assets/icons/caltopo/canoeing-1_triangle.png",
+      "filename": "canoeing-1_triangle",
+      "style": "triangle",
+      "base_name": "canoeing-1"
+    },
+    {
+      "url": "assets/icons/caltopo/canoeing-2_circle.png",
+      "filename": "canoeing-2_circle",
+      "style": "circle",
+      "base_name": "canoeing-2"
+    },
+    {
+      "url": "assets/icons/caltopo/canoeing-2_diamond.png",
+      "filename": "canoeing-2_diamond",
+      "style": "diamond",
+      "base_name": "canoeing-2"
+    },
+    {
+      "url": "assets/icons/caltopo/canoeing-2_hexagon.png",
+      "filename": "canoeing-2_hexagon",
+      "style": "hexagon",
+      "base_name": "canoeing-2"
+    },
+    {
+      "url": "assets/icons/caltopo/canoeing-2_pentagon.png",
+      "filename": "canoeing-2_pentagon",
+      "style": "pentagon",
+      "base_name": "canoeing-2"
+    },
+    {
+      "url": "assets/icons/caltopo/canoeing-2_placemark.png",
+      "filename": "canoeing-2_placemark",
+      "style": "placemark",
+      "base_name": "canoeing-2"
+    },
+    {
+      "url": "assets/icons/caltopo/canoeing-2_square.png",
+      "filename": "canoeing-2_square",
+      "style": "square",
+      "base_name": "canoeing-2"
+    },
+    {
+      "url": "assets/icons/caltopo/canoeing-2_square-rounded.png",
+      "filename": "canoeing-2_square-rounded",
+      "style": "square-rounded",
+      "base_name": "canoeing-2"
+    },
+    {
+      "url": "assets/icons/caltopo/canoeing-2.png",
+      "filename": "canoeing-2",
+      "style": "standard",
+      "base_name": "canoeing-2"
+    },
+    {
+      "url": "assets/icons/caltopo/canoeing-2_triangle.png",
+      "filename": "canoeing-2_triangle",
+      "style": "triangle",
+      "base_name": "canoeing-2"
+    },
+    {
+      "url": "assets/icons/caltopo/caving_circle.png",
+      "filename": "caving_circle",
+      "style": "circle",
+      "base_name": "caving"
+    },
+    {
+      "url": "assets/icons/caltopo/caving_diamond.png",
+      "filename": "caving_diamond",
+      "style": "diamond",
+      "base_name": "caving"
+    },
+    {
+      "url": "assets/icons/caltopo/caving_hexagon.png",
+      "filename": "caving_hexagon",
+      "style": "hexagon",
+      "base_name": "caving"
+    },
+    {
+      "url": "assets/icons/caltopo/caving_pentagon.png",
+      "filename": "caving_pentagon",
+      "style": "pentagon",
+      "base_name": "caving"
+    },
+    {
+      "url": "assets/icons/caltopo/caving_placemark.png",
+      "filename": "caving_placemark",
+      "style": "placemark",
+      "base_name": "caving"
+    },
+    {
+      "url": "assets/icons/caltopo/caving_square.png",
+      "filename": "caving_square",
+      "style": "square",
+      "base_name": "caving"
+    },
+    {
+      "url": "assets/icons/caltopo/caving_square-rounded.png",
+      "filename": "caving_square-rounded",
+      "style": "square-rounded",
+      "base_name": "caving"
+    },
+    {
+      "url": "assets/icons/caltopo/caving.png",
+      "filename": "caving",
+      "style": "standard",
+      "base_name": "caving"
+    },
+    {
+      "url": "assets/icons/caltopo/caving_triangle.png",
+      "filename": "caving_triangle",
+      "style": "triangle",
+      "base_name": "caving"
+    },
+    {
+      "url": "assets/icons/caltopo/chairlift_circle.png",
+      "filename": "chairlift_circle",
+      "style": "circle",
+      "base_name": "chairlift"
+    },
+    {
+      "url": "assets/icons/caltopo/chairlift_diamond.png",
+      "filename": "chairlift_diamond",
+      "style": "diamond",
+      "base_name": "chairlift"
+    },
+    {
+      "url": "assets/icons/caltopo/chairlift_hexagon.png",
+      "filename": "chairlift_hexagon",
+      "style": "hexagon",
+      "base_name": "chairlift"
+    },
+    {
+      "url": "assets/icons/caltopo/chairlift_pentagon.png",
+      "filename": "chairlift_pentagon",
+      "style": "pentagon",
+      "base_name": "chairlift"
+    },
+    {
+      "url": "assets/icons/caltopo/chairlift_placemark.png",
+      "filename": "chairlift_placemark",
+      "style": "placemark",
+      "base_name": "chairlift"
+    },
+    {
+      "url": "assets/icons/caltopo/chairlift_square.png",
+      "filename": "chairlift_square",
+      "style": "square",
+      "base_name": "chairlift"
+    },
+    {
+      "url": "assets/icons/caltopo/chairlift_square-rounded.png",
+      "filename": "chairlift_square-rounded",
+      "style": "square-rounded",
+      "base_name": "chairlift"
+    },
+    {
+      "url": "assets/icons/caltopo/chairlift.png",
+      "filename": "chairlift",
+      "style": "standard",
+      "base_name": "chairlift"
+    },
+    {
+      "url": "assets/icons/caltopo/chairlift_triangle.png",
+      "filename": "chairlift_triangle",
+      "style": "triangle",
+      "base_name": "chairlift"
+    },
+    {
+      "url": "assets/icons/caltopo/cliff-edge_circle.png",
+      "filename": "cliff-edge_circle",
+      "style": "circle",
+      "base_name": "cliff-edge"
+    },
+    {
+      "url": "assets/icons/caltopo/cliff-edge_diamond.png",
+      "filename": "cliff-edge_diamond",
+      "style": "diamond",
+      "base_name": "cliff-edge"
+    },
+    {
+      "url": "assets/icons/caltopo/cliff-edge_hexagon.png",
+      "filename": "cliff-edge_hexagon",
+      "style": "hexagon",
+      "base_name": "cliff-edge"
+    },
+    {
+      "url": "assets/icons/caltopo/cliff-edge_pentagon.png",
+      "filename": "cliff-edge_pentagon",
+      "style": "pentagon",
+      "base_name": "cliff-edge"
+    },
+    {
+      "url": "assets/icons/caltopo/cliff-edge_placemark.png",
+      "filename": "cliff-edge_placemark",
+      "style": "placemark",
+      "base_name": "cliff-edge"
+    },
+    {
+      "url": "assets/icons/caltopo/cliff-edge_square.png",
+      "filename": "cliff-edge_square",
+      "style": "square",
+      "base_name": "cliff-edge"
+    },
+    {
+      "url": "assets/icons/caltopo/cliff-edge_square-rounded.png",
+      "filename": "cliff-edge_square-rounded",
+      "style": "square-rounded",
+      "base_name": "cliff-edge"
+    },
+    {
+      "url": "assets/icons/caltopo/cliff-edge.png",
+      "filename": "cliff-edge",
+      "style": "standard",
+      "base_name": "cliff-edge"
+    },
+    {
+      "url": "assets/icons/caltopo/cliff-edge_triangle.png",
+      "filename": "cliff-edge_triangle",
+      "style": "triangle",
+      "base_name": "cliff-edge"
+    },
+    {
+      "url": "assets/icons/caltopo/climbing-1_circle.png",
+      "filename": "climbing-1_circle",
+      "style": "circle",
+      "base_name": "climbing-1"
+    },
+    {
+      "url": "assets/icons/caltopo/climbing-1_diamond.png",
+      "filename": "climbing-1_diamond",
+      "style": "diamond",
+      "base_name": "climbing-1"
+    },
+    {
+      "url": "assets/icons/caltopo/climbing-1_hexagon.png",
+      "filename": "climbing-1_hexagon",
+      "style": "hexagon",
+      "base_name": "climbing-1"
+    },
+    {
+      "url": "assets/icons/caltopo/climbing-1_pentagon.png",
+      "filename": "climbing-1_pentagon",
+      "style": "pentagon",
+      "base_name": "climbing-1"
+    },
+    {
+      "url": "assets/icons/caltopo/climbing-1_placemark.png",
+      "filename": "climbing-1_placemark",
+      "style": "placemark",
+      "base_name": "climbing-1"
+    },
+    {
+      "url": "assets/icons/caltopo/climbing-1_square.png",
+      "filename": "climbing-1_square",
+      "style": "square",
+      "base_name": "climbing-1"
+    },
+    {
+      "url": "assets/icons/caltopo/climbing-1_square-rounded.png",
+      "filename": "climbing-1_square-rounded",
+      "style": "square-rounded",
+      "base_name": "climbing-1"
+    },
+    {
+      "url": "assets/icons/caltopo/climbing-1.png",
+      "filename": "climbing-1",
+      "style": "standard",
+      "base_name": "climbing-1"
+    },
+    {
+      "url": "assets/icons/caltopo/climbing-1_triangle.png",
+      "filename": "climbing-1_triangle",
+      "style": "triangle",
+      "base_name": "climbing-1"
+    },
+    {
+      "url": "assets/icons/caltopo/climbing-2_circle.png",
+      "filename": "climbing-2_circle",
+      "style": "circle",
+      "base_name": "climbing-2"
+    },
+    {
+      "url": "assets/icons/caltopo/climbing-2_diamond.png",
+      "filename": "climbing-2_diamond",
+      "style": "diamond",
+      "base_name": "climbing-2"
+    },
+    {
+      "url": "assets/icons/caltopo/climbing-2_hexagon.png",
+      "filename": "climbing-2_hexagon",
+      "style": "hexagon",
+      "base_name": "climbing-2"
+    },
+    {
+      "url": "assets/icons/caltopo/climbing-2_pentagon.png",
+      "filename": "climbing-2_pentagon",
+      "style": "pentagon",
+      "base_name": "climbing-2"
+    },
+    {
+      "url": "assets/icons/caltopo/climbing-2_placemark.png",
+      "filename": "climbing-2_placemark",
+      "style": "placemark",
+      "base_name": "climbing-2"
+    },
+    {
+      "url": "assets/icons/caltopo/climbing-2_square.png",
+      "filename": "climbing-2_square",
+      "style": "square",
+      "base_name": "climbing-2"
+    },
+    {
+      "url": "assets/icons/caltopo/climbing-2_square-rounded.png",
+      "filename": "climbing-2_square-rounded",
+      "style": "square-rounded",
+      "base_name": "climbing-2"
+    },
+    {
+      "url": "assets/icons/caltopo/climbing-2.png",
+      "filename": "climbing-2",
+      "style": "standard",
+      "base_name": "climbing-2"
+    },
+    {
+      "url": "assets/icons/caltopo/climbing-2_triangle.png",
+      "filename": "climbing-2_triangle",
+      "style": "triangle",
+      "base_name": "climbing-2"
+    },
+    {
+      "url": "assets/icons/caltopo/construction_circle.png",
+      "filename": "construction_circle",
+      "style": "circle",
+      "base_name": "construction"
+    },
+    {
+      "url": "assets/icons/caltopo/construction_diamond.png",
+      "filename": "construction_diamond",
+      "style": "diamond",
+      "base_name": "construction"
+    },
+    {
+      "url": "assets/icons/caltopo/construction_hexagon.png",
+      "filename": "construction_hexagon",
+      "style": "hexagon",
+      "base_name": "construction"
+    },
+    {
+      "url": "assets/icons/caltopo/construction_pentagon.png",
+      "filename": "construction_pentagon",
+      "style": "pentagon",
+      "base_name": "construction"
+    },
+    {
+      "url": "assets/icons/caltopo/construction_placemark.png",
+      "filename": "construction_placemark",
+      "style": "placemark",
+      "base_name": "construction"
+    },
+    {
+      "url": "assets/icons/caltopo/construction_square.png",
+      "filename": "construction_square",
+      "style": "square",
+      "base_name": "construction"
+    },
+    {
+      "url": "assets/icons/caltopo/construction_square-rounded.png",
+      "filename": "construction_square-rounded",
+      "style": "square-rounded",
+      "base_name": "construction"
+    },
+    {
+      "url": "assets/icons/caltopo/construction.png",
+      "filename": "construction",
+      "style": "standard",
+      "base_name": "construction"
+    },
+    {
+      "url": "assets/icons/caltopo/construction_triangle.png",
+      "filename": "construction_triangle",
+      "style": "triangle",
+      "base_name": "construction"
+    },
+    {
+      "url": "assets/icons/caltopo/danger_circle.png",
+      "filename": "danger_circle",
+      "style": "circle",
+      "base_name": "danger"
+    },
+    {
+      "url": "assets/icons/caltopo/danger_diamond.png",
+      "filename": "danger_diamond",
+      "style": "diamond",
+      "base_name": "danger"
+    },
+    {
+      "url": "assets/icons/caltopo/danger_hexagon.png",
+      "filename": "danger_hexagon",
+      "style": "hexagon",
+      "base_name": "danger"
+    },
+    {
+      "url": "assets/icons/caltopo/danger_pentagon.png",
+      "filename": "danger_pentagon",
+      "style": "pentagon",
+      "base_name": "danger"
+    },
+    {
+      "url": "assets/icons/caltopo/danger_placemark.png",
+      "filename": "danger_placemark",
+      "style": "placemark",
+      "base_name": "danger"
+    },
+    {
+      "url": "assets/icons/caltopo/danger_square.png",
+      "filename": "danger_square",
+      "style": "square",
+      "base_name": "danger"
+    },
+    {
+      "url": "assets/icons/caltopo/danger_square-rounded.png",
+      "filename": "danger_square-rounded",
+      "style": "square-rounded",
+      "base_name": "danger"
+    },
+    {
+      "url": "assets/icons/caltopo/danger.png",
+      "filename": "danger",
+      "style": "standard",
+      "base_name": "danger"
+    },
+    {
+      "url": "assets/icons/caltopo/danger_triangle.png",
+      "filename": "danger_triangle",
+      "style": "triangle",
+      "base_name": "danger"
+    },
+    {
+      "url": "assets/icons/caltopo/diving_circle.png",
+      "filename": "diving_circle",
+      "style": "circle",
+      "base_name": "diving"
+    },
+    {
+      "url": "assets/icons/caltopo/diving_diamond.png",
+      "filename": "diving_diamond",
+      "style": "diamond",
+      "base_name": "diving"
+    },
+    {
+      "url": "assets/icons/caltopo/diving_hexagon.png",
+      "filename": "diving_hexagon",
+      "style": "hexagon",
+      "base_name": "diving"
+    },
+    {
+      "url": "assets/icons/caltopo/diving_pentagon.png",
+      "filename": "diving_pentagon",
+      "style": "pentagon",
+      "base_name": "diving"
+    },
+    {
+      "url": "assets/icons/caltopo/diving_placemark.png",
+      "filename": "diving_placemark",
+      "style": "placemark",
+      "base_name": "diving"
+    },
+    {
+      "url": "assets/icons/caltopo/diving_square.png",
+      "filename": "diving_square",
+      "style": "square",
+      "base_name": "diving"
+    },
+    {
+      "url": "assets/icons/caltopo/diving_square-rounded.png",
+      "filename": "diving_square-rounded",
+      "style": "square-rounded",
+      "base_name": "diving"
+    },
+    {
+      "url": "assets/icons/caltopo/diving.png",
+      "filename": "diving",
+      "style": "standard",
+      "base_name": "diving"
+    },
+    {
+      "url": "assets/icons/caltopo/diving_triangle.png",
+      "filename": "diving_triangle",
+      "style": "triangle",
+      "base_name": "diving"
+    },
+    {
+      "url": "assets/icons/caltopo/dogs-no_circle.png",
+      "filename": "dogs-no_circle",
+      "style": "circle",
+      "base_name": "dogs-no"
+    },
+    {
+      "url": "assets/icons/caltopo/dogs-no_diamond.png",
+      "filename": "dogs-no_diamond",
+      "style": "diamond",
+      "base_name": "dogs-no"
+    },
+    {
+      "url": "assets/icons/caltopo/dogs-no_hexagon.png",
+      "filename": "dogs-no_hexagon",
+      "style": "hexagon",
+      "base_name": "dogs-no"
+    },
+    {
+      "url": "assets/icons/caltopo/dogs-no_pentagon.png",
+      "filename": "dogs-no_pentagon",
+      "style": "pentagon",
+      "base_name": "dogs-no"
+    },
+    {
+      "url": "assets/icons/caltopo/dogs-no_placemark.png",
+      "filename": "dogs-no_placemark",
+      "style": "placemark",
+      "base_name": "dogs-no"
+    },
+    {
+      "url": "assets/icons/caltopo/dogs-no_square.png",
+      "filename": "dogs-no_square",
+      "style": "square",
+      "base_name": "dogs-no"
+    },
+    {
+      "url": "assets/icons/caltopo/dogs-no_square-rounded.png",
+      "filename": "dogs-no_square-rounded",
+      "style": "square-rounded",
+      "base_name": "dogs-no"
+    },
+    {
+      "url": "assets/icons/caltopo/dogs-no.png",
+      "filename": "dogs-no",
+      "style": "standard",
+      "base_name": "dogs-no"
+    },
+    {
+      "url": "assets/icons/caltopo/dogs-no_triangle.png",
+      "filename": "dogs-no_triangle",
+      "style": "triangle",
+      "base_name": "dogs-no"
+    },
+    {
+      "url": "assets/icons/caltopo/dogs-offleash_circle.png",
+      "filename": "dogs-offleash_circle",
+      "style": "circle",
+      "base_name": "dogs-offleash"
+    },
+    {
+      "url": "assets/icons/caltopo/dogs-offleash_diamond.png",
+      "filename": "dogs-offleash_diamond",
+      "style": "diamond",
+      "base_name": "dogs-offleash"
+    },
+    {
+      "url": "assets/icons/caltopo/dogs-offleash_hexagon.png",
+      "filename": "dogs-offleash_hexagon",
+      "style": "hexagon",
+      "base_name": "dogs-offleash"
+    },
+    {
+      "url": "assets/icons/caltopo/dogs-offleash_pentagon.png",
+      "filename": "dogs-offleash_pentagon",
+      "style": "pentagon",
+      "base_name": "dogs-offleash"
+    },
+    {
+      "url": "assets/icons/caltopo/dogs-offleash_placemark.png",
+      "filename": "dogs-offleash_placemark",
+      "style": "placemark",
+      "base_name": "dogs-offleash"
+    },
+    {
+      "url": "assets/icons/caltopo/dogs-offleash_square.png",
+      "filename": "dogs-offleash_square",
+      "style": "square",
+      "base_name": "dogs-offleash"
+    },
+    {
+      "url": "assets/icons/caltopo/dogs-offleash_square-rounded.png",
+      "filename": "dogs-offleash_square-rounded",
+      "style": "square-rounded",
+      "base_name": "dogs-offleash"
+    },
+    {
+      "url": "assets/icons/caltopo/dogs-offleash.png",
+      "filename": "dogs-offleash",
+      "style": "standard",
+      "base_name": "dogs-offleash"
+    },
+    {
+      "url": "assets/icons/caltopo/dogs-offleash_triangle.png",
+      "filename": "dogs-offleash_triangle",
+      "style": "triangle",
+      "base_name": "dogs-offleash"
+    },
+    {
+      "url": "assets/icons/caltopo/dogs-onleash_circle.png",
+      "filename": "dogs-onleash_circle",
+      "style": "circle",
+      "base_name": "dogs-onleash"
+    },
+    {
+      "url": "assets/icons/caltopo/dogs-onleash_diamond.png",
+      "filename": "dogs-onleash_diamond",
+      "style": "diamond",
+      "base_name": "dogs-onleash"
+    },
+    {
+      "url": "assets/icons/caltopo/dogs-onleash_hexagon.png",
+      "filename": "dogs-onleash_hexagon",
+      "style": "hexagon",
+      "base_name": "dogs-onleash"
+    },
+    {
+      "url": "assets/icons/caltopo/dogs-onleash_pentagon.png",
+      "filename": "dogs-onleash_pentagon",
+      "style": "pentagon",
+      "base_name": "dogs-onleash"
+    },
+    {
+      "url": "assets/icons/caltopo/dogs-onleash_placemark.png",
+      "filename": "dogs-onleash_placemark",
+      "style": "placemark",
+      "base_name": "dogs-onleash"
+    },
+    {
+      "url": "assets/icons/caltopo/dogs-onleash_square.png",
+      "filename": "dogs-onleash_square",
+      "style": "square",
+      "base_name": "dogs-onleash"
+    },
+    {
+      "url": "assets/icons/caltopo/dogs-onleash_square-rounded.png",
+      "filename": "dogs-onleash_square-rounded",
+      "style": "square-rounded",
+      "base_name": "dogs-onleash"
+    },
+    {
+      "url": "assets/icons/caltopo/dogs-onleash.png",
+      "filename": "dogs-onleash",
+      "style": "standard",
+      "base_name": "dogs-onleash"
+    },
+    {
+      "url": "assets/icons/caltopo/dogs-onleash_triangle.png",
+      "filename": "dogs-onleash_triangle",
+      "style": "triangle",
+      "base_name": "dogs-onleash"
+    },
+    {
+      "url": "assets/icons/caltopo/drinking-water_circle.png",
+      "filename": "drinking-water_circle",
+      "style": "circle",
+      "base_name": "drinking-water"
+    },
+    {
+      "url": "assets/icons/caltopo/drinking-water_diamond.png",
+      "filename": "drinking-water_diamond",
+      "style": "diamond",
+      "base_name": "drinking-water"
+    },
+    {
+      "url": "assets/icons/caltopo/drinking-water_hexagon.png",
+      "filename": "drinking-water_hexagon",
+      "style": "hexagon",
+      "base_name": "drinking-water"
+    },
+    {
+      "url": "assets/icons/caltopo/drinking-water_pentagon.png",
+      "filename": "drinking-water_pentagon",
+      "style": "pentagon",
+      "base_name": "drinking-water"
+    },
+    {
+      "url": "assets/icons/caltopo/drinking-water_placemark.png",
+      "filename": "drinking-water_placemark",
+      "style": "placemark",
+      "base_name": "drinking-water"
+    },
+    {
+      "url": "assets/icons/caltopo/drinking-water_square.png",
+      "filename": "drinking-water_square",
+      "style": "square",
+      "base_name": "drinking-water"
+    },
+    {
+      "url": "assets/icons/caltopo/drinking-water_square-rounded.png",
+      "filename": "drinking-water_square-rounded",
+      "style": "square-rounded",
+      "base_name": "drinking-water"
+    },
+    {
+      "url": "assets/icons/caltopo/drinking-water.png",
+      "filename": "drinking-water",
+      "style": "standard",
+      "base_name": "drinking-water"
+    },
+    {
+      "url": "assets/icons/caltopo/drinking-water_triangle.png",
+      "filename": "drinking-water_triangle",
+      "style": "triangle",
+      "base_name": "drinking-water"
+    },
+    {
+      "url": "assets/icons/caltopo/electric-charging_circle.png",
+      "filename": "electric-charging_circle",
+      "style": "circle",
+      "base_name": "electric-charging"
+    },
+    {
+      "url": "assets/icons/caltopo/electric-charging_diamond.png",
+      "filename": "electric-charging_diamond",
+      "style": "diamond",
+      "base_name": "electric-charging"
+    },
+    {
+      "url": "assets/icons/caltopo/electric-charging_hexagon.png",
+      "filename": "electric-charging_hexagon",
+      "style": "hexagon",
+      "base_name": "electric-charging"
+    },
+    {
+      "url": "assets/icons/caltopo/electric-charging_pentagon.png",
+      "filename": "electric-charging_pentagon",
+      "style": "pentagon",
+      "base_name": "electric-charging"
+    },
+    {
+      "url": "assets/icons/caltopo/electric-charging_placemark.png",
+      "filename": "electric-charging_placemark",
+      "style": "placemark",
+      "base_name": "electric-charging"
+    },
+    {
+      "url": "assets/icons/caltopo/electric-charging_square.png",
+      "filename": "electric-charging_square",
+      "style": "square",
+      "base_name": "electric-charging"
+    },
+    {
+      "url": "assets/icons/caltopo/electric-charging_square-rounded.png",
+      "filename": "electric-charging_square-rounded",
+      "style": "square-rounded",
+      "base_name": "electric-charging"
+    },
+    {
+      "url": "assets/icons/caltopo/electric-charging.png",
+      "filename": "electric-charging",
+      "style": "standard",
+      "base_name": "electric-charging"
+    },
+    {
+      "url": "assets/icons/caltopo/electric-charging_triangle.png",
+      "filename": "electric-charging_triangle",
+      "style": "triangle",
+      "base_name": "electric-charging"
+    },
+    {
+      "url": "assets/icons/caltopo/electric-hookup_circle.png",
+      "filename": "electric-hookup_circle",
+      "style": "circle",
+      "base_name": "electric-hookup"
+    },
+    {
+      "url": "assets/icons/caltopo/electric-hookup_diamond.png",
+      "filename": "electric-hookup_diamond",
+      "style": "diamond",
+      "base_name": "electric-hookup"
+    },
+    {
+      "url": "assets/icons/caltopo/electric-hookup_hexagon.png",
+      "filename": "electric-hookup_hexagon",
+      "style": "hexagon",
+      "base_name": "electric-hookup"
+    },
+    {
+      "url": "assets/icons/caltopo/electric-hookup_pentagon.png",
+      "filename": "electric-hookup_pentagon",
+      "style": "pentagon",
+      "base_name": "electric-hookup"
+    },
+    {
+      "url": "assets/icons/caltopo/electric-hookup_placemark.png",
+      "filename": "electric-hookup_placemark",
+      "style": "placemark",
+      "base_name": "electric-hookup"
+    },
+    {
+      "url": "assets/icons/caltopo/electric-hookup_square.png",
+      "filename": "electric-hookup_square",
+      "style": "square",
+      "base_name": "electric-hookup"
+    },
+    {
+      "url": "assets/icons/caltopo/electric-hookup_square-rounded.png",
+      "filename": "electric-hookup_square-rounded",
+      "style": "square-rounded",
+      "base_name": "electric-hookup"
+    },
+    {
+      "url": "assets/icons/caltopo/electric-hookup.png",
+      "filename": "electric-hookup",
+      "style": "standard",
+      "base_name": "electric-hookup"
+    },
+    {
+      "url": "assets/icons/caltopo/electric-hookup_triangle.png",
+      "filename": "electric-hookup_triangle",
+      "style": "triangle",
+      "base_name": "electric-hookup"
+    },
+    {
+      "url": "assets/icons/caltopo/firelookout_circle.png",
+      "filename": "firelookout_circle",
+      "style": "circle",
+      "base_name": "firelookout"
+    },
+    {
+      "url": "assets/icons/caltopo/firelookout_diamond.png",
+      "filename": "firelookout_diamond",
+      "style": "diamond",
+      "base_name": "firelookout"
+    },
+    {
+      "url": "assets/icons/caltopo/firelookout_hexagon.png",
+      "filename": "firelookout_hexagon",
+      "style": "hexagon",
+      "base_name": "firelookout"
+    },
+    {
+      "url": "assets/icons/caltopo/firelookout_pentagon.png",
+      "filename": "firelookout_pentagon",
+      "style": "pentagon",
+      "base_name": "firelookout"
+    },
+    {
+      "url": "assets/icons/caltopo/firelookout_placemark.png",
+      "filename": "firelookout_placemark",
+      "style": "placemark",
+      "base_name": "firelookout"
+    },
+    {
+      "url": "assets/icons/caltopo/firelookout_square.png",
+      "filename": "firelookout_square",
+      "style": "square",
+      "base_name": "firelookout"
+    },
+    {
+      "url": "assets/icons/caltopo/firelookout_square-rounded.png",
+      "filename": "firelookout_square-rounded",
+      "style": "square-rounded",
+      "base_name": "firelookout"
+    },
+    {
+      "url": "assets/icons/caltopo/firelookout.png",
+      "filename": "firelookout",
+      "style": "standard",
+      "base_name": "firelookout"
+    },
+    {
+      "url": "assets/icons/caltopo/firelookout_triangle.png",
+      "filename": "firelookout_triangle",
+      "style": "triangle",
+      "base_name": "firelookout"
+    },
+    {
+      "url": "assets/icons/caltopo/firstaidplus_circle.png",
+      "filename": "firstaidplus_circle",
+      "style": "circle",
+      "base_name": "firstaidplus"
+    },
+    {
+      "url": "assets/icons/caltopo/firstaidplus_diamond.png",
+      "filename": "firstaidplus_diamond",
+      "style": "diamond",
+      "base_name": "firstaidplus"
+    },
+    {
+      "url": "assets/icons/caltopo/firstaidplus_hexagon.png",
+      "filename": "firstaidplus_hexagon",
+      "style": "hexagon",
+      "base_name": "firstaidplus"
+    },
+    {
+      "url": "assets/icons/caltopo/firstaidplus_pentagon.png",
+      "filename": "firstaidplus_pentagon",
+      "style": "pentagon",
+      "base_name": "firstaidplus"
+    },
+    {
+      "url": "assets/icons/caltopo/firstaidplus_placemark.png",
+      "filename": "firstaidplus_placemark",
+      "style": "placemark",
+      "base_name": "firstaidplus"
+    },
+    {
+      "url": "assets/icons/caltopo/firstaidplus_square.png",
+      "filename": "firstaidplus_square",
+      "style": "square",
+      "base_name": "firstaidplus"
+    },
+    {
+      "url": "assets/icons/caltopo/firstaidplus_square-rounded.png",
+      "filename": "firstaidplus_square-rounded",
+      "style": "square-rounded",
+      "base_name": "firstaidplus"
+    },
+    {
+      "url": "assets/icons/caltopo/firstaidplus.png",
+      "filename": "firstaidplus",
+      "style": "standard",
+      "base_name": "firstaidplus"
+    },
+    {
+      "url": "assets/icons/caltopo/firstaidplus_triangle.png",
+      "filename": "firstaidplus_triangle",
+      "style": "triangle",
+      "base_name": "firstaidplus"
+    },
+    {
+      "url": "assets/icons/caltopo/fishing_circle.png",
+      "filename": "fishing_circle",
+      "style": "circle",
+      "base_name": "fishing"
+    },
+    {
+      "url": "assets/icons/caltopo/fishing_diamond.png",
+      "filename": "fishing_diamond",
+      "style": "diamond",
+      "base_name": "fishing"
+    },
+    {
+      "url": "assets/icons/caltopo/fishing_hexagon.png",
+      "filename": "fishing_hexagon",
+      "style": "hexagon",
+      "base_name": "fishing"
+    },
+    {
+      "url": "assets/icons/caltopo/fishing_pentagon.png",
+      "filename": "fishing_pentagon",
+      "style": "pentagon",
+      "base_name": "fishing"
+    },
+    {
+      "url": "assets/icons/caltopo/fishing_placemark.png",
+      "filename": "fishing_placemark",
+      "style": "placemark",
+      "base_name": "fishing"
+    },
+    {
+      "url": "assets/icons/caltopo/fishing_square.png",
+      "filename": "fishing_square",
+      "style": "square",
+      "base_name": "fishing"
+    },
+    {
+      "url": "assets/icons/caltopo/fishing_square-rounded.png",
+      "filename": "fishing_square-rounded",
+      "style": "square-rounded",
+      "base_name": "fishing"
+    },
+    {
+      "url": "assets/icons/caltopo/fishing.png",
+      "filename": "fishing",
+      "style": "standard",
+      "base_name": "fishing"
+    },
+    {
+      "url": "assets/icons/caltopo/fishing_triangle.png",
+      "filename": "fishing_triangle",
+      "style": "triangle",
+      "base_name": "fishing"
+    },
+    {
+      "url": "assets/icons/caltopo/flame_circle.png",
+      "filename": "flame_circle",
+      "style": "circle",
+      "base_name": "flame"
+    },
+    {
+      "url": "assets/icons/caltopo/flame_diamond.png",
+      "filename": "flame_diamond",
+      "style": "diamond",
+      "base_name": "flame"
+    },
+    {
+      "url": "assets/icons/caltopo/flame_hexagon.png",
+      "filename": "flame_hexagon",
+      "style": "hexagon",
+      "base_name": "flame"
+    },
+    {
+      "url": "assets/icons/caltopo/flame_pentagon.png",
+      "filename": "flame_pentagon",
+      "style": "pentagon",
+      "base_name": "flame"
+    },
+    {
+      "url": "assets/icons/caltopo/flame_placemark.png",
+      "filename": "flame_placemark",
+      "style": "placemark",
+      "base_name": "flame"
+    },
+    {
+      "url": "assets/icons/caltopo/flame_square.png",
+      "filename": "flame_square",
+      "style": "square",
+      "base_name": "flame"
+    },
+    {
+      "url": "assets/icons/caltopo/flame_square-rounded.png",
+      "filename": "flame_square-rounded",
+      "style": "square-rounded",
+      "base_name": "flame"
+    },
+    {
+      "url": "assets/icons/caltopo/flame.png",
+      "filename": "flame",
+      "style": "standard",
+      "base_name": "flame"
+    },
+    {
+      "url": "assets/icons/caltopo/flame_triangle.png",
+      "filename": "flame_triangle",
+      "style": "triangle",
+      "base_name": "flame"
+    },
+    {
+      "url": "assets/icons/caltopo/foodservice_circle.png",
+      "filename": "foodservice_circle",
+      "style": "circle",
+      "base_name": "foodservice"
+    },
+    {
+      "url": "assets/icons/caltopo/foodservice_diamond.png",
+      "filename": "foodservice_diamond",
+      "style": "diamond",
+      "base_name": "foodservice"
+    },
+    {
+      "url": "assets/icons/caltopo/foodservice_hexagon.png",
+      "filename": "foodservice_hexagon",
+      "style": "hexagon",
+      "base_name": "foodservice"
+    },
+    {
+      "url": "assets/icons/caltopo/foodservice_pentagon.png",
+      "filename": "foodservice_pentagon",
+      "style": "pentagon",
+      "base_name": "foodservice"
+    },
+    {
+      "url": "assets/icons/caltopo/foodservice_placemark.png",
+      "filename": "foodservice_placemark",
+      "style": "placemark",
+      "base_name": "foodservice"
+    },
+    {
+      "url": "assets/icons/caltopo/foodservice_square.png",
+      "filename": "foodservice_square",
+      "style": "square",
+      "base_name": "foodservice"
+    },
+    {
+      "url": "assets/icons/caltopo/foodservice_square-rounded.png",
+      "filename": "foodservice_square-rounded",
+      "style": "square-rounded",
+      "base_name": "foodservice"
+    },
+    {
+      "url": "assets/icons/caltopo/foodservice.png",
+      "filename": "foodservice",
+      "style": "standard",
+      "base_name": "foodservice"
+    },
+    {
+      "url": "assets/icons/caltopo/foodservice_triangle.png",
+      "filename": "foodservice_triangle",
+      "style": "triangle",
+      "base_name": "foodservice"
+    },
+    {
+      "url": "assets/icons/caltopo/fuel_circle.png",
+      "filename": "fuel_circle",
+      "style": "circle",
+      "base_name": "fuel"
+    },
+    {
+      "url": "assets/icons/caltopo/fuel_diamond.png",
+      "filename": "fuel_diamond",
+      "style": "diamond",
+      "base_name": "fuel"
+    },
+    {
+      "url": "assets/icons/caltopo/fuel_hexagon.png",
+      "filename": "fuel_hexagon",
+      "style": "hexagon",
+      "base_name": "fuel"
+    },
+    {
+      "url": "assets/icons/caltopo/fuel_pentagon.png",
+      "filename": "fuel_pentagon",
+      "style": "pentagon",
+      "base_name": "fuel"
+    },
+    {
+      "url": "assets/icons/caltopo/fuel_placemark.png",
+      "filename": "fuel_placemark",
+      "style": "placemark",
+      "base_name": "fuel"
+    },
+    {
+      "url": "assets/icons/caltopo/fuel_square.png",
+      "filename": "fuel_square",
+      "style": "square",
+      "base_name": "fuel"
+    },
+    {
+      "url": "assets/icons/caltopo/fuel_square-rounded.png",
+      "filename": "fuel_square-rounded",
+      "style": "square-rounded",
+      "base_name": "fuel"
+    },
+    {
+      "url": "assets/icons/caltopo/fuel.png",
+      "filename": "fuel",
+      "style": "standard",
+      "base_name": "fuel"
+    },
+    {
+      "url": "assets/icons/caltopo/fuel_triangle.png",
+      "filename": "fuel_triangle",
+      "style": "triangle",
+      "base_name": "fuel"
+    },
+    {
+      "url": "assets/icons/caltopo/gate.png",
+      "filename": "gate",
+      "style": "standard",
+      "base_name": "gate"
+    },
+    {
+      "url": "assets/icons/caltopo/gate-side_circle.png",
+      "filename": "gate-side_circle",
+      "style": "circle",
+      "base_name": "gate-side"
+    },
+    {
+      "url": "assets/icons/caltopo/gate-side_diamond.png",
+      "filename": "gate-side_diamond",
+      "style": "diamond",
+      "base_name": "gate-side"
+    },
+    {
+      "url": "assets/icons/caltopo/gate-side_hexagon.png",
+      "filename": "gate-side_hexagon",
+      "style": "hexagon",
+      "base_name": "gate-side"
+    },
+    {
+      "url": "assets/icons/caltopo/gate-side_pentagon.png",
+      "filename": "gate-side_pentagon",
+      "style": "pentagon",
+      "base_name": "gate-side"
+    },
+    {
+      "url": "assets/icons/caltopo/gate-side_placemark.png",
+      "filename": "gate-side_placemark",
+      "style": "placemark",
+      "base_name": "gate-side"
+    },
+    {
+      "url": "assets/icons/caltopo/gate-side_square.png",
+      "filename": "gate-side_square",
+      "style": "square",
+      "base_name": "gate-side"
+    },
+    {
+      "url": "assets/icons/caltopo/gate-side_square-rounded.png",
+      "filename": "gate-side_square-rounded",
+      "style": "square-rounded",
+      "base_name": "gate-side"
+    },
+    {
+      "url": "assets/icons/caltopo/gate-side.png",
+      "filename": "gate-side",
+      "style": "standard",
+      "base_name": "gate-side"
+    },
+    {
+      "url": "assets/icons/caltopo/gate-side_triangle.png",
+      "filename": "gate-side_triangle",
+      "style": "triangle",
+      "base_name": "gate-side"
+    },
+    {
+      "url": "assets/icons/caltopo/golf_circle.png",
+      "filename": "golf_circle",
+      "style": "circle",
+      "base_name": "golf"
+    },
+    {
+      "url": "assets/icons/caltopo/golf_diamond.png",
+      "filename": "golf_diamond",
+      "style": "diamond",
+      "base_name": "golf"
+    },
+    {
+      "url": "assets/icons/caltopo/golf_hexagon.png",
+      "filename": "golf_hexagon",
+      "style": "hexagon",
+      "base_name": "golf"
+    },
+    {
+      "url": "assets/icons/caltopo/golf_pentagon.png",
+      "filename": "golf_pentagon",
+      "style": "pentagon",
+      "base_name": "golf"
+    },
+    {
+      "url": "assets/icons/caltopo/golf_placemark.png",
+      "filename": "golf_placemark",
+      "style": "placemark",
+      "base_name": "golf"
+    },
+    {
+      "url": "assets/icons/caltopo/golf_square.png",
+      "filename": "golf_square",
+      "style": "square",
+      "base_name": "golf"
+    },
+    {
+      "url": "assets/icons/caltopo/golf_square-rounded.png",
+      "filename": "golf_square-rounded",
+      "style": "square-rounded",
+      "base_name": "golf"
+    },
+    {
+      "url": "assets/icons/caltopo/golf.png",
+      "filename": "golf",
+      "style": "standard",
+      "base_name": "golf"
+    },
+    {
+      "url": "assets/icons/caltopo/golf_triangle.png",
+      "filename": "golf_triangle",
+      "style": "triangle",
+      "base_name": "golf"
+    },
+    {
+      "url": "assets/icons/caltopo/hanggliding_circle.png",
+      "filename": "hanggliding_circle",
+      "style": "circle",
+      "base_name": "hanggliding"
+    },
+    {
+      "url": "assets/icons/caltopo/hanggliding_diamond.png",
+      "filename": "hanggliding_diamond",
+      "style": "diamond",
+      "base_name": "hanggliding"
+    },
+    {
+      "url": "assets/icons/caltopo/hanggliding_hexagon.png",
+      "filename": "hanggliding_hexagon",
+      "style": "hexagon",
+      "base_name": "hanggliding"
+    },
+    {
+      "url": "assets/icons/caltopo/hanggliding_pentagon.png",
+      "filename": "hanggliding_pentagon",
+      "style": "pentagon",
+      "base_name": "hanggliding"
+    },
+    {
+      "url": "assets/icons/caltopo/hanggliding_placemark.png",
+      "filename": "hanggliding_placemark",
+      "style": "placemark",
+      "base_name": "hanggliding"
+    },
+    {
+      "url": "assets/icons/caltopo/hanggliding_square.png",
+      "filename": "hanggliding_square",
+      "style": "square",
+      "base_name": "hanggliding"
+    },
+    {
+      "url": "assets/icons/caltopo/hanggliding_square-rounded.png",
+      "filename": "hanggliding_square-rounded",
+      "style": "square-rounded",
+      "base_name": "hanggliding"
+    },
+    {
+      "url": "assets/icons/caltopo/hanggliding.png",
+      "filename": "hanggliding",
+      "style": "standard",
+      "base_name": "hanggliding"
+    },
+    {
+      "url": "assets/icons/caltopo/hanggliding_triangle.png",
+      "filename": "hanggliding_triangle",
+      "style": "triangle",
+      "base_name": "hanggliding"
+    },
+    {
+      "url": "assets/icons/caltopo/hiking_circle.png",
+      "filename": "hiking_circle",
+      "style": "circle",
+      "base_name": "hiking"
+    },
+    {
+      "url": "assets/icons/caltopo/hiking_diamond.png",
+      "filename": "hiking_diamond",
+      "style": "diamond",
+      "base_name": "hiking"
+    },
+    {
+      "url": "assets/icons/caltopo/hiking_hexagon.png",
+      "filename": "hiking_hexagon",
+      "style": "hexagon",
+      "base_name": "hiking"
+    },
+    {
+      "url": "assets/icons/caltopo/hiking_pentagon.png",
+      "filename": "hiking_pentagon",
+      "style": "pentagon",
+      "base_name": "hiking"
+    },
+    {
+      "url": "assets/icons/caltopo/hiking_placemark.png",
+      "filename": "hiking_placemark",
+      "style": "placemark",
+      "base_name": "hiking"
+    },
+    {
+      "url": "assets/icons/caltopo/hiking_square.png",
+      "filename": "hiking_square",
+      "style": "square",
+      "base_name": "hiking"
+    },
+    {
+      "url": "assets/icons/caltopo/hiking_square-rounded.png",
+      "filename": "hiking_square-rounded",
+      "style": "square-rounded",
+      "base_name": "hiking"
+    },
+    {
+      "url": "assets/icons/caltopo/hiking.png",
+      "filename": "hiking",
+      "style": "standard",
+      "base_name": "hiking"
+    },
+    {
+      "url": "assets/icons/caltopo/hiking_triangle.png",
+      "filename": "hiking_triangle",
+      "style": "triangle",
+      "base_name": "hiking"
+    },
+    {
+      "url": "assets/icons/caltopo/hiking-downhill_circle.png",
+      "filename": "hiking-downhill_circle",
+      "style": "circle",
+      "base_name": "hiking-downhill"
+    },
+    {
+      "url": "assets/icons/caltopo/hiking-downhill_diamond.png",
+      "filename": "hiking-downhill_diamond",
+      "style": "diamond",
+      "base_name": "hiking-downhill"
+    },
+    {
+      "url": "assets/icons/caltopo/hiking-downhill_hexagon.png",
+      "filename": "hiking-downhill_hexagon",
+      "style": "hexagon",
+      "base_name": "hiking-downhill"
+    },
+    {
+      "url": "assets/icons/caltopo/hiking-downhill_pentagon.png",
+      "filename": "hiking-downhill_pentagon",
+      "style": "pentagon",
+      "base_name": "hiking-downhill"
+    },
+    {
+      "url": "assets/icons/caltopo/hiking-downhill_placemark.png",
+      "filename": "hiking-downhill_placemark",
+      "style": "placemark",
+      "base_name": "hiking-downhill"
+    },
+    {
+      "url": "assets/icons/caltopo/hiking-downhill_square.png",
+      "filename": "hiking-downhill_square",
+      "style": "square",
+      "base_name": "hiking-downhill"
+    },
+    {
+      "url": "assets/icons/caltopo/hiking-downhill_square-rounded.png",
+      "filename": "hiking-downhill_square-rounded",
+      "style": "square-rounded",
+      "base_name": "hiking-downhill"
+    },
+    {
+      "url": "assets/icons/caltopo/hiking-downhill.png",
+      "filename": "hiking-downhill",
+      "style": "standard",
+      "base_name": "hiking-downhill"
+    },
+    {
+      "url": "assets/icons/caltopo/hiking-downhill_triangle.png",
+      "filename": "hiking-downhill_triangle",
+      "style": "triangle",
+      "base_name": "hiking-downhill"
+    },
+    {
+      "url": "assets/icons/caltopo/hiking-uphill_circle.png",
+      "filename": "hiking-uphill_circle",
+      "style": "circle",
+      "base_name": "hiking-uphill"
+    },
+    {
+      "url": "assets/icons/caltopo/hiking-uphill_diamond.png",
+      "filename": "hiking-uphill_diamond",
+      "style": "diamond",
+      "base_name": "hiking-uphill"
+    },
+    {
+      "url": "assets/icons/caltopo/hiking-uphill_hexagon.png",
+      "filename": "hiking-uphill_hexagon",
+      "style": "hexagon",
+      "base_name": "hiking-uphill"
+    },
+    {
+      "url": "assets/icons/caltopo/hiking-uphill_pentagon.png",
+      "filename": "hiking-uphill_pentagon",
+      "style": "pentagon",
+      "base_name": "hiking-uphill"
+    },
+    {
+      "url": "assets/icons/caltopo/hiking-uphill_placemark.png",
+      "filename": "hiking-uphill_placemark",
+      "style": "placemark",
+      "base_name": "hiking-uphill"
+    },
+    {
+      "url": "assets/icons/caltopo/hiking-uphill_square.png",
+      "filename": "hiking-uphill_square",
+      "style": "square",
+      "base_name": "hiking-uphill"
+    },
+    {
+      "url": "assets/icons/caltopo/hiking-uphill_square-rounded.png",
+      "filename": "hiking-uphill_square-rounded",
+      "style": "square-rounded",
+      "base_name": "hiking-uphill"
+    },
+    {
+      "url": "assets/icons/caltopo/hiking-uphill.png",
+      "filename": "hiking-uphill",
+      "style": "standard",
+      "base_name": "hiking-uphill"
+    },
+    {
+      "url": "assets/icons/caltopo/hiking-uphill_triangle.png",
+      "filename": "hiking-uphill_triangle",
+      "style": "triangle",
+      "base_name": "hiking-uphill"
+    },
+    {
+      "url": "assets/icons/caltopo/horses-no_circle.png",
+      "filename": "horses-no_circle",
+      "style": "circle",
+      "base_name": "horses-no"
+    },
+    {
+      "url": "assets/icons/caltopo/horses-no_diamond.png",
+      "filename": "horses-no_diamond",
+      "style": "diamond",
+      "base_name": "horses-no"
+    },
+    {
+      "url": "assets/icons/caltopo/horses-no_hexagon.png",
+      "filename": "horses-no_hexagon",
+      "style": "hexagon",
+      "base_name": "horses-no"
+    },
+    {
+      "url": "assets/icons/caltopo/horses-no_pentagon.png",
+      "filename": "horses-no_pentagon",
+      "style": "pentagon",
+      "base_name": "horses-no"
+    },
+    {
+      "url": "assets/icons/caltopo/horses-no_placemark.png",
+      "filename": "horses-no_placemark",
+      "style": "placemark",
+      "base_name": "horses-no"
+    },
+    {
+      "url": "assets/icons/caltopo/horses-no_square.png",
+      "filename": "horses-no_square",
+      "style": "square",
+      "base_name": "horses-no"
+    },
+    {
+      "url": "assets/icons/caltopo/horses-no_square-rounded.png",
+      "filename": "horses-no_square-rounded",
+      "style": "square-rounded",
+      "base_name": "horses-no"
+    },
+    {
+      "url": "assets/icons/caltopo/horses-no.png",
+      "filename": "horses-no",
+      "style": "standard",
+      "base_name": "horses-no"
+    },
+    {
+      "url": "assets/icons/caltopo/horses-no_triangle.png",
+      "filename": "horses-no_triangle",
+      "style": "triangle",
+      "base_name": "horses-no"
+    },
+    {
+      "url": "assets/icons/caltopo/horses-riding_circle.png",
+      "filename": "horses-riding_circle",
+      "style": "circle",
+      "base_name": "horses-riding"
+    },
+    {
+      "url": "assets/icons/caltopo/horses-riding_diamond.png",
+      "filename": "horses-riding_diamond",
+      "style": "diamond",
+      "base_name": "horses-riding"
+    },
+    {
+      "url": "assets/icons/caltopo/horses-riding_hexagon.png",
+      "filename": "horses-riding_hexagon",
+      "style": "hexagon",
+      "base_name": "horses-riding"
+    },
+    {
+      "url": "assets/icons/caltopo/horses-riding_pentagon.png",
+      "filename": "horses-riding_pentagon",
+      "style": "pentagon",
+      "base_name": "horses-riding"
+    },
+    {
+      "url": "assets/icons/caltopo/horses-riding_placemark.png",
+      "filename": "horses-riding_placemark",
+      "style": "placemark",
+      "base_name": "horses-riding"
+    },
+    {
+      "url": "assets/icons/caltopo/horses-riding_square.png",
+      "filename": "horses-riding_square",
+      "style": "square",
+      "base_name": "horses-riding"
+    },
+    {
+      "url": "assets/icons/caltopo/horses-riding_square-rounded.png",
+      "filename": "horses-riding_square-rounded",
+      "style": "square-rounded",
+      "base_name": "horses-riding"
+    },
+    {
+      "url": "assets/icons/caltopo/horses-riding.png",
+      "filename": "horses-riding",
+      "style": "standard",
+      "base_name": "horses-riding"
+    },
+    {
+      "url": "assets/icons/caltopo/horses-riding_triangle.png",
+      "filename": "horses-riding_triangle",
+      "style": "triangle",
+      "base_name": "horses-riding"
+    },
+    {
+      "url": "assets/icons/caltopo/hut_circle.png",
+      "filename": "hut_circle",
+      "style": "circle",
+      "base_name": "hut"
+    },
+    {
+      "url": "assets/icons/caltopo/hut_diamond.png",
+      "filename": "hut_diamond",
+      "style": "diamond",
+      "base_name": "hut"
+    },
+    {
+      "url": "assets/icons/caltopo/hut_hexagon.png",
+      "filename": "hut_hexagon",
+      "style": "hexagon",
+      "base_name": "hut"
+    },
+    {
+      "url": "assets/icons/caltopo/hut_pentagon.png",
+      "filename": "hut_pentagon",
+      "style": "pentagon",
+      "base_name": "hut"
+    },
+    {
+      "url": "assets/icons/caltopo/hut_placemark.png",
+      "filename": "hut_placemark",
+      "style": "placemark",
+      "base_name": "hut"
+    },
+    {
+      "url": "assets/icons/caltopo/hut_square.png",
+      "filename": "hut_square",
+      "style": "square",
+      "base_name": "hut"
+    },
+    {
+      "url": "assets/icons/caltopo/hut_square-rounded.png",
+      "filename": "hut_square-rounded",
+      "style": "square-rounded",
+      "base_name": "hut"
+    },
+    {
+      "url": "assets/icons/caltopo/hut.png",
+      "filename": "hut",
+      "style": "standard",
+      "base_name": "hut"
+    },
+    {
+      "url": "assets/icons/caltopo/hut_triangle.png",
+      "filename": "hut_triangle",
+      "style": "triangle",
+      "base_name": "hut"
+    },
+    {
+      "url": "assets/icons/caltopo/iceskating_circle.png",
+      "filename": "iceskating_circle",
+      "style": "circle",
+      "base_name": "iceskating"
+    },
+    {
+      "url": "assets/icons/caltopo/iceskating_diamond.png",
+      "filename": "iceskating_diamond",
+      "style": "diamond",
+      "base_name": "iceskating"
+    },
+    {
+      "url": "assets/icons/caltopo/iceskating_hexagon.png",
+      "filename": "iceskating_hexagon",
+      "style": "hexagon",
+      "base_name": "iceskating"
+    },
+    {
+      "url": "assets/icons/caltopo/iceskating_pentagon.png",
+      "filename": "iceskating_pentagon",
+      "style": "pentagon",
+      "base_name": "iceskating"
+    },
+    {
+      "url": "assets/icons/caltopo/iceskating_placemark.png",
+      "filename": "iceskating_placemark",
+      "style": "placemark",
+      "base_name": "iceskating"
+    },
+    {
+      "url": "assets/icons/caltopo/iceskating_square.png",
+      "filename": "iceskating_square",
+      "style": "square",
+      "base_name": "iceskating"
+    },
+    {
+      "url": "assets/icons/caltopo/iceskating_square-rounded.png",
+      "filename": "iceskating_square-rounded",
+      "style": "square-rounded",
+      "base_name": "iceskating"
+    },
+    {
+      "url": "assets/icons/caltopo/iceskating.png",
+      "filename": "iceskating",
+      "style": "standard",
+      "base_name": "iceskating"
+    },
+    {
+      "url": "assets/icons/caltopo/iceskating_triangle.png",
+      "filename": "iceskating_triangle",
+      "style": "triangle",
+      "base_name": "iceskating"
+    },
+    {
+      "url": "assets/icons/caltopo/info_circle.png",
+      "filename": "info_circle",
+      "style": "circle",
+      "base_name": "info"
+    },
+    {
+      "url": "assets/icons/caltopo/info_diamond.png",
+      "filename": "info_diamond",
+      "style": "diamond",
+      "base_name": "info"
+    },
+    {
+      "url": "assets/icons/caltopo/info_hexagon.png",
+      "filename": "info_hexagon",
+      "style": "hexagon",
+      "base_name": "info"
+    },
+    {
+      "url": "assets/icons/caltopo/info_pentagon.png",
+      "filename": "info_pentagon",
+      "style": "pentagon",
+      "base_name": "info"
+    },
+    {
+      "url": "assets/icons/caltopo/info_placemark.png",
+      "filename": "info_placemark",
+      "style": "placemark",
+      "base_name": "info"
+    },
+    {
+      "url": "assets/icons/caltopo/info_square.png",
+      "filename": "info_square",
+      "style": "square",
+      "base_name": "info"
+    },
+    {
+      "url": "assets/icons/caltopo/info_square-rounded.png",
+      "filename": "info_square-rounded",
+      "style": "square-rounded",
+      "base_name": "info"
+    },
+    {
+      "url": "assets/icons/caltopo/info.png",
+      "filename": "info",
+      "style": "standard",
+      "base_name": "info"
+    },
+    {
+      "url": "assets/icons/caltopo/info_triangle.png",
+      "filename": "info_triangle",
+      "style": "triangle",
+      "base_name": "info"
+    },
+    {
+      "url": "assets/icons/caltopo/kayaking_circle.png",
+      "filename": "kayaking_circle",
+      "style": "circle",
+      "base_name": "kayaking"
+    },
+    {
+      "url": "assets/icons/caltopo/kayaking_diamond.png",
+      "filename": "kayaking_diamond",
+      "style": "diamond",
+      "base_name": "kayaking"
+    },
+    {
+      "url": "assets/icons/caltopo/kayaking_hexagon.png",
+      "filename": "kayaking_hexagon",
+      "style": "hexagon",
+      "base_name": "kayaking"
+    },
+    {
+      "url": "assets/icons/caltopo/kayaking_pentagon.png",
+      "filename": "kayaking_pentagon",
+      "style": "pentagon",
+      "base_name": "kayaking"
+    },
+    {
+      "url": "assets/icons/caltopo/kayaking_placemark.png",
+      "filename": "kayaking_placemark",
+      "style": "placemark",
+      "base_name": "kayaking"
+    },
+    {
+      "url": "assets/icons/caltopo/kayaking_square.png",
+      "filename": "kayaking_square",
+      "style": "square",
+      "base_name": "kayaking"
+    },
+    {
+      "url": "assets/icons/caltopo/kayaking_square-rounded.png",
+      "filename": "kayaking_square-rounded",
+      "style": "square-rounded",
+      "base_name": "kayaking"
+    },
+    {
+      "url": "assets/icons/caltopo/kayaking.png",
+      "filename": "kayaking",
+      "style": "standard",
+      "base_name": "kayaking"
+    },
+    {
+      "url": "assets/icons/caltopo/kayaking_triangle.png",
+      "filename": "kayaking_triangle",
+      "style": "triangle",
+      "base_name": "kayaking"
+    },
+    {
+      "url": "assets/icons/caltopo/leanto_circle.png",
+      "filename": "leanto_circle",
+      "style": "circle",
+      "base_name": "leanto"
+    },
+    {
+      "url": "assets/icons/caltopo/leanto_diamond.png",
+      "filename": "leanto_diamond",
+      "style": "diamond",
+      "base_name": "leanto"
+    },
+    {
+      "url": "assets/icons/caltopo/leanto_hexagon.png",
+      "filename": "leanto_hexagon",
+      "style": "hexagon",
+      "base_name": "leanto"
+    },
+    {
+      "url": "assets/icons/caltopo/leanto_pentagon.png",
+      "filename": "leanto_pentagon",
+      "style": "pentagon",
+      "base_name": "leanto"
+    },
+    {
+      "url": "assets/icons/caltopo/leanto_placemark.png",
+      "filename": "leanto_placemark",
+      "style": "placemark",
+      "base_name": "leanto"
+    },
+    {
+      "url": "assets/icons/caltopo/leanto_square.png",
+      "filename": "leanto_square",
+      "style": "square",
+      "base_name": "leanto"
+    },
+    {
+      "url": "assets/icons/caltopo/leanto_square-rounded.png",
+      "filename": "leanto_square-rounded",
+      "style": "square-rounded",
+      "base_name": "leanto"
+    },
+    {
+      "url": "assets/icons/caltopo/leanto.png",
+      "filename": "leanto",
+      "style": "standard",
+      "base_name": "leanto"
+    },
+    {
+      "url": "assets/icons/caltopo/leanto_triangle.png",
+      "filename": "leanto_triangle",
+      "style": "triangle",
+      "base_name": "leanto"
+    },
+    {
+      "url": "assets/icons/caltopo/lifepreserver_circle.png",
+      "filename": "lifepreserver_circle",
+      "style": "circle",
+      "base_name": "lifepreserver"
+    },
+    {
+      "url": "assets/icons/caltopo/lifepreserver_diamond.png",
+      "filename": "lifepreserver_diamond",
+      "style": "diamond",
+      "base_name": "lifepreserver"
+    },
+    {
+      "url": "assets/icons/caltopo/lifepreserver_hexagon.png",
+      "filename": "lifepreserver_hexagon",
+      "style": "hexagon",
+      "base_name": "lifepreserver"
+    },
+    {
+      "url": "assets/icons/caltopo/lifepreserver_pentagon.png",
+      "filename": "lifepreserver_pentagon",
+      "style": "pentagon",
+      "base_name": "lifepreserver"
+    },
+    {
+      "url": "assets/icons/caltopo/lifepreserver_placemark.png",
+      "filename": "lifepreserver_placemark",
+      "style": "placemark",
+      "base_name": "lifepreserver"
+    },
+    {
+      "url": "assets/icons/caltopo/lifepreserver_square.png",
+      "filename": "lifepreserver_square",
+      "style": "square",
+      "base_name": "lifepreserver"
+    },
+    {
+      "url": "assets/icons/caltopo/lifepreserver_square-rounded.png",
+      "filename": "lifepreserver_square-rounded",
+      "style": "square-rounded",
+      "base_name": "lifepreserver"
+    },
+    {
+      "url": "assets/icons/caltopo/lifepreserver.png",
+      "filename": "lifepreserver",
+      "style": "standard",
+      "base_name": "lifepreserver"
+    },
+    {
+      "url": "assets/icons/caltopo/lifepreserver_triangle.png",
+      "filename": "lifepreserver_triangle",
+      "style": "triangle",
+      "base_name": "lifepreserver"
+    },
+    {
+      "url": "assets/icons/caltopo/lighthouse_circle.png",
+      "filename": "lighthouse_circle",
+      "style": "circle",
+      "base_name": "lighthouse"
+    },
+    {
+      "url": "assets/icons/caltopo/lighthouse_diamond.png",
+      "filename": "lighthouse_diamond",
+      "style": "diamond",
+      "base_name": "lighthouse"
+    },
+    {
+      "url": "assets/icons/caltopo/lighthouse_hexagon.png",
+      "filename": "lighthouse_hexagon",
+      "style": "hexagon",
+      "base_name": "lighthouse"
+    },
+    {
+      "url": "assets/icons/caltopo/lighthouse_pentagon.png",
+      "filename": "lighthouse_pentagon",
+      "style": "pentagon",
+      "base_name": "lighthouse"
+    },
+    {
+      "url": "assets/icons/caltopo/lighthouse_placemark.png",
+      "filename": "lighthouse_placemark",
+      "style": "placemark",
+      "base_name": "lighthouse"
+    },
+    {
+      "url": "assets/icons/caltopo/lighthouse_square.png",
+      "filename": "lighthouse_square",
+      "style": "square",
+      "base_name": "lighthouse"
+    },
+    {
+      "url": "assets/icons/caltopo/lighthouse_square-rounded.png",
+      "filename": "lighthouse_square-rounded",
+      "style": "square-rounded",
+      "base_name": "lighthouse"
+    },
+    {
+      "url": "assets/icons/caltopo/lighthouse.png",
+      "filename": "lighthouse",
+      "style": "standard",
+      "base_name": "lighthouse"
+    },
+    {
+      "url": "assets/icons/caltopo/lighthouse_triangle.png",
+      "filename": "lighthouse_triangle",
+      "style": "triangle",
+      "base_name": "lighthouse"
+    },
+    {
+      "url": "assets/icons/caltopo/lodging_circle.png",
+      "filename": "lodging_circle",
+      "style": "circle",
+      "base_name": "lodging"
+    },
+    {
+      "url": "assets/icons/caltopo/lodging_diamond.png",
+      "filename": "lodging_diamond",
+      "style": "diamond",
+      "base_name": "lodging"
+    },
+    {
+      "url": "assets/icons/caltopo/lodging_hexagon.png",
+      "filename": "lodging_hexagon",
+      "style": "hexagon",
+      "base_name": "lodging"
+    },
+    {
+      "url": "assets/icons/caltopo/lodging_pentagon.png",
+      "filename": "lodging_pentagon",
+      "style": "pentagon",
+      "base_name": "lodging"
+    },
+    {
+      "url": "assets/icons/caltopo/lodging_placemark.png",
+      "filename": "lodging_placemark",
+      "style": "placemark",
+      "base_name": "lodging"
+    },
+    {
+      "url": "assets/icons/caltopo/lodging_square.png",
+      "filename": "lodging_square",
+      "style": "square",
+      "base_name": "lodging"
+    },
+    {
+      "url": "assets/icons/caltopo/lodging_square-rounded.png",
+      "filename": "lodging_square-rounded",
+      "style": "square-rounded",
+      "base_name": "lodging"
+    },
+    {
+      "url": "assets/icons/caltopo/lodging.png",
+      "filename": "lodging",
+      "style": "standard",
+      "base_name": "lodging"
+    },
+    {
+      "url": "assets/icons/caltopo/lodging_triangle.png",
+      "filename": "lodging_triangle",
+      "style": "triangle",
+      "base_name": "lodging"
+    },
+    {
+      "url": "assets/icons/caltopo/low-vision-access_circle.png",
+      "filename": "low-vision-access_circle",
+      "style": "circle",
+      "base_name": "low-vision-access"
+    },
+    {
+      "url": "assets/icons/caltopo/low-vision-access_diamond.png",
+      "filename": "low-vision-access_diamond",
+      "style": "diamond",
+      "base_name": "low-vision-access"
+    },
+    {
+      "url": "assets/icons/caltopo/low-vision-access_hexagon.png",
+      "filename": "low-vision-access_hexagon",
+      "style": "hexagon",
+      "base_name": "low-vision-access"
+    },
+    {
+      "url": "assets/icons/caltopo/low-vision-access_pentagon.png",
+      "filename": "low-vision-access_pentagon",
+      "style": "pentagon",
+      "base_name": "low-vision-access"
+    },
+    {
+      "url": "assets/icons/caltopo/low-vision-access_placemark.png",
+      "filename": "low-vision-access_placemark",
+      "style": "placemark",
+      "base_name": "low-vision-access"
+    },
+    {
+      "url": "assets/icons/caltopo/low-vision-access_square.png",
+      "filename": "low-vision-access_square",
+      "style": "square",
+      "base_name": "low-vision-access"
+    },
+    {
+      "url": "assets/icons/caltopo/low-vision-access_square-rounded.png",
+      "filename": "low-vision-access_square-rounded",
+      "style": "square-rounded",
+      "base_name": "low-vision-access"
+    },
+    {
+      "url": "assets/icons/caltopo/low-vision-access.png",
+      "filename": "low-vision-access",
+      "style": "standard",
+      "base_name": "low-vision-access"
+    },
+    {
+      "url": "assets/icons/caltopo/low-vision-access_triangle.png",
+      "filename": "low-vision-access_triangle",
+      "style": "triangle",
+      "base_name": "low-vision-access"
+    },
+    {
+      "url": "assets/icons/caltopo/maps_circle.png",
+      "filename": "maps_circle",
+      "style": "circle",
+      "base_name": "maps"
+    },
+    {
+      "url": "assets/icons/caltopo/maps_diamond.png",
+      "filename": "maps_diamond",
+      "style": "diamond",
+      "base_name": "maps"
+    },
+    {
+      "url": "assets/icons/caltopo/maps_hexagon.png",
+      "filename": "maps_hexagon",
+      "style": "hexagon",
+      "base_name": "maps"
+    },
+    {
+      "url": "assets/icons/caltopo/maps_pentagon.png",
+      "filename": "maps_pentagon",
+      "style": "pentagon",
+      "base_name": "maps"
+    },
+    {
+      "url": "assets/icons/caltopo/maps_placemark.png",
+      "filename": "maps_placemark",
+      "style": "placemark",
+      "base_name": "maps"
+    },
+    {
+      "url": "assets/icons/caltopo/maps_square.png",
+      "filename": "maps_square",
+      "style": "square",
+      "base_name": "maps"
+    },
+    {
+      "url": "assets/icons/caltopo/maps_square-rounded.png",
+      "filename": "maps_square-rounded",
+      "style": "square-rounded",
+      "base_name": "maps"
+    },
+    {
+      "url": "assets/icons/caltopo/maps.png",
+      "filename": "maps",
+      "style": "standard",
+      "base_name": "maps"
+    },
+    {
+      "url": "assets/icons/caltopo/maps_triangle.png",
+      "filename": "maps_triangle",
+      "style": "triangle",
+      "base_name": "maps"
+    },
+    {
+      "url": "assets/icons/caltopo/marsh_circle.png",
+      "filename": "marsh_circle",
+      "style": "circle",
+      "base_name": "marsh"
+    },
+    {
+      "url": "assets/icons/caltopo/marsh_diamond.png",
+      "filename": "marsh_diamond",
+      "style": "diamond",
+      "base_name": "marsh"
+    },
+    {
+      "url": "assets/icons/caltopo/marsh_hexagon.png",
+      "filename": "marsh_hexagon",
+      "style": "hexagon",
+      "base_name": "marsh"
+    },
+    {
+      "url": "assets/icons/caltopo/marsh_pentagon.png",
+      "filename": "marsh_pentagon",
+      "style": "pentagon",
+      "base_name": "marsh"
+    },
+    {
+      "url": "assets/icons/caltopo/marsh_placemark.png",
+      "filename": "marsh_placemark",
+      "style": "placemark",
+      "base_name": "marsh"
+    },
+    {
+      "url": "assets/icons/caltopo/marsh_square.png",
+      "filename": "marsh_square",
+      "style": "square",
+      "base_name": "marsh"
+    },
+    {
+      "url": "assets/icons/caltopo/marsh_square-rounded.png",
+      "filename": "marsh_square-rounded",
+      "style": "square-rounded",
+      "base_name": "marsh"
+    },
+    {
+      "url": "assets/icons/caltopo/marsh.png",
+      "filename": "marsh",
+      "style": "standard",
+      "base_name": "marsh"
+    },
+    {
+      "url": "assets/icons/caltopo/marsh_triangle.png",
+      "filename": "marsh_triangle",
+      "style": "triangle",
+      "base_name": "marsh"
+    },
+    {
+      "url": "assets/icons/caltopo/paragliding_circle.png",
+      "filename": "paragliding_circle",
+      "style": "circle",
+      "base_name": "paragliding"
+    },
+    {
+      "url": "assets/icons/caltopo/paragliding_diamond.png",
+      "filename": "paragliding_diamond",
+      "style": "diamond",
+      "base_name": "paragliding"
+    },
+    {
+      "url": "assets/icons/caltopo/paragliding_hexagon.png",
+      "filename": "paragliding_hexagon",
+      "style": "hexagon",
+      "base_name": "paragliding"
+    },
+    {
+      "url": "assets/icons/caltopo/paragliding_pentagon.png",
+      "filename": "paragliding_pentagon",
+      "style": "pentagon",
+      "base_name": "paragliding"
+    },
+    {
+      "url": "assets/icons/caltopo/paragliding_placemark.png",
+      "filename": "paragliding_placemark",
+      "style": "placemark",
+      "base_name": "paragliding"
+    },
+    {
+      "url": "assets/icons/caltopo/paragliding_square.png",
+      "filename": "paragliding_square",
+      "style": "square",
+      "base_name": "paragliding"
+    },
+    {
+      "url": "assets/icons/caltopo/paragliding_square-rounded.png",
+      "filename": "paragliding_square-rounded",
+      "style": "square-rounded",
+      "base_name": "paragliding"
+    },
+    {
+      "url": "assets/icons/caltopo/paragliding.png",
+      "filename": "paragliding",
+      "style": "standard",
+      "base_name": "paragliding"
+    },
+    {
+      "url": "assets/icons/caltopo/paragliding_triangle.png",
+      "filename": "paragliding_triangle",
+      "style": "triangle",
+      "base_name": "paragliding"
+    },
+    {
+      "url": "assets/icons/caltopo/peak_circle.png",
+      "filename": "peak_circle",
+      "style": "circle",
+      "base_name": "peak"
+    },
+    {
+      "url": "assets/icons/caltopo/peak_diamond.png",
+      "filename": "peak_diamond",
+      "style": "diamond",
+      "base_name": "peak"
+    },
+    {
+      "url": "assets/icons/caltopo/peak_hexagon.png",
+      "filename": "peak_hexagon",
+      "style": "hexagon",
+      "base_name": "peak"
+    },
+    {
+      "url": "assets/icons/caltopo/peak_pentagon.png",
+      "filename": "peak_pentagon",
+      "style": "pentagon",
+      "base_name": "peak"
+    },
+    {
+      "url": "assets/icons/caltopo/peak_placemark.png",
+      "filename": "peak_placemark",
+      "style": "placemark",
+      "base_name": "peak"
+    },
+    {
+      "url": "assets/icons/caltopo/peak_square.png",
+      "filename": "peak_square",
+      "style": "square",
+      "base_name": "peak"
+    },
+    {
+      "url": "assets/icons/caltopo/peak_square-rounded.png",
+      "filename": "peak_square-rounded",
+      "style": "square-rounded",
+      "base_name": "peak"
+    },
+    {
+      "url": "assets/icons/caltopo/peak.png",
+      "filename": "peak",
+      "style": "standard",
+      "base_name": "peak"
+    },
+    {
+      "url": "assets/icons/caltopo/peak_triangle.png",
+      "filename": "peak_triangle",
+      "style": "triangle",
+      "base_name": "peak"
+    },
+    {
+      "url": "assets/icons/caltopo/personal-watercraft_circle.png",
+      "filename": "personal-watercraft_circle",
+      "style": "circle",
+      "base_name": "personal-watercraft"
+    },
+    {
+      "url": "assets/icons/caltopo/personal-watercraft_diamond.png",
+      "filename": "personal-watercraft_diamond",
+      "style": "diamond",
+      "base_name": "personal-watercraft"
+    },
+    {
+      "url": "assets/icons/caltopo/personal-watercraft_hexagon.png",
+      "filename": "personal-watercraft_hexagon",
+      "style": "hexagon",
+      "base_name": "personal-watercraft"
+    },
+    {
+      "url": "assets/icons/caltopo/personal-watercraft_pentagon.png",
+      "filename": "personal-watercraft_pentagon",
+      "style": "pentagon",
+      "base_name": "personal-watercraft"
+    },
+    {
+      "url": "assets/icons/caltopo/personal-watercraft_placemark.png",
+      "filename": "personal-watercraft_placemark",
+      "style": "placemark",
+      "base_name": "personal-watercraft"
+    },
+    {
+      "url": "assets/icons/caltopo/personal-watercraft_square.png",
+      "filename": "personal-watercraft_square",
+      "style": "square",
+      "base_name": "personal-watercraft"
+    },
+    {
+      "url": "assets/icons/caltopo/personal-watercraft_square-rounded.png",
+      "filename": "personal-watercraft_square-rounded",
+      "style": "square-rounded",
+      "base_name": "personal-watercraft"
+    },
+    {
+      "url": "assets/icons/caltopo/personal-watercraft.png",
+      "filename": "personal-watercraft",
+      "style": "standard",
+      "base_name": "personal-watercraft"
+    },
+    {
+      "url": "assets/icons/caltopo/personal-watercraft_triangle.png",
+      "filename": "personal-watercraft_triangle",
+      "style": "triangle",
+      "base_name": "personal-watercraft"
+    },
+    {
+      "url": "assets/icons/caltopo/phone_circle.png",
+      "filename": "phone_circle",
+      "style": "circle",
+      "base_name": "phone"
+    },
+    {
+      "url": "assets/icons/caltopo/phone_diamond.png",
+      "filename": "phone_diamond",
+      "style": "diamond",
+      "base_name": "phone"
+    },
+    {
+      "url": "assets/icons/caltopo/phone_hexagon.png",
+      "filename": "phone_hexagon",
+      "style": "hexagon",
+      "base_name": "phone"
+    },
+    {
+      "url": "assets/icons/caltopo/phone_pentagon.png",
+      "filename": "phone_pentagon",
+      "style": "pentagon",
+      "base_name": "phone"
+    },
+    {
+      "url": "assets/icons/caltopo/phone_placemark.png",
+      "filename": "phone_placemark",
+      "style": "placemark",
+      "base_name": "phone"
+    },
+    {
+      "url": "assets/icons/caltopo/phone_square.png",
+      "filename": "phone_square",
+      "style": "square",
+      "base_name": "phone"
+    },
+    {
+      "url": "assets/icons/caltopo/phone_square-rounded.png",
+      "filename": "phone_square-rounded",
+      "style": "square-rounded",
+      "base_name": "phone"
+    },
+    {
+      "url": "assets/icons/caltopo/phone.png",
+      "filename": "phone",
+      "style": "standard",
+      "base_name": "phone"
+    },
+    {
+      "url": "assets/icons/caltopo/phone_triangle.png",
+      "filename": "phone_triangle",
+      "style": "triangle",
+      "base_name": "phone"
+    },
+    {
+      "url": "assets/icons/caltopo/photo_circle.png",
+      "filename": "photo_circle",
+      "style": "circle",
+      "base_name": "photo"
+    },
+    {
+      "url": "assets/icons/caltopo/photo_diamond.png",
+      "filename": "photo_diamond",
+      "style": "diamond",
+      "base_name": "photo"
+    },
+    {
+      "url": "assets/icons/caltopo/photo_hexagon.png",
+      "filename": "photo_hexagon",
+      "style": "hexagon",
+      "base_name": "photo"
+    },
+    {
+      "url": "assets/icons/caltopo/photo_pentagon.png",
+      "filename": "photo_pentagon",
+      "style": "pentagon",
+      "base_name": "photo"
+    },
+    {
+      "url": "assets/icons/caltopo/photo_placemark.png",
+      "filename": "photo_placemark",
+      "style": "placemark",
+      "base_name": "photo"
+    },
+    {
+      "url": "assets/icons/caltopo/photo_square.png",
+      "filename": "photo_square",
+      "style": "square",
+      "base_name": "photo"
+    },
+    {
+      "url": "assets/icons/caltopo/photo_square-rounded.png",
+      "filename": "photo_square-rounded",
+      "style": "square-rounded",
+      "base_name": "photo"
+    },
+    {
+      "url": "assets/icons/caltopo/photo.png",
+      "filename": "photo",
+      "style": "standard",
+      "base_name": "photo"
+    },
+    {
+      "url": "assets/icons/caltopo/photo_triangle.png",
+      "filename": "photo_triangle",
+      "style": "triangle",
+      "base_name": "photo"
+    },
+    {
+      "url": "assets/icons/caltopo/picnicbench_circle.png",
+      "filename": "picnicbench_circle",
+      "style": "circle",
+      "base_name": "picnicbench"
+    },
+    {
+      "url": "assets/icons/caltopo/picnicbench_diamond.png",
+      "filename": "picnicbench_diamond",
+      "style": "diamond",
+      "base_name": "picnicbench"
+    },
+    {
+      "url": "assets/icons/caltopo/picnicbench_hexagon.png",
+      "filename": "picnicbench_hexagon",
+      "style": "hexagon",
+      "base_name": "picnicbench"
+    },
+    {
+      "url": "assets/icons/caltopo/picnicbench_pentagon.png",
+      "filename": "picnicbench_pentagon",
+      "style": "pentagon",
+      "base_name": "picnicbench"
+    },
+    {
+      "url": "assets/icons/caltopo/picnicbench_placemark.png",
+      "filename": "picnicbench_placemark",
+      "style": "placemark",
+      "base_name": "picnicbench"
+    },
+    {
+      "url": "assets/icons/caltopo/picnicbench_square.png",
+      "filename": "picnicbench_square",
+      "style": "square",
+      "base_name": "picnicbench"
+    },
+    {
+      "url": "assets/icons/caltopo/picnicbench_square-rounded.png",
+      "filename": "picnicbench_square-rounded",
+      "style": "square-rounded",
+      "base_name": "picnicbench"
+    },
+    {
+      "url": "assets/icons/caltopo/picnicbench.png",
+      "filename": "picnicbench",
+      "style": "standard",
+      "base_name": "picnicbench"
+    },
+    {
+      "url": "assets/icons/caltopo/picnicbench_triangle.png",
+      "filename": "picnicbench_triangle",
+      "style": "triangle",
+      "base_name": "picnicbench"
+    },
+    {
+      "url": "assets/icons/caltopo/radiotower_circle.png",
+      "filename": "radiotower_circle",
+      "style": "circle",
+      "base_name": "radiotower"
+    },
+    {
+      "url": "assets/icons/caltopo/radiotower_diamond.png",
+      "filename": "radiotower_diamond",
+      "style": "diamond",
+      "base_name": "radiotower"
+    },
+    {
+      "url": "assets/icons/caltopo/radiotower_hexagon.png",
+      "filename": "radiotower_hexagon",
+      "style": "hexagon",
+      "base_name": "radiotower"
+    },
+    {
+      "url": "assets/icons/caltopo/radiotower_pentagon.png",
+      "filename": "radiotower_pentagon",
+      "style": "pentagon",
+      "base_name": "radiotower"
+    },
+    {
+      "url": "assets/icons/caltopo/radiotower_placemark.png",
+      "filename": "radiotower_placemark",
+      "style": "placemark",
+      "base_name": "radiotower"
+    },
+    {
+      "url": "assets/icons/caltopo/radiotower_square.png",
+      "filename": "radiotower_square",
+      "style": "square",
+      "base_name": "radiotower"
+    },
+    {
+      "url": "assets/icons/caltopo/radiotower_square-rounded.png",
+      "filename": "radiotower_square-rounded",
+      "style": "square-rounded",
+      "base_name": "radiotower"
+    },
+    {
+      "url": "assets/icons/caltopo/radiotower.png",
+      "filename": "radiotower",
+      "style": "standard",
+      "base_name": "radiotower"
+    },
+    {
+      "url": "assets/icons/caltopo/radiotower_triangle.png",
+      "filename": "radiotower_triangle",
+      "style": "triangle",
+      "base_name": "radiotower"
+    },
+    {
+      "url": "assets/icons/caltopo/rangerstation2_circle.png",
+      "filename": "rangerstation2_circle",
+      "style": "circle",
+      "base_name": "rangerstation2"
+    },
+    {
+      "url": "assets/icons/caltopo/rangerstation2_diamond.png",
+      "filename": "rangerstation2_diamond",
+      "style": "diamond",
+      "base_name": "rangerstation2"
+    },
+    {
+      "url": "assets/icons/caltopo/rangerstation2_hexagon.png",
+      "filename": "rangerstation2_hexagon",
+      "style": "hexagon",
+      "base_name": "rangerstation2"
+    },
+    {
+      "url": "assets/icons/caltopo/rangerstation2_pentagon.png",
+      "filename": "rangerstation2_pentagon",
+      "style": "pentagon",
+      "base_name": "rangerstation2"
+    },
+    {
+      "url": "assets/icons/caltopo/rangerstation2_placemark.png",
+      "filename": "rangerstation2_placemark",
+      "style": "placemark",
+      "base_name": "rangerstation2"
+    },
+    {
+      "url": "assets/icons/caltopo/rangerstation2_square.png",
+      "filename": "rangerstation2_square",
+      "style": "square",
+      "base_name": "rangerstation2"
+    },
+    {
+      "url": "assets/icons/caltopo/rangerstation2_square-rounded.png",
+      "filename": "rangerstation2_square-rounded",
+      "style": "square-rounded",
+      "base_name": "rangerstation2"
+    },
+    {
+      "url": "assets/icons/caltopo/rangerstation2.png",
+      "filename": "rangerstation2",
+      "style": "standard",
+      "base_name": "rangerstation2"
+    },
+    {
+      "url": "assets/icons/caltopo/rangerstation2_triangle.png",
+      "filename": "rangerstation2_triangle",
+      "style": "triangle",
+      "base_name": "rangerstation2"
+    },
+    {
+      "url": "assets/icons/caltopo/rappelling_circle.png",
+      "filename": "rappelling_circle",
+      "style": "circle",
+      "base_name": "rappelling"
+    },
+    {
+      "url": "assets/icons/caltopo/rappelling_diamond.png",
+      "filename": "rappelling_diamond",
+      "style": "diamond",
+      "base_name": "rappelling"
+    },
+    {
+      "url": "assets/icons/caltopo/rappelling_hexagon.png",
+      "filename": "rappelling_hexagon",
+      "style": "hexagon",
+      "base_name": "rappelling"
+    },
+    {
+      "url": "assets/icons/caltopo/rappelling_pentagon.png",
+      "filename": "rappelling_pentagon",
+      "style": "pentagon",
+      "base_name": "rappelling"
+    },
+    {
+      "url": "assets/icons/caltopo/rappelling_placemark.png",
+      "filename": "rappelling_placemark",
+      "style": "placemark",
+      "base_name": "rappelling"
+    },
+    {
+      "url": "assets/icons/caltopo/rappelling_square.png",
+      "filename": "rappelling_square",
+      "style": "square",
+      "base_name": "rappelling"
+    },
+    {
+      "url": "assets/icons/caltopo/rappelling_square-rounded.png",
+      "filename": "rappelling_square-rounded",
+      "style": "square-rounded",
+      "base_name": "rappelling"
+    },
+    {
+      "url": "assets/icons/caltopo/rappelling.png",
+      "filename": "rappelling",
+      "style": "standard",
+      "base_name": "rappelling"
+    },
+    {
+      "url": "assets/icons/caltopo/rappelling_triangle.png",
+      "filename": "rappelling_triangle",
+      "style": "triangle",
+      "base_name": "rappelling"
+    },
+    {
+      "url": "assets/icons/caltopo/recycling_circle.png",
+      "filename": "recycling_circle",
+      "style": "circle",
+      "base_name": "recycling"
+    },
+    {
+      "url": "assets/icons/caltopo/recycling_diamond.png",
+      "filename": "recycling_diamond",
+      "style": "diamond",
+      "base_name": "recycling"
+    },
+    {
+      "url": "assets/icons/caltopo/recycling_hexagon.png",
+      "filename": "recycling_hexagon",
+      "style": "hexagon",
+      "base_name": "recycling"
+    },
+    {
+      "url": "assets/icons/caltopo/recycling_pentagon.png",
+      "filename": "recycling_pentagon",
+      "style": "pentagon",
+      "base_name": "recycling"
+    },
+    {
+      "url": "assets/icons/caltopo/recycling_placemark.png",
+      "filename": "recycling_placemark",
+      "style": "placemark",
+      "base_name": "recycling"
+    },
+    {
+      "url": "assets/icons/caltopo/recycling_square.png",
+      "filename": "recycling_square",
+      "style": "square",
+      "base_name": "recycling"
+    },
+    {
+      "url": "assets/icons/caltopo/recycling_square-rounded.png",
+      "filename": "recycling_square-rounded",
+      "style": "square-rounded",
+      "base_name": "recycling"
+    },
+    {
+      "url": "assets/icons/caltopo/recycling.png",
+      "filename": "recycling",
+      "style": "standard",
+      "base_name": "recycling"
+    },
+    {
+      "url": "assets/icons/caltopo/recycling_triangle.png",
+      "filename": "recycling_triangle",
+      "style": "triangle",
+      "base_name": "recycling"
+    },
+    {
+      "url": "assets/icons/caltopo/river-rafting_circle.png",
+      "filename": "river-rafting_circle",
+      "style": "circle",
+      "base_name": "river-rafting"
+    },
+    {
+      "url": "assets/icons/caltopo/river-rafting_diamond.png",
+      "filename": "river-rafting_diamond",
+      "style": "diamond",
+      "base_name": "river-rafting"
+    },
+    {
+      "url": "assets/icons/caltopo/river-rafting_hexagon.png",
+      "filename": "river-rafting_hexagon",
+      "style": "hexagon",
+      "base_name": "river-rafting"
+    },
+    {
+      "url": "assets/icons/caltopo/river-rafting_pentagon.png",
+      "filename": "river-rafting_pentagon",
+      "style": "pentagon",
+      "base_name": "river-rafting"
+    },
+    {
+      "url": "assets/icons/caltopo/river-rafting_placemark.png",
+      "filename": "river-rafting_placemark",
+      "style": "placemark",
+      "base_name": "river-rafting"
+    },
+    {
+      "url": "assets/icons/caltopo/river-rafting_square.png",
+      "filename": "river-rafting_square",
+      "style": "square",
+      "base_name": "river-rafting"
+    },
+    {
+      "url": "assets/icons/caltopo/river-rafting_square-rounded.png",
+      "filename": "river-rafting_square-rounded",
+      "style": "square-rounded",
+      "base_name": "river-rafting"
+    },
+    {
+      "url": "assets/icons/caltopo/river-rafting.png",
+      "filename": "river-rafting",
+      "style": "standard",
+      "base_name": "river-rafting"
+    },
+    {
+      "url": "assets/icons/caltopo/river-rafting_triangle.png",
+      "filename": "river-rafting_triangle",
+      "style": "triangle",
+      "base_name": "river-rafting"
+    },
+    {
+      "url": "assets/icons/caltopo/rockfall_circle.png",
+      "filename": "rockfall_circle",
+      "style": "circle",
+      "base_name": "rockfall"
+    },
+    {
+      "url": "assets/icons/caltopo/rockfall_diamond.png",
+      "filename": "rockfall_diamond",
+      "style": "diamond",
+      "base_name": "rockfall"
+    },
+    {
+      "url": "assets/icons/caltopo/rockfall_hexagon.png",
+      "filename": "rockfall_hexagon",
+      "style": "hexagon",
+      "base_name": "rockfall"
+    },
+    {
+      "url": "assets/icons/caltopo/rockfall_pentagon.png",
+      "filename": "rockfall_pentagon",
+      "style": "pentagon",
+      "base_name": "rockfall"
+    },
+    {
+      "url": "assets/icons/caltopo/rockfall_placemark.png",
+      "filename": "rockfall_placemark",
+      "style": "placemark",
+      "base_name": "rockfall"
+    },
+    {
+      "url": "assets/icons/caltopo/rockfall_square.png",
+      "filename": "rockfall_square",
+      "style": "square",
+      "base_name": "rockfall"
+    },
+    {
+      "url": "assets/icons/caltopo/rockfall_square-rounded.png",
+      "filename": "rockfall_square-rounded",
+      "style": "square-rounded",
+      "base_name": "rockfall"
+    },
+    {
+      "url": "assets/icons/caltopo/rockfall.png",
+      "filename": "rockfall",
+      "style": "standard",
+      "base_name": "rockfall"
+    },
+    {
+      "url": "assets/icons/caltopo/rockfall_triangle.png",
+      "filename": "rockfall_triangle",
+      "style": "triangle",
+      "base_name": "rockfall"
+    },
+    {
+      "url": "assets/icons/caltopo/rv-campground_circle.png",
+      "filename": "rv-campground_circle",
+      "style": "circle",
+      "base_name": "rv-campground"
+    },
+    {
+      "url": "assets/icons/caltopo/rv-campground_diamond.png",
+      "filename": "rv-campground_diamond",
+      "style": "diamond",
+      "base_name": "rv-campground"
+    },
+    {
+      "url": "assets/icons/caltopo/rv-campground_hexagon.png",
+      "filename": "rv-campground_hexagon",
+      "style": "hexagon",
+      "base_name": "rv-campground"
+    },
+    {
+      "url": "assets/icons/caltopo/rv-campground_pentagon.png",
+      "filename": "rv-campground_pentagon",
+      "style": "pentagon",
+      "base_name": "rv-campground"
+    },
+    {
+      "url": "assets/icons/caltopo/rv-campground_placemark.png",
+      "filename": "rv-campground_placemark",
+      "style": "placemark",
+      "base_name": "rv-campground"
+    },
+    {
+      "url": "assets/icons/caltopo/rv-campground_square.png",
+      "filename": "rv-campground_square",
+      "style": "square",
+      "base_name": "rv-campground"
+    },
+    {
+      "url": "assets/icons/caltopo/rv-campground_square-rounded.png",
+      "filename": "rv-campground_square-rounded",
+      "style": "square-rounded",
+      "base_name": "rv-campground"
+    },
+    {
+      "url": "assets/icons/caltopo/rv-campground.png",
+      "filename": "rv-campground",
+      "style": "standard",
+      "base_name": "rv-campground"
+    },
+    {
+      "url": "assets/icons/caltopo/rv-campground_triangle.png",
+      "filename": "rv-campground_triangle",
+      "style": "triangle",
+      "base_name": "rv-campground"
+    },
+    {
+      "url": "assets/icons/caltopo/sailing_circle.png",
+      "filename": "sailing_circle",
+      "style": "circle",
+      "base_name": "sailing"
+    },
+    {
+      "url": "assets/icons/caltopo/sailing_diamond.png",
+      "filename": "sailing_diamond",
+      "style": "diamond",
+      "base_name": "sailing"
+    },
+    {
+      "url": "assets/icons/caltopo/sailing_hexagon.png",
+      "filename": "sailing_hexagon",
+      "style": "hexagon",
+      "base_name": "sailing"
+    },
+    {
+      "url": "assets/icons/caltopo/sailing_pentagon.png",
+      "filename": "sailing_pentagon",
+      "style": "pentagon",
+      "base_name": "sailing"
+    },
+    {
+      "url": "assets/icons/caltopo/sailing_placemark.png",
+      "filename": "sailing_placemark",
+      "style": "placemark",
+      "base_name": "sailing"
+    },
+    {
+      "url": "assets/icons/caltopo/sailing_square.png",
+      "filename": "sailing_square",
+      "style": "square",
+      "base_name": "sailing"
+    },
+    {
+      "url": "assets/icons/caltopo/sailing_square-rounded.png",
+      "filename": "sailing_square-rounded",
+      "style": "square-rounded",
+      "base_name": "sailing"
+    },
+    {
+      "url": "assets/icons/caltopo/sailing.png",
+      "filename": "sailing",
+      "style": "standard",
+      "base_name": "sailing"
+    },
+    {
+      "url": "assets/icons/caltopo/sailing_triangle.png",
+      "filename": "sailing_triangle",
+      "style": "triangle",
+      "base_name": "sailing"
+    },
+    {
+      "url": "assets/icons/caltopo/scrambling_circle.png",
+      "filename": "scrambling_circle",
+      "style": "circle",
+      "base_name": "scrambling"
+    },
+    {
+      "url": "assets/icons/caltopo/scrambling_diamond.png",
+      "filename": "scrambling_diamond",
+      "style": "diamond",
+      "base_name": "scrambling"
+    },
+    {
+      "url": "assets/icons/caltopo/scrambling_hexagon.png",
+      "filename": "scrambling_hexagon",
+      "style": "hexagon",
+      "base_name": "scrambling"
+    },
+    {
+      "url": "assets/icons/caltopo/scrambling_pentagon.png",
+      "filename": "scrambling_pentagon",
+      "style": "pentagon",
+      "base_name": "scrambling"
+    },
+    {
+      "url": "assets/icons/caltopo/scrambling_placemark.png",
+      "filename": "scrambling_placemark",
+      "style": "placemark",
+      "base_name": "scrambling"
+    },
+    {
+      "url": "assets/icons/caltopo/scrambling_square.png",
+      "filename": "scrambling_square",
+      "style": "square",
+      "base_name": "scrambling"
+    },
+    {
+      "url": "assets/icons/caltopo/scrambling_square-rounded.png",
+      "filename": "scrambling_square-rounded",
+      "style": "square-rounded",
+      "base_name": "scrambling"
+    },
+    {
+      "url": "assets/icons/caltopo/scrambling.png",
+      "filename": "scrambling",
+      "style": "standard",
+      "base_name": "scrambling"
+    },
+    {
+      "url": "assets/icons/caltopo/scrambling_triangle.png",
+      "filename": "scrambling_triangle",
+      "style": "triangle",
+      "base_name": "scrambling"
+    },
+    {
+      "url": "assets/icons/caltopo/shelter-empty_circle.png",
+      "filename": "shelter-empty_circle",
+      "style": "circle",
+      "base_name": "shelter-empty"
+    },
+    {
+      "url": "assets/icons/caltopo/shelter-empty_diamond.png",
+      "filename": "shelter-empty_diamond",
+      "style": "diamond",
+      "base_name": "shelter-empty"
+    },
+    {
+      "url": "assets/icons/caltopo/shelter-empty_hexagon.png",
+      "filename": "shelter-empty_hexagon",
+      "style": "hexagon",
+      "base_name": "shelter-empty"
+    },
+    {
+      "url": "assets/icons/caltopo/shelter-empty_pentagon.png",
+      "filename": "shelter-empty_pentagon",
+      "style": "pentagon",
+      "base_name": "shelter-empty"
+    },
+    {
+      "url": "assets/icons/caltopo/shelter-empty_placemark.png",
+      "filename": "shelter-empty_placemark",
+      "style": "placemark",
+      "base_name": "shelter-empty"
+    },
+    {
+      "url": "assets/icons/caltopo/shelter-empty_square.png",
+      "filename": "shelter-empty_square",
+      "style": "square",
+      "base_name": "shelter-empty"
+    },
+    {
+      "url": "assets/icons/caltopo/shelter-empty_square-rounded.png",
+      "filename": "shelter-empty_square-rounded",
+      "style": "square-rounded",
+      "base_name": "shelter-empty"
+    },
+    {
+      "url": "assets/icons/caltopo/shelter-empty.png",
+      "filename": "shelter-empty",
+      "style": "standard",
+      "base_name": "shelter-empty"
+    },
+    {
+      "url": "assets/icons/caltopo/shelter-empty_triangle.png",
+      "filename": "shelter-empty_triangle",
+      "style": "triangle",
+      "base_name": "shelter-empty"
+    },
+    {
+      "url": "assets/icons/caltopo/shelter-picnic_circle.png",
+      "filename": "shelter-picnic_circle",
+      "style": "circle",
+      "base_name": "shelter-picnic"
+    },
+    {
+      "url": "assets/icons/caltopo/shelter-picnic_diamond.png",
+      "filename": "shelter-picnic_diamond",
+      "style": "diamond",
+      "base_name": "shelter-picnic"
+    },
+    {
+      "url": "assets/icons/caltopo/shelter-picnic_hexagon.png",
+      "filename": "shelter-picnic_hexagon",
+      "style": "hexagon",
+      "base_name": "shelter-picnic"
+    },
+    {
+      "url": "assets/icons/caltopo/shelter-picnic_pentagon.png",
+      "filename": "shelter-picnic_pentagon",
+      "style": "pentagon",
+      "base_name": "shelter-picnic"
+    },
+    {
+      "url": "assets/icons/caltopo/shelter-picnic_placemark.png",
+      "filename": "shelter-picnic_placemark",
+      "style": "placemark",
+      "base_name": "shelter-picnic"
+    },
+    {
+      "url": "assets/icons/caltopo/shelter-picnic_square.png",
+      "filename": "shelter-picnic_square",
+      "style": "square",
+      "base_name": "shelter-picnic"
+    },
+    {
+      "url": "assets/icons/caltopo/shelter-picnic_square-rounded.png",
+      "filename": "shelter-picnic_square-rounded",
+      "style": "square-rounded",
+      "base_name": "shelter-picnic"
+    },
+    {
+      "url": "assets/icons/caltopo/shelter-picnic.png",
+      "filename": "shelter-picnic",
+      "style": "standard",
+      "base_name": "shelter-picnic"
+    },
+    {
+      "url": "assets/icons/caltopo/shelter-picnic_triangle.png",
+      "filename": "shelter-picnic_triangle",
+      "style": "triangle",
+      "base_name": "shelter-picnic"
+    },
+    {
+      "url": "assets/icons/caltopo/shooting_circle.png",
+      "filename": "shooting_circle",
+      "style": "circle",
+      "base_name": "shooting"
+    },
+    {
+      "url": "assets/icons/caltopo/shooting_diamond.png",
+      "filename": "shooting_diamond",
+      "style": "diamond",
+      "base_name": "shooting"
+    },
+    {
+      "url": "assets/icons/caltopo/shooting_hexagon.png",
+      "filename": "shooting_hexagon",
+      "style": "hexagon",
+      "base_name": "shooting"
+    },
+    {
+      "url": "assets/icons/caltopo/shooting_pentagon.png",
+      "filename": "shooting_pentagon",
+      "style": "pentagon",
+      "base_name": "shooting"
+    },
+    {
+      "url": "assets/icons/caltopo/shooting_placemark.png",
+      "filename": "shooting_placemark",
+      "style": "placemark",
+      "base_name": "shooting"
+    },
+    {
+      "url": "assets/icons/caltopo/shooting_square.png",
+      "filename": "shooting_square",
+      "style": "square",
+      "base_name": "shooting"
+    },
+    {
+      "url": "assets/icons/caltopo/shooting_square-rounded.png",
+      "filename": "shooting_square-rounded",
+      "style": "square-rounded",
+      "base_name": "shooting"
+    },
+    {
+      "url": "assets/icons/caltopo/shooting.png",
+      "filename": "shooting",
+      "style": "standard",
+      "base_name": "shooting"
+    },
+    {
+      "url": "assets/icons/caltopo/shooting_triangle.png",
+      "filename": "shooting_triangle",
+      "style": "triangle",
+      "base_name": "shooting"
+    },
+    {
+      "url": "assets/icons/caltopo/shower_circle.png",
+      "filename": "shower_circle",
+      "style": "circle",
+      "base_name": "shower"
+    },
+    {
+      "url": "assets/icons/caltopo/shower_diamond.png",
+      "filename": "shower_diamond",
+      "style": "diamond",
+      "base_name": "shower"
+    },
+    {
+      "url": "assets/icons/caltopo/shower_hexagon.png",
+      "filename": "shower_hexagon",
+      "style": "hexagon",
+      "base_name": "shower"
+    },
+    {
+      "url": "assets/icons/caltopo/shower_pentagon.png",
+      "filename": "shower_pentagon",
+      "style": "pentagon",
+      "base_name": "shower"
+    },
+    {
+      "url": "assets/icons/caltopo/shower_placemark.png",
+      "filename": "shower_placemark",
+      "style": "placemark",
+      "base_name": "shower"
+    },
+    {
+      "url": "assets/icons/caltopo/shower_square.png",
+      "filename": "shower_square",
+      "style": "square",
+      "base_name": "shower"
+    },
+    {
+      "url": "assets/icons/caltopo/shower_square-rounded.png",
+      "filename": "shower_square-rounded",
+      "style": "square-rounded",
+      "base_name": "shower"
+    },
+    {
+      "url": "assets/icons/caltopo/shower.png",
+      "filename": "shower",
+      "style": "standard",
+      "base_name": "shower"
+    },
+    {
+      "url": "assets/icons/caltopo/shower_triangle.png",
+      "filename": "shower_triangle",
+      "style": "triangle",
+      "base_name": "shower"
+    },
+    {
+      "url": "assets/icons/caltopo/skiing-downhill_circle.png",
+      "filename": "skiing-downhill_circle",
+      "style": "circle",
+      "base_name": "skiing-downhill"
+    },
+    {
+      "url": "assets/icons/caltopo/skiing-downhill_diamond.png",
+      "filename": "skiing-downhill_diamond",
+      "style": "diamond",
+      "base_name": "skiing-downhill"
+    },
+    {
+      "url": "assets/icons/caltopo/skiing-downhill_hexagon.png",
+      "filename": "skiing-downhill_hexagon",
+      "style": "hexagon",
+      "base_name": "skiing-downhill"
+    },
+    {
+      "url": "assets/icons/caltopo/skiing-downhill_pentagon.png",
+      "filename": "skiing-downhill_pentagon",
+      "style": "pentagon",
+      "base_name": "skiing-downhill"
+    },
+    {
+      "url": "assets/icons/caltopo/skiing-downhill_placemark.png",
+      "filename": "skiing-downhill_placemark",
+      "style": "placemark",
+      "base_name": "skiing-downhill"
+    },
+    {
+      "url": "assets/icons/caltopo/skiing-downhill_square.png",
+      "filename": "skiing-downhill_square",
+      "style": "square",
+      "base_name": "skiing-downhill"
+    },
+    {
+      "url": "assets/icons/caltopo/skiing-downhill_square-rounded.png",
+      "filename": "skiing-downhill_square-rounded",
+      "style": "square-rounded",
+      "base_name": "skiing-downhill"
+    },
+    {
+      "url": "assets/icons/caltopo/skiing-downhill.png",
+      "filename": "skiing-downhill",
+      "style": "standard",
+      "base_name": "skiing-downhill"
+    },
+    {
+      "url": "assets/icons/caltopo/skiing-downhill_triangle.png",
+      "filename": "skiing-downhill_triangle",
+      "style": "triangle",
+      "base_name": "skiing-downhill"
+    },
+    {
+      "url": "assets/icons/caltopo/skiing-xc_circle.png",
+      "filename": "skiing-xc_circle",
+      "style": "circle",
+      "base_name": "skiing-xc"
+    },
+    {
+      "url": "assets/icons/caltopo/skiing-xc_diamond.png",
+      "filename": "skiing-xc_diamond",
+      "style": "diamond",
+      "base_name": "skiing-xc"
+    },
+    {
+      "url": "assets/icons/caltopo/skiing-xc_hexagon.png",
+      "filename": "skiing-xc_hexagon",
+      "style": "hexagon",
+      "base_name": "skiing-xc"
+    },
+    {
+      "url": "assets/icons/caltopo/skiing-xc_pentagon.png",
+      "filename": "skiing-xc_pentagon",
+      "style": "pentagon",
+      "base_name": "skiing-xc"
+    },
+    {
+      "url": "assets/icons/caltopo/skiing-xc_placemark.png",
+      "filename": "skiing-xc_placemark",
+      "style": "placemark",
+      "base_name": "skiing-xc"
+    },
+    {
+      "url": "assets/icons/caltopo/skiing-xc_square.png",
+      "filename": "skiing-xc_square",
+      "style": "square",
+      "base_name": "skiing-xc"
+    },
+    {
+      "url": "assets/icons/caltopo/skiing-xc_square-rounded.png",
+      "filename": "skiing-xc_square-rounded",
+      "style": "square-rounded",
+      "base_name": "skiing-xc"
+    },
+    {
+      "url": "assets/icons/caltopo/skiing-xc.png",
+      "filename": "skiing-xc",
+      "style": "standard",
+      "base_name": "skiing-xc"
+    },
+    {
+      "url": "assets/icons/caltopo/skiing-xc_triangle.png",
+      "filename": "skiing-xc_triangle",
+      "style": "triangle",
+      "base_name": "skiing-xc"
+    },
+    {
+      "url": "assets/icons/caltopo/sledding_circle.png",
+      "filename": "sledding_circle",
+      "style": "circle",
+      "base_name": "sledding"
+    },
+    {
+      "url": "assets/icons/caltopo/sledding_diamond.png",
+      "filename": "sledding_diamond",
+      "style": "diamond",
+      "base_name": "sledding"
+    },
+    {
+      "url": "assets/icons/caltopo/sledding_hexagon.png",
+      "filename": "sledding_hexagon",
+      "style": "hexagon",
+      "base_name": "sledding"
+    },
+    {
+      "url": "assets/icons/caltopo/sledding_pentagon.png",
+      "filename": "sledding_pentagon",
+      "style": "pentagon",
+      "base_name": "sledding"
+    },
+    {
+      "url": "assets/icons/caltopo/sledding_placemark.png",
+      "filename": "sledding_placemark",
+      "style": "placemark",
+      "base_name": "sledding"
+    },
+    {
+      "url": "assets/icons/caltopo/sledding_square.png",
+      "filename": "sledding_square",
+      "style": "square",
+      "base_name": "sledding"
+    },
+    {
+      "url": "assets/icons/caltopo/sledding_square-rounded.png",
+      "filename": "sledding_square-rounded",
+      "style": "square-rounded",
+      "base_name": "sledding"
+    },
+    {
+      "url": "assets/icons/caltopo/sledding.png",
+      "filename": "sledding",
+      "style": "standard",
+      "base_name": "sledding"
+    },
+    {
+      "url": "assets/icons/caltopo/sledding_triangle.png",
+      "filename": "sledding_triangle",
+      "style": "triangle",
+      "base_name": "sledding"
+    },
+    {
+      "url": "assets/icons/caltopo/slip_circle.png",
+      "filename": "slip_circle",
+      "style": "circle",
+      "base_name": "slip"
+    },
+    {
+      "url": "assets/icons/caltopo/slip_diamond.png",
+      "filename": "slip_diamond",
+      "style": "diamond",
+      "base_name": "slip"
+    },
+    {
+      "url": "assets/icons/caltopo/slip_hexagon.png",
+      "filename": "slip_hexagon",
+      "style": "hexagon",
+      "base_name": "slip"
+    },
+    {
+      "url": "assets/icons/caltopo/slip_pentagon.png",
+      "filename": "slip_pentagon",
+      "style": "pentagon",
+      "base_name": "slip"
+    },
+    {
+      "url": "assets/icons/caltopo/slip_placemark.png",
+      "filename": "slip_placemark",
+      "style": "placemark",
+      "base_name": "slip"
+    },
+    {
+      "url": "assets/icons/caltopo/slip_square.png",
+      "filename": "slip_square",
+      "style": "square",
+      "base_name": "slip"
+    },
+    {
+      "url": "assets/icons/caltopo/slip_square-rounded.png",
+      "filename": "slip_square-rounded",
+      "style": "square-rounded",
+      "base_name": "slip"
+    },
+    {
+      "url": "assets/icons/caltopo/slip.png",
+      "filename": "slip",
+      "style": "standard",
+      "base_name": "slip"
+    },
+    {
+      "url": "assets/icons/caltopo/slip_triangle.png",
+      "filename": "slip_triangle",
+      "style": "triangle",
+      "base_name": "slip"
+    },
+    {
+      "url": "assets/icons/caltopo/snorkeling_circle.png",
+      "filename": "snorkeling_circle",
+      "style": "circle",
+      "base_name": "snorkeling"
+    },
+    {
+      "url": "assets/icons/caltopo/snorkeling_diamond.png",
+      "filename": "snorkeling_diamond",
+      "style": "diamond",
+      "base_name": "snorkeling"
+    },
+    {
+      "url": "assets/icons/caltopo/snorkeling_hexagon.png",
+      "filename": "snorkeling_hexagon",
+      "style": "hexagon",
+      "base_name": "snorkeling"
+    },
+    {
+      "url": "assets/icons/caltopo/snorkeling_pentagon.png",
+      "filename": "snorkeling_pentagon",
+      "style": "pentagon",
+      "base_name": "snorkeling"
+    },
+    {
+      "url": "assets/icons/caltopo/snorkeling_placemark.png",
+      "filename": "snorkeling_placemark",
+      "style": "placemark",
+      "base_name": "snorkeling"
+    },
+    {
+      "url": "assets/icons/caltopo/snorkeling_square.png",
+      "filename": "snorkeling_square",
+      "style": "square",
+      "base_name": "snorkeling"
+    },
+    {
+      "url": "assets/icons/caltopo/snorkeling_square-rounded.png",
+      "filename": "snorkeling_square-rounded",
+      "style": "square-rounded",
+      "base_name": "snorkeling"
+    },
+    {
+      "url": "assets/icons/caltopo/snorkeling.png",
+      "filename": "snorkeling",
+      "style": "standard",
+      "base_name": "snorkeling"
+    },
+    {
+      "url": "assets/icons/caltopo/snorkeling_triangle.png",
+      "filename": "snorkeling_triangle",
+      "style": "triangle",
+      "base_name": "snorkeling"
+    },
+    {
+      "url": "assets/icons/caltopo/snowboarding_circle.png",
+      "filename": "snowboarding_circle",
+      "style": "circle",
+      "base_name": "snowboarding"
+    },
+    {
+      "url": "assets/icons/caltopo/snowboarding_diamond.png",
+      "filename": "snowboarding_diamond",
+      "style": "diamond",
+      "base_name": "snowboarding"
+    },
+    {
+      "url": "assets/icons/caltopo/snowboarding_hexagon.png",
+      "filename": "snowboarding_hexagon",
+      "style": "hexagon",
+      "base_name": "snowboarding"
+    },
+    {
+      "url": "assets/icons/caltopo/snowboarding_pentagon.png",
+      "filename": "snowboarding_pentagon",
+      "style": "pentagon",
+      "base_name": "snowboarding"
+    },
+    {
+      "url": "assets/icons/caltopo/snowboarding_placemark.png",
+      "filename": "snowboarding_placemark",
+      "style": "placemark",
+      "base_name": "snowboarding"
+    },
+    {
+      "url": "assets/icons/caltopo/snowboarding_square.png",
+      "filename": "snowboarding_square",
+      "style": "square",
+      "base_name": "snowboarding"
+    },
+    {
+      "url": "assets/icons/caltopo/snowboarding_square-rounded.png",
+      "filename": "snowboarding_square-rounded",
+      "style": "square-rounded",
+      "base_name": "snowboarding"
+    },
+    {
+      "url": "assets/icons/caltopo/snowboarding.png",
+      "filename": "snowboarding",
+      "style": "standard",
+      "base_name": "snowboarding"
+    },
+    {
+      "url": "assets/icons/caltopo/snowboarding_triangle.png",
+      "filename": "snowboarding_triangle",
+      "style": "triangle",
+      "base_name": "snowboarding"
+    },
+    {
+      "url": "assets/icons/caltopo/snowmobiling_circle.png",
+      "filename": "snowmobiling_circle",
+      "style": "circle",
+      "base_name": "snowmobiling"
+    },
+    {
+      "url": "assets/icons/caltopo/snowmobiling_diamond.png",
+      "filename": "snowmobiling_diamond",
+      "style": "diamond",
+      "base_name": "snowmobiling"
+    },
+    {
+      "url": "assets/icons/caltopo/snowmobiling_hexagon.png",
+      "filename": "snowmobiling_hexagon",
+      "style": "hexagon",
+      "base_name": "snowmobiling"
+    },
+    {
+      "url": "assets/icons/caltopo/snowmobiling_pentagon.png",
+      "filename": "snowmobiling_pentagon",
+      "style": "pentagon",
+      "base_name": "snowmobiling"
+    },
+    {
+      "url": "assets/icons/caltopo/snowmobiling_placemark.png",
+      "filename": "snowmobiling_placemark",
+      "style": "placemark",
+      "base_name": "snowmobiling"
+    },
+    {
+      "url": "assets/icons/caltopo/snowmobiling_square.png",
+      "filename": "snowmobiling_square",
+      "style": "square",
+      "base_name": "snowmobiling"
+    },
+    {
+      "url": "assets/icons/caltopo/snowmobiling_square-rounded.png",
+      "filename": "snowmobiling_square-rounded",
+      "style": "square-rounded",
+      "base_name": "snowmobiling"
+    },
+    {
+      "url": "assets/icons/caltopo/snowmobiling.png",
+      "filename": "snowmobiling",
+      "style": "standard",
+      "base_name": "snowmobiling"
+    },
+    {
+      "url": "assets/icons/caltopo/snowmobiling_triangle.png",
+      "filename": "snowmobiling_triangle",
+      "style": "triangle",
+      "base_name": "snowmobiling"
+    },
+    {
+      "url": "assets/icons/caltopo/snowmobiling-no_circle.png",
+      "filename": "snowmobiling-no_circle",
+      "style": "circle",
+      "base_name": "snowmobiling-no"
+    },
+    {
+      "url": "assets/icons/caltopo/snowmobiling-no_diamond.png",
+      "filename": "snowmobiling-no_diamond",
+      "style": "diamond",
+      "base_name": "snowmobiling-no"
+    },
+    {
+      "url": "assets/icons/caltopo/snowmobiling-no_hexagon.png",
+      "filename": "snowmobiling-no_hexagon",
+      "style": "hexagon",
+      "base_name": "snowmobiling-no"
+    },
+    {
+      "url": "assets/icons/caltopo/snowmobiling-no_pentagon.png",
+      "filename": "snowmobiling-no_pentagon",
+      "style": "pentagon",
+      "base_name": "snowmobiling-no"
+    },
+    {
+      "url": "assets/icons/caltopo/snowmobiling-no_placemark.png",
+      "filename": "snowmobiling-no_placemark",
+      "style": "placemark",
+      "base_name": "snowmobiling-no"
+    },
+    {
+      "url": "assets/icons/caltopo/snowmobiling-no_square.png",
+      "filename": "snowmobiling-no_square",
+      "style": "square",
+      "base_name": "snowmobiling-no"
+    },
+    {
+      "url": "assets/icons/caltopo/snowmobiling-no_square-rounded.png",
+      "filename": "snowmobiling-no_square-rounded",
+      "style": "square-rounded",
+      "base_name": "snowmobiling-no"
+    },
+    {
+      "url": "assets/icons/caltopo/snowmobiling-no.png",
+      "filename": "snowmobiling-no",
+      "style": "standard",
+      "base_name": "snowmobiling-no"
+    },
+    {
+      "url": "assets/icons/caltopo/snowmobiling-no_triangle.png",
+      "filename": "snowmobiling-no_triangle",
+      "style": "triangle",
+      "base_name": "snowmobiling-no"
+    },
+    {
+      "url": "assets/icons/caltopo/snowshoeing_circle.png",
+      "filename": "snowshoeing_circle",
+      "style": "circle",
+      "base_name": "snowshoeing"
+    },
+    {
+      "url": "assets/icons/caltopo/snowshoeing_diamond.png",
+      "filename": "snowshoeing_diamond",
+      "style": "diamond",
+      "base_name": "snowshoeing"
+    },
+    {
+      "url": "assets/icons/caltopo/snowshoeing_hexagon.png",
+      "filename": "snowshoeing_hexagon",
+      "style": "hexagon",
+      "base_name": "snowshoeing"
+    },
+    {
+      "url": "assets/icons/caltopo/snowshoeing_pentagon.png",
+      "filename": "snowshoeing_pentagon",
+      "style": "pentagon",
+      "base_name": "snowshoeing"
+    },
+    {
+      "url": "assets/icons/caltopo/snowshoeing_placemark.png",
+      "filename": "snowshoeing_placemark",
+      "style": "placemark",
+      "base_name": "snowshoeing"
+    },
+    {
+      "url": "assets/icons/caltopo/snowshoeing_square.png",
+      "filename": "snowshoeing_square",
+      "style": "square",
+      "base_name": "snowshoeing"
+    },
+    {
+      "url": "assets/icons/caltopo/snowshoeing_square-rounded.png",
+      "filename": "snowshoeing_square-rounded",
+      "style": "square-rounded",
+      "base_name": "snowshoeing"
+    },
+    {
+      "url": "assets/icons/caltopo/snowshoeing.png",
+      "filename": "snowshoeing",
+      "style": "standard",
+      "base_name": "snowshoeing"
+    },
+    {
+      "url": "assets/icons/caltopo/snowshoeing_triangle.png",
+      "filename": "snowshoeing_triangle",
+      "style": "triangle",
+      "base_name": "snowshoeing"
+    },
+    {
+      "url": "assets/icons/caltopo/surfing_circle.png",
+      "filename": "surfing_circle",
+      "style": "circle",
+      "base_name": "surfing"
+    },
+    {
+      "url": "assets/icons/caltopo/surfing_diamond.png",
+      "filename": "surfing_diamond",
+      "style": "diamond",
+      "base_name": "surfing"
+    },
+    {
+      "url": "assets/icons/caltopo/surfing_hexagon.png",
+      "filename": "surfing_hexagon",
+      "style": "hexagon",
+      "base_name": "surfing"
+    },
+    {
+      "url": "assets/icons/caltopo/surfing_pentagon.png",
+      "filename": "surfing_pentagon",
+      "style": "pentagon",
+      "base_name": "surfing"
+    },
+    {
+      "url": "assets/icons/caltopo/surfing_placemark.png",
+      "filename": "surfing_placemark",
+      "style": "placemark",
+      "base_name": "surfing"
+    },
+    {
+      "url": "assets/icons/caltopo/surfing_square.png",
+      "filename": "surfing_square",
+      "style": "square",
+      "base_name": "surfing"
+    },
+    {
+      "url": "assets/icons/caltopo/surfing_square-rounded.png",
+      "filename": "surfing_square-rounded",
+      "style": "square-rounded",
+      "base_name": "surfing"
+    },
+    {
+      "url": "assets/icons/caltopo/surfing.png",
+      "filename": "surfing",
+      "style": "standard",
+      "base_name": "surfing"
+    },
+    {
+      "url": "assets/icons/caltopo/surfing_triangle.png",
+      "filename": "surfing_triangle",
+      "style": "triangle",
+      "base_name": "surfing"
+    },
+    {
+      "url": "assets/icons/caltopo/swimming_circle.png",
+      "filename": "swimming_circle",
+      "style": "circle",
+      "base_name": "swimming"
+    },
+    {
+      "url": "assets/icons/caltopo/swimming_diamond.png",
+      "filename": "swimming_diamond",
+      "style": "diamond",
+      "base_name": "swimming"
+    },
+    {
+      "url": "assets/icons/caltopo/swimming_hexagon.png",
+      "filename": "swimming_hexagon",
+      "style": "hexagon",
+      "base_name": "swimming"
+    },
+    {
+      "url": "assets/icons/caltopo/swimming_pentagon.png",
+      "filename": "swimming_pentagon",
+      "style": "pentagon",
+      "base_name": "swimming"
+    },
+    {
+      "url": "assets/icons/caltopo/swimming_placemark.png",
+      "filename": "swimming_placemark",
+      "style": "placemark",
+      "base_name": "swimming"
+    },
+    {
+      "url": "assets/icons/caltopo/swimming_square.png",
+      "filename": "swimming_square",
+      "style": "square",
+      "base_name": "swimming"
+    },
+    {
+      "url": "assets/icons/caltopo/swimming_square-rounded.png",
+      "filename": "swimming_square-rounded",
+      "style": "square-rounded",
+      "base_name": "swimming"
+    },
+    {
+      "url": "assets/icons/caltopo/swimming.png",
+      "filename": "swimming",
+      "style": "standard",
+      "base_name": "swimming"
+    },
+    {
+      "url": "assets/icons/caltopo/swimming_triangle.png",
+      "filename": "swimming_triangle",
+      "style": "triangle",
+      "base_name": "swimming"
+    },
+    {
+      "url": "assets/icons/caltopo/tidepool_circle.png",
+      "filename": "tidepool_circle",
+      "style": "circle",
+      "base_name": "tidepool"
+    },
+    {
+      "url": "assets/icons/caltopo/tidepool_diamond.png",
+      "filename": "tidepool_diamond",
+      "style": "diamond",
+      "base_name": "tidepool"
+    },
+    {
+      "url": "assets/icons/caltopo/tidepool_hexagon.png",
+      "filename": "tidepool_hexagon",
+      "style": "hexagon",
+      "base_name": "tidepool"
+    },
+    {
+      "url": "assets/icons/caltopo/tidepool_pentagon.png",
+      "filename": "tidepool_pentagon",
+      "style": "pentagon",
+      "base_name": "tidepool"
+    },
+    {
+      "url": "assets/icons/caltopo/tidepool_placemark.png",
+      "filename": "tidepool_placemark",
+      "style": "placemark",
+      "base_name": "tidepool"
+    },
+    {
+      "url": "assets/icons/caltopo/tidepool_square.png",
+      "filename": "tidepool_square",
+      "style": "square",
+      "base_name": "tidepool"
+    },
+    {
+      "url": "assets/icons/caltopo/tidepool_square-rounded.png",
+      "filename": "tidepool_square-rounded",
+      "style": "square-rounded",
+      "base_name": "tidepool"
+    },
+    {
+      "url": "assets/icons/caltopo/tidepool.png",
+      "filename": "tidepool",
+      "style": "standard",
+      "base_name": "tidepool"
+    },
+    {
+      "url": "assets/icons/caltopo/tidepool_triangle.png",
+      "filename": "tidepool_triangle",
+      "style": "triangle",
+      "base_name": "tidepool"
+    },
+    {
+      "url": "assets/icons/caltopo/tramway_circle.png",
+      "filename": "tramway_circle",
+      "style": "circle",
+      "base_name": "tramway"
+    },
+    {
+      "url": "assets/icons/caltopo/tramway_diamond.png",
+      "filename": "tramway_diamond",
+      "style": "diamond",
+      "base_name": "tramway"
+    },
+    {
+      "url": "assets/icons/caltopo/tramway_hexagon.png",
+      "filename": "tramway_hexagon",
+      "style": "hexagon",
+      "base_name": "tramway"
+    },
+    {
+      "url": "assets/icons/caltopo/tramway_pentagon.png",
+      "filename": "tramway_pentagon",
+      "style": "pentagon",
+      "base_name": "tramway"
+    },
+    {
+      "url": "assets/icons/caltopo/tramway_placemark.png",
+      "filename": "tramway_placemark",
+      "style": "placemark",
+      "base_name": "tramway"
+    },
+    {
+      "url": "assets/icons/caltopo/tramway_square.png",
+      "filename": "tramway_square",
+      "style": "square",
+      "base_name": "tramway"
+    },
+    {
+      "url": "assets/icons/caltopo/tramway_square-rounded.png",
+      "filename": "tramway_square-rounded",
+      "style": "square-rounded",
+      "base_name": "tramway"
+    },
+    {
+      "url": "assets/icons/caltopo/tramway.png",
+      "filename": "tramway",
+      "style": "standard",
+      "base_name": "tramway"
+    },
+    {
+      "url": "assets/icons/caltopo/tramway_triangle.png",
+      "filename": "tramway_triangle",
+      "style": "triangle",
+      "base_name": "tramway"
+    },
+    {
+      "url": "assets/icons/caltopo/trashcan_circle.png",
+      "filename": "trashcan_circle",
+      "style": "circle",
+      "base_name": "trashcan"
+    },
+    {
+      "url": "assets/icons/caltopo/trashcan_diamond.png",
+      "filename": "trashcan_diamond",
+      "style": "diamond",
+      "base_name": "trashcan"
+    },
+    {
+      "url": "assets/icons/caltopo/trashcan_hexagon.png",
+      "filename": "trashcan_hexagon",
+      "style": "hexagon",
+      "base_name": "trashcan"
+    },
+    {
+      "url": "assets/icons/caltopo/trashcan_pentagon.png",
+      "filename": "trashcan_pentagon",
+      "style": "pentagon",
+      "base_name": "trashcan"
+    },
+    {
+      "url": "assets/icons/caltopo/trashcan_placemark.png",
+      "filename": "trashcan_placemark",
+      "style": "placemark",
+      "base_name": "trashcan"
+    },
+    {
+      "url": "assets/icons/caltopo/trashcan_square.png",
+      "filename": "trashcan_square",
+      "style": "square",
+      "base_name": "trashcan"
+    },
+    {
+      "url": "assets/icons/caltopo/trashcan_square-rounded.png",
+      "filename": "trashcan_square-rounded",
+      "style": "square-rounded",
+      "base_name": "trashcan"
+    },
+    {
+      "url": "assets/icons/caltopo/trashcan.png",
+      "filename": "trashcan",
+      "style": "standard",
+      "base_name": "trashcan"
+    },
+    {
+      "url": "assets/icons/caltopo/trashcan_triangle.png",
+      "filename": "trashcan_triangle",
+      "style": "triangle",
+      "base_name": "trashcan"
+    },
+    {
+      "url": "assets/icons/caltopo/waterfalls_circle.png",
+      "filename": "waterfalls_circle",
+      "style": "circle",
+      "base_name": "waterfalls"
+    },
+    {
+      "url": "assets/icons/caltopo/waterfalls_diamond.png",
+      "filename": "waterfalls_diamond",
+      "style": "diamond",
+      "base_name": "waterfalls"
+    },
+    {
+      "url": "assets/icons/caltopo/waterfalls_hexagon.png",
+      "filename": "waterfalls_hexagon",
+      "style": "hexagon",
+      "base_name": "waterfalls"
+    },
+    {
+      "url": "assets/icons/caltopo/waterfalls_pentagon.png",
+      "filename": "waterfalls_pentagon",
+      "style": "pentagon",
+      "base_name": "waterfalls"
+    },
+    {
+      "url": "assets/icons/caltopo/waterfalls_placemark.png",
+      "filename": "waterfalls_placemark",
+      "style": "placemark",
+      "base_name": "waterfalls"
+    },
+    {
+      "url": "assets/icons/caltopo/waterfalls_square.png",
+      "filename": "waterfalls_square",
+      "style": "square",
+      "base_name": "waterfalls"
+    },
+    {
+      "url": "assets/icons/caltopo/waterfalls_square-rounded.png",
+      "filename": "waterfalls_square-rounded",
+      "style": "square-rounded",
+      "base_name": "waterfalls"
+    },
+    {
+      "url": "assets/icons/caltopo/waterfalls.png",
+      "filename": "waterfalls",
+      "style": "standard",
+      "base_name": "waterfalls"
+    },
+    {
+      "url": "assets/icons/caltopo/waterfalls_triangle.png",
+      "filename": "waterfalls_triangle",
+      "style": "triangle",
+      "base_name": "waterfalls"
+    },
+    {
+      "url": "assets/icons/caltopo/wheelchair_circle.png",
+      "filename": "wheelchair_circle",
+      "style": "circle",
+      "base_name": "wheelchair"
+    },
+    {
+      "url": "assets/icons/caltopo/wheelchair_diamond.png",
+      "filename": "wheelchair_diamond",
+      "style": "diamond",
+      "base_name": "wheelchair"
+    },
+    {
+      "url": "assets/icons/caltopo/wheelchair_hexagon.png",
+      "filename": "wheelchair_hexagon",
+      "style": "hexagon",
+      "base_name": "wheelchair"
+    },
+    {
+      "url": "assets/icons/caltopo/wheelchair_pentagon.png",
+      "filename": "wheelchair_pentagon",
+      "style": "pentagon",
+      "base_name": "wheelchair"
+    },
+    {
+      "url": "assets/icons/caltopo/wheelchair_placemark.png",
+      "filename": "wheelchair_placemark",
+      "style": "placemark",
+      "base_name": "wheelchair"
+    },
+    {
+      "url": "assets/icons/caltopo/wheelchair_square.png",
+      "filename": "wheelchair_square",
+      "style": "square",
+      "base_name": "wheelchair"
+    },
+    {
+      "url": "assets/icons/caltopo/wheelchair_square-rounded.png",
+      "filename": "wheelchair_square-rounded",
+      "style": "square-rounded",
+      "base_name": "wheelchair"
+    },
+    {
+      "url": "assets/icons/caltopo/wheelchair.png",
+      "filename": "wheelchair",
+      "style": "standard",
+      "base_name": "wheelchair"
+    },
+    {
+      "url": "assets/icons/caltopo/wheelchair_triangle.png",
+      "filename": "wheelchair_triangle",
+      "style": "triangle",
+      "base_name": "wheelchair"
+    },
+    {
+      "url": "assets/icons/caltopo/wifi_circle.png",
+      "filename": "wifi_circle",
+      "style": "circle",
+      "base_name": "wifi"
+    },
+    {
+      "url": "assets/icons/caltopo/wifi_diamond.png",
+      "filename": "wifi_diamond",
+      "style": "diamond",
+      "base_name": "wifi"
+    },
+    {
+      "url": "assets/icons/caltopo/wifi_hexagon.png",
+      "filename": "wifi_hexagon",
+      "style": "hexagon",
+      "base_name": "wifi"
+    },
+    {
+      "url": "assets/icons/caltopo/wifi_pentagon.png",
+      "filename": "wifi_pentagon",
+      "style": "pentagon",
+      "base_name": "wifi"
+    },
+    {
+      "url": "assets/icons/caltopo/wifi_placemark.png",
+      "filename": "wifi_placemark",
+      "style": "placemark",
+      "base_name": "wifi"
+    },
+    {
+      "url": "assets/icons/caltopo/wifi_square.png",
+      "filename": "wifi_square",
+      "style": "square",
+      "base_name": "wifi"
+    },
+    {
+      "url": "assets/icons/caltopo/wifi_square-rounded.png",
+      "filename": "wifi_square-rounded",
+      "style": "square-rounded",
+      "base_name": "wifi"
+    },
+    {
+      "url": "assets/icons/caltopo/wifi.png",
+      "filename": "wifi",
+      "style": "standard",
+      "base_name": "wifi"
+    },
+    {
+      "url": "assets/icons/caltopo/wifi_triangle.png",
+      "filename": "wifi_triangle",
+      "style": "triangle",
+      "base_name": "wifi"
+    },
+    {
+      "url": "assets/icons/caltopo/wilderness_circle.png",
+      "filename": "wilderness_circle",
+      "style": "circle",
+      "base_name": "wilderness"
+    },
+    {
+      "url": "assets/icons/caltopo/wilderness_diamond.png",
+      "filename": "wilderness_diamond",
+      "style": "diamond",
+      "base_name": "wilderness"
+    },
+    {
+      "url": "assets/icons/caltopo/wilderness_hexagon.png",
+      "filename": "wilderness_hexagon",
+      "style": "hexagon",
+      "base_name": "wilderness"
+    },
+    {
+      "url": "assets/icons/caltopo/wilderness_pentagon.png",
+      "filename": "wilderness_pentagon",
+      "style": "pentagon",
+      "base_name": "wilderness"
+    },
+    {
+      "url": "assets/icons/caltopo/wilderness_placemark.png",
+      "filename": "wilderness_placemark",
+      "style": "placemark",
+      "base_name": "wilderness"
+    },
+    {
+      "url": "assets/icons/caltopo/wilderness_square.png",
+      "filename": "wilderness_square",
+      "style": "square",
+      "base_name": "wilderness"
+    },
+    {
+      "url": "assets/icons/caltopo/wilderness_square-rounded.png",
+      "filename": "wilderness_square-rounded",
+      "style": "square-rounded",
+      "base_name": "wilderness"
+    },
+    {
+      "url": "assets/icons/caltopo/wilderness.png",
+      "filename": "wilderness",
+      "style": "standard",
+      "base_name": "wilderness"
+    },
+    {
+      "url": "assets/icons/caltopo/wilderness_triangle.png",
+      "filename": "wilderness_triangle",
+      "style": "triangle",
+      "base_name": "wilderness"
+    },
+    {
+      "url": "assets/icons/caltopo/windsurfing_circle.png",
+      "filename": "windsurfing_circle",
+      "style": "circle",
+      "base_name": "windsurfing"
+    },
+    {
+      "url": "assets/icons/caltopo/windsurfing_diamond.png",
+      "filename": "windsurfing_diamond",
+      "style": "diamond",
+      "base_name": "windsurfing"
+    },
+    {
+      "url": "assets/icons/caltopo/windsurfing_hexagon.png",
+      "filename": "windsurfing_hexagon",
+      "style": "hexagon",
+      "base_name": "windsurfing"
+    },
+    {
+      "url": "assets/icons/caltopo/windsurfing_pentagon.png",
+      "filename": "windsurfing_pentagon",
+      "style": "pentagon",
+      "base_name": "windsurfing"
+    },
+    {
+      "url": "assets/icons/caltopo/windsurfing_placemark.png",
+      "filename": "windsurfing_placemark",
+      "style": "placemark",
+      "base_name": "windsurfing"
+    },
+    {
+      "url": "assets/icons/caltopo/windsurfing_square.png",
+      "filename": "windsurfing_square",
+      "style": "square",
+      "base_name": "windsurfing"
+    },
+    {
+      "url": "assets/icons/caltopo/windsurfing_square-rounded.png",
+      "filename": "windsurfing_square-rounded",
+      "style": "square-rounded",
+      "base_name": "windsurfing"
+    },
+    {
+      "url": "assets/icons/caltopo/windsurfing.png",
+      "filename": "windsurfing",
+      "style": "standard",
+      "base_name": "windsurfing"
+    },
+    {
+      "url": "assets/icons/caltopo/windsurfing_triangle.png",
+      "filename": "windsurfing_triangle",
+      "style": "triangle",
+      "base_name": "windsurfing"
+    }
+  ]
+}

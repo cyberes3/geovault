@@ -46,7 +46,7 @@
           ></textarea>
         </div>
 
-        <!-- Icon Upload Section (for points) -->
+        <!-- Icon Section (for points) -->
         <div v-if="isPoint">
           <label class="block text-sm font-medium text-gray-700 mb-1">Icon</label>
           
@@ -70,17 +70,17 @@
             </div>
           </div>
 
-          <!-- Icon Upload Input -->
+          <!-- Choose Icon Button -->
           <div class="space-y-2">
-            <input
-              ref="iconFileInput"
-              type="file"
-              accept=".png,.jpg,.jpeg,.ico"
-              @change="handleIconFileSelect"
-              class="block w-full text-sm text-gray-500 file:mr-4 file:py-2 file:px-4 file:rounded-md file:border-0 file:text-sm file:font-semibold file:bg-blue-50 file:text-blue-700 hover:file:bg-blue-100"
-            />
+            <button
+              type="button"
+              @click="openIconPicker"
+              class="w-full px-4 py-2 text-sm font-medium text-white bg-blue-600 border border-transparent rounded-md hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500"
+            >
+              Choose Icon
+            </button>
             <p class="text-xs text-gray-500">
-              Supported formats: PNG, JPG, ICO (max 500KB)
+              Select from preset icons or upload your own
             </p>
           </div>
 
@@ -100,8 +100,8 @@
           </div>
         </div>
 
-        <!-- Icon Color Field (only for points with no PNG icon) -->
-        <div v-if="isPoint && !hasPngIcon && !uploadedIconFile">
+        <!-- Icon Color Field (for points) -->
+        <div v-if="isPoint">
           <label class="block text-sm font-medium text-gray-700 mb-1">Icon Color</label>
           <div class="flex items-center space-x-2">
             <input
@@ -117,9 +117,15 @@
               pattern="^#[0-9A-Fa-f]{6}$"
             />
           </div>
+          <p v-if="hasPngIcon && isBuiltInIcon" class="text-xs text-gray-500 mt-1">
+            Recolors black pixels in the icon
+          </p>
+          <p v-else-if="!hasPngIcon" class="text-xs text-gray-500 mt-1">
+            Color for default circle icon
+          </p>
         </div>
 
-        <!-- Line/Polygon Color and Width Fields -->
+        <!-- Line/Polygon Color Field -->
         <div v-if="isLine || isPolygon">
           <label class="block text-sm font-medium text-gray-700 mb-1">Border Color</label>
           <div class="flex items-center space-x-2">
@@ -138,19 +144,6 @@
               @input="onStrokeColorChange"
             />
           </div>
-        </div>
-
-        <!-- Width Field (for lines and polygons) -->
-        <div v-if="isLine || isPolygon">
-          <label class="block text-sm font-medium text-gray-700 mb-1">Border Width</label>
-          <input
-            v-model.number="formData.strokeWidth"
-            type="number"
-            min="1"
-            max="20"
-            step="1"
-            class="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500"
-          />
         </div>
 
         <!-- Raw JSON Field (Coordinates Only) -->
@@ -201,6 +194,13 @@
         </div>
       </form>
     </div>
+
+    <!-- Icon Picker Dialog -->
+    <IconPickerDialog
+      :is-open="iconPickerOpen"
+      @close="closeIconPicker"
+      @icon-selected="handleIconSelected"
+    />
   </div>
 </template>
 
@@ -209,9 +209,13 @@ import {APIHOST} from '@/config.js'
 import {GeoJSON} from 'ol/format'
 import { getProtectedTags } from '@/utils/configService.js'
 import { filterProtectedTags } from '@/utils/tagUtils.js'
+import IconPickerDialog from './IconPickerDialog.vue'
 
 export default {
   name: 'FeatureEditBox',
+  components: {
+    IconPickerDialog
+  },
   props: {
     feature: {
       type: Object,
@@ -241,7 +245,8 @@ export default {
       iconPreviewUrl: null,
       iconUploadError: '',
       currentIconUrl: null,
-      iconRemoved: false
+      iconRemoved: false,
+      iconPickerOpen: false
     }
   },
   computed: {
@@ -263,6 +268,9 @@ export default {
     },
     isPolygon() {
       return this.geometryType === 'Polygon' || this.geometryType === 'MultiPolygon'
+    },
+    isBuiltInIcon() {
+      return this.currentIconUrl && this.currentIconUrl.startsWith('assets/')
     }
   },
   async mounted() {
@@ -332,8 +340,8 @@ export default {
       for (const propName of iconPropertyNames) {
         if (properties[propName] && typeof properties[propName] === 'string') {
           const iconUrl = properties[propName].trim()
-          // Check if it's an icon (ends with valid extension or starts with /api/data/icons/)
-          if (iconUrl.startsWith('/api/data/icons/')) {
+          // Check if it's an icon (ends with valid extension or starts with /api/data/icons/ or assets/)
+          if (iconUrl.startsWith('/api/data/icons/') || iconUrl.startsWith('assets/')) {
             return true
           }
           // Check if it ends with a valid icon extension
@@ -356,8 +364,8 @@ export default {
         if (properties[propName] && typeof properties[propName] === 'string') {
           const iconUrl = properties[propName].trim()
           if (iconUrl) {
-            // Check if it starts with /api/data/icons/ (uploaded icon)
-            if (iconUrl.startsWith('/api/data/icons/')) {
+            // Check if it starts with /api/data/icons/ (uploaded icon) or assets/ (preset icon)
+            if (iconUrl.startsWith('/api/data/icons/') || iconUrl.startsWith('assets/')) {
               return iconUrl
             }
             // Check if it ends with a valid icon extension
@@ -381,6 +389,14 @@ export default {
       // If relative URL starting with /api/, prepend APIHOST
       if (iconUrl.startsWith('/api/')) {
         return `${APIHOST}${iconUrl}`
+      }
+      // If relative URL starting with /assets/, prepend APIHOST
+      if (iconUrl.startsWith('/assets/')) {
+        return `${APIHOST}${iconUrl}`
+      }
+      // If relative URL starting with assets/, prepend /assets/
+      if (iconUrl.startsWith('assets/')) {
+        return `${APIHOST}/${iconUrl}`
       }
       // Fallback: assume it's a relative path and prepend APIHOST
       return `${APIHOST}${iconUrl.startsWith('/') ? '' : '/'}${iconUrl}`
@@ -641,13 +657,27 @@ export default {
 
         // Handle icon for points
         if (this.isPoint) {
-          // If icon was uploaded, set it
+          // If icon was uploaded via old file input, set it
           if (uploadedIconUrl) {
             // Set icon in the first available property name
             formFieldUpdates['icon'] = uploadedIconUrl
-            // Also clear marker-color since we have an icon
+            // Uploaded icons can't be recolored, so clear marker-color
             delete formFieldUpdates['marker-color']
-          } 
+          }
+          // If icon was selected from picker (preset or uploaded)
+          else if (this.currentIconUrl && !this.iconRemoved) {
+            // Check if it's a preset icon (starts with assets/) or uploaded icon (starts with /api/data/icons/)
+            if (this.currentIconUrl.startsWith('assets/') || this.currentIconUrl.startsWith('/api/data/icons/')) {
+              formFieldUpdates['icon'] = this.currentIconUrl
+              // For built-in icons, save marker-color for recoloring
+              if (this.currentIconUrl.startsWith('assets/')) {
+                formFieldUpdates['marker-color'] = this.formData.markerColor
+              } else {
+                // Uploaded icons can't be recolored
+                delete formFieldUpdates['marker-color']
+              }
+            }
+          }
           // If icon was removed (user clicked remove button)
           else if (this.iconRemoved) {
             // Remove icon by setting it to empty string
@@ -668,10 +698,10 @@ export default {
           }
         }
 
-        // Update stroke and stroke-width for lines and polygons
+        // Update stroke for lines and polygons (stroke-width is normalized on import, don't change it)
         if (this.isLine || this.isPolygon) {
           formFieldUpdates.stroke = this.formData.strokeColor
-          formFieldUpdates['stroke-width'] = this.formData.strokeWidth
+          // Don't update stroke-width - it's normalized on import
         }
 
         // Update fill and fill-opacity for polygons
@@ -726,6 +756,10 @@ export default {
           } else if (this.iconRemoved) {
             this.currentIconUrl = null
             this.hasPngIcon = false
+          } else if (this.currentIconUrl && (this.currentIconUrl.startsWith('assets/') || this.currentIconUrl.startsWith('/api/data/icons/'))) {
+            // Icon was selected from picker (preset or uploaded) - state already set in handleIconSelected
+            this.hasPngIcon = true
+            this.iconRemoved = false
           }
         }
         
@@ -797,6 +831,33 @@ export default {
       }
     },
 
+    openIconPicker() {
+      this.iconPickerOpen = true
+    },
+    closeIconPicker() {
+      this.iconPickerOpen = false
+    },
+    handleIconSelected(iconUrl) {
+      // Set the selected icon URL
+      this.uploadedIconFile = null
+      this.iconPreviewUrl = null
+      this.iconUploadError = ''
+      
+      // If it's a preset icon (starts with assets/), we need to handle it differently
+      // For preset icons, we'll set it directly as the icon URL
+      // For uploaded icons (starts with /api/data/icons/), it's already handled
+      if (iconUrl.startsWith('assets/')) {
+        // Preset icon - set it directly
+        this.currentIconUrl = iconUrl
+        this.hasPngIcon = true
+        this.iconRemoved = false
+      } else if (iconUrl.startsWith('/api/data/icons/')) {
+        // Uploaded icon - same as before
+        this.currentIconUrl = iconUrl
+        this.hasPngIcon = true
+        this.iconRemoved = false
+      }
+    },
     getCsrfToken() {
       // Get CSRF token from cookies
       const name = 'csrftoken'

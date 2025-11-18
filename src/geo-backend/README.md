@@ -47,15 +47,15 @@ This could literally take days to import the data up, so be patient.
 
 1. Install Docker
 2. `mkdir -p /srv/docker-data/nominatim/db /srv/docker-data/nominatim/flatnode /srv/docker-data/overpass`
-3. `docker-compose -f nominatim.yml up`
+3. `docker compose -f nominatim.yml up`
 4. `./download-overpass-data.sh`
-5. `docker-compose -f overpass.yml up`
+5. `docker compose -f overpass.yml up`
 6. Wait 2 days and come back
 
 This will run the containers in the foreground so you can monitor their progress. `CTRL+C` the containers when they have
 finished building their databases and then start them normally:
 
 ```shell
-docker-compose -f nominatim.yml up -d
-docker-compose -f overpass.yml up -d
+docker compose -f nominatim.yml up -d
+docker compose -f overpass.yml up -d
 ```
