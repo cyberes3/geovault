@@ -1,12 +1,11 @@
 insane linework test isn't showing up on the map
-Auto parse kml point color from url
-Batch loading features on map (split into chunks of 100, account for vertices in polys and lines)
-Up to 3 concurrent feature loading requests. Have a 5 second timeout. Don't cancel requests when the user scrolls map
+Auto parse kml point color from url and use that if the user doesn't want to import map icons
 Error message on map when loading fails
 Error message on map when an exception is encountered
-Allow uploading custom PNG icons
 Handle clicking where multiple points are (see how caltopo does it)
 Allow skipping items during import
+Make sure custom caltopo icons (non-dot) are imported correctly
+On map feature edit view allow uploading a feature to replace the spatial data of that feature. If multiple features in the new file present them with all the features in the uploaded file and make them choose the correct one
 
 Later:
 For tracks, set the created date to the timestamp of the first point in the track

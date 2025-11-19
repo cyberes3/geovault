@@ -16,7 +16,8 @@ from .kmz_processor import KMZProcessor
 
 def get_processor(file_data: Union[bytes, str], filename: str = "", 
                   job_id: Optional[str] = None,
-                  status_tracker: Optional[ProcessingStatusTracker] = None) -> BaseProcessor:
+                  status_tracker: Optional[ProcessingStatusTracker] = None,
+                  minimal_processing: bool = False) -> BaseProcessor:
     """
     Factory function to create the appropriate processor for a file type.
     
@@ -25,6 +26,7 @@ def get_processor(file_data: Union[bytes, str], filename: str = "",
         filename: Optional filename for type detection
         job_id: Optional job ID for cancellation checking
         status_tracker: Optional status tracker for cancellation checking
+        minimal_processing: If True, skip tag generation and other expensive operations
         
     Returns:
         Appropriate processor instance
@@ -35,11 +37,11 @@ def get_processor(file_data: Union[bytes, str], filename: str = "",
     file_type = detect_file_type(file_data, filename)
 
     if file_type == FileType.KML:
-        return KMLProcessor(file_data, filename, job_id=job_id, status_tracker=status_tracker)
+        return KMLProcessor(file_data, filename, job_id=job_id, status_tracker=status_tracker, minimal_processing=minimal_processing)
     elif file_type == FileType.KMZ:
-        return KMZProcessor(file_data, filename, job_id=job_id, status_tracker=status_tracker)
+        return KMZProcessor(file_data, filename, job_id=job_id, status_tracker=status_tracker, minimal_processing=minimal_processing)
     elif file_type == FileType.GPX:
-        return GPXProcessor(file_data, filename, job_id=job_id, status_tracker=status_tracker)
+        return GPXProcessor(file_data, filename, job_id=job_id, status_tracker=status_tracker, minimal_processing=minimal_processing)
     else:
         raise ValueError(f"Unsupported file type: {file_type}")
 

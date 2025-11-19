@@ -35,7 +35,8 @@ class BaseProcessor(ABC):
 
     def __init__(self, file_data: Union[bytes, str], filename: str = "", 
                  job_id: Optional[str] = None, 
-                 status_tracker: Optional[ProcessingStatusTracker] = None):
+                 status_tracker: Optional[ProcessingStatusTracker] = None,
+                 minimal_processing: bool = False):
         """
         Initialize the processor.
         
@@ -44,6 +45,7 @@ class BaseProcessor(ABC):
             filename: Original filename for context
             job_id: Optional job ID for cancellation checking
             status_tracker: Optional status tracker for cancellation checking
+            minimal_processing: If True, skip tag generation and other expensive operations
         """
         self.file_data = file_data
         self.filename = filename
@@ -53,6 +55,7 @@ class BaseProcessor(ABC):
         self.processed_features = []
         self.job_id = job_id
         self.status_tracker = status_tracker
+        self.minimal_processing = minimal_processing
         self._executor = None  # Store executor reference for proper shutdown
 
     def detect_file_type(self) -> FileType:
@@ -164,56 +167,59 @@ class BaseProcessor(ABC):
                     # Generate properties with appropriate styling based on file type and feature geometry
                     split_feature['properties'] = geojson_property_generation(split_feature)
 
-                    # Generate all auto tags (type, import-year, import-month, geocoding) using generate_auto_tags()
-                    # Check for cancellation before tag generation
-                    if self._is_cancelled():
-                        break
-                    
-                    try:
-                        geometry_type = split_feature['geometry']['type'].lower()
+                    # Skip tag generation in minimal processing mode
+                    if not self.minimal_processing:
+                        # Generate all auto tags (type, import-year, import-month, geocoding) using generate_auto_tags()
+                        # Check for cancellation before tag generation
+                        if self._is_cancelled():
+                            break
                         
-                        # Determine the appropriate feature class
-                        feature_class = None
-                        if geometry_type in ['point', 'multipoint']:
-                            feature_class = PointFeature
-                        elif geometry_type == 'linestring':
-                            feature_class = LineStringFeature
-                        elif geometry_type == 'multilinestring':
-                            feature_class = MultiLineStringFeature
-                        elif geometry_type in ['polygon', 'multipolygon']:
-                            feature_class = PolygonFeature
-                        
-                        if feature_class:
-                            # Create feature instance for tag generation
-                            feature_instance = feature_class(**split_feature)
+                        try:
+                            geometry_type = split_feature['geometry']['type'].lower()
                             
-                            # Check for cancellation before generating tags
-                            if self._is_cancelled():
-                                break
+                            # Determine the appropriate feature class
+                            feature_class = None
+                            if geometry_type in ['point', 'multipoint']:
+                                feature_class = PointFeature
+                            elif geometry_type == 'linestring':
+                                feature_class = LineStringFeature
+                            elif geometry_type == 'multilinestring':
+                                feature_class = MultiLineStringFeature
+                            elif geometry_type in ['polygon', 'multipolygon']:
+                                feature_class = PolygonFeature
                             
-                            # Generate all auto tags (includes type, import-year, import-month, and geocoding)
-                            auto_tags = generate_auto_tags(feature_instance, feature_log)
-                            
-                            # Check for cancellation after tag generation
-                            if self._is_cancelled():
-                                break
-                            
-                            # Merge auto tags with existing tags, avoiding duplicates
-                            existing_tags = split_feature['properties'].get('tags', [])
-                            if not isinstance(existing_tags, list):
-                                existing_tags = []
-                            # Combine existing tags with auto tags, avoiding duplicates
-                            all_tags = list(existing_tags) + [tag for tag in auto_tags if tag not in existing_tags]
-                            split_feature['properties']['tags'] = all_tags
-                    except Exception as tag_error:
-                        # Log error but don't fail the feature processing
-                        feature_name = split_feature.get('properties', {}).get('name', 'Unnamed')
-                        feature_log.add(
-                            f"Tag generation failed for feature '{feature_name}': {str(tag_error)}",
-                            "Tag Generation",
-                            DatabaseLogLevel.WARNING
-                        )
-                        logger.warning(f"Tag generation failed for feature '{feature_name}': {tag_error}")
+                            if feature_class:
+                                # Create feature instance for tag generation
+                                feature_instance = feature_class(**split_feature)
+                                
+                                # Check for cancellation before generating tags
+                                if self._is_cancelled():
+                                    break
+                                
+                                # Generate all auto tags (includes type, import-year, import-month, and geocoding)
+                                auto_tags = generate_auto_tags(feature_instance, feature_log)
+                                
+                                # Check for cancellation after tag generation
+                                if self._is_cancelled():
+                                    break
+                                
+                                # Merge auto tags with existing tags, avoiding duplicates
+                                existing_tags = split_feature['properties'].get('tags', [])
+                                if not isinstance(existing_tags, list):
+                                    existing_tags = []
+                                # Combine existing tags with auto tags, avoiding duplicates
+                                all_tags = list(existing_tags) + [tag for tag in auto_tags if tag not in existing_tags]
+                                split_feature['properties']['tags'] = all_tags
+                        except Exception as tag_error:
+                            # Log error but don't fail the feature processing
+                            feature_name = split_feature.get('properties', {}).get('name', 'Unnamed')
+                            feature_log.add(
+                                f"Tag generation failed for feature '{feature_name}': {str(tag_error)}",
+                                "Tag Generation",
+                                DatabaseLogLevel.WARNING
+                            )
+                            logger.warning(f"Tag generation failed for feature '{feature_name}': {tag_error}")
+                    # In minimal processing mode, preserve existing tags from file if any, but don't generate new ones
 
                     # Check for cancellation before finalizing feature
                     if self._is_cancelled():

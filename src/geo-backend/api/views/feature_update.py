@@ -6,11 +6,11 @@ from django.http import JsonResponse
 from django.views.decorators.csrf import csrf_protect
 from django.views.decorators.http import require_http_methods
 
-from api.models import FeatureStore
+from api.models import FeatureStore, ImportQueue
 from geo_lib.const_strings import CONST_INTERNAL_TAGS, filter_protected_tags, is_protected_tag
 from geo_lib.feature_id import generate_feature_hash
 from geo_lib.logging.console import get_access_logger
-from geo_lib.types.feature import PointFeature, LineStringFeature, MultiLineStringFeature, PolygonFeature
+from geo_lib.types.feature import PointFeature, LineStringFeature, MultiLineStringFeature, PolygonFeature, GeoFeatureSupported
 from geo_lib.validation.geometry_validation import (
     normalize_and_validate_feature_update,
     GeometryValidationError
@@ -408,5 +408,378 @@ def update_feature(request, feature_id):
         return JsonResponse({
             'success': False,
             'error': 'Failed to update feature',
+            'code': 500
+        }, status=500)
+
+
+@login_required_401
+@csrf_protect
+@require_http_methods(["POST"])
+def apply_replacement_geometry(request, feature_id):
+    """
+    API endpoint to apply replacement geometry from an ImportQueue entry to an existing feature.
+    Only updates the geometry, preserving all properties (name, description, tags, styling, etc.).
+
+    URL parameter:
+    - feature_id: ID of the feature to update
+
+    Request body: JSON object with:
+    - import_queue_id: ID of the ImportQueue entry containing the replacement features
+    - feature_index: Index of the feature in the ImportQueue.geofeatures array to use
+    """
+    try:
+        # Get the feature from database
+        feature = FeatureStore.objects.get(id=feature_id, user=request.user)
+
+        # Parse request body
+        try:
+            request_data = json.loads(request.body)
+        except json.JSONDecodeError:
+            return JsonResponse({
+                'success': False,
+                'error': 'Invalid JSON in request body',
+                'code': 400
+            }, status=400)
+
+        # Validate required fields
+        if 'import_queue_id' not in request_data or 'feature_index' not in request_data:
+            return JsonResponse({
+                'success': False,
+                'error': 'Missing required fields: import_queue_id and feature_index',
+                'code': 400
+            }, status=400)
+
+        import_queue_id = request_data['import_queue_id']
+        feature_index = request_data['feature_index']
+
+        # Validate feature_index is an integer
+        try:
+            feature_index = int(feature_index)
+        except (ValueError, TypeError):
+            return JsonResponse({
+                'success': False,
+                'error': 'feature_index must be an integer',
+                'code': 400
+            }, status=400)
+
+        # Get the ImportQueue entry
+        try:
+            import_queue = ImportQueue.objects.get(id=import_queue_id, user=request.user)
+        except ImportQueue.DoesNotExist:
+            return JsonResponse({
+                'success': False,
+                'error': 'ImportQueue entry not found or access denied',
+                'code': 404
+            }, status=404)
+
+        # Verify this is a replacement upload for this feature
+        if import_queue.replacement != feature_id:
+            return JsonResponse({
+                'success': False,
+                'error': 'ImportQueue entry is not a replacement for this feature',
+                'code': 400
+            }, status=400)
+
+        # Get the features from the ImportQueue
+        geofeatures = import_queue.geofeatures
+        if not isinstance(geofeatures, list) or len(geofeatures) == 0:
+            return JsonResponse({
+                'success': False,
+                'error': 'ImportQueue entry has no features',
+                'code': 400
+            }, status=400)
+
+        # Validate feature_index is within bounds
+        if feature_index < 0 or feature_index >= len(geofeatures):
+            return JsonResponse({
+                'success': False,
+                'error': f'feature_index {feature_index} is out of bounds (0-{len(geofeatures)-1})',
+                'code': 400
+            }, status=400)
+
+        # Get the selected replacement feature
+        replacement_feature = geofeatures[feature_index]
+        if not isinstance(replacement_feature, dict) or 'geometry' not in replacement_feature:
+            return JsonResponse({
+                'success': False,
+                'error': 'Selected feature has invalid structure or missing geometry',
+                'code': 400
+            }, status=400)
+
+        # Get the replacement geometry
+        replacement_geometry = replacement_feature.get('geometry')
+        if not replacement_geometry:
+            return JsonResponse({
+                'success': False,
+                'error': 'Selected feature has no geometry',
+                'code': 400
+            }, status=400)
+
+        # Get original feature data
+        original_geojson = feature.geojson.copy()
+        original_properties = original_geojson.get('properties', {})
+
+        # Create updated feature with replacement geometry but original properties
+        updated_feature = {
+            'type': 'Feature',
+            'geometry': replacement_geometry,
+            'properties': original_properties
+        }
+
+        # Validate the updated feature
+        try:
+            feature_data = normalize_and_validate_feature_update(updated_feature, original_properties)
+        except GeometryValidationError as e:
+            return JsonResponse({
+                'success': False,
+                'error': str(e),
+                'code': 400
+            }, status=400)
+
+        # Validate feature structure using feature classes
+        try:
+            geom_type = feature_data.get('geometry', {}).get('type', '').lower()
+            feature_class = None
+
+            # GeometryCollection is not supported by the feature classes, but we allow it
+            if geom_type == 'geometrycollection':
+                # For GeometryCollection, we do basic validation but skip feature class validation
+                geom_data = feature_data.get('geometry', {})
+                if not geom_data.get('geometries') or not isinstance(geom_data.get('geometries'), list):
+                    return JsonResponse({
+                        'success': False,
+                        'error': 'GeometryCollection must have a geometries array',
+                        'code': 400
+                    }, status=400)
+                # Skip feature class validation for GeometryCollection
+                feature_class = None
+            else:
+                match geom_type:
+                    case 'point' | 'multipoint':
+                        feature_class = PointFeature
+                    case 'linestring':
+                        feature_class = LineStringFeature
+                    case 'multilinestring':
+                        feature_class = MultiLineStringFeature
+                    case 'polygon' | 'multipolygon':
+                        feature_class = PolygonFeature
+                    case _:
+                        return JsonResponse({
+                            'success': False,
+                            'error': f'Unsupported geometry type: {geom_type}',
+                            'code': 400
+                        }, status=400)
+
+            # Validate by instantiating the feature class (this will raise ValidationError if invalid)
+            # Skip for GeometryCollection as it's not supported by feature classes
+            if feature_class is not None:
+                validated_feature = feature_class(**feature_data)
+                # Convert back to dict for storage (this ensures proper structure)
+                feature_data = json.loads(validated_feature.model_dump_json())
+
+        except Exception as e:
+            logger.error(f"Feature validation error for replacement feature {feature_id}: {str(e)}")
+            return JsonResponse({
+                'success': False,
+                'error': f'Feature validation failed: {str(e)}',
+                'code': 400
+            }, status=400)
+
+        # Update the feature's geometry (preserving all properties)
+        feature.geojson = feature_data
+
+        # Regenerate the hash for the updated feature
+        feature.geojson_hash = generate_feature_hash(feature_data)
+
+        # Update the geometry field if coordinates changed
+        try:
+            geom_data = feature_data.get('geometry', {})
+            if geom_data and geom_data.get('type'):
+                # Handle GeometryCollection separately (not supported by GEOSGeometry)
+                if geom_data['type'] == 'GeometryCollection':
+                    # For GeometryCollection, we can't use GEOSGeometry, so skip geometry field update
+                    # The geometry will be stored in the geojson field
+                    pass
+                elif geom_data.get('coordinates'):
+                    # Ensure coordinates have 3 dimensions for consistency
+                    coords = geom_data['coordinates']
+                    if geom_data['type'] == 'Point':
+                        if len(coords) == 2:
+                            coords = [coords[0], coords[1], 0.0]
+                    elif geom_data['type'] == 'LineString':
+                        geom_data['coordinates'] = [
+                            [coord[0], coord[1], coord[2] if len(coord) > 2 else 0.0]
+                            for coord in coords
+                        ]
+                    elif geom_data['type'] == 'Polygon':
+                        geom_data['coordinates'] = [
+                            [
+                                [coord[0], coord[1], coord[2] if len(coord) > 2 else 0.0]
+                                for coord in ring
+                            ]
+                            for ring in coords
+                        ]
+
+                    feature.geometry = GEOSGeometry(json.dumps(geom_data))
+        except Exception as e:
+            logger.warning(f"Error updating geometry for feature {feature_id}: {e}")
+            # Continue without updating geometry if there's an error
+
+        # Save the updated feature
+        feature.save()
+
+        # Delete the ImportQueue row after successful application
+        import_queue.delete()
+
+        return JsonResponse({
+            'success': True,
+            'message': 'Replacement geometry applied successfully',
+            'feature_id': feature.id
+        })
+
+    except FeatureStore.DoesNotExist:
+        return JsonResponse({
+            'success': False,
+            'error': 'Feature not found or access denied',
+            'code': 404
+        }, status=404)
+    except Exception as e:
+        logger.error(f"Error applying replacement geometry for feature {feature_id}: {traceback.format_exc()}")
+        return JsonResponse({
+            'success': False,
+            'error': 'Failed to apply replacement geometry',
+            'code': 500
+        }, status=500)
+
+
+@login_required_401
+@csrf_protect
+@require_http_methods(["POST"])
+def regenerate_feature_tags(request, feature_id):
+    """
+    API endpoint to regenerate automatic tags for a feature based on its current geometry.
+    Preserves existing non-auto tags (user-generated tags that don't match auto tag patterns).
+
+    URL parameter:
+    - feature_id: ID of the feature to regenerate tags for
+    """
+    try:
+        # Get the feature from database
+        feature = FeatureStore.objects.get(id=feature_id, user=request.user)
+
+        # Get the feature's GeoJSON data
+        geojson_data = feature.geojson
+
+        # Convert to feature class instance for tag generation
+        geom_type = geojson_data.get('geometry', {}).get('type', '').lower()
+        feature_class = None
+
+        match geom_type:
+            case 'point' | 'multipoint':
+                feature_class = PointFeature
+            case 'linestring':
+                feature_class = LineStringFeature
+            case 'multilinestring':
+                feature_class = MultiLineStringFeature
+            case 'polygon' | 'multipolygon':
+                feature_class = PolygonFeature
+            case _:
+                return JsonResponse({
+                    'success': False,
+                    'error': f'Unsupported geometry type: {geom_type}',
+                    'code': 400
+                }, status=400)
+
+        if feature_class is None:
+            return JsonResponse({
+                'success': False,
+                'error': 'Could not determine feature class',
+                'code': 400
+            }, status=400)
+
+        # Create feature instance
+        try:
+            feature_instance: GeoFeatureSupported = feature_class(**geojson_data)
+        except Exception as e:
+            logger.error(f"Error creating feature instance for tag regeneration {feature_id}: {str(e)}")
+            return JsonResponse({
+                'success': False,
+                'error': f'Invalid feature structure: {str(e)}',
+                'code': 400
+            }, status=400)
+
+        # Get existing tags
+        existing_tags = geojson_data.get('properties', {}).get('tags', [])
+        if not isinstance(existing_tags, list):
+            existing_tags = []
+
+        # Identify auto tags and non-auto tags
+        # Auto tags match patterns: type:*, import-year:*, import-month:*, or location tags (contain : and start with location identifiers)
+        auto_tag_patterns = ['type:', 'import-year:', 'import-month:']
+        non_auto_tags = []
+        for tag in existing_tags:
+            if not isinstance(tag, str):
+                continue
+            # Check if it's an auto tag
+            is_auto_tag = any(tag.startswith(pattern) for pattern in auto_tag_patterns)
+            # Location tags typically contain ':' and are generated by geocoding
+            # They usually have patterns like "country:*", "state:*", "city:*", etc.
+            if not is_auto_tag and ':' in tag:
+                # Could be a location tag, but we'll be conservative and only remove known auto patterns
+                # For now, we'll keep tags with ':' that don't match auto patterns as user tags
+                # This is safer - users can manually remove location tags if needed
+                pass
+            if not is_auto_tag:
+                non_auto_tags.append(tag)
+
+        # Generate new auto tags
+        from geo_lib.processing.tagging import generate_auto_tags
+        new_auto_tags = generate_auto_tags(feature_instance, import_log=None)
+
+        # Combine non-auto tags with new auto tags, avoiding duplicates
+        all_tags = list(non_auto_tags)
+        for tag in new_auto_tags:
+            if tag not in all_tags:
+                all_tags.append(tag)
+
+        # Preserve protected tags from original feature
+        protected_tags = [tag for tag in existing_tags if is_protected_tag(tag, CONST_INTERNAL_TAGS)]
+        
+        # Combine: non-auto tags + new auto tags + protected tags (avoiding duplicates)
+        final_tags = list(non_auto_tags)
+        for tag in new_auto_tags:
+            if tag not in final_tags:
+                final_tags.append(tag)
+        for tag in protected_tags:
+            if tag not in final_tags:
+                final_tags.append(tag)
+
+        # Update the feature's tags
+        if 'properties' not in geojson_data:
+            geojson_data['properties'] = {}
+        geojson_data['properties']['tags'] = final_tags
+
+        # Update the feature
+        feature.geojson = geojson_data
+        feature.save()
+
+        return JsonResponse({
+            'success': True,
+            'message': 'Feature tags regenerated successfully',
+            'feature_id': feature.id,
+            'tags': final_tags
+        })
+
+    except FeatureStore.DoesNotExist:
+        return JsonResponse({
+            'success': False,
+            'error': 'Feature not found or access denied',
+            'code': 404
+        }, status=404)
+    except Exception as e:
+        logger.error(f"Error regenerating tags for feature {feature_id}: {traceback.format_exc()}")
+        return JsonResponse({
+            'success': False,
+            'error': 'Failed to regenerate feature tags',
             'code': 500
         }, status=500)

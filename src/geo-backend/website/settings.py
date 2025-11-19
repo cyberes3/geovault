@@ -54,13 +54,14 @@ INSTALLED_APPS = [
 
 MIDDLEWARE = [
     'django.middleware.security.SecurityMiddleware',
+    'website.middleware.LoggingMiddleware',  # Log BEFORE WhiteNoise to catch static file requests
+    'whitenoise.middleware.WhiteNoiseMiddleware',  # Serve static files in production
     'django.contrib.sessions.middleware.SessionMiddleware',
     'django.middleware.common.CommonMiddleware',
     'django.middleware.csrf.CsrfViewMiddleware',
     'django.contrib.auth.middleware.AuthenticationMiddleware',
     'django.contrib.messages.middleware.MessageMiddleware',
     'django.middleware.clickjacking.XFrameOptionsMiddleware',
-    'website.middleware.LoggingMiddleware',
     'website.middleware.CustomHeaderMiddleware',
 ]
 
@@ -132,6 +133,11 @@ USE_TZ = True
 
 STATIC_URL = 'static/'
 
+# WhiteNoise configuration for serving static files in production
+# Using CompressedStaticFilesStorage to serve directly from STATICFILES_DIRS
+# without requiring collectstatic (no manifest file needed)
+STATICFILES_STORAGE = 'whitenoise.storage.CompressedStaticFilesStorage'
+
 # Cache configuration (using dummy cache since we removed caching)
 CACHES = {
     'default': {
@@ -163,7 +169,8 @@ LOGOUT_REDIRECT_URL = '/#/'
 # TODO: https://realpython.com/django-user-management/#send-password-reset-links
 
 STATICFILES_DIRS = [
-    os.path.join(BASE_DIR, '../geo-frontend/dist/static'),
+    os.path.join(BASE_DIR, '../geo-frontend/dist'),  # Include dist root for favicon.ico
+    os.path.join(BASE_DIR, '../geo-frontend/dist/static'),  # Vue.js static assets
     os.path.join(BASE_DIR, 'assets'),
 ]
 
@@ -273,7 +280,7 @@ LOGGING = {
     },
     'handlers': {
         'console': {
-            'level': 'INFO',
+            'level': 'DEBUG',  # Set to DEBUG for troubleshooting
             'class': 'logging.StreamHandler',
             'formatter': 'console',
         },
@@ -300,7 +307,13 @@ LOGGING = {
         # Job logging - Background job processing
         'job': {
             'handlers': ['console'],
-            'level': 'INFO',
+            'level': 'DEBUG',  # Set to DEBUG for troubleshooting
+            'propagate': False,
+        },
+        # API app logging - App initialization, background services
+        'api.apps': {
+            'handlers': ['console'],
+            'level': 'DEBUG',  # Set to DEBUG for troubleshooting
             'propagate': False,
         },
         # Database logging - Database operations, queries

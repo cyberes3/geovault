@@ -43,10 +43,11 @@ class ImportHistoryModule(BaseWebSocketModule):
     @database_sync_to_async
     def get_import_history_data(self):
         """Get current import history data for the user."""
-        # Get user's imported items from database
+        # Get user's imported items from database (exclude replacement uploads)
         user_items = ImportQueue.objects.filter(
             user=self.user,
-            imported=True
+            imported=True,
+            replacement__isnull=True
         ).order_by('-timestamp').values(
             'id', 'original_filename', 'timestamp'
         )

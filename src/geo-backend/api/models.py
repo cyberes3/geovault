@@ -17,6 +17,7 @@ class ImportQueue(django_models.Model):
     raw_kml = django_models.TextField()
     geojson_hash = django_models.CharField(max_length=64, null=True, blank=True, help_text="SHA-256 hash of the normalized GeoJSON FeatureCollection content")
     log_id = django_models.UUIDField(default=uuid.uuid4, unique=True, help_text="UUID to group related log entries", null=True)
+    replacement = django_models.IntegerField(null=True, blank=True, help_text="ID of the existing feature being updated with this replacement upload")
     timestamp = django_models.DateTimeField(auto_now_add=True)
 
     class Meta:

@@ -18,14 +18,15 @@ from django.conf.urls import include
 from django.contrib import admin
 from django.urls import path, re_path
 
-from website.views import index, standalone_map, tile_proxy, get_tile_sources, serve_assets
+from website.views import index, standalone_map, tile_proxy, get_tile_sources, serve_assets, serve_favicon
 from website.exception_handler import custom_exception_handler
 
 # Set custom exception handler
 handler500 = custom_exception_handler
 
 urlpatterns = [
-    path('', index),
+    path('favicon.ico', serve_favicon, name='favicon'),
+    path('', index, name='index'),  # Root route
     path('standalone_map/', standalone_map, name='standalone_map'),
     re_path(r"^account/", include("django.contrib.auth.urls")),
     path('admin/', admin.site.urls),
@@ -33,5 +34,9 @@ urlpatterns = [
     path('api/data/', include("api.urls")),
     path('api/tiles/sources/', get_tile_sources, name='get_tile_sources'),
     path('api/tiles/<str:service>/<int:z>/<int:x>/<int:y>', tile_proxy, name='tile_proxy'),
+    # Catch-all route for Vue.js router (must be last)
+    # Serves index.html for any route that doesn't match above patterns
+    # Vue router uses hash-based routing, so this handles direct navigation to non-API routes
+    re_path(r'^(?!api/|admin/|account/|static/).+$', index),
     # re_path(r'^assets/(?P<path>.*)$', serve_assets, name='serve_assets'),
 ]

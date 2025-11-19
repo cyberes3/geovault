@@ -158,7 +158,21 @@
 
         <!-- Raw JSON Field (Coordinates Only) -->
         <div>
-          <label class="block text-sm font-medium text-gray-700 mb-1">Coordinates</label>
+          <div class="flex items-center justify-between mb-1">
+            <label class="block text-sm font-medium text-gray-700">Coordinates</label>
+            <button
+              type="button"
+              @click="openReplacementDialog"
+              :disabled="isSaving"
+              class="text-xs px-2 py-1 text-blue-600 hover:text-blue-800 hover:bg-blue-50 rounded-md focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 disabled:opacity-50 disabled:cursor-not-allowed"
+              title="Update spatial data from KMZ/KML/GPX file"
+            >
+              <svg class="w-4 h-4 inline mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12"></path>
+              </svg>
+              Update Spatial Data
+            </button>
+          </div>
           <textarea
             v-model="rawJsonInput"
             rows="6"
@@ -208,6 +222,14 @@
       @close="closeIconPicker"
       @icon-selected="handleIconSelected"
     />
+
+    <!-- Replacement Feature Dialog -->
+    <ReplacementFeatureDialog
+      :is-open="replacementDialogOpen"
+      :feature-id="featureId"
+      @close="closeReplacementDialog"
+      @applied="handleReplacementApplied"
+    />
   </div>
 </template>
 
@@ -217,6 +239,7 @@ import {GeoJSON} from 'ol/format'
 import { getProtectedTags } from '@/utils/configService.js'
 import { filterProtectedTags, isProtectedTag } from '@/utils/tagUtils.js'
 import IconPickerDialog from './IconPickerDialog.vue'
+import ReplacementFeatureDialog from './ReplacementFeatureDialog.vue'
 
 // Helper functions for icon type checking
 function isSystemIcon(iconUrl) {
@@ -230,7 +253,8 @@ function isUserIcon(iconUrl) {
 export default {
   name: 'FeatureEditBox',
   components: {
-    IconPickerDialog
+    IconPickerDialog,
+    ReplacementFeatureDialog
   },
   props: {
     feature: {
@@ -261,10 +285,16 @@ export default {
       iconUploadError: '',
       currentIconUrl: null,
       iconRemoved: false,
-      iconPickerOpen: false
+      iconPickerOpen: false,
+      replacementDialogOpen: false
     }
   },
   computed: {
+    featureId() {
+      if (!this.feature) return null
+      const properties = this.feature.get('properties') || {}
+      return properties._id
+    },
     geometryType() {
       if (!this.feature) return null
       const geometry = this.feature.getGeometry()
@@ -894,6 +924,22 @@ export default {
         }
       }
       return cookieValue || ''
+    },
+    openReplacementDialog() {
+      if (!this.featureId) {
+        this.errorMessage = 'Feature ID not found. Cannot update spatial data.'
+        return
+      }
+      this.replacementDialogOpen = true
+    },
+    closeReplacementDialog() {
+      this.replacementDialogOpen = false
+    },
+    handleReplacementApplied() {
+      // Refresh the feature data after replacement is applied
+      // The parent component should handle refreshing the map
+      this.$emit('saved')
+      this.closeReplacementDialog()
     }
   }
 }

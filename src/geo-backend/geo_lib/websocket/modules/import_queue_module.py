@@ -44,10 +44,11 @@ class ImportQueueModule(BaseWebSocketModule):
     @database_sync_to_async
     def get_import_queue_data(self):
         """Get current import queue data for the user."""
-        # Get user items from database
+        # Get user items from database (exclude replacement uploads)
         user_items = ImportQueue.objects.filter(
             user=self.user,
-            imported=False
+            imported=False,
+            replacement__isnull=True
         ).order_by('-timestamp').values(
             'id', 'geofeatures', 'original_filename', 'geojson_hash',
             'log_id', 'timestamp', 'imported', 'unparsable'

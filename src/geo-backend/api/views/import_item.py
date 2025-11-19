@@ -505,11 +505,23 @@ def upload_item(request):
             # Read file data after validation
             file_data = uploaded_file.read()
 
+            # Get optional replacement parameter (feature ID being updated)
+            replacement_feature_id = None
+            if 'replacement' in request.POST:
+                try:
+                    replacement_feature_id = int(request.POST['replacement'])
+                except (ValueError, TypeError):
+                    return JsonResponse({
+                        'success': False,
+                        'msg': 'Invalid replacement feature ID',
+                        'job_id': None
+                    }, status=400)
+
             # Create a processing job
             job_id = status_tracker.create_job(file_name, request.user.id)
 
             # Start background processing
-            if upload_job.start_upload_job(job_id, file_data, file_name, request.user.id):
+            if upload_job.start_upload_job(job_id, file_data, file_name, request.user.id, replacement_feature_id=replacement_feature_id):
                 return JsonResponse({
                     'success': True,
                     'msg': 'File uploaded successfully, processing started',
@@ -588,6 +600,37 @@ def fetch_import_history_item(request, item_id: int):
     response = HttpResponse(item.raw_kml, content_type='application/octet-stream')
     response['Content-Disposition'] = 'attachment; filename="%s"' % item.original_filename
     return response
+
+
+@login_required_401
+def get_import_queue_item_features(request, item_id: int):
+    """
+    Get the processed features (geofeatures) from an import queue item.
+    Used for replacement uploads to display features for selection.
+    """
+    try:
+        item = ImportQueue.objects.get(id=item_id, user=request.user)
+        
+        return JsonResponse({
+            'success': True,
+            'geofeatures': item.geofeatures,
+            'original_filename': item.original_filename,
+            'imported': item.imported,
+            'replacement': item.replacement
+        })
+    except ImportQueue.DoesNotExist:
+        return JsonResponse({
+            'success': False,
+            'error': 'Import queue item not found or access denied',
+            'code': 404
+        }, status=404)
+    except Exception as e:
+        logger.error(f"Error fetching import queue item features: {traceback.format_exc()}")
+        return JsonResponse({
+            'success': False,
+            'error': 'Failed to fetch features',
+            'code': 500
+        }, status=500)
 
 
 @login_required_401

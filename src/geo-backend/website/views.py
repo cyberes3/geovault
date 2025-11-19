@@ -24,6 +24,18 @@ def standalone_map(request):
     return render(request, "standalone_map.html")
 
 
+def serve_favicon(request):
+    """Serve favicon.ico from the Vue.js dist directory."""
+    favicon_path = Path(settings.BASE_DIR) / '../geo-frontend/dist/favicon.ico'
+    try:
+        if favicon_path.exists():
+            favicon_data = favicon_path.read_bytes()
+            return HttpResponse(favicon_data, content_type='image/x-icon')
+    except Exception:
+        pass
+    raise Http404("Favicon not found")
+
+
 def get_tile_cache_path(service, z, x, y):
     """
     Generate the cache file path for a tile.

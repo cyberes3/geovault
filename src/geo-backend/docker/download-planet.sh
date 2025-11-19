@@ -11,6 +11,18 @@ PLANET_URL="https://download.geofabrik.de/north-america/us-latest.osm.pbf"
 PLANET_PBF="${DOWNLOAD_DIR}/planet.osm.pbf"
 PLANET_XML="${DOWNLOAD_DIR}/planet.osm"
 PLANET_BZ2="${DOWNLOAD_DIR}/planet.osm.bz2"
+PLANET_BZ2_TMP="${PLANET_BZ2}.tmp"
+
+# Cleanup function for temporary files
+cleanup() {
+    if [ -n "${PLANET_BZ2_TMP}" ] && [ -f "${PLANET_BZ2_TMP}" ]; then
+        echo "Cleaning up temporary file: ${PLANET_BZ2_TMP}"
+        rm -f "${PLANET_BZ2_TMP}"
+    fi
+}
+
+# Set trap to cleanup on exit (normal or error) or interruption
+trap cleanup EXIT INT TERM
 
 if ! command -v osmium &> /dev/null; then
     echo "Error: osmium-tool is not installed."
@@ -54,10 +66,30 @@ echo "XML file size: ${XML_SIZE}"
 echo "Compressing XML to bz2 format..."
 echo "This may take a while..."
 
-bzip2 -c "${PLANET_XML}" > "${PLANET_BZ2}"
+# Compress to temporary file first for atomic operation
+bzip2 -c "${PLANET_XML}" > "${PLANET_BZ2_TMP}"
+
+if [ ! -f "${PLANET_BZ2_TMP}" ]; then
+    echo "Error: Compression to bz2 failed!"
+    exit 1
+fi
+
+# Verify the compressed file integrity
+echo "Verifying compressed file integrity..."
+if ! bzip2 -t "${PLANET_BZ2_TMP}"; then
+    echo "Error: Compressed file integrity check failed!"
+    echo "The file may be corrupted. Cleaning up..."
+    rm -f "${PLANET_BZ2_TMP}"
+    exit 1
+fi
+
+# Move the verified file to final location atomically
+mv "${PLANET_BZ2_TMP}" "${PLANET_BZ2}"
+# Clear the temp file variable so cleanup trap doesn't try to remove it
+PLANET_BZ2_TMP=""
 
 if [ ! -f "${PLANET_BZ2}" ]; then
-    echo "Error: Compression to bz2 failed!"
+    echo "Error: Failed to move compressed file to final location!"
     exit 1
 fi
 
