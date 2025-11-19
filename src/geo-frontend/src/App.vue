@@ -42,10 +42,11 @@
           <div class="flex items-center">
             <div class="relative" ref="userMenuRef">
               <button
+                v-if="userInfo?.username"
                 @click="toggleUserMenu"
                 class="flex items-center text-sm font-medium text-gray-900 hover:text-gray-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 rounded-md px-3 py-2"
               >
-                {{ userInfo?.username || 'Guest' }}
+                {{ userInfo.username }}
                 <svg class="ml-2 h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"></path>
                 </svg>
@@ -91,7 +92,8 @@
 <script>
 import {mapState} from "vuex";
 import {realtimeSocket} from "@/assets/js/websocket/realtimeSocket.js";
-import {getCookie} from "@/assets/js/auth.js";
+import {getCookie, getUserInfo} from "@/assets/js/auth.js";
+import {UserInfo} from "@/assets/js/types/store-types";
 import axios from "axios";
 
 export default {
@@ -99,7 +101,8 @@ export default {
   data() {
     return {
       realtimeListenersAdded: false,
-      userMenuOpen: false
+      userMenuOpen: false,
+      userInfoLoading: true
     }
   },
   computed: {
@@ -120,6 +123,21 @@ export default {
     }
   },
   methods: {
+    async checkAuth() {
+      this.userInfoLoading = true;
+      const userStatus = await getUserInfo();
+      
+      if (!userStatus || !userStatus.authorized) {
+        // User is not authorized (guest), redirect to login
+        window.location.href = '/accounts/login/';
+        return;
+      }
+      
+      // User is authorized, set user info in store
+      const userInfo = new UserInfo(userStatus.username, userStatus.id, userStatus.featureCount, userStatus.tags || []);
+      this.$store.commit('userInfo', userInfo);
+      this.userInfoLoading = false;
+    },
     async setupRealtimeConnection() {
       // Load all modules from registry first
       await realtimeSocket.loadAllModules(this.$store);
@@ -194,6 +212,8 @@ export default {
     }
   },
   async created() {
+    // Check authentication first
+    await this.checkAuth();
     // Setup realtime connection after auth check
     this.setupRealtimeConnection();
   },

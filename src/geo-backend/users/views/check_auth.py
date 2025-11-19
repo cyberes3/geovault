@@ -8,28 +8,33 @@ def check_auth(request):
         # Count the number of features for this user
         feature_count = FeatureStore.objects.filter(user=request.user).count()
         
-        # Collect all unique tags from user's features (excluding protected tags)
+        # Count features per tag (excluding protected tags)
         features = FeatureStore.objects.filter(user=request.user).values_list('geojson', flat=True)
-        all_tags = set()
+        tag_counts = {}
         for geojson in features:
             if isinstance(geojson, dict) and 'properties' in geojson:
                 properties = geojson.get('properties', {})
                 tags = properties.get('tags', [])
                 if isinstance(tags, list):
-                    # Filter out protected tags before adding to set
+                    # Filter out protected tags before counting
                     filtered_tags = filter_protected_tags(tags, CONST_INTERNAL_TAGS)
-                    # Add all tags to the set (automatically handles uniqueness)
-                    all_tags.update(tag for tag in filtered_tags if isinstance(tag, str))
+                    # Count occurrences of each tag
+                    for tag in filtered_tags:
+                        if isinstance(tag, str):
+                            tag_counts[tag] = tag_counts.get(tag, 0) + 1
         
-        # Convert to sorted list for consistent ordering
-        sorted_tags = sorted(list(all_tags))
+        # Sort tags by count (descending) and take top 5
+        top_tags = sorted(tag_counts.items(), key=lambda x: x[1], reverse=True)[:5]
+        
+        # Convert to list of objects with tag and count
+        top_tags_list = [{'tag': tag, 'count': count} for tag, count in top_tags]
         
         data = {
             'authorized': True,
             'username': request.user.username,
             'id': request.user.id,
             'featureCount': feature_count,
-            'tags': sorted_tags
+            'tags': top_tags_list
         }
     else:
         data = {

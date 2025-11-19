@@ -146,10 +146,13 @@ STATIC_URL = 'static/'
 # without requiring collectstatic (no manifest file needed)
 STATICFILES_STORAGE = 'whitenoise.storage.CompressedStaticFilesStorage'
 
-# Cache configuration (using dummy cache since we removed caching)
+# Cache configuration
+# Using LocMemCache for in-memory caching (works within a single process)
+# For production with multiple processes, consider using Redis or Memcached
 CACHES = {
     'default': {
-        'BACKEND': 'django.core.cache.backends.dummy.DummyCache',
+        'BACKEND': 'django.core.cache.backends.locmem.LocMemCache',
+        'LOCATION': 'unique-snowflake',  # Unique identifier for this cache instance
     }
 }
 
@@ -213,7 +216,7 @@ SITE_ID = 1  # Required by allauth
 
 # Account settings
 ACCOUNT_LOGIN_METHODS = {'email'}  # Use email for authentication
-ACCOUNT_EMAIL_VERIFICATION = 'mandatory'  # Require email verification
+ACCOUNT_EMAIL_VERIFICATION = 'none'  # Require email verification
 ACCOUNT_SIGNUP_FIELDS = ['email*', 'email2*', 'password1*', 'password2*']  # Email required, enter twice, no username
 ACCOUNT_SESSION_REMEMBER = True
 ACCOUNT_LOGOUT_ON_GET = False

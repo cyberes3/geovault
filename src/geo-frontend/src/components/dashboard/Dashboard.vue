@@ -66,12 +66,15 @@
       </div>
       <div v-if="filteredTags && filteredTags.length > 0" class="flex flex-wrap gap-2">
         <router-link
-          v-for="tag in filteredTags"
-          :key="tag"
+          v-for="tagObj in filteredTags"
+          :key="tagObj.tag"
           to="/tags"
           class="inline-flex items-center px-3 py-1 rounded-full text-sm font-medium bg-blue-100 text-blue-800 border border-blue-200 hover:bg-blue-200 transition-colors cursor-pointer"
         >
-          {{ tag }}
+          <span>{{ tagObj.tag }}</span>
+          <span class="ml-1.5 px-1.5 py-0.5 rounded-full text-xs font-semibold bg-blue-200 text-blue-900">
+            {{ tagObj.count }}
+          </span>
         </router-link>
       </div>
       <div v-else class="text-gray-500 text-sm">
@@ -141,8 +144,6 @@
 <script>
 import {mapState} from "vuex";
 import {authMixin} from "@/assets/js/authMixin.js";
-import { getProtectedTags } from "@/utils/configService.js";
-import { filterProtectedTags } from "@/utils/tagUtils.js";
 
 export default {
   computed: {
@@ -151,21 +152,19 @@ export default {
       if (!this.userInfo || !this.userInfo.tags) {
         return [];
       }
-      // Filter protected tags (userInfo.tags should already be filtered, but double-check)
-      return filterProtectedTags(this.userInfo.tags, this.protectedTags);
+      // Tags are now objects with tag and count properties, already filtered by backend
+      // Just return them as-is (they're already top 5 and filtered)
+      return this.userInfo.tags;
     }
   },
   components: {},
   mixins: [authMixin],
   data() {
     return {
-      protectedTags: []
     }
   },
   methods: {},
   async created() {
-    // Fetch protected tags on component creation
-    this.protectedTags = await getProtectedTags();
   },
   async mounted() {
   },

@@ -6,34 +6,54 @@
     {% trans "Confirm Email Address" %}
 {% endblock head_title %}
 {% block inner_content %}
-    {% element h1 %}
-        {% trans "Confirm Email Address" %}
-    {% endelement %}
+    <div class="text-center mb-6">
+        {% element h1 %}
+            {% trans "Confirm Email Address" %}
+        {% endelement %}
+    </div>
+    
     {% if confirmation %}
         {% user_display confirmation.email_address.user as user_display %}
         {% if can_confirm %}
-            {% element p %}
-                {% blocktrans with confirmation.email_address.email as email %}Please confirm that <a href="mailto:{{ email }}">{{ email }}</a> is an email address for user {{ user_display }}.{% endblocktrans %}
-            {% endelement %}
+            <div class="mb-6">
+                {% element p %}
+                    {% blocktrans with confirmation.email_address.email as email %}
+                        Please confirm that <a href="mailto:{{ email }}" class="text-blue-600 hover:text-blue-700 font-medium">{{ email }}</a> is the correct email address for user <span class="font-medium text-gray-900">{{ user_display }}</span>.
+                    {% endblocktrans %}
+                {% endelement %}
+            </div>
+            
             {% url 'account_confirm_email' confirmation.key as action_url %}
             {% element form method="post" action=action_url %}
-                {% slot actions %}
+                {% slot body %}
                     {% csrf_token %}
                     {{ redirect_field }}
-                    {% element button type="submit" %}
-                        {% trans 'Confirm' %}
-                    {% endelement %}
+                {% endslot %}
+                {% slot actions %}
+                    <div class="flex justify-center">
+                        {% element button type="submit" tags="prominent" %}
+                            {% trans 'Confirm' %}
+                        {% endelement %}
+                    </div>
                 {% endslot %}
             {% endelement %}
         {% else %}
-            {% element p %}
-                {% blocktrans %}Unable to confirm {{ email }} because it is already confirmed by a different account.{% endblocktrans %}
-            {% endelement %}
+            <div class="mb-6 p-4 bg-red-50 border border-red-200 rounded-md">
+                {% element p %}
+                    {% blocktrans with email=confirmation.email_address.email %}
+                        Unable to confirm <span class="font-medium">{{ email }}</span> because it is already confirmed by a different account.
+                    {% endblocktrans %}
+                {% endelement %}
+            </div>
         {% endif %}
     {% else %}
-        {% url 'account_email' as email_url %}
-        {% element p %}
-            {% blocktrans %}This email confirmation link expired or is invalid. Please <a href="{{ email_url }}">issue a new email confirmation request</a>.{% endblocktrans %}
-        {% endelement %}
+        <div class="mb-6 p-4 bg-yellow-50 border border-yellow-200 rounded-md">
+            {% url 'account_email' as email_url %}
+            {% element p %}
+                {% blocktrans %}
+                    This email confirmation link expired or is invalid. Please <a href="{{ email_url }}" class="text-blue-600 hover:text-blue-700 font-medium">issue a new email confirmation request</a>.
+                {% endblocktrans %}
+            {% endelement %}
+        </div>
     {% endif %}
 {% endblock inner_content %}

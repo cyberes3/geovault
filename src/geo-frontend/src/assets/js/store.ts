@@ -18,7 +18,7 @@ interface ImportHistoryItem {
 
 // Define the state interface
 interface State {
-    userInfo: typeof UserInfo
+    userInfo: UserInfo | null
     importQueue: ImportQueueItem[]
     importHistory: ImportHistoryItem[]
     importHistoryLoaded: boolean
@@ -36,7 +36,7 @@ interface State {
 
 export default createStore<State>({
     state: {
-        userInfo: UserInfo,
+        userInfo: null,
         importQueue: [],
         importHistory: [],
         importHistoryLoaded: false,
@@ -49,7 +49,7 @@ export default createStore<State>({
         },
     }, 
     mutations: {
-        userInfo(state: State, payload: typeof UserInfo) {
+        userInfo(state: State, payload: UserInfo | null) {
             state.userInfo = payload
         },
         importQueue(state: State, payload: ImportQueueItem[]) {
