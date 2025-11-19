@@ -1,5 +1,5 @@
 <template>
-  <div v-if="feature" class="absolute bottom-4 right-4 bg-white rounded-lg shadow-lg border border-gray-200 z-10 max-w-md w-96">
+  <div v-if="feature" class="absolute bottom-4 right-4 bg-white rounded-lg shadow-lg border border-gray-200 z-10 max-w-md w-96 max-h-[90vh]">
     <div class="p-4">
       <div class="flex items-start justify-between mb-4">
         <h3 class="text-lg font-semibold text-gray-900">Edit Feature</h3>
@@ -29,14 +29,69 @@
 
         <!-- Tags Field -->
         <div>
-          <label class="block text-sm font-medium text-gray-700 mb-1">Tags (comma-separated)</label>
-          <input
-            v-model="tagsInput"
-            type="text"
-            :disabled="isSaving"
-            class="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500 disabled:bg-gray-100 disabled:cursor-not-allowed"
-            placeholder="tag1, tag2, tag3"
-          />
+          <label class="block text-sm font-medium text-gray-700 mb-1">Tags</label>
+
+          <!-- Selected Tags Display -->
+          <div v-if="formData.tags.length > 0" class="relative mb-2 border border-gray-200 rounded-md bg-gray-50 overflow-hidden">
+            <div class="max-h-24 overflow-y-auto p-2" ref="tagsContainer">
+              <div class="flex flex-wrap gap-2">
+                <span
+                  v-for="(tag, index) in formData.tags"
+                  :key="index"
+                  class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-blue-100 text-blue-800 border border-blue-200"
+                >
+                  {{ tag }}
+                  <button
+                    type="button"
+                    @click="removeTag(index)"
+                    :disabled="isSaving"
+                    class="ml-1.5 inline-flex items-center justify-center w-4 h-4 rounded-full text-blue-400 hover:bg-blue-200 hover:text-blue-600 focus:outline-none focus:bg-blue-200 focus:text-blue-600 disabled:opacity-50 disabled:cursor-not-allowed"
+                  >
+                    <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path>
+                    </svg>
+                  </button>
+                </span>
+              </div>
+            </div>
+            <!-- Gradient fade to indicate more content -->
+            <div
+              v-if="hasTagsOverflow"
+              class="absolute bottom-0 left-0 right-0 h-8 bg-gradient-to-t from-gray-50 to-transparent pointer-events-none"
+            ></div>
+          </div>
+
+          <!-- Tag Input with Autocomplete -->
+          <div class="relative" ref="tagInputContainer">
+            <input
+              v-model="tagInput"
+              type="text"
+              :disabled="isSaving"
+              @input="onTagInput"
+              @keydown.enter.prevent="addTagFromInput"
+              @keydown.escape="hideSuggestions"
+              @focus="showSuggestionsOnFocus"
+              @blur="handleTagInputBlur"
+              class="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500 disabled:bg-gray-100 disabled:cursor-not-allowed"
+              placeholder="Type to search tags..."
+            />
+
+            <!-- Autocomplete Suggestions -->
+            <div
+              v-if="showTagSuggestions && filteredTagSuggestions.length > 0"
+              class="absolute z-50 w-full mt-1 bg-white border border-gray-300 rounded-md shadow-lg max-h-48 overflow-auto"
+            >
+              <button
+                v-for="(suggestion, index) in filteredTagSuggestions"
+                :key="index"
+                type="button"
+                @mousedown.prevent="selectTagSuggestion(suggestion)"
+                class="w-full text-left px-3 py-2 text-sm text-gray-700 hover:bg-blue-50 focus:bg-blue-50 focus:outline-none"
+              >
+                {{ suggestion }}
+              </button>
+            </div>
+          </div>
         </div>
 
         <!-- Description Field -->
@@ -53,51 +108,52 @@
         <!-- Icon Section (for points) -->
         <div v-if="isPoint">
           <label class="block text-sm font-medium text-gray-700 mb-1">Icon</label>
-          
-          <!-- Current Icon Preview -->
-          <div v-if="hasPngIcon && currentIconUrl" class="mb-2">
-            <div class="flex items-center space-x-2">
-              <img 
-                :src="resolveIconUrl(currentIconUrl)" 
-                alt="Current icon" 
+
+          <!-- Icon Display with Choose Button Inline -->
+          <div class="flex items-center justify-between">
+            <!-- Current Icon Preview or Placeholder (Left) -->
+            <div v-if="hasPngIcon && currentIconUrl" class="flex items-center">
+              <img
+                :src="resolveIconUrl(currentIconUrl)"
+                alt="Current icon"
                 class="w-8 h-8 object-contain border border-gray-300 rounded"
                 @error="handleIconError"
               />
-              <span class="text-sm text-gray-600">Current icon</span>
+            </div>
+            <div v-else class="w-8 h-8 border border-gray-300 rounded bg-gray-100 flex items-center justify-center">
+              <span class="text-xs text-gray-400">No icon</span>
+            </div>
+
+            <!-- Buttons (Right) -->
+            <div class="flex items-center space-x-2">
               <button
+                v-if="hasPngIcon && currentIconUrl"
                 type="button"
                 @click="handleRemoveIcon"
                 :disabled="isSaving"
-                class="ml-auto text-sm text-red-600 hover:text-red-800 disabled:opacity-50 disabled:cursor-not-allowed"
+                class="text-sm text-red-600 hover:text-red-800 disabled:opacity-50 disabled:cursor-not-allowed"
               >
                 Remove
+              </button>
+              <button
+                type="button"
+                @click="openIconPicker"
+                :disabled="isSaving"
+                class="text-sm px-3 py-1.5 text-blue-600 hover:text-blue-800 hover:bg-blue-50 rounded-md focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                Choose Icon
               </button>
             </div>
           </div>
 
-          <!-- Choose Icon Button -->
-          <div class="space-y-2">
-            <button
-              type="button"
-              @click="openIconPicker"
-              :disabled="isSaving"
-              class="w-full px-4 py-2 text-sm font-medium text-white bg-blue-600 border border-transparent rounded-md hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 disabled:opacity-50 disabled:cursor-not-allowed"
-            >
-              Choose Icon
-            </button>
-            <p class="text-xs text-gray-500">
-              Select from preset icons or upload your own
-            </p>
-          </div>
-
           <!-- Icon Preview (for newly selected file) -->
-          <div v-if="iconPreviewUrl" class="mt-2">
-            <img 
-              :src="iconPreviewUrl" 
-              alt="Icon preview" 
+          <div v-if="iconPreviewUrl" class="mt-2 flex items-start">
+            <img
+              :src="iconPreviewUrl"
+              alt="Icon preview"
               class="w-8 h-8 object-contain border border-gray-300 rounded"
             />
-            <p class="text-xs text-gray-600 mt-1">Preview</p>
+            <p class="text-xs text-gray-600 mt-1 ml-2">Preview</p>
           </div>
 
           <!-- Icon Upload Error -->
@@ -107,7 +163,7 @@
         </div>
 
         <!-- Icon Color Field (for points) -->
-        <div v-if="isPoint">
+        <div v-if="isPoint && !isCustomIcon">
           <label class="block text-sm font-medium text-gray-700 mb-1">Icon Color</label>
           <div class="flex items-center space-x-2">
             <input
@@ -125,12 +181,6 @@
               pattern="^#[0-9A-Fa-f]{6}$"
             />
           </div>
-          <p v-if="hasPngIcon && isBuiltInIcon" class="text-xs text-gray-500 mt-1">
-            Recolors black pixels in the icon
-          </p>
-          <p v-else-if="!hasPngIcon" class="text-xs text-gray-500 mt-1">
-            Color for default circle icon
-          </p>
         </div>
 
         <!-- Line/Polygon Color Field -->
@@ -156,30 +206,33 @@
           </div>
         </div>
 
-        <!-- Raw JSON Field (Coordinates Only) -->
+        <!-- Coordinates Section -->
         <div>
-          <div class="flex items-center justify-between mb-1">
-            <label class="block text-sm font-medium text-gray-700">Coordinates</label>
+          <div class="flex items-center justify-center space-x-2">
+            <button
+              type="button"
+              @click="openCoordinatesDialog"
+              :disabled="isSaving"
+              class="text-sm px-3 py-1.5 text-blue-600 hover:text-blue-800 hover:bg-blue-50 rounded-md focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 disabled:opacity-50 disabled:cursor-not-allowed inline-flex items-center"
+            >
+              <svg class="w-4 h-4 mr-1.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 20l-5.447-2.724A1 1 0 013 16.382V5.618a1 1 0 011.447-.894L9 7m0 13l6-3m-6 3V7m6 10l4.553 2.276A1 1 0 0021 18.382V7.618a1 1 0 00-.553-.894L15 4m0 13V4m0 0L9 7"></path>
+              </svg>
+              Edit Coordinates
+            </button>
             <button
               type="button"
               @click="openReplacementDialog"
               :disabled="isSaving"
-              class="text-xs px-2 py-1 text-blue-600 hover:text-blue-800 hover:bg-blue-50 rounded-md focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 disabled:opacity-50 disabled:cursor-not-allowed"
+              class="text-xs px-2 py-1 text-blue-600 hover:text-blue-800 hover:bg-blue-50 rounded-md focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 disabled:opacity-50 disabled:cursor-not-allowed inline-flex items-center"
               title="Update spatial data from KMZ/KML/GPX file"
             >
-              <svg class="w-4 h-4 inline mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <svg class="w-4 h-4 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12"></path>
               </svg>
               Update Spatial Data
             </button>
           </div>
-          <textarea
-            v-model="rawJsonInput"
-            rows="6"
-            :disabled="isSaving"
-            class="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500 font-mono text-xs disabled:bg-gray-100 disabled:cursor-not-allowed"
-            placeholder="[]"
-          ></textarea>
         </div>
 
         <!-- Error Message -->
@@ -230,6 +283,53 @@
       @close="closeReplacementDialog"
       @applied="handleReplacementApplied"
     />
+
+    <!-- Coordinates Edit Dialog -->
+    <div
+      v-if="coordinatesDialogOpen"
+      class="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50"
+      @click.self="closeCoordinatesDialog"
+    >
+      <div class="bg-white rounded-lg shadow-xl max-w-2xl w-full mx-4 max-h-[90vh] flex flex-col">
+        <div class="flex items-center justify-between p-4 border-b border-gray-200">
+          <h3 class="text-lg font-semibold text-gray-900">Edit Coordinates</h3>
+          <button
+            @click="closeCoordinatesDialog"
+            class="text-gray-400 hover:text-gray-600"
+          >
+            <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path>
+            </svg>
+          </button>
+        </div>
+        <div class="p-4 overflow-y-auto flex-1">
+          <div class="space-y-4">
+            <div>
+              <label class="block text-sm font-medium text-gray-700 mb-2">
+                Coordinates (JSON array)
+              </label>
+              <textarea
+                v-model="rawJsonInput"
+                rows="12"
+                :disabled="isSaving"
+                class="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500 font-mono text-xs disabled:bg-gray-100 disabled:cursor-not-allowed"
+                placeholder="[]"
+              ></textarea>
+            </div>
+          </div>
+        </div>
+        <div class="flex justify-end space-x-2 p-4 border-t border-gray-200">
+          <button
+            type="button"
+            @click="closeCoordinatesDialog"
+            :disabled="isSaving"
+            class="px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-md hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 disabled:opacity-50 disabled:cursor-not-allowed"
+          >
+            Close
+          </button>
+        </div>
+      </div>
+    </div>
   </div>
 </template>
 
@@ -276,6 +376,10 @@ export default {
       },
       tagsInput: '',
       rawJsonInput: '',
+      tagInput: '',
+      availableTags: [],
+      showTagSuggestions: false,
+      hasTagsOverflow: false,
       hasPngIcon: false,
       isSaving: false,
       errorMessage: '',
@@ -286,7 +390,8 @@ export default {
       currentIconUrl: null,
       iconRemoved: false,
       iconPickerOpen: false,
-      replacementDialogOpen: false
+      replacementDialogOpen: false,
+      coordinatesDialogOpen: false
     }
   },
   computed: {
@@ -316,17 +421,62 @@ export default {
     },
     isBuiltInIcon() {
       return this.currentIconUrl && isSystemIcon(this.currentIconUrl)
+    },
+    isCustomIcon() {
+      // Custom icon is a user-uploaded icon or any icon that's not a system icon
+      if (!this.currentIconUrl || !this.hasPngIcon) return false
+      return isUserIcon(this.currentIconUrl) || !isSystemIcon(this.currentIconUrl)
+    },
+    filteredTagSuggestions() {
+      if (!this.tagInput.trim()) {
+        return this.availableTags.filter(tag => !this.formData.tags.includes(tag)).slice(0, 10)
+      }
+
+      const query = this.tagInput.toLowerCase().trim()
+      return this.availableTags
+        .filter(tag =>
+          tag.toLowerCase().includes(query) &&
+          !this.formData.tags.includes(tag)
+        )
+        .slice(0, 10)
     }
   },
   async mounted() {
     // Fetch protected tags on mount
     this.protectedTags = await getProtectedTags()
+    // Fetch available tags for autocomplete
+    await this.fetchAvailableTags()
     this.initializeForm()
+    // Add scroll listener for tags container
+    this.$nextTick(() => {
+      if (this.$refs.tagsContainer) {
+        this.$refs.tagsContainer.addEventListener('scroll', this.checkTagsOverflow)
+      }
+    })
+  },
+  beforeUnmount() {
+    // Remove scroll listener
+    if (this.$refs.tagsContainer) {
+      this.$refs.tagsContainer.removeEventListener('scroll', this.checkTagsOverflow)
+    }
   },
   watch: {
     feature: {
-      handler() {
+      async handler() {
+        // Wait for protected tags to be loaded before initializing form
+        if (this.protectedTags.length === 0) {
+          this.protectedTags = await getProtectedTags()
+        }
         this.initializeForm()
+        // Reattach scroll listener after form initialization
+        this.$nextTick(() => {
+          if (this.$refs.tagsContainer) {
+            // Remove old listener if it exists
+            this.$refs.tagsContainer.removeEventListener('scroll', this.checkTagsOverflow)
+            // Add new listener
+            this.$refs.tagsContainer.addEventListener('scroll', this.checkTagsOverflow)
+          }
+        })
       },
       immediate: true
     }
@@ -343,7 +493,11 @@ export default {
       // Filter protected tags when initializing
       const allTags = Array.isArray(properties.tags) ? properties.tags : []
       this.formData.tags = filterProtectedTags(allTags, this.protectedTags)
-      this.tagsInput = this.formData.tags.join(', ')
+      this.tagsInput = this.formData.tags.join(', ') // Keep for backward compatibility
+      this.tagInput = '' // Clear tag input
+      this.$nextTick(() => {
+        this.checkTagsOverflow()
+      })
       this.formData.markerColor = properties['marker-color'] || '#ff0000'
 
       // Initialize stroke color and width for lines and polygons
@@ -364,13 +518,13 @@ export default {
 
       // Check for PNG icon
       this.hasPngIcon = this.checkForPngIcon(properties)
-      
+
       // Store current icon URL for display
       this.currentIconUrl = this.getCurrentIconUrl(properties)
 
       // Initialize raw JSON
       this.updateRawJson()
-      
+
       // Reset icon upload state
       this.uploadedIconFile = null
       this.iconPreviewUrl = null
@@ -404,7 +558,7 @@ export default {
     getCurrentIconUrl(properties) {
       const iconPropertyNames = ['icon', 'icon-href', 'iconUrl', 'icon_url', 'marker-icon', 'marker-symbol', 'symbol']
       const validIconExtensions = ['.png', '.jpg', '.jpeg', '.gif', '.bmp', '.svg', '.webp', '.ico']
-      
+
       for (const propName of iconPropertyNames) {
         if (properties[propName] && typeof properties[propName] === 'string') {
           const iconUrl = properties[propName].trim()
@@ -497,7 +651,7 @@ export default {
       this.currentIconUrl = null
       this.hasPngIcon = false
       this.iconRemoved = true
-      
+
       // Clear file input
       if (this.$refs.iconFileInput) {
         this.$refs.iconFileInput.value = ''
@@ -564,6 +718,91 @@ export default {
       if (!tagsString || !tagsString.trim()) return []
       return tagsString.split(',').map(tag => tag.trim()).filter(tag => tag.length > 0)
     },
+    async fetchAvailableTags() {
+      try {
+        const response = await fetch('/api/data/features/by-tag/')
+        if (response.ok) {
+          const data = await response.json()
+          if (data.success && data.tags) {
+            // Extract all tag names from the tags object
+            this.availableTags = Object.keys(data.tags).sort()
+          }
+        }
+      } catch (error) {
+        console.error('Error fetching available tags:', error)
+        // Don't show error to user, just use empty array
+        this.availableTags = []
+      }
+    },
+    onTagInput() {
+      if (this.tagInput.trim()) {
+        this.showTagSuggestions = true
+      } else {
+        this.showTagSuggestions = false
+      }
+    },
+    showSuggestionsOnFocus() {
+      if (this.tagInput.trim() || this.availableTags.length > 0) {
+        this.showTagSuggestions = true
+      }
+    },
+    hideSuggestions() {
+      this.showTagSuggestions = false
+    },
+    handleTagInputBlur(event) {
+      // Use setTimeout to allow click events on suggestions to fire first
+      setTimeout(() => {
+        // Check if the related target (what we're focusing on) is not within the tag input container
+        if (this.$refs.tagInputContainer && !this.$refs.tagInputContainer.contains(document.activeElement)) {
+          this.showTagSuggestions = false
+        }
+      }, 200)
+    },
+    selectTagSuggestion(tag) {
+      if (tag && !this.formData.tags.includes(tag)) {
+        this.formData.tags.push(tag)
+        this.checkTagsOverflow()
+      }
+      this.tagInput = ''
+      this.showTagSuggestions = false
+      // Refocus the input after a short delay to allow the blur event to complete
+      setTimeout(() => {
+        if (this.$refs.tagInputContainer) {
+          const input = this.$refs.tagInputContainer.querySelector('input')
+          if (input) {
+            input.focus()
+          }
+        }
+      }, 100)
+    },
+    addTagFromInput() {
+      const trimmedInput = this.tagInput.trim()
+      if (trimmedInput && !this.formData.tags.includes(trimmedInput)) {
+        this.formData.tags.push(trimmedInput)
+        // Add to available tags if not already there
+        if (!this.availableTags.includes(trimmedInput)) {
+          this.availableTags.push(trimmedInput)
+          this.availableTags.sort()
+        }
+        this.tagInput = ''
+        this.showTagSuggestions = false
+        this.checkTagsOverflow()
+      }
+    },
+    removeTag(index) {
+      this.formData.tags.splice(index, 1)
+      this.$nextTick(() => {
+        this.checkTagsOverflow()
+      })
+    },
+    checkTagsOverflow() {
+      this.$nextTick(() => {
+        if (this.$refs.tagsContainer) {
+          const container = this.$refs.tagsContainer
+          this.hasTagsOverflow = container.scrollHeight > container.clientHeight
+        }
+      })
+    },
 
     hexToRgba(hexColor, opacity) {
       // Convert hex color to RGBA string
@@ -577,12 +816,12 @@ export default {
     extractHexFromColor(colorString) {
       // Extract hex color from rgba string or return hex if already hex
       if (!colorString) return null
-      
+
       // If it's already a hex color, return it
       if (colorString.startsWith('#')) {
         return colorString
       }
-      
+
       // If it's rgba, extract RGB values and convert to hex
       const rgbaMatch = colorString.match(/rgba?\((\d+),\s*(\d+),\s*(\d+)/)
       if (rgbaMatch) {
@@ -594,7 +833,7 @@ export default {
           return hex.length === 1 ? '0' + hex : hex
         }).join('')}`
       }
-      
+
       return null
     },
 
@@ -690,9 +929,10 @@ export default {
         // Merge form field values into the feature data
         // Form fields ALWAYS take precedence over raw JSON values
         // This ensures the color picker and other form fields work even when raw JSON is provided
-        const parsedTags = this.parseTags(this.tagsInput)
+        // Use formData.tags array directly (preferred) or fall back to parsing tagsInput for backward compatibility
+        const tagsToUse = this.formData.tags.length > 0 ? this.formData.tags : this.parseTags(this.tagsInput)
         // Filter protected tags before sending
-        const filteredTags = filterProtectedTags(parsedTags, this.protectedTags)
+        const filteredTags = filterProtectedTags(tagsToUse, this.protectedTags)
         const formFieldUpdates = {
           name: this.formData.name,
           description: this.formData.description || '',
@@ -785,15 +1025,15 @@ export default {
 
         // Update the feature object's properties immediately so reopening the dialog shows correct values
         const properties = this.feature.get('properties') || {}
-        
+
         // Preserve protected tags from the original feature (same logic as backend)
         // Use originalProperties to get tags before any modifications
         const originalTags = Array.isArray(originalProperties.tags) ? originalProperties.tags : []
         const protectedTags = originalTags.filter(tag => isProtectedTag(tag, this.protectedTags))
-        
+
         // Combine filtered user tags with preserved protected tags (same as backend does)
         const tagsWithProtected = [...filteredTags, ...protectedTags]
-        
+
         // Update properties with the form field updates, but use tags with protected tags preserved
         const updatedFormFieldUpdates = {
           ...formFieldUpdates,
@@ -803,7 +1043,7 @@ export default {
         // Restore _id since we removed it before sending
         properties._id = featureId
         this.feature.set('properties', properties)
-        
+
         // Update icon state if icon was uploaded or removed
         if (this.isPoint) {
           if (uploadedIconUrl) {
@@ -819,7 +1059,7 @@ export default {
             this.iconRemoved = false
           }
         }
-        
+
         // Trigger feature change to update any listeners
         this.feature.changed()
 
@@ -895,7 +1135,7 @@ export default {
       this.uploadedIconFile = null
       this.iconPreviewUrl = null
       this.iconUploadError = ''
-      
+
       // Handle system and user icons
       if (isSystemIcon(iconUrl)) {
         // System icon - set it directly
@@ -940,6 +1180,12 @@ export default {
       // The parent component should handle refreshing the map
       this.$emit('saved')
       this.closeReplacementDialog()
+    },
+    openCoordinatesDialog() {
+      this.coordinatesDialogOpen = true
+    },
+    closeCoordinatesDialog() {
+      this.coordinatesDialogOpen = false
     }
   }
 }

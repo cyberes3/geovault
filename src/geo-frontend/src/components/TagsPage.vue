@@ -2,7 +2,7 @@
   <div class="space-y-6">
     <!-- Page Header -->
     <div class="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
-      <div class="flex items-center justify-between">
+      <div class="flex items-center justify-between mb-4">
         <div>
           <h1 class="text-2xl font-bold text-gray-900 mb-2">Tags</h1>
           <p class="text-gray-600">Browse your features organized by tags</p>
@@ -16,6 +16,30 @@
           </svg>
           Back to Dashboard
         </router-link>
+      </div>
+      
+      <!-- Search Input -->
+      <div class="relative">
+        <div class="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+          <svg class="h-5 w-5 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"></path>
+          </svg>
+        </div>
+        <input
+          v-model="searchQuery"
+          type="text"
+          placeholder="Search tags..."
+          class="block w-full pl-10 pr-3 py-2 border border-gray-300 rounded-md leading-5 bg-white placeholder-gray-500 focus:outline-none focus:placeholder-gray-400 focus:ring-1 focus:ring-blue-500 focus:border-blue-500 sm:text-sm"
+        />
+        <button
+          v-if="searchQuery"
+          @click="searchQuery = ''"
+          class="absolute inset-y-0 right-0 pr-3 flex items-center"
+        >
+          <svg class="h-5 w-5 text-gray-400 hover:text-gray-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path>
+          </svg>
+        </button>
       </div>
     </div>
 
@@ -48,10 +72,21 @@
       </div>
     </div>
 
+    <!-- No Search Results -->
+    <div v-else-if="!loading && Object.keys(filteredTagsData).length === 0 && searchQuery" class="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
+      <div class="text-center py-12">
+        <svg class="mx-auto h-12 w-12 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"></path>
+        </svg>
+        <h3 class="mt-2 text-sm font-medium text-gray-900">No tags match your search</h3>
+        <p class="mt-1 text-sm text-gray-500">Try adjusting your search query.</p>
+      </div>
+    </div>
+
     <!-- Tags List -->
-    <div v-else class="space-y-4">
+    <div v-else-if="!loading && Object.keys(filteredTagsData).length > 0" class="space-y-4">
       <div
-        v-for="(features, tag) in tagsData"
+        v-for="(features, tag) in filteredTagsData"
         :key="tag"
         class="bg-white rounded-lg shadow-sm border border-gray-200 overflow-hidden"
       >
@@ -99,9 +134,6 @@
                   <span class="capitalize">
                     {{ feature.geometry?.type || 'Unknown' }}
                   </span>
-                  <span v-if="feature.properties._id">
-                    ID: {{ feature.properties._id }}
-                  </span>
                 </div>
               </div>
               <div class="ml-4 flex-shrink-0">
@@ -135,7 +167,26 @@ export default {
       tagsData: {},
       loading: true,
       error: null,
-      expandedTags: {} // Track which tags are expanded
+      expandedTags: {}, // Track which tags are expanded
+      searchQuery: '' // Search query for filtering tags
+    }
+  },
+  computed: {
+    filteredTagsData() {
+      if (!this.searchQuery.trim()) {
+        return this.tagsData;
+      }
+      
+      const query = this.searchQuery.toLowerCase().trim();
+      const filtered = {};
+      
+      for (const [tag, features] of Object.entries(this.tagsData)) {
+        if (tag.toLowerCase().includes(query)) {
+          filtered[tag] = features;
+        }
+      }
+      
+      return filtered;
     }
   },
   methods: {
