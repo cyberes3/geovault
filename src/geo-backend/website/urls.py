@@ -28,7 +28,7 @@ urlpatterns = [
     path('favicon.ico', serve_favicon, name='favicon'),
     path('', index, name='index'),  # Root route
     path('standalone_map/', standalone_map, name='standalone_map'),
-    re_path(r"^account/", include("django.contrib.auth.urls")),
+    path('accounts/', include('allauth.urls')),  # Django allauth URLs
     path('admin/', admin.site.urls),
     path('', include("users.urls")),
     path('api/data/', include("api.urls")),
@@ -37,6 +37,6 @@ urlpatterns = [
     # Catch-all route for Vue.js router (must be last)
     # Serves index.html for any route that doesn't match above patterns
     # Vue router uses hash-based routing, so this handles direct navigation to non-API routes
-    re_path(r'^(?!api/|admin/|account/|static/).+$', index),
+    re_path(r'^(?!api/|admin/|accounts/|static/).+$', index),
     # re_path(r'^assets/(?P<path>.*)$', serve_assets, name='serve_assets'),
 ]

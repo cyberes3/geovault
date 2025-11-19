@@ -1,0 +1,5 @@
+{% load allauth %}
+<div class="mb-4 p-4 rounded-md {% if attrs.tags == 'error' or attrs.tags == 'danger' %}bg-red-50 text-red-800{% elif attrs.tags == 'success' %}bg-green-50 text-green-800{% elif attrs.tags == 'warning' %}bg-yellow-50 text-yellow-800{% else %}bg-blue-50 text-blue-800{% endif %}">
+    {% slot message %}
+    {% endslot %}
+</div>

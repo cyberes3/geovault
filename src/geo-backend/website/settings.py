@@ -50,6 +50,10 @@ INSTALLED_APPS = [
     'django.contrib.staticfiles',
     'django.contrib.gis',
     'django.contrib.postgres',
+    'django.contrib.sites',  # Required by allauth
+    'allauth',
+    'allauth.account',
+    'allauth.socialaccount',
 ]
 
 MIDDLEWARE = [
@@ -63,6 +67,7 @@ MIDDLEWARE = [
     'django.contrib.messages.middleware.MessageMiddleware',
     'django.middleware.clickjacking.XFrameOptionsMiddleware',
     'website.middleware.CustomHeaderMiddleware',
+    'allauth.account.middleware.AccountMiddleware',
 ]
 
 ROOT_URLCONF = 'website.urls'
@@ -70,7 +75,10 @@ ROOT_URLCONF = 'website.urls'
 TEMPLATES = [
     {
         'BACKEND': 'django.template.backends.django.DjangoTemplates',
-        'DIRS': [os.path.join(BASE_DIR, '../geo-frontend/dist')],
+        'DIRS': [
+            os.path.join(BASE_DIR, '../geo-frontend/dist'),
+            os.path.join(BASE_DIR, '../allauth templates'),
+        ],
         'APP_DIRS': True,
         'OPTIONS': {
             'context_processors': [
@@ -195,6 +203,26 @@ SERVER_EMAIL = from_email  # Used for error notifications to admins (email only,
 # Optional: Subject prefix
 EMAIL_SUBJECT_PREFIX = config.get_str('email.subject_prefix', '')
 
+# Django Allauth Configuration
+AUTHENTICATION_BACKENDS = [
+    'django.contrib.auth.backends.ModelBackend',
+    'allauth.account.auth_backends.AuthenticationBackend',
+]
+
+SITE_ID = 1  # Required by allauth
+
+# Account settings
+ACCOUNT_LOGIN_METHODS = {'email'}  # Use email for authentication
+ACCOUNT_EMAIL_VERIFICATION = 'mandatory'  # Require email verification
+ACCOUNT_SIGNUP_FIELDS = ['email*', 'email2*', 'password1*', 'password2*']  # Email required, enter twice, no username
+ACCOUNT_SESSION_REMEMBER = True
+ACCOUNT_LOGOUT_ON_GET = False
+ACCOUNT_LOGOUT_REDIRECT_URL = LOGOUT_REDIRECT_URL
+ACCOUNT_LOGIN_REDIRECT_URL = LOGIN_REDIRECT_URL
+ACCOUNT_EMAIL_SUBJECT_PREFIX = EMAIL_SUBJECT_PREFIX
+# Use https in production, http in development
+ACCOUNT_DEFAULT_HTTP_PROTOCOL = 'https' if not DEBUG else 'http'
+
 STATICFILES_DIRS = [
     os.path.join(BASE_DIR, '../geo-frontend/dist'),  # Include dist root for favicon.ico
     os.path.join(BASE_DIR, '../geo-frontend/dist/static'),  # Vue.js static assets
@@ -203,7 +231,7 @@ STATICFILES_DIRS = [
 
 APPEND_SLASH = True
 
-LOGIN_URL = '/account/login'
+LOGIN_URL = '/accounts/login/'
 
 CSRF_TRUSTED_ORIGINS = config.get_list('security.csrf_trusted_origins', ['http://localhost:5173'])
 

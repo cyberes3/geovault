@@ -1,0 +1,10 @@
+{% load allauth %}
+{% for field in attrs.form %}
+    {% if attrs.unlabeled %}
+        {% element field field=field unlabeled=True %}
+        {% endelement %}
+    {% else %}
+        {% element field field=field %}
+        {% endelement %}
+    {% endif %}
+{% endfor %}

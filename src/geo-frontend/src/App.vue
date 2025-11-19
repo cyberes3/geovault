@@ -63,6 +63,13 @@
                 >
                   Settings
                 </router-link>
+                <div class="border-t border-gray-200 my-1"></div>
+                <button
+                  @click="performLogout"
+                  class="block w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-gray-100"
+                >
+                  Sign Out
+                </button>
               </div>
             </div>
           </div>
@@ -84,6 +91,8 @@
 <script>
 import {mapState} from "vuex";
 import {realtimeSocket} from "@/assets/js/websocket/realtimeSocket.js";
+import {getCookie} from "@/assets/js/auth.js";
+import axios from "axios";
 
 export default {
   name: 'App',
@@ -146,6 +155,31 @@ export default {
     },
     handleLogout() {
       realtimeSocket.forceDisconnect();
+    },
+    async performLogout() {
+      this.closeUserMenu();
+      try {
+        // Disconnect WebSocket first
+        this.handleLogout();
+        
+        // Call allauth logout endpoint (requires POST with CSRF token)
+        await axios.post('/accounts/logout/', {}, {
+          headers: {
+            'X-CSRFToken': getCookie('csrftoken')
+          }
+        });
+        
+        // Clear user info from store
+        this.$store.commit('userInfo', null);
+        
+        // Redirect to login page
+        window.location.href = '/accounts/login/';
+      } catch (error) {
+        console.error('Logout error:', error);
+        // Even if logout fails, clear local state and redirect
+        this.$store.commit('userInfo', null);
+        window.location.href = '/accounts/login/';
+      }
     },
     toggleUserMenu() {
       this.userMenuOpen = !this.userMenuOpen;
