@@ -1,4 +1,5 @@
 .idea
+allauth templates
 
 migrations/
 !migrations/__init__.py

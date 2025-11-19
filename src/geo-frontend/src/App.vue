@@ -40,8 +40,30 @@
             </div>
           </div>
           <div class="flex items-center">
-            <div class="flex-shrink-0">
-              <span class="text-sm text-gray-500">Welcome, {{ userInfo?.username || 'Guest' }}</span>
+            <div class="relative" ref="userMenuRef">
+              <button
+                @click="toggleUserMenu"
+                class="flex items-center text-sm font-medium text-gray-900 hover:text-gray-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 rounded-md px-3 py-2"
+              >
+                {{ userInfo?.username || 'Guest' }}
+                <svg class="ml-2 h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"></path>
+                </svg>
+              </button>
+              
+              <!-- Dropdown Menu -->
+              <div
+                v-if="userMenuOpen"
+                class="absolute right-0 mt-2 w-48 bg-white rounded-md shadow-lg py-1 z-50 border border-gray-200"
+              >
+                <router-link
+                  to="/settings"
+                  @click="closeUserMenu"
+                  class="block px-4 py-2 text-sm text-gray-700 hover:bg-gray-100"
+                >
+                  Settings
+                </router-link>
+              </div>
             </div>
           </div>
         </div>
@@ -67,7 +89,8 @@ export default {
   name: 'App',
   data() {
     return {
-      realtimeListenersAdded: false
+      realtimeListenersAdded: false,
+      userMenuOpen: false
     }
   },
   computed: {
@@ -123,6 +146,17 @@ export default {
     },
     handleLogout() {
       realtimeSocket.forceDisconnect();
+    },
+    toggleUserMenu() {
+      this.userMenuOpen = !this.userMenuOpen;
+    },
+    closeUserMenu() {
+      this.userMenuOpen = false;
+    },
+    handleClickOutside(event) {
+      if (this.$refs.userMenuRef && !this.$refs.userMenuRef.contains(event.target)) {
+        this.userMenuOpen = false;
+      }
     }
   },
   async created() {
@@ -131,9 +165,13 @@ export default {
   },
   mounted() {
     // WebSocket connection is managed globally and persists across page navigation
+    // Add click outside listener for user menu
+    document.addEventListener('click', this.handleClickOutside);
   },
   beforeDestroy() {
     // Don't disconnect WebSocket here - let it stay connected across the app lifecycle
+    // Remove click outside listener
+    document.removeEventListener('click', this.handleClickOutside);
   }
 };
 </script>

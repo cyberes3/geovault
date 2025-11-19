@@ -104,3 +104,35 @@ maxmind:
   # Path to MaxMind GeoIP2 database file
   database_path: "/var/lib/GeoIP/GeoLite2-Country.mmdb"
 
+# Email Configuration
+email:
+  # SMTP Configuration
+  smtp:
+    # SMTP server host
+    host: "smtp.gmail.com"
+    
+    # SMTP server port (587 for TLS, 465 for SSL, 25 for unencrypted)
+    port: 587
+    
+    # Use TLS encryption (recommended)
+    use_tls: true
+    
+    # Use SSL encryption (alternative to TLS, typically on port 465)
+    use_ssl: false
+    
+    # SMTP username (usually your email address)
+    username: "your-email@gmail.com"
+    
+    # SMTP password (can be overridden with EMAIL_HOST_PASSWORD environment variable)
+    # For Gmail, use an app-specific password, not your regular password
+    password: "your-app-specific-password"
+  
+  # Email sender configuration
+  from_email: "noreply@example.com"
+  
+  # Default "from" name (optional)
+  from_name: "GeoServer"
+  
+  # Subject prefix for emails (optional)
+  subject_prefix: "[GeoServer] "
+

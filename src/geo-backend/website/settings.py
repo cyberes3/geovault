@@ -166,7 +166,34 @@ DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
 LOGIN_REDIRECT_URL = '/#/dashboard'
 LOGOUT_REDIRECT_URL = '/#/'
 
-# TODO: https://realpython.com/django-user-management/#send-password-reset-links
+# Email Configuration
+# Always use SMTP backend
+EMAIL_BACKEND = 'django.core.mail.backends.smtp.EmailBackend'
+EMAIL_HOST = config.get_str('email.smtp.host', 'smtp.gmail.com')
+EMAIL_PORT = config.get_int('email.smtp.port', 587)
+EMAIL_USE_TLS = config.get_bool('email.smtp.use_tls', True)
+EMAIL_USE_SSL = config.get_bool('email.smtp.use_ssl', False)
+EMAIL_HOST_USER = config.get_str('email.smtp.username', '')
+EMAIL_HOST_PASSWORD = config.get_with_env_override(
+    'email.smtp.password',
+    'EMAIL_HOST_PASSWORD',
+    ''
+)
+
+# Email sender configuration
+from_email = config.get_str('email.from_email', 'noreply@example.com')
+from_name = config.get_str('email.from_name', '')
+
+# Format "From" email with optional name
+if from_name:
+    DEFAULT_FROM_EMAIL = f"{from_name} <{from_email}>"
+else:
+    DEFAULT_FROM_EMAIL = from_email
+
+SERVER_EMAIL = from_email  # Used for error notifications to admins (email only, no name)
+
+# Optional: Subject prefix
+EMAIL_SUBJECT_PREFIX = config.get_str('email.subject_prefix', '')
 
 STATICFILES_DIRS = [
     os.path.join(BASE_DIR, '../geo-frontend/dist'),  # Include dist root for favicon.ico
@@ -286,6 +313,24 @@ LOGGING = {
         },
     },
     'loggers': {
+        # Root logger - catches all unhandled loggers
+        '': {
+            'handlers': ['console'],
+            'level': 'WARNING',  # Only show warnings and errors by default
+            'propagate': False,
+        },
+        # Django mail logging
+        'django.core.mail': {
+            'handlers': ['console'],
+            'level': 'INFO',
+            'propagate': False,
+        },
+        # Users app logging
+        'users': {
+            'handlers': ['console'],
+            'level': 'INFO',
+            'propagate': False,
+        },
         # Access logging - HTTP requests, API endpoints, views
         'access': {
             'handlers': ['console'],

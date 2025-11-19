@@ -36,6 +36,11 @@ const routes = [
         path: '/tags',
         name: 'Tags',
         component: () => import('./components/TagsPage.vue'),
+    },
+    {
+        path: '/settings',
+        name: 'Settings',
+        component: () => import('./components/settings/Settings.vue'),
     }
 ]
 
