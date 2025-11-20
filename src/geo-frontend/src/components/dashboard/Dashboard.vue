@@ -52,36 +52,6 @@
       </div>
     </div>
 
-    <!-- Tags Section -->
-    <div class="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
-      <div class="flex items-center justify-between mb-4">
-        <h2 class="text-lg font-semibold text-gray-900">Your Tags</h2>
-        <router-link
-          v-if="filteredTags && filteredTags.length > 0"
-          to="/tags"
-          class="text-sm font-medium text-blue-600 hover:text-blue-800"
-        >
-          View All Tags →
-        </router-link>
-      </div>
-      <div v-if="filteredTags && filteredTags.length > 0" class="flex flex-wrap gap-2">
-        <router-link
-          v-for="tagObj in filteredTags"
-          :key="tagObj.tag"
-          to="/tags"
-          class="inline-flex items-center px-3 py-1 rounded-full text-sm font-medium bg-blue-100 text-blue-800 border border-blue-200 hover:bg-blue-200 transition-colors cursor-pointer"
-        >
-          <span>{{ tagObj.tag }}</span>
-          <span class="ml-1.5 px-1.5 py-0.5 rounded-full text-xs font-semibold bg-blue-200 text-blue-900">
-            {{ tagObj.count }}
-          </span>
-        </router-link>
-      </div>
-      <div v-else class="text-gray-500 text-sm">
-        No tags found. Tags will appear here once you import features with tags.
-      </div>
-    </div>
-
     <!-- Quick Actions -->
     <div class="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
       <h2 class="text-lg font-semibold text-gray-900 mb-4">Quick Actions</h2>
@@ -148,14 +118,6 @@ import {authMixin} from "@/assets/js/authMixin.js";
 export default {
   computed: {
     ...mapState(["userInfo"]),
-    filteredTags() {
-      if (!this.userInfo || !this.userInfo.tags) {
-        return [];
-      }
-      // Tags are now objects with tag and count properties, already filtered by backend
-      // Just return them as-is (they're already top 5 and filtered)
-      return this.userInfo.tags;
-    }
   },
   components: {},
   mixins: [authMixin],

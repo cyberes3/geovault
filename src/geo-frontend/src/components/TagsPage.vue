@@ -2,22 +2,11 @@
   <div class="space-y-6">
     <!-- Page Header -->
     <div class="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
-      <div class="flex items-center justify-between mb-4">
-        <div>
-          <h1 class="text-2xl font-bold text-gray-900 mb-2">Tags</h1>
-          <p class="text-gray-600">Browse your features organized by tags</p>
-        </div>
-        <router-link
-          to="/dashboard"
-          class="inline-flex items-center px-4 py-2 border border-gray-300 rounded-md shadow-sm text-sm font-medium text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500"
-        >
-          <svg class="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 19l-7-7m0 0l7-7m-7 7h18"></path>
-          </svg>
-          Back to Dashboard
-        </router-link>
+      <div class="mb-4">
+        <h1 class="text-2xl font-bold text-gray-900 mb-2">Tags</h1>
+        <p class="text-gray-600">Browse your features organized by tags</p>
       </div>
-      
+
       <!-- Search Input -->
       <div class="relative">
         <div class="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
@@ -93,30 +82,61 @@
         <!-- Tag Header -->
         <div class="bg-gray-50 px-6 py-4 border-b border-gray-200">
           <div class="flex items-center justify-between">
-            <div class="flex items-center space-x-3">
-              <span class="inline-flex items-center px-3 py-1 rounded-full text-sm font-medium bg-blue-100 text-blue-800 border border-blue-200">
+            <div class="flex items-center space-x-3 flex-1">
+              <span v-if="editingTag !== tag" class="inline-flex items-center px-3 py-1 rounded-full text-sm font-medium bg-blue-100 text-blue-800 border border-blue-200">
                 {{ tag }}
               </span>
-              <span class="text-sm text-gray-500">
-                {{ features.length }} {{ features.length === 1 ? 'feature' : 'features' }}
-              </span>
+              <input
+                v-else
+                v-model="editingTagValue"
+                @keyup.enter="saveTagEdit(tag)"
+                @keyup.esc="cancelTagEdit"
+                @focus.stop
+                @click.stop
+                ref="tagEditInput"
+                class="inline-flex items-center px-3 py-1 rounded-md text-sm font-medium bg-white text-gray-900 border border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-1"
+                type="text"
+              />
+            </div>
+            <div v-if="editingTag !== tag" class="flex items-center space-x-1">
+              <button
+                @click.stop.prevent="startTagEdit(tag)"
+                @mousedown.stop.prevent
+                type="button"
+                class="p-1.5 text-gray-400 hover:text-gray-600 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-1 rounded"
+                title="Edit tag name"
+              >
+                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"></path>
+                </svg>
+              </button>
+              <button
+                @click.stop.prevent="deleteTag(tag)"
+                @mousedown.stop.prevent
+                type="button"
+                class="p-1.5 text-gray-400 hover:text-red-600 focus:outline-none focus:ring-2 focus:ring-red-500 focus:ring-offset-1 rounded"
+                title="Delete tag"
+              >
+                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"></path>
+                </svg>
+              </button>
             </div>
             <button
-              @click="toggleTag(tag)"
-              class="text-sm text-gray-600 hover:text-gray-900"
+              v-else
+              @click.stop="saveTagEdit(tag)"
+              class="ml-2 p-1.5 bg-blue-600 text-white hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-1 rounded"
+              title="Save tag name"
             >
-              <svg v-if="expandedTags[tag]" class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 15l7-7 7 7"></path>
-              </svg>
-              <svg v-else class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"></path>
+              <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"></path>
               </svg>
             </button>
           </div>
         </div>
 
         <!-- Features List -->
-        <div v-if="expandedTags[tag]" class="divide-y divide-gray-200">
+        <div class="divide-y divide-gray-200">
           <div
             v-for="(feature, index) in features"
             :key="feature.properties._id || index"
@@ -136,11 +156,22 @@
                   </span>
                 </div>
               </div>
-              <div class="ml-4 flex-shrink-0">
+              <div class="ml-4 flex-shrink-0 relative z-10 flex items-center space-x-2">
+                <button
+                  @click.stop.prevent="removeTagFromFeature(tag, feature)"
+                  type="button"
+                  class="p-1.5 text-gray-400 hover:text-red-600 focus:outline-none focus:ring-2 focus:ring-red-500 focus:ring-offset-1 rounded"
+                  title="Remove this feature from tag"
+                >
+                  <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path>
+                  </svg>
+                </button>
                 <router-link
                   v-if="feature.properties._id"
                   :to="{ path: '/map', query: { featureId: feature.properties._id } }"
-                  class="inline-flex items-center px-3 py-1.5 border border-gray-300 rounded-md text-xs font-medium text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500"
+                  @click.stop
+                  class="inline-flex items-center px-3 py-1.5 border border-gray-300 rounded-md text-xs font-medium text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 cursor-pointer"
                 >
                   View on Map
                   <svg class="w-3 h-3 ml-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -167,8 +198,9 @@ export default {
       tagsData: {},
       loading: true,
       error: null,
-      expandedTags: {}, // Track which tags are expanded
-      searchQuery: '' // Search query for filtering tags
+      searchQuery: '', // Search query for filtering tags
+      editingTag: null, // Tag currently being edited
+      editingTagValue: '' // Value of tag being edited
     }
   },
   computed: {
@@ -176,16 +208,16 @@ export default {
       if (!this.searchQuery.trim()) {
         return this.tagsData;
       }
-      
+
       const query = this.searchQuery.toLowerCase().trim();
       const filtered = {};
-      
+
       for (const [tag, features] of Object.entries(this.tagsData)) {
         if (tag.toLowerCase().includes(query)) {
           filtered[tag] = features;
         }
       }
-      
+
       return filtered;
     }
   },
@@ -193,22 +225,18 @@ export default {
     async fetchTagsData() {
       this.loading = true;
       this.error = null;
-      
+
       try {
         const response = await fetch('/api/data/features/by-tag/');
-        
+
         if (!response.ok) {
           throw new Error(`HTTP error! status: ${response.status}`);
         }
-        
+
         const data = await response.json();
-        
+
         if (data.success && data.tags) {
           this.tagsData = data.tags;
-          // Expand all tags by default
-          Object.keys(data.tags).forEach(tag => {
-            this.expandedTags[tag] = true;
-          });
         } else {
           throw new Error(data.error || 'Failed to load tags');
         }
@@ -219,8 +247,260 @@ export default {
         this.loading = false;
       }
     },
-    toggleTag(tag) {
-      this.expandedTags[tag] = !this.expandedTags[tag];
+    startTagEdit(tag, event) {
+      if (event) {
+        event.preventDefault();
+        event.stopPropagation();
+      }
+      this.editingTag = tag;
+      this.editingTagValue = tag;
+      // Focus the input after it's rendered
+      this.$nextTick(() => {
+        // Find the tag edit input (not the search input which has a placeholder)
+        const allInputs = this.$el.querySelectorAll('input[type="text"]');
+        const tagInput = Array.from(allInputs).find(input => !input.placeholder);
+        if (tagInput) {
+          // Use setTimeout to ensure focus happens after any other focus events
+          setTimeout(() => {
+            tagInput.focus();
+            tagInput.select();
+          }, 0);
+        }
+      });
+    },
+    cancelTagEdit() {
+      this.editingTag = null;
+      this.editingTagValue = '';
+    },
+    async saveTagEdit(oldTag) {
+      const newTag = this.editingTagValue.trim();
+
+      // Validate the new tag name
+      if (!newTag) {
+        alert('Tag name cannot be empty');
+        return;
+      }
+
+      if (newTag === oldTag) {
+        // No change, just cancel
+        this.cancelTagEdit();
+        return;
+      }
+
+      // Check if the new tag already exists
+      if (this.tagsData[newTag]) {
+        alert(`Tag "${newTag}" already exists. Please choose a different name.`);
+        return;
+      }
+
+      try {
+        // Get all features with this tag
+        const features = this.tagsData[oldTag] || [];
+
+        // Update each feature's tags
+        const updatePromises = features.map(async (feature) => {
+          if (!feature.properties._id) {
+            return;
+          }
+
+          // Get current tags
+          const currentTags = Array.isArray(feature.properties.tags)
+            ? [...feature.properties.tags]
+            : [];
+
+          // Replace old tag with new tag
+          const tagIndex = currentTags.indexOf(oldTag);
+          if (tagIndex !== -1) {
+            currentTags[tagIndex] = newTag;
+          } else {
+            // Tag not found in array, add it (shouldn't happen, but handle gracefully)
+            currentTags.push(newTag);
+          }
+
+          // Update the feature
+          const csrfToken = this.getCookie('csrftoken');
+          const response = await fetch(`/api/data/feature/${feature.properties._id}/update-metadata/`, {
+            method: 'PUT',
+            headers: {
+              'Content-Type': 'application/json',
+              'X-CSRFToken': csrfToken || ''
+            },
+            body: JSON.stringify({
+              tags: currentTags
+            })
+          });
+
+          if (!response.ok) {
+            throw new Error(`Failed to update feature ${feature.properties._id}`);
+          }
+        });
+
+        // Wait for all updates to complete
+        await Promise.all(updatePromises);
+
+        // Update local state
+        const newTagsData = { ...this.tagsData };
+        newTagsData[newTag] = newTagsData[oldTag];
+        delete newTagsData[oldTag];
+        this.tagsData = newTagsData;
+
+        // Cancel edit mode
+        this.cancelTagEdit();
+
+        // Refresh the data to ensure consistency
+        await this.fetchTagsData();
+
+        // Scroll to the newly renamed tag after data refresh
+        this.$nextTick(() => {
+          this.scrollToTag(newTag);
+        });
+      } catch (error) {
+        console.error('Error updating tag:', error);
+        alert(`Failed to update tag: ${error.message}`);
+      }
+    },
+    scrollToTag(tagName) {
+      // Find the tag element by looking for the tag name in the DOM
+      // The tag container has class "bg-white rounded-lg shadow-sm border border-gray-200"
+      const tagContainers = this.$el.querySelectorAll('.bg-white.rounded-lg.shadow-sm');
+      for (const container of tagContainers) {
+        // Check if this container's header contains the tag name
+        const tagHeader = container.querySelector('.bg-gray-50');
+        if (tagHeader) {
+          const tagSpan = tagHeader.querySelector('span.inline-flex');
+          if (tagSpan && tagSpan.textContent.trim() === tagName) {
+            // Scroll the container into view with smooth behavior
+            container.scrollIntoView({ behavior: 'smooth', block: 'center' });
+            break;
+          }
+        }
+      }
+    },
+    async deleteTag(tag) {
+      // Get the number of features with this tag
+      const features = this.tagsData[tag] || [];
+      const featureCount = features.length;
+
+      // Show confirmation dialog
+      const confirmMessage = `Are you sure you want to delete the tag "${tag}"?\n\nThis will remove the tag from ${featureCount} ${featureCount === 1 ? 'feature' : 'features'}.`;
+      if (!confirm(confirmMessage)) {
+        return;
+      }
+
+      try {
+        // Remove the tag from all features
+        const updatePromises = features.map(async (feature) => {
+          if (!feature.properties._id) {
+            return;
+          }
+
+          // Get current tags
+          const currentTags = Array.isArray(feature.properties.tags)
+            ? [...feature.properties.tags]
+            : [];
+
+          // Remove the tag from the array
+          const filteredTags = currentTags.filter(t => t !== tag);
+
+          // Update the feature
+          const csrfToken = this.getCookie('csrftoken');
+          const response = await fetch(`/api/data/feature/${feature.properties._id}/update-metadata/`, {
+            method: 'PUT',
+            headers: {
+              'Content-Type': 'application/json',
+              'X-CSRFToken': csrfToken || ''
+            },
+            body: JSON.stringify({
+              tags: filteredTags
+            })
+          });
+
+          if (!response.ok) {
+            throw new Error(`Failed to update feature ${feature.properties._id}`);
+          }
+        });
+
+        // Wait for all updates to complete
+        await Promise.all(updatePromises);
+
+        // Remove tag from local state
+        const newTagsData = { ...this.tagsData };
+        delete newTagsData[tag];
+        this.tagsData = newTagsData;
+
+        // Refresh the data to ensure consistency
+        await this.fetchTagsData();
+      } catch (error) {
+        console.error('Error deleting tag:', error);
+        alert(`Failed to delete tag: ${error.message}`);
+      }
+    },
+    async removeTagFromFeature(tag, feature) {
+      if (!feature.properties._id) {
+        return;
+      }
+
+      // Show confirmation dialog
+      const featureName = feature.properties.name || 'Unnamed Feature';
+      const confirmMessage = `Are you sure you want to remove the tag "${tag}" from "${featureName}"?`;
+      if (!confirm(confirmMessage)) {
+        return;
+      }
+
+      try {
+        // Get current tags
+        const currentTags = Array.isArray(feature.properties.tags)
+          ? [...feature.properties.tags]
+          : [];
+
+        // Remove the tag from the array
+        const filteredTags = currentTags.filter(t => t !== tag);
+
+        // Update the feature
+        const csrfToken = this.getCookie('csrftoken');
+        const response = await fetch(`/api/data/feature/${feature.properties._id}/update-metadata/`, {
+          method: 'PUT',
+          headers: {
+            'Content-Type': 'application/json',
+            'X-CSRFToken': csrfToken || ''
+          },
+          body: JSON.stringify({
+            tags: filteredTags
+          })
+        });
+
+        if (!response.ok) {
+          throw new Error(`Failed to update feature ${feature.properties._id}`);
+        }
+
+        // Update local state - remove feature from tag's list
+        const newTagsData = { ...this.tagsData };
+        if (newTagsData[tag]) {
+          newTagsData[tag] = newTagsData[tag].filter(f => f.properties._id !== feature.properties._id);
+          // If no features left with this tag, remove the tag entry
+          if (newTagsData[tag].length === 0) {
+            delete newTagsData[tag];
+          }
+        }
+        this.tagsData = newTagsData;
+      } catch (error) {
+        console.error('Error removing tag from feature:', error);
+        alert(`Failed to remove tag from feature: ${error.message}`);
+      }
+    },
+    getCookie(name) {
+      let cookieValue = null;
+      if (document.cookie && document.cookie !== '') {
+        const cookies = document.cookie.split(';');
+        for (let i = 0; i < cookies.length; i++) {
+          const cookie = cookies[i].trim();
+          if (cookie.substring(0, name.length + 1) === (name + '=')) {
+            cookieValue = decodeURIComponent(cookie.substring(name.length + 1));
+            break;
+          }
+        }
+      }
+      return cookieValue;
     }
   },
   async mounted() {
