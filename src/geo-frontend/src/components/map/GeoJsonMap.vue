@@ -2,8 +2,8 @@
   <div class="w-full h-full flex">
     <!-- Left Sidebar - Feature List -->
     <FeatureListSidebar
-      :features="featuresInExtent"
-      @feature-click="zoomToFeature"
+        :features="featuresInExtent"
+        @feature-click="zoomToFeature"
     />
 
     <!-- Center - Map -->
@@ -18,7 +18,7 @@
             <div class="bg-white rounded-lg shadow-xl p-6 max-w-md mx-4 select-none">
               <div class="flex items-center space-x-3 mb-4">
                 <svg class="w-8 h-8 text-red-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path>
+                  <path d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" stroke-linecap="round" stroke-linejoin="round" stroke-width="2"></path>
                 </svg>
                 <h3 class="text-lg font-semibold text-gray-900">Invalid Share Link</h3>
               </div>
@@ -32,7 +32,8 @@
         <div v-if="isPublicShareMode" class="absolute top-4 right-4 bg-white bg-opacity-90 px-4 py-2 rounded-lg shadow-md z-10">
           <div class="flex items-center space-x-2">
             <svg class="w-5 h-5 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8.684 13.342C8.885 12.938 9 12.482 9 12c0-.482-.115-.938-.316-1.342m0 2.684a3 3 0 110-2.684m0 2.684l6.632 3.316m-6.632-6l6.632-3.316m0 0a3 3 0 105.367-2.684 3 3 0 00-5.367 2.684zm0 9.316a3 3 0 105.368 2.684 3 3 0 00-5.368-2.684z"></path>
+              <path d="M8.684 13.342C8.885 12.938 9 12.482 9 12c0-.482-.115-.938-.316-1.342m0 2.684a3 3 0 110-2.684m0 2.684l6.632 3.316m-6.632-6l6.632-3.316m0 0a3 3 0 105.367-2.684 3 3 0 00-5.367 2.684zm0 9.316a3 3 0 105.368 2.684 3 3 0 00-5.368-2.684z" stroke-linecap="round" stroke-linejoin="round"
+                    stroke-width="2"></path>
             </svg>
             <span v-if="publicShareTag && !publicShareError" class="text-sm font-medium text-gray-900">Shared: {{ publicShareTag }}</span>
           </div>
@@ -48,37 +49,46 @@
 
         <!-- Feature Info Box or Edit Box -->
         <FeatureInfoBox
-          v-if="!isEditingFeature && !isPublicShareMode"
-          :feature="selectedFeature"
-          @close="selectedFeature = null"
-          @edit="handleEditFeature"
+            v-if="!isEditingFeature && !isPublicShareMode"
+            :feature="selectedFeature"
+            @close="selectedFeature = null"
+            @edit="handleEditFeature"
         />
         <FeatureInfoBox
-          v-if="!isEditingFeature && isPublicShareMode"
-          :feature="selectedFeature"
-          :show-edit-button="false"
-          @close="selectedFeature = null"
+            v-if="!isEditingFeature && isPublicShareMode"
+            :feature="selectedFeature"
+            :show-edit-button="false"
+            @close="selectedFeature = null"
         />
         <FeatureEditBox
-          v-if="isEditingFeature && !isPublicShareMode"
-          :feature="selectedFeature"
-          @cancel="handleCancelEdit"
-          @saved="handleFeatureSaved"
-          @deleted="handleFeatureDeleted"
+            v-if="isEditingFeature && !isPublicShareMode"
+            :feature="selectedFeature"
+            @cancel="handleCancelEdit"
+            @deleted="handleFeatureDeleted"
+            @saved="handleFeatureSaved"
+        />
+
+        <!-- Feature Selection Popup (for overlapping features) -->
+        <FeatureSelectionPopup
+            :features="overlappingFeatures"
+            :position="popupPosition"
+            :visible="showFeaturePopup"
+            @close="showFeaturePopup = false"
+            @select="handleFeatureSelect"
         />
       </div>
     </div>
 
     <!-- Right Sidebar - Map Controls -->
     <MapControlsSidebar
-      :selected-layer="selectedLayer"
-      :tile-sources="tileSources"
-      :feature-count="featureCount"
-      :max-features="MAX_FEATURES"
-      :user-location="userLocation"
-      :location-display-name="getLocationDisplayName()"
-      :allowed-options="publicShareAllowedOptions"
-      @layer-change="updateMapLayer"
+        :allowed-options="publicShareAllowedOptions"
+        :feature-count="featureCount"
+        :location-display-name="getLocationDisplayName()"
+        :max-features="MAX_FEATURES"
+        :selected-layer="selectedLayer"
+        :tile-sources="tileSources"
+        :user-location="userLocation"
+        @layer-change="updateMapLayer"
     />
   </div>
 </template>
@@ -99,6 +109,7 @@ import FeatureListSidebar from './FeatureListSidebar.vue'
 import MapControlsSidebar from './MapControlsSidebar.vue'
 import FeatureInfoBox from './FeatureInfoBox.vue'
 import FeatureEditBox from './FeatureEditBox.vue'
+import FeatureSelectionPopup from './FeatureSelectionPopup.vue'
 
 export default {
   name: 'GeoJsonMap',
@@ -106,7 +117,8 @@ export default {
     FeatureListSidebar,
     MapControlsSidebar,
     FeatureInfoBox,
-    FeatureEditBox
+    FeatureEditBox,
+    FeatureSelectionPopup
   },
   mixins: [],
   computed: {
@@ -171,7 +183,11 @@ export default {
         mapLayer: true, // Allow map layer selection
         featureStats: false, // Hide feature stats for public users
         userLocation: false // Hide user location for public users
-      }
+      },
+      // Feature selection popup state
+      overlappingFeatures: [], // Array of features at click point
+      popupPosition: {x: 0, y: 0, containerWidth: 0, containerHeight: 0}, // Pixel coordinates and container dimensions for popup positioning
+      showFeaturePopup: false // Boolean flag to show/hide popup
     }
   },
   methods: {
@@ -217,7 +233,7 @@ export default {
           name: 'OpenStreetMap',
           type: 'osm',
           requires_proxy: false,
-          client_config: { type: 'osm' }
+          client_config: {type: 'osm'}
         }]
       }
     },
@@ -373,6 +389,13 @@ export default {
       this.isEditingFeature = false // Reset edit mode when selecting a new feature
     },
 
+    // Handle feature selection from popup
+    handleFeatureSelect(feature) {
+      this.selectedFeature = feature
+      this.isEditingFeature = false
+      this.showFeaturePopup = false
+    },
+
     // Handle edit button click
     handleEditFeature() {
       // Disable editing in public share mode
@@ -421,8 +444,8 @@ export default {
                 // Manually preserve properties from the GeoJSON data (same as loadDataForCurrentView)
                 // Create a new properties object to avoid reference issues
                 const properties = geojsonData && geojsonData.properties
-                  ? { ...geojsonData.properties }
-                  : {}
+                    ? {...geojsonData.properties}
+                    : {}
 
                 // Add the _id to properties for future updates
                 properties._id = featureId
@@ -578,32 +601,80 @@ export default {
 
       // Add click event listener for feature selection
       this.map.on('click', (event) => {
-        const clickedFeature = this.map.forEachFeatureAtPixel(
-          event.pixel,
-          (feature) => feature,
-          {
-            hitTolerance: 5 // 5 pixel tolerance for easier clicking
-          }
+        // Collect all features at the click point
+        const featuresAtPixel = []
+        const seenFeatures = new WeakSet() // Track unique features by object reference
+        const seenIds = new Set() // Track features by ID for deduplication
+
+        this.map.forEachFeatureAtPixel(
+            event.pixel,
+            (feature) => {
+              // Deduplicate features: check by object reference first, then by ID
+              if (seenFeatures.has(feature)) {
+                return false // Skip duplicate feature object
+              }
+
+              const properties = feature.get('properties') || {}
+              const featureId = properties._id
+
+              // If feature has an ID, check if we've seen this ID before
+              if (featureId) {
+                if (seenIds.has(featureId)) {
+                  return false // Skip duplicate feature with same ID
+                }
+                seenIds.add(featureId)
+              }
+
+              // Mark this feature as seen and add to list
+              seenFeatures.add(feature)
+              featuresAtPixel.push(feature)
+              return false // Continue collecting all features
+            },
+            {
+              hitTolerance: 12 // Increased tolerance for easier clicking
+            }
         )
 
-        if (clickedFeature) {
-          this.selectedFeature = clickedFeature
-          this.isEditingFeature = false // Reset edit mode when selecting a new feature
-        } else {
-          // Clear selection if clicking on empty space
+        // Close popup if clicking elsewhere
+        if (this.showFeaturePopup) {
+          this.showFeaturePopup = false
+        }
+
+        if (featuresAtPixel.length === 0) {
+          // No features: Clear selection
           this.selectedFeature = null
           this.isEditingFeature = false
+        } else if (featuresAtPixel.length === 1) {
+          // Single feature: Select directly (existing behavior)
+          this.selectedFeature = featuresAtPixel[0]
+          this.isEditingFeature = false
+        } else {
+          // Multiple features: Show popup
+          // Close info box if it's open
+          this.selectedFeature = null
+          this.isEditingFeature = false
+          this.overlappingFeatures = featuresAtPixel
+          // Get pixel coordinates relative to map container
+          const mapContainer = this.$refs.mapContainer
+          const containerRect = mapContainer ? mapContainer.getBoundingClientRect() : {width: window.innerWidth, height: window.innerHeight}
+          this.popupPosition = {
+            x: event.pixel[0],
+            y: event.pixel[1],
+            containerWidth: containerRect.width,
+            containerHeight: containerRect.height
+          }
+          this.showFeaturePopup = true
         }
       })
 
       // Change cursor when hovering over features
       this.map.on('pointermove', (event) => {
         const hasFeature = this.map.forEachFeatureAtPixel(
-          event.pixel,
-          (feature) => feature,
-          {
-            hitTolerance: 5
-          }
+            event.pixel,
+            (feature) => feature,
+            {
+              hitTolerance: 12 // Match click tolerance
+            }
         )
 
         this.map.getViewport().style.cursor = hasFeature ? 'pointer' : ''
@@ -781,8 +852,8 @@ export default {
           // Log error if fallback mechanism was used
           if (data.fallback_used) {
             console.error(
-              'ERROR: Spatial query returned suspiciously few results for large extent. ' +
-              'Fell back to world-wide query. This may indicate a problem with the spatial query or extent calculation.'
+                'ERROR: Spatial query returned suspiciously few results for large extent. ' +
+                'Fell back to world-wide query. This may indicate a problem with the spatial query or extent calculation.'
             )
           }
 
@@ -1082,9 +1153,9 @@ export default {
                 if (extent && extent.length === 4) {
                   // Check if extent is valid (not infinite or NaN)
                   const isValid = extent.every(val =>
-                    typeof val === 'number' &&
-                    isFinite(val) &&
-                    !isNaN(val)
+                      typeof val === 'number' &&
+                      isFinite(val) &&
+                      !isNaN(val)
                   )
 
                   if (isValid) {
@@ -1121,7 +1192,7 @@ export default {
           }
 
           this.publicShareLoaded = true
-          
+
           // Update features in extent list after loading public share data
           this.updateFeaturesInExtent()
         } else {
@@ -1204,8 +1275,8 @@ export default {
 
         // Preserve properties from the GeoJSON data
         const properties = geojsonData && geojsonData.properties
-          ? { ...geojsonData.properties }
-          : {}
+            ? {...geojsonData.properties}
+            : {}
 
         // Add the _id to properties
         properties._id = featureId
@@ -1246,7 +1317,7 @@ export default {
 
     // Remove featureId parameter from URL
     removeFeatureIdFromUrl() {
-      const query = { ...this.$route.query }
+      const query = {...this.$route.query}
       delete query.featureId
       this.$router.replace({
         path: this.$route.path,
@@ -1263,7 +1334,7 @@ export default {
       if (this.isPublicShareMode) {
         const newShareId = to.query.id
         const oldShareId = from?.query?.id
-        
+
         // If share ID changed, reload the share data
         if (newShareId !== oldShareId) {
           console.log('Share ID changed, reloading share data:', newShareId)
@@ -1271,14 +1342,14 @@ export default {
           this.publicShareLoaded = false
           this.publicShareError = null
           this.publicShareTag = null
-          
+
           // Re-enable map interactions in case they were disabled
           if (this.map) {
             this.map.getInteractions().forEach(interaction => {
               interaction.setActive(true)
             })
           }
-          
+
           // Clear existing features
           if (this.vectorSource) {
             this.vectorSource.clear()
@@ -1287,7 +1358,7 @@ export default {
           this.loadedBounds.clear()
           this.selectedFeature = null
           this.isEditingFeature = false
-          
+
           // Reload the new share data
           if (this.map && this.vectorSource) {
             this.loadPublicShareData()
@@ -1308,12 +1379,12 @@ export default {
     if (!this.isPublicShareMode) {
       // Check if userInfo already exists in store (set by App.vue)
       const existingUserInfo = this.$store.state.userInfo;
-      
+
       if (existingUserInfo && existingUserInfo.username) {
         // User info already loaded, no need to make API call
         return;
       }
-      
+
       // Only call API if store is empty
       const userStatus = await getUserInfo()
       if (!userStatus || !userStatus.authorized) {
