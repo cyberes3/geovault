@@ -323,20 +323,30 @@ def _find_coordinate_duplicates_batched(features: List[Dict], user_id: int, impo
 def _find_existing_features_by_coordinates(coordinates: List, geom_type: str, user_id: int) -> List[Dict]:
     """Find existing features in the database with matching coordinates."""
     try:
+        # Normalize coordinates to handle floating point precision differences
+        normalized_coords = _normalize_coordinates(coordinates)
+        
         # Create a GEOSGeometry object for spatial queries
         if geom_type == 'point':
-            # For points, use exact coordinate matching
-            geom_data = {
-                'type': 'Point',
-                'coordinates': coordinates
-            }
-            geometry = GEOSGeometry(json.dumps(geom_data))
-
-            # Find features with the same point coordinates
-            existing_features = FeatureStore.objects.filter(
+            # For points, we need to handle floating point precision differences.
+            # Query all features for this user and filter by geometry type and compare normalized coordinates in Python
+            # This is more reliable than database-level exact matching which can fail due to precision differences
+            all_features = FeatureStore.objects.filter(
                 user_id=user_id,
-                geometry__equals=geometry
+                geometry__isnull=False
             ).values('id', 'geojson', 'timestamp')
+            
+            # Filter to only points and compare normalized coordinates
+            existing_features = []
+            for feat in all_features:
+                feat_geojson = feat['geojson'] if isinstance(feat['geojson'], dict) else json.loads(feat['geojson'])
+                feat_geom_type = feat_geojson.get('geometry', {}).get('type', '').lower()
+                if feat_geom_type == 'point':
+                    feature_coords = feat_geojson.get('geometry', {}).get('coordinates', [])
+                    if feature_coords:
+                        normalized_feature_coords = _normalize_coordinates(feature_coords)
+                        if normalized_coords == normalized_feature_coords:
+                            existing_features.append(feat)
 
         elif geom_type == 'linestring':
             # For linestrings, check if coordinates match exactly
@@ -415,7 +425,7 @@ def _find_existing_features_by_coordinates(coordinates: List, geom_type: str, us
         # Convert to list and add feature info
         result = []
         for feature in existing_features:
-            geojson_data = feature['geojson']
+            geojson_data = feature['geojson'] if isinstance(feature['geojson'], dict) else json.loads(feature['geojson'])
             result.append({
                 'id': feature['id'],
                 'name': geojson_data.get('properties', {}).get('name', 'Unnamed'),

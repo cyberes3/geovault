@@ -348,16 +348,16 @@
               <h3 class="text-sm font-medium text-yellow-800">Duplicate Feature Detected</h3>
               <div class="mt-2 text-sm text-yellow-700">
                 <p>This feature has the same coordinates as an existing feature in your feature store.</p>
-                <div class="mt-2">
-                  <button
-                      class="inline-flex items-center px-3 py-1.5 border border-transparent text-xs font-medium rounded-md text-white bg-yellow-600 hover:bg-yellow-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-yellow-500"
-                      @click="editOriginalFeature(item.duplicateInfo)"
+                <div class="mt-2" v-if="item.duplicateInfo && item.duplicateInfo.existing_features && item.duplicateInfo.existing_features.length > 0">
+                  <router-link
+                      :to="{ path: '/map', query: { featureId: item.duplicateInfo.existing_features[0].id } }"
+                      class="inline-flex items-center px-3 py-1.5 border border-gray-300 rounded-md text-xs font-medium text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500"
                   >
                     <svg class="w-3 h-3 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" stroke-linecap="round" stroke-linejoin="round" stroke-width="2"></path>
+                      <path d="M9 20l-5.447-2.724A1 1 0 013 16.382V5.618a1 1 0 011.447-.894L9 7m0 13l6-3m-6 3V7m6 10l4.553 2.276A1 1 0 0021 18.382V7.618a1 1 0 00-.553-.894L15 4m0 13V4m0 0L9 7" stroke-linecap="round" stroke-linejoin="round" stroke-width="2"></path>
                     </svg>
-                    Edit Original Feature
-                  </button>
+                    View Original Feature on Map
+                  </router-link>
                 </div>
               </div>
             </div>
@@ -535,15 +535,6 @@
         @close="closeFeatureMap"
     />
 
-    <!-- Edit Original Feature Dialog -->
-    <EditOriginalFeatureDialog
-        :is-open="dialogs.editOriginal.isOpen"
-        :loading="dialogs.editOriginal.loading"
-        :original-feature="dialogs.editOriginal.feature"
-        @close="closeEditOriginalDialog"
-        @saved="onOriginalFeatureSaved"
-    />
-
     <!-- Log View Modal -->
     <LogViewModal
         :is-open="dialogs.logs"
@@ -570,7 +561,6 @@ import { filterProtectedTags } from "@/utils/tagUtils.js";
 import Loader from "@/components/parts/Loader.vue";
 import MapPreviewDialog from "@/components/import/parts/MapPreviewDialog.vue";
 import FeatureMapDialog from "@/components/import/parts/FeatureMapDialog.vue";
-import EditOriginalFeatureDialog from "@/components/import/parts/EditOriginalFeatureDialog.vue";
 import LogViewModal from "@/components/import/parts/LogViewModal.vue";
 import ImportControls from "@/components/import/parts/ImportControls.vue";
 
@@ -591,7 +581,7 @@ export default {
       return this.originalFilename != null && !this.processing.active && !this.loading.page && this.itemsForUser.length === 0;
     }
   },
-  components: {Loader, Importqueue: ImportQueue, MapPreviewDialog, FeatureMapDialog, EditOriginalFeatureDialog, LogViewModal, ImportControls},
+  components: {Loader, Importqueue: ImportQueue, MapPreviewDialog, FeatureMapDialog, LogViewModal, ImportControls},
   data() {
     return {
       // Core data
@@ -607,7 +597,6 @@ export default {
       dialogs: {
         mapPreview: false,
         featureMap: {isOpen: false, selectedIndex: 0},
-        editOriginal: {isOpen: false, feature: null, loading: false},
         logs: false
       },
 
@@ -1418,63 +1407,8 @@ export default {
         }
       });
     },
-    async editOriginalFeature(duplicateInfo) {
-      // Fetch the full feature data since the new API format only provides basic fields
-      const existingFeature = duplicateInfo.existing_features[0];
-
-      // Show dialog with loading state immediately
-      this.dialogs.editOriginal.isOpen = true;
-      this.dialogs.editOriginal.loading = true;
-      this.dialogs.editOriginal.feature = null;
-
-      try {
-        const response = await axios.get(`/api/data/feature/${existingFeature.id}/`);
-        if (response.data.success) {
-          this.dialogs.editOriginal.feature = response.data.feature;
-        } else {
-          console.error('Failed to fetch feature data:', response.data.msg);
-          alert('Error loading feature data: ' + response.data.msg);
-          this.dialogs.editOriginal.isOpen = false;
-        }
-      } catch (error) {
-        console.error('Error fetching feature data:', error);
-        alert('Error loading feature data: ' + error.message);
-        this.dialogs.editOriginal.isOpen = false;
-      } finally {
-        this.dialogs.editOriginal.loading = false;
-      }
-    },
-    closeEditOriginalDialog() {
-      this.dialogs.editOriginal.isOpen = false;
-      this.dialogs.editOriginal.feature = null;
-      this.dialogs.editOriginal.loading = false;
-    },
     closeLogModal() {
       this.dialogs.logs = false;
-    },
-    async onOriginalFeatureSaved(featureId) {
-      // Handle when the original feature is saved
-      console.log(`Original feature ${featureId} was updated`);
-
-      // Refresh the original feature data to reflect the changes
-      try {
-        const response = await axios.get(`/api/data/feature/${featureId}/`);
-        if (response.data.success) {
-          // Update the selectedOriginalFeature with the fresh data
-          this.dialogs.editOriginal.feature = response.data.feature;
-
-          // Also update the duplicate info in the itemsForUser array
-          this.itemsForUser.forEach((item, index) => {
-            if (item.isDuplicate && item.duplicateInfo &&
-                item.duplicateInfo.existing_features[0].id === featureId) {
-              // Update the duplicate info with the fresh feature data
-              item.duplicateInfo.existing_features[0] = response.data.feature;
-            }
-          });
-        }
-      } catch (error) {
-        console.error('Error refreshing original feature data:', error);
-      }
     },
     clearComponentState() {
       // Stop polling first to prevent API calls with null currentId
@@ -1498,7 +1432,6 @@ export default {
       this.dialogs = {
         mapPreview: false,
         featureMap: {isOpen: false, selectedIndex: 0},
-        editOriginal: {isOpen: false, feature: null, loading: false},
         logs: false
       };
 
