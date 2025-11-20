@@ -226,9 +226,13 @@ def _find_coordinate_duplicates_batched(features: List[Dict], user_id: int, impo
             batch_features = type_features[batch_start:batch_end]
 
             # Create geometries for this batch
+            # Normalize coordinates first to handle floating point precision differences
             batch_geometries = []
             for idx, feature, coordinates in batch_features:
                 try:
+                    # Normalize coordinates before creating geometry to ensure consistent WKT representation
+                    normalized_coords = _normalize_coordinates(coordinates)
+                    
                     # Handle different geometry type naming conventions
                     if geom_type == 'multilinestring':
                         geom_type_name = 'MultiLineString'
@@ -257,7 +261,7 @@ def _find_coordinate_duplicates_batched(features: List[Dict], user_id: int, impo
 
                     geom_data = {
                         'type': geom_type_name,
-                        'coordinates': coordinates
+                        'coordinates': normalized_coords
                     }
                     geometry = GEOSGeometry(json.dumps(geom_data))
                     batch_geometries.append((idx, feature, geometry))
@@ -277,27 +281,38 @@ def _find_coordinate_duplicates_batched(features: List[Dict], user_id: int, impo
                     geometry__in=geometries
                 ).values('id', 'geojson', 'timestamp', 'geometry')
 
-                # Create a lookup map for existing features
+                # Create a lookup map for existing features using normalized coordinates
+                # This handles floating point precision differences better than WKT comparison
                 existing_lookup = {}
                 for existing in existing_features:
-                    geom_wkt = existing['geometry'].wkt
-                    if geom_wkt not in existing_lookup:
-                        existing_lookup[geom_wkt] = []
-                    existing_lookup[geom_wkt].append(existing)
+                    # Get coordinates from geojson and normalize them
+                    existing_geojson = existing['geojson'] if isinstance(existing['geojson'], dict) else json.loads(existing['geojson'])
+                    existing_coords = existing_geojson.get('geometry', {}).get('coordinates', [])
+                    if existing_coords:
+                        normalized_existing_coords = _normalize_coordinates(existing_coords)
+                        # Use normalized coordinates as key for lookup
+                        coords_key = json.dumps(normalized_existing_coords, sort_keys=True)
+                        if coords_key not in existing_lookup:
+                            existing_lookup[coords_key] = []
+                        existing_lookup[coords_key].append(existing)
 
-                # Check each feature in the batch
+                # Check each feature in the batch using normalized coordinate comparison
                 for idx, feature, geometry in batch_geometries:
-                    geom_wkt = geometry.wkt
-                    if geom_wkt in existing_lookup:
+                    # Get normalized coordinates from the feature (already normalized when creating geometry)
+                    feature_coords = feature.get('geometry', {}).get('coordinates', [])
+                    normalized_feature_coords = _normalize_coordinates(feature_coords)
+                    coords_key = json.dumps(normalized_feature_coords, sort_keys=True)
+                    
+                    if coords_key in existing_lookup:
                         # This is a duplicate
                         duplicate_info = {
                             'feature': feature,
-                            'existing_features': existing_lookup[geom_wkt]
+                            'existing_features': existing_lookup[coords_key]
                         }
                         duplicate_features.append(duplicate_info)
 
                         feature_name = feature.get('properties', {}).get('name', 'Unnamed')
-                        existing_count = len(existing_lookup[geom_wkt])
+                        existing_count = len(existing_lookup[coords_key])
                         import_log.add(f"Coordinate duplicate found: '{feature_name}' ({geom_type}) matches {existing_count} existing feature(s)", 'Duplicate Detection', DatabaseLogLevel.INFO)
                     else:
                         unique_features.append(feature)
@@ -349,69 +364,99 @@ def _find_existing_features_by_coordinates(coordinates: List, geom_type: str, us
                             existing_features.append(feat)
 
         elif geom_type == 'linestring':
-            # For linestrings, check if coordinates match exactly
-            geom_data = {
-                'type': 'LineString',
-                'coordinates': coordinates
-            }
-            geometry = GEOSGeometry(json.dumps(geom_data))
-
-            existing_features = FeatureStore.objects.filter(
+            # For linestrings, normalize coordinates and compare in Python to handle floating point precision differences
+            all_features = FeatureStore.objects.filter(
                 user_id=user_id,
-                geometry__equals=geometry
+                geometry__isnull=False
             ).values('id', 'geojson', 'timestamp')
+            
+            # Filter to only linestrings and compare normalized coordinates
+            existing_features = []
+            for feat in all_features:
+                feat_geojson = feat['geojson'] if isinstance(feat['geojson'], dict) else json.loads(feat['geojson'])
+                feat_geom_type = feat_geojson.get('geometry', {}).get('type', '').lower()
+                if feat_geom_type == 'linestring':
+                    feature_coords = feat_geojson.get('geometry', {}).get('coordinates', [])
+                    if feature_coords:
+                        normalized_feature_coords = _normalize_coordinates(feature_coords)
+                        if normalized_coords == normalized_feature_coords:
+                            existing_features.append(feat)
 
         elif geom_type == 'polygon':
-            # For polygons, check if coordinates match exactly
-            geom_data = {
-                'type': 'Polygon',
-                'coordinates': coordinates
-            }
-            geometry = GEOSGeometry(json.dumps(geom_data))
-
-            existing_features = FeatureStore.objects.filter(
+            # For polygons, normalize coordinates and compare in Python to handle floating point precision differences
+            all_features = FeatureStore.objects.filter(
                 user_id=user_id,
-                geometry__equals=geometry
+                geometry__isnull=False
             ).values('id', 'geojson', 'timestamp')
+            
+            # Filter to only polygons and compare normalized coordinates
+            existing_features = []
+            for feat in all_features:
+                feat_geojson = feat['geojson'] if isinstance(feat['geojson'], dict) else json.loads(feat['geojson'])
+                feat_geom_type = feat_geojson.get('geometry', {}).get('type', '').lower()
+                if feat_geom_type == 'polygon':
+                    feature_coords = feat_geojson.get('geometry', {}).get('coordinates', [])
+                    if feature_coords:
+                        normalized_feature_coords = _normalize_coordinates(feature_coords)
+                        if normalized_coords == normalized_feature_coords:
+                            existing_features.append(feat)
 
         elif geom_type == 'multilinestring':
-            # For multilinestrings, check if coordinates match exactly
-            geom_data = {
-                'type': 'MultiLineString',
-                'coordinates': coordinates
-            }
-            geometry = GEOSGeometry(json.dumps(geom_data))
-
-            existing_features = FeatureStore.objects.filter(
+            # For multilinestrings, normalize coordinates and compare in Python to handle floating point precision differences
+            all_features = FeatureStore.objects.filter(
                 user_id=user_id,
-                geometry__equals=geometry
+                geometry__isnull=False
             ).values('id', 'geojson', 'timestamp')
+            
+            # Filter to only multilinestrings and compare normalized coordinates
+            existing_features = []
+            for feat in all_features:
+                feat_geojson = feat['geojson'] if isinstance(feat['geojson'], dict) else json.loads(feat['geojson'])
+                feat_geom_type = feat_geojson.get('geometry', {}).get('type', '').lower()
+                if feat_geom_type == 'multilinestring':
+                    feature_coords = feat_geojson.get('geometry', {}).get('coordinates', [])
+                    if feature_coords:
+                        normalized_feature_coords = _normalize_coordinates(feature_coords)
+                        if normalized_coords == normalized_feature_coords:
+                            existing_features.append(feat)
 
         elif geom_type == 'multipolygon':
-            # For multipolygons, check if coordinates match exactly
-            geom_data = {
-                'type': 'MultiPolygon',
-                'coordinates': coordinates
-            }
-            geometry = GEOSGeometry(json.dumps(geom_data))
-
-            existing_features = FeatureStore.objects.filter(
+            # For multipolygons, normalize coordinates and compare in Python to handle floating point precision differences
+            all_features = FeatureStore.objects.filter(
                 user_id=user_id,
-                geometry__equals=geometry
+                geometry__isnull=False
             ).values('id', 'geojson', 'timestamp')
+            
+            # Filter to only multipolygons and compare normalized coordinates
+            existing_features = []
+            for feat in all_features:
+                feat_geojson = feat['geojson'] if isinstance(feat['geojson'], dict) else json.loads(feat['geojson'])
+                feat_geom_type = feat_geojson.get('geometry', {}).get('type', '').lower()
+                if feat_geom_type == 'multipolygon':
+                    feature_coords = feat_geojson.get('geometry', {}).get('coordinates', [])
+                    if feature_coords:
+                        normalized_feature_coords = _normalize_coordinates(feature_coords)
+                        if normalized_coords == normalized_feature_coords:
+                            existing_features.append(feat)
 
         elif geom_type == 'multipoint':
-            # For multipoints, check if coordinates match exactly
-            geom_data = {
-                'type': 'MultiPoint',
-                'coordinates': coordinates
-            }
-            geometry = GEOSGeometry(json.dumps(geom_data))
-
-            existing_features = FeatureStore.objects.filter(
+            # For multipoints, normalize coordinates and compare in Python to handle floating point precision differences
+            all_features = FeatureStore.objects.filter(
                 user_id=user_id,
-                geometry__equals=geometry
+                geometry__isnull=False
             ).values('id', 'geojson', 'timestamp')
+            
+            # Filter to only multipoints and compare normalized coordinates
+            existing_features = []
+            for feat in all_features:
+                feat_geojson = feat['geojson'] if isinstance(feat['geojson'], dict) else json.loads(feat['geojson'])
+                feat_geom_type = feat_geojson.get('geometry', {}).get('type', '').lower()
+                if feat_geom_type == 'multipoint':
+                    feature_coords = feat_geojson.get('geometry', {}).get('coordinates', [])
+                    if feature_coords:
+                        normalized_feature_coords = _normalize_coordinates(feature_coords)
+                        if normalized_coords == normalized_feature_coords:
+                            existing_features.append(feat)
 
         elif geom_type == 'geometrycollection':
             # For geometry collections, we need to handle this differently

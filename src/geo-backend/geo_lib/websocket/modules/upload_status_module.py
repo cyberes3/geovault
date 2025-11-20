@@ -3,6 +3,7 @@ Upload status WebSocket module.
 Handles real-time status updates for a specific import item.
 """
 
+import json
 from typing import Dict, Any, Optional
 
 from geo_lib.processing.status_tracker import status_tracker
@@ -227,29 +228,57 @@ class UploadStatusModule(BaseWebSocketModule):
         duplicates_optimized = []
         duplicate_indices = []
 
+        # Import normalization function for coordinate comparison
+        from api.views.import_item import _normalize_coordinates
+        
+        # Build a map of normalized coordinates to all features with those coordinates
+        # This allows us to mark ALL features with matching coordinates as duplicates
+        coords_to_indices = {}
+        for idx, feature in enumerate(self.import_item.geofeatures):
+            feature_geom = feature.get('geometry', {})
+            feature_coords = feature_geom.get('coordinates')
+            feature_type = feature_geom.get('type', '').lower()
+            
+            if feature_coords:
+                normalized_coords = _normalize_coordinates(feature_coords)
+                coords_key = (feature_type, json.dumps(normalized_coords, sort_keys=True))
+                if coords_key not in coords_to_indices:
+                    coords_to_indices[coords_key] = []
+                coords_to_indices[coords_key].append(idx)
+        
+        # Now process each duplicate_info and mark all features with matching coordinates
         for dup_info in (self.import_item.duplicate_features if self.import_item.duplicate_features else []):
             dup_feature = dup_info.get('feature')
             if dup_feature:
-                # Find matching feature by coordinates
-                for idx, feature in enumerate(self.import_item.geofeatures):
-                    if (feature.get('geometry', {}).get('coordinates') == dup_feature.get('geometry', {}).get('coordinates') and
-                            feature.get('geometry', {}).get('type') == dup_feature.get('geometry', {}).get('type')):
-                        duplicate_indices.append(idx)
-                        # Only include duplicate info if it's in the current page
-                        if start_idx <= idx < end_idx:
-                            existing_features_optimized = []
-                            for existing in dup_info.get('existing_features', []):
-                                existing_features_optimized.append({
-                                    'id': existing.get('id'),
-                                    'name': existing.get('name'),
-                                    'type': existing.get('type'),
-                                    'timestamp': existing.get('timestamp')
+                dup_geom = dup_feature.get('geometry', {})
+                dup_coords = dup_geom.get('coordinates')
+                dup_type = dup_geom.get('type', '').lower()
+                
+                if dup_coords:
+                    # Normalize duplicate feature coordinates for comparison
+                    normalized_dup_coords = _normalize_coordinates(dup_coords)
+                    coords_key = (dup_type, json.dumps(normalized_dup_coords, sort_keys=True))
+                    
+                    # Mark ALL features with matching coordinates as duplicates
+                    if coords_key in coords_to_indices:
+                        for idx in coords_to_indices[coords_key]:
+                            if idx not in duplicate_indices:
+                                duplicate_indices.append(idx)
+                            
+                            # Only include duplicate info if it's in the current page
+                            if start_idx <= idx < end_idx:
+                                existing_features_optimized = []
+                                for existing in dup_info.get('existing_features', []):
+                                    existing_features_optimized.append({
+                                        'id': existing.get('id'),
+                                        'name': existing.get('name'),
+                                        'type': existing.get('type'),
+                                        'timestamp': existing.get('timestamp')
+                                    })
+                                duplicates_optimized.append({
+                                    'existing_features': existing_features_optimized,
+                                    'page_index': idx - start_idx,
                                 })
-                            duplicates_optimized.append({
-                                'existing_features': existing_features_optimized,
-                                'page_index': idx - start_idx,
-                            })
-                        break
 
         return {
             'data': paginated_features,

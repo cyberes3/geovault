@@ -75,6 +75,10 @@ def categorize_icon(filename, base_name):
     if LETTER_PATTERN.match(filename.replace('.png', '')):
         return 'letters'
     
+    # CalTopo icons starting with c_ should be in Points category
+    if base_name.startswith('c_'):
+        return 'points'
+    
     # Check if it's a point marker
     if base_name.lower() in POINT_MARKERS:
         return 'points'

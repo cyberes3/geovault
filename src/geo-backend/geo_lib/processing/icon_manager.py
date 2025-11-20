@@ -310,8 +310,9 @@ def process_geojson_icons(geojson_data: dict, file_type: str, file_data: Optiona
     if kml_content:
         icon_hrefs = extract_icon_hrefs_from_kml(kml_content)
         for href in icon_hrefs:
-            # Skip CalTopo URLs - they will be handled by extracting color
-            if _extract_color_from_caltopo_url(href):
+            # Skip CalTopo point icons - they will be replaced with default icon
+            # But fetch all other CalTopo icons
+            if _is_caltopo_point_icon(href):
                 continue
             new_href = process_icon_href(href, file_type, file_data)
             if new_href:
@@ -367,6 +368,50 @@ def extract_icon_hrefs_from_kml(kml_content: str) -> List[str]:
     except Exception as e:
         logger.error(f"Error extracting icon hrefs from KML: {str(e)}")
         return []
+
+
+def _is_caltopo_point_icon(url: str) -> bool:
+    """
+    Check if a CalTopo URL is the default point icon.
+    
+    CalTopo point icons have format: http://caltopo.com/icon.png?cfg=point
+    or http://caltopo.com/icon.png?cfg=c%3Apoint (URL encoded)
+    
+    Args:
+        url: Icon URL from CalTopo
+        
+    Returns:
+        True if this is a point icon, False otherwise
+    """
+    try:
+        parsed = urlparse(url)
+        
+        # Check if it's a CalTopo URL
+        if 'caltopo.com' not in parsed.netloc.lower():
+            return False
+        
+        # Check if path is /icon.png
+        if parsed.path.lower() != '/icon.png':
+            return False
+        
+        # Parse query parameters
+        query_params = parse_qs(parsed.query)
+        
+        # Get cfg parameter
+        if 'cfg' not in query_params:
+            return False
+        
+        cfg_value = query_params['cfg'][0]
+        # URL decode
+        cfg_decoded = unquote(cfg_value)
+        
+        # Check if it starts with "point" (could be "point" or "c:point" or similar)
+        # The point icon typically has cfg=point or cfg=c:point
+        return cfg_decoded.startswith('point') or cfg_decoded.startswith('c:point')
+        
+    except Exception as e:
+        logger.debug(f"Failed to check if CalTopo URL is point icon {url}: {str(e)}")
+        return False
 
 
 def _extract_color_from_caltopo_url(url: str) -> Optional[str]:
@@ -445,28 +490,31 @@ def _process_properties_icons(properties: dict, file_type: str, file_data: Optio
         if prop_name in properties and properties[prop_name]:
             href = properties[prop_name]
             if isinstance(href, str):
-                # Check if this is a CalTopo URL - if so, extract color and remove icon
-                color = _extract_color_from_caltopo_url(href)
-                if color:
-                    # Set marker-color and remove icon property
-                    properties['marker-color'] = color
-                    del properties[prop_name]
-                    logger.debug(f"Replaced CalTopo icon with marker-color: {color}")
-                    continue
+                # Check if this is a CalTopo point icon - if so, extract color and remove icon
+                # Only point icons should be replaced with default icon
+                if _is_caltopo_point_icon(href):
+                    color = _extract_color_from_caltopo_url(href)
+                    if color:
+                        # Set marker-color and remove icon property to use default icon
+                        properties['marker-color'] = color
+                        del properties[prop_name]
+                        logger.debug(f"Replaced CalTopo point icon with marker-color: {color}")
+                        continue
                 
                 # Check mapping first if available
                 if href_mapping and href in href_mapping:
                     mapped_href = href_mapping[href]
-                    # Check if mapped href is also a CalTopo URL (shouldn't happen, but be safe)
-                    mapped_color = _extract_color_from_caltopo_url(mapped_href)
-                    if mapped_color:
-                        properties['marker-color'] = mapped_color
-                        del properties[prop_name]
-                        logger.debug(f"Replaced mapped CalTopo icon with marker-color: {mapped_color}")
-                        continue
+                    # Check if mapped href is also a CalTopo point icon (shouldn't happen, but be safe)
+                    if _is_caltopo_point_icon(mapped_href):
+                        mapped_color = _extract_color_from_caltopo_url(mapped_href)
+                        if mapped_color:
+                            properties['marker-color'] = mapped_color
+                            del properties[prop_name]
+                            logger.debug(f"Replaced mapped CalTopo point icon with marker-color: {mapped_color}")
+                            continue
                     properties[prop_name] = mapped_href
                 else:
-                    # Process directly
+                    # Process directly (this will fetch non-point CalTopo icons)
                     new_href = process_icon_href(href, file_type, file_data)
                     if new_href:
                         properties[prop_name] = new_href

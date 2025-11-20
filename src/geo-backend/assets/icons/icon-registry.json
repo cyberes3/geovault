@@ -1,6 +1,30 @@
 {
   "points": [
     {
+      "url": "/api/data/icons/system/caltopo/c_ring.png",
+      "filename": "c_ring",
+      "style": "standard",
+      "base_name": "c_ring"
+    },
+    {
+      "url": "/api/data/icons/system/caltopo/c_target1.png",
+      "filename": "c_target1",
+      "style": "standard",
+      "base_name": "c_target1"
+    },
+    {
+      "url": "/api/data/icons/system/caltopo/c_target2.png",
+      "filename": "c_target2",
+      "style": "standard",
+      "base_name": "c_target2"
+    },
+    {
+      "url": "/api/data/icons/system/caltopo/c_target3.png",
+      "filename": "c_target3",
+      "style": "standard",
+      "base_name": "c_target3"
+    },
+    {
       "url": "/api/data/icons/system/caltopo/flag-1.png",
       "filename": "flag-1",
       "style": "standard",
@@ -1101,30 +1125,6 @@
       "filename": "busstop_triangle",
       "style": "triangle",
       "base_name": "busstop"
-    },
-    {
-      "url": "/api/data/icons/system/caltopo/c_ring.png",
-      "filename": "c_ring",
-      "style": "standard",
-      "base_name": "c_ring"
-    },
-    {
-      "url": "/api/data/icons/system/caltopo/c_target1.png",
-      "filename": "c_target1",
-      "style": "standard",
-      "base_name": "c_target1"
-    },
-    {
-      "url": "/api/data/icons/system/caltopo/c_target2.png",
-      "filename": "c_target2",
-      "style": "standard",
-      "base_name": "c_target2"
-    },
-    {
-      "url": "/api/data/icons/system/caltopo/c_target3.png",
-      "filename": "c_target3",
-      "style": "standard",
-      "base_name": "c_target3"
     },
     {
       "url": "/api/data/icons/system/caltopo/campfire_circle.png",
