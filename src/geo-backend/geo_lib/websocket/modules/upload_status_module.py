@@ -182,6 +182,100 @@ class UploadStatusModule(BaseWebSocketModule):
         """Handle item deletion - notify client and close connection."""
         await self.send_to_client('item_deleted', data)
 
+    def _get_feature_bounding_box_center(self, feature: Dict[str, Any]) -> Optional[tuple]:
+        """
+        Calculate the bounding box center (lat, lon) for a feature.
+        
+        Args:
+            feature: GeoJSON feature dictionary
+            
+        Returns:
+            Tuple of (lat, lon) center coordinates, or None if feature has no valid geometry
+        """
+        geometry = feature.get('geometry', {})
+        if not geometry:
+            return None
+        
+        geom_type = geometry.get('type', '').lower()
+        coordinates = geometry.get('coordinates')
+        
+        if not coordinates:
+            return None
+        
+        # Collect all coordinate points from the geometry
+        all_points = []
+        
+        try:
+            if geom_type == 'point':
+                # Point: [lon, lat] or [lon, lat, elevation]
+                if isinstance(coordinates, list) and len(coordinates) >= 2:
+                    all_points.append(coordinates)
+            
+            elif geom_type == 'multipoint':
+                # MultiPoint: [[lon, lat], [lon, lat], ...]
+                if isinstance(coordinates, list):
+                    for point in coordinates:
+                        if isinstance(point, list) and len(point) >= 2:
+                            all_points.append(point)
+            
+            elif geom_type == 'linestring':
+                # LineString: [[lon, lat], [lon, lat], ...]
+                if isinstance(coordinates, list):
+                    for point in coordinates:
+                        if isinstance(point, list) and len(point) >= 2:
+                            all_points.append(point)
+            
+            elif geom_type == 'multilinestring':
+                # MultiLineString: [[[lon, lat], ...], [[lon, lat], ...], ...]
+                if isinstance(coordinates, list):
+                    for linestring in coordinates:
+                        if isinstance(linestring, list):
+                            for point in linestring:
+                                if isinstance(point, list) and len(point) >= 2:
+                                    all_points.append(point)
+            
+            elif geom_type == 'polygon':
+                # Polygon: [[[lon, lat], ...], [[lon, lat], ...], ...] (exterior ring + holes)
+                if isinstance(coordinates, list):
+                    for ring in coordinates:
+                        if isinstance(ring, list):
+                            for point in ring:
+                                if isinstance(point, list) and len(point) >= 2:
+                                    all_points.append(point)
+            
+            elif geom_type == 'multipolygon':
+                # MultiPolygon: [[[[lon, lat], ...], ...], [[[lon, lat], ...], ...], ...]
+                if isinstance(coordinates, list):
+                    for polygon in coordinates:
+                        if isinstance(polygon, list):
+                            for ring in polygon:
+                                if isinstance(ring, list):
+                                    for point in ring:
+                                        if isinstance(point, list) and len(point) >= 2:
+                                            all_points.append(point)
+            
+            # Calculate bounding box from all points
+            if not all_points:
+                return None
+            
+            # Extract lons and lats (GeoJSON uses [lon, lat] format)
+            lons = [point[0] for point in all_points if isinstance(point[0], (int, float))]
+            lats = [point[1] for point in all_points if isinstance(point[1], (int, float))]
+            
+            if not lons or not lats:
+                return None
+            
+            # Calculate center
+            center_lon = (min(lons) + max(lons)) / 2.0
+            center_lat = (min(lats) + max(lats)) / 2.0
+            
+            return (center_lat, center_lon)
+        
+        except (TypeError, IndexError, ValueError) as e:
+            # Handle any errors in coordinate extraction gracefully
+            logger.debug(f"Error calculating bounding box center for feature: {str(e)}")
+            return None
+
     async def _get_paginated_features(self, page: int, page_size: int) -> Dict[str, Any]:
         """Get paginated features for the import item."""
         if self.import_item.imported:
@@ -216,13 +310,33 @@ class UploadStatusModule(BaseWebSocketModule):
         if page_size < 1 or page_size > 500:
             page_size = 50
 
+        # Sort features spatially before pagination
+        # Create list of (feature, original_index, sort_key) tuples
+        features_with_indices = []
+        for original_idx, feature in enumerate(self.import_item.geofeatures):
+            center = self._get_feature_bounding_box_center(feature)
+            if center is not None:
+                # Sort by (-lat, lon) to get north-to-south, west-to-east ordering
+                sort_key = (-center[0], center[1])
+            else:
+                # Features without valid geometry go to the end (high sort key)
+                sort_key = (float('inf'), float('inf'))
+            features_with_indices.append((feature, original_idx, sort_key))
+        
+        # Sort by spatial center
+        features_with_indices.sort(key=lambda x: x[2])
+        
+        # Extract sorted features and create mapping from original index to new index
+        sorted_features = [item[0] for item in features_with_indices]
+        original_to_new_index = {item[1]: new_idx for new_idx, item in enumerate(features_with_indices)}
+
         # Calculate pagination
-        total_features = len(self.import_item.geofeatures)
+        total_features = len(sorted_features)
         start_idx = (page - 1) * page_size
         end_idx = start_idx + page_size
 
-        # Get paginated features
-        paginated_features = self.import_item.geofeatures[start_idx:end_idx]
+        # Get paginated features from sorted list
+        paginated_features = sorted_features[start_idx:end_idx]
 
         # Get duplicate information for current page
         duplicates_optimized = []
@@ -231,10 +345,10 @@ class UploadStatusModule(BaseWebSocketModule):
         # Import normalization function for coordinate comparison
         from api.views.import_item import _normalize_coordinates
         
-        # Build a map of normalized coordinates to all features with those coordinates
+        # Build a map of normalized coordinates to original indices
         # This allows us to mark ALL features with matching coordinates as duplicates
-        coords_to_indices = {}
-        for idx, feature in enumerate(self.import_item.geofeatures):
+        coords_to_original_indices = {}
+        for original_idx, feature in enumerate(self.import_item.geofeatures):
             feature_geom = feature.get('geometry', {})
             feature_coords = feature_geom.get('coordinates')
             feature_type = feature_geom.get('type', '').lower()
@@ -242,11 +356,12 @@ class UploadStatusModule(BaseWebSocketModule):
             if feature_coords:
                 normalized_coords = _normalize_coordinates(feature_coords)
                 coords_key = (feature_type, json.dumps(normalized_coords, sort_keys=True))
-                if coords_key not in coords_to_indices:
-                    coords_to_indices[coords_key] = []
-                coords_to_indices[coords_key].append(idx)
+                if coords_key not in coords_to_original_indices:
+                    coords_to_original_indices[coords_key] = []
+                coords_to_original_indices[coords_key].append(original_idx)
         
-        # Now process each duplicate_info and mark all features with matching coordinates
+        # Now process each duplicate_info and mark all features with matching coordinates as duplicates
+        # Convert original indices to new sorted indices
         for dup_info in (self.import_item.duplicate_features if self.import_item.duplicate_features else []):
             dup_feature = dup_info.get('feature')
             if dup_feature:
@@ -260,25 +375,28 @@ class UploadStatusModule(BaseWebSocketModule):
                     coords_key = (dup_type, json.dumps(normalized_dup_coords, sort_keys=True))
                     
                     # Mark ALL features with matching coordinates as duplicates
-                    if coords_key in coords_to_indices:
-                        for idx in coords_to_indices[coords_key]:
-                            if idx not in duplicate_indices:
-                                duplicate_indices.append(idx)
-                            
-                            # Only include duplicate info if it's in the current page
-                            if start_idx <= idx < end_idx:
-                                existing_features_optimized = []
-                                for existing in dup_info.get('existing_features', []):
-                                    existing_features_optimized.append({
-                                        'id': existing.get('id'),
-                                        'name': existing.get('name'),
-                                        'type': existing.get('type'),
-                                        'timestamp': existing.get('timestamp')
+                    if coords_key in coords_to_original_indices:
+                        for original_idx in coords_to_original_indices[coords_key]:
+                            # Convert original index to new sorted index
+                            if original_idx in original_to_new_index:
+                                new_idx = original_to_new_index[original_idx]
+                                if new_idx not in duplicate_indices:
+                                    duplicate_indices.append(new_idx)
+                                
+                                # Only include duplicate info if it's in the current page
+                                if start_idx <= new_idx < end_idx:
+                                    existing_features_optimized = []
+                                    for existing in dup_info.get('existing_features', []):
+                                        existing_features_optimized.append({
+                                            'id': existing.get('id'),
+                                            'name': existing.get('name'),
+                                            'type': existing.get('type'),
+                                            'timestamp': existing.get('timestamp')
+                                        })
+                                    duplicates_optimized.append({
+                                        'existing_features': existing_features_optimized,
+                                        'page_index': new_idx - start_idx,
                                     })
-                                duplicates_optimized.append({
-                                    'existing_features': existing_features_optimized,
-                                    'page_index': idx - start_idx,
-                                })
 
         return {
             'data': paginated_features,
