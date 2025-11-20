@@ -63,6 +63,11 @@ icons:
 
   # Timeout for fetching remote icons in seconds
   fetch_timeout: 1.0
+  
+  # Allow or disallow hot-linking of hosted icons from external domains
+  # Set to true to allow external websites to link to your icons
+  # Set to false (default) to block hot-linking attempts
+  allow_hotlinking: false
 
 # Reverse Geocoding Configuration
 geocoding:

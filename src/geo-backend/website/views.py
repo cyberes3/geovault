@@ -7,8 +7,10 @@ from django.http import HttpResponse, JsonResponse, Http404
 from django.conf import settings
 from urllib.request import urlopen, Request
 from urllib.error import URLError
+from urllib.parse import urlparse
 from geo_lib.tile_sources import get_tile_source, get_tile_sources_for_client
 from geo_lib.logging.console import get_tile_logger, get_access_logger
+from api.views.icon_management import _is_allowed_referer
 
 tile_logger = get_tile_logger()
 access_logger = get_access_logger()
@@ -301,6 +303,12 @@ def serve_assets(request, path):
     
     suffix = file_path.suffix.lower()
     content_type = content_types.get(suffix, 'application/octet-stream')
+    
+    # Check referer to prevent hot-linking for image files only
+    image_extensions = {'.png', '.jpg', '.jpeg', '.gif', '.bmp', '.svg', '.webp', '.ico'}
+    if suffix in image_extensions:
+        if not _is_allowed_referer(request):
+            return HttpResponse("Hot-linking not allowed", status=403)
     
     # Read and serve the file
     try:

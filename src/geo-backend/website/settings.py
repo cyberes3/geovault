@@ -306,6 +306,10 @@ ICON_UPLOAD_ALLOWED_EXTENSIONS = {'.png', '.jpg', '.jpeg', '.ico'}
 # Timeout for fetching remote icons in seconds
 ICON_FETCH_TIMEOUT = config.get_float('icons.fetch_timeout', 1.0)
 
+# Allow or disallow hot-linking of hosted icons from external domains
+# Default: False (hot-linking disallowed)
+ICON_ALLOW_HOTLINKING = config.get_bool('icons.allow_hotlinking', False)
+
 # Reverse Geocoding Configuration
 # Overpass API server URL
 OVERPASS_API_URL = config.get_with_env_override('geocoding.overpass_api_url', 'OVERPASS_API_URL', 'https://overpass-api.de/api/interpreter')
