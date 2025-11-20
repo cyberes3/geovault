@@ -124,13 +124,27 @@ export default {
   watch: {
     userInfo: {
       handler(newUserInfo, oldUserInfo) {
-        // If user becomes unauthorized, disconnect WebSocket
-        if (oldUserInfo && oldUserInfo.authorized && newUserInfo && !newUserInfo.authorized) {
+        // If user becomes unauthorized (userInfo is cleared), disconnect WebSocket
+        if (oldUserInfo && !newUserInfo) {
           this.handleLogout();
+        }
+        // If user becomes authorized (userInfo is set), ensure WebSocket is connected
+        if (newUserInfo && !realtimeSocket.isConnected) {
+          this.setupRealtimeConnection();
         }
       },
       deep: true
     },
+    $route: {
+      handler(to, from) {
+        // When navigating to authenticated routes, ensure WebSocket is connected if user is authorized
+        // Skip only for public share routes
+        if (to.path !== '/mapshare' && this.userInfo && !realtimeSocket.isConnected) {
+          this.setupRealtimeConnection();
+        }
+      },
+      immediate: false
+    }
   },
   methods: {
     async checkAuth() {
@@ -158,8 +172,17 @@ export default {
       const userInfo = new UserInfo(userStatus.username, userStatus.id, userStatus.featureCount, userStatus.tags || []);
       this.$store.commit('userInfo', userInfo);
       this.userInfoLoading = false;
+      
+      // Always setup WebSocket connection if user is authorized (not just for non-public routes)
+      // The setupRealtimeConnection method will skip public share routes internally
+      await this.setupRealtimeConnection();
     },
     async setupRealtimeConnection() {
+      // Only connect if user is authorized (userInfo exists means user is authorized)
+      if (!this.userInfo) {
+        return;
+      }
+
       // Skip WebSocket connection for public share routes
       if (this.isPublicShareRoute) {
         return;
@@ -240,16 +263,7 @@ export default {
   async created() {
     // Always check authentication (even on public share routes) to set userInfo if logged in
     await this.checkAuth();
-    
-    // Only setup WebSocket for non-public routes
-    // Use window.location.hash since $route might not be ready yet
-    const hash = window.location.hash || '';
-    const isPublicShare = hash.startsWith('#/mapshare');
-    
-    if (!isPublicShare) {
-      // Setup realtime connection after auth check
-      this.setupRealtimeConnection();
-    }
+    // WebSocket connection is now handled in checkAuth() after userInfo is set
   },
   mounted() {
     // WebSocket connection is managed globally and persists across page navigation

@@ -1306,8 +1306,17 @@ export default {
   async created() {
     // Only check auth if not in public share mode
     if (!this.isPublicShareMode) {
+      // Check if userInfo already exists in store (set by App.vue)
+      const existingUserInfo = this.$store.state.userInfo;
+      
+      if (existingUserInfo && existingUserInfo.username) {
+        // User info already loaded, no need to make API call
+        return;
+      }
+      
+      // Only call API if store is empty
       const userStatus = await getUserInfo()
-      if (!userStatus.authorized) {
+      if (!userStatus || !userStatus.authorized) {
         window.location = "/accounts/login/"
         return
       }

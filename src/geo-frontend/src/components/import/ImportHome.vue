@@ -106,7 +106,6 @@
 
 <script>
 import {mapState} from "vuex"
-import {authMixin} from "@/assets/js/authMixin.js";
 import {IMPORT_HISTORY_URL} from "@/assets/js/import/url.js";
 import ImportQueue from "@/components/import/parts/ImportQueue.vue";
 
@@ -121,7 +120,6 @@ export default {
     }
   },
   components: {ImportQueue: ImportQueue},
-  mixins: [authMixin],
   data() {
     return {
       importQueueIsLoading: true,
