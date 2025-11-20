@@ -100,6 +100,17 @@
             </div>
             <div v-if="editingTag !== tag" class="flex items-center space-x-1">
               <button
+                @click.stop.prevent="openShareDialog(tag)"
+                @mousedown.stop.prevent
+                type="button"
+                class="p-1.5 text-gray-400 hover:text-blue-600 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-1 rounded"
+                title="Share tag"
+              >
+                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8.684 13.342C8.885 12.938 9 12.482 9 12c0-.482-.115-.938-.316-1.342m0 2.684a3 3 0 110-2.684m0 2.684l6.632 3.316m-6.632-6l6.632-3.316m0 0a3 3 0 105.367-2.684 3 3 0 00-5.367 2.684zm0 9.316a3 3 0 105.368 2.684 3 3 0 00-5.368-2.684z"></path>
+                </svg>
+              </button>
+              <button
                 @click.stop.prevent="startTagEdit(tag)"
                 @mousedown.stop.prevent
                 type="button"
@@ -184,14 +195,25 @@
         </div>
       </div>
     </div>
+
+    <!-- Share Dialog -->
+    <TagShareDialog
+      :isOpen="shareDialogOpen"
+      :tag="selectedTagForShare"
+      @close="shareDialogOpen = false"
+    />
   </div>
 </template>
 
 <script>
 import {authMixin} from "@/assets/js/authMixin.js";
+import TagShareDialog from "./TagShareDialog.vue";
 
 export default {
   name: 'TagsPage',
+  components: {
+    TagShareDialog
+  },
   mixins: [authMixin],
   data() {
     return {
@@ -200,7 +222,9 @@ export default {
       error: null,
       searchQuery: '', // Search query for filtering tags
       editingTag: null, // Tag currently being edited
-      editingTagValue: '' // Value of tag being edited
+      editingTagValue: '', // Value of tag being edited
+      shareDialogOpen: false, // Whether share dialog is open
+      selectedTagForShare: '' // Tag selected for sharing
     }
   },
   computed: {
@@ -278,6 +302,18 @@ export default {
       // Validate the new tag name
       if (!newTag) {
         alert('Tag name cannot be empty');
+        return;
+      }
+
+      // Validate tag length (max 255 characters)
+      if (newTag.length > 255) {
+        alert('Tag name cannot exceed 255 characters');
+        return;
+      }
+
+      // Validate tag format: no control characters (except tab, newline, carriage return)
+      if (/[\x00-\x08\x0B\x0C\x0E-\x1F]/.test(newTag)) {
+        alert('Tag name cannot contain control characters');
         return;
       }
 
@@ -501,6 +537,10 @@ export default {
         }
       }
       return cookieValue;
+    },
+    openShareDialog(tag) {
+      this.selectedTagForShare = tag;
+      this.shareDialogOpen = true;
     }
   },
   async mounted() {

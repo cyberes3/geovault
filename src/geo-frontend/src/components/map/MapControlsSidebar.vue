@@ -3,7 +3,7 @@
     <h2 class="text-lg font-semibold text-gray-900 mb-4">Map Controls</h2>
     
     <!-- Layer Selection -->
-    <div class="mb-4">
+    <div v-if="allowedOptions.mapLayer" class="mb-4">
       <label for="layer-select" class="block text-sm font-medium text-gray-700 mb-2">
         Map Layer
       </label>
@@ -24,10 +24,12 @@
     </div>
 
     <!-- Feature Stats -->
-    <div class="mt-auto text-xs text-gray-600">
+    <div v-if="allowedOptions.featureStats || allowedOptions.userLocation" class="mt-auto text-xs text-gray-600">
       <div class="space-y-1">
-        <div>Features: <span class="font-medium">{{ featureCount }}</span> / <span class="font-medium">{{ maxFeatures }}</span></div>
-        <div v-if="userLocation" class="text-gray-600">
+        <div v-if="allowedOptions.featureStats">
+          Features: <span class="font-medium">{{ featureCount }}</span> / <span class="font-medium">{{ maxFeatures }}</span>
+        </div>
+        <div v-if="allowedOptions.userLocation && userLocation" class="text-gray-600">
           📍 {{ locationDisplayName }}
         </div>
       </div>
@@ -65,6 +67,14 @@ export default {
     locationDisplayName: {
       type: String,
       default: ''
+    },
+    allowedOptions: {
+      type: Object,
+      default: () => ({
+        mapLayer: true,
+        featureStats: true,
+        userLocation: true
+      })
     }
   },
   emits: ['layer-change']

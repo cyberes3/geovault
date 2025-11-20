@@ -10,6 +10,7 @@ from api.views.geolocation_api import get_user_location, get_location_by_ip
 from api.views.icon_management import serve_user_icon, serve_system_icon, upload_icon, recolor_icon, serve_icon_registry
 from api.views.import_item import upload_item, get_processing_status, get_user_processing_jobs, delete_import_item, update_import_item, fetch_import_history_item, \
     import_to_featurestore, get_import_queue_item_features
+from api.views.sharing import create_share, list_shares, delete_share, get_public_share
 
 urlpatterns = [
     path('item/import/upload', upload_item),
@@ -43,4 +44,9 @@ urlpatterns = [
     # Geolocation API endpoints
     path('location/user/', get_user_location),
     path('location/ip/', get_location_by_ip),
+    # Sharing API endpoints
+    path('sharing/create/', create_share),
+    path('sharing/list/', list_shares),
+    path('sharing/<str:share_id>/', delete_share),
+    path('sharing/public/<str:share_id>/', get_public_share),
 ]

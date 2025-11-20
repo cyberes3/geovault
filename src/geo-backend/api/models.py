@@ -105,3 +105,19 @@ class DatabaseLogging(django_models.Model):
             # Optimizes queries like: source='import', level=ERROR ORDER BY timestamp
             django_models.Index(fields=['source', 'level', 'timestamp'], name='log_source_level_time'),
         ]
+
+
+class TagShare(django_models.Model):
+    share_id = django_models.CharField(max_length=255, unique=True, db_index=True, help_text="UUID4 or sanitized tag name")
+    tag = django_models.CharField(max_length=255, help_text="The tag being shared")
+    user = django_models.ForeignKey(get_user_model(), on_delete=django_models.CASCADE)
+    created_at = django_models.DateTimeField(auto_now_add=True)
+    access_count = django_models.IntegerField(default=0, help_text="Number of times this share has been accessed")
+    use_tag_as_id = django_models.BooleanField(default=False, help_text="Whether share_id is the tag name or UUID4")
+
+    class Meta:
+        indexes = [
+            django_models.Index(fields=['user', 'created_at'], name='tagshare_user_created'),
+            django_models.Index(fields=['share_id'], name='tagshare_share_id'),
+            django_models.Index(fields=['tag', 'user'], name='tagshare_tag_user'),
+        ]

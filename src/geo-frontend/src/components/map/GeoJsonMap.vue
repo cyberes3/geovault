@@ -10,10 +10,36 @@
     <div class="flex-1 bg-gray-50 relative">
       <div class="relative w-full h-full">
         <!-- Map -->
-        <div ref="mapContainer" class="w-full h-full"></div>
+        <div ref="mapContainer" :class="['w-full h-full transition-opacity duration-300', publicShareError ? 'opacity-50 pointer-events-none' : 'opacity-100']"></div>
+
+        <!-- Error Overlay for Invalid Share -->
+        <transition name="fade">
+          <div v-if="publicShareError" class="absolute inset-0 z-50 flex items-center justify-center bg-gray-900 bg-opacity-50">
+            <div class="bg-white rounded-lg shadow-xl p-6 max-w-md mx-4 select-none">
+              <div class="flex items-center space-x-3 mb-4">
+                <svg class="w-8 h-8 text-red-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path>
+                </svg>
+                <h3 class="text-lg font-semibold text-gray-900">Invalid Share Link</h3>
+              </div>
+              <p class="text-gray-700 mb-4">{{ publicShareError }}</p>
+              <p class="text-sm text-gray-500">The share link may have been deleted or expired.</p>
+            </div>
+          </div>
+        </transition>
+
+        <!-- Public Share Title (shown when viewing a public share) -->
+        <div v-if="isPublicShareMode" class="absolute top-4 right-4 bg-white bg-opacity-90 px-4 py-2 rounded-lg shadow-md z-10">
+          <div class="flex items-center space-x-2">
+            <svg class="w-5 h-5 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8.684 13.342C8.885 12.938 9 12.482 9 12c0-.482-.115-.938-.316-1.342m0 2.684a3 3 0 110-2.684m0 2.684l6.632 3.316m-6.632-6l6.632-3.316m0 0a3 3 0 105.367-2.684 3 3 0 00-5.367 2.684zm0 9.316a3 3 0 105.368 2.684 3 3 0 00-5.368-2.684z"></path>
+            </svg>
+            <span v-if="publicShareTag && !publicShareError" class="text-sm font-medium text-gray-900">Shared: {{ publicShareTag }}</span>
+          </div>
+        </div>
 
         <!-- Loading Indicator -->
-        <div v-show="isLoading" class="absolute top-4 right-4 bg-white bg-opacity-90 px-4 py-2 rounded-lg shadow-md z-10">
+        <div v-show="isLoading && !isPublicShareMode" class="absolute top-4 right-4 bg-white bg-opacity-90 px-4 py-2 rounded-lg shadow-md z-10">
           <div class="flex items-center space-x-2">
             <div class="animate-spin rounded-full h-4 w-4 border-b-2 border-blue-600"></div>
             <span class="text-sm text-gray-700">Loading data...</span>
@@ -22,13 +48,19 @@
 
         <!-- Feature Info Box or Edit Box -->
         <FeatureInfoBox
-          v-if="!isEditingFeature"
+          v-if="!isEditingFeature && !isPublicShareMode"
           :feature="selectedFeature"
           @close="selectedFeature = null"
           @edit="handleEditFeature"
         />
+        <FeatureInfoBox
+          v-if="!isEditingFeature && isPublicShareMode"
+          :feature="selectedFeature"
+          :show-edit-button="false"
+          @close="selectedFeature = null"
+        />
         <FeatureEditBox
-          v-if="isEditingFeature"
+          v-if="isEditingFeature && !isPublicShareMode"
           :feature="selectedFeature"
           @cancel="handleCancelEdit"
           @saved="handleFeatureSaved"
@@ -45,6 +77,7 @@
       :max-features="MAX_FEATURES"
       :user-location="userLocation"
       :location-display-name="getLocationDisplayName()"
+      :allowed-options="publicShareAllowedOptions"
       @layer-change="updateMapLayer"
     />
   </div>
@@ -58,7 +91,8 @@ import {Tile as TileLayer, Vector as VectorLayer} from 'ol/layer'
 import {Vector as VectorSource} from 'ol/source'
 import {GeoJSON} from 'ol/format'
 import {fromLonLat, toLonLat} from 'ol/proj'
-import {authMixin} from '@/assets/js/authMixin.js'
+import {getUserInfo} from '@/assets/js/auth.js'
+import {UserInfo} from '@/assets/js/types/store-types'
 import {MapUtils} from '@/utils/map/MapUtils'
 import {APIHOST} from '@/config.js'
 import FeatureListSidebar from './FeatureListSidebar.vue'
@@ -74,7 +108,31 @@ export default {
     FeatureInfoBox,
     FeatureEditBox
   },
-  mixins: [authMixin],
+  mixins: [],
+  computed: {
+    isPublicShareMode() {
+      return this.$route.path === '/mapshare' && this.$route.query.id
+    },
+    shareId() {
+      return this.$route.query.id || null
+    },
+    // Get allowed options based on mode (public share or authenticated)
+    publicShareAllowedOptions() {
+      if (this.isPublicShareMode) {
+        return {
+          mapLayer: true, // Allow map layer selection
+          featureStats: false, // Hide feature stats for public users
+          userLocation: false // Hide user location for public users
+        }
+      }
+      // For authenticated users, allow all options
+      return {
+        mapLayer: true,
+        featureStats: true,
+        userLocation: true
+      }
+    }
+  },
   data() {
     return {
       map: null,
@@ -96,6 +154,7 @@ export default {
       tileSources: [], // Available tile sources from backend
       // Configuration
       API_BASE_URL: '/api/data/geojson/',
+      SHARE_API_BASE_URL: '/api/data/sharing/public/',
       LOCATION_API_URL: '/api/data/location/user/',
       TILE_SOURCES_API_URL: '/api/tiles/sources/',
       MAX_FEATURES: 5000, // Maximum number of features to keep on the map
@@ -103,7 +162,16 @@ export default {
       featureIdCounter: 0, // Counter to generate unique IDs for features
       currentZoom: null,
       featureCountUpdatePending: false, // Flag to batch feature count updates
-      isEditingFeature: false // Track if we're in edit mode
+      isEditingFeature: false, // Track if we're in edit mode
+      publicShareLoaded: false, // Track if public share data has been loaded
+      publicShareError: null, // Error message for invalid public share
+      publicShareTag: null, // Tag name for public share
+      // Allowed options for public share users
+      publicShareAllowedOptions: {
+        mapLayer: true, // Allow map layer selection
+        featureStats: false, // Hide feature stats for public users
+        userLocation: false // Hide user location for public users
+      }
     }
   },
   methods: {
@@ -127,11 +195,11 @@ export default {
       try {
         const response = await fetch(this.TILE_SOURCES_API_URL)
         const data = await response.json()
-        
+
         if (data.sources && Array.isArray(data.sources)) {
           this.tileSources = data.sources
           console.log('Loaded tile sources:', this.tileSources)
-          
+
           // Set default layer if not already set or if current selection is invalid
           if (!this.selectedLayer || !this.tileSources.find(s => s.id === this.selectedLayer)) {
             if (this.tileSources.length > 0) {
@@ -173,7 +241,7 @@ export default {
 
       // Create new tile layer based on configuration
       const clientConfig = tileSource.client_config || {}
-      
+
       if (clientConfig.type === 'osm' || tileSource.type === 'osm') {
         // OpenStreetMap source
         this.tileLayer = markRaw(new TileLayer({
@@ -266,7 +334,7 @@ export default {
             const props = f.get('properties') || {}
             return props._id === featureId
           })
-          
+
           if (existingFeature) {
             // Use existing feature instead
             feature = existingFeature
@@ -307,6 +375,10 @@ export default {
 
     // Handle edit button click
     handleEditFeature() {
+      // Disable editing in public share mode
+      if (this.isPublicShareMode) {
+        return
+      }
       this.isEditingFeature = true
     },
 
@@ -318,7 +390,7 @@ export default {
     // Handle feature saved
     async handleFeatureSaved() {
       this.isEditingFeature = false
-      
+
       // Get the updated feature from the backend
       const featureId = this.selectedFeature?.get('properties')?._id
       if (featureId && this.vectorSource) {
@@ -334,46 +406,46 @@ export default {
                 const props = f.get('properties') || {}
                 return props._id === featureId
               })
-              
+
               if (existingFeature) {
                 // Update the existing feature with new data
                 const format = new GeoJSON()
                 const geojsonData = data.feature.geojson
-                
+
                 // Read the feature from GeoJSON
                 const updatedFeature = format.readFeature(geojsonData, {
                   featureProjection: 'EPSG:3857',
                   dataProjection: 'EPSG:4326'
                 })
-                
+
                 // Manually preserve properties from the GeoJSON data (same as loadDataForCurrentView)
                 // Create a new properties object to avoid reference issues
-                const properties = geojsonData && geojsonData.properties 
+                const properties = geojsonData && geojsonData.properties
                   ? { ...geojsonData.properties }
                   : {}
-                
+
                 // Add the _id to properties for future updates
                 properties._id = featureId
                 updatedFeature.set('properties', properties)
-                
+
                 // Preserve geojson_hash if available
                 if (data.feature.geojson_hash) {
                   updatedFeature.set('geojson_hash', data.feature.geojson_hash)
                 }
-                
+
                 // Replace the old feature with the updated one
                 this.vectorSource.removeFeature(existingFeature)
                 this.vectorSource.addFeature(updatedFeature)
-                
+
                 // Update selected feature if it's the one we just updated
                 if (this.selectedFeature === existingFeature) {
                   this.selectedFeature = updatedFeature
                 }
-                
+
                 // Force style update
                 this.vectorLayer.changed()
                 this.textLayer.changed()
-                
+
                 // Update features in extent list
                 this.updateFeaturesInExtent()
                 return
@@ -384,7 +456,7 @@ export default {
           console.error('Error fetching updated feature:', error)
         }
       }
-      
+
       // Fallback: Refresh the map data to show updated feature
       // Clear the loaded bounds to force a reload
       this.loadedBounds.clear()
@@ -397,10 +469,10 @@ export default {
     // Handle feature deleted
     async handleFeatureDeleted() {
       this.isEditingFeature = false
-      
+
       // Get the deleted feature ID
       const featureId = this.selectedFeature?.get('properties')?._id
-      
+
       // Remove the deleted feature from vector source if it exists
       if (featureId && this.vectorSource) {
         const existingFeatures = this.vectorSource.getFeatures()
@@ -408,10 +480,10 @@ export default {
           const props = f.get('properties') || {}
           return props._id === featureId
         })
-        
+
         if (featureToRemove) {
           this.vectorSource.removeFeature(featureToRemove)
-          
+
           // Remove from feature timestamps if it exists
           const featureId_key = this.getFeatureId(featureToRemove)
           if (this.featureTimestamps[featureId_key]) {
@@ -419,23 +491,25 @@ export default {
           }
         }
       }
-      
+
       // Clear selected feature
       this.selectedFeature = null
-      
+
       // Clear loaded bounds cache to force reload
       this.loadedBounds.clear()
-      
+
       // Reload data for current view to refresh the map
       await this.loadDataForCurrentView()
-      
+
       // Update features in extent list
       this.updateFeaturesInExtent()
     },
 
     async initializeMap() {
-      // Get user location first
-      await this.getUserLocation()
+      // Get user location first (skip for public share mode)
+      if (!this.isPublicShareMode) {
+        await this.getUserLocation()
+      }
 
       // Create vector source and two separate layers
       // Use markRaw to prevent Vue from making OpenLayers objects reactive
@@ -492,9 +566,11 @@ export default {
         })
       }))
 
-      // Add event listeners for data loading
-      this.map.getView().on('change:center', this.debouncedLoadData)
-      this.map.getView().on('change:resolution', this.debouncedLoadData)
+      // Add event listeners for data loading (skip in public share mode)
+      if (!this.isPublicShareMode) {
+        this.map.getView().on('change:center', this.debouncedLoadData)
+        this.map.getView().on('change:resolution', this.debouncedLoadData)
+      }
 
       // Add event listeners for feature list updates
       this.map.getView().on('change:center', this.debouncedUpdateFeaturesInExtent)
@@ -509,7 +585,7 @@ export default {
             hitTolerance: 5 // 5 pixel tolerance for easier clicking
           }
         )
-        
+
         if (clickedFeature) {
           this.selectedFeature = clickedFeature
           this.isEditingFeature = false // Reset edit mode when selecting a new feature
@@ -529,7 +605,7 @@ export default {
             hitTolerance: 5
           }
         )
-        
+
         this.map.getViewport().style.cursor = hasFeature ? 'pointer' : ''
       })
 
@@ -540,7 +616,7 @@ export default {
         if (zoomChangeTimeout) {
           clearTimeout(zoomChangeTimeout)
         }
-        
+
         // Debounce the zoom change handling
         zoomChangeTimeout = setTimeout(() => {
           const newZoom = this.map.getView().getZoom()
@@ -551,13 +627,13 @@ export default {
               console.log(`Significant zoom change detected (${zoomDiff} levels), clearing cache`)
               this.loadedBounds.clear()
             }
-            
+
             // Clear cache when zooming out to world view (zoom <= 3)
             if (newZoom <= 3) {
               console.log(`Zooming to world view (zoom: ${newZoom}), clearing cache`)
               this.loadedBounds.clear()
             }
-            
+
           }
         }, 100) // 100ms debounce
       })
@@ -571,12 +647,39 @@ export default {
 
       // Event listeners removed - cache functionality eliminated
 
+      // Update map size to ensure it renders properly
+      setTimeout(() => {
+        if (this.map) {
+          this.map.updateSize()
+          console.log('Map size updated after initialization')
+        }
+      }, 100)
+
       // Return a promise that resolves when the map is ready
       return new Promise((resolve) => {
         // Wait for the map to be fully rendered
         this.map.once('rendercomplete', () => {
+          console.log('Map rendercomplete event fired')
+          // Update size again after render
+          setTimeout(() => {
+            if (this.map) {
+              this.map.updateSize()
+              console.log('Map size updated after rendercomplete')
+            }
+          }, 100)
           resolve()
         })
+
+        // Fallback timeout in case rendercomplete doesn't fire
+        setTimeout(() => {
+          console.log('Map initialization timeout, proceeding anyway')
+          // Update size before resolving
+          if (this.map) {
+            this.map.updateSize()
+            console.log('Map size updated after timeout')
+          }
+          resolve()
+        }, 1000)
       })
     },
 
@@ -617,6 +720,17 @@ export default {
     },
 
     async loadDataForCurrentView() {
+      // In public share mode, load all features at once
+      if (this.isPublicShareMode && !this.publicShareLoaded) {
+        await this.loadPublicShareData()
+        return
+      }
+
+      // Skip bbox-based loading in public share mode after initial load
+      if (this.isPublicShareMode && this.publicShareLoaded) {
+        return
+      }
+
       // Cancel any existing request
       if (this.currentAbortController) {
         this.currentAbortController.abort()
@@ -629,17 +743,17 @@ export default {
 
       // Check if we already loaded data for this area
       const bboxKey = this.getBoundingBoxKey(extent, zoom)
-      
+
       // Check if this is a world-wide extent by calculating the geographic extent
       const [minX, minY, maxX, maxY] = extent
       const minLonLat = toLonLat([minX, minY])
       const maxLonLat = toLonLat([maxX, maxY])
       const lonSpan = maxLonLat[0] - minLonLat[0]
       const latSpan = maxLonLat[1] - minLonLat[1]
-      
+
       // Consider it world-wide if longitude span > 300 degrees or latitude span > 150 degrees
       const isWorldWide = lonSpan > 300 || latSpan > 150 || zoom <= 2
-      
+
       if (isWorldWide) {
         console.log(`World-wide extent detected (zoom: ${zoom}, lonSpan: ${lonSpan.toFixed(1)}, latSpan: ${latSpan.toFixed(1)}), clearing cache and forcing reload`)
         this.loadedBounds.clear()
@@ -860,6 +974,201 @@ export default {
       console.log('Cleared all features from the map')
     },
 
+    // Load public share data
+    async loadPublicShareData() {
+      if (!this.shareId) {
+        console.error('No share ID provided')
+        this.publicShareError = 'No share ID provided in the link.'
+        return
+      }
+
+      // Ensure map and vector source are ready
+      if (!this.map || !this.vectorSource) {
+        console.error('Map or vector source not ready, retrying...')
+        // Retry after a short delay
+        setTimeout(() => {
+          this.loadPublicShareData()
+        }, 100)
+        return
+      }
+
+      // Reset error state
+      this.publicShareError = null
+
+      this.isLoading = true
+      this.currentAbortController = new AbortController()
+
+      try {
+        const url = `${this.SHARE_API_BASE_URL}${this.shareId}/`
+        console.log('Loading public share data from:', url)
+        const response = await fetch(url, {
+          signal: this.currentAbortController.signal
+        })
+
+        if (!response.ok) {
+          const errorData = await response.json().catch(() => ({}))
+          const errorMessage = errorData.error || `HTTP error! status: ${response.status}`
+          throw new Error(`${errorMessage} (${response.status})`)
+        }
+
+        const data = await response.json()
+        console.log('Public share data received, features:', data.data?.features?.length || 0)
+
+        // Store the tag name for display
+        if (data.tag) {
+          this.publicShareTag = data.tag
+        }
+
+        // Check if the response indicates an error
+        if (!data.success) {
+          this.publicShareError = data.error || 'Failed to load shared features.'
+          // Disable map interactions
+          if (this.map) {
+            this.map.getInteractions().forEach(interaction => {
+              interaction.setActive(false)
+            })
+          }
+          return
+        }
+
+        if (data.success && data.data && data.data.features) {
+          const processedData = data.data
+
+          // Add features to the vector source
+          const features = new GeoJSON().readFeatures(processedData, {
+            featureProjection: 'EPSG:3857',
+            dataProjection: 'EPSG:4326'
+          })
+
+          // Manually preserve properties from the original GeoJSON data
+          features.forEach((feature, index) => {
+            const originalFeature = data.data.features[index]
+
+            if (originalFeature && originalFeature.properties) {
+              feature.set('properties', originalFeature.properties)
+            }
+
+            if (originalFeature && originalFeature.geojson_hash) {
+              feature.set('geojson_hash', originalFeature.geojson_hash)
+            }
+          })
+
+          // Add timestamps to features
+          features.forEach(feature => {
+            this.addFeatureTimestamp(feature)
+          })
+
+          if (this.vectorSource) {
+            this.vectorSource.addFeatures(features)
+            console.log(`Loaded ${features.length} features from public share`)
+          }
+
+          // Update feature count
+          this.updateFeatureCount()
+
+          // Fit map to show all features
+          if (features.length > 0 && this.map && this.vectorSource) {
+            await this.$nextTick()
+
+            // Update map size first to ensure proper rendering
+            this.map.updateSize()
+
+            // Wait a bit for features to be fully added and map to render
+            setTimeout(() => {
+              try {
+                const extent = this.vectorSource.getExtent()
+                console.log('Calculated extent for features:', extent)
+
+                if (extent && extent.length === 4) {
+                  // Check if extent is valid (not infinite or NaN)
+                  const isValid = extent.every(val =>
+                    typeof val === 'number' &&
+                    isFinite(val) &&
+                    !isNaN(val)
+                  )
+
+                  if (isValid) {
+                    console.log('Fitting map to extent:', extent)
+                    this.map.getView().fit(extent, {
+                      padding: [50, 50, 50, 50],
+                      duration: 500,
+                      maxZoom: 15
+                    })
+
+                    // Update size again after fitting
+                    setTimeout(() => {
+                      if (this.map) {
+                        this.map.updateSize()
+                        console.log('Map size updated after fit')
+                      }
+                    }, 100)
+                  } else {
+                    console.warn('Invalid extent calculated:', extent)
+                  }
+                } else {
+                  console.warn('Could not calculate extent, extent:', extent)
+                }
+              } catch (error) {
+                console.error('Error fitting map to features:', error)
+              }
+            }, 200)
+          } else {
+            console.warn('Cannot fit map - missing requirements:', {
+              featuresCount: features.length,
+              mapReady: !!this.map,
+              vectorSourceReady: !!this.vectorSource
+            })
+          }
+
+          this.publicShareLoaded = true
+          
+          // Update features in extent list after loading public share data
+          this.updateFeaturesInExtent()
+        } else {
+          // API returned success: false
+          this.publicShareError = data.error || 'Failed to load shared features.'
+          this.publicShareTag = null
+          // Disable map interactions
+          if (this.map) {
+            this.map.getInteractions().forEach(interaction => {
+              interaction.setActive(false)
+            })
+          }
+        }
+      } catch (error) {
+        if (error.name === 'AbortError') {
+          console.log('Public share data load aborted')
+        } else {
+          console.error('Error loading public share data:', error)
+          console.error('Error details:', {
+            shareId: this.shareId,
+            url: `${this.SHARE_API_BASE_URL}${this.shareId}/`,
+            mapReady: !!this.map,
+            vectorSourceReady: !!this.vectorSource
+          })
+
+          // Set error message based on response
+          this.publicShareTag = null
+          if (error.message && error.message.includes('404')) {
+            this.publicShareError = 'This share link is invalid or has been deleted.'
+          } else if (error.message && error.message.includes('400')) {
+            this.publicShareError = 'Invalid share link format.'
+          } else {
+            this.publicShareError = 'Failed to load shared features. The share link may be invalid or expired.'
+          }
+
+          // Disable map interactions
+          if (this.map) {
+            this.map.getInteractions().forEach(interaction => {
+              interaction.setActive(false)
+            })
+          }
+        }
+      } finally {
+        this.isLoading = false
+      }
+    },
+
     // Handle featureId from URL parameter
     async handleUrlFeatureId() {
       // Check for featureId in query parameters
@@ -887,17 +1196,17 @@ export default {
         // Convert GeoJSON to OpenLayers feature
         const format = new GeoJSON()
         const geojsonData = data.feature.geojson
-        
+
         const feature = format.readFeature(geojsonData, {
           featureProjection: 'EPSG:3857',
           dataProjection: 'EPSG:4326'
         })
 
         // Preserve properties from the GeoJSON data
-        const properties = geojsonData && geojsonData.properties 
+        const properties = geojsonData && geojsonData.properties
           ? { ...geojsonData.properties }
           : {}
-        
+
         // Add the _id to properties
         properties._id = featureId
         feature.set('properties', properties)
@@ -948,15 +1257,86 @@ export default {
     // Cache functionality removed
   },
 
+  watch: {
+    '$route'(to, from) {
+      // Watch for route changes, especially share ID changes
+      if (this.isPublicShareMode) {
+        const newShareId = to.query.id
+        const oldShareId = from?.query?.id
+        
+        // If share ID changed, reload the share data
+        if (newShareId !== oldShareId) {
+          console.log('Share ID changed, reloading share data:', newShareId)
+          // Reset state
+          this.publicShareLoaded = false
+          this.publicShareError = null
+          this.publicShareTag = null
+          
+          // Re-enable map interactions in case they were disabled
+          if (this.map) {
+            this.map.getInteractions().forEach(interaction => {
+              interaction.setActive(true)
+            })
+          }
+          
+          // Clear existing features
+          if (this.vectorSource) {
+            this.vectorSource.clear()
+          }
+          this.featureTimestamps = {}
+          this.loadedBounds.clear()
+          this.selectedFeature = null
+          this.isEditingFeature = false
+          
+          // Reload the new share data
+          if (this.map && this.vectorSource) {
+            this.loadPublicShareData()
+          } else {
+            // If map isn't ready yet, wait for it
+            this.$nextTick(() => {
+              if (this.map && this.vectorSource) {
+                this.loadPublicShareData()
+              }
+            })
+          }
+        }
+      }
+    }
+  },
+  async created() {
+    // Only check auth if not in public share mode
+    if (!this.isPublicShareMode) {
+      const userStatus = await getUserInfo()
+      if (!userStatus.authorized) {
+        window.location = "/accounts/login/"
+        return
+      }
+      const userInfo = new UserInfo(userStatus.username, userStatus.id, userStatus.featureCount, userStatus.tags || [])
+      this.$store.commit('userInfo', userInfo)
+    }
+  },
   async mounted() {
     // Initialize featureTimestamps as empty object
     this.featureTimestamps = {}
+
+    // Ensure map container is available
+    await this.$nextTick()
+    if (!this.$refs.mapContainer) {
+      console.error('Map container not available')
+      return
+    }
 
     // Fetch tile sources configuration first
     await this.fetchTileSources()
 
     // Wait for map to be fully initialized before loading data
-    await this.initializeMap()
+    try {
+      await this.initializeMap()
+      console.log('Map initialized successfully')
+    } catch (error) {
+      console.error('Error initializing map:', error)
+      return
+    }
 
     // Update map layer to use the selected source (in case it's not the default OSM)
     if (this.selectedLayer && this.tileSources.length > 0) {
@@ -964,17 +1344,28 @@ export default {
     }
 
     // Initial data load - now the map is ready
+    console.log('Loading data for current view, isPublicShareMode:', this.isPublicShareMode, 'shareId:', this.shareId)
     await this.loadDataForCurrentView()
+
+    // Update map size to ensure it renders properly (especially important for public shares)
+    await this.$nextTick()
+    if (this.map) {
+      setTimeout(() => {
+        this.map.updateSize()
+        console.log('Map size updated after data load')
+      }, 100)
+    }
 
     // Initial feature list update
     this.updateFeaturesInExtent()
 
-    // Check for featureId in URL parameters and zoom to it
-    // Wait a bit for the map to fully render before zooming
-    await this.$nextTick()
-    setTimeout(() => {
-      this.handleUrlFeatureId()
-    }, 200)
+    // Check for featureId in URL parameters and zoom to it (only in non-public mode)
+    if (!this.isPublicShareMode) {
+      await this.$nextTick()
+      setTimeout(() => {
+        this.handleUrlFeatureId()
+      }, 200)
+    }
   },
 
   beforeUnmount() {
@@ -1004,5 +1395,26 @@ export default {
 /* Hide OpenLayers attribution */
 :deep(.ol-attribution) {
   display: none;
+}
+
+/* Fade transition for error overlay */
+.fade-enter-active, .fade-leave-active {
+  transition: opacity 0.5s ease;
+}
+
+.fade-enter-from, .fade-leave-to {
+  opacity: 0;
+}
+
+.fade-enter-to, .fade-leave-from {
+  opacity: 1;
+}
+
+/* Disable text selection on error overlay */
+.select-none {
+  -webkit-user-select: none;
+  -moz-user-select: none;
+  -ms-user-select: none;
+  user-select: none;
 }
 </style>

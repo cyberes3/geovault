@@ -98,6 +98,30 @@ def update_feature_metadata(request, feature_id):
                         'error': 'all tags must be strings',
                         'code': 400
                     }, status=400)
+                
+                # Validate tag length (max 255 characters)
+                if len(tag) > 255:
+                    return JsonResponse({
+                        'success': False,
+                        'error': f'Tag "{tag[:50]}..." exceeds maximum length of 255 characters',
+                        'code': 400
+                    }, status=400)
+                
+                # Validate tag is not empty after stripping
+                if not tag.strip():
+                    return JsonResponse({
+                        'success': False,
+                        'error': 'Tags cannot be empty or contain only whitespace',
+                        'code': 400
+                    }, status=400)
+                
+                # Validate tag format: no control characters
+                if any(ord(c) < 32 and c not in '\t\n\r' for c in tag):
+                    return JsonResponse({
+                        'success': False,
+                        'error': 'Tags cannot contain control characters',
+                        'code': 400
+                    }, status=400)
 
             # Filter out protected tags from incoming tags
             filtered_tags = filter_protected_tags(metadata['tags'], CONST_INTERNAL_TAGS)
@@ -226,6 +250,40 @@ def update_feature(request, feature_id):
         new_tags = new_properties.get('tags', [])
         if not isinstance(new_tags, list):
             new_tags = []
+        
+        # Validate tags
+        for tag in new_tags:
+            if not isinstance(tag, str):
+                return JsonResponse({
+                    'success': False,
+                    'error': 'all tags must be strings',
+                    'code': 400
+                }, status=400)
+            
+            # Validate tag length (max 255 characters)
+            if len(tag) > 255:
+                return JsonResponse({
+                    'success': False,
+                    'error': f'Tag "{tag[:50]}..." exceeds maximum length of 255 characters',
+                    'code': 400
+                }, status=400)
+            
+            # Validate tag is not empty after stripping
+            if not tag.strip():
+                return JsonResponse({
+                    'success': False,
+                    'error': 'Tags cannot be empty or contain only whitespace',
+                    'code': 400
+                }, status=400)
+            
+            # Validate tag format: no control characters
+            if any(ord(c) < 32 and c not in '\t\n\r' for c in tag):
+                return JsonResponse({
+                    'success': False,
+                    'error': 'Tags cannot contain control characters',
+                    'code': 400
+                }, status=400)
+        
         filtered_tags = filter_protected_tags(new_tags, CONST_INTERNAL_TAGS)
 
         # Combine filtered user tags with preserved protected tags

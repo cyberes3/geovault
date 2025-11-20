@@ -14,8 +14,12 @@ tile_logger = get_tile_logger()
 access_logger = get_access_logger()
 
 
-@login_required
 def index(request):
+    """
+    Serve the main Vue.js application.
+    Authentication is handled by the frontend for protected routes.
+    Public routes (like /mapshare) should be accessible without authentication.
+    """
     return render(request, "index.html")
 
 

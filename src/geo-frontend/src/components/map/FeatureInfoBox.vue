@@ -6,6 +6,7 @@
         <h3 class="text-lg font-bold text-gray-900 pr-2">{{ getFeatureName(feature) }}</h3>
         <div class="flex items-center space-x-2 flex-shrink-0">
           <button
+            v-if="showEditButton"
             @click="$emit('edit')"
             class="text-gray-400 hover:text-blue-600 transition-colors"
             title="Edit feature"
@@ -61,6 +62,10 @@ export default {
     feature: {
       type: Object,
       default: null
+    },
+    showEditButton: {
+      type: Boolean,
+      default: true
     }
   },
   emits: ['close', 'edit'],

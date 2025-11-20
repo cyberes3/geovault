@@ -33,6 +33,11 @@ const routes = [
         component: () => import('./components/map/GeoJsonMap.vue'),
     },
     {
+        path: '/mapshare',
+        name: 'MapShare',
+        component: () => import('./components/map/GeoJsonMap.vue'),
+    },
+    {
         path: '/tags',
         name: 'Tags',
         component: () => import('./components/TagsPage.vue'),

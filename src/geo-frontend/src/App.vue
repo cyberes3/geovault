@@ -8,7 +8,7 @@
             <div class="flex-shrink-0">
               <h1 class="text-xl font-bold text-gray-900">GeoServer</h1>
             </div>
-            <div class="hidden sm:ml-6 sm:flex sm:space-x-8">
+            <div v-if="userInfo" class="hidden sm:ml-6 sm:flex sm:space-x-8">
               <router-link
                   :class="{ 'text-gray-900 border-gray-500': $route.path === '/' }"
                   class="inline-flex items-center px-1 pt-1 text-sm font-medium text-gray-500 hover:text-gray-700 hover:border-gray-300 border-b-2 border-transparent transition-colors duration-200"
@@ -115,7 +115,10 @@ export default {
   computed: {
     ...mapState(["userInfo"]),
     isMapRoute() {
-      return this.$route.path === '/map'
+      return this.$route.path === '/map' || this.$route.path === '/mapshare'
+    },
+    isPublicShareRoute() {
+      return this.$route.path === '/mapshare'
     }
   },
   watch: {
@@ -127,15 +130,26 @@ export default {
         }
       },
       deep: true
-    }
+    },
   },
   methods: {
     async checkAuth() {
+      // Check if we're on a public share route using window.location.hash
+      // since $route might not be ready yet
+      const hash = window.location.hash || '';
+      const isPublicShare = hash.startsWith('#/mapshare');
+      
       this.userInfoLoading = true;
       const userStatus = await getUserInfo();
       
       if (!userStatus || !userStatus.authorized) {
-        // User is not authorized (guest), redirect to login
+        // User is not authorized (guest)
+        if (isPublicShare) {
+          // On public share routes, allow access without redirecting
+          this.userInfoLoading = false;
+          return;
+        }
+        // On other routes, redirect to login
         window.location.href = '/accounts/login/';
         return;
       }
@@ -146,6 +160,11 @@ export default {
       this.userInfoLoading = false;
     },
     async setupRealtimeConnection() {
+      // Skip WebSocket connection for public share routes
+      if (this.isPublicShareRoute) {
+        return;
+      }
+
       // Load all modules from registry first
       await realtimeSocket.loadAllModules(this.$store);
       
@@ -216,13 +235,21 @@ export default {
       if (this.$refs.userMenuRef && !this.$refs.userMenuRef.contains(event.target)) {
         this.userMenuOpen = false;
       }
-    }
+    },
   },
   async created() {
-    // Check authentication first
+    // Always check authentication (even on public share routes) to set userInfo if logged in
     await this.checkAuth();
-    // Setup realtime connection after auth check
-    this.setupRealtimeConnection();
+    
+    // Only setup WebSocket for non-public routes
+    // Use window.location.hash since $route might not be ready yet
+    const hash = window.location.hash || '';
+    const isPublicShare = hash.startsWith('#/mapshare');
+    
+    if (!isPublicShare) {
+      // Setup realtime connection after auth check
+      this.setupRealtimeConnection();
+    }
   },
   mounted() {
     // WebSocket connection is managed globally and persists across page navigation
