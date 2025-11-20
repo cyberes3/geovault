@@ -351,6 +351,8 @@ def extract_icon_hrefs_from_kml(kml_content: str) -> List[str]:
             if href_elem.tag.endswith('href') and href_elem.text:
                 href = href_elem.text.strip()
                 if href and _is_valid_icon_type(href):
+                    # Fix nested CalTopo URLs when extracting from KML
+                    href = _fix_nested_caltopo_url(href)
                     icon_hrefs.append(href)
         
         # Remove duplicates while preserving order
@@ -368,6 +370,66 @@ def extract_icon_hrefs_from_kml(kml_content: str) -> List[str]:
     except Exception as e:
         logger.error(f"Error extracting icon hrefs from KML: {str(e)}")
         return []
+
+
+def _fix_nested_caltopo_url(url: str) -> str:
+    """
+    Fix nested CalTopo URLs that occur when CalTopo reimports files.
+    
+    When CalTopo reimports, it creates nested URLs where the original URL
+    is URL-encoded inside the cfg parameter:
+    - Original: https://caltopo.com/icon.png?cfg=point%2CFF0000
+    - Nested: http://caltopo.com/icon.png?cfg=http%3A%2F%2Fcaltopo.com%2Ficon.png%3Fcfg%3Dpoint%252CFF0000
+    
+    This function detects and extracts the inner URL.
+    
+    Args:
+        url: Icon URL (potentially nested)
+        
+    Returns:
+        Fixed URL with inner URL extracted, or original URL if not nested
+    """
+    try:
+        parsed = urlparse(url)
+        
+        # Check if it's a CalTopo URL
+        if 'caltopo.com' not in parsed.netloc.lower():
+            return url
+        
+        # Check if path is /icon.png
+        if parsed.path.lower() != '/icon.png':
+            return url
+        
+        # Parse query parameters
+        query_params = parse_qs(parsed.query)
+        
+        # Get cfg parameter
+        if 'cfg' not in query_params:
+            return url
+        
+        cfg_value = query_params['cfg'][0]
+        # URL decode
+        cfg_decoded = unquote(cfg_value)
+        
+        # Check if cfg contains a full CalTopo URL (nested)
+        # Look for http://caltopo.com or https://caltopo.com in the decoded cfg
+        if 'http://caltopo.com' in cfg_decoded.lower() or 'https://caltopo.com' in cfg_decoded.lower():
+            # Extract the inner URL
+            # The pattern is typically: http://caltopo.com/icon.png?cfg=... possibly followed by #1.0
+            # There may be a duplicate #1.0 at the end, so we capture up to the first #1.0
+            # Pattern: capture the URL including optional #1.0, but stop before a second #1.0
+            inner_url_match = re.search(r'(https?://caltopo\.com/icon\.png\?cfg=[^#]+(?:#1\.0)?)', cfg_decoded, re.IGNORECASE)
+            if inner_url_match:
+                inner_url = inner_url_match.group(1)
+                logger.debug(f"Fixed nested CalTopo URL: {url} -> {inner_url}")
+                return inner_url
+        
+        # Not nested, return original
+        return url
+        
+    except Exception as e:
+        logger.debug(f"Failed to fix nested CalTopo URL {url}: {str(e)}")
+        return url
 
 
 def _is_caltopo_point_icon(url: str) -> bool:
@@ -490,6 +552,10 @@ def _process_properties_icons(properties: dict, file_type: str, file_data: Optio
         if prop_name in properties and properties[prop_name]:
             href = properties[prop_name]
             if isinstance(href, str):
+                # Fix nested CalTopo URLs first (before processing)
+                href = _fix_nested_caltopo_url(href)
+                properties[prop_name] = href
+                
                 # Check if this is a CalTopo point icon - if so, extract color and remove icon
                 # Only point icons should be replaced with default icon
                 if _is_caltopo_point_icon(href):
@@ -504,6 +570,8 @@ def _process_properties_icons(properties: dict, file_type: str, file_data: Optio
                 # Check mapping first if available
                 if href_mapping and href in href_mapping:
                     mapped_href = href_mapping[href]
+                    # Fix nested CalTopo URLs in mapped href too
+                    mapped_href = _fix_nested_caltopo_url(mapped_href)
                     # Check if mapped href is also a CalTopo point icon (shouldn't happen, but be safe)
                     if _is_caltopo_point_icon(mapped_href):
                         mapped_color = _extract_color_from_caltopo_url(mapped_href)
