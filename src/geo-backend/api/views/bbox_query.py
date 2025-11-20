@@ -108,7 +108,7 @@ def _get_features_in_bbox(bbox: Tuple[float, float, float, float], user_id: int,
                 "type": "Feature",
                 "geometry": geojson_data.get('geometry'),
                 "properties": properties,
-                "geojson_hash": feature.geojson_hash
+                "geojson_hash": feature.file_hash
             }
             geojson_features.append(geojson_feature)
 
@@ -149,7 +149,7 @@ def _get_features_in_bbox(bbox: Tuple[float, float, float, float], user_id: int,
                         "type": "Feature",
                         "geometry": geojson_data.get('geometry'),
                         "properties": properties,
-                        "geojson_hash": feature.geojson_hash
+                        "geojson_hash": feature.file_hash
                     }
                     geojson_features.append(geojson_feature)
 

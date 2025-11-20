@@ -34,7 +34,7 @@ def get_feature(request, feature_id):
             'feature': {
                 'id': feature.id,
                 'geojson': geojson_data,
-                'geojson_hash': feature.geojson_hash,
+                'geojson_hash': feature.file_hash,
                 'timestamp': feature.timestamp.isoformat() if feature.timestamp else None
             }
         })

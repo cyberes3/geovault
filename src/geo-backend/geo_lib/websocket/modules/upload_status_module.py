@@ -49,14 +49,14 @@ class UploadStatusModule(BaseWebSocketModule):
             get_item = sync_to_async(ImportQueue.objects.get)
             self.import_item = await get_item(id=self.import_item.id)
 
-            # Check for file-level duplicates
+            # Check for file-level duplicates using raw file content hash
             # Only block duplicates that are still in the queue (not yet imported)
             # Allow re-importing files that were previously imported (but mark them as duplicates)
             duplicate_status = None
             duplicate_original_filename = None
 
             if self.import_item.geojson_hash:
-                # Check for earlier files with same hash still in queue (not imported)
+                # Check for earlier files with same raw file hash still in queue (not imported)
                 duplicate_in_queue_query = sync_to_async(ImportQueue.objects.filter(
                     user_id=self.user.id,
                     geojson_hash=self.import_item.geojson_hash,
@@ -69,7 +69,7 @@ class UploadStatusModule(BaseWebSocketModule):
                     duplicate_status = 'duplicate_in_queue'
                     duplicate_original_filename = duplicate_in_queue.original_filename
                 else:
-                    # Check for already-imported files with same hash
+                    # Check for already-imported files with same raw file hash
                     duplicate_imported_query = sync_to_async(ImportQueue.objects.filter(
                         user_id=self.user.id,
                         geojson_hash=self.import_item.geojson_hash,

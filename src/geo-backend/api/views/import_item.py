@@ -652,7 +652,7 @@ def fetch_import_history_item(request, item_id: int):
     if item.user_id != request.user.id:
         return JsonResponse({'success': False, 'msg': 'not authorized to view this item', 'code': 403}, status=400)
 
-    response = HttpResponse(item.raw_kml, content_type='application/octet-stream')
+    response = HttpResponse(item.raw_file, content_type='application/octet-stream')
     response['Content-Disposition'] = 'attachment; filename="%s"' % item.original_filename
     return response
 
@@ -870,7 +870,7 @@ def import_to_featurestore(request, item_id):
     current_batch_hashes = set()  # Track hashes in current import batch
 
     # Get existing feature hashes for this user to avoid duplicates
-    existing_features = FeatureStore.objects.filter(user=request.user).values_list('geojson_hash', flat=True)
+    existing_features = FeatureStore.objects.filter(user=request.user).values_list('file_hash', flat=True)
     existing_hashes.update(existing_features)
 
     # Thread-safe duplicate checking
@@ -994,7 +994,7 @@ def import_to_featurestore(request, item_id):
             # Create FeatureStore object
             return FeatureStore(
                 geojson=geojson_data,
-                geojson_hash=feature_hash,
+                file_hash=feature_hash,
                 geometry=geometry,
                 source=import_item,
                 user=request.user

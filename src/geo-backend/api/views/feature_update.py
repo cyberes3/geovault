@@ -410,7 +410,7 @@ def update_feature(request, feature_id):
         feature.geojson = feature_data
 
         # Regenerate the hash for the updated feature
-        feature.geojson_hash = generate_feature_hash(feature_data)
+        feature.file_hash = generate_feature_hash(feature_data)
 
         # Update the geometry field if coordinates changed
         try:
@@ -647,7 +647,7 @@ def apply_replacement_geometry(request, feature_id):
         feature.geojson = feature_data
 
         # Regenerate the hash for the updated feature
-        feature.geojson_hash = generate_feature_hash(feature_data)
+        feature.file_hash = generate_feature_hash(feature_data)
 
         # Update the geometry field if coordinates changed
         try:

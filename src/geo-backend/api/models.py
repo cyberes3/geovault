@@ -14,8 +14,8 @@ class ImportQueue(django_models.Model):
     geofeatures = django_models.JSONField(default=list)
     duplicate_features = django_models.JSONField(default=list, help_text="Features that are duplicates of existing features in the feature store")
     original_filename = django_models.TextField()
-    raw_kml = django_models.TextField()
-    geojson_hash = django_models.CharField(max_length=64, null=True, blank=True, help_text="SHA-256 hash of the normalized GeoJSON FeatureCollection content")
+    raw_file = django_models.TextField(help_text="Raw file content (KML, KMZ, GPX, etc.)")
+    geojson_hash = django_models.CharField(max_length=64, null=True, blank=True, help_text="SHA-256 hash of the raw file content for duplicate detection")
     log_id = django_models.UUIDField(default=uuid.uuid4, unique=True, help_text="UUID to group related log entries", null=True)
     replacement = django_models.IntegerField(null=True, blank=True, help_text="ID of the existing feature being updated with this replacement upload")
     timestamp = django_models.DateTimeField(auto_now_add=True)
@@ -24,7 +24,7 @@ class ImportQueue(django_models.Model):
         indexes = [
             # Compound index for user-specific import queue queries
             django_models.Index(fields=['user', 'imported', 'timestamp'], name='import_user_imported_time'),
-            # Index for geojson hash lookups
+            # Index for file hash lookups (raw file content hash for duplicate detection)
             django_models.Index(fields=['user', 'geojson_hash'], name='import_user_geojson_hash'),
             # Index for log grouping
             django_models.Index(fields=['log_id', 'timestamp'], name='import_log_id_time'),
@@ -36,7 +36,7 @@ class FeatureStore(models.Model):
     user = models.ForeignKey(get_user_model(), on_delete=models.CASCADE)
     source = models.ForeignKey(ImportQueue, on_delete=models.SET_NULL, null=True)
     geojson = models.JSONField(null=False)
-    geojson_hash = models.CharField(max_length=64, unique=True, null=True, blank=True, help_text="SHA-256 hash of the feature's GeoJSON content")
+    file_hash = models.CharField(max_length=64, unique=True, null=True, blank=True, help_text="SHA-256 hash of the feature's GeoJSON content")
     geometry = models.GeometryField(null=True, blank=True, dim=3)  # Spatial field for efficient queries, supports 3D
     timestamp = models.DateTimeField(auto_now_add=True)
 
@@ -45,15 +45,15 @@ class FeatureStore(models.Model):
             # Original indexes
             models.Index(fields=['user', 'timestamp']),
             GistIndex(fields=['geometry'], name='featurestore_geometry_idx'),  # GIST spatial index
-            models.Index(fields=['geojson_hash']),  # Index for hash-based lookups
+            models.Index(fields=['file_hash']),  # Index for hash-based lookups
             
             # NEW COMPOUND INDEXES FOR OPTIMIZED QUERIES (with short names)
             # NOTE: Removed compound indexes that include geometry fields to avoid PostgreSQL
             # btree index size limits. Geometry fields use GiST spatial indexes instead.
             
             # 1. User + Hash lookups (used in duplicate detection and hash-based queries)
-            # Optimizes queries like: user_id=user_id, geojson_hash=hash
-            models.Index(fields=['user', 'geojson_hash'], name='fs_user_hash'),
+            # Optimizes queries like: user_id=user_id, file_hash=hash
+            models.Index(fields=['user', 'file_hash'], name='fs_user_hash'),
             
             # 2. User + Timestamp for chronological queries
             # Optimizes queries like: user_id=user_id ORDER BY timestamp
@@ -65,7 +65,7 @@ class FeatureStore(models.Model):
             
             # 4. Hash + Timestamp for hash-based chronological queries
             # Optimizes duplicate detection with temporal ordering
-            models.Index(fields=['geojson_hash', 'timestamp'], name='fs_hash_time'),
+            models.Index(fields=['file_hash', 'timestamp'], name='fs_hash_time'),
         ]
 
 

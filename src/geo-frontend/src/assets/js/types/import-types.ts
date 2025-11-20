@@ -1,7 +1,7 @@
 export class ImportQueueItem {
     id: number;
     original_filename: string;
-    raw_kml_hash: string;
+    raw_file_hash: string;
     data: object;
     log: any[];
     timestamp: string;
@@ -17,7 +17,7 @@ export class ImportQueueItem {
     constructor(data: any) {
         this.id = data.id;
         this.original_filename = data.original_filename;
-        this.raw_kml_hash = data.raw_kml_hash;
+        this.raw_file_hash = data.raw_file_hash;
         this.data = data.data;
         this.log = data.log;
         this.timestamp = data.timestamp;

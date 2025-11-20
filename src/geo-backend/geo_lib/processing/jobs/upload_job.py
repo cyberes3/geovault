@@ -11,7 +11,6 @@ from django.contrib.auth.models import User
 from django.db import transaction
 
 from api.models import ImportQueue
-from geo_lib.processing.geojson_normalization import hash_normalized_geojson
 from geo_lib.processing.jobs.base_job import BaseJob
 from geo_lib.processing.logging import RealTimeImportLog, DatabaseLogLevel
 from geo_lib.processing.processors import get_processor
@@ -290,7 +289,7 @@ class UploadJob(BaseJob):
             # Update existing import queue entry with timing
             feature_processing_start = time.time()
             import_queue_id = self._update_import_queue_entry(
-                geojson_data, realtime_log, filename, user_id, job_id, geojson_str, geojson_size_mb
+                geojson_data, realtime_log, filename, user_id, job_id, geojson_str, geojson_size_mb, file_data
             )
             feature_processing_duration = time.time() - feature_processing_start
             realtime_log.add_timing("Feature processing and database update", feature_processing_duration, "UploadJob")
@@ -419,7 +418,7 @@ class UploadJob(BaseJob):
 
                 # Create import queue entry with empty geofeatures during processing
                 import_queue = ImportQueue.objects.create(
-                    raw_kml='{"type": "FeatureCollection", "features": []}',  # Empty GeoJSON
+                    raw_file='{"type": "FeatureCollection", "features": []}',  # Empty GeoJSON
                     original_filename=filename,
                     user=user,
                     geofeatures=[],  # Empty array during processing
@@ -435,7 +434,8 @@ class UploadJob(BaseJob):
 
     def _update_import_queue_entry(self, geojson_data: Dict[str, Any],
                                    processing_log: RealTimeImportLog, filename: str,
-                                   user_id: int, job_id: str, geojson_str: str, geojson_size_mb: float) -> int:
+                                   user_id: int, job_id: str, geojson_str: str, geojson_size_mb: float,
+                                   raw_file_data: bytes) -> int:
         """Update an existing ImportQueue entry with processed data."""
         # Get the import queue entry
         job = self.status_tracker.get_job(job_id)
@@ -452,9 +452,13 @@ class UploadJob(BaseJob):
         try:
             with transaction.atomic():
 
-                # Create normalized content hash for duplicate detection
-                # This ensures KML/KMZ files with same content get same hash
-                content_hash = hash_normalized_geojson(geojson_data)
+                # Hash the raw file content for duplicate detection
+                # This ensures files with the same source content get the same hash,
+                # regardless of processing differences or file format (KML vs KMZ)
+                import hashlib
+                if isinstance(raw_file_data, str):
+                    raw_file_data = raw_file_data.encode('utf-8')
+                file_hash = hashlib.sha256(raw_file_data).hexdigest()
 
                 # Process features using the processor's already processed features
                 features = geojson_data.get('features', [])
@@ -474,12 +478,9 @@ class UploadJob(BaseJob):
                 processing_log.add(f"Successfully processed {len(processed_features)} features", "UploadJob", DatabaseLogLevel.INFO)
                 processing_log.add("Preparing to save processed data to database", "UploadJob", DatabaseLogLevel.INFO)
 
-                # Compute the geojson_hash (still needed for tracking, but skip duplicate detection for replacements)
-                geojson_for_hash = {
-                    'type': 'FeatureCollection',
-                    'features': processed_features
-                }
-                geojson_hash = hash_normalized_geojson(geojson_for_hash)
+                # Store the raw file hash for duplicate detection
+                # Note: field is named geojson_hash for historical reasons, but stores raw file hash
+                geojson_hash = file_hash
 
                 # Check if this is a replacement upload - skip duplicate detection for fast path
                 is_replacement = import_queue.replacement is not None
@@ -583,13 +584,28 @@ class UploadJob(BaseJob):
                 # Save the features to the database
                 processing_log.add(f"Saving {len(processed_features)} features to database ({geojson_size_mb:.2f} MB)", "UploadJob", DatabaseLogLevel.INFO)
 
-                import_queue.raw_kml = geojson_str
+                # Store raw file content (convert bytes to string if needed)
+                if isinstance(raw_file_data, bytes):
+                    # Try to decode as UTF-8, fall back to base64 if it's binary
+                    try:
+                        raw_file_content = raw_file_data.decode('utf-8')
+                    except UnicodeDecodeError:
+                        # For binary files like KMZ, store as base64
+                        import base64
+                        raw_file_content = base64.b64encode(raw_file_data).decode('utf-8')
+                else:
+                    raw_file_content = raw_file_data
+                
+                import_queue.raw_file = raw_file_content
                 import_queue.geojson_hash = geojson_hash
                 import_queue.geofeatures = processed_features
                 import_queue.duplicate_features = duplicate_features  # Store duplicate information
                 import_queue.save()
 
                 processing_log.add("Import queue entry updated successfully", "UploadJob", DatabaseLogLevel.INFO)
+
+                # Broadcast status update to trigger queue refresh so duplicate status is updated
+                self._broadcast_to_import_queue_module(user_id, 'status_updated', {'id': import_queue.id})
 
                 # Note: No need to call importlog_to_db since RealTimeImportLog writes to DB immediately
 

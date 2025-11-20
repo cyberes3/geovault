@@ -63,22 +63,27 @@ class ImportQueueModule(BaseWebSocketModule):
             if job.status.value == 'processing' and job.import_queue_id
         }
 
-        # Build a map of geojson_hash to items for duplicate detection
+        # Build a map of file hash to items for duplicate detection (hash of raw file content)
         hash_to_items = {}
+        queue_hashes = set()
         for item in data:
             if item.get('geojson_hash'):
-                if item['geojson_hash'] not in hash_to_items:
-                    hash_to_items[item['geojson_hash']] = []
-                hash_to_items[item['geojson_hash']].append(item)
+                geojson_hash = item['geojson_hash']
+                queue_hashes.add(geojson_hash)
+                if geojson_hash not in hash_to_items:
+                    hash_to_items[geojson_hash] = []
+                hash_to_items[geojson_hash].append(item)
 
         # Check for imported files with same hash
+        # Get all imported items for this user that have a hash matching any item in the queue
         imported_hashes = {}
-        if hash_to_items:
+        if queue_hashes:
             imported_items = ImportQueue.objects.filter(
                 user=self.user,
                 imported=True,
-                geojson_hash__in=list(hash_to_items.keys())
-            ).values('geojson_hash', 'original_filename')
+                geojson_hash__in=list(queue_hashes),
+                geojson_hash__isnull=False
+            ).values('geojson_hash', 'original_filename').distinct()
 
             for imported_item in imported_items:
                 imported_hashes[imported_item['geojson_hash']] = imported_item['original_filename']
@@ -159,5 +164,6 @@ class ImportQueueModule(BaseWebSocketModule):
         await self.send_to_client('item_imported', event['data'])
 
     async def status_updated(self, event):
-        """Handle status_updated event."""
-        await self.send_to_client('status_updated', event['data'])
+        """Handle status_updated event - refresh queue to update duplicate status."""
+        # Refresh the queue data to ensure duplicate status is up to date
+        await self.send_initial_state()

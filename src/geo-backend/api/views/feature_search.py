@@ -50,7 +50,7 @@ def get_features_by_tag(request):
                 "type": "Feature",
                 "geometry": geojson_data.get('geometry'),
                 "properties": feature_properties,
-                "geojson_hash": feature.geojson_hash
+                "geojson_hash": feature.file_hash
             }
 
             # Add feature to each tag's list
@@ -131,7 +131,7 @@ def search_features(request):
                     "type": "Feature",
                     "geometry": geojson_data.get('geometry'),
                     "properties": properties,
-                    "geojson_hash": feature.geojson_hash
+                    "geojson_hash": feature.file_hash
                 }
                 geojson_features.append(geojson_feature)
 
