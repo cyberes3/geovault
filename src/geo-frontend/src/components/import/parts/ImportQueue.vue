@@ -288,6 +288,7 @@ export default {
       internalLoading: true,
       hasInitiallyLoaded: false,
       isRefreshing: false,
+      hasRequestedInitialLoad: false, // Track if we've already requested initial data load
       deletedItems: new Set(), // Track locally deleted items to prevent flicker
       deletedItemTimeouts: new Map(), // Track how many refresh cycles each deleted item has been gone
       selectedItems: new Set(), // Track selected items for bulk import
@@ -339,15 +340,21 @@ export default {
 
       this.isRefreshing = true
       this.internalLoading = true
+      this.hasRequestedInitialLoad = true // Mark that we've requested initial load
 
       try {
         // Request refresh from WebSocket
         realtimeSocket.requestRefresh('import_queue')
+        // Don't set internalLoading = false here - keep it true until data arrives
+        // The subscribeToImportQueueUpdates() method will set it to false when setImportQueue mutation is received
       } catch (error) {
         console.error('Error requesting queue refresh:', error)
-      } finally {
+        // Only set loading to false on error
         this.internalLoading = false
-        this.isRefreshing = false
+        this.hasRequestedInitialLoad = false // Reset on error so we can retry
+      } finally {
+        // Keep isRefreshing true until data arrives to prevent duplicate requests
+        // It will be set to false when data arrives via subscribeToImportQueueUpdates
       }
     },
     checkForRestoreItems(serverQueue) {
@@ -627,6 +634,7 @@ export default {
           // When import queue data is received, mark as initially loaded
           this.hasInitiallyLoaded = true;
           this.internalLoading = false;
+          this.isRefreshing = false; // Clear refreshing flag when data arrives
         }
       });
     },
@@ -765,6 +773,10 @@ export default {
     if (this.importQueue && this.importQueue.length > 0) {
       this.hasInitiallyLoaded = true;
       this.internalLoading = false;
+    } else {
+      // If we don't have data, request a refresh via WebSocket
+      // This ensures the component gets data when created on a new page
+      this.fetchQueueList();
     }
 
     // Setup realtime connection (now managed globally)
@@ -781,6 +793,10 @@ export default {
   },
   mounted() {
     // WebSocket is already connected in created()
+    // Fallback: If we still haven't received data, haven't requested initial load yet, and WebSocket is connected, request refresh
+    if (!this.hasInitiallyLoaded && !this.hasRequestedInitialLoad && this.websocketConnected && (!this.importQueue || this.importQueue.length === 0)) {
+      this.fetchQueueList();
+    }
   },
   beforeDestroy() {
     // Unsubscribe from bulk job events
