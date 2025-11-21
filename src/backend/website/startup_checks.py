@@ -166,23 +166,22 @@ def check_static_files():
     
     # In production mode, WhiteNoise serves from STATIC_ROOT
     static_root = Path(settings.STATIC_ROOT)
-    static_dir = static_root / 'static'
     
-    if not static_root.exists() or not static_dir.exists():
+    if not static_root.exists():
         logger.warning("⚠ Static files may not be collected!")
         logger.warning("  When DEBUG=False, static files must be collected into STATIC_ROOT")
         logger.warning("  Run: python manage.py collectstatic --noinput")
         logger.warning("  This is required after rebuilding the frontend")
         return True
     
-    # Check if static directory has files
-    static_files = list(static_dir.glob('*'))
+    # Check if STATIC_ROOT has files
+    static_files = [f for f in static_root.iterdir() if f.is_file()]
     if not static_files:
-        logger.warning("⚠ STATIC_ROOT/static/ directory is empty!")
+        logger.warning("⚠ STATIC_ROOT directory is empty!")
         logger.warning("  Run: python manage.py collectstatic --noinput")
         return True
     
-    logger.info(f"✓ Static files collected ({len(static_files)} files in static/)")
+    logger.info(f"✓ Static files collected ({len(static_files)} files in STATIC_ROOT)")
     return True
 
 

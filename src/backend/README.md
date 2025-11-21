@@ -1,8 +1,10 @@
 ## Install
 
 ```shell
-sudo apt install postgresql-common libpq-dev libxml2-dev libxslt-dev python3.12 python3.12-dev python3.12-venv
+sudo apt-get install python3-gdal
 ```
+
+./venv/bin/python manage.py collectstatic --noinput
 
 PostGIS setup. Run this on your database before starting the geoserver for the first time.
 

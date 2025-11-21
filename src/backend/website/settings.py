@@ -143,16 +143,12 @@ STATIC_URL = '/static/'
 
 # Static files collection directory
 # After rebuilding the frontend, run: python manage.py collectstatic --noinput
-# This collects all static files from STATICFILES_DIRS into STATIC_ROOT
 STATIC_ROOT = os.path.join(BASE_DIR, 'staticfiles')
 
 # WhiteNoise configuration for serving static files in production
-# Uses compressed storage (without manifest) since Vite already handles file hashing
-# Note: After rebuilding the frontend, run: python manage.py collectstatic --noinput
-STATICFILES_STORAGE = 'whitenoise.storage.CompressedStaticFilesStorage'
-
-# WhiteNoise automatically serves files from STATIC_ROOT when DEBUG=False
-# No additional configuration needed - the middleware handles it automatically
+# Use StaticFilesStorage (not compressed) since Vite already handles file hashing and compression
+# After rebuilding the frontend, run: python manage.py collectstatic --noinput
+STATICFILES_STORAGE = 'django.contrib.staticfiles.storage.StaticFilesStorage'
 
 # Cache configuration
 # Using LocMemCache for in-memory caching (works within a single process)
@@ -235,7 +231,8 @@ ACCOUNT_EMAIL_SUBJECT_PREFIX = EMAIL_SUBJECT_PREFIX
 ACCOUNT_DEFAULT_HTTP_PROTOCOL = 'https' if not DEBUG else 'http'
 
 STATICFILES_DIRS = [
-    os.path.join(BASE_DIR, '../frontend/dist'),  # Vue.js dist directory (includes static/ subdirectory)
+    os.path.join(BASE_DIR, '../frontend/dist/static'),  # Vue.js static files (JS, CSS with hashes)
+    os.path.join(BASE_DIR, '../frontend/dist'),  # Vue.js dist root (for index.html, favicons, etc.)
     os.path.join(BASE_DIR, 'assets'),
 ]
 
