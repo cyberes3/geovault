@@ -1,5 +1,5 @@
 <template>
-  <div class="space-y-6">
+  <div class="space-y-6" v-if="userInfo">
     <!-- Page Header -->
     <div class="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
       <h1 class="text-2xl font-bold text-gray-900 mb-2">Dashboard</h1>

@@ -60,7 +60,7 @@
                 @click="toggleUserMenu"
                 class="flex items-center text-sm font-medium text-gray-900 hover:text-gray-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 rounded-md px-3 py-2"
               >
-                {{ userInfo.username }}
+                {{ userInfo?.username }}
                 <svg class="ml-2 h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"></path>
                 </svg>
@@ -140,9 +140,15 @@ export default {
   watch: {
     userInfo: {
       handler(newUserInfo, oldUserInfo) {
-        // If user becomes unauthorized (userInfo is cleared), disconnect WebSocket
+        // If user becomes unauthorized (userInfo is cleared), disconnect WebSocket and redirect
         if (oldUserInfo && !newUserInfo) {
           this.handleLogout();
+          // Redirect to login if not on a public share route
+          const hash = window.location.hash || '';
+          const isPublicShare = hash.startsWith('#/mapshare');
+          if (!isPublicShare) {
+            window.location.href = '/accounts/login/';
+          }
         }
         // If user becomes authorized (userInfo is set), ensure WebSocket is connected
         if (newUserInfo && !realtimeSocket.isConnected) {
@@ -153,8 +159,12 @@ export default {
     },
     $route: {
       handler(to, from) {
+        // Redirect to login if userInfo is null and not on a public share route
+        if (to.path !== '/mapshare' && !this.userInfo) {
+          window.location.href = '/accounts/login/';
+          return;
+        }
         // When navigating to authenticated routes, ensure WebSocket is connected if user is authorized
-        // Skip only for public share routes
         if (to.path !== '/mapshare' && this.userInfo && !realtimeSocket.isConnected) {
           this.setupRealtimeConnection();
         }
