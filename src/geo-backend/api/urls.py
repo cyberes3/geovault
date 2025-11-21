@@ -4,7 +4,7 @@ from api.views.bbox_query import get_geojson_data
 from api.views.config import get_config
 from api.views.feature_delete import delete_feature
 from api.views.feature_retrieval import get_feature
-from api.views.feature_search import get_features_by_tag, search_features
+from api.views.feature_search import get_features_by_tag, search_features, filter_features_by_tags
 from api.views.feature_update import update_feature, update_feature_metadata, apply_replacement_geometry, regenerate_feature_tags
 from api.views.geolocation_api import get_user_location, get_location_by_ip
 from api.views.icon_management import serve_user_icon, serve_system_icon, upload_icon, recolor_icon, serve_icon_registry
@@ -25,6 +25,7 @@ urlpatterns = [
     path('geojson/', get_geojson_data),
     path('features/by-tag/', get_features_by_tag),
     path('features/search/', search_features),
+    path('features/filter-by-tags/', filter_features_by_tags),
     path('feature/<int:feature_id>/', get_feature),
     path('feature/<int:feature_id>/update/', update_feature),
     path('feature/<int:feature_id>/update-metadata/', update_feature_metadata),

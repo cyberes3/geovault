@@ -157,3 +157,86 @@ def search_features(request):
             'error': 'Failed to search features',
             'code': 500
         }, status=500)
+
+
+@login_required_401
+@require_http_methods(["GET"])
+def filter_features_by_tags(request):
+    """
+    Filter features by tags using AND logic.
+    Query parameters:
+    - tags: list of tag names (can be repeated: ?tags=tag1&tags=tag2)
+    Returns features that have ALL specified tags.
+    """
+    # Get tags from query parameters (can be multiple)
+    tags = request.GET.getlist('tags')
+    
+    # Filter out empty tags
+    tags = [tag.strip() for tag in tags if tag.strip()]
+    
+    if not tags:
+        return JsonResponse({
+            'success': False,
+            'error': 'At least one tag parameter is required',
+            'code': 400
+        }, status=400)
+    
+    try:
+        # Base query for user's features
+        base_query = FeatureStore.objects.filter(user=request.user).exclude(geometry__isnull=True)
+        
+        # Filter features that have ALL specified tags (AND logic)
+        # We need to check that each tag is present in the feature's tags array
+        features_query = base_query
+        
+        for tag in tags:
+            # Use JSON field lookup to check if tag exists in the tags array
+            # This uses PostgreSQL's JSON containment operator
+            features_query = features_query.filter(geojson__properties__tags__contains=[tag])
+        
+        # Convert to GeoJSON format
+        geojson_features = []
+        for feature in features_query.order_by('id'):
+            geojson_data = feature.geojson
+            if geojson_data and 'geometry' in geojson_data:
+                properties = geojson_data.get('properties', {}).copy()
+                
+                # Filter out protected tags from the tags list for display
+                tags_list = properties.get('tags', [])
+                if isinstance(tags_list, list):
+                    filtered_tags = filter_protected_tags(tags_list, CONST_INTERNAL_TAGS)
+                    properties['tags'] = filtered_tags
+                
+                # Include database ID in properties for frontend editing
+                properties['_id'] = feature.id
+                
+                geojson_feature = {
+                    "type": "Feature",
+                    "geometry": geojson_data.get('geometry'),
+                    "properties": properties,
+                    "geojson_hash": feature.file_hash
+                }
+                geojson_features.append(geojson_feature)
+        
+        # Create GeoJSON FeatureCollection
+        geojson_data = {
+            "type": "FeatureCollection",
+            "features": geojson_features
+        }
+        
+        response_data = {
+            'success': True,
+            'data': geojson_data,
+            'feature_count': len(geojson_features),
+            'tags': tags
+        }
+        
+        return JsonResponse(response_data)
+    
+    except Exception:
+        logger.error(f"Error filtering features by tags: {traceback.format_exc()}")
+        return JsonResponse({
+            'success': False,
+            'error': 'Failed to filter features by tags',
+            'code': 500
+        }, status=500)

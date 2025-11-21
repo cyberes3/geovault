@@ -4,6 +4,7 @@
     <FeatureListSidebar
         :features="featuresInExtent"
         @feature-click="zoomToFeature"
+        @tag-filter-change="handleTagFilterChange"
     />
 
     <!-- Center - Map -->
@@ -187,7 +188,10 @@ export default {
       // Feature selection popup state
       overlappingFeatures: [], // Array of features at click point
       popupPosition: {x: 0, y: 0, containerWidth: 0, containerHeight: 0}, // Pixel coordinates and container dimensions for popup positioning
-      showFeaturePopup: false // Boolean flag to show/hide popup
+      showFeaturePopup: false, // Boolean flag to show/hide popup
+      // Tag filter state
+      isTagFilterActive: false, // Track if tag filtering is active
+      tagFilteredFeatures: [] // Store filtered features from tag filter
     }
   },
   methods: {
@@ -394,6 +398,56 @@ export default {
       this.selectedFeature = feature
       this.isEditingFeature = false
       this.showFeaturePopup = false
+    },
+
+    // Handle tag filter change from sidebar
+    handleTagFilterChange(filteredFeatures) {
+      if (!this.vectorSource) {
+        return
+      }
+
+      if (filteredFeatures === null) {
+        // Clear tag filter - restore normal behavior
+        this.isTagFilterActive = false
+        this.tagFilteredFeatures = []
+        
+        // Clear the map and reload data for current view
+        this.vectorSource.clear()
+        this.loadedBounds.clear()
+        this.featureTimestamps = {}
+        this.loadDataForCurrentView()
+        return
+      }
+
+      // Apply tag filter
+      this.isTagFilterActive = true
+      this.tagFilteredFeatures = filteredFeatures
+
+      // Clear current features
+      this.vectorSource.clear()
+      this.featureTimestamps = {}
+
+      // Add filtered features to map
+      if (filteredFeatures.length > 0) {
+        // Add timestamps to features
+        filteredFeatures.forEach(feature => {
+          this.addFeatureTimestamp(feature)
+        })
+
+        this.vectorSource.addFeatures(filteredFeatures)
+        console.log(`Applied tag filter: ${filteredFeatures.length} features`)
+
+        // Update feature count
+        this.updateFeatureCount()
+
+        // Update features in extent list
+        this.updateFeaturesInExtent()
+      } else {
+        // No features match the filter
+        this.updateFeatureCount()
+        this.updateFeaturesInExtent()
+        console.log('Tag filter: No features match the selected tags')
+      }
     },
 
     // Handle edit button click
@@ -791,6 +845,11 @@ export default {
     },
 
     async loadDataForCurrentView() {
+      // Skip loading if tag filter is active (tag filter manages its own features)
+      if (this.isTagFilterActive) {
+        return
+      }
+
       // In public share mode, load all features at once
       if (this.isPublicShareMode && !this.publicShareLoaded) {
         await this.loadPublicShareData()
