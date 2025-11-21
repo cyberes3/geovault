@@ -139,7 +139,7 @@ USE_TZ = True
 # Static files (CSS, JavaScript, Images)
 # https://docs.djangoproject.com/en/5.0/howto/static-files/
 
-STATIC_URL = 'static/'
+STATIC_URL = '/static/'
 
 # Static files collection directory
 # After rebuilding the frontend, run: python manage.py collectstatic --noinput
@@ -150,6 +150,9 @@ STATIC_ROOT = os.path.join(BASE_DIR, 'staticfiles')
 # Uses compressed storage (without manifest) since Vite already handles file hashing
 # Note: After rebuilding the frontend, run: python manage.py collectstatic --noinput
 STATICFILES_STORAGE = 'whitenoise.storage.CompressedStaticFilesStorage'
+
+# WhiteNoise automatically serves files from STATIC_ROOT when DEBUG=False
+# No additional configuration needed - the middleware handles it automatically
 
 # Cache configuration
 # Using LocMemCache for in-memory caching (works within a single process)
