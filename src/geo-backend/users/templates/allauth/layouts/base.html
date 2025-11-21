@@ -1,4 +1,4 @@
-{% load i18n %}
+{% load i18n static %}
 <!DOCTYPE html>
 <html lang="en">
     <head>
@@ -9,7 +9,7 @@
             {% block head_title %}
             {% endblock head_title %} - GeoServer
         </title>
-        <script src="https://cdn.tailwindcss.com"></script>
+        <script src="{% static 'js/tailwindcss.js' %}"></script>
         <style>
             /* Style Django form fields */
             input[type="text"],
