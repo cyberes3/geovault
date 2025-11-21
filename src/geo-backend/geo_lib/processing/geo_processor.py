@@ -196,12 +196,42 @@ def geojson_property_generation(feature: dict) -> dict:
     if 'description' in properties and properties['description']:
         properties['description'] = html_to_markdown(properties['description'])
 
-    # Normalize stroke-width to 2 for polygon borders and lines
+    # Strip unused style properties that are not part of GeoJSON spec and not used by frontend
+    # Keep only: stroke, stroke-width, fill, fill-opacity, marker-color
+    unused_style_properties = [
+        'stroke-opacity',
+        'opacity',
+        'weight',
+        'dashArray',
+        'dash-array',
+        'lineCap',
+        'line-cap',
+        'lineJoin',
+        'line-join',
+        'color',  # Generic color property - we use specific ones like stroke, fill, marker-color
+    ]
+    for prop_name in unused_style_properties:
+        if prop_name in properties:
+            del properties[prop_name]
+
+    # Normalize styles for lines and polygons
     geometry = feature.get('geometry', {})
     geometry_type = geometry.get('type', '').lower() if geometry else ''
     
-    if geometry_type in ['polygon', 'multipolygon', 'linestring', 'multilinestring']:
+    # Normalize stroke-width to 2 for lines
+    if geometry_type in ['linestring', 'multilinestring']:
         properties['stroke-width'] = 2
+    
+    # Normalize styles for polygons: stroke-width, fill, and fill-opacity
+    if geometry_type in ['polygon', 'multipolygon']:
+        properties['stroke-width'] = 2
+        
+        # Set fill color to match stroke color (or default to #ff0000)
+        stroke_color = properties.get('stroke', '#ff0000')
+        properties['fill'] = stroke_color
+        
+        # Set fill-opacity to 10% (0.1)
+        properties['fill-opacity'] = 0.1
 
     return properties
 
