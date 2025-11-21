@@ -14,6 +14,14 @@ class GeojsonRawProperty(BaseModel):
     created: Optional[datetime] = None
     tags: List[str] = Field(default_factory=list, alias='feature_tags')  # kml2geojson calls this field `feature_tags`
     
+    @field_validator('name', mode='before')
+    @classmethod
+    def parse_name_field(cls, v):
+        # Convert None or empty strings to default name
+        if v is None or (isinstance(v, str) and v.strip() == ''):
+            return "Unnamed Feature"
+        return v
+    
     @field_validator('created', mode='before')
     @classmethod
     def parse_created_field(cls, v):

@@ -6,6 +6,7 @@ Main processing logic has been moved to the processors module.
 
 import re
 import xml.etree.ElementTree as ET
+from typing import Optional
 
 import markdownify
 
@@ -234,6 +235,60 @@ def geojson_property_generation(feature: dict) -> dict:
         properties['fill-opacity'] = 0.1
 
     return properties
+
+
+def extract_track_created_date(feature: dict) -> Optional[str]:
+    """
+    Extract the first timestamp from a track feature's coordinateProperties.times.
+    
+    For KML and GPX tracks (LineString/MultiLineString), togeojson preserves timestamps
+    in properties.coordinateProperties.times. This function extracts the first timestamp
+    to use as the created date for the track.
+    
+    Args:
+        feature: GeoJSON feature dictionary
+        
+    Returns:
+        ISO timestamp string (e.g., "2001-06-24T15:09:09Z") or None if not found
+    """
+    geometry = feature.get('geometry', {})
+    geometry_type = geometry.get('type', '').lower() if geometry else ''
+    
+    # Only process tracks (LineString or MultiLineString)
+    if geometry_type not in ['linestring', 'multilinestring']:
+        return None
+    
+    properties = feature.get('properties', {})
+    coordinate_properties = properties.get('coordinateProperties', {})
+    
+    if not coordinate_properties:
+        return None
+    
+    times = coordinate_properties.get('times')
+    if not times:
+        return None
+    
+    try:
+        # Handle MultiLineString: times is an array of arrays
+        # Get the first timestamp from the first line
+        if geometry_type == 'multilinestring':
+            if isinstance(times, list) and len(times) > 0:
+                first_line_times = times[0]
+                if isinstance(first_line_times, list) and len(first_line_times) > 0:
+                    first_timestamp = first_line_times[0]
+                    if isinstance(first_timestamp, str):
+                        return first_timestamp
+        # Handle LineString: times is a flat array
+        elif geometry_type == 'linestring':
+            if isinstance(times, list) and len(times) > 0:
+                first_timestamp = times[0]
+                if isinstance(first_timestamp, str):
+                    return first_timestamp
+    except (IndexError, TypeError, AttributeError) as e:
+        logger.warning(f"Error extracting track timestamp: {e}")
+        return None
+    
+    return None
 
 
 def split_complex_geometries(feature: dict) -> list:

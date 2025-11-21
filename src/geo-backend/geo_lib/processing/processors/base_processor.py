@@ -14,6 +14,7 @@ from typing import Dict, Any, Tuple, Union, List, Optional
 
 from geo_lib.processing.file_types import FileType, detect_file_type
 from geo_lib.processing.geo_processor import (
+    extract_track_created_date,
     geojson_property_generation,
     split_complex_geometries
 )
@@ -167,6 +168,13 @@ class BaseProcessor(ABC):
                     # Generate properties with appropriate styling based on file type and feature geometry
                     split_feature['properties'] = geojson_property_generation(split_feature)
 
+                    # Extract track created date from first point timestamp (for KML/GPX tracks)
+                    # Only set if created date is not already present
+                    if 'created' not in split_feature['properties'] or not split_feature['properties']['created']:
+                        track_timestamp = extract_track_created_date(split_feature)
+                        if track_timestamp:
+                            split_feature['properties']['created'] = track_timestamp
+
                     # Skip tag generation in minimal processing mode
                     if not self.minimal_processing:
                         # Generate all auto tags (type, import-year, import-month, geocoding) using generate_auto_tags()
@@ -227,7 +235,7 @@ class BaseProcessor(ABC):
                     
                     # Convert to our property format
                     from geo_lib.types.geojson import GeojsonRawProperty
-                    split_feature['properties'] = GeojsonRawProperty(**split_feature['properties']).model_dump()
+                    split_feature['properties'] = GeojsonRawProperty(**split_feature['properties']).model_dump(mode='json')
                     
                     # Generate and set feature ID if not already present
                     if 'id' not in split_feature.get('properties', {}):
