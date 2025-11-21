@@ -3,6 +3,5 @@ insane linework test isn't showing up on the map
 Later:
 For tracks, set the created date to the timestamp of the first point in the track
 See how https://trails.colorado.gov loads their data in the map
-Look for magic numbers and strings and move those to a yaml config
 Debug log messages are hidden by default and only shown if a user enables that in his settings
 validate that `FILE_TYPE_CONFIGS[file_type].max_size` is always less than 200 or else the database will break

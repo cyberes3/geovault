@@ -14,7 +14,7 @@ export const authMixin = {
         // Only call API if store is empty
         const userStatus = await getUserInfo()
         if (!userStatus || !userStatus.authorized) {
-            window.location = "/account/login/"
+            // Don't redirect here - App.vue handles auth redirects globally
             return;
         }
         const userInfo = new UserInfo(userStatus.username, userStatus.id, userStatus.featureCount, userStatus.tags || [])
