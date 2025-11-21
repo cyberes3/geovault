@@ -1,16 +1,30 @@
 import re
 import traceback
 import uuid
+from typing import Tuple
 
 from django.db.models import F
 from django.http import JsonResponse
 from django.views.decorators.http import require_http_methods
 
-from api.models import TagShare, FeatureStore
+from api.models import TagShare
+from api.views.bbox_query import BboxQueryResult, _build_bbox_response, _get_features_in_bbox, _validate_bbox_params
 from geo_lib.logging.console import get_access_logger
 from geo_lib.website.auth import login_required_401
 
 logger = get_access_logger()
+
+
+def _get_public_share_features_in_bbox(bbox: Tuple[float, float, float, float], user_id: int, tag: str, zoom_level: int) -> BboxQueryResult:
+    """
+    Get features within bounding box that have a specific tag.
+    Handles world-wide extents that cross the International Date Line.
+    Returns both the features and the total count in a single optimized operation.
+    Features are returned with public-safe properties (excludes _id and tags).
+    
+    This is a wrapper around the consolidated _get_features_in_bbox() function.
+    """
+    return _get_features_in_bbox(bbox, user_id, zoom_level, tag=tag, public_safe=True)
 
 
 def _validate_share_id(share_id: str) -> bool:
@@ -191,10 +205,14 @@ def delete_share(request, share_id):
 @require_http_methods(["GET"])
 def get_public_share(request, share_id):
     """
-    Public endpoint to get features for a shared tag.
+    Public endpoint to get features for a shared tag within a bounding box.
     No authentication required.
-    Returns GeoJSON FeatureCollection of features with the shared tag.
+    Returns GeoJSON FeatureCollection of features with the shared tag in the specified bbox.
     Increments access_count on each successful access.
+
+    Query parameters:
+    - bbox: comma-separated bounding box (min_lon,min_lat,max_lon,max_lat) - required
+    - zoom: zoom level (integer, 1-20) - optional, defaults to 10
     """
     try:
         # Validate share_id format (must be UUID4)
@@ -216,61 +234,25 @@ def get_public_share(request, share_id):
                 'code': 404
             }, status=404)
 
-        # Get all features for the user that have this tag
-        features = FeatureStore.objects.filter(user=share.user)
+        # Validate bbox and zoom parameters
+        validation_result = _validate_bbox_params(request)
+        if isinstance(validation_result, JsonResponse):
+            return validation_result
+        bbox, zoom_level = validation_result
 
-        # Dictionary to store features with the tag
-        geojson_features = []
+        # Fetch data from database with optimized single query
+        query_result = _get_public_share_features_in_bbox(bbox, share.user.id, share.tag, zoom_level)
+        features = query_result.features
+        total_features_in_bbox = query_result.total_count
+        fallback_used = query_result.fallback_used
 
-        # Iterate through all features
-        for feature in features:
-            geojson_data = feature.geojson
-            if not geojson_data or 'properties' not in geojson_data:
-                continue
-
-            properties = geojson_data.get('properties', {})
-            tags = properties.get('tags', [])
-
-            if not isinstance(tags, list):
-                continue
-
-            # Check if this feature has the shared tag
-            if share.tag not in tags:
-                continue
-
-            # Create feature properties (exclude internal IDs and tags for public view)
-            feature_properties = properties.copy()
-            # Don't include database ID in public view
-            if '_id' in feature_properties:
-                del feature_properties['_id']
-            # Don't include tags in public view (they can contain private information)
-            if 'tags' in feature_properties:
-                del feature_properties['tags']
-
-            # Create GeoJSON feature
-            geojson_feature = {
-                "type": "Feature",
-                "geometry": geojson_data.get('geometry'),
-                "properties": feature_properties,
-                "geojson_hash": feature.file_hash
-            }
-
-            geojson_features.append(geojson_feature)
-
-        # Create GeoJSON FeatureCollection
-        geojson_data = {
-            "type": "FeatureCollection",
-            "features": geojson_features
-        }
+        # Build response using helper function, including tag for frontend display
+        response_data = _build_bbox_response(features, total_features_in_bbox, zoom_level, fallback_used, tag=share.tag)
 
         # Increment access count atomically only on successful response
         TagShare.objects.filter(share_id=share_id).update(access_count=F('access_count') + 1)
 
-        return JsonResponse({
-            'success': True,
-            'data': geojson_data,
-            'feature_count': len(geojson_features)
-        })
+        return JsonResponse(response_data)
 
     except Exception:
         logger.error(f"Error getting public share: {traceback.format_exc()}")

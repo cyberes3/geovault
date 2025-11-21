@@ -176,7 +176,6 @@ export default {
       currentZoom: null,
       featureCountUpdatePending: false, // Flag to batch feature count updates
       isEditingFeature: false, // Track if we're in edit mode
-      publicShareLoaded: false, // Track if public share data has been loaded
       publicShareError: null, // Error message for invalid public share
       publicShareTag: null, // Tag name for public share
       // Allowed options for public share users
@@ -643,11 +642,9 @@ export default {
         })
       }))
 
-      // Add event listeners for data loading (skip in public share mode)
-      if (!this.isPublicShareMode) {
-        this.map.getView().on('change:center', this.debouncedLoadData)
-        this.map.getView().on('change:resolution', this.debouncedLoadData)
-      }
+      // Add event listeners for data loading
+      this.map.getView().on('change:center', this.debouncedLoadData)
+      this.map.getView().on('change:resolution', this.debouncedLoadData)
 
       // Add event listeners for feature list updates
       this.map.getView().on('change:center', this.debouncedUpdateFeaturesInExtent)
@@ -850,17 +847,6 @@ export default {
         return
       }
 
-      // In public share mode, load all features at once
-      if (this.isPublicShareMode && !this.publicShareLoaded) {
-        await this.loadPublicShareData()
-        return
-      }
-
-      // Skip bbox-based loading in public share mode after initial load
-      if (this.isPublicShareMode && this.publicShareLoaded) {
-        return
-      }
-
       // Cancel any existing request
       if (this.currentAbortController) {
         this.currentAbortController.abort()
@@ -900,12 +886,37 @@ export default {
       try {
         const bboxString = this.getBoundingBoxString(extent)
         const roundedZoom = Math.round(zoom) // Round to integer for API compatibility
-        const url = `${this.API_BASE_URL}?bbox=${bboxString}&zoom=${roundedZoom}`
+        
+        // Use public share endpoint if in public share mode, otherwise use regular endpoint
+        const baseUrl = this.isPublicShareMode 
+          ? `${this.SHARE_API_BASE_URL}${this.shareId}/`
+          : this.API_BASE_URL
+        const url = `${baseUrl}?bbox=${bboxString}&zoom=${roundedZoom}`
 
         const response = await fetch(url, {
           signal: this.currentAbortController.signal
         })
         const data = await response.json()
+
+        // Store the tag name for display (from public share response)
+        if (this.isPublicShareMode && data.tag) {
+          this.publicShareTag = data.tag
+        }
+
+        // Check if the response indicates an error
+        if (!data.success) {
+          if (this.isPublicShareMode) {
+            this.publicShareError = data.error || 'Failed to load shared features.'
+            // Disable map interactions
+            if (this.map) {
+              this.map.getInteractions().forEach(interaction => {
+                interaction.setActive(false)
+              })
+            }
+          }
+          console.error('Error loading data:', data.error)
+          return
+        }
 
         if (data.success && data.data.features) {
           // Log error if fallback mechanism was used
@@ -1104,201 +1115,6 @@ export default {
       console.log('Cleared all features from the map')
     },
 
-    // Load public share data
-    async loadPublicShareData() {
-      if (!this.shareId) {
-        console.error('No share ID provided')
-        this.publicShareError = 'No share ID provided in the link.'
-        return
-      }
-
-      // Ensure map and vector source are ready
-      if (!this.map || !this.vectorSource) {
-        console.error('Map or vector source not ready, retrying...')
-        // Retry after a short delay
-        setTimeout(() => {
-          this.loadPublicShareData()
-        }, 100)
-        return
-      }
-
-      // Reset error state
-      this.publicShareError = null
-
-      this.isLoading = true
-      this.currentAbortController = new AbortController()
-
-      try {
-        const url = `${this.SHARE_API_BASE_URL}${this.shareId}/`
-        console.log('Loading public share data from:', url)
-        const response = await fetch(url, {
-          signal: this.currentAbortController.signal
-        })
-
-        if (!response.ok) {
-          const errorData = await response.json().catch(() => ({}))
-          const errorMessage = errorData.error || `HTTP error! status: ${response.status}`
-          throw new Error(`${errorMessage} (${response.status})`)
-        }
-
-        const data = await response.json()
-        console.log('Public share data received, features:', data.data?.features?.length || 0)
-
-        // Store the tag name for display
-        if (data.tag) {
-          this.publicShareTag = data.tag
-        }
-
-        // Check if the response indicates an error
-        if (!data.success) {
-          this.publicShareError = data.error || 'Failed to load shared features.'
-          // Disable map interactions
-          if (this.map) {
-            this.map.getInteractions().forEach(interaction => {
-              interaction.setActive(false)
-            })
-          }
-          return
-        }
-
-        if (data.success && data.data && data.data.features) {
-          const processedData = data.data
-
-          // Add features to the vector source
-          const features = new GeoJSON().readFeatures(processedData, {
-            featureProjection: 'EPSG:3857',
-            dataProjection: 'EPSG:4326'
-          })
-
-          // Manually preserve properties from the original GeoJSON data
-          features.forEach((feature, index) => {
-            const originalFeature = data.data.features[index]
-
-            if (originalFeature && originalFeature.properties) {
-              feature.set('properties', originalFeature.properties)
-            }
-
-            if (originalFeature && originalFeature.geojson_hash) {
-              feature.set('geojson_hash', originalFeature.geojson_hash)
-            }
-          })
-
-          // Add timestamps to features
-          features.forEach(feature => {
-            this.addFeatureTimestamp(feature)
-          })
-
-          if (this.vectorSource) {
-            this.vectorSource.addFeatures(features)
-            console.log(`Loaded ${features.length} features from public share`)
-          }
-
-          // Update feature count
-          this.updateFeatureCount()
-
-          // Fit map to show all features
-          if (features.length > 0 && this.map && this.vectorSource) {
-            await this.$nextTick()
-
-            // Update map size first to ensure proper rendering
-            this.map.updateSize()
-
-            // Wait a bit for features to be fully added and map to render
-            setTimeout(() => {
-              try {
-                const extent = this.vectorSource.getExtent()
-                console.log('Calculated extent for features:', extent)
-
-                if (extent && extent.length === 4) {
-                  // Check if extent is valid (not infinite or NaN)
-                  const isValid = extent.every(val =>
-                      typeof val === 'number' &&
-                      isFinite(val) &&
-                      !isNaN(val)
-                  )
-
-                  if (isValid) {
-                    console.log('Fitting map to extent:', extent)
-                    this.map.getView().fit(extent, {
-                      padding: [50, 50, 50, 50],
-                      duration: 500,
-                      maxZoom: 15
-                    })
-
-                    // Update size again after fitting
-                    setTimeout(() => {
-                      if (this.map) {
-                        this.map.updateSize()
-                        console.log('Map size updated after fit')
-                      }
-                    }, 100)
-                  } else {
-                    console.warn('Invalid extent calculated:', extent)
-                  }
-                } else {
-                  console.warn('Could not calculate extent, extent:', extent)
-                }
-              } catch (error) {
-                console.error('Error fitting map to features:', error)
-              }
-            }, 200)
-          } else {
-            console.warn('Cannot fit map - missing requirements:', {
-              featuresCount: features.length,
-              mapReady: !!this.map,
-              vectorSourceReady: !!this.vectorSource
-            })
-          }
-
-          this.publicShareLoaded = true
-
-          // Update features in extent list after loading public share data
-          this.updateFeaturesInExtent()
-        } else {
-          // API returned success: false
-          this.publicShareError = data.error || 'Failed to load shared features.'
-          this.publicShareTag = null
-          // Disable map interactions
-          if (this.map) {
-            this.map.getInteractions().forEach(interaction => {
-              interaction.setActive(false)
-            })
-          }
-        }
-      } catch (error) {
-        if (error.name === 'AbortError') {
-          console.log('Public share data load aborted')
-        } else {
-          console.error('Error loading public share data:', error)
-          console.error('Error details:', {
-            shareId: this.shareId,
-            url: `${this.SHARE_API_BASE_URL}${this.shareId}/`,
-            mapReady: !!this.map,
-            vectorSourceReady: !!this.vectorSource
-          })
-
-          // Set error message based on response
-          this.publicShareTag = null
-          if (error.message && error.message.includes('404')) {
-            this.publicShareError = 'This share link is invalid or has been deleted.'
-          } else if (error.message && error.message.includes('400')) {
-            this.publicShareError = 'Invalid share link format.'
-          } else {
-            this.publicShareError = 'Failed to load shared features. The share link may be invalid or expired.'
-          }
-
-          // Disable map interactions
-          if (this.map) {
-            this.map.getInteractions().forEach(interaction => {
-              interaction.setActive(false)
-            })
-          }
-        }
-      } finally {
-        this.isLoading = false
-      }
-    },
-
     // Handle featureId from URL parameter
     async handleUrlFeatureId() {
       // Check for featureId in query parameters
@@ -1398,7 +1214,6 @@ export default {
         if (newShareId !== oldShareId) {
           console.log('Share ID changed, reloading share data:', newShareId)
           // Reset state
-          this.publicShareLoaded = false
           this.publicShareError = null
           this.publicShareTag = null
 
@@ -1418,14 +1233,15 @@ export default {
           this.selectedFeature = null
           this.isEditingFeature = false
 
-          // Reload the new share data
+          // Reload the new share data using bbox loading
+          // The map view change will trigger loadDataForCurrentView automatically
           if (this.map && this.vectorSource) {
-            this.loadPublicShareData()
+            this.debouncedLoadData()
           } else {
             // If map isn't ready yet, wait for it
             this.$nextTick(() => {
               if (this.map && this.vectorSource) {
-                this.loadPublicShareData()
+                this.debouncedLoadData()
               }
             })
           }
