@@ -1,1 +1,1 @@
-# Security module for GeoServer
+# Security module for GeoVault

@@ -1,6 +1,6 @@
 # MaxMind GeoIP2 Database Setup for Ubuntu
 
-The GeoServer application uses MaxMind's GeoIP2 database to determine user location based on their IP address. This allows the map to automatically center on the user's location instead of using a hardcoded default.
+The GeoVault application uses MaxMind's GeoIP2 database to determine user location based on their IP address. This allows the map to automatically center on the user's location instead of using a hardcoded default.
 
 
 

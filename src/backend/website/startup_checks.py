@@ -1,5 +1,5 @@
 """
-Startup checks for the GeoServer Django application.
+Startup checks for the GeoVault Django application.
 
 This module performs essential checks when the server starts up:
 1. Database connection
@@ -199,7 +199,7 @@ def run_startup_checks():
     Raises:
         SystemExit: If any check fails
     """
-    logger.info("Starting GeoServer startup checks...")
+    logger.info("Starting GeoVault startup checks...")
     
     # Critical checks that will fail startup
     critical_checks = [
@@ -243,5 +243,5 @@ def run_startup_checks():
     else:
         logger.info("=" * 60)
         logger.info("✓ ALL STARTUP CHECKS PASSED!")
-        logger.info("✓ GeoServer is ready to start")
+        logger.info("✓ GeoVault is ready to start")
         logger.info("=" * 60)

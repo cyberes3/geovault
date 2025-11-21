@@ -1,4 +1,4 @@
-# GeoServer Configuration File
+# GeoVault Configuration File
 # Copy this file to config.yaml and customize for your environment.
 # The config.yaml file should NOT be committed to version control.
 
@@ -23,8 +23,8 @@ security:
 # Database Configuration
 database:
   engine: "django.contrib.gis.db.backends.postgis"
-  name: "geoserver"
-  user: "geoserver"
+  name: "geovault"
+  user: "geovault"
   # Password can be overridden with DB_PASSWORD environment variable
   password: "your-database-password"
   host: "172.0.2.105"
@@ -47,7 +47,7 @@ api:
 # Tile Cache Configuration
 tiles:
   # Directory where proxied tiles will be cached on disk
-  cache_dir: "/tmp/geoserver-tiles"
+  cache_dir: "/tmp/geovault-tiles"
   
   # Enable or disable tile caching
   cache_enabled: true
@@ -166,8 +166,8 @@ email:
   from_email: "noreply@example.com"
   
   # Default "from" name (optional)
-  from_name: "GeoServer"
+  from_name: "GeoVault"
   
   # Subject prefix for emails (optional)
-  subject_prefix: "[GeoServer] "
+  subject_prefix: "[GeoVault] "
 

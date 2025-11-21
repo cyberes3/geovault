@@ -27,7 +27,7 @@ class ReverseGeocodingService:
     def __init__(self, overpass_url: Optional[str] = None, nominatim_url: Optional[str] = None):
         self.overpass_url = overpass_url or getattr(settings, 'OVERPASS_API_URL', 'https://overpass-api.de/api/interpreter')
         self.nominatim_url = nominatim_url or getattr(settings, 'NOMINATIM_API_URL', 'https://nominatim.openstreetmap.org')
-        self.user_agent = "GeoServer/1.0"
+        self.user_agent = "GeoVault/1.0"
         self.overpass_timeout = getattr(settings, 'OVERPASS_TIMEOUT_SECONDS', 10)
         self.overpass_request_timeout = getattr(settings, 'OVERPASS_REQUEST_TIMEOUT_SECONDS', 15)
 

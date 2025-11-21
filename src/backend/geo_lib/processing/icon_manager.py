@@ -141,7 +141,7 @@ def fetch_remote_icon(url: str, timeout: float) -> Optional[bytes]:
     """
     try:
         # Create request with user agent
-        req = Request(url, headers={'User-Agent': 'GeoServer/1.0'})
+        req = Request(url, headers={'User-Agent': 'GeoVault/1.0'})
         
         # Fetch with timeout
         with urlopen(req, timeout=timeout) as response:

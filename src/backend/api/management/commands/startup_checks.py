@@ -7,7 +7,7 @@ from website.startup_checks import run_startup_checks
 
 
 class Command(BaseCommand):
-    help = 'Run startup checks for the GeoServer application'
+    help = 'Run startup checks for the GeoVault application'
 
     def handle(self, *args, **options):
         """Run the startup checks."""

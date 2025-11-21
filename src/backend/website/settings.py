@@ -100,8 +100,8 @@ ASGI_APPLICATION = 'website.asgi.application'
 DATABASES = {
     'default': {
         'ENGINE': config.get_str('database.engine', 'django.contrib.gis.db.backends.postgis'),
-        'NAME': config.get_str('database.name', 'geoserver'),
-        'USER': config.get_str('database.user', 'geoserver'),
+        'NAME': config.get_str('database.name', 'geovault'),
+        'USER': config.get_str('database.user', 'geovault'),
         'PASSWORD': config.get_with_env_override('database.password', 'DB_PASSWORD', ''),
         'HOST': config.get_str('database.host', 'localhost'),
         'PORT': config.get_str('database.port', '5432'),
@@ -276,7 +276,7 @@ MAX_FEATURES_PER_REQUEST = config.get_int('api.max_features_per_request', -1)
 
 # Tile Proxy Cache Configuration
 # Directory where proxied tiles will be cached on disk
-TILE_CACHE_DIR = config.get_with_env_override('tiles.cache_dir', 'TILE_CACHE_DIR', '/tmp/geoserver-tiles')
+TILE_CACHE_DIR = config.get_with_env_override('tiles.cache_dir', 'TILE_CACHE_DIR', '/tmp/geovault-tiles')
 
 # Enable or disable tile caching
 TILE_CACHE_ENABLED = config.get_bool_with_env_override('tiles.cache_enabled', 'TILE_CACHE_ENABLED', True)

@@ -1,5 +1,5 @@
 """
-Secure file validation module for GeoServer.
+Secure file validation module for GeoVault.
 
 This module provides comprehensive file validation for KML/KMZ uploads,
 including signature validation, MIME type checking, secure ZIP processing,

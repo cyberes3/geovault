@@ -1,5 +1,5 @@
 """
-YAML Configuration Loader for GeoServer
+YAML Configuration Loader for GeoVault
 
 Loads configuration from a YAML file and provides it to Django settings.
 Supports environment variable overrides for sensitive values.
@@ -22,11 +22,11 @@ class ConfigLoader:
         
         Args:
             config_path: Path to the YAML config file. If None, will look for
-                        config.yaml in the project root or use GEOSERVER_CONFIG_PATH env var.
+                        config.yaml in the project root or use GEOVAULT_CONFIG_PATH env var.
         """
         if config_path is None:
             # Check environment variable first
-            config_path = os.environ.get('GEOSERVER_CONFIG_PATH')
+            config_path = os.environ.get('GEOVAULT_CONFIG_PATH')
             
             # If not set, default to config.yaml in project root (backend directory)
             if config_path is None:
@@ -49,7 +49,7 @@ class ConfigLoader:
         if not self.config_path.exists():
             logger.warning(
                 f"Config file not found at {self.config_path}. "
-                "Using default values. Create config.yaml or set GEOSERVER_CONFIG_PATH."
+                "Using default values. Create config.yaml or set GEOVAULT_CONFIG_PATH."
             )
             self.config = {}
             return

@@ -38,8 +38,8 @@ class Command(BaseCommand):
         try:
             self.stdout.write(f'Sending test email to {test_email_address}...')
             send_mail(
-                subject='Test Email from GeoServer',
-                message='This is a test email from GeoServer. If you receive this, email is working correctly!',
+                subject='Test Email from GeoVault',
+                message='This is a test email from GeoVault. If you receive this, email is working correctly!',
                 from_email=settings.DEFAULT_FROM_EMAIL,
                 recipient_list=[test_email_address],
                 fail_silently=False,

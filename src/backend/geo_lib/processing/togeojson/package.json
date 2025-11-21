@@ -1,7 +1,7 @@
 {
-  "name": "geoserver-geo-importer",
+  "name": "geovault-geo-importer",
   "version": "1.0.0",
-  "description": "KML and GPX to GeoJSON converter for GeoServer using togeojson",
+  "description": "KML and GPX to GeoJSON converter for GeoVault using togeojson",
   "main": "index.js",
   "scripts": {
     "test": "node test.js",
@@ -20,8 +20,8 @@
     "gpx",
     "geojson",
     "converter",
-    "geoserver"
+    "geovault"
   ],
-  "author": "GeoServer Team",
+  "author": "GeoVault Team",
   "license": "MIT"
 }

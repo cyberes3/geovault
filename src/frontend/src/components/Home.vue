@@ -3,7 +3,7 @@
     <!-- Hero Section -->
     <div class="bg-white rounded-lg shadow-sm border border-gray-200 p-8">
       <div class="text-center">
-        <h1 class="text-4xl font-bold text-gray-900 mb-4">Welcome to GeoServer</h1>
+        <h1 class="text-4xl font-bold text-gray-900 mb-4">Welcome to GeoVault</h1>
         <p class="text-xl text-gray-600 mb-8 max-w-2xl mx-auto">
           Manage and import your geospatial data with ease. Upload KML/KMZ files, process them, and organize your geographic features.
         </p>

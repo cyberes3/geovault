@@ -1,5 +1,5 @@
 #!/bin/bash
-# Production server startup script for GeoServer
+# Production server startup script for GeoVault
 # Uses Daphne (ASGI server) to support WebSockets
 
 set -e  # Exit on error
