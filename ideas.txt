@@ -8,6 +8,7 @@ Track replay and stats
 When importing, list all new items and make it quick and easy to edit the attributes of new items
 Visibility: private, public, restricted (only logged in users)
 Save the unmodified original imported file in a special table and link it to the item ID
+Bulk tagging and styling on import page
 
 
 ## Stretch Goals

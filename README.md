@@ -1,17 +1,19 @@
-# geoserver
+# GeoVault
 
 *Platform to organize your personal spatial data in a unified database.*
 
+An outdoorsman tends to collect all sorts of spatial data: tracks of hikes, points of interest, and so on. This data
+tends to be scattered across numerous files and it isn't easy to see where you've been. *GeoVault* is a web platform
+that stores your data and presents *all* of it on one map.
 
+**Features:**
 
-This project is similar to [GeoNetwork](https://www.geonetwork-opensource.org): a spatial information management environment. But where GeoNetwork is designed for cataloging geospatial data into discrete datasets for professional and academic projects, *geoserver* is used by an individual to store, organize, and share their personal spatial information on an easy to use and self-hosted platform.
-
-
+- Streamlined upload and import process that makes it easy to shove your spatial data into the database
+- KMZ, KML, and GPX files supported
+- Tag and collection based organization
+- Link-based public sharing
+- Reverse geocoding to show what features are associated with
 
 **This platform does not support editing.** Use your own preferred tool and then upload your data to the server.
-
-
-
-Name is pending.
 
 https://trac.osgeo.org/postgis/wiki/UsersWikiPostGIS3UbuntuPGSQLApt
