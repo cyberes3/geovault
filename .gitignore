@@ -1,8 +1,4 @@
 .idea
-allauth templates
-
-migrations/
-!migrations/__init__.py
 
 # ---> Python
 # Byte-compiled / optimized / DLL files
