@@ -2,6 +2,7 @@
   <div class="w-full h-full flex">
     <!-- Left Sidebar - Feature List -->
     <FeatureListSidebar
+        :class="['transition-opacity duration-300', publicShareError ? 'opacity-50 pointer-events-none' : 'opacity-100']"
         :features="featuresInExtent"
         @feature-click="zoomToFeature"
         @tag-filter-change="handleTagFilterChange"
@@ -36,7 +37,20 @@
               <path d="M8.684 13.342C8.885 12.938 9 12.482 9 12c0-.482-.115-.938-.316-1.342m0 2.684a3 3 0 110-2.684m0 2.684l6.632 3.316m-6.632-6l6.632-3.316m0 0a3 3 0 105.367-2.684 3 3 0 00-5.367 2.684zm0 9.316a3 3 0 105.368 2.684 3 3 0 00-5.368-2.684z" stroke-linecap="round" stroke-linejoin="round"
                     stroke-width="2"></path>
             </svg>
-            <span v-if="publicShareTag && !publicShareError" class="text-sm font-medium text-gray-900">Shared: {{ publicShareTag }}</span>
+            <span v-if="(publicShareTag || publicShareCollectionName) && !publicShareError" class="text-sm font-medium text-gray-900">
+              <template v-if="publicShareTag">Shared Tag: {{ publicShareTag }}</template>
+              <template v-else-if="publicShareCollectionName">Shared Collection: {{ publicShareCollectionName }}</template>
+            </span>
+          </div>
+        </div>
+
+        <!-- Collection Title (shown when viewing a collection) -->
+        <div v-if="collectionName && !isPublicShareMode" class="absolute top-4 right-4 bg-white bg-opacity-90 px-4 py-2 rounded-lg shadow-md z-10">
+          <div class="flex items-center space-x-2">
+            <svg class="w-5 h-5 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10" stroke-linecap="round" stroke-linejoin="round" stroke-width="2"></path>
+            </svg>
+            <span class="text-sm font-medium text-gray-900">Collection: {{ collectionName }}</span>
           </div>
         </div>
 
@@ -82,6 +96,7 @@
 
     <!-- Right Sidebar - Map Controls -->
     <MapControlsSidebar
+        :class="['transition-opacity duration-300', publicShareError ? 'opacity-50 pointer-events-none' : 'opacity-100']"
         :allowed-options="publicShareAllowedOptions"
         :feature-count="featureCount"
         :location-display-name="getLocationDisplayName()"
@@ -128,6 +143,9 @@ export default {
     },
     shareId() {
       return this.$route.query.id || null
+    },
+    collectionId() {
+      return this.$route.query.collection || null
     },
     // Get allowed options based on mode (public share or authenticated)
     publicShareAllowedOptions() {
@@ -178,6 +196,8 @@ export default {
       isEditingFeature: false, // Track if we're in edit mode
       publicShareError: null, // Error message for invalid public share
       publicShareTag: null, // Tag name for public share
+      publicShareCollectionName: null, // Collection name for public share
+      publicShareInfo: null, // Cached share info (share_type, tag, collection_name, etc.)
       // Allowed options for public share users
       publicShareAllowedOptions: {
         mapLayer: true, // Allow map layer selection
@@ -190,7 +210,10 @@ export default {
       showFeaturePopup: false, // Boolean flag to show/hide popup
       // Tag filter state
       isTagFilterActive: false, // Track if tag filtering is active
-      tagFilteredFeatures: [] // Store filtered features from tag filter
+      tagFilteredFeatures: [], // Store filtered features from tag filter
+      // Collection state
+      collectionName: null, // Name of the collection being viewed
+      isCollectionMode: false // Track if collection filtering is active
     }
   },
   methods: {
@@ -446,6 +469,53 @@ export default {
         this.updateFeatureCount()
         this.updateFeaturesInExtent()
         console.log('Tag filter: No features match the selected tags')
+      }
+    },
+
+    // Handle collection filter
+    async handleCollectionFilter(collectionId) {
+      if (!this.vectorSource || !collectionId) {
+        return
+      }
+
+      try {
+        // Fetch collection info only (name for display)
+        const collectionResponse = await fetch(`${APIHOST}/api/data/collections/${collectionId}/`)
+
+        if (!collectionResponse.ok) {
+          throw new Error('Failed to load collection')
+        }
+
+        const collectionData = await collectionResponse.json()
+
+        if (collectionData.success) {
+          this.collectionName = collectionData.collection.name
+          this.isCollectionMode = true
+
+          // Clear current features and loaded bounds to start fresh with bbox loading
+          this.vectorSource.clear()
+          this.featureTimestamps = {}
+          this.loadedBounds.clear()
+
+          // Trigger bbox loading for current view
+          // This will use the collection parameter automatically via loadDataForCurrentView
+          await this.loadDataForCurrentView()
+
+          console.log(`Collection filter enabled: ${this.collectionName} (ID: ${collectionId})`)
+        } else {
+          throw new Error('Failed to load collection info')
+        }
+      } catch (error) {
+        console.error('Error loading collection:', error)
+        this.collectionName = null
+        this.isCollectionMode = false
+        // Clear collection filter and restore normal behavior
+        if (this.vectorSource) {
+          this.vectorSource.clear()
+          this.loadedBounds.clear()
+          this.featureTimestamps = {}
+          this.loadDataForCurrentView()
+        }
       }
     },
 
@@ -841,11 +911,24 @@ export default {
       return MapUtils.getBoundingBoxString(extent, toLonLat)
     },
 
+    // Handle public share errors by setting error message and disabling map interactions
+    handlePublicShareError(errorMessage) {
+      this.publicShareError = errorMessage || 'Invalid share link'
+      // Disable map interactions
+      if (this.map) {
+        this.map.getInteractions().forEach(interaction => {
+          interaction.setActive(false)
+        })
+      }
+    },
+
     async loadDataForCurrentView() {
       // Skip loading if tag filter is active (tag filter manages its own features)
       if (this.isTagFilterActive) {
         return
       }
+
+      // Note: Collection mode now uses bbox loading, so we don't skip it here
 
       // Cancel any existing request
       if (this.currentAbortController) {
@@ -887,32 +970,94 @@ export default {
         const bboxString = this.getBoundingBoxString(extent)
         const roundedZoom = Math.round(zoom) // Round to integer for API compatibility
         
-        // Use public share endpoint if in public share mode, otherwise use regular endpoint
-        const baseUrl = this.isPublicShareMode 
-          ? `${this.SHARE_API_BASE_URL}${this.shareId}/`
-          : this.API_BASE_URL
-        const url = `${baseUrl}?bbox=${bboxString}&zoom=${roundedZoom}`
+        let url, response, data
+        
+        if (this.isPublicShareMode) {
+          // Get share info (cached after first call)
+          if (!this.publicShareInfo || this.publicShareInfo.share_id !== this.shareId) {
+            const infoUrl = `/api/data/sharing/public/info/${this.shareId}/`
+            const infoResponse = await fetch(infoUrl, {
+              signal: this.currentAbortController.signal
+            })
+            
+            if (!infoResponse.ok) {
+              const errorData = await infoResponse.json()
+              this.handlePublicShareError(errorData.error || 'Invalid share link')
+              return
+            }
+            
+            const infoData = await infoResponse.json()
+            if (!infoData.success) {
+              this.handlePublicShareError(infoData.error || 'Invalid share link')
+              return
+            }
+            
+            // Cache the share info
+            this.publicShareInfo = {
+              share_id: this.shareId,
+              share_type: infoData.share_type,
+              tag: infoData.tag || null,
+              collection_name: infoData.collection_name || null,
+              collection_id: infoData.collection_id || null,
+              include_tags: infoData.include_tags || false
+            }
+            
+            // Store tag/collection name for display
+            if (infoData.share_type === 'tag') {
+              this.publicShareTag = infoData.tag
+              this.publicShareCollectionName = null
+            } else if (infoData.share_type === 'collection') {
+              this.publicShareCollectionName = infoData.collection_name
+              this.publicShareTag = null
+            }
+          }
+          
+          // Use appropriate endpoint based on share_type
+          if (this.publicShareInfo.share_type === 'tag') {
+            url = `${this.SHARE_API_BASE_URL}${this.shareId}/?bbox=${bboxString}&zoom=${roundedZoom}`
+          } else if (this.publicShareInfo.share_type === 'collection') {
+            url = `/api/data/sharing/public/collection/${this.shareId}/?bbox=${bboxString}&zoom=${roundedZoom}`
+          } else {
+            this.publicShareError = 'Unknown share type'
+            return
+          }
+          
+          response = await fetch(url, {
+            signal: this.currentAbortController.signal
+          })
+          
+          data = await response.json()
+        } else {
+          // Use regular endpoint
+          url = this.API_BASE_URL
+          // Build URL with optional collection parameter
+          url = `${url}?bbox=${bboxString}&zoom=${roundedZoom}`
+          if (this.isCollectionMode && this.collectionId) {
+            // collectionId is a computed property from route query
+            url += `&collection=${this.collectionId}`
+          }
 
-        const response = await fetch(url, {
-          signal: this.currentAbortController.signal
-        })
-        const data = await response.json()
+          response = await fetch(url, {
+            signal: this.currentAbortController.signal
+          })
+          data = await response.json()
+        }
 
-        // Store the tag name for display (from public share response)
-        if (this.isPublicShareMode && data.tag) {
-          this.publicShareTag = data.tag
+        // Store the tag or collection name for display (from public share response)
+        if (this.isPublicShareMode) {
+          if (data.tag) {
+            this.publicShareTag = data.tag
+            this.publicShareCollectionName = null
+          } else if (data.collection_name) {
+            this.publicShareCollectionName = data.collection_name
+            this.publicShareTag = null
+          }
         }
 
         // Check if the response indicates an error
         if (!data.success) {
           if (this.isPublicShareMode) {
-            this.publicShareError = data.error || 'Failed to load shared features.'
-            // Disable map interactions
-            if (this.map) {
-              this.map.getInteractions().forEach(interaction => {
-                interaction.setActive(false)
-              })
-            }
+            this.handlePublicShareError(data.error || 'Failed to load shared features.')
           }
           console.error('Error loading data:', data.error)
           return
@@ -1205,7 +1350,43 @@ export default {
 
   watch: {
     '$route'(to, from) {
-      // Watch for route changes, especially share ID changes
+      // Watch for route changes, especially share ID and collection changes
+      
+      // Handle collection query parameter changes
+      const newCollectionId = to.query.collection
+      const oldCollectionId = from?.query?.collection
+      
+      if (newCollectionId !== oldCollectionId) {
+        if (newCollectionId) {
+          // Collection ID changed or added, load the collection
+          console.log('Collection ID changed, loading collection:', newCollectionId)
+          // Wait for map to be ready if it's not yet
+          if (this.map && this.vectorSource) {
+            this.handleCollectionFilter(newCollectionId)
+          } else {
+            // If map isn't ready yet, wait for it
+            this.$nextTick(() => {
+              if (this.map && this.vectorSource) {
+                this.handleCollectionFilter(newCollectionId)
+              }
+            })
+          }
+        } else if (oldCollectionId) {
+          // Collection parameter was removed, clear collection mode
+          console.log('Collection parameter removed, clearing collection mode')
+          this.collectionName = null
+          this.isCollectionMode = false
+          // Clear the map and reload data for current view
+          if (this.vectorSource) {
+            this.vectorSource.clear()
+            this.loadedBounds.clear()
+            this.featureTimestamps = {}
+            this.loadDataForCurrentView()
+          }
+        }
+      }
+      
+      // Handle public share mode
       if (this.isPublicShareMode) {
         const newShareId = to.query.id
         const oldShareId = from?.query?.id
@@ -1216,6 +1397,8 @@ export default {
           // Reset state
           this.publicShareError = null
           this.publicShareTag = null
+          this.publicShareCollectionName = null
+          this.publicShareInfo = null // Clear cached share info
 
           // Re-enable map interactions in case they were disabled
           if (this.map) {
@@ -1298,9 +1481,18 @@ export default {
       this.updateMapLayer(this.selectedLayer)
     }
 
-    // Initial data load - now the map is ready
-    console.log('Loading data for current view, isPublicShareMode:', this.isPublicShareMode, 'shareId:', this.shareId)
-    await this.loadDataForCurrentView()
+    // Check for collection query parameter
+    if (this.collectionId) {
+      await this.handleCollectionFilter(this.collectionId)
+      // Don't load normal data if collection is loaded
+    } else {
+      // Check for featureId in URL (existing functionality)
+      await this.handleUrlFeatureId()
+      
+      // Initial data load - now the map is ready (only if not in collection mode)
+      console.log('Loading data for current view, isPublicShareMode:', this.isPublicShareMode, 'shareId:', this.shareId)
+      await this.loadDataForCurrentView()
+    }
 
     // Update map size to ensure it renders properly (especially important for public shares)
     await this.$nextTick()

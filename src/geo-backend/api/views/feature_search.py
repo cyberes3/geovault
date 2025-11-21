@@ -240,3 +240,61 @@ def filter_features_by_tags(request):
             'error': 'Failed to filter features by tags',
             'code': 500
         }, status=500)
+
+
+@login_required_401
+@require_http_methods(["GET"])
+def get_all_features(request):
+    """
+    API endpoint to get all features for the user.
+    Returns a list of all features with their basic information for selection purposes.
+    """
+    try:
+        # Get all features for the user
+        features = FeatureStore.objects.filter(user=request.user).exclude(geometry__isnull=True).order_by('id')
+        
+        # Convert to GeoJSON format
+        geojson_features = []
+        for feature in features:
+            geojson_data = feature.geojson
+            if geojson_data and 'geometry' in geojson_data:
+                properties = geojson_data.get('properties', {}).copy()
+                
+                # Filter out protected tags from the tags list for display
+                tags_list = properties.get('tags', [])
+                if isinstance(tags_list, list):
+                    filtered_tags = filter_protected_tags(tags_list, CONST_INTERNAL_TAGS)
+                    properties['tags'] = filtered_tags
+                
+                # Include database ID in properties
+                properties['_id'] = feature.id
+                
+                geojson_feature = {
+                    "type": "Feature",
+                    "geometry": geojson_data.get('geometry'),
+                    "properties": properties,
+                    "geojson_hash": feature.file_hash
+                }
+                geojson_features.append(geojson_feature)
+        
+        # Create GeoJSON FeatureCollection
+        geojson_data = {
+            "type": "FeatureCollection",
+            "features": geojson_features
+        }
+        
+        response_data = {
+            'success': True,
+            'data': geojson_data,
+            'feature_count': len(geojson_features)
+        }
+        
+        return JsonResponse(response_data)
+    
+    except Exception:
+        logger.error(f"Error getting all features: {traceback.format_exc()}")
+        return JsonResponse({
+            'success': False,
+            'error': 'Failed to get all features',
+            'code': 500
+        }, status=500)

@@ -43,6 +43,11 @@ const routes = [
         component: () => import('./components/TagsPage.vue'),
     },
     {
+        path: '/collections',
+        name: 'Collections',
+        component: () => import('./components/CollectionsPage.vue'),
+    },
+    {
         path: '/settings',
         name: 'Settings',
         component: () => import('./components/settings/Settings.vue'),

@@ -231,7 +231,7 @@
               <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8.684 13.342C8.885 12.938 9 12.482 9 12c0-.482-.115-.938-.316-1.342m0 2.684a3 3 0 110-2.684m0 2.684l6.632 3.316m-6.632-6l6.632-3.316m0 0a3 3 0 105.367-2.684 3 3 0 00-5.367 2.684zm0 9.316a3 3 0 105.368 2.684 3 3 0 00-5.368-2.684z"></path>
             </svg>
             <p class="text-sm">No share links created yet.</p>
-            <p class="text-xs mt-1">Create share links from the Tags page.</p>
+            <p class="text-xs mt-1">Create share links from the Tags or Collections page.</p>
           </div>
 
           <div v-else class="space-y-3">
@@ -242,10 +242,41 @@
             >
               <div class="flex items-start justify-between">
                 <div class="flex-1 min-w-0">
-                  <!-- Tag Name -->
-                  <div class="mb-2">
-                    <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-blue-100 text-blue-800">
+                  <!-- Share Type and Name -->
+                  <div class="mb-2 flex items-center gap-2">
+                    <!-- Share Type Badge -->
+                    <span 
+                      v-if="share.share_type === 'tag'"
+                      class="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-purple-100 text-purple-800"
+                      title="Tag Share"
+                    >
+                      <svg class="w-3 h-3 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 7h.01M7 3h5c.512 0 1.024.195 1.414.586l7 7a2 2 0 010 2.828l-7 7a2 2 0 01-2.828 0l-7-7A1.994 1.994 0 013 12V7a4 4 0 014-4z"></path>
+                      </svg>
+                      Tag
+                    </span>
+                    <span 
+                      v-else-if="share.share_type === 'collection'"
+                      class="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-green-100 text-green-800"
+                      title="Collection Share"
+                    >
+                      <svg class="w-3 h-3 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10"></path>
+                      </svg>
+                      Collection
+                    </span>
+                    <!-- Tag or Collection Name -->
+                    <span 
+                      v-if="share.share_type === 'tag'"
+                      class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-blue-100 text-blue-800"
+                    >
                       {{ share.tag }}
+                    </span>
+                    <span 
+                      v-else-if="share.share_type === 'collection'"
+                      class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-blue-100 text-blue-800"
+                    >
+                      {{ share.collection_name }}
                     </span>
                   </div>
 
@@ -288,7 +319,7 @@
 
                 <!-- Delete Button -->
                 <button
-                  @click="deleteShare(share.share_id)"
+                  @click="deleteShare(share.share_id, share.share_type)"
                   :disabled="deletingShareId === share.share_id"
                   class="ml-4 p-2 text-red-600 hover:text-red-800 hover:bg-red-50 rounded-md focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-red-500 disabled:opacity-50"
                   title="Delete share"
@@ -569,7 +600,7 @@ export default {
         this.sharesLoading = false;
       }
     },
-    async deleteShare(shareId) {
+    async deleteShare(shareId, shareType) {
       if (!confirm('Are you sure you want to delete this share link?')) {
         return;
       }
@@ -578,6 +609,7 @@ export default {
       this.sharesError = null;
 
       try {
+        // Single endpoint handles both tag and collection shares
         const response = await axios.delete(`/api/data/sharing/${shareId}/`, {
           headers: {
             'X-CSRFToken': getCookie('csrftoken')

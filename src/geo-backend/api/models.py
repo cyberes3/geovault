@@ -121,3 +121,35 @@ class TagShare(django_models.Model):
             django_models.Index(fields=['share_id'], name='tagshare_share_id'),
             django_models.Index(fields=['tag', 'user'], name='tagshare_tag_user'),
         ]
+
+
+class CollectionShare(django_models.Model):
+    share_id = django_models.CharField(max_length=255, unique=True, db_index=True, help_text="UUID4 share identifier")
+    collection = django_models.ForeignKey('Collection', on_delete=django_models.CASCADE, help_text="The collection being shared")
+    user = django_models.ForeignKey(get_user_model(), on_delete=django_models.CASCADE)
+    created_at = django_models.DateTimeField(auto_now_add=True)
+    access_count = django_models.IntegerField(default=0, help_text="Number of times this share has been accessed")
+    include_tags = django_models.BooleanField(default=False, help_text="Whether to include tags in the shared features")
+
+    class Meta:
+        indexes = [
+            django_models.Index(fields=['user', 'created_at'], name='colshare_user_created'),
+            django_models.Index(fields=['share_id'], name='colshare_share_id'),
+            django_models.Index(fields=['collection', 'user'], name='colshare_coll_user'),
+        ]
+
+
+class Collection(django_models.Model):
+    id = django_models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    user = django_models.ForeignKey(get_user_model(), on_delete=django_models.CASCADE)
+    name = django_models.CharField(max_length=255)
+    description = django_models.TextField(blank=True, null=True)
+    tags = django_models.JSONField(default=list, help_text="Array of tag strings")
+    feature_ids = django_models.JSONField(default=list, help_text="Array of feature IDs")
+    created_at = django_models.DateTimeField(auto_now_add=True)
+    updated_at = django_models.DateTimeField(auto_now=True)
+
+    class Meta:
+        indexes = [
+            django_models.Index(fields=['user', 'created_at'], name='collection_user_created'),
+        ]

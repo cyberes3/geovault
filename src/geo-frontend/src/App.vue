@@ -38,6 +38,13 @@
                 Tags
               </router-link>
               <router-link
+                  :class="{ 'text-gray-900 border-gray-500': $route.path === '/collections' }"
+                  class="inline-flex items-center px-1 pt-1 text-sm font-medium text-gray-500 hover:text-gray-700 hover:border-gray-300 border-b-2 border-transparent transition-colors duration-200"
+                  to="/collections"
+              >
+                Collections
+              </router-link>
+              <router-link
                   :class="{ 'text-gray-900 border-gray-500': $route.path === '/map' }"
                   class="inline-flex items-center px-1 pt-1 text-sm font-medium text-gray-500 hover:text-gray-700 hover:border-gray-300 border-b-2 border-transparent transition-colors duration-200"
                   to="/map"
