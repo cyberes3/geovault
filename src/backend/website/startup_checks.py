@@ -5,9 +5,12 @@ This module performs essential checks when the server starts up:
 1. Database connection
 2. Required tables exist
 3. PostGIS extension is installed
+4. Static files (warning only when DEBUG=False)
 """
 
 import sys
+import os
+from pathlib import Path
 from django.db import connection
 from django.core.exceptions import ImproperlyConfigured
 from django.conf import settings
@@ -149,6 +152,40 @@ def check_spatial_tables():
         return False
 
 
+def check_static_files():
+    """
+    Check if static files are collected when DEBUG=False.
+    This is a warning only, not a fatal error.
+    
+    Returns:
+        bool: Always returns True (warning only)
+    """
+    if settings.DEBUG:
+        # In debug mode, Django serves static files automatically
+        return True
+    
+    # In production mode, WhiteNoise serves from STATIC_ROOT
+    static_root = Path(settings.STATIC_ROOT)
+    static_dir = static_root / 'static'
+    
+    if not static_root.exists() or not static_dir.exists():
+        logger.warning("⚠ Static files may not be collected!")
+        logger.warning("  When DEBUG=False, static files must be collected into STATIC_ROOT")
+        logger.warning("  Run: python manage.py collectstatic --noinput")
+        logger.warning("  This is required after rebuilding the frontend")
+        return True
+    
+    # Check if static directory has files
+    static_files = list(static_dir.glob('*'))
+    if not static_files:
+        logger.warning("⚠ STATIC_ROOT/static/ directory is empty!")
+        logger.warning("  Run: python manage.py collectstatic --noinput")
+        return True
+    
+    logger.info(f"✓ Static files collected ({len(static_files)} files in static/)")
+    return True
+
+
 def run_startup_checks():
     """
     Run all startup checks and exit if any fail.
@@ -158,25 +195,36 @@ def run_startup_checks():
     2. Verify PostGIS installation
     3. Check required tables exist
     4. Verify spatial table configuration
+    5. Check static files (warning only when DEBUG=False)
     
     Raises:
         SystemExit: If any check fails
     """
     logger.info("Starting GeoServer startup checks...")
     
-    checks = [
+    # Critical checks that will fail startup
+    critical_checks = [
         ("Database Connection", check_database_connection),
         ("PostGIS Installation", check_postgis_installation),
         ("Required Tables", check_required_tables),
         ("Spatial Tables", check_spatial_tables),
     ]
     
+    # Warning checks that won't fail startup
+    warning_checks = [
+        ("Static Files", check_static_files),
+    ]
+    
     failed_checks = []
     
-    for check_name, check_func in checks:
+    for check_name, check_func in critical_checks:
         logger.info(f"Running {check_name} check...")
         if not check_func():
             failed_checks.append(check_name)
+    
+    for check_name, check_func in warning_checks:
+        logger.info(f"Running {check_name} check...")
+        check_func()  # Warning checks always return True, but may log warnings
     
     if failed_checks:
         logger.error("=" * 60)

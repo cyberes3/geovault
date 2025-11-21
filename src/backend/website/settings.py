@@ -147,8 +147,9 @@ STATIC_URL = 'static/'
 STATIC_ROOT = os.path.join(BASE_DIR, 'staticfiles')
 
 # WhiteNoise configuration for serving static files in production
-# Uses compressed manifest storage for efficient serving
-STATICFILES_STORAGE = 'whitenoise.storage.CompressedManifestStaticFilesStorage'
+# Uses compressed storage (without manifest) since Vite already handles file hashing
+# Note: After rebuilding the frontend, run: python manage.py collectstatic --noinput
+STATICFILES_STORAGE = 'whitenoise.storage.CompressedStaticFilesStorage'
 
 # Cache configuration
 # Using LocMemCache for in-memory caching (works within a single process)
