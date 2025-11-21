@@ -6,9 +6,9 @@
         <div class="flex justify-between h-16">
           <div class="flex items-center">
             <div class="flex-shrink-0">
-              <h1 class="text-xl font-bold text-gray-900">GeoServer</h1>
+              <h1 class="text-xl font-bold text-gray-900">GeoVault</h1>
             </div>
-            <div v-if="userInfo" class="hidden sm:ml-6 sm:flex sm:space-x-8">
+            <div v-if="!userInfoLoading && userInfo" class="hidden sm:ml-6 sm:flex sm:space-x-8">
               <router-link
                   :class="{ 'text-gray-900 border-gray-500': $route.path === '/' }"
                   class="inline-flex items-center px-1 pt-1 text-sm font-medium text-gray-500 hover:text-gray-700 hover:border-gray-300 border-b-2 border-transparent transition-colors duration-200"
@@ -56,7 +56,7 @@
           <div class="flex items-center">
             <div class="relative" ref="userMenuRef">
               <button
-                v-if="userInfo?.username"
+                v-if="!userInfoLoading && userInfo?.username"
                 @click="toggleUserMenu"
                 class="flex items-center text-sm font-medium text-gray-900 hover:text-gray-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 rounded-md px-3 py-2"
               >
@@ -66,9 +66,9 @@
                 </svg>
               </button>
               
-              <!-- Login Link (shown when user is not logged in) -->
+              <!-- Login Link (shown when user is not logged in and auth check is complete) -->
               <a
-                v-if="!userInfo"
+                v-if="!userInfoLoading && !userInfo"
                 href="/accounts/login/"
                 class="text-sm font-medium text-gray-500 hover:text-gray-700 px-3 py-2"
               >
@@ -103,7 +103,15 @@
 
     <!-- Main Content -->
     <main :class="isMapRoute ? 'w-full h-[calc(100vh-4rem)] overflow-hidden' : 'max-w-7xl mx-auto py-6 px-4 sm:px-6 lg:px-8'">
-      <router-view v-slot="{ Component }">
+      <!-- Show loading state while checking authentication for protected routes -->
+      <div v-if="userInfoLoading && !isPublicShareRoute" class="flex items-center justify-center min-h-[400px]">
+        <div class="text-center">
+          <div class="inline-block animate-spin rounded-full h-8 w-8 border-b-2 border-gray-900"></div>
+          <p class="mt-4 text-sm text-gray-600">Loading...</p>
+        </div>
+      </div>
+      <!-- Render router-view only after auth check completes (or immediately for public routes) -->
+      <router-view v-if="!userInfoLoading || isPublicShareRoute" v-slot="{ Component }">
         <keep-alive>
           <component :is="Component"/>
         </keep-alive>
@@ -159,6 +167,11 @@ export default {
     },
     $route: {
       handler(to, from) {
+        // Don't check auth during initial load - that's handled by checkAuth() in created()
+        // Only check on route changes after initial auth check is complete
+        if (this.userInfoLoading) {
+          return;
+        }
         // Redirect to login if userInfo is null and not on a public share route
         if (to.path !== '/mapshare' && !this.userInfo) {
           window.location.href = '/accounts/login/';
