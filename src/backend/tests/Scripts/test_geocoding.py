@@ -13,7 +13,7 @@ import sys
 import os
 import django
 
-# Add the geo-backend directory to the path so we can import geo_lib and website
+# Add the backend directory to the path so we can import geo_lib and website
 backend_dir = os.path.dirname(os.path.dirname(os.path.dirname(__file__)))
 sys.path.insert(0, backend_dir)
 

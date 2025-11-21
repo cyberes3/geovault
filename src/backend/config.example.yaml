@@ -61,7 +61,7 @@ icons:
   processing_enabled: true
   
   # Directory where processed icons will be stored
-  # Relative paths are relative to geo-backend directory
+  # Relative paths are relative to backend directory
   storage_dir: "data/icons"
 
   # Timeout for fetching remote icons in seconds

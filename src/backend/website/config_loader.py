@@ -28,11 +28,11 @@ class ConfigLoader:
             # Check environment variable first
             config_path = os.environ.get('GEOSERVER_CONFIG_PATH')
             
-            # If not set, default to config.yaml in project root (geo-backend directory)
+            # If not set, default to config.yaml in project root (backend directory)
             if config_path is None:
                 # Get the directory containing this file (website/)
                 current_dir = Path(__file__).resolve().parent
-                # Go up to geo-backend directory
+                # Go up to backend directory
                 project_root = current_dir.parent
                 config_path = project_root / 'config.yaml'
             else:

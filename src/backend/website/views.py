@@ -32,7 +32,7 @@ def standalone_map(request):
 
 def serve_favicon(request):
     """Serve favicon.ico from the Vue.js dist directory."""
-    favicon_path = Path(settings.BASE_DIR) / '../geo-frontend/dist/favicon.ico'
+    favicon_path = Path(settings.BASE_DIR) / '../frontend/dist/favicon.ico'
     try:
         if favicon_path.exists():
             favicon_data = favicon_path.read_bytes()

@@ -76,7 +76,7 @@ TEMPLATES = [
     {
         'BACKEND': 'django.template.backends.django.DjangoTemplates',
         'DIRS': [
-            os.path.join(BASE_DIR, '../geo-frontend/dist'),
+            os.path.join(BASE_DIR, '../frontend/dist'),
             os.path.join(BASE_DIR, '../allauth templates'),
         ],
         'APP_DIRS': True,
@@ -142,9 +142,8 @@ USE_TZ = True
 STATIC_URL = 'static/'
 
 # WhiteNoise configuration for serving static files in production
-# Using CompressedStaticFilesStorage to serve directly from STATICFILES_DIRS
-# without requiring collectstatic (no manifest file needed)
-STATICFILES_STORAGE = 'whitenoise.storage.CompressedStaticFilesStorage'
+# WhiteNoise serves directly from STATICFILES_DIRS without requiring collectstatic
+# Files are already optimized by Vite during build, so no additional compression needed
 
 # Cache configuration
 # Using LocMemCache for in-memory caching (works within a single process)
@@ -227,8 +226,8 @@ ACCOUNT_EMAIL_SUBJECT_PREFIX = EMAIL_SUBJECT_PREFIX
 ACCOUNT_DEFAULT_HTTP_PROTOCOL = 'https' if not DEBUG else 'http'
 
 STATICFILES_DIRS = [
-    os.path.join(BASE_DIR, '../geo-frontend/dist'),  # Include dist root for favicon.ico
-    os.path.join(BASE_DIR, '../geo-frontend/dist/static'),  # Vue.js static assets
+    os.path.join(BASE_DIR, '../frontend/dist'),  # Include dist root for favicon.ico
+    os.path.join(BASE_DIR, '../frontend/dist/static'),  # Vue.js static assets
     os.path.join(BASE_DIR, 'assets'),
 ]
 
