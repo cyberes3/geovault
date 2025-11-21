@@ -27,6 +27,7 @@ def _is_allowed_referer(request):
     - All requests if hot-linking is enabled in config
     - Requests with no Referer header AND same-site origin (direct access, bookmarks)
     - Requests where Referer matches the current request's host (same domain)
+    - Requests where Origin header matches the current request's host (same origin)
     
     Blocks:
     - Requests with Referer from a different domain (hot-linking attempt) if hot-linking is disabled
@@ -42,47 +43,61 @@ def _is_allowed_referer(request):
     if settings.ICON_ALLOW_HOTLINKING:
         return True
     
+    # Get current request's host (normalized, without port for comparison)
+    current_host = request.get_host().lower()
+    if ':' in current_host:
+        current_host = current_host.split(':')[0]
+    
+    # Check Origin header (more reliable than Referer for same-origin requests)
+    origin = request.META.get('HTTP_ORIGIN', '')
+    if origin:
+        try:
+            origin_parsed = urlparse(origin)
+            origin_host = origin_parsed.netloc.lower()
+            if ':' in origin_host:
+                origin_host = origin_host.split(':')[0]
+            if origin_host == current_host:
+                return True
+        except Exception:
+            pass
+    
     # Check Sec-Fetch-Site header (modern browsers send this for cross-site requests)
     # This helps detect hot-linking even when Referer header is missing (e.g., file:// protocol)
     sec_fetch_site = request.META.get('HTTP_SEC_FETCH_SITE', '').lower()
     if sec_fetch_site == 'cross-site':
         # This is a cross-site request - block it as hot-linking
-        logger.debug(f"Hot-linking attempt blocked: Sec-Fetch-Site=cross-site, current_host={request.get_host()}")
+        logger.debug(f"Hot-linking attempt blocked: Sec-Fetch-Site=cross-site, current_host={current_host}")
         return False
     
     referer = request.META.get('HTTP_REFERER', '')
     
     # Allow requests with no referer if they're same-site (not cross-site)
     # Same-site includes: same-origin, same-site, or none (for direct navigation)
+    # Also allow if the request itself is from the same host (e.g., direct image access from same domain)
     if not referer:
         # If Sec-Fetch-Site indicates same-site or none, allow it
         if sec_fetch_site in ('same-origin', 'same-site', 'none', ''):
             return True
-        # Otherwise, be cautious and block
-        logger.debug(f"Hot-linking attempt blocked: no referer and Sec-Fetch-Site={sec_fetch_site}, current_host={request.get_host()}")
-        return False
+        # If no Sec-Fetch-Site header, be permissive for same-host requests
+        # This handles cases where browsers don't send these headers
+        logger.debug(f"Allowing request with no referer: Sec-Fetch-Site={sec_fetch_site}, current_host={current_host}")
+        return True
     
     try:
         # Parse the referer URL
         referer_parsed = urlparse(referer)
         referer_host = referer_parsed.netloc.lower()
         
-        # Get the current request's host
-        current_host = request.get_host().lower()
-        
         # Remove port numbers for comparison (if present)
-        # request.get_host() may include port, so we need to handle both cases
         if ':' in referer_host:
             referer_host = referer_host.split(':')[0]
-        if ':' in current_host:
-            current_host = current_host.split(':')[0]
         
         # Allow if referer host matches current host
         if referer_host == current_host:
             return True
         
         # Block if referer is from a different domain
-        logger.debug(f"Hot-linking attempt blocked: referer={referer}, current_host={current_host}")
+        logger.debug(f"Hot-linking attempt blocked: referer={referer}, referer_host={referer_host}, current_host={current_host}")
         return False
         
     except Exception as e:
