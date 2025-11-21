@@ -59,6 +59,15 @@
                 </svg>
               </button>
               
+              <!-- Login Link (shown when user is not logged in) -->
+              <a
+                v-if="!userInfo"
+                href="/accounts/login/"
+                class="text-sm font-medium text-gray-500 hover:text-gray-700 px-3 py-2"
+              >
+                Sign In
+              </a>
+              
               <!-- Dropdown Menu -->
               <div
                 v-if="userMenuOpen"

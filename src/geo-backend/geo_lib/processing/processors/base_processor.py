@@ -196,8 +196,8 @@ class BaseProcessor(ABC):
                                 if self._is_cancelled():
                                     break
                                 
-                                # Generate all auto tags (includes type, import-year, import-month, and geocoding)
-                                auto_tags = generate_auto_tags(feature_instance, feature_log)
+                                # Generate all auto tags (includes type, import-year, import-month, source-file, and geocoding)
+                                auto_tags = generate_auto_tags(feature_instance, feature_log, filename=self.filename)
                                 
                                 # Check for cancellation after tag generation
                                 if self._is_cancelled():

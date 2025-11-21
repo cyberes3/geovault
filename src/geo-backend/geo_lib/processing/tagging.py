@@ -1,3 +1,4 @@
+import os
 from datetime import datetime
 from typing import List, Optional, Tuple
 
@@ -58,13 +59,14 @@ def get_representative_points(feature: GeoFeatureSupported) -> List[Tuple[float,
     return points
 
 
-def generate_auto_tags(feature: GeoFeatureSupported, import_log=None) -> List[str]:
+def generate_auto_tags(feature: GeoFeatureSupported, import_log=None, filename: Optional[str] = None) -> List[str]:
     """
     Generate automatic tags for a feature including geocoding tags.
     
     Args:
         feature: The feature to generate tags for
         import_log: Optional ImportLog for database logging
+        filename: Optional original filename to add as source-file tag
         
     Returns:
         List of tag strings
@@ -76,6 +78,12 @@ def generate_auto_tags(feature: GeoFeatureSupported, import_log=None) -> List[st
     now = datetime.now()
     tags.append(f'import-year:{now.year}')
     tags.append(f'import-month:{now.strftime("%B")}')
+    
+    # Add source-file tag if filename is provided
+    if filename:
+        # Extract just the filename (not full path) if needed
+        basename = os.path.basename(filename)
+        tags.append(f'source-file:{basename}')
     
     # Add geocoding tags for points and lines only
     geometry_type = feature.geometry.type.value.lower()

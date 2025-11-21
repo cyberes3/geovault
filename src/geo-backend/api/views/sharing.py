@@ -7,7 +7,6 @@ from django.http import JsonResponse
 from django.views.decorators.http import require_http_methods
 
 from api.models import TagShare, FeatureStore
-from geo_lib.const_strings import CONST_INTERNAL_TAGS, filter_protected_tags
 from geo_lib.logging.console import get_access_logger
 from geo_lib.website.auth import login_required_401
 
@@ -239,14 +238,14 @@ def get_public_share(request, share_id):
             if share.tag not in tags:
                 continue
 
-            # Filter out protected tags for public view
-            filtered_tags = filter_protected_tags(tags, CONST_INTERNAL_TAGS)
-
-            # Create feature properties (exclude internal IDs for public view)
+            # Create feature properties (exclude internal IDs and tags for public view)
             feature_properties = properties.copy()
             # Don't include database ID in public view
             if '_id' in feature_properties:
                 del feature_properties['_id']
+            # Don't include tags in public view (they can contain private information)
+            if 'tags' in feature_properties:
+                del feature_properties['tags']
 
             # Create GeoJSON feature
             geojson_feature = {
@@ -270,8 +269,7 @@ def get_public_share(request, share_id):
         return JsonResponse({
             'success': True,
             'data': geojson_data,
-            'feature_count': len(geojson_features),
-            'tag': share.tag
+            'feature_count': len(geojson_features)
         })
 
     except Exception:
