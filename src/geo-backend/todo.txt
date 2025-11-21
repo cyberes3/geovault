@@ -1,6 +1,4 @@
 insane linework test isn't showing up on the map
-Error message on map when loading fails
-Error message on map when an exception is encountered
 Allow skipping items during import
 please download the assets on the allauth templates and store them locally and don't use CDNs
 

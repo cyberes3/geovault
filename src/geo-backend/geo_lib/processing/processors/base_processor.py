@@ -228,6 +228,13 @@ class BaseProcessor(ABC):
                     # Convert to our property format
                     from geo_lib.types.geojson import GeojsonRawProperty
                     split_feature['properties'] = GeojsonRawProperty(**split_feature['properties']).model_dump()
+                    
+                    # Generate and set feature ID if not already present
+                    if 'id' not in split_feature.get('properties', {}):
+                        from geo_lib.feature_id import generate_feature_hash
+                        feature_id = generate_feature_hash(split_feature)
+                        split_feature['properties']['id'] = feature_id
+                    
                     processed_features.append(split_feature)
                 except Exception as e:
                     feature_name = split_feature.get('properties', {}).get('name', 'Unnamed')

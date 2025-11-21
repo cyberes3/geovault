@@ -835,15 +835,20 @@ def import_to_featurestore(request, item_id):
             'code': 400
         }, status=400)
 
-    # Parse request body to get import_custom_icons flag
+    # Parse request body to get import_custom_icons flag and skipped_feature_ids
     import_custom_icons = True  # Default to True for backward compatibility
+    skipped_feature_ids = set()  # Set of feature IDs to skip during import
     try:
         if request.body:
             data = json.loads(request.body)
             if isinstance(data, dict):
                 import_custom_icons = data.get('import_custom_icons', True)
+                # Parse skipped_feature_ids if provided
+                skipped_ids = data.get('skipped_feature_ids', [])
+                if isinstance(skipped_ids, list):
+                    skipped_feature_ids = set(skipped_ids)
     except (json.JSONDecodeError, ValueError) as e:
-        logger.warning(f"Failed to parse request body for import_custom_icons: {str(e)}, using default True")
+        logger.warning(f"Failed to parse request body: {str(e)}, using defaults")
 
     # Check for file-level duplicates before importing
     # Only block duplicates that are still in the queue (not yet imported)
@@ -1005,17 +1010,27 @@ def import_to_featurestore(request, item_id):
             logger.error(f"Feature processing error traceback: {traceback.format_exc()}")
             return None
 
+    # Filter out skipped features before processing
+    features_to_process = []
+    skipped_count = 0
+    for feature in import_item.geofeatures:
+        feature_id = feature.get('properties', {}).get('id')
+        if feature_id and feature_id in skipped_feature_ids:
+            skipped_count += 1
+            continue
+        features_to_process.append(feature)
+
     # Get number of threads from settings
     from django.conf import settings
     num_threads = getattr(settings, 'IMPORT_PROCESSING_THREADS', 4)
 
     # Process features in parallel using ThreadPoolExecutor
-    if len(import_item.geofeatures) > 0:
+    if len(features_to_process) > 0:
         with ThreadPoolExecutor(max_workers=num_threads) as executor:
             # Process all features in parallel and collect results
             results = executor.map(
                 process_feature_with_index,
-                enumerate(import_item.geofeatures)
+                enumerate(features_to_process)
             )
 
             # Collect results from all workers
@@ -1054,7 +1069,16 @@ def import_to_featurestore(request, item_id):
     # Log final summary
     total_processed = len(import_item.geofeatures)
     total_imported = successful_imports
-    total_skipped = total_processed - len(features_to_create)  # Features skipped before creation attempt
+    total_skipped_duplicates = total_processed - skipped_count - len(features_to_create)  # Features skipped due to duplicates or errors
+    
+    # Build success message
+    msg_parts = [f'Successfully imported {total_imported} features']
+    if skipped_count > 0:
+        msg_parts.append(f'{skipped_count} skipped by user')
+    if total_skipped_duplicates > 0:
+        msg_parts.append(f'{total_skipped_duplicates} already existed')
+    success_msg = ' (' + ', '.join(msg_parts[1:]) + ')' if len(msg_parts) > 1 else ''
+    success_msg = msg_parts[0] + success_msg
 
     # Only mark as imported and proceed with cleanup if at least one feature was successfully created
     if successful_imports > 0:
@@ -1076,7 +1100,7 @@ def import_to_featurestore(request, item_id):
         # Broadcast WebSocket event for item import
         _broadcast_item_imported(request.user.id, item_id)
 
-        return JsonResponse({'success': True, 'msg': f'Successfully imported {total_imported} features ({total_skipped} already existed)'})
+        return JsonResponse({'success': True, 'msg': success_msg})
     else:
         # No features were successfully imported
         logger.warning(f"Import failed for user {request.user.id}: No features were imported from '{import_item.original_filename}'")

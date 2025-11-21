@@ -105,7 +105,7 @@
             </div>
             <div class="ml-3">
               <p class="text-sm font-medium text-green-800">Ready to Import</p>
-              <p class="text-2xl font-bold text-green-900">{{ pagination.totalFeatures - duplicates.indices.length }}</p>
+              <p class="text-2xl font-bold text-green-900">{{ importableCount }}</p>
             </div>
           </div>
         </div>
@@ -139,7 +139,7 @@
         :has-features="itemsForUser.length > 0"
         :has-next-page="pagination.hasNext"
         :has-previous-page="pagination.hasPrevious"
-        :importable-count="pagination.totalFeatures - duplicates.indices.length"
+        :importable-count="importableCount"
         :is-imported="isImported"
         :is-importing="loading.importing"
         :is-loading-page="loading.page"
@@ -198,7 +198,7 @@
           {{ loading.saving ? 'Saving...' : 'Save Changes' }}
         </button>
         <button
-            :disabled="lockButtons || loading.importing || (pagination.totalFeatures - duplicates.indices.length) === 0"
+            :disabled="lockButtons || loading.importing || importableCount === 0"
             class="inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md text-white bg-blue-600 hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 disabled:bg-gray-400 disabled:cursor-not-allowed transition-colors duration-200"
             @click="performImport"
         >
@@ -209,7 +209,7 @@
           <svg v-else class="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12" stroke-linecap="round" stroke-linejoin="round" stroke-width="2"></path>
           </svg>
-          {{ loading.importing ? 'Importing...' : `Import ${pagination.totalFeatures - duplicates.indices.length} Features` }}
+          {{ loading.importing ? 'Importing...' : `Import ${importableCount} Features` }}
         </button>
       </div>
     </div>
@@ -308,9 +308,10 @@
     <!-- Feature Items -->
     <div v-else-if="itemsForUser.length > 0 && !loading.page" class="space-y-6">
       <div v-for="(item, index) in itemsForUser" :key="`item-${index}`"
-           :class="item.isDuplicate ? 'bg-gray-100 rounded-lg shadow-sm border border-gray-300 p-6 opacity-75' : 'bg-white rounded-lg shadow-sm border border-gray-200 p-6'">
-        <div class="flex items-center justify-between mb-6">
-          <h3 class="text-lg font-semibold text-gray-900">Feature {{ (pagination.currentPage - 1) * pagination.pageSize + index + 1 }} (of {{ pagination.totalFeatures }})</h3>
+           :class="getItemClasses(item, index)">
+        <!-- Button row - always fully visible -->
+        <div class="flex items-center justify-between mb-6 relative z-20">
+          <h3 class="text-lg font-semibold text-gray-900" :class="isItemSkipped(item, index) && !item.isDuplicate ? 'opacity-50' : ''">Feature {{ (pagination.currentPage - 1) * pagination.pageSize + index + 1 }} (of {{ pagination.totalFeatures }})</h3>
           <div class="flex items-center space-x-2">
             <!-- Icon Preview -->
             <div v-if="getFeatureIconUrl(item)" class="flex items-center justify-center w-8 h-8 p-1 border border-gray-300 rounded bg-white shadow-sm">
@@ -321,8 +322,26 @@
                   @error="handleIconError($event)"
               />
             </div>
+            <!-- Skip/Restore Button -->
             <button
-                class="inline-flex items-center px-3 py-1.5 border border-gray-300 shadow-sm text-xs font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500"
+                v-if="!isImported && !loading.importing"
+                :class="isItemSkipped(item, index) ? 'relative z-20 inline-flex items-center px-3 py-1.5 border border-transparent text-xs font-medium rounded-md text-white bg-green-600 hover:bg-green-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-green-500' : 'relative z-20 inline-flex items-center px-3 py-1.5 border border-gray-300 shadow-sm text-xs font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-gray-500'"
+                @click.stop="toggleSkipItem(index)"
+                :title="isItemSkipped(item, index) ? 'Restore this item' : 'Skip this item'"
+                type="button"
+                style="opacity: 1 !important;"
+            >
+              <svg v-if="isItemSkipped(item, index)" class="w-3 h-3 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"></path>
+              </svg>
+              <svg v-else class="w-3 h-3 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path>
+              </svg>
+              {{ isItemSkipped(item, index) ? 'Restore' : 'Skip' }}
+            </button>
+            <button
+                :class="isItemSkipped(item, index) ? 'inline-flex items-center px-3 py-1.5 border border-gray-300 shadow-sm text-xs font-medium rounded-md text-gray-400 bg-gray-100 cursor-not-allowed' : 'inline-flex items-center px-3 py-1.5 border border-gray-300 shadow-sm text-xs font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500'"
+                :disabled="isItemSkipped(item, index)"
                 @click="showFeatureMap(index)"
             >
               <svg class="w-3 h-3 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -336,6 +355,8 @@
           </div>
         </div>
 
+        <!-- Content area - can be greyed out for skipped items -->
+        <div :class="isItemSkipped(item, index) && !item.isDuplicate ? 'opacity-50' : ''">
         <!-- Duplicate Warning -->
         <div v-if="item.isDuplicate" class="mb-4 p-4 bg-yellow-50 border border-yellow-200 rounded-md">
           <div class="flex items-start">
@@ -371,12 +392,12 @@
             <div class="flex items-center space-x-2">
               <input
                   v-model="item.properties.name"
-                  :class="isImported || item.isDuplicate || loading.importing ? 'block w-full px-3 py-2 border border-gray-300 rounded-md bg-gray-100 cursor-not-allowed' : 'block w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-blue-500 focus:border-blue-500'"
-                  :disabled="isImported || item.isDuplicate || loading.importing"
+                  :class="isImported || item.isDuplicate || isItemSkipped(item, index) || loading.importing ? 'block w-full px-3 py-2 border border-gray-300 rounded-md bg-gray-100 cursor-not-allowed' : 'block w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-blue-500 focus:border-blue-500'"
+                  :disabled="isImported || item.isDuplicate || isItemSkipped(item, index) || loading.importing"
                   :placeholder="originalItems[index].properties.name"
               />
               <button
-                  v-if="!isImported && !item.isDuplicate && !loading.importing"
+                  v-if="!isImported && !item.isDuplicate && !isItemSkipped(item, index) && !loading.importing"
                   class="inline-flex items-center px-3 py-2 border border-gray-300 shadow-sm text-sm leading-4 font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500"
                   @click="resetNestedField(index, 'properties', 'name')"
               >
@@ -393,14 +414,14 @@
             <div class="flex items-start space-x-2">
               <textarea
                   v-model="item.properties.description"
-                  :class="isImported || item.isDuplicate || loading.importing ? 'block w-full px-3 py-2 border border-gray-300 rounded-md bg-gray-100 cursor-not-allowed resize-none' : 'block w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-blue-500 focus:border-blue-500 resize-none'"
-                  :disabled="isImported || item.isDuplicate || loading.importing"
+                  :class="isImported || item.isDuplicate || isItemSkipped(item, index) || loading.importing ? 'block w-full px-3 py-2 border border-gray-300 rounded-md bg-gray-100 cursor-not-allowed resize-none' : 'block w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-blue-500 focus:border-blue-500 resize-none'"
+                  :disabled="isImported || item.isDuplicate || isItemSkipped(item, index) || loading.importing"
                   :placeholder="originalItems[index].properties.description"
                   class="text-sm"
                   rows="4"
               ></textarea>
               <button
-                  v-if="!isImported && !item.isDuplicate && !loading.importing"
+                  v-if="!isImported && !item.isDuplicate && !isItemSkipped(item, index) && !loading.importing"
                   class="inline-flex items-center px-3 py-2 border border-gray-300 shadow-sm text-sm leading-4 font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 mt-1"
                   @click="resetNestedField(index, 'properties', 'description')"
               >
@@ -416,14 +437,14 @@
             <label class="block text-sm font-medium text-gray-700 mb-2">Created Date</label>
             <div class="flex items-center space-x-2">
               <input
-                  :class="isImported || item.isDuplicate || loading.importing ? 'block w-full px-3 py-2 border border-gray-300 rounded-md bg-gray-100 cursor-not-allowed' : 'block w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-blue-500 focus:border-blue-500'"
-                  :disabled="isImported || item.isDuplicate || loading.importing"
+                  :class="isImported || item.isDuplicate || isItemSkipped(item, index) || loading.importing ? 'block w-full px-3 py-2 border border-gray-300 rounded-md bg-gray-100 cursor-not-allowed' : 'block w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-blue-500 focus:border-blue-500'"
+                  :disabled="isImported || item.isDuplicate || isItemSkipped(item, index) || loading.importing"
                   :value="formatDateForInput(item.properties.created)"
                   type="datetime-local"
                   @change="updateDate(index, $event)"
               />
               <button
-                  v-if="!isImported && !item.isDuplicate && !loading.importing"
+                  v-if="!isImported && !item.isDuplicate && !isItemSkipped(item, index) && !loading.importing"
                   class="inline-flex items-center px-3 py-2 border border-gray-300 shadow-sm text-sm leading-4 font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500"
                   @click="resetNestedField(index, 'properties', 'created')"
               >
@@ -441,12 +462,12 @@
               <div v-for="(tag, tagIndex) in getFilteredTagsWithIndex(item.properties.tags)" :key="`tag-${tagIndex}`" class="flex items-center space-x-2">
                 <input
                     v-model="item.properties.tags[tag.originalIndex]"
-                    :class="isImported || item.isDuplicate || loading.importing ? 'block w-full px-3 py-2 border border-gray-300 rounded-md bg-gray-100 cursor-not-allowed' : 'block w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-blue-500 focus:border-blue-500'"
-                    :disabled="isImported || item.isDuplicate || loading.importing"
+                    :class="isImported || item.isDuplicate || isItemSkipped(item, index) || loading.importing ? 'block w-full px-3 py-2 border border-gray-300 rounded-md bg-gray-100 cursor-not-allowed' : 'block w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-blue-500 focus:border-blue-500'"
+                    :disabled="isImported || item.isDuplicate || isItemSkipped(item, index) || loading.importing"
                     :placeholder="getTagPlaceholder(index, tag.tag)"
                 />
                 <button
-                    v-if="!isImported && !item.isDuplicate && !loading.importing"
+                    v-if="!isImported && !item.isDuplicate && !isItemSkipped(item, index) && !loading.importing"
                     class="inline-flex items-center px-3 py-2 border border-transparent text-sm font-medium rounded-md text-white bg-red-600 hover:bg-red-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-red-500"
                     @click="removeTag(index, tag.originalIndex)"
                 >
@@ -456,7 +477,7 @@
                 </button>
               </div>
             </div>
-            <div v-if="!isImported && !item.isDuplicate && !loading.importing" class="flex items-center space-x-2 mt-3">
+            <div v-if="!isImported && !item.isDuplicate && !isItemSkipped(item, index) && !loading.importing" class="flex items-center space-x-2 mt-3">
               <button
                   :class="{ 'opacity-50 cursor-not-allowed': isLastTagEmpty(index) }"
                   :disabled="isLastTagEmpty(index)"
@@ -469,6 +490,7 @@
                 Add Tag
               </button>
               <button
+                  v-if="!isItemSkipped(item, index)"
                   class="inline-flex items-center px-3 py-2 border border-gray-300 shadow-sm text-sm font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500"
                   @click="resetTags(index)"
               >
@@ -479,6 +501,7 @@
               </button>
             </div>
           </div>
+        </div>
         </div>
       </div>
     </div>
@@ -494,7 +517,7 @@
         :has-features="itemsForUser.length > 0"
         :has-next-page="pagination.hasNext"
         :has-previous-page="pagination.hasPrevious"
-        :importable-count="pagination.totalFeatures - duplicates.indices.length"
+        :importable-count="importableCount"
         :is-imported="isImported"
         :is-importing="loading.importing"
         :is-loading-page="loading.page"
@@ -579,6 +602,10 @@ export default {
 
     showNoFeaturesMessage() {
       return this.originalFilename != null && !this.processing.active && !this.loading.page && this.itemsForUser.length === 0;
+    },
+
+    importableCount() {
+      return this.pagination.totalFeatures - this.duplicates.indices.length - this.skippedFeatureIds.size;
     }
   },
   components: {Loader, Importqueue: ImportQueue, MapPreviewDialog, FeatureMapDialog, LogViewModal, ImportControls},
@@ -640,8 +667,12 @@ export default {
       // Consolidated: Edit cache
       editCache: {
         pages: {},
-        originals: {}
+        originals: {},
+        skippedFeatureIds: new Set()
       },
+
+      // Skipped items tracking
+      skippedFeatureIds: new Set(),
 
       // Misc state
       lockButtons: false,
@@ -852,6 +883,9 @@ export default {
 
         // Restore cached changes if they exist for this page
         this.restoreCachedPageChanges(data.pagination.page);
+
+        // Restore skipped state for items on this page
+        this.restoreSkippedStateForPage();
       }
 
       if (data.pagination) {
@@ -1125,6 +1159,62 @@ export default {
         }
       });
     },
+    getItemClasses(item, index) {
+      // Base classes
+      let classes = 'rounded-lg shadow-sm border p-6 relative';
+
+      if (item.isDuplicate) {
+        classes += ' bg-gray-100 border-gray-300 opacity-75';
+      } else if (this.isItemSkipped(item, index)) {
+        classes += ' bg-gray-100 border-gray-300';
+      } else {
+        classes += ' bg-white border-gray-200';
+      }
+
+      return classes;
+    },
+    getFeatureId(item, index) {
+      // Get feature ID, using global index as fallback for unique identification
+      if (item && item.properties && item.properties.id) {
+        return item.properties.id;
+      }
+      // Use global index as fallback - this is unique per feature across all pages
+      const globalIndex = (this.pagination.currentPage - 1) * this.pagination.pageSize + index;
+      return `index_${globalIndex}`;
+    },
+    isItemSkipped(item, index) {
+      if (!item) {
+        return false;
+      }
+      const featureId = this.getFeatureId(item, index);
+      return this.skippedFeatureIds.has(featureId);
+    },
+    toggleSkipItem(index) {
+      const item = this.itemsForUser[index];
+      if (!item) {
+        console.warn('toggleSkipItem: item not found at index', index);
+        return;
+      }
+
+      // Get unique feature ID
+      const featureId = this.getFeatureId(item, index);
+
+      if (this.skippedFeatureIds.has(featureId)) {
+        // Restore item
+        this.skippedFeatureIds.delete(featureId);
+        console.log('Restored item:', featureId, 'at index', index);
+      } else {
+        // Skip item
+        this.skippedFeatureIds.add(featureId);
+        console.log('Skipped item:', featureId, 'at index', index);
+      }
+
+      // Update editCache to persist skipped state
+      this.editCache.skippedFeatureIds = new Set(this.skippedFeatureIds);
+
+      // Force Vue to detect the change since Sets are not reactive
+      this.$forceUpdate();
+    },
     // Note: MultiPoint and MultiPolygon features may be displayed during import preview,
     // but KML's MultiGeometry converts to GeometryCollection (not MultiPoint/MultiPolygon).
     // If MultiPoint/MultiPolygon appear in processed features, the backend will error/assert.
@@ -1347,8 +1437,12 @@ export default {
 
         // Perform the import - server will use the stored features in the database
         // No need to send the feature collection, it's already saved
+        // Convert skippedFeatureIds Set to array for JSON serialization
+        // Filter out index-based IDs (temp IDs) - only send actual feature IDs to backend
+        const skippedFeatureIdsArray = Array.from(this.skippedFeatureIds).filter(id => !id.startsWith('index_'));
         const response = await axios.post('/api/data/item/import/perform/' + this.currentId, {
-          import_custom_icons: this.importCustomIcons
+          import_custom_icons: this.importCustomIcons,
+          skipped_feature_ids: skippedFeatureIdsArray
         }, {
           headers: {
             'X-CSRFToken': csrftoken
@@ -1476,8 +1570,12 @@ export default {
       // Reset edit cache
       this.editCache = {
         pages: {},
-        originals: {}
+        originals: {},
+        skippedFeatureIds: new Set()
       };
+
+      // Reset skipped feature IDs
+      this.skippedFeatureIds = new Set();
 
       // Reset misc state
       this.lockButtons = false;
@@ -1520,6 +1618,8 @@ export default {
           this.editCache.originals[this.pagination.currentPage] = JSON.parse(JSON.stringify(this.originalItems));
         }
       }
+      // Persist skipped feature IDs to editCache
+      this.editCache.skippedFeatureIds = new Set(this.skippedFeatureIds);
     },
     restoreCachedPageChanges(page) {
       // Restore cached changes for the specified page
@@ -1530,6 +1630,14 @@ export default {
           this.originalItems = JSON.parse(JSON.stringify(this.editCache.originals[page]));
         }
       }
+      // Restore skipped feature IDs from editCache
+      if (this.editCache.skippedFeatureIds) {
+        this.skippedFeatureIds = new Set(this.editCache.skippedFeatureIds);
+      }
+    },
+    restoreSkippedStateForPage() {
+      // Skipped state is now handled by isItemSkipped() which checks skippedFeatureIds
+      // No additional action needed here
     },
     async nextPage() {
       if (this.pagination.hasNext) {
