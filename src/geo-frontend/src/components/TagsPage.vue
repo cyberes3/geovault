@@ -4,7 +4,14 @@
     <div class="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
       <div class="mb-4">
         <h1 class="text-2xl font-bold text-gray-900 mb-2">Tags</h1>
-        <p class="text-gray-600">Browse your features organized by tags</p>
+      </div>
+
+      <!-- Explanatory Text -->
+      <div class="m-4 p-4 bg-blue-50 border border-blue-200 rounded-lg">
+        <p class="text-sm text-gray-700">
+          Tags are labels attached to your geographic features that help you organize, filter, and find them easily.
+          You can create custom tags, edit or delete them, share them with others, and each feature can have multiple tags for flexible categorization.
+        </p>
       </div>
 
       <!-- Search Input -->

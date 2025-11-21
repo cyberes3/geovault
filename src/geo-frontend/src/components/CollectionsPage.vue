@@ -5,7 +5,6 @@
       <div class="flex items-center justify-between mb-4">
         <div>
           <h1 class="text-2xl font-bold text-gray-900 mb-2">Collections</h1>
-          <p class="text-gray-600">Organize your features into custom collections</p>
         </div>
         <button
             @click="openCreateDialog"
@@ -17,6 +16,14 @@
           </svg>
           Create New Collection
         </button>
+      </div>
+
+      <!-- Explanatory Text -->
+      <div class="m-4 p-4 bg-blue-50 border border-blue-200 rounded-lg">
+        <p class="text-sm text-gray-700">
+          Collections are custom groupings of features that allow you to organize and view related geographic data together.
+          You can create collections by matching tags (features with ANY of the specified tags) or by individually selecting features, then view them all together on the map, edit them, and share them with others.
+        </p>
       </div>
     </div>
 
@@ -103,11 +110,11 @@
               </button>
             </div>
           </div>
-          
+
           <p v-if="collection.description" class="text-sm text-gray-600 mb-4 line-clamp-2">
             {{ collection.description }}
           </p>
-          
+
           <div class="flex items-center justify-between text-sm text-gray-500 mb-4">
             <span class="flex items-center">
               <svg class="w-4 h-4 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -116,7 +123,7 @@
               {{ collection.feature_count }} {{ collection.feature_count === 1 ? 'feature' : 'features' }}
             </span>
           </div>
-          
+
           <div class="flex space-x-2">
             <button
                 @click="viewOnMap(collection.id)"
