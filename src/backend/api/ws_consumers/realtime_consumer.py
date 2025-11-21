@@ -38,51 +38,83 @@ class RealtimeConsumer(AsyncWebsocketConsumer):
 
     async def connect(self):
         """Handle WebSocket connection."""
-        # Get user from scope
-        self.user = self.scope["user"]
-        path = self.scope.get('path', 'unknown')
-        client_ip = get_client_ip(self.scope)
-
-        # Reject connection if user is not authenticated
-        if isinstance(self.user, AnonymousUser):
-            logger.warning(f"WebSocket connection rejected: {path} - Anonymous@{client_ip}")
-            await self.close()
-            return
-
-        # Create user-specific room group
-        self.room_group_name = f"realtime_{self.user.id}"
-
-        # Join room group
-        await self.channel_layer.group_add(
-            self.room_group_name,
-            self.channel_name
-        )
-
-        await self.accept()
+        import traceback
         
-        # Log successful connection
-        user_identifier = get_user_identifier(self.scope)
-        logger.info(f"WebSocket connected: {path} - {user_identifier}@{client_ip}")
+        path = self.scope.get('path', 'unknown')
+        client_ip = 'unknown'
+        user_identifier = 'unknown'
+        
+        try:
+            # Get user from scope (AuthMiddlewareStack should set this)
+            self.user = self.scope.get("user")
+            if self.user is None:
+                # If user is not in scope, default to AnonymousUser
+                self.user = AnonymousUser()
+            
+            client_ip = get_client_ip(self.scope)
 
-        # Load modules now that user is available
-        self._load_modules()
+            # Reject connection if user is not authenticated
+            if isinstance(self.user, AnonymousUser):
+                logger.warning(f"WebSocket connection rejected: {path} - Anonymous@{client_ip}")
+                await self.close()
+                return
 
-        # Send initial state for all modules
-        for module in self.modules.values():
-            await module.send_initial_state()
+            # Create user-specific room group
+            self.room_group_name = f"realtime_{self.user.id}"
+
+            # Join room group
+            await self.channel_layer.group_add(
+                self.room_group_name,
+                self.channel_name
+            )
+
+            await self.accept()
+            
+            # Log successful connection
+            user_identifier = get_user_identifier(self.scope)
+            logger.info(f"WebSocket connected: {path} - {user_identifier}@{client_ip}")
+
+            # Load modules now that user is available
+            self._load_modules()
+
+            # Send initial state for all modules
+            for module in self.modules.values():
+                await module.send_initial_state()
+                
+        except Exception as e:
+            # Log the full traceback for debugging
+            traceback_str = traceback.format_exc()
+            logger.error(f"WebSocket connection error: {path} - {user_identifier}@{client_ip}\n{traceback_str}")
+            
+            # Try to close the connection if it was accepted
+            try:
+                await self.close(code=1011)  # 1011 = Internal Server Error
+            except Exception:
+                pass  # Ignore errors when closing
 
     async def disconnect(self, close_code):
         """Handle WebSocket disconnection."""
-        path = self.scope.get('path', 'unknown')
-        client_ip = get_client_ip(self.scope)
-        user_identifier = get_user_identifier(self.scope)
-        logger.info(f"WebSocket disconnected: {path} - {user_identifier}@{client_ip} - Close code: {close_code}")
+        import traceback
         
-        # Leave room group
-        await self.channel_layer.group_discard(
-            self.room_group_name,
-            self.channel_name
-        )
+        path = self.scope.get('path', 'unknown')
+        client_ip = 'unknown'
+        user_identifier = 'unknown'
+        
+        try:
+            client_ip = get_client_ip(self.scope)
+            user_identifier = get_user_identifier(self.scope)
+            logger.info(f"WebSocket disconnected: {path} - {user_identifier}@{client_ip} - Close code: {close_code}")
+            
+            # Leave room group if it was created
+            if hasattr(self, 'room_group_name') and self.room_group_name:
+                await self.channel_layer.group_discard(
+                    self.room_group_name,
+                    self.channel_name
+                )
+        except Exception as e:
+            # Log the error but don't raise - we're already disconnecting
+            traceback_str = traceback.format_exc()
+            logger.error(f"WebSocket disconnect error: {path} - {user_identifier}@{client_ip}\n{traceback_str}")
 
     async def receive(self, text_data=None, bytes_data=None):
         """Handle messages received from WebSocket."""
