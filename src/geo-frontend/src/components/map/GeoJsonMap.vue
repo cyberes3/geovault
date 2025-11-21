@@ -2,7 +2,7 @@
   <div class="w-full h-full flex">
     <!-- Left Sidebar - Feature List -->
     <FeatureListSidebar
-        :class="['transition-opacity duration-300', publicShareError ? 'opacity-50 pointer-events-none' : 'opacity-100']"
+        :class="['transition-opacity duration-300', (publicShareError || loadError) ? 'opacity-50 pointer-events-none' : 'opacity-100']"
         :features="featuresInExtent"
         @feature-click="zoomToFeature"
         @tag-filter-change="handleTagFilterChange"
@@ -12,7 +12,7 @@
     <div class="flex-1 bg-gray-50 relative">
       <div class="relative w-full h-full">
         <!-- Map -->
-        <div ref="mapContainer" :class="['w-full h-full transition-opacity duration-300', publicShareError ? 'opacity-50 pointer-events-none' : 'opacity-100']"></div>
+        <div ref="mapContainer" :class="['w-full h-full transition-opacity duration-300', (publicShareError || loadError) ? 'opacity-50 pointer-events-none' : 'opacity-100']"></div>
 
         <!-- Error Overlay for Invalid Share -->
         <transition name="fade">
@@ -26,6 +26,22 @@
               </div>
               <p class="text-gray-700 mb-4">{{ publicShareError }}</p>
               <p class="text-sm text-gray-500">The share link may have been deleted or expired.</p>
+            </div>
+          </div>
+        </transition>
+
+        <!-- Error Overlay for Loading Failures -->
+        <transition name="fade">
+          <div v-if="loadError" class="absolute inset-0 z-50 flex items-center justify-center bg-gray-900 bg-opacity-50">
+            <div class="bg-white rounded-lg shadow-xl p-6 max-w-md mx-4 select-none">
+              <div class="flex items-center space-x-3 mb-4">
+                <svg class="w-8 h-8 text-red-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" stroke-linecap="round" stroke-linejoin="round" stroke-width="2"></path>
+                </svg>
+                <h3 class="text-lg font-semibold text-gray-900">Error Loading Map</h3>
+              </div>
+              <p class="text-gray-700 mb-4">{{ loadError }}</p>
+              <p class="text-sm text-gray-500">Please try refreshing the page or check your connection.</p>
             </div>
           </div>
         </transition>
@@ -96,8 +112,8 @@
 
     <!-- Right Sidebar - Map Controls -->
     <MapControlsSidebar
-        :class="['transition-opacity duration-300', publicShareError ? 'opacity-50 pointer-events-none' : 'opacity-100']"
         :allowed-options="publicShareAllowedOptions"
+        :class="['transition-opacity duration-300', (publicShareError || loadError) ? 'opacity-50 pointer-events-none' : 'opacity-100']"
         :feature-count="featureCount"
         :location-display-name="getLocationDisplayName()"
         :max-features="MAX_FEATURES"
@@ -195,6 +211,7 @@ export default {
       featureCountUpdatePending: false, // Flag to batch feature count updates
       isEditingFeature: false, // Track if we're in edit mode
       publicShareError: null, // Error message for invalid public share
+      loadError: null, // Error message for loading failures and exceptions
       publicShareTag: null, // Tag name for public share
       publicShareCollectionName: null, // Collection name for public share
       publicShareInfo: null, // Cached share info (share_type, tag, collection_name, etc.)
@@ -432,7 +449,7 @@ export default {
         // Clear tag filter - restore normal behavior
         this.isTagFilterActive = false
         this.tagFilteredFeatures = []
-        
+
         // Clear the map and reload data for current view
         this.vectorSource.clear()
         this.loadedBounds.clear()
@@ -965,13 +982,14 @@ export default {
       // Create new AbortController for this request
       this.currentAbortController = new AbortController()
       this.isLoading = true
+      this.loadError = null // Clear any previous load errors
 
       try {
         const bboxString = this.getBoundingBoxString(extent)
         const roundedZoom = Math.round(zoom) // Round to integer for API compatibility
-        
+
         let url, response, data
-        
+
         if (this.isPublicShareMode) {
           // Get share info (cached after first call)
           if (!this.publicShareInfo || this.publicShareInfo.share_id !== this.shareId) {
@@ -979,19 +997,19 @@ export default {
             const infoResponse = await fetch(infoUrl, {
               signal: this.currentAbortController.signal
             })
-            
+
             if (!infoResponse.ok) {
               const errorData = await infoResponse.json()
               this.handlePublicShareError(errorData.error || 'Invalid share link')
               return
             }
-            
+
             const infoData = await infoResponse.json()
             if (!infoData.success) {
               this.handlePublicShareError(infoData.error || 'Invalid share link')
               return
             }
-            
+
             // Cache the share info
             this.publicShareInfo = {
               share_id: this.shareId,
@@ -1001,7 +1019,7 @@ export default {
               collection_id: infoData.collection_id || null,
               include_tags: infoData.include_tags || false
             }
-            
+
             // Store tag/collection name for display
             if (infoData.share_type === 'tag') {
               this.publicShareTag = infoData.tag
@@ -1011,7 +1029,7 @@ export default {
               this.publicShareTag = null
             }
           }
-          
+
           // Use appropriate endpoint based on share_type
           if (this.publicShareInfo.share_type === 'tag') {
             url = `${this.SHARE_API_BASE_URL}${this.shareId}/?bbox=${bboxString}&zoom=${roundedZoom}`
@@ -1021,11 +1039,11 @@ export default {
             this.publicShareError = 'Unknown share type'
             return
           }
-          
+
           response = await fetch(url, {
             signal: this.currentAbortController.signal
           })
-          
+
           data = await response.json()
         } else {
           // Use regular endpoint
@@ -1058,6 +1076,8 @@ export default {
         if (!data.success) {
           if (this.isPublicShareMode) {
             this.handlePublicShareError(data.error || 'Failed to load shared features.')
+          } else {
+            this.loadError = data.error || 'Failed to load map data.'
           }
           console.error('Error loading data:', data.error)
           return
@@ -1171,6 +1191,7 @@ export default {
           console.log('Request was cancelled')
         } else {
           console.error('Error fetching data:', error)
+          this.loadError = error.message || 'Failed to load map data. Please try again.'
         }
       } finally {
         this.isLoading = false
@@ -1351,11 +1372,11 @@ export default {
   watch: {
     '$route'(to, from) {
       // Watch for route changes, especially share ID and collection changes
-      
+
       // Handle collection query parameter changes
       const newCollectionId = to.query.collection
       const oldCollectionId = from?.query?.collection
-      
+
       if (newCollectionId !== oldCollectionId) {
         if (newCollectionId) {
           // Collection ID changed or added, load the collection
@@ -1385,7 +1406,7 @@ export default {
           }
         }
       }
-      
+
       // Handle public share mode
       if (this.isPublicShareMode) {
         const newShareId = to.query.id
@@ -1473,6 +1494,7 @@ export default {
       console.log('Map initialized successfully')
     } catch (error) {
       console.error('Error initializing map:', error)
+      this.loadError = error.message || 'Failed to initialize map. Please refresh the page.'
       return
     }
 
@@ -1488,7 +1510,7 @@ export default {
     } else {
       // Check for featureId in URL (existing functionality)
       await this.handleUrlFeatureId()
-      
+
       // Initial data load - now the map is ready (only if not in collection mode)
       console.log('Loading data for current view, isPublicShareMode:', this.isPublicShareMode, 'shareId:', this.shareId)
       await this.loadDataForCurrentView()
