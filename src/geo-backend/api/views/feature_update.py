@@ -1,6 +1,7 @@
 import json
 import traceback
 
+from django.conf import settings
 from django.contrib.gis.geos import GEOSGeometry
 from django.http import JsonResponse
 from django.views.decorators.csrf import csrf_protect
@@ -99,11 +100,12 @@ def update_feature_metadata(request, feature_id):
                         'code': 400
                     }, status=400)
                 
-                # Validate tag length (max 255 characters)
-                if len(tag) > 255:
+                # Validate tag length
+                tag_max_length = getattr(settings, 'TAG_MAX_LENGTH', 255)
+                if len(tag) > tag_max_length:
                     return JsonResponse({
                         'success': False,
-                        'error': f'Tag "{tag[:50]}..." exceeds maximum length of 255 characters',
+                        'error': f'Tag "{tag[:50]}..." exceeds maximum length of {tag_max_length} characters',
                         'code': 400
                     }, status=400)
                 
@@ -260,11 +262,12 @@ def update_feature(request, feature_id):
                     'code': 400
                 }, status=400)
             
-            # Validate tag length (max 255 characters)
-            if len(tag) > 255:
+            # Validate tag length
+            tag_max_length = getattr(settings, 'TAG_MAX_LENGTH', 255)
+            if len(tag) > tag_max_length:
                 return JsonResponse({
                     'success': False,
-                    'error': f'Tag "{tag[:50]}..." exceeds maximum length of 255 characters',
+                    'error': f'Tag "{tag[:50]}..." exceeds maximum length of {tag_max_length} characters',
                     'code': 400
                 }, status=400)
             

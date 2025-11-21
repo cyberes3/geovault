@@ -64,10 +64,12 @@ def create_share(request):
             }, status=400)
 
         # Validate tag length
-        if len(tag) > 255:
+        from django.conf import settings
+        tag_max_length = getattr(settings, 'TAG_MAX_LENGTH', 255)
+        if len(tag) > tag_max_length:
             return JsonResponse({
                 'success': False,
-                'error': 'Tag name exceeds maximum length of 255 characters',
+                'error': f'Tag name exceeds maximum length of {tag_max_length} characters',
                 'code': 400
             }, status=400)
 

@@ -55,18 +55,22 @@ def _detect_world_wide_extent(bbox: Tuple[float, float, float, float]) -> Tuple[
     # Improved world-wide extent detection with more conservative thresholds
     # Lower threshold from 300° to 280° for more conservative detection
     # Also check latitude span (>170° indicates world-wide view)
+    world_wide_lon_threshold_1 = getattr(settings, 'BBOX_WORLD_WIDE_LON_THRESHOLD_1', 280)
+    world_wide_lon_threshold_2 = getattr(settings, 'BBOX_WORLD_WIDE_LON_THRESHOLD_2', 270)
+    world_wide_lat_threshold = getattr(settings, 'BBOX_WORLD_WIDE_LAT_THRESHOLD', 170)
+    
     world_wide_extent = False
     if crosses_dateline:
         world_wide_extent = True
     else:
         # Check longitude span (more conservative: 280° instead of 300°)
-        if lon_span > 280:
+        if lon_span > world_wide_lon_threshold_1:
             world_wide_extent = True
         # Check latitude span (if lat span > 170°, treat as world-wide)
-        elif lat_span > 170:
+        elif lat_span > world_wide_lat_threshold:
             world_wide_extent = True
         # Additional check for very large extents (>270° longitude)
-        elif lon_span > 270:
+        elif lon_span > world_wide_lon_threshold_2:
             world_wide_extent = True
 
     return (crosses_dateline, world_wide_extent, lon_span, lat_span)
@@ -339,8 +343,12 @@ def _get_features_in_bbox(bbox: Tuple[float, float, float, float], user_id: int,
     if not (crosses_dateline or world_wide_extent):
         # If we used a spatial query but got very few results for a large extent, something might be wrong
         # Check if the extent is large (>200° longitude or >150° latitude) but we got very few results
-        is_large_extent = lon_span > 200 or lat_span > 150
-        suspicious_result = is_large_extent and total_count < 10 and total_count > 0
+        large_extent_lon_threshold = getattr(settings, 'BBOX_LARGE_EXTENT_LON_THRESHOLD', 200)
+        large_extent_lat_threshold = getattr(settings, 'BBOX_LARGE_EXTENT_LAT_THRESHOLD', 150)
+        suspicious_result_min_count = getattr(settings, 'BBOX_SUSPICIOUS_RESULT_MIN_COUNT', 10)
+        
+        is_large_extent = lon_span > large_extent_lon_threshold or lat_span > large_extent_lat_threshold
+        suspicious_result = is_large_extent and total_count < suspicious_result_min_count and total_count > 0
 
         if suspicious_result:
             logger.warning(

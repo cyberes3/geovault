@@ -9,6 +9,7 @@ import threading
 from concurrent.futures import ThreadPoolExecutor
 from typing import Dict, Any, List, Tuple, Optional
 
+from django.conf import settings
 from django.contrib.gis.geos import GEOSGeometry
 from django.db import transaction
 
@@ -296,7 +297,8 @@ class BulkImportJob(BaseJob):
             # Bulk create all features at once for better performance
             if features_to_create:
                 try:
-                    FeatureStore.objects.bulk_create(features_to_create, batch_size=1000)
+                    bulk_batch_size = getattr(settings, 'BULK_CREATE_BATCH_SIZE', 1000)
+                    FeatureStore.objects.bulk_create(features_to_create, batch_size=bulk_batch_size)
                     successful_imports = len(features_to_create)
                 except Exception as e:
                     logger.warning(f"Bulk import failed for user {user_id}, falling back to individual imports: {str(e)}")

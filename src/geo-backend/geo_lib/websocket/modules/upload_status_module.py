@@ -6,6 +6,7 @@ Handles real-time status updates for a specific import item.
 import json
 from typing import Dict, Any, Optional
 
+from django.conf import settings
 from geo_lib.processing.status_tracker import status_tracker
 from geo_lib.websocket.base_module import BaseWebSocketModule
 from geo_lib.logging.console import get_websocket_logger
@@ -307,8 +308,8 @@ class UploadStatusModule(BaseWebSocketModule):
         # Validate pagination parameters
         if page < 1:
             page = 1
-        if page_size < 1 or page_size > 500:
-            page_size = 50
+        # Force page_size to 50
+        page_size = 50
 
         # Sort features spatially before pagination
         # Create list of (feature, original_index, sort_key) tuples

@@ -28,6 +28,8 @@ class ReverseGeocodingService:
         self.overpass_url = overpass_url or getattr(settings, 'OVERPASS_API_URL', 'https://overpass-api.de/api/interpreter')
         self.nominatim_url = nominatim_url or getattr(settings, 'NOMINATIM_API_URL', 'https://nominatim.openstreetmap.org')
         self.user_agent = "GeoServer/1.0"
+        self.overpass_timeout = getattr(settings, 'OVERPASS_TIMEOUT_SECONDS', 10)
+        self.overpass_request_timeout = getattr(settings, 'OVERPASS_REQUEST_TIMEOUT_SECONDS', 15)
 
     def is_point_in_water(self, latitude: float, longitude: float) -> bool:
         """Check if a point is in water using Overpass API."""
@@ -36,7 +38,7 @@ class ReverseGeocodingService:
             return False
         
         try:
-            query = f"""[out:json][timeout:10];
+            query = f"""[out:json][timeout:{self.overpass_timeout}];
 (
   is_in({latitude},{longitude})->.a;
   relation["natural"="water"](pivot.a);
@@ -48,7 +50,7 @@ class ReverseGeocodingService:
 );
 out count;"""
             headers = {'User-Agent': self.user_agent, 'Content-Type': 'application/x-www-form-urlencoded'}
-            response = requests.post(self.overpass_url, data={'data': query}, headers=headers, timeout=15)
+            response = requests.post(self.overpass_url, data={'data': query}, headers=headers, timeout=self.overpass_request_timeout)
             if response.status_code == 200:
                 data = response.json()
                 if data and 'elements' in data:
@@ -75,7 +77,7 @@ out count;"""
         
         try:
             # Get administrative boundaries for state, country, and county only
-            query = f"""[out:json][timeout:10];
+            query = f"""[out:json][timeout:{self.overpass_timeout}];
 (
   is_in({latitude},{longitude})->.a;
   relation["admin_level"="2"](pivot.a);  // Country
@@ -85,7 +87,7 @@ out count;"""
 out tags;"""
 
             headers = {'User-Agent': self.user_agent, 'Content-Type': 'application/x-www-form-urlencoded'}
-            response = requests.post(self.overpass_url, data={'data': query}, headers=headers, timeout=15)
+            response = requests.post(self.overpass_url, data={'data': query}, headers=headers, timeout=self.overpass_request_timeout)
             if response.status_code != 200:
                 error_msg = f"Overpass API returned status {response.status_code} for coordinates ({latitude}, {longitude})"
                 logger.warning(error_msg)
@@ -148,7 +150,7 @@ out tags;"""
 );
 out tags;"""
                 try:
-                    fallback_response = requests.post(self.overpass_url, data={'data': fallback_query}, headers=headers, timeout=15)
+                    fallback_response = requests.post(self.overpass_url, data={'data': fallback_query}, headers=headers, timeout=self.overpass_request_timeout)
                     if fallback_response.status_code == 200:
                         fallback_data = fallback_response.json()
                         if fallback_data and 'elements' in fallback_data:
@@ -206,7 +208,7 @@ out tags;"""
                 'Accept': 'application/json'
             }
 
-            response = requests.get(url, params=params, headers=headers, timeout=10)
+            response = requests.get(url, params=params, headers=headers, timeout=self.overpass_timeout)
             if response.status_code != 200:
                 error_msg = f"Nominatim API returned status {response.status_code} for coordinates ({latitude}, {longitude})"
                 logger.warning(error_msg)
@@ -335,7 +337,7 @@ out tags;"""
             return []
         
         try:
-            query = f"""[out:json][timeout:10];
+            query = f"""[out:json][timeout:{self.overpass_timeout}];
 (
   is_in({latitude},{longitude})->.a;
   relation["boundary"="protected_area"](pivot.a);
@@ -343,7 +345,7 @@ out tags;"""
 );
 out tags;"""
             headers = {'User-Agent': self.user_agent, 'Content-Type': 'application/x-www-form-urlencoded'}
-            response = requests.post(self.overpass_url, data={'data': query}, headers=headers, timeout=15)
+            response = requests.post(self.overpass_url, data={'data': query}, headers=headers, timeout=self.overpass_request_timeout)
             if response.status_code != 200:
                 logger.warning(f"Overpass API returned status {response.status_code}")
                 return []
@@ -397,7 +399,7 @@ out tags;"""
 );
 out tags;"""
             headers = {'User-Agent': self.user_agent, 'Content-Type': 'application/x-www-form-urlencoded'}
-            response = requests.post(self.overpass_url, data={'data': query_inside}, headers=headers, timeout=15)
+            response = requests.post(self.overpass_url, data={'data': query_inside}, headers=headers, timeout=self.overpass_request_timeout)
             lakes = []
             if response.status_code == 200:
                 data = response.json()
@@ -424,7 +426,7 @@ out tags;"""
   way["water"="pond"](around:{radius_meters},{latitude},{longitude});
 );
 out tags center;"""
-            response = requests.post(self.overpass_url, data={'data': query_nearby}, headers=headers, timeout=15)
+            response = requests.post(self.overpass_url, data={'data': query_nearby}, headers=headers, timeout=self.overpass_request_timeout)
             if response.status_code != 200:
                 return lakes
             data = response.json()

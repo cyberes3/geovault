@@ -457,11 +457,15 @@ class BaseProcessor(ABC):
         Returns:
             Timeout in seconds
         """
+        from django.conf import settings
+        
         file_size = len(self.file_data) if isinstance(self.file_data, bytes) else len(self.file_data.encode('utf-8'))
         file_size_mb = file_size / (1024 * 1024)
 
-        # Base timeout of 30 seconds, plus 2 seconds per MB for large files
-        timeout_seconds = max(30, int(30 + (file_size_mb * 2)))
+        # Base timeout plus additional timeout per MB for large files
+        timeout_base = getattr(settings, 'PROCESSING_TIMEOUT_BASE_SECONDS', 30)
+        timeout_per_mb = getattr(settings, 'PROCESSING_TIMEOUT_PER_MB_SECONDS', 2)
+        timeout_seconds = max(timeout_base, int(timeout_base + (file_size_mb * timeout_per_mb)))
 
         self.import_log.add(f'Calculated timeout: {timeout_seconds}s for {file_size_mb:.1f}MB file', 'Processing', DatabaseLogLevel.DEBUG)
         return timeout_seconds

@@ -40,6 +40,9 @@ api:
   # Maximum number of features to return in a single API request
   # Set to -1 for no limit, or any positive integer to limit features
   max_features_per_request: -1
+  
+  # Tag settings
+  tag_max_length: 255  # Maximum length for tag names
 
 # Tile Cache Configuration
 tiles:
@@ -68,6 +71,14 @@ icons:
   # Set to true to allow external websites to link to your icons
   # Set to false (default) to block hot-linking attempts
   allow_hotlinking: false
+  
+  # User upload settings
+  upload_max_size_bytes: 512000  # Maximum size for user-uploaded icons (500KB)
+  upload_allowed_extensions:  # Allowed extensions for icon uploads
+    - ".png"
+    - ".jpg"
+    - ".jpeg"
+    - ".ico"
 
 # Reverse Geocoding Configuration
 geocoding:
@@ -83,6 +94,10 @@ geocoding:
   # Distance thresholds for proximity tags (in miles)
   city_proximity_miles: 5.0
   lake_proximity_miles: 1.0
+  
+  # Overpass API timeout settings
+  overpass_timeout_seconds: 10  # Timeout for Overpass API queries
+  overpass_request_timeout_seconds: 15  # Timeout for Overpass API requests
 
 # Processing Configuration
 processing:
@@ -92,6 +107,21 @@ processing:
   # File upload limits (in bytes)
   file_upload_max_memory_size: 2097152  # 2MB
   data_upload_max_memory_size: 2097152  # 2MB
+  
+  # Timeout settings for file processing
+  timeout_base_seconds: 30  # Base timeout for file processing
+  timeout_per_mb_seconds: 2  # Additional timeout per MB of file size
+  
+  # Duplicate detection settings
+  duplicate_detection_batch_size: 100  # Batch size for duplicate detection
+  duplicate_detection_batch_threshold: 1000  # Threshold for using batched approach
+  
+  # Bulk database operations
+  bulk_create_batch_size: 1000  # Batch size for bulk database operations
+  
+  # Job cleanup settings
+  job_cleanup_interval_seconds: 3600  # Interval for cleaning up old jobs (1 hour)
+  max_job_age_seconds: 7200  # Maximum age before jobs are cleaned up (2 hours)
 
 # File Validation Configuration
 validation:

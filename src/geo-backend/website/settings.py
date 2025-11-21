@@ -242,6 +242,7 @@ CSRF_TRUSTED_ORIGINS = config.get_list('security.csrf_trusted_origins', ['http:/
 SECURE_BROWSER_XSS_FILTER = True
 SECURE_CONTENT_TYPE_NOSNIFF = True
 X_FRAME_OPTIONS = 'DENY'
+# HSTS is handled by nginx, not Django
 SECURE_HSTS_SECONDS = 31536000  # 1 year
 SECURE_HSTS_INCLUDE_SUBDOMAINS = True
 SECURE_HSTS_PRELOAD = True
@@ -298,10 +299,10 @@ ICON_PROCESSING_ENABLED = config.get_bool_with_env_override('icons.processing_en
 ICON_MAX_SIZE_BYTES = config.get_int('icons.max_size_bytes', 1048576)
 
 # Maximum icon file size for user uploads (500KB)
-ICON_UPLOAD_MAX_SIZE_BYTES = 512000  # 500KB
+ICON_UPLOAD_MAX_SIZE_BYTES = config.get_int('icons.upload_max_size_bytes', 512000)  # 500KB
 
 # Allowed icon extensions for user uploads (restricted subset)
-ICON_UPLOAD_ALLOWED_EXTENSIONS = {'.png', '.jpg', '.jpeg', '.ico'}
+ICON_UPLOAD_ALLOWED_EXTENSIONS = set(config.get_list('icons.upload_allowed_extensions', ['.png', '.jpg', '.jpeg', '.ico']))
 
 # Timeout for fetching remote icons in seconds
 ICON_FETCH_TIMEOUT = config.get_float('icons.fetch_timeout', 1.0)
@@ -325,9 +326,39 @@ REVERSE_GEOCODING_ENABLED = config.get_bool_with_env_override('geocoding.enabled
 CITY_PROXIMITY_MILES = config.get_float('geocoding.city_proximity_miles', 5.0)
 LAKE_PROXIMITY_MILES = config.get_float('geocoding.lake_proximity_miles', 1.0)
 
+# Overpass API timeout settings
+OVERPASS_TIMEOUT_SECONDS = config.get_int('geocoding.overpass_timeout_seconds', 10)
+OVERPASS_REQUEST_TIMEOUT_SECONDS = config.get_int('geocoding.overpass_request_timeout_seconds', 15)
+
 # Import Processing Configuration
 # Number of threads to use for parallel feature processing during import
 IMPORT_PROCESSING_THREADS = config.get_int('processing.import_threads', 10)
+
+# Processing timeout settings
+PROCESSING_TIMEOUT_BASE_SECONDS = config.get_int('processing.timeout_base_seconds', 30)
+PROCESSING_TIMEOUT_PER_MB_SECONDS = config.get_int('processing.timeout_per_mb_seconds', 2)
+
+# Duplicate detection settings
+DUPLICATE_DETECTION_BATCH_SIZE = config.get_int('processing.duplicate_detection_batch_size', 100)
+DUPLICATE_DETECTION_BATCH_THRESHOLD = config.get_int('processing.duplicate_detection_batch_threshold', 1000)
+
+# Bulk database operations
+BULK_CREATE_BATCH_SIZE = config.get_int('processing.bulk_create_batch_size', 1000)
+
+# Job cleanup settings
+JOB_CLEANUP_INTERVAL_SECONDS = config.get_int('processing.job_cleanup_interval_seconds', 3600)
+MAX_JOB_AGE_SECONDS = config.get_int('processing.max_job_age_seconds', 7200)
+
+# API Configuration
+TAG_MAX_LENGTH = config.get_int('api.tag_max_length', 255)
+
+# Bounding Box Configuration (hardcoded - not user configurable)
+BBOX_WORLD_WIDE_LON_THRESHOLD_1 = 280
+BBOX_WORLD_WIDE_LON_THRESHOLD_2 = 270
+BBOX_WORLD_WIDE_LAT_THRESHOLD = 170
+BBOX_LARGE_EXTENT_LON_THRESHOLD = 200
+BBOX_LARGE_EXTENT_LAT_THRESHOLD = 150
+BBOX_SUSPICIOUS_RESULT_MIN_COUNT = 10
 
 # Logging configuration with activity tags
 LOGGING = {
