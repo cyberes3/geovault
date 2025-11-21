@@ -113,7 +113,7 @@
 
           <!-- Icon Display with Choose Button Inline -->
           <div class="flex items-center justify-between">
-            <!-- Current Icon Preview or Placeholder (Left) -->
+            <!-- Current Icon Preview (Left) -->
             <div v-if="hasPngIcon && currentIconUrl" class="flex items-center">
               <img
                 :src="resolveIconUrl(currentIconUrl)"
@@ -121,9 +121,6 @@
                 class="w-8 h-8 object-contain border border-gray-300 rounded"
                 @error="handleIconError"
               />
-            </div>
-            <div v-else class="w-8 h-8 border border-gray-300 rounded bg-gray-100 flex items-center justify-center">
-              <span class="text-xs text-gray-400">No icon</span>
             </div>
 
             <!-- Buttons (Right) -->

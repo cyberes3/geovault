@@ -1,4 +1,6 @@
 insane linework test isn't showing up on the map
+show feature stats (length, area, elevation, etc)
+instead of hiding small polygons and lines, render them as a point at low zooms the color of their border/line
 
 Later:
 See how https://trails.colorado.gov loads their data in the map
