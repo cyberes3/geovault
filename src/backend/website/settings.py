@@ -142,8 +142,10 @@ USE_TZ = True
 STATIC_URL = 'static/'
 
 # WhiteNoise configuration for serving static files in production
-# WhiteNoise serves directly from STATICFILES_DIRS without requiring collectstatic
-# Files are already optimized by Vite during build, so no additional compression needed
+# Set STATIC_ROOT to the static subdirectory where Vue.js compiled files are located
+# When a request comes for /static/Dashboard-Cz_pIraS.js, WhiteNoise looks in STATIC_ROOT
+# for Dashboard-Cz_pIraS.js, so STATIC_ROOT must point to the directory containing these files
+STATIC_ROOT = os.path.join(BASE_DIR, '../frontend/dist/static')
 
 # Cache configuration
 # Using LocMemCache for in-memory caching (works within a single process)
