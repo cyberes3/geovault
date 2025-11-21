@@ -3,9 +3,6 @@ KMZ file processor for the unified import pipeline.
 Inherits from KMLProcessor since KMZ is just a zipped KML file.
 """
 
-import io
-import traceback
-import zipfile
 from typing import Dict, Any
 
 from geo_lib.processing.icon_manager import process_geojson_icons
@@ -35,27 +32,11 @@ class KMZProcessor(KMLProcessor):
         # Convert using shared temp file helper (binary mode for KMZ)
         geojson_data = self._convert_to_geojson(kmz_data, '.kmz', 'KMZ', is_text=False)
 
-        # Extract KML content from KMZ for icon processing
-        kml_content = None
-        try:
-            with zipfile.ZipFile(io.BytesIO(kmz_data), 'r') as zip_file:
-                # Find the first .kml file
-                kml_entry = None
-                for entry in zip_file.namelist():
-                    if entry.lower().endswith('.kml'):
-                        kml_entry = entry
-                        break
-                if kml_entry:
-                    kml_content = zip_file.read(kml_entry).decode('utf-8')
-        except Exception as e:
-            logger.warning(f"Failed to extract KML from KMZ for icon processing: {traceback.format_exc()}")
-
         # Process icons in GeoJSON
         geojson_data = process_geojson_icons(
             geojson_data,
             file_type='kmz',
-            file_data=kmz_data,
-            kml_content=kml_content
+            file_data=kmz_data
         )
 
         return geojson_data

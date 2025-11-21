@@ -7,7 +7,6 @@ import hashlib
 import io
 import os
 import re
-import xml.etree.ElementTree as ET
 import zipfile
 from pathlib import Path
 from typing import Dict, List, Optional, Tuple
@@ -282,17 +281,16 @@ def process_icon_href(href: str, file_type: str, file_data: Optional[bytes] = No
     return None
 
 
-def process_geojson_icons(geojson_data: dict, file_type: str, file_data: Optional[bytes] = None, kml_content: Optional[str] = None) -> dict:
+def process_geojson_icons(geojson_data: dict, file_type: str, file_data: Optional[bytes] = None) -> dict:
     """
     Process all icon hrefs in GeoJSON data structure.
     Recursively searches for icon hrefs in properties and replaces them with local paths.
-    Also extracts icon hrefs from original KML if provided.
+    Only processes icons for Point geometries (skips LineString, Polygon, etc.).
     
     Args:
         geojson_data: GeoJSON data dictionary
         file_type: File type ('kmz' or 'kml')
         file_data: File data as bytes (required for KMZ)
-        kml_content: Original KML content as string (optional, for extracting icon hrefs)
         
     Returns:
         Modified GeoJSON data with replaced icon hrefs
@@ -306,70 +304,35 @@ def process_geojson_icons(geojson_data: dict, file_type: str, file_data: Optiona
     # Create mapping of original hrefs to new hrefs
     href_mapping: Dict[str, str] = {}
     
-    # Extract icon hrefs from KML if provided
-    if kml_content:
-        icon_hrefs = extract_icon_hrefs_from_kml(kml_content)
-        for href in icon_hrefs:
-            # Skip CalTopo point icons - they will be replaced with default icon
-            # But fetch all other CalTopo icons
-            if _is_caltopo_point_icon(href):
-                continue
-            new_href = process_icon_href(href, file_type, file_data)
-            if new_href:
-                href_mapping[href] = new_href
-    
-    # Process features
+    # Process features - only process icons for Point geometries
     if 'features' in geojson_data:
         for feature in geojson_data['features']:
-            if isinstance(feature, dict) and 'properties' in feature:
-                _process_properties_icons(feature['properties'], file_type, file_data, href_mapping)
+            if not isinstance(feature, dict):
+                continue
+            
+            # Check geometry type - only process icons for Point features
+            geometry = feature.get('geometry', {})
+            geometry_type = geometry.get('type', '').lower() if isinstance(geometry, dict) else ''
+            
+            if geometry_type == 'point' and 'properties' in feature:
+                _process_properties_icons(feature['properties'], file_type, file_data, href_mapping, is_point=True)
+            elif geometry_type != 'point' and 'properties' in feature:
+                # For non-Point features, remove icon properties entirely
+                # This prevents fetching icons for LineString, Polygon, etc.
+                props = feature.get('properties', {})
+                icon_props = [k for k in ['icon', 'icon-href', 'iconUrl', 'icon_url', 'marker-icon', 'marker-symbol', 'symbol'] if k in props]
+                if icon_props:
+                    for prop_name in icon_props:
+                        del props[prop_name]
+                # Note: We keep 'styleUrl' as it's a style reference, not an icon URL
     
     # Process properties at root level if present
-    if 'properties' in geojson_data:
-        _process_properties_icons(geojson_data['properties'], file_type, file_data, href_mapping)
+    # Root-level properties should not contain feature-specific icons, but if they do,
+    # we should skip them since we don't know the geometry type
+    # (Root-level properties are typically metadata, not feature icons)
+    pass
     
     return geojson_data
-
-
-def extract_icon_hrefs_from_kml(kml_content: str) -> List[str]:
-    """
-    Extract all icon hrefs from KML XML content.
-    
-    Args:
-        kml_content: KML content as string
-        
-    Returns:
-        List of icon hrefs found in the KML
-    """
-    icon_hrefs = []
-    try:
-        # Parse KML XML
-        root = ET.fromstring(kml_content)
-        
-        # Find all href elements (icons are typically in Icon/href or ItemIcon/href)
-        for href_elem in root.iter():
-            if href_elem.tag.endswith('href') and href_elem.text:
-                href = href_elem.text.strip()
-                if href and _is_valid_icon_type(href):
-                    # Fix nested CalTopo URLs when extracting from KML
-                    href = _fix_nested_caltopo_url(href)
-                    icon_hrefs.append(href)
-        
-        # Remove duplicates while preserving order
-        seen = set()
-        unique_hrefs = []
-        for href in icon_hrefs:
-            if href not in seen:
-                seen.add(href)
-                unique_hrefs.append(href)
-        
-        return unique_hrefs
-    except ET.ParseError:
-        logger.warning("Failed to parse KML for icon extraction")
-        return []
-    except Exception as e:
-        logger.error(f"Error extracting icon hrefs from KML: {str(e)}")
-        return []
 
 
 def _fix_nested_caltopo_url(url: str) -> str:
@@ -521,17 +484,22 @@ def _extract_color_from_caltopo_url(url: str) -> Optional[str]:
         return None
 
 
-def _process_properties_icons(properties: dict, file_type: str, file_data: Optional[bytes] = None, href_mapping: Optional[Dict[str, str]] = None) -> None:
+def _process_properties_icons(properties: dict, file_type: str, file_data: Optional[bytes] = None, href_mapping: Optional[Dict[str, str]] = None, is_point: bool = False) -> None:
     """
     Process icon hrefs in properties dictionary.
     Looks for common icon-related property names and replaces hrefs.
+    Only processes icons if is_point is True (to prevent fetching icons for LineString, Polygon, etc.).
     
     Args:
         properties: Properties dictionary
         file_type: File type ('kmz' or 'kml')
         file_data: File data as bytes (required for KMZ)
         href_mapping: Optional pre-computed mapping of old hrefs to new hrefs
+        is_point: Whether this is a Point feature (only True for Point geometries)
     """
+    if not is_point:
+        # Don't process icons for non-Point features
+        return
     if not isinstance(properties, dict):
         return
     
@@ -588,15 +556,17 @@ def _process_properties_icons(properties: dict, file_type: str, file_data: Optio
                         properties[prop_name] = new_href
     
     # Also check for nested structures (e.g., style objects)
-    for key, value in properties.items():
-        if isinstance(value, dict):
-            _process_properties_icons(value, file_type, file_data, href_mapping)
-        elif isinstance(value, list):
-            for item in value:
-                if isinstance(item, dict):
-                    _process_properties_icons(item, file_type, file_data, href_mapping)
-        elif isinstance(value, str) and key not in icon_property_names:
-            # Check if any string value matches a href in the mapping
-            if href_mapping and value in href_mapping:
-                properties[key] = href_mapping[value]
+    # Only process nested structures if this is a Point feature
+    if is_point:
+        for key, value in properties.items():
+            if isinstance(value, dict):
+                _process_properties_icons(value, file_type, file_data, href_mapping, is_point=True)
+            elif isinstance(value, list):
+                for item in value:
+                    if isinstance(item, dict):
+                        _process_properties_icons(item, file_type, file_data, href_mapping, is_point=True)
+            elif isinstance(value, str) and key not in icon_property_names:
+                # Check if any string value matches a href in the mapping
+                if href_mapping and value in href_mapping:
+                    properties[key] = href_mapping[value]
 

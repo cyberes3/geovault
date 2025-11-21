@@ -54,8 +54,7 @@ class KMLProcessor(BaseProcessor):
         geojson_data = process_geojson_icons(
             geojson_data,
             file_type='kml',
-            file_data=None,
-            kml_content=content
+            file_data=None
         )
 
         return geojson_data
