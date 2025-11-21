@@ -16,7 +16,7 @@ logger = get_access_logger()
 @require_http_methods(["GET"])
 def get_features_by_tag(request):
     """
-    API endpoint to get all features grouped by user-generated tags.
+    API endpoint to get all features grouped by tags (both user-generated and system tags).
     Returns a dictionary where keys are tags and values are lists of features with that tag.
     """
     try:
@@ -38,9 +38,6 @@ def get_features_by_tag(request):
             if not isinstance(tags, list):
                 continue
 
-            # Filter out protected tags to only show user-generated tags
-            filtered_tags = filter_protected_tags(tags, CONST_INTERNAL_TAGS)
-
             # Include database ID in properties for frontend editing
             feature_properties = properties.copy()
             feature_properties['_id'] = feature.id
@@ -53,8 +50,8 @@ def get_features_by_tag(request):
                 "geojson_hash": feature.file_hash
             }
 
-            # Add feature to each tag's list
-            for tag in filtered_tags:
+            # Add feature to each tag's list (including system tags)
+            for tag in tags:
                 if isinstance(tag, str) and tag:  # Ensure tag is a non-empty string
                     if tag not in features_by_tag:
                         features_by_tag[tag] = []

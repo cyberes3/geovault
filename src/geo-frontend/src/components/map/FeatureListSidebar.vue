@@ -184,35 +184,6 @@
           </button>
         </div>
       </div>
-
-      <!-- Filtered Features List -->
-      <div v-if="selectedTags.length > 0" class="mt-2 border-t border-gray-200 pt-2">
-        <h3 class="text-xs font-semibold text-gray-900 mb-1 px-1">Filtered Results</h3>
-        <div v-if="isFiltering" class="flex items-center justify-center py-2">
-          <div class="animate-spin rounded-full h-4 w-4 border-b-2 border-blue-600"></div>
-        </div>
-        <div v-else class="max-h-48 overflow-y-auto">
-          <div v-if="tagFilteredFeatures.length === 0" class="text-xs text-gray-500 text-center py-2">
-            No features match all selected tags
-          </div>
-          <div v-else class="space-y-0.5">
-            <div
-              v-for="feature in tagFilteredFeatures"
-              :key="getFeatureId(feature)"
-              @click="handleFeatureClick(feature)"
-              class="px-1.5 py-1 bg-gray-50 hover:bg-gray-100 transition-colors flex items-center cursor-pointer"
-              :style="{ borderLeft: `3px solid ${getGeometryTypeColor(feature)}` }"
-            >
-              <div class="text-xs text-gray-900 truncate">
-                {{ getFeatureName(feature) }}
-              </div>
-            </div>
-          </div>
-        </div>
-        <div v-if="!isFiltering" class="mt-1 text-xs text-gray-500 border-t border-gray-200 pt-1 px-1">
-          {{ tagFilteredFeatures.length }} features
-        </div>
-      </div>
     </div>
   </div>
 </template>
@@ -220,6 +191,8 @@
 <script>
 import {GeoJSON} from 'ol/format'
 import {APIHOST} from '@/config.js'
+import {getProtectedTags} from '@/utils/configService.js'
+import {isProtectedTag} from '@/utils/tagUtils.js'
 
 export default {
   name: 'FeatureListSidebar',
@@ -246,7 +219,8 @@ export default {
       isLoadingTags: false,
       tagFilteredFeatures: [],
       isFiltering: false,
-      filterTimeout: null
+      filterTimeout: null,
+      protectedTags: []
     }
   },
   computed: {
@@ -257,13 +231,36 @@ export default {
       return this.isSearchMode ? this.searchResults : this.features
     },
     filteredAvailableTags() {
-      if (!this.tagSearchQuery.trim()) {
-        return this.availableTags.filter(tag => !this.selectedTags.includes(tag))
+      // Filter out already selected tags
+      const unselectedTags = this.availableTags.filter(tag => !this.selectedTags.includes(tag))
+      
+      // Separate user tags from system tags
+      const userTags = []
+      const systemTags = []
+      
+      for (const tag of unselectedTags) {
+        if (isProtectedTag(tag, this.protectedTags)) {
+          systemTags.push(tag)
+        } else {
+          userTags.push(tag)
+        }
       }
-      const query = this.tagSearchQuery.toLowerCase()
-      return this.availableTags.filter(tag => 
-        tag.toLowerCase().includes(query) && !this.selectedTags.includes(tag)
-      )
+      
+      // Sort each group alphabetically
+      userTags.sort()
+      systemTags.sort()
+      
+      // Apply search filter if there's a search query
+      if (this.tagSearchQuery.trim()) {
+        const query = this.tagSearchQuery.toLowerCase()
+        const filteredUserTags = userTags.filter(tag => tag.toLowerCase().includes(query))
+        const filteredSystemTags = systemTags.filter(tag => tag.toLowerCase().includes(query))
+        // Return user tags first, then system tags
+        return [...filteredUserTags, ...filteredSystemTags]
+      }
+      
+      // Return user tags first, then system tags
+      return [...userTags, ...systemTags]
     }
   },
   watch: {
@@ -519,7 +516,9 @@ export default {
       }
     }
   },
-  mounted() {
+  async mounted() {
+    // Fetch protected tags to identify system tags
+    this.protectedTags = await getProtectedTags()
     // Fetch available tags when component mounts (will be used when tag filter tab is opened)
     this.fetchAvailableTags()
   },
