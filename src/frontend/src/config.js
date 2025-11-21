@@ -1,4 +1,6 @@
-export const APIHOST = "http://127.0.0.1:8000"
+// API host is dynamically determined from current window location
+// This allows the app to work on any domain/port without hardcoding
+export const APIHOST = window.location.origin
 
 // WebSocket configuration
 export const WEBSOCKET_CONFIG = {
