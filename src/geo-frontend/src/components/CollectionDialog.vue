@@ -16,6 +16,7 @@
             <button
               @click="closeDialog"
               class="text-gray-400 hover:text-gray-600 focus:outline-none focus:text-gray-600 transition ease-in-out duration-150"
+              title="Close dialog"
             >
               <svg class="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
@@ -119,6 +120,7 @@
                         type="button"
                         @click.stop="removeTag(tag)"
                         class="ml-1 text-blue-600 hover:text-blue-800"
+                        title="Remove tag"
                       >
                         <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                           <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path>
@@ -195,6 +197,7 @@
                 type="button"
                 @click="closeDialog"
                 class="px-4 py-2 border border-gray-300 rounded-md shadow-sm text-sm font-medium text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500"
+                title="Cancel"
               >
                 Cancel
               </button>
@@ -202,6 +205,7 @@
                 type="submit"
                 :disabled="saving || !formData.name.trim()"
                 class="px-4 py-2 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-blue-600 hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 disabled:opacity-50 disabled:cursor-not-allowed"
+                title="Save collection"
               >
                 <span v-if="saving">Saving...</span>
                 <span v-else>Save Collection</span>

@@ -7,6 +7,7 @@
           @click="$emit('cancel')"
           :disabled="isSaving"
           class="ml-2 text-gray-400 hover:text-gray-600 disabled:opacity-50 disabled:cursor-not-allowed"
+          title="Close edit dialog"
         >
           <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path>
@@ -46,6 +47,7 @@
                     @click="removeTag(index)"
                     :disabled="isSaving"
                     class="ml-1.5 inline-flex items-center justify-center w-4 h-4 rounded-full text-blue-400 hover:bg-blue-200 hover:text-blue-600 focus:outline-none focus:bg-blue-200 focus:text-blue-600 disabled:opacity-50 disabled:cursor-not-allowed"
+                    title="Remove tag"
                   >
                     <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                       <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path>
@@ -132,6 +134,7 @@
                 @click="handleRemoveIcon"
                 :disabled="isSaving"
                 class="text-sm text-red-600 hover:text-red-800 disabled:opacity-50 disabled:cursor-not-allowed"
+                title="Remove icon"
               >
                 Remove
               </button>
@@ -140,6 +143,7 @@
                 @click="openIconPicker"
                 :disabled="isSaving"
                 class="text-sm px-3 py-1.5 text-blue-600 hover:text-blue-800 hover:bg-blue-50 rounded-md focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 disabled:opacity-50 disabled:cursor-not-allowed"
+                title="Choose icon"
               >
                 Choose Icon
               </button>
@@ -214,6 +218,7 @@
               @click="openCoordinatesDialog"
               :disabled="isSaving"
               class="text-sm px-3 py-1.5 text-blue-600 hover:text-blue-800 hover:bg-blue-50 rounded-md focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 disabled:opacity-50 disabled:cursor-not-allowed inline-flex items-center"
+              title="Edit coordinates manually"
             >
               <svg class="w-4 h-4 mr-1.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 20l-5.447-2.724A1 1 0 013 16.382V5.618a1 1 0 011.447-.894L9 7m0 13l6-3m-6 3V7m6 10l4.553 2.276A1 1 0 0021 18.382V7.618a1 1 0 00-.553-.894L15 4m0 13V4m0 0L9 7"></path>
@@ -247,6 +252,7 @@
             @click="$emit('cancel')"
             :disabled="isSaving"
             class="px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-md hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 disabled:opacity-50 disabled:cursor-not-allowed"
+            title="Cancel editing"
           >
             Cancel
           </button>
@@ -255,6 +261,7 @@
             @click="handleDelete"
             :disabled="isSaving"
             class="px-4 py-2 text-sm font-medium text-white bg-red-600 border border-transparent rounded-md hover:bg-red-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-red-500 disabled:opacity-50 disabled:cursor-not-allowed"
+            title="Delete feature"
           >
             Delete
           </button>
@@ -262,6 +269,7 @@
             type="submit"
             :disabled="isSaving"
             class="px-4 py-2 text-sm font-medium text-white bg-blue-600 border border-transparent rounded-md hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 disabled:opacity-50 disabled:cursor-not-allowed"
+            title="Save changes"
           >
             {{ isSaving ? 'Saving...' : 'Save' }}
           </button>
@@ -296,6 +304,7 @@
           <button
             @click="closeCoordinatesDialog"
             class="text-gray-400 hover:text-gray-600"
+            title="Close coordinates editor"
           >
             <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path>
@@ -324,6 +333,7 @@
             @click="closeCoordinatesDialog"
             :disabled="isSaving"
             class="px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-md hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 disabled:opacity-50 disabled:cursor-not-allowed"
+            title="Close"
           >
             Close
           </button>

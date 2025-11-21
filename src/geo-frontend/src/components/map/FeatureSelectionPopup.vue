@@ -28,6 +28,7 @@
           <button
               class="w-full text-left flex items-center gap-2 text-sm text-gray-900 hover:text-blue-600 transition-colors"
               @click="$emit('select', feature)"
+              title="Select this feature"
           >
             <span :class="getGeometryTypeClass(feature)"
                   class="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium flex-shrink-0">

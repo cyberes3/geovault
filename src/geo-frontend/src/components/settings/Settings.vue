@@ -18,6 +18,7 @@
                   ? 'bg-blue-50 text-blue-700 border-l-4 border-blue-600'
                   : 'text-gray-700 hover:bg-gray-50'
               ]"
+              title="Account settings"
             >
               <div class="flex items-center">
                 <svg class="w-5 h-5 mr-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -34,6 +35,7 @@
                   ? 'bg-blue-50 text-blue-700 border-l-4 border-blue-600'
                   : 'text-gray-700 hover:bg-gray-50'
               ]"
+              title="Map settings"
             >
               <div class="flex items-center">
                 <svg class="w-5 h-5 mr-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -50,6 +52,7 @@
                   ? 'bg-blue-50 text-blue-700 border-l-4 border-blue-600'
                   : 'text-gray-700 hover:bg-gray-50'
               ]"
+              title="Sharing settings"
             >
               <div class="flex items-center">
                 <svg class="w-5 h-5 mr-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -110,6 +113,7 @@
                 type="submit"
                 :disabled="passwordLoading"
                 class="inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md text-white bg-blue-600 hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 disabled:opacity-50 disabled:cursor-not-allowed"
+                title="Change password"
               >
                 <span v-if="passwordLoading">Changing...</span>
                 <span v-else>Change Password</span>
@@ -192,6 +196,7 @@
                   type="submit"
                   :disabled="emailLoading"
                   class="inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md text-white bg-blue-600 hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 disabled:opacity-50 disabled:cursor-not-allowed"
+                  title="Change email address"
                 >
                   <span v-if="emailLoading">Changing...</span>
                   <span v-else>Change Email</span>
@@ -221,6 +226,7 @@
             <button
               @click="loadShares"
               class="mt-2 text-sm text-red-600 hover:text-red-800 underline"
+              title="Retry loading shares"
             >
               Try again
             </button>

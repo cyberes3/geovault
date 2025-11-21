@@ -10,6 +10,7 @@
             ? 'text-blue-600 border-b-2 border-blue-600'
             : 'text-gray-600 hover:text-gray-900'
         ]"
+        title="View features in current map view"
       >
         Features in View
       </button>
@@ -21,6 +22,7 @@
             ? 'text-blue-600 border-b-2 border-blue-600'
             : 'text-gray-600 hover:text-gray-900'
         ]"
+        title="Filter features by tags"
       >
         Tag Filter
         <svg
@@ -57,6 +59,7 @@
             @click="clearSearch"
             class="absolute right-1 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600 focus:outline-none"
             type="button"
+            title="Clear search"
           >
             <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path>
@@ -121,6 +124,7 @@
             @click="clearTagSearch"
             class="absolute right-1 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600 focus:outline-none"
             type="button"
+            title="Clear tag search"
           >
             <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path>
@@ -142,6 +146,7 @@
               @click="removeTag(tag)"
               class="text-blue-600 hover:text-blue-800 focus:outline-none"
               type="button"
+              title="Remove tag from filter"
             >
               <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path>
@@ -153,6 +158,7 @@
           @click="clearTagFilters"
           class="text-xs text-blue-600 hover:text-blue-800 focus:outline-none"
           type="button"
+          title="Clear all tag filters"
         >
           Clear filters
         </button>
@@ -172,6 +178,7 @@
             :key="tag"
             @click="toggleTag(tag)"
             class="w-full px-1.5 py-1 text-left text-xs rounded transition-colors bg-gray-50 hover:bg-gray-100 text-gray-900"
+            title="Toggle tag filter"
           >
             {{ tag }}
           </button>
