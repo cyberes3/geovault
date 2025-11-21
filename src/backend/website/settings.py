@@ -141,11 +141,14 @@ USE_TZ = True
 
 STATIC_URL = 'static/'
 
+# Static files collection directory
+# After rebuilding the frontend, run: python manage.py collectstatic --noinput
+# This collects all static files from STATICFILES_DIRS into STATIC_ROOT
+STATIC_ROOT = os.path.join(BASE_DIR, 'staticfiles')
+
 # WhiteNoise configuration for serving static files in production
-# Set STATIC_ROOT to the static subdirectory where Vue.js compiled files are located
-# When a request comes for /static/Dashboard-Cz_pIraS.js, WhiteNoise looks in STATIC_ROOT
-# for Dashboard-Cz_pIraS.js, so STATIC_ROOT must point to the directory containing these files
-STATIC_ROOT = os.path.join(BASE_DIR, '../frontend/dist/static')
+# Uses compressed manifest storage for efficient serving
+STATICFILES_STORAGE = 'whitenoise.storage.CompressedManifestStaticFilesStorage'
 
 # Cache configuration
 # Using LocMemCache for in-memory caching (works within a single process)
@@ -228,8 +231,7 @@ ACCOUNT_EMAIL_SUBJECT_PREFIX = EMAIL_SUBJECT_PREFIX
 ACCOUNT_DEFAULT_HTTP_PROTOCOL = 'https' if not DEBUG else 'http'
 
 STATICFILES_DIRS = [
-    os.path.join(BASE_DIR, '../frontend/dist'),  # Include dist root for favicon.ico
-    os.path.join(BASE_DIR, '../frontend/dist/static'),  # Vue.js static assets
+    os.path.join(BASE_DIR, '../frontend/dist'),  # Vue.js dist directory (includes static/ subdirectory)
     os.path.join(BASE_DIR, 'assets'),
 ]
 
