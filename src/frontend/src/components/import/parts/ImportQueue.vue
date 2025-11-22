@@ -386,7 +386,7 @@ export default {
         return;
       }
 
-      const confirmMessage = `Are you sure you want to import "${item.original_filename}" (#${item.id}) without reviewing it?`;
+      const confirmMessage = `Are you sure you want to import "${item.original_filename}" without reviewing it?`;
       if (!window.confirm(confirmMessage)) {
         return;
       }

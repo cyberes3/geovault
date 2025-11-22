@@ -12,10 +12,14 @@ PostGIS setup. Run this on your database before starting the geovault for the fi
 CREATE EXTENSION IF NOT EXISTS postgis;
 
 -- Grant necessary privileges to the geovault user
-GRANT ALL PRIVILEGES ON DATABASE geovault TO geovault;
-GRANT ALL PRIVILEGES ON SCHEMA public TO geovault;
-GRANT ALL PRIVILEGES ON ALL TABLES IN SCHEMA public TO geovault;
-GRANT ALL PRIVILEGES ON ALL SEQUENCES IN SCHEMA public TO geovault;
+GRANT ALL PRIVILEGES ON DATABASE
+geovault TO geovault;
+GRANT ALL PRIVILEGES ON SCHEMA
+public TO geovault;
+GRANT ALL PRIVILEGES ON ALL
+TABLES IN SCHEMA public TO geovault;
+GRANT ALL PRIVILEGES ON ALL
+SEQUENCES IN SCHEMA public TO geovault;
 
 -- Grant privileges on PostGIS tables
 GRANT ALL PRIVILEGES ON TABLE geometry_columns TO geovault;
@@ -26,6 +30,9 @@ GRANT ALL PRIVILEGES ON TABLE spatial_ref_sys TO geovault;
 ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT ALL ON TABLES TO geovault;
 ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT ALL ON SEQUENCES TO geovault;
 ```
+
+If you get the error `django.db.utils.ProgrammingError: permission denied to create extension "postgis"` then you forgot
+to do this step before appling the migrations.
 
 ## Reverse Geocoding
 
