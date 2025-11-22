@@ -21,7 +21,40 @@ def index(request):
     Serve the main Vue.js application.
     Authentication is handled by the frontend for protected routes.
     Public routes (like /mapshare) should be accessible without authentication.
+    
+    This view checks if the requested path is a static file first.
+    If it is, raises Http404 so WhiteNoise can handle it.
     """
+    # Get the requested path (without leading slash)
+    path = request.path.lstrip('/')
+    
+    # Skip check for root path
+    if not path:
+        return render(request, "index.html")
+    
+    # Skip paths that start with 'static/' - those are handled by WhiteNoise middleware
+    # and shouldn't reach this view (catch-all excludes them, but just in case)
+    if path.startswith('static/'):
+        raise Http404("Static file should be served by WhiteNoise")
+    
+    # Check if this path exists as a static file (root-level files like apple-touch-icon.png)
+    if not settings.DEBUG:
+        # In production, only check STATIC_ROOT (where collectstatic puts everything)
+        static_root = Path(settings.STATIC_ROOT)
+        if static_root.exists():
+            file_path = static_root / path
+            if file_path.exists() and file_path.is_file():
+                # This is a static file - let WhiteNoise handle it
+                raise Http404("Static file should be served by WhiteNoise")
+    else:
+        # In debug mode, check STATICFILES_DIRS
+        for static_dir in [Path(d) for d in settings.STATICFILES_DIRS]:
+            if static_dir.exists():
+                file_path = static_dir / path
+                if file_path.exists() and file_path.is_file():
+                    raise Http404("Static file should be served by Django")
+    
+    # Not a static file, serve Vue.js app
     return render(request, "index.html")
 
 

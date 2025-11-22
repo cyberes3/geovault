@@ -20,3 +20,7 @@ to [GitHub](https://github.com/Cyberes/geovault).
 **This platform does not support editing.** Use your own preferred tool and then upload your data to the server.
 
 https://trac.osgeo.org/postgis/wiki/UsersWikiPostGIS3UbuntuPGSQLApt
+
+sudo add-apt-repository ppa:deadsnakes/ppa
+sudo apt install python3.12 python3.12-dev
+

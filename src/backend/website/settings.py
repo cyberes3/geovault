@@ -234,9 +234,7 @@ ACCOUNT_EMAIL_SUBJECT_PREFIX = EMAIL_SUBJECT_PREFIX
 ACCOUNT_DEFAULT_HTTP_PROTOCOL = 'https' if not DEBUG else 'http'
 
 STATICFILES_DIRS = [
-    os.path.join(BASE_DIR, '../frontend/dist/static'),
-    os.path.join(BASE_DIR, '../frontend/dist/images'),
-    os.path.join(BASE_DIR, '../frontend/dist'),
+    os.path.join(BASE_DIR, '../frontend/dist'),  # Includes static/ and images/ subdirectories
     os.path.join(BASE_DIR, 'assets'),
 ]
 
