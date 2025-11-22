@@ -263,6 +263,13 @@ SECURE_HSTS_SECONDS = 31536000  # 1 year
 SECURE_HSTS_INCLUDE_SUBDOMAINS = True
 SECURE_HSTS_PRELOAD = True
 
+# Reverse Proxy Settings
+# When behind a reverse proxy, Django should use the X-Forwarded-Host header
+# to determine the correct host for building absolute URLs (e.g., in emails)
+USE_X_FORWARDED_HOST = True
+# Use X-Forwarded-Proto to determine if the original request was HTTPS
+USE_X_FORWARDED_PROTO = True
+
 # CSRF Protection Settings
 # CSRF_TRUSTED_ORIGINS is required in Django 4.0+ for HTTPS sites
 # Automatically derive from ALLOWED_HOSTS
