@@ -56,7 +56,8 @@ class RealtimeConsumer(AsyncWebsocketConsumer):
             # Reject connection if user is not authenticated
             if isinstance(self.user, AnonymousUser):
                 logger.warning(f"WebSocket connection rejected: {path} - Anonymous@{client_ip}")
-                await self.close()
+                # Don't accept the connection - just return without accepting
+                # This will cause the connection to fail gracefully
                 return
 
             # Create user-specific room group
@@ -86,9 +87,15 @@ class RealtimeConsumer(AsyncWebsocketConsumer):
             traceback_str = traceback.format_exc()
             logger.error(f"WebSocket connection error: {path} - {user_identifier}@{client_ip}\n{traceback_str}")
             
-            # Try to close the connection if it was accepted
+            # Try to accept and close the connection with error code if not already accepted
             try:
-                await self.close(code=1011)  # 1011 = Internal Server Error
+                # Check if connection was already accepted by checking if room_group_name exists
+                if not hasattr(self, 'room_group_name') or not self.room_group_name:
+                    # Connection not accepted yet, just don't accept it
+                    return
+                else:
+                    # Connection was accepted, close it properly
+                    await self.close(code=1011)  # 1011 = Internal Server Error
             except Exception:
                 pass  # Ignore errors when closing
 
@@ -126,7 +133,12 @@ class RealtimeConsumer(AsyncWebsocketConsumer):
                 message_data = data.get('data', {})
 
                 if message_type == 'ping':
-                    await self.send(text_data=json.dumps({'type': 'pong'}))
+                    # Send pong response in the same format as other messages
+                    await self.send(text_data=self.encode_json({
+                        'module': 'ping',
+                        'type': 'pong',
+                        'data': {}
+                    }))
                 elif module_name in self.modules:
                     await self.modules[module_name].handle_message(message_type, message_data)
                 else:

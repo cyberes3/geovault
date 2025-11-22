@@ -224,6 +224,7 @@ class UploadJob(BaseJob):
             # Convert to GeoJSON with timing using new processor API
             # Use minimal processing for replacement uploads (skip tags, geocoding)
             conversion_start = time.time()
+            logger.info(f"Starting GeoJSON conversion for job {job_id}: file '{filename}' ({file_size_mb:.2f} MB), replacement={is_replacement}")
             processor = get_processor(
                 file_data, 
                 filename, 
@@ -232,6 +233,7 @@ class UploadJob(BaseJob):
                 minimal_processing=is_replacement
             )
             geojson_data, processing_log = processor.process()
+            logger.info(f"GeoJSON conversion completed for job {job_id} in {time.time() - conversion_start:.2f}s")
             conversion_duration = time.time() - conversion_start
             realtime_log.add_timing("GeoJSON conversion", conversion_duration, "UploadJob")
 
@@ -384,8 +386,10 @@ class UploadJob(BaseJob):
         except Exception as e:
             # Generic error message for users, detailed logging internally
             error_msg = "An error occurred during file processing"
+            # Get file info for better error context
+            file_size_mb = len(file_data) / (1024 * 1024) if file_data else 0
             # Log detailed error internally only (not exposed to user via RealTimeImportLog)
-            logger.error(f"Processing error in job {job_id}: {type(e).__name__}: {str(e)}")
+            logger.error(f"Processing error in job {job_id} for file '{filename}' ({file_size_mb:.2f} MB): {type(e).__name__}: {str(e)}")
             logger.error(f"Full traceback for job {job_id}: {traceback.format_exc()}")
             realtime_log.add(error_msg, "UploadJob", DatabaseLogLevel.ERROR)
             self.status_tracker.update_job_status(

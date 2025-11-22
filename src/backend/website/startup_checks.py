@@ -8,6 +8,7 @@ This module performs essential checks when the server starts up:
 4. Redis connection
 5. Writable directories (tile cache, icon storage)
 6. Frontend static files are built
+7. togeojson Node.js converter is installed
 
 Warning checks (don't fail startup):
 - Configuration file exists
@@ -317,6 +318,59 @@ def check_frontend_files():
         return False
 
 
+def check_togeojson_installation():
+    """
+    Check if togeojson Node.js converter is installed and available.
+    
+    Returns:
+        bool: True if togeojson is properly installed, False otherwise
+    """
+    try:
+        # Path to togeojson directory relative to BASE_DIR
+        togeojson_dir = settings.BASE_DIR / 'geo_lib' / 'processing' / 'togeojson'
+        
+        # Check if togeojson directory exists
+        if not togeojson_dir.exists():
+            logger.error(f"✗ togeojson directory not found: {togeojson_dir}")
+            logger.error("  Please ensure togeojson is installed in src/backend/geo_lib/processing/togeojson")
+            return False
+        
+        # Check if index.js exists
+        index_js = togeojson_dir / 'index.js'
+        if not index_js.exists():
+            logger.error(f"✗ togeojson index.js not found: {index_js}")
+            logger.error("  Please ensure togeojson index.js is present")
+            return False
+        
+        # Check if node_modules exists (indicating npm packages are installed)
+        node_modules = togeojson_dir / 'node_modules'
+        if not node_modules.exists() or not node_modules.is_dir():
+            logger.error(f"✗ togeojson node_modules not found: {node_modules}")
+            logger.error("  Please install dependencies: cd src/backend/geo_lib/processing/togeojson && npm install")
+            return False
+        
+        # Check if required dependencies are installed
+        required_deps = ['@tmcw/togeojson', '@xmldom/xmldom', 'adm-zip']
+        missing_deps = []
+        for dep in required_deps:
+            # Check if the dependency directory exists in node_modules
+            dep_path = node_modules / dep
+            if not dep_path.exists():
+                missing_deps.append(dep)
+        
+        if missing_deps:
+            logger.error(f"✗ Missing required togeojson dependencies: {', '.join(missing_deps)}")
+            logger.error("  Please install dependencies: cd src/backend/geo_lib/processing/togeojson && npm install")
+            return False
+        
+        logger.info(f"✓ togeojson is installed: {togeojson_dir}")
+        return True
+        
+    except Exception as e:
+        logger.error(f"✗ togeojson installation check failed: {e}")
+        return False
+
+
 def check_config_file():
     """
     Check if configuration file exists.
@@ -432,6 +486,7 @@ def run_startup_checks():
     5. Check Redis connection
     6. Check writable directories (create if needed)
     7. Check frontend files are built
+    8. Check togeojson installation
     
     Warning checks (don't fail startup):
     - Configuration file
@@ -453,6 +508,7 @@ def run_startup_checks():
         ("Redis Connection", check_redis_connection),
         ("Writable Directories", check_writable_directories),
         ("Frontend Files", check_frontend_files),
+        ("togeojson Installation", check_togeojson_installation),
     ]
     
     failed_checks = []
@@ -484,6 +540,7 @@ def run_startup_checks():
         logger.error("  - Run migrations: python manage.py migrate")
         logger.error("  - Ensure Redis is running and accessible")
         logger.error("  - Build frontend: cd frontend && npm run build")
+        logger.error("  - Install togeojson: cd src/backend/geo_lib/processing/togeojson && npm install")
         logger.error("  - Ensure directories are writable")
         logger.error("=" * 60)
         sys.exit(1)

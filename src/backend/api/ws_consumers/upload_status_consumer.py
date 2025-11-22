@@ -24,15 +24,25 @@ class UploadStatusConsumer(AsyncWebsocketConsumer):
 
     async def connect(self):
         """Handle WebSocket connection."""
-        # Get user from scope
-        self.user = self.scope["user"]
+        import traceback
+        
         path = self.scope.get('path', 'unknown')
+        client_ip = 'unknown'
+        user_identifier = 'unknown'
+        
+        # Get user from scope (AuthMiddlewareStack should set this)
+        self.user = self.scope.get("user")
+        if self.user is None:
+            # If user is not in scope, default to AnonymousUser
+            self.user = AnonymousUser()
+        
         client_ip = get_client_ip(self.scope)
 
         # Reject connection if user is not authenticated
         if isinstance(self.user, AnonymousUser):
             logger.warning(f"WebSocket connection rejected: {path} - Anonymous@{client_ip}")
-            await self.close()
+            # Don't accept the connection - just return without accepting
+            # This will cause the connection to fail gracefully
             return
 
         # Get item_id from URL parameters
@@ -83,9 +93,22 @@ class UploadStatusConsumer(AsyncWebsocketConsumer):
             }))
             await self.close(code=4004)  # 4004 = 404 Not Found
         except Exception as e:
+            # Log the full traceback for debugging
+            traceback_str = traceback.format_exc()
             user_identifier = get_user_identifier(self.scope)
-            logger.error(f"Error in UploadStatusConsumer connect: {path} - {user_identifier}@{client_ip} - {str(e)}")
-            await self.close()
+            logger.error(f"WebSocket connection error: {path} - {user_identifier}@{client_ip}\n{traceback_str}")
+            
+            # Try to accept and close the connection with error code if not already accepted
+            try:
+                # Check if connection was already accepted by checking if room_group_name exists
+                if not hasattr(self, 'room_group_name') or not self.room_group_name:
+                    # Connection not accepted yet, just don't accept it
+                    return
+                else:
+                    # Connection was accepted, close it properly
+                    await self.close(code=1011)  # 1011 = Internal Server Error
+            except Exception:
+                pass  # Ignore errors when closing
 
     async def disconnect(self, close_code):
         """Handle WebSocket disconnection."""
@@ -111,7 +134,11 @@ class UploadStatusConsumer(AsyncWebsocketConsumer):
                 message_data = data.get('data', {})
 
                 if message_type == 'ping':
-                    await self.send(text_data=json.dumps({'type': 'pong'}))
+                    # Send pong response in the same format as other messages
+                    await self.send(text_data=json.dumps({
+                        'type': 'pong',
+                        'data': {}
+                    }))
                 elif message_type == 'refresh':
                     await self.upload_status_module.send_initial_state()
                 elif message_type == 'request_logs':

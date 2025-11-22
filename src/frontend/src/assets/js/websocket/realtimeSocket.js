@@ -76,10 +76,6 @@ class RealtimeSocket {
 
         this.socket.onclose = (event) => {
             console.log('Realtime WebSocket disconnected:', event.code, event.reason);
-            console.log('Should stay connected:', this.shouldStayConnected);
-            console.log('Event code:', event.code, '(1000 = normal closure)');
-            console.log('Connection was clean:', event.wasClean);
-            console.trace('WebSocket close call stack:');
             this.isConnected = false;
             this.stopPing();
             this.cleanupModules(); // Cleanup all registered modules
@@ -88,18 +84,11 @@ class RealtimeSocket {
             // Attempt to reconnect if we should stay connected
             if (this.shouldStayConnected) {
                 if (event.code === 1000) {
-                    console.log('Normal closure detected - this should not happen unless user logged out');
-                    console.log('This indicates something is calling socket.close(1000) or socket.close()');
-                    console.log('But we should stay connected, so attempting reconnection...');
+                    console.warn('Normal closure detected - reconnecting');
                 } else if (event.code === 1006) {
-                    console.log('Ping timeout detected - triggering reconnection');
-                } else {
-                    console.log('Connection lost - triggering reconnection');
+                    console.warn('Connection lost - reconnecting');
                 }
-                console.log('Scheduling reconnect...');
                 this.scheduleReconnect();
-            } else {
-                console.log('Not reconnecting - shouldStayConnected is false');
             }
         };
 
@@ -113,11 +102,16 @@ class RealtimeSocket {
      * Handle incoming WebSocket messages
      */
     handleMessage(data) {
-        const { module, type, data: messageData } = data;
+        // Handle malformed messages gracefully
+        if (!data || typeof data !== 'object') {
+            console.error('Invalid message format received:', data);
+            return;
+        }
+        
+        const { module, type, data: messageData = {} } = data;
         
         // Handle ping/pong
         if (type === 'pong') {
-            console.log('Received pong, clearing ping timeout');
             if (this.pingTimeout) {
                 clearTimeout(this.pingTimeout);
                 this.pingTimeout = null;
@@ -139,8 +133,10 @@ class RealtimeSocket {
             }
         }
         
-        // Emit global event
-        this.emit(`${module}_${type}`, messageData);
+        // Emit global event (only if we have both module and type)
+        if (module && type) {
+            this.emit(`${module}_${type}`, messageData);
+        }
     }
 
     /**
@@ -162,7 +158,6 @@ class RealtimeSocket {
      * Send a ping to keep the connection alive
      */
     ping() {
-        console.log('Sending ping...');
         this.send('ping', 'ping');
         
         // Set timeout for pong response
@@ -203,7 +198,6 @@ class RealtimeSocket {
      */
     scheduleReconnect() {
         if (!this.shouldStayConnected) {
-            console.log('Not scheduling reconnect - should not stay connected');
             return;
         }
         
@@ -215,8 +209,6 @@ class RealtimeSocket {
 
         this.reconnectAttempts++;
         const delay = Math.min(this.reconnectInterval * Math.pow(2, this.reconnectAttempts - 1), this.maxReconnectInterval);
-        
-        console.log(`Attempting to reconnect in ${delay}ms (attempt ${this.reconnectAttempts}/${this.maxReconnectAttempts})`);
         
         setTimeout(() => {
             if (this.shouldStayConnected) {
@@ -231,16 +223,12 @@ class RealtimeSocket {
     disconnect() {
         // Don't actually disconnect - this is just for component cleanup
         // The connection should stay alive across the entire app lifecycle
-        console.log('Disconnect called but connection will remain active');
-        console.trace('Disconnect call stack:');
     }
 
     /**
      * Force disconnect (for cleanup)
      */
     forceDisconnect() {
-        console.log('forceDisconnect() called - this should only happen on logout');
-        console.trace('forceDisconnect call stack:');
         this.shouldStayConnected = false;
         this.stopPing();
         this.cleanupModules(); // Cleanup all registered modules

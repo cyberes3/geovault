@@ -539,10 +539,32 @@ class BaseProcessor(ABC):
             # Get the path to the togeojson converter
             current_dir = os.path.dirname(os.path.abspath(__file__))
             togeojson_path = os.path.join(current_dir, '..', 'togeojson', 'index.js')
+            togeojson_path = os.path.normpath(togeojson_path)  # Normalize path
+
+            # Verify the converter script exists
+            if not os.path.exists(togeojson_path):
+                error_msg = f"Node.js converter script not found at {togeojson_path}"
+                logger.error(error_msg)
+                self.import_log.add(error_msg, "File Conversion", DatabaseLogLevel.ERROR)
+                raise FileNotFoundError(error_msg)
+
+            # Get file info for logging
+            file_size = os.path.getsize(file_path) if os.path.exists(file_path) else 0
+            file_size_mb = file_size / (1024 * 1024) if file_size > 0 else 0
+            filename = self.filename or os.path.basename(file_path)
+            
+            # Verify the input file exists
+            if not os.path.exists(file_path):
+                error_msg = f"Input file does not exist: {file_path}"
+                logger.error(error_msg)
+                self.import_log.add(error_msg, "File Conversion", DatabaseLogLevel.ERROR)
+                raise FileNotFoundError(error_msg)
 
             # Use the JavaScript converter with file path
             # Note: Timing is handled by the base processor's process() method
             self.import_log.add(f"Converting {file_type_name} file to GeoJSON format", "File Conversion", DatabaseLogLevel.INFO)
+            logger.info(f"Starting {file_type_name} conversion for file '{filename}' ({file_size_mb:.2f} MB)")
+            
             result = subprocess.run(
                 ['node', togeojson_path, file_path],
                 capture_output=True,
@@ -551,20 +573,63 @@ class BaseProcessor(ABC):
             )
 
             if result.returncode != 0:
-                raise Exception(f"{file_type_name} file conversion failed")
+                # Capture detailed error information
+                stderr_output = result.stderr.strip() if result.stderr else "No error output"
+                stdout_output = result.stdout.strip() if result.stdout else "No output"
+                
+                error_msg = f"{file_type_name} file conversion failed"
+                detailed_error = f"Node.js conversion failed for '{filename}' (return code: {result.returncode})"
+                
+                if stderr_output:
+                    detailed_error += f"\nNode.js stderr: {stderr_output}"
+                if stdout_output and not stdout_output.startswith('{'):
+                    # Only log stdout if it's not valid JSON (which would be the error message)
+                    detailed_error += f"\nNode.js stdout: {stdout_output}"
+                
+                logger.error(detailed_error)
+                self.import_log.add(f"{error_msg}: {stderr_output if stderr_output else 'Unknown error'}", "File Conversion", DatabaseLogLevel.ERROR)
+                raise Exception(f"{error_msg}: {stderr_output if stderr_output else 'Unknown error'}")
 
-            geojson_data = json.loads(result.stdout)
-            return geojson_data
+            # Validate that we got valid output
+            if not result.stdout or not result.stdout.strip():
+                error_msg = f"{file_type_name} conversion produced no output"
+                logger.error(f"{error_msg} for file '{filename}'")
+                self.import_log.add(error_msg, "File Conversion", DatabaseLogLevel.ERROR)
+                raise Exception(error_msg)
 
-        except subprocess.TimeoutExpired:
-            self.import_log.add(f"{file_type_name} conversion timed out after {self._calculate_timeout()}s", "File Conversion", DatabaseLogLevel.ERROR)
+            try:
+                geojson_data = json.loads(result.stdout)
+                logger.info(f"Successfully converted {file_type_name} file '{filename}' to GeoJSON")
+                return geojson_data
+            except json.JSONDecodeError as json_err:
+                # Log the actual output that failed to parse
+                output_preview = result.stdout[:500] if len(result.stdout) > 500 else result.stdout
+                error_msg = f"{file_type_name} conversion produced invalid JSON output"
+                detailed_error = f"{error_msg} for file '{filename}': {str(json_err)}\nOutput preview: {output_preview}"
+                logger.error(detailed_error)
+                self.import_log.add(f"{error_msg} - file may be corrupted or invalid", "File Conversion", DatabaseLogLevel.ERROR)
+                raise Exception(f"{error_msg}: {str(json_err)}")
+
+        except subprocess.TimeoutExpired as e:
+            timeout_seconds = self._calculate_timeout()
+            error_msg = f"{file_type_name} conversion timed out after {timeout_seconds}s"
+            logger.error(f"{error_msg} for file '{filename}' ({file_size_mb:.2f} MB)")
+            self.import_log.add(error_msg, "File Conversion", DatabaseLogLevel.ERROR)
             raise Exception(f"{file_type_name} file conversion timed out")
-        except json.JSONDecodeError as e:
-            self.import_log.add(f"{file_type_name} conversion produced invalid output - file may be corrupted", "File Conversion", DatabaseLogLevel.ERROR)
-            raise Exception(f"{file_type_name} file conversion failed")
+        except FileNotFoundError:
+            error_msg = f"Node.js not found - cannot convert {file_type_name} file"
+            logger.error(f"{error_msg} for file '{filename}'. Is Node.js installed?")
+            self.import_log.add(error_msg, "File Conversion", DatabaseLogLevel.ERROR)
+            raise Exception(error_msg)
         except Exception as e:
-            self.import_log.add(f"{file_type_name} conversion failed: {type(e).__name__}", "File Conversion", DatabaseLogLevel.ERROR)
-            logger.error(f"{file_type_name} conversion error: {str(e)}")
+            # Re-raise if it's already been handled above
+            if "conversion" in str(e).lower() or "timeout" in str(e).lower():
+                raise
+            
+            error_msg = f"{file_type_name} conversion failed: {type(e).__name__}"
+            detailed_error = f"{error_msg} for file '{filename}': {str(e)}"
+            logger.error(detailed_error)
+            self.import_log.add(f"{error_msg}: {str(e)}", "File Conversion", DatabaseLogLevel.ERROR)
             raise
 
     def get_file_metadata(self) -> Dict[str, Any]:
