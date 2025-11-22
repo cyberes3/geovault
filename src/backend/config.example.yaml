@@ -7,6 +7,11 @@ security:
   
   # Debug mode for development (set to false in production)
   debug: true
+  
+  # If commented out or not specified, defaults to ['*'] (allow everything)
+  # allowed_hosts:
+  #   - yourdomain.com
+  #   - www.yourdomain.com
 
 
 database:

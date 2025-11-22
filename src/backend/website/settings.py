@@ -33,6 +33,11 @@ SECRET_KEY = config.get_with_env_override(
 # SECURITY WARNING: don't run with debug turned on in production!
 DEBUG = config.get_bool('security.debug', False)
 
+# Allowed hosts (required when DEBUG is False)
+# Defaults to ['*'] (allow everything) if not specified in config
+# To restrict, set security.allowed_hosts in config.yaml to a list of allowed domains
+ALLOWED_HOSTS = config.get_list('security.allowed_hosts', ['*'])
+
 # Application definition
 
 INSTALLED_APPS = [
