@@ -2,9 +2,9 @@ import { getProtectedTags, fetchConfig } from '@/utils/configService.js'
 import { filterProtectedTags } from '@/utils/tagUtils.js'
 
 class UserStatus {
-    constructor(authorized, username, id, featureCount = 0, tags = []) {
+    constructor(authorized, email, id, featureCount = 0, tags = []) {
         this.authorized = authorized;
-        this.username = username;
+        this.email = email;
         this.id = id;
         this.featureCount = featureCount;
         this.tags = tags;
@@ -49,7 +49,7 @@ export async function getUserInfo() {
                 }
             }
             
-            return new UserStatus(userStatusData.authorized, userStatusData.username, userStatusData.id, userStatusData.featureCount, processedTags)
+            return new UserStatus(userStatusData.authorized, userStatusData.email, userStatusData.id, userStatusData.featureCount, processedTags)
         } catch (error) {
             console.error(error)
             return null

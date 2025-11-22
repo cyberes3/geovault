@@ -2,6 +2,7 @@
 Utility functions for extracting client IP addresses.
 Supports getting the real IP when behind a proxy (nginx, etc.).
 """
+from allauth.account.models import EmailAddress
 
 
 def get_client_ip(request_or_scope):
@@ -59,21 +60,37 @@ def get_client_ip(request_or_scope):
 
 def get_user_identifier(request_or_scope):
     """
-    Get user identifier (username or ID) from request or scope.
+    Get user identifier (email or ID) from request or scope.
     
     Args:
         request_or_scope: Django request object or WebSocket scope dict
         
     Returns:
-        Username if available, otherwise user ID, otherwise 'Anonymous'
+        Email if available, otherwise user ID, otherwise 'Anonymous'
     """
+    def get_user_email(user):
+        """Helper function to get primary email for a user."""
+        try:
+            email_address = EmailAddress.objects.filter(user=user, primary=True).first()
+            if email_address:
+                return email_address.email
+            else:
+                # Fallback to first email if no primary is set
+                email_address = EmailAddress.objects.filter(user=user).first()
+                if email_address:
+                    return email_address.email
+        except Exception:
+            pass
+        return None
+    
     # Handle Django request object
     if hasattr(request_or_scope, 'user'):
         user = request_or_scope.user
         if hasattr(user, 'is_authenticated') and user.is_authenticated:
-            # Prefer username if available
-            if hasattr(user, 'username') and user.username:
-                return user.username
+            # Prefer email if available
+            email = get_user_email(user)
+            if email:
+                return email
             elif hasattr(user, 'id'):
                 return str(user.id)
         return 'Anonymous'
@@ -82,8 +99,9 @@ def get_user_identifier(request_or_scope):
     if isinstance(request_or_scope, dict):
         user = request_or_scope.get('user')
         if user and hasattr(user, 'is_authenticated') and user.is_authenticated:
-            if hasattr(user, 'username') and user.username:
-                return user.username
+            email = get_user_email(user)
+            if email:
+                return email
             elif hasattr(user, 'id'):
                 return str(user.id)
         return 'Anonymous'

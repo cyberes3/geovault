@@ -1459,7 +1459,7 @@ export default {
       // Check if userInfo already exists in store (set by App.vue)
       const existingUserInfo = this.$store.state.userInfo;
 
-      if (existingUserInfo && existingUserInfo.username) {
+      if (existingUserInfo && existingUserInfo.email) {
         // User info already loaded, no need to make API call
         return;
       }
@@ -1470,7 +1470,7 @@ export default {
         window.location = "/accounts/login/"
         return
       }
-      const userInfo = new UserInfo(userStatus.username, userStatus.id, userStatus.featureCount, userStatus.tags || [])
+      const userInfo = new UserInfo(userStatus.email, userStatus.id, userStatus.featureCount, userStatus.tags || [])
       this.$store.commit('userInfo', userInfo)
     }
   },

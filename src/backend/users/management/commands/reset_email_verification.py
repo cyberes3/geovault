@@ -46,7 +46,7 @@ class Command(BaseCommand):
             status = 'verified' if verify else 'unverified'
             self.stdout.write(
                 self.style.SUCCESS(
-                    f'Successfully set email {email} to {status} for user {user.username}'
+                    f'Successfully set email {email} to {status} for user {email}'
                 )
             )
             

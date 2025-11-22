@@ -13,7 +13,7 @@
             </div>
             <div v-if="!userInfoLoading && userInfo" class="hidden sm:ml-6 sm:flex sm:space-x-8">
               <router-link
-                  :class="{ 'text-gray-900 border-gray-500': $route.path === '/dashboard' }"
+                  :class="{ 'text-gray-900 border-gray-500': $route.path === '/dashboard' || $route.path === '/' }"
                   class="inline-flex items-center px-1 pt-1 text-sm font-medium text-gray-500 hover:text-gray-700 hover:border-gray-300 border-b-2 border-transparent transition-colors duration-200"
                   to="/dashboard"
               >
@@ -52,11 +52,11 @@
           <div class="flex items-center">
             <div ref="userMenuRef" class="relative">
               <button
-                  v-if="!userInfoLoading && userInfo?.username"
+                  v-if="!userInfoLoading && userInfo?.email"
                   class="flex items-center text-sm font-medium text-gray-900 hover:text-gray-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 rounded-md px-3 py-2"
                   @click="toggleUserMenu"
               >
-                {{ userInfo?.username }}
+                {{ userInfo?.email }}
                 <svg class="ml-2 h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path d="M19 9l-7 7-7-7" stroke-linecap="round" stroke-linejoin="round" stroke-width="2"></path>
                 </svg>
@@ -205,7 +205,7 @@ export default {
       }
 
       // User is authorized, set user info in store
-      const userInfo = new UserInfo(userStatus.username, userStatus.id, userStatus.featureCount, userStatus.tags || []);
+      const userInfo = new UserInfo(userStatus.email, userStatus.id, userStatus.featureCount, userStatus.tags || []);
       this.$store.commit('userInfo', userInfo);
       this.userInfoLoading = false;
 

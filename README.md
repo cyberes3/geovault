@@ -24,3 +24,4 @@ https://trac.osgeo.org/postgis/wiki/UsersWikiPostGIS3UbuntuPGSQLApt
 sudo add-apt-repository ppa:deadsnakes/ppa
 sudo apt install python3.12 python3.12-dev
 
+python manage.py createsuperuser

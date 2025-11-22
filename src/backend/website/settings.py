@@ -231,6 +231,7 @@ AUTHENTICATION_BACKENDS = [
 SITE_ID = 1  # Required by allauth
 
 # Account settings
+ACCOUNT_ADAPTER = 'users.adapters.NoUsernameAccountAdapter'  # Custom adapter to prevent username usage
 ACCOUNT_LOGIN_METHODS = {'email'}  # Use email for authentication
 ACCOUNT_EMAIL_VERIFICATION = 'none'  # Require email verification
 ACCOUNT_SIGNUP_FIELDS = ['email*', 'password1*', 'password2*']  # Email required, no username
