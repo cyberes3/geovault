@@ -6,7 +6,10 @@
         <div class="flex justify-between h-16">
           <div class="flex items-center">
             <div class="flex-shrink-0">
-              <h1 class="text-xl font-bold text-gray-900">GeoVault</h1>
+              <router-link to="/" class="flex items-center space-x-2 hover:opacity-80 transition-opacity">
+                <img src="/images/logo.svg" alt="GeoVault Logo" class="h-8 w-auto" />
+                <h1 class="text-xl font-bold text-gray-900">GeoVault</h1>
+              </router-link>
             </div>
             <div v-if="!userInfoLoading && userInfo" class="hidden sm:ml-6 sm:flex sm:space-x-8">
               <router-link
