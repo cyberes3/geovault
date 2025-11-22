@@ -1,41 +1,33 @@
 # GeoVault Configuration File
-# Copy this file to config.yaml and customize for your environment.
-# The config.yaml file should NOT be committed to version control.
 
-# Security & Deployment Settings
 security:
   # Django secret key (REQUIRED for production)
   # Can be overridden with SECRET_KEY environment variable
   secret_key: django-insecure-change-this-in-production
   
-  # Debug mode (set to false in production)
+  # Debug mode for development (set to false in production)
   debug: true
 
-# Database Configuration
+
 database:
-  engine: django.contrib.gis.db.backends.postgis
   name: geovault
   user: geovault
   # Password can be overridden with DB_PASSWORD environment variable
   password: your-database-password
   host: 172.0.2.105
-  port: 5432  # Default PostgreSQL port
+  port: 5432
 
-# Redis/WebSocket Configuration
+
 redis:
   host: 127.0.0.1
   port: 6379
 
-# API Configuration
-api:
-  # Maximum number of features to return in a single API request
-  # Set to -1 for no limit, or any positive integer to limit features
-  max_features_per_request: -1
-  
-  # Tag settings
-  tag_max_length: 255  # Maximum length for tag names
 
-# Tile Cache Configuration
+api:
+  # Maximum length for tag names
+  tag_max_length: 255
+
+
 tiles:
   # Directory where proxied tiles will be cached on disk
   cache_dir: /tmp/geovault-tiles
@@ -46,7 +38,7 @@ tiles:
   # Number of days before cached tiles expire
   cache_expiry_days: 30
 
-# Icon Processing Configuration
+
 icons:
   # Enable or disable icon processing for KML/KMZ files
   processing_enabled: true
@@ -60,18 +52,19 @@ icons:
   
   # Allow or disallow hot-linking of hosted icons from external domains
   # Set to true (default) to allow external websites to link to your icons
-  # Set to false to block hot-linking attempts
   allow_hotlinking: true
-  
-  # User upload settings
-  upload_max_size_bytes: 512000  # Maximum size for user-uploaded icons (500KB)
-  upload_allowed_extensions: # Allowed extensions for icon uploads
+
+  # Maximum size for user-uploaded icons (500KB)
+  upload_max_size_bytes: 512000
+
+  # Allowed extensions for icon uploads
+  upload_allowed_extensions:
     - .png
     - .jpg
     - .jpeg
     - .ico
 
-# Reverse Geocoding Configuration
+
 geocoding:
   # Overpass API server URL
   overpass_api_url: https://overpass-api.de/api/interpreter
@@ -85,12 +78,14 @@ geocoding:
   # Distance thresholds for proximity tags (in miles)
   city_proximity_miles: 5.0
   lake_proximity_miles: 1.0
-  
-  # Overpass API timeout settings
-  overpass_timeout_seconds: 10  # Timeout for Overpass API queries
-  overpass_request_timeout_seconds: 15  # Timeout for Overpass API requests
 
-# Processing Configuration
+  # Timeout for Overpass API queries
+  overpass_timeout_seconds: 10
+
+  # Timeout for Overpass API requests
+  overpass_request_timeout_seconds: 15
+
+
 processing:
   # Number of threads to use for parallel feature processing during import
   import_threads: 10
@@ -99,22 +94,28 @@ processing:
   file_upload_max_memory_size: 2097152  # 2MB
   data_upload_max_memory_size: 2097152  # 2MB
   
-  # Timeout settings for file processing
-  timeout_base_seconds: 30  # Base timeout for file processing
-  timeout_per_mb_seconds: 2  # Additional timeout per MB of file size
-  
-  # Duplicate detection settings
-  duplicate_detection_batch_size: 100  # Batch size for duplicate detection
-  duplicate_detection_batch_threshold: 1000  # Threshold for using batched approach
-  
-  # Bulk database operations
-  bulk_create_batch_size: 1000  # Batch size for bulk database operations
-  
-  # Job cleanup settings
-  job_cleanup_interval_seconds: 3600  # Interval for cleaning up old jobs (1 hour)
-  max_job_age_seconds: 7200  # Maximum age before jobs are cleaned up (2 hours)
+  # Base timeout for file processing
+  timeout_base_seconds: 30
 
-# File Validation Configuration
+  # Additional timeout per MB of file size
+  timeout_per_mb_seconds: 2
+  
+  # Batch size for duplicate detection
+  duplicate_detection_batch_size: 100
+
+  # Threshold for using batched approach
+  duplicate_detection_batch_threshold: 1000
+  
+  # Batch size for bulk database operations
+  bulk_create_batch_size: 1000
+  
+  # Interval for cleaning up old jobs (1 hour)
+  job_cleanup_interval_seconds: 3600
+
+  # Maximum age before jobs are cleaned up (2 hours)
+  max_job_age_seconds: 7200
+
+
 validation:
   # Enable secure XML parsing
   secure_xml_parsing: true
@@ -125,14 +126,13 @@ validation:
   # Enable MIME type validation
   enable_mime_type_validation: true
 
-# MaxMind IP Geolocation Configuration
+
 maxmind:
   # Path to MaxMind GeoIP2 database file
   database_path: /var/lib/GeoIP/GeoLite2-Country.mmdb
 
-# Email Configuration
+
 email:
-  # SMTP Configuration
   smtp:
     # SMTP server host
     host: smtp.gmail.com
@@ -140,25 +140,24 @@ email:
     # SMTP server port (587 for TLS, 465 for SSL, 25 for unencrypted)
     port: 587
     
-    # Use TLS encryption (recommended)
+    # Use TLS encryption
     use_tls: true
     
-    # Use SSL encryption (alternative to TLS, typically on port 465)
+    # Use SSL encryption (typically on port 465)
     use_ssl: false
     
     # SMTP username (usually your email address)
     username: your-email@gmail.com
     
     # SMTP password (can be overridden with EMAIL_HOST_PASSWORD environment variable)
-    # For Gmail, use an app-specific password, not your regular password
-    password: your-app-specific-password
+    password: your-password
   
   # Email sender configuration
   from_email: noreply@example.com
   
-  # Default "from" name (optional)
+  # Default "from" name
   from_name: GeoVault
   
-  # Subject prefix for emails (optional)
+  # Subject prefix for emails
   subject_prefix: "[GeoVault] "
 

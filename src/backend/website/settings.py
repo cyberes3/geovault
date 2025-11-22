@@ -97,7 +97,7 @@ ASGI_APPLICATION = 'website.asgi.application'
 
 DATABASES = {
     'default': {
-        'ENGINE': config.get_str('database.engine', 'django.contrib.gis.db.backends.postgis'),
+        'ENGINE': 'django.contrib.gis.db.backends.postgis',
         'NAME': config.get_str('database.name', 'geovault'),
         'USER': config.get_str('database.user', 'geovault'),
         'PASSWORD': config.get_with_env_override('database.password', 'DB_PASSWORD', ''),
