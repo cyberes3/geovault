@@ -18,14 +18,13 @@ from django.conf.urls import include
 from django.contrib import admin
 from django.urls import path, re_path
 
-from website.views import index, standalone_map, tile_proxy, get_tile_sources, serve_assets, serve_favicon
+from website.views import index, standalone_map, tile_proxy, get_tile_sources, serve_assets
 from website.exception_handler import custom_exception_handler
 
 # Set custom exception handler
 handler500 = custom_exception_handler
 
 urlpatterns = [
-    path('favicon.ico', serve_favicon, name='favicon'),
     path('', index, name='index'),  # Root route
     path('standalone_map/', standalone_map, name='standalone_map'),
     path('accounts/', include('allauth.urls')),  # Django allauth URLs

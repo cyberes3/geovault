@@ -11,6 +11,7 @@ https://docs.djangoproject.com/en/5.0/ref/settings/
 """
 import os
 from pathlib import Path
+
 from website.config_loader import get_config_loader
 
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
@@ -144,14 +145,22 @@ USE_TZ = True
 
 STATIC_URL = '/static/'
 
-# Static files collection directory
-# After rebuilding the frontend, run: python manage.py collectstatic --noinput
-STATIC_ROOT = os.path.join(BASE_DIR, 'staticfiles')
-
-# WhiteNoise configuration for serving static files in production
+# WhiteNoise configuration for serving static files
 # Use StaticFilesStorage (not compressed) since Vite already handles file hashing and compression
-# After rebuilding the frontend, run: python manage.py collectstatic --noinput
 STATICFILES_STORAGE = 'django.contrib.staticfiles.storage.StaticFilesStorage'
+
+# WhiteNoise settings - serves files directly from source directories
+WHITENOISE_USE_FINDERS = True  # Serve directly from STATICFILES_DIRS (no collectstatic needed!)
+WHITENOISE_AUTOREFRESH = DEBUG  # Auto-refresh in debug mode
+WHITENOISE_MANIFEST_STRICT = False  # Don't require manifest file
+# WHITENOISE_ROOT serves files at the root URL (e.g., /favicon.ico, /apple-touch-icon.png)
+WHITENOISE_ROOT = os.path.join(BASE_DIR, '../frontend/dist')
+
+# Cache control for static files
+# Vite adds content hashes to filenames (e.g., index-0MtPbVXm.js), so we can cache aggressively
+WHITENOISE_MAX_AGE = 31536000  # 1 year in seconds (60*60*24*365)
+# Mark files with content hashes as immutable for optimal caching
+WHITENOISE_IMMUTABLE_FILE_TEST = lambda path, url: url.startswith('/static/') and '-' in url.split('/')[-1]
 
 # Cache configuration
 # Using LocMemCache for in-memory caching (works within a single process)
@@ -234,7 +243,9 @@ ACCOUNT_EMAIL_SUBJECT_PREFIX = EMAIL_SUBJECT_PREFIX
 ACCOUNT_DEFAULT_HTTP_PROTOCOL = 'https' if not DEBUG else 'http'
 
 STATICFILES_DIRS = [
-    os.path.join(BASE_DIR, '../frontend/dist'),  # Includes static/ and images/ subdirectories
+    # WhiteNoise serves directly from these directories (WHITENOISE_USE_FINDERS = True)
+    # Vite's assetsDir: 'static' puts files in dist/static/, which serves at /static/xxx.js
+    os.path.join(BASE_DIR, '../frontend/dist/static'),
     os.path.join(BASE_DIR, 'assets'),
 ]
 

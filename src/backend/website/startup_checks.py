@@ -154,34 +154,29 @@ def check_spatial_tables():
 
 def check_static_files():
     """
-    Check if static files are collected when DEBUG=False.
-    This is a warning only, not a fatal error.
+    Check if static files are available for serving.
+    With WHITENOISE_USE_FINDERS=True, collectstatic is not required.
     
     Returns:
         bool: Always returns True (warning only)
     """
-    if settings.DEBUG:
-        # In debug mode, Django serves static files automatically
+    # Check if STATICFILES_DIRS exist and have files
+    frontend_dist = Path(settings.BASE_DIR) / '../frontend/dist/static'
+    
+    if not frontend_dist.exists():
+        logger.warning("⚠ Frontend static files not found!")
+        logger.warning(f"  Expected directory: {frontend_dist}")
+        logger.warning("  Run: cd ../frontend && npm run build")
         return True
     
-    # In production mode, WhiteNoise serves from STATIC_ROOT
-    static_root = Path(settings.STATIC_ROOT)
-    
-    if not static_root.exists():
-        logger.warning("⚠ Static files may not be collected!")
-        logger.warning("  When DEBUG=False, static files must be collected into STATIC_ROOT")
-        logger.warning("  Run: python manage.py collectstatic --noinput")
-        logger.warning("  This is required after rebuilding the frontend")
-        return True
-    
-    # Check if STATIC_ROOT has files
-    static_files = [f for f in static_root.iterdir() if f.is_file()]
+    static_files = list(frontend_dist.glob('*.js'))
     if not static_files:
-        logger.warning("⚠ STATIC_ROOT directory is empty!")
-        logger.warning("  Run: python manage.py collectstatic --noinput")
+        logger.warning("⚠ No JavaScript files found in frontend dist!")
+        logger.warning("  Run: cd ../frontend && npm run build")
         return True
     
-    logger.info(f"✓ Static files collected ({len(static_files)} files in STATIC_ROOT)")
+    logger.info(f"✓ Frontend static files available ({len(static_files)} JS files)")
+    logger.info("  Note: Using WhiteNoise with USE_FINDERS (collectstatic not required)")
     return True
 
 

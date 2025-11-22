@@ -22,57 +22,14 @@ def index(request):
     Authentication is handled by the frontend for protected routes.
     Public routes (like /mapshare) should be accessible without authentication.
     
-    This view checks if the requested path is a static file first.
-    If it is, raises Http404 so WhiteNoise can handle it.
+    WhiteNoise middleware handles all static files before requests reach this view.
     """
-    # Get the requested path (without leading slash)
-    path = request.path.lstrip('/')
-    
-    # Skip check for root path
-    if not path:
-        return render(request, "index.html")
-    
-    # Skip paths that start with 'static/' - those are handled by WhiteNoise middleware
-    # and shouldn't reach this view (catch-all excludes them, but just in case)
-    if path.startswith('static/'):
-        raise Http404("Static file should be served by WhiteNoise")
-    
-    # Check if this path exists as a static file (root-level files like apple-touch-icon.png)
-    if not settings.DEBUG:
-        # In production, only check STATIC_ROOT (where collectstatic puts everything)
-        static_root = Path(settings.STATIC_ROOT)
-        if static_root.exists():
-            file_path = static_root / path
-            if file_path.exists() and file_path.is_file():
-                # This is a static file - let WhiteNoise handle it
-                raise Http404("Static file should be served by WhiteNoise")
-    else:
-        # In debug mode, check STATICFILES_DIRS
-        for static_dir in [Path(d) for d in settings.STATICFILES_DIRS]:
-            if static_dir.exists():
-                file_path = static_dir / path
-                if file_path.exists() and file_path.is_file():
-                    raise Http404("Static file should be served by Django")
-    
-    # Not a static file, serve Vue.js app
     return render(request, "index.html")
 
 
 @login_required
 def standalone_map(request):
     return render(request, "standalone_map.html")
-
-
-def serve_favicon(request):
-    """Serve favicon.ico from the Vue.js dist directory."""
-    favicon_path = Path(settings.BASE_DIR) / '../frontend/dist/favicon.ico'
-    try:
-        if favicon_path.exists():
-            favicon_data = favicon_path.read_bytes()
-            return HttpResponse(favicon_data, content_type='image/x-icon')
-    except Exception:
-        pass
-    raise Http404("Favicon not found")
 
 
 def get_tile_cache_path(service, z, x, y):
