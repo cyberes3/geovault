@@ -234,8 +234,9 @@ ACCOUNT_EMAIL_SUBJECT_PREFIX = EMAIL_SUBJECT_PREFIX
 ACCOUNT_DEFAULT_HTTP_PROTOCOL = 'https' if not DEBUG else 'http'
 
 STATICFILES_DIRS = [
-    os.path.join(BASE_DIR, '../frontend/dist/static'),  # Vue.js static files (JS, CSS with hashes)
-    os.path.join(BASE_DIR, '../frontend/dist'),  # Vue.js dist root (for index.html, favicons, etc.)
+    os.path.join(BASE_DIR, '../frontend/dist/static'),
+    os.path.join(BASE_DIR, '../frontend/dist/images'),
+    os.path.join(BASE_DIR, '../frontend/dist'),
     os.path.join(BASE_DIR, 'assets'),
 ]
 
