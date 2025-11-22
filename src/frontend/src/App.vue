@@ -6,19 +6,12 @@
         <div class="flex justify-between h-16">
           <div class="flex items-center">
             <div class="flex-shrink-0">
-              <router-link to="/" class="flex items-center space-x-2 hover:opacity-80 transition-opacity">
-                <img src="/images/logo.svg" alt="GeoVault Logo" class="h-8 w-auto" />
+              <router-link class="flex items-center space-x-2 hover:opacity-80 transition-opacity" to="/">
+                <img alt="GeoVault Logo" class="h-8 w-auto" src="/images/logo.svg"/>
                 <h1 class="text-xl font-bold text-gray-900">GeoVault</h1>
               </router-link>
             </div>
             <div v-if="!userInfoLoading && userInfo" class="hidden sm:ml-6 sm:flex sm:space-x-8">
-              <router-link
-                  :class="{ 'text-gray-900 border-gray-500': $route.path === '/' }"
-                  class="inline-flex items-center px-1 pt-1 text-sm font-medium text-gray-500 hover:text-gray-700 hover:border-gray-300 border-b-2 border-transparent transition-colors duration-200"
-                  to="/"
-              >
-                Home
-              </router-link>
               <router-link
                   :class="{ 'text-gray-900 border-gray-500': $route.path === '/dashboard' }"
                   class="inline-flex items-center px-1 pt-1 text-sm font-medium text-gray-500 hover:text-gray-700 hover:border-gray-300 border-b-2 border-transparent transition-colors duration-200"
@@ -57,43 +50,43 @@
             </div>
           </div>
           <div class="flex items-center">
-            <div class="relative" ref="userMenuRef">
+            <div ref="userMenuRef" class="relative">
               <button
-                v-if="!userInfoLoading && userInfo?.username"
-                @click="toggleUserMenu"
-                class="flex items-center text-sm font-medium text-gray-900 hover:text-gray-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 rounded-md px-3 py-2"
+                  v-if="!userInfoLoading && userInfo?.username"
+                  class="flex items-center text-sm font-medium text-gray-900 hover:text-gray-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 rounded-md px-3 py-2"
+                  @click="toggleUserMenu"
               >
                 {{ userInfo?.username }}
                 <svg class="ml-2 h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"></path>
+                  <path d="M19 9l-7 7-7-7" stroke-linecap="round" stroke-linejoin="round" stroke-width="2"></path>
                 </svg>
               </button>
-              
+
               <!-- Login Link (shown when user is not logged in and auth check is complete) -->
               <a
-                v-if="!userInfoLoading && !userInfo"
-                href="/accounts/login/"
-                class="text-sm font-medium text-gray-500 hover:text-gray-700 px-3 py-2"
+                  v-if="!userInfoLoading && !userInfo"
+                  class="text-sm font-medium text-gray-500 hover:text-gray-700 px-3 py-2"
+                  href="/accounts/login/"
               >
                 Sign In
               </a>
-              
+
               <!-- Dropdown Menu -->
               <div
-                v-if="userMenuOpen"
-                class="absolute right-0 mt-2 w-48 bg-white rounded-md shadow-lg py-1 z-50 border border-gray-200"
+                  v-if="userMenuOpen"
+                  class="absolute right-0 mt-2 w-48 bg-white rounded-md shadow-lg py-1 z-50 border border-gray-200"
               >
                 <router-link
-                  to="/settings"
-                  @click="closeUserMenu"
-                  class="block px-4 py-2 text-sm text-gray-700 hover:bg-gray-100"
+                    class="block px-4 py-2 text-sm text-gray-700 hover:bg-gray-100"
+                    to="/settings"
+                    @click="closeUserMenu"
                 >
                   Settings
                 </router-link>
                 <div class="border-t border-gray-200 my-1"></div>
                 <button
-                  @click="performLogout"
-                  class="block w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-gray-100"
+                    class="block w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-gray-100"
+                    @click="performLogout"
                 >
                   Sign Out
                 </button>
@@ -105,7 +98,8 @@
     </nav>
 
     <!-- Main Content -->
-    <main :class="isMapRoute ? 'w-full h-[calc(100vh-4rem)] overflow-hidden' : 'max-w-7xl mx-auto py-6 px-4 sm:px-6 lg:px-8'">
+    <main
+        :class="isMapRoute ? 'w-full h-[calc(100vh-4rem)] overflow-hidden' : 'max-w-7xl mx-auto py-6 px-4 sm:px-6 lg:px-8'">
       <!-- Show loading state while checking authentication for protected routes -->
       <div v-if="userInfoLoading && !isPublicShareRoute" class="flex items-center justify-center min-h-[400px]">
         <div class="text-center">
@@ -194,10 +188,10 @@ export default {
       // since $route might not be ready yet
       const hash = window.location.hash || '';
       const isPublicShare = hash.startsWith('#/mapshare');
-      
+
       this.userInfoLoading = true;
       const userStatus = await getUserInfo();
-      
+
       if (!userStatus || !userStatus.authorized) {
         // User is not authorized (guest)
         if (isPublicShare) {
@@ -209,12 +203,12 @@ export default {
         window.location.href = '/accounts/login/';
         return;
       }
-      
+
       // User is authorized, set user info in store
       const userInfo = new UserInfo(userStatus.username, userStatus.id, userStatus.featureCount, userStatus.tags || []);
       this.$store.commit('userInfo', userInfo);
       this.userInfoLoading = false;
-      
+
       // Always setup WebSocket connection if user is authorized (not just for non-public routes)
       // The setupRealtimeConnection method will skip public share routes internally
       await this.setupRealtimeConnection();
@@ -232,13 +226,13 @@ export default {
 
       // Load all modules from registry first
       await realtimeSocket.loadAllModules(this.$store);
-      
+
       // Handle connection status (only add listeners once)
       if (!this.realtimeListenersAdded) {
         this.addRealtimeListeners();
         this.realtimeListenersAdded = true;
       }
-      
+
       // Connect socket after modules are loaded and listeners are set up
       if (!realtimeSocket.isConnected) {
         realtimeSocket.connect();
@@ -270,17 +264,17 @@ export default {
       try {
         // Disconnect WebSocket first
         this.handleLogout();
-        
+
         // Call allauth logout endpoint (requires POST with CSRF token)
         await axios.post('/accounts/logout/', {}, {
           headers: {
             'X-CSRFToken': getCookie('csrftoken')
           }
         });
-        
+
         // Clear user info from store
         this.$store.commit('userInfo', null);
-        
+
         // Redirect to login page
         window.location.href = '/accounts/login/';
       } catch (error) {

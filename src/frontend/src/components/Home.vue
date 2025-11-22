@@ -3,7 +3,18 @@
     <!-- Hero Section -->
     <div class="bg-white rounded-lg shadow-sm border border-gray-200 p-8">
       <div class="text-center">
-        <h1 class="text-4xl font-bold text-gray-900 mb-4">Welcome to GeoVault</h1>
+        <h1 class="text-4xl font-bold text-gray-900 mb-4">Welcome to the GeoVault</h1>
+        
+        <div class="geo-anim-container my-8 mx-auto" aria-hidden="true">
+          <div class="geo-grid"></div>
+          <div class="geo-rings">
+            <div class="geo-ring ring-1"></div>
+            <div class="geo-ring ring-2"></div>
+            <div class="geo-ring ring-3"></div>
+          </div>
+          <div class="geo-pulse"></div>
+        </div>
+
         <p class="text-xl text-gray-600 mb-8 max-w-2xl mx-auto">
           Manage and import your geospatial data with ease. Upload KML/KMZ files, process them, and organize your geographic features.
         </p>
@@ -117,4 +128,120 @@ export default {
 </script>
 
 <style scoped>
+.geo-anim-container {
+  position: relative;
+  width: 100%;
+  max-width: 600px;
+  height: 200px;
+  overflow: hidden;
+  background: linear-gradient(to bottom, #ffffff, #f0f9ff);
+  border-radius: 0.5rem;
+  perspective: 1000px;
+  /* Fade out the bottom slightly to blend */
+  mask-image: linear-gradient(to bottom, black 85%, transparent 100%);
+  -webkit-mask-image: linear-gradient(to bottom, black 85%, transparent 100%);
+}
+
+.geo-grid {
+  position: absolute;
+  top: 0;
+  left: -50%;
+  width: 200%;
+  height: 200%;
+  background-image: 
+    linear-gradient(rgba(20, 61, 141, 0.1) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(20, 61, 141, 0.1) 1px, transparent 1px);
+  background-size: 40px 40px;
+  transform: rotateX(60deg);
+  transform-origin: center top;
+  animation: gridMove 2s linear infinite;
+}
+
+.geo-rings {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  width: 160px;
+  height: 160px;
+  /* Add a slight tilt to the rings for 3D effect */
+  transform-style: preserve-3d;
+}
+
+.geo-ring {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  border-radius: 50%;
+  border: 2px dashed #143d8d;
+  transform: translate(-50%, -50%);
+  opacity: 0.6;
+  box-shadow: 0 0 10px rgba(20, 61, 141, 0.1);
+}
+
+.ring-1 {
+  width: 100%;
+  height: 100%;
+  animation: rotateRight 10s linear infinite;
+}
+
+.ring-2 {
+  width: 70%;
+  height: 70%;
+  border-style: solid;
+  border-width: 1px;
+  border-top-color: transparent;
+  border-bottom-color: transparent;
+  animation: rotateLeft 6s linear infinite;
+}
+
+.ring-3 {
+  width: 40%;
+  height: 40%;
+  border-style: dotted;
+  animation: rotateRight 4s linear infinite;
+}
+
+.geo-pulse {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  width: 12px;
+  height: 12px;
+  background: #143d8d;
+  border-radius: 50%;
+  box-shadow: 0 0 0 0 rgba(20, 61, 141, 0.7);
+  animation: pulse 2s infinite;
+}
+
+@keyframes gridMove {
+  0% { background-position: 0 0; }
+  100% { background-position: 0 40px; }
+}
+
+@keyframes rotateRight {
+  from { transform: translate(-50%, -50%) rotate(0deg); }
+  to { transform: translate(-50%, -50%) rotate(360deg); }
+}
+
+@keyframes rotateLeft {
+  from { transform: translate(-50%, -50%) rotate(0deg); }
+  to { transform: translate(-50%, -50%) rotate(-360deg); }
+}
+
+@keyframes pulse {
+  0% {
+    transform: translate(-50%, -50%) scale(0.95);
+    box-shadow: 0 0 0 0 rgba(20, 61, 141, 0.7);
+  }
+  70% {
+    transform: translate(-50%, -50%) scale(1);
+    box-shadow: 0 0 0 20px rgba(20, 61, 141, 0);
+  }
+  100% {
+    transform: translate(-50%, -50%) scale(0.95);
+    box-shadow: 0 0 0 0 rgba(20, 61, 141, 0);
+  }
+}
 </style>
