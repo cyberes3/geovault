@@ -18,7 +18,7 @@
           <h3 class="text-sm font-medium text-blue-800">Important Guidelines</h3>
           <div class="mt-2 text-sm text-blue-700">
             <ul class="list-disc list-inside space-y-1">
-              <li>Only KML/KMZ files are supported</li>
+              <li>Only KML, KMZ, and GPX files are supported (max 5MB per file)</li>
               <li>You can select and upload multiple files at once</li>
               <li>Each file can only be imported once</li>
               <li>Files with the same content or filename are considered duplicates</li>
@@ -93,7 +93,7 @@
                 <span class="font-medium text-blue-600 hover:text-blue-500 cursor-pointer" @click="$refs.fileInput.click()">Click to upload</span>
                 or drag and drop
               </p>
-              <p class="text-xs text-gray-500 mt-1">KML and KMZ files only</p>
+              <p class="text-xs text-gray-500 mt-1">KML, KMZ, or GPX files only (max 5MB)</p>
             </div>
           </div>
 
@@ -147,7 +147,7 @@
         <!-- Hidden file input for click-to-upload -->
         <input
             ref="fileInput"
-            accept=".kml,.kmz"
+            accept=".kml,.kmz,.gpx"
             class="hidden"
             multiple
             type="file"

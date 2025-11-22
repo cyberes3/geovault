@@ -49,7 +49,7 @@
                       <p class="mt-2 text-sm text-gray-600">
                         <span class="font-medium text-blue-600 hover:text-blue-500">Click to browse</span> or drag and drop
                       </p>
-                      <p class="mt-1 text-xs text-gray-500">KMZ, KML, or GPX files only</p>
+                      <p class="mt-1 text-xs text-gray-500">KMZ, KML, or GPX files only (max 5MB)</p>
                     </div>
                   </div>
                 </label>
