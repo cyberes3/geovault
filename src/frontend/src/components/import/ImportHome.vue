@@ -44,7 +44,6 @@
     <!-- Ready to Import Section -->
     <div class="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
       <h2 class="text-lg font-semibold text-gray-900 mb-4">Ready to Import</h2>
-      <p class="text-sm text-gray-600 mb-4">Files that have been uploaded and are ready for processing.</p>
 
       <!-- Import queue component -->
       <ImportQueue :is-loading="importQueueIsLoading"/>

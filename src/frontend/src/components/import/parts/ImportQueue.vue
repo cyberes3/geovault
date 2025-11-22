@@ -1,5 +1,11 @@
 <template>
   <div class="overflow-hidden">
+    <!-- Help text for clickable items -->
+    <div v-if="filteredImportQueue.length > 0 && !combinedLoading" class="mb-3">
+      <p class="text-sm text-gray-600">
+        Files that have been uploaded and are ready for processing. Click on any item in the table below to open the import processing page where you can review and edit features before importing.
+      </p>
+    </div>
     <!-- Bulk Import Controls -->
     <div v-if="filteredImportQueue.length > 0 && !combinedLoading" class="mb-4 flex items-center justify-between">
       <div class="flex items-center space-x-3">
