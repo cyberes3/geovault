@@ -5,7 +5,7 @@ This module performs essential checks when the server starts up:
 1. Database connection
 2. Required tables exist
 3. PostGIS extension is installed
-4. Static files (warning only when DEBUG=False)
+4. Redis connection
 """
 
 import sys
@@ -14,6 +14,8 @@ from pathlib import Path
 from django.db import connection
 from django.core.exceptions import ImproperlyConfigured
 from django.conf import settings
+from channels.layers import get_channel_layer
+from asgiref.sync import async_to_sync
 from geo_lib.logging.console import get_startup_logger
 
 logger = get_startup_logger()
@@ -152,32 +154,50 @@ def check_spatial_tables():
         return False
 
 
-def check_static_files():
+def check_redis_connection():
     """
-    Check if static files are available for serving.
-    With WHITENOISE_USE_FINDERS=True, collectstatic is not required.
+    Check if Redis connection is working.
     
     Returns:
-        bool: Always returns True (warning only)
+        bool: True if connection is successful, False otherwise
     """
-    # Check if STATICFILES_DIRS exist and have files
-    frontend_dist = Path(settings.BASE_DIR) / '../frontend/dist/static'
-    
-    if not frontend_dist.exists():
-        logger.warning("⚠ Frontend static files not found!")
-        logger.warning(f"  Expected directory: {frontend_dist}")
-        logger.warning("  Run: cd ../frontend && npm run build")
-        return True
-    
-    static_files = list(frontend_dist.glob('*.js'))
-    if not static_files:
-        logger.warning("⚠ No JavaScript files found in frontend dist!")
-        logger.warning("  Run: cd ../frontend && npm run build")
-        return True
-    
-    logger.info(f"✓ Frontend static files available ({len(static_files)} JS files)")
-    logger.info("  Note: Using WhiteNoise with USE_FINDERS (collectstatic not required)")
-    return True
+    try:
+        channel_layer = get_channel_layer()
+        if channel_layer is None:
+            logger.error("✗ Redis connection failed: Channel layer not configured")
+            return False
+        
+        # Test Redis connectivity by performing a simple async operation
+        # This will fail immediately if Redis is not accessible
+        async def test_redis():
+            try:
+                # Try to send a message to a test channel
+                # This operation requires Redis to be available and will raise
+                # a connection error if Redis is down
+                await channel_layer.send('test_startup_check_channel', {'type': 'test'})
+                return True
+            except (ConnectionError, OSError, TimeoutError):
+                # These indicate Redis connection issues
+                raise
+            except Exception:
+                # Other exceptions (like channel errors) are fine - Redis is reachable
+                return True
+        
+        try:
+            result = async_to_sync(test_redis)()
+            if result:
+                logger.info("✓ Redis connection successful")
+                return True
+            else:
+                logger.error("✗ Redis connection test failed")
+                return False
+        except (ConnectionError, OSError, TimeoutError) as e:
+            logger.error(f"✗ Redis connection failed: {e}")
+            return False
+                
+    except Exception as e:
+        logger.error(f"✗ Redis connection failed: {e}")
+        return False
 
 
 def run_startup_checks():
@@ -189,7 +209,7 @@ def run_startup_checks():
     2. Verify PostGIS installation
     3. Check required tables exist
     4. Verify spatial table configuration
-    5. Check static files (warning only when DEBUG=False)
+    5. Check Redis connection
     
     Raises:
         SystemExit: If any check fails
@@ -202,11 +222,7 @@ def run_startup_checks():
         ("PostGIS Installation", check_postgis_installation),
         ("Required Tables", check_required_tables),
         ("Spatial Tables", check_spatial_tables),
-    ]
-    
-    # Warning checks that won't fail startup
-    warning_checks = [
-        ("Static Files", check_static_files),
+        ("Redis Connection", check_redis_connection),
     ]
     
     failed_checks = []
@@ -215,10 +231,6 @@ def run_startup_checks():
         logger.info(f"Running {check_name} check...")
         if not check_func():
             failed_checks.append(check_name)
-    
-    for check_name, check_func in warning_checks:
-        logger.info(f"Running {check_name} check...")
-        check_func()  # Warning checks always return True, but may log warnings
     
     if failed_checks:
         logger.error("=" * 60)
@@ -233,6 +245,7 @@ def run_startup_checks():
         logger.error("  - Ensure PostgreSQL is running")
         logger.error("  - Install PostGIS extension: CREATE EXTENSION postgis;")
         logger.error("  - Run migrations: python manage.py migrate")
+        logger.error("  - Ensure Redis is running and accessible")
         logger.error("=" * 60)
         sys.exit(1)
     else:
