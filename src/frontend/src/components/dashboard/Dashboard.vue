@@ -110,6 +110,8 @@
 <script>
 import {mapState} from "vuex";
 import {authMixin} from "@/assets/js/authMixin.js";
+import {getUserInfo} from "@/assets/js/auth.js";
+import {UserInfo} from "@/assets/js/types/store-types";
 
 export default {
   computed: {
@@ -121,10 +123,39 @@ export default {
     return {
     }
   },
-  methods: {},
+  methods: {
+    async refreshUserInfo() {
+      try {
+        const userStatus = await getUserInfo();
+        if (!userStatus || !userStatus.authorized) {
+          return;
+        }
+        const userInfo = new UserInfo(userStatus.email, userStatus.id, userStatus.featureCount, userStatus.tags || []);
+        this.$store.commit('userInfo', userInfo);
+      } catch (error) {
+        console.error('Error refreshing user info:', error);
+      }
+    },
+  },
   async created() {
   },
   async mounted() {
+  },
+  activated() {
+    // Refresh user info when navigating back to dashboard (keep-alive component)
+    this.refreshUserInfo();
+  },
+  beforeRouteEnter(to, from, next) {
+    next(async vm => {
+      // Refresh user info when entering the dashboard route
+      await vm.refreshUserInfo();
+    });
+  },
+  beforeRouteUpdate(to, from, next) {
+    // Refresh user info when route updates (e.g., navigating back to dashboard)
+    this.refreshUserInfo().then(() => {
+      next();
+    });
   },
   watch: {},
 }
