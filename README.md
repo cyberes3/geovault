@@ -6,6 +6,9 @@ An outdoorsman tends to collect all sorts of spatial data: tracks of hikes, poin
 tends to be scattered across numerous files stored in your documents and it isn't easy to see where you've been.
 *GeoVault* is a web platform that stores this data and presents *all* of it on one map.
 
+Development is done on my personal Git server, [git.evulid.cc](https://git.evulid.cc/cyberes/geovault), and is mirrored
+to [GitHub](https://github.com/Cyberes/geovault).
+
 **Features:**
 
 - Streamlined upload and import process that makes it easy to shove your spatial data into the database

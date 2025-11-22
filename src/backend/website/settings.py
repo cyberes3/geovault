@@ -31,9 +31,7 @@ SECRET_KEY = config.get_with_env_override(
 )
 
 # SECURITY WARNING: don't run with debug turned on in production!
-DEBUG = config.get_bool('security.debug', True)
-
-ALLOWED_HOSTS = config.get_list('security.allowed_hosts', ['localhost', '127.0.0.1'])
+DEBUG = config.get_bool('security.debug', False)
 
 # Application definition
 
@@ -240,8 +238,6 @@ APPEND_SLASH = True
 
 LOGIN_URL = '/accounts/login/'
 
-CSRF_TRUSTED_ORIGINS = config.get_list('security.csrf_trusted_origins', ['http://localhost:5173'])
-
 # Security Settings
 SECURE_BROWSER_XSS_FILTER = True
 SECURE_CONTENT_TYPE_NOSNIFF = True
@@ -312,8 +308,8 @@ ICON_UPLOAD_ALLOWED_EXTENSIONS = set(config.get_list('icons.upload_allowed_exten
 ICON_FETCH_TIMEOUT = config.get_float('icons.fetch_timeout', 1.0)
 
 # Allow or disallow hot-linking of hosted icons from external domains
-# Default: False (hot-linking disallowed)
-ICON_ALLOW_HOTLINKING = config.get_bool('icons.allow_hotlinking', False)
+# Default: True (hot-linking allowed)
+ICON_ALLOW_HOTLINKING = config.get_bool('icons.allow_hotlinking', True)
 
 # Reverse Geocoding Configuration
 # Overpass API server URL
@@ -323,8 +319,8 @@ OVERPASS_API_URL = config.get_with_env_override('geocoding.overpass_api_url', 'O
 # Nominatim is better at identifying cities/towns from administrative boundaries
 NOMINATIM_API_URL = config.get_with_env_override('geocoding.nominatim_api_url', 'NOMINATIM_API_URL', 'https://nominatim.openstreetmap.org')
 
-# Enable or disable reverse geocoding
-REVERSE_GEOCODING_ENABLED = config.get_bool_with_env_override('geocoding.enabled', 'REVERSE_GEOCODING_ENABLED', True)
+# Enable or disable reverse geocoding (disabled by default)
+REVERSE_GEOCODING_ENABLED = config.get_bool_with_env_override('geocoding.enabled', 'REVERSE_GEOCODING_ENABLED', False)
 
 # Distance thresholds for proximity tags (in miles)
 CITY_PROXIMITY_MILES = config.get_float('geocoding.city_proximity_miles', 5.0)
