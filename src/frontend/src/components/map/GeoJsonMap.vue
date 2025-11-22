@@ -725,7 +725,8 @@ export default {
         ],
         view: new View({
           center: fromLonLat(mapConfig.center),
-          zoom: mapConfig.zoom
+          zoom: mapConfig.zoom,
+          maxZoom: 20
         })
       }))
 
@@ -828,7 +829,15 @@ export default {
 
         // Debounce the zoom change handling
         zoomChangeTimeout = setTimeout(() => {
-          const newZoom = this.map.getView().getZoom()
+          let newZoom = this.map.getView().getZoom()
+          
+          // Defensive check: clamp zoom to 20 if it somehow exceeds the limit
+          if (newZoom > 20) {
+            console.warn(`Zoom level ${newZoom} exceeds maximum of 20, clamping to 20`)
+            this.map.getView().setZoom(20)
+            newZoom = 20
+          }
+          
           if (newZoom !== this.currentZoom) {
             // Clear cache when zoom changes significantly to ensure data reload
             const zoomDiff = Math.abs(newZoom - (this.currentZoom || 0))
