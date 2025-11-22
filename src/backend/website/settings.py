@@ -233,7 +233,7 @@ SITE_ID = 1  # Required by allauth
 # Account settings
 ACCOUNT_LOGIN_METHODS = {'email'}  # Use email for authentication
 ACCOUNT_EMAIL_VERIFICATION = 'none'  # Require email verification
-ACCOUNT_SIGNUP_FIELDS = ['email*', 'email2*', 'password1*', 'password2*']  # Email required, enter twice, no username
+ACCOUNT_SIGNUP_FIELDS = ['email*', 'password1*', 'password2*']  # Email required, no username
 ACCOUNT_SESSION_REMEMBER = True
 ACCOUNT_LOGOUT_ON_GET = False
 ACCOUNT_LOGOUT_REDIRECT_URL = LOGOUT_REDIRECT_URL
@@ -261,6 +261,21 @@ X_FRAME_OPTIONS = 'DENY'
 SECURE_HSTS_SECONDS = 31536000  # 1 year
 SECURE_HSTS_INCLUDE_SUBDOMAINS = True
 SECURE_HSTS_PRELOAD = True
+
+# CSRF Protection Settings
+# CSRF_TRUSTED_ORIGINS is required in Django 4.0+ for HTTPS sites
+# Automatically derive from ALLOWED_HOSTS
+# Use https:// protocol for production (when not DEBUG), http:// for development
+protocol = 'https' if not DEBUG else 'http'
+CSRF_TRUSTED_ORIGINS = [f"{protocol}://{host}" for host in ALLOWED_HOSTS if host != '*']
+
+# Cookie Security Settings (for production with HTTPS)
+# In production (when DEBUG=False), cookies should only be sent over HTTPS
+CSRF_COOKIE_SECURE = not DEBUG  # True in production, False in development
+SESSION_COOKIE_SECURE = not DEBUG  # True in production, False in development
+# SameSite prevents CSRF attacks while allowing normal usage
+CSRF_COOKIE_SAMESITE = 'Lax'
+SESSION_COOKIE_SAMESITE = 'Lax'
 
 # File Upload Security Settings
 # Note: File type configurations are now centralized in geo_lib.processing.file_types

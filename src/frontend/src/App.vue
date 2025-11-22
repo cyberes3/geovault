@@ -265,10 +265,25 @@ export default {
         // Disconnect WebSocket first
         this.handleLogout();
 
-        // Call allauth logout endpoint (requires POST with CSRF token)
-        await axios.post('/accounts/logout/', {}, {
+        // Get CSRF token
+        const csrfToken = getCookie('csrftoken');
+        if (!csrfToken) {
+          console.error('CSRF token not found');
+          // Even if CSRF token is missing, clear local state and redirect
+          this.$store.commit('userInfo', null);
+          window.location.href = '/accounts/login/';
+          return;
+        }
+
+        // Call allauth logout endpoint (requires POST with CSRF token in form data)
+        // Django allauth expects the CSRF token as 'csrfmiddlewaretoken' in the form body
+        const formData = new URLSearchParams();
+        formData.append('csrfmiddlewaretoken', csrfToken);
+
+        await axios.post('/accounts/logout/', formData.toString(), {
           headers: {
-            'X-CSRFToken': getCookie('csrftoken')
+            'Content-Type': 'application/x-www-form-urlencoded',
+            'X-CSRFToken': csrfToken
           }
         });
 

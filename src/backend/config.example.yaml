@@ -9,6 +9,7 @@ security:
   debug: true
   
   # If commented out or not specified, defaults to ['*'] (allow everything)
+  # Note: CSRF_TRUSTED_ORIGINS will be automatically derived from allowed_hosts
   # allowed_hosts:
   #   - yourdomain.com
   #   - www.yourdomain.com
