@@ -30,4 +30,35 @@ class NoUsernameAccountAdapter(DefaultAccountAdapter):
             user.save()
         
         return user
+    
+    def get_email_confirmation_url(self, request, emailconfirmation):
+        """
+        Override to ensure URLs use the correct domain from config settings.
+        Updates Site model if needed, then uses it for URL generation.
+        """
+        from django.urls import reverse
+        from django.conf import settings
+        from django.contrib.sites.models import Site
+        
+        # Update Site model from settings if needed (lazy update)
+        if hasattr(settings, 'SITE_DOMAIN') and hasattr(settings, 'SITE_NAME'):
+            try:
+                site, _ = Site.objects.get_or_create(id=settings.SITE_ID)
+                if site.domain != settings.SITE_DOMAIN or site.name != settings.SITE_NAME:
+                    site.domain = settings.SITE_DOMAIN
+                    site.name = settings.SITE_NAME
+                    site.save()
+            except Exception:
+                pass  # If update fails, continue with existing Site values
+        
+        # Use Site model domain for URL
+        try:
+            site = Site.objects.get(id=settings.SITE_ID)
+            protocol = 'https' if request.is_secure() or request.META.get('HTTP_X_FORWARDED_PROTO') == 'https' else 'http'
+            path = reverse('account_confirm_email', args=[emailconfirmation.key])
+            return f"{protocol}://{site.domain}{path}"
+        except Site.DoesNotExist:
+            # Fallback to request.build_absolute_uri() if Site doesn't exist
+            path = reverse('account_confirm_email', args=[emailconfirmation.key])
+            return request.build_absolute_uri(path)
 

@@ -230,6 +230,12 @@ AUTHENTICATION_BACKENDS = [
 
 SITE_ID = 1  # Required by allauth
 
+# Site Framework Configuration
+# These settings control the Site model used by django.contrib.sites
+# The Site model is automatically updated on startup to match these settings
+SITE_DOMAIN = config.get_str('site.domain', 'geovault.example.com')
+SITE_NAME = config.get_str('site.name', 'GeoVault')
+
 # Account settings
 ACCOUNT_ADAPTER = 'users.adapters.NoUsernameAccountAdapter'  # Custom adapter to prevent username usage
 ACCOUNT_LOGIN_METHODS = {'email'}  # Use email for authentication

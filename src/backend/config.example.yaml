@@ -167,3 +167,12 @@ email:
   # Subject prefix for emails
   subject_prefix: "[GeoVault] "
 
+
+site:
+  # Site domain name (used in email links and Site framework)
+  # This should match your actual domain
+  domain: geovault.example.com
+  
+  # Site display name (used in email templates and Site framework)
+  name: GeoVault
+
