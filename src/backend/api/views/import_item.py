@@ -21,6 +21,8 @@ from geo_lib.processing.logging import ImportLog, DatabaseLogLevel
 from geo_lib.processing.status_tracker import status_tracker
 from geo_lib.security.file_validation import SecureFileValidator
 from geo_lib.types.feature import PointFeature, PolygonFeature, LineStringFeature, MultiLineStringFeature
+from geo_lib.validation.geojson_whitelist import validate_and_normalize_geojson_feature
+from geo_lib.validation.geometry_validation import GeometryValidationError
 from geo_lib.website.auth import login_required_401
 
 logger = get_access_logger()
@@ -779,6 +781,18 @@ def update_import_item(request, item_id):
                 logger.warning(f"Skipping feature without ID: {feature.get('properties', {}).get('name', 'Unnamed')}")
                 continue
 
+            # Validate, whitelist, and normalize the feature
+            # Note: system_tags will be preserved when updating existing features below
+            try:
+                feature_json = validate_and_normalize_geojson_feature(
+                    feature_json,
+                    preserve_system_tags=None,  # Will be set when updating existing features
+                    preserve_id=False
+                )
+            except GeometryValidationError as e:
+                logger.warning(f"Skipping feature {feature_id} due to validation error: {str(e)}")
+                continue
+
             updates_by_id[feature_id] = feature_json
         except Exception as e:
             logger.error(f"Error parsing feature: {e}")
@@ -795,8 +809,21 @@ def update_import_item(request, item_id):
             if not isinstance(original_system_tags, list):
                 original_system_tags = []
 
-            # Strip system tags from incoming feature tags (defensive)
+            # Get updated feature and preserve system_tags
             updated_feature = updates_by_id[feature_id]
+            
+            # Re-validate with preserved system_tags to ensure they're included
+            try:
+                updated_feature = validate_and_normalize_geojson_feature(
+                    updated_feature,
+                    preserve_system_tags=original_system_tags,
+                    preserve_id=False
+                )
+            except GeometryValidationError as e:
+                logger.warning(f"Error validating feature {feature_id} during update: {str(e)}")
+                continue
+            
+            # Strip system tags from incoming feature tags (defensive)
             new_tags = updated_feature.get('properties', {}).get('tags', [])
             if not isinstance(new_tags, list):
                 new_tags = []

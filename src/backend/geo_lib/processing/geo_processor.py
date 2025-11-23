@@ -182,59 +182,44 @@ def _normalize_gpx_for_comparison(gpx_content: str) -> str:
 
 def geojson_property_generation(feature: dict) -> dict:
     """
-    Generate GeoJSON properties.
+    Generate GeoJSON properties with validation, whitelisting, and style normalization.
+    
+    This function uses the comprehensive validation function to whitelist keys and normalize styles.
+    It also handles HTML to markdown conversion for descriptions.
     
     Args:
-        feature: Full GeoJSON
+        feature: Full GeoJSON Feature
 
     Returns:
-        Properties dictionary with optional styling changes
+        Properties dictionary with validated, whitelisted keys and normalized styles
     """
-    # Extract properties from feature
+    from geo_lib.validation.geojson_whitelist import validate_and_normalize_geojson_feature
+    from geo_lib.validation.geometry_validation import GeometryValidationError
+    
+    # Extract and preserve system_tags if they exist (they're generated during processing)
+    original_system_tags = feature.get('properties', {}).get('system_tags')
+    
+    # Convert HTML descriptions to markdown before validation
     properties = feature.get('properties', {}).copy()
-
-    # Convert HTML descriptions to markdown
     if 'description' in properties and properties['description']:
         properties['description'] = html_to_markdown(properties['description'])
-
-    # Strip unused style properties that are not part of GeoJSON spec and not used by frontend
-    # Keep only: stroke, stroke-width, fill, fill-opacity, marker-color
-    unused_style_properties = [
-        'stroke-opacity',
-        'opacity',
-        'weight',
-        'dashArray',
-        'dash-array',
-        'lineCap',
-        'line-cap',
-        'lineJoin',
-        'line-join',
-        'color',  # Generic color property - we use specific ones like stroke, fill, marker-color
-    ]
-    for prop_name in unused_style_properties:
-        if prop_name in properties:
-            del properties[prop_name]
-
-    # Normalize styles for lines and polygons
-    geometry = feature.get('geometry', {})
-    geometry_type = geometry.get('type', '').lower() if geometry else ''
+    feature['properties'] = properties
     
-    # Normalize stroke-width to 2 for lines
-    if geometry_type in ['linestring', 'multilinestring']:
-        properties['stroke-width'] = 2
-    
-    # Normalize styles for polygons: stroke-width, fill, and fill-opacity
-    if geometry_type in ['polygon', 'multipolygon']:
-        properties['stroke-width'] = 2
-        
-        # Set fill color to match stroke color (or default to #ff0000)
-        stroke_color = properties.get('stroke', '#ff0000')
-        properties['fill'] = stroke_color
-        
-        # Set fill-opacity to 10% (0.1)
-        properties['fill-opacity'] = 0.1
-
-    return properties
+    # Validate, whitelist, and normalize the feature
+    try:
+        normalized_feature = validate_and_normalize_geojson_feature(
+            feature,
+            preserve_system_tags=original_system_tags,
+            preserve_id=False
+        )
+        return normalized_feature.get('properties', {})
+    except GeometryValidationError as e:
+        # If validation fails, log warning and return original properties with basic normalization
+        import logging
+        logger = logging.getLogger(__name__)
+        logger.warning(f"Feature validation failed during property generation: {str(e)}")
+        # Return original properties (caller should handle validation errors)
+        return properties
 
 
 def extract_track_created_date(feature: dict) -> Optional[str]:

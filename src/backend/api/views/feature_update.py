@@ -16,6 +16,9 @@ from geo_lib.validation.geometry_validation import (
     normalize_and_validate_feature_update,
     GeometryValidationError
 )
+from geo_lib.validation.geojson_whitelist import (
+    validate_and_normalize_geojson_feature
+)
 from geo_lib.website.auth import login_required_401
 
 logger = get_access_logger()
@@ -242,11 +245,23 @@ def update_feature(request, feature_id):
         except GeometryValidationError as e:
             return _error_response(str(e), 400)
 
-        # Get new properties (if geometry-only update, properties were already set to original)
-        new_properties = feature_data.get('properties', {})
-
         # Preserve existing system_tags from original feature
         original_system_tags = original_properties.get('system_tags', [])
+        
+        # Validate, whitelist, and normalize the feature
+        try:
+            feature_data = validate_and_normalize_geojson_feature(
+                feature_data,
+                preserve_system_tags=original_system_tags,
+                preserve_id=False  # Don't preserve _id in backend
+            )
+        except GeometryValidationError as e:
+            return _error_response(str(e), 400)
+
+        # Get new properties after normalization
+        new_properties = feature_data.get('properties', {})
+
+        # Validate that system_tags were preserved correctly
         is_valid, error_response, preserved_system_tags = _validate_and_preserve_system_tags(
             new_properties, original_system_tags
         )
@@ -332,14 +347,8 @@ def update_feature(request, feature_id):
                             new_properties[prop_name] = ''
                     logger.warning(f"Attempted to set external icon URL for feature {feature_id}, removed (only built-in and uploaded icons allowed)")
 
-        # Prevent stroke-width changes for lines and polygons (normalized on import)
-        geom_type = feature_data.get('geometry', {}).get('type', '').lower()
-        if geom_type in ['linestring', 'multilinestring', 'polygon', 'multipolygon']:
-            # Restore original stroke-width value (normalized to 2 on import)
-            original_stroke_width = original_properties.get('stroke-width', 2)
-            if 'stroke-width' in new_properties and new_properties.get('stroke-width') != original_stroke_width:
-                new_properties['stroke-width'] = original_stroke_width
-                logger.warning(f"Attempted to change stroke-width for feature {feature_id}, restored original value (normalized on import)")
+        # Note: stroke-width, fill, and fill-opacity normalization is now handled by validate_and_normalize_geojson_feature
+        # The normalization function ensures stroke-width=2 for lines/polygons and proper fill/fill-opacity for polygons
 
         # Validate feature structure using the same validation as import conversion
         try:
@@ -504,6 +513,16 @@ def apply_replacement_geometry(request, feature_id):
         # Get original feature data
         original_geojson = feature.geojson.copy()
         original_properties = original_geojson.get('properties', {})
+        
+        # Validate that geometry type hasn't changed
+        original_geometry_type = original_geojson.get('geometry', {}).get('type', '').lower()
+        replacement_geometry_type = replacement_geometry.get('type', '').lower()
+        
+        if original_geometry_type != replacement_geometry_type:
+            return _error_response(
+                f'Geometry type cannot change. Original: {original_geometry_type}, Replacement: {replacement_geometry_type}',
+                400
+            )
 
         # Create updated feature with replacement geometry but original properties
         updated_feature = {

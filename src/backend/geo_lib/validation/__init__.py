@@ -10,6 +10,9 @@ from geo_lib.validation.geometry_validation import (
     get_valid_geometry_types,
     GeometryValidationError
 )
+from geo_lib.validation.geojson_whitelist import (
+    validate_and_normalize_geojson_feature
+)
 
 __all__ = [
     'validate_geometry',
@@ -17,6 +20,7 @@ __all__ = [
     'normalize_and_validate_feature_update',
     'is_valid_geometry_type',
     'get_valid_geometry_types',
-    'GeometryValidationError'
+    'GeometryValidationError',
+    'validate_and_normalize_geojson_feature'
 ]
 
