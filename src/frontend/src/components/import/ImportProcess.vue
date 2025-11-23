@@ -484,7 +484,7 @@
                 <div class="relative flex-1">
                   <input
                       v-model="item.properties.tags[tagIndex]"
-                      :class="isImported || item.isDuplicate || isItemSkipped(item, index) || loading.importing ? 'block w-full px-3 py-2 border border-gray-300 rounded-md bg-gray-100 cursor-not-allowed' : 'block w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-blue-500 focus:border-blue-500'"
+                      :class="'tag-input ' + (isImported || item.isDuplicate || isItemSkipped(item, index) || loading.importing ? 'block w-full px-3 py-2 border border-gray-300 rounded-md bg-gray-100 cursor-not-allowed' : 'block w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-blue-500 focus:border-blue-500')"
                       :disabled="isImported || item.isDuplicate || isItemSkipped(item, index) || loading.importing"
                       :placeholder="getTagPlaceholder(index, tag)"
                       @input="onTagInput(index, tagIndex, $event.target.value)"
@@ -492,6 +492,7 @@
                       @blur="handleTagInputBlur(index, tagIndex)"
                       @keydown.enter.prevent="hideTagSuggestions"
                       @keydown.escape="hideTagSuggestions"
+                      @keyup="convertTagToLowercase(index, tagIndex)"
                   />
                   <!-- Autocomplete Suggestions -->
                   <div
@@ -1345,11 +1346,26 @@ export default {
     },
     onTagInput(featureIndex, tagIndex, value) {
       this.activeTagInput = { featureIndex, tagIndex };
-      this.tagInputValue = value;
-      if (value.trim()) {
+      // Convert to lowercase
+      const lowerValue = value.toLowerCase();
+      this.tagInputValue = lowerValue;
+      // Update the model with lowercase value
+      if (this.itemsForUser[featureIndex] && this.itemsForUser[featureIndex].properties.tags) {
+        this.itemsForUser[featureIndex].properties.tags[tagIndex] = lowerValue;
+      }
+      if (lowerValue.trim()) {
         this.showTagSuggestions = true;
       } else {
         this.showTagSuggestions = false;
+      }
+    },
+    convertTagToLowercase(featureIndex, tagIndex) {
+      // Ensure tag is always lowercase
+      if (this.itemsForUser[featureIndex] && this.itemsForUser[featureIndex].properties.tags) {
+        const currentTag = this.itemsForUser[featureIndex].properties.tags[tagIndex];
+        if (currentTag && currentTag !== currentTag.toLowerCase()) {
+          this.itemsForUser[featureIndex].properties.tags[tagIndex] = currentTag.toLowerCase();
+        }
       }
     },
     showSuggestionsForInput(featureIndex, tagIndex) {
@@ -1365,7 +1381,7 @@ export default {
     },
     selectTagSuggestion(featureIndex, tagIndex, tag) {
       if (tag && this.itemsForUser[featureIndex]) {
-        this.itemsForUser[featureIndex].properties.tags[tagIndex] = tag;
+        this.itemsForUser[featureIndex].properties.tags[tagIndex] = tag.toLowerCase();
       }
       this.tagInputValue = '';
       this.showTagSuggestions = false;
@@ -1859,5 +1875,7 @@ export default {
 </script>
 
 <style scoped>
-
+.tag-input {
+  text-transform: lowercase;
+}
 </style>

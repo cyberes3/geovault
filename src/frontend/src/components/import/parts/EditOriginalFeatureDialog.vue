@@ -163,8 +163,10 @@
                   <div v-for="(tag, tagIndex) in editableFeature.properties.tags" :key="`tag-${tagIndex}`" class="flex items-center space-x-2">
                     <input
                       v-model="editableFeature.properties.tags[tagIndex]"
-                      class="block w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-blue-500 focus:border-blue-500"
+                      class="tag-input block w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-blue-500 focus:border-blue-500"
                       :placeholder="`Tag ${tagIndex + 1}`"
+                      @input="convertTagToLowercase(tagIndex, $event.target.value)"
+                      @keyup="convertTagToLowercase(tagIndex, $event.target.value)"
                     />
                     <button
                       class="inline-flex items-center px-3 py-2 border border-transparent text-sm font-medium rounded-md text-white bg-red-600 hover:bg-red-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-red-500"
@@ -351,6 +353,15 @@ export default {
     removeTag(tagIndex) {
       this.editableFeature.properties.tags.splice(tagIndex, 1);
     },
+    convertTagToLowercase(tagIndex, value) {
+      // Ensure tag is always lowercase
+      if (this.editableFeature && this.editableFeature.properties.tags) {
+        const lowerValue = value.toLowerCase();
+        if (this.editableFeature.properties.tags[tagIndex] !== lowerValue) {
+          this.editableFeature.properties.tags[tagIndex] = lowerValue;
+        }
+      }
+    },
     updateDate(event) {
       this.editableFeature.properties.created = event.target.value;
     },
@@ -415,3 +426,9 @@ export default {
   }
 }
 </script>
+
+<style scoped>
+.tag-input {
+  text-transform: lowercase;
+}
+</style>

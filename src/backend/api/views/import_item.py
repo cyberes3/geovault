@@ -13,7 +13,7 @@ from django.views.decorators.csrf import csrf_protect
 from django.views.decorators.http import require_http_methods
 
 from api.models import ImportQueue, FeatureStore, DatabaseLogging
-from geo_lib.const_strings import CONST_INTERNAL_TAGS, filter_protected_tags, is_protected_tag, deduplicate_tags
+from geo_lib.const_strings import CONST_INTERNAL_TAGS, filter_protected_tags, is_protected_tag, prepare_user_tags
 from geo_lib.feature_id import generate_feature_hash
 from geo_lib.logging.console import get_access_logger
 from geo_lib.processing.jobs import upload_job, delete_job
@@ -803,8 +803,8 @@ def update_import_item(request, item_id):
             # Filter out any system tags that user might have added
             user_tags = filter_protected_tags(new_tags, CONST_INTERNAL_TAGS)
 
-            # Deduplicate user tags
-            user_tags = deduplicate_tags(user_tags)
+            # Prepare user tags (lowercase and deduplicate)
+            user_tags = prepare_user_tags(user_tags)
 
             # Store user tags and preserve system tags separately
             updated_feature['properties']['tags'] = user_tags
@@ -938,8 +938,8 @@ def import_to_featurestore(request, item_id):
             feature_instance = c(**feature)
             # Tags are already generated during processing step, just use existing tags
             existing_tags = feature_instance.properties.tags or []
-            # Deduplicate tags before storing
-            existing_tags = deduplicate_tags(existing_tags)
+            # Prepare tags before storing (lowercase and deduplicate)
+            existing_tags = prepare_user_tags(existing_tags)
             feature_instance.properties.tags = existing_tags
 
             # Create the GeoJSON data

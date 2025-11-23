@@ -74,7 +74,8 @@
               @keydown.escape="hideSuggestions"
               @focus="showSuggestionsOnFocus"
               @blur="handleTagInputBlur"
-              class="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500 disabled:bg-gray-100 disabled:cursor-not-allowed"
+              @keyup="convertTagInputToLowercase"
+              class="tag-input w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500 disabled:bg-gray-100 disabled:cursor-not-allowed"
               placeholder="Type to search tags..."
             />
 
@@ -719,10 +720,18 @@ export default {
       return tagsString.split(',').map(tag => tag.trim()).filter(tag => tag.length > 0)
     },
     onTagInput() {
+      // Convert to lowercase as user types
+      this.tagInput = this.tagInput.toLowerCase()
       if (this.tagInput.trim()) {
         this.showTagSuggestions = true
       } else {
         this.showTagSuggestions = false
+      }
+    },
+    convertTagInputToLowercase() {
+      // Ensure tag input is always lowercase
+      if (this.tagInput && this.tagInput !== this.tagInput.toLowerCase()) {
+        this.tagInput = this.tagInput.toLowerCase()
       }
     },
     showSuggestionsOnFocus() {
@@ -743,8 +752,8 @@ export default {
       }, 200)
     },
     selectTagSuggestion(tag) {
-      if (tag && !this.formData.tags.includes(tag)) {
-        this.formData.tags.push(tag)
+      if (tag && !this.formData.tags.includes(tag.toLowerCase())) {
+        this.formData.tags.push(tag.toLowerCase())
         this.checkTagsOverflow()
       }
       this.tagInput = ''
@@ -760,7 +769,7 @@ export default {
       }, 100)
     },
     addTagFromInput() {
-      const trimmedInput = this.tagInput.trim()
+      const trimmedInput = this.tagInput.trim().toLowerCase()
       if (trimmedInput && !this.formData.tags.includes(trimmedInput)) {
         this.formData.tags.push(trimmedInput)
         this.tagInput = ''
@@ -1157,4 +1166,10 @@ export default {
   }
 }
 </script>
+
+<style scoped>
+.tag-input {
+  text-transform: lowercase;
+}
+</style>
 

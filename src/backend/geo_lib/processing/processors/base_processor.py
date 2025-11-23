@@ -24,7 +24,7 @@ from geo_lib.processing.tagging import generate_auto_tags
 from geo_lib.security.file_validation import SecureFileValidator
 from geo_lib.logging.console import get_import_logger
 from geo_lib.types.feature import PointFeature, LineStringFeature, MultiLineStringFeature, PolygonFeature
-from geo_lib.const_strings import CONST_INTERNAL_TAGS, is_protected_tag, filter_protected_tags, deduplicate_tags
+from geo_lib.const_strings import CONST_INTERNAL_TAGS, is_protected_tag, filter_protected_tags, prepare_user_tags
 
 logger = get_import_logger()
 
@@ -220,8 +220,8 @@ class BaseProcessor(ABC):
                                 # Strip system tags from existing tags (defensive - in case user added them)
                                 user_tags = filter_protected_tags(existing_tags, CONST_INTERNAL_TAGS)
                                 
-                                # Deduplicate user tags
-                                user_tags = deduplicate_tags(user_tags)
+                                # Prepare user tags (lowercase and deduplicate)
+                                user_tags = prepare_user_tags(user_tags)
                                 
                                 # Store system tags separately
                                 split_feature['properties']['system_tags'] = auto_tags
