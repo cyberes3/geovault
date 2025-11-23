@@ -1,3 +1,4 @@
+import copy
 import hashlib
 import json
 import threading
@@ -744,7 +745,7 @@ def update_import_item(request, item_id):
     try:
         data = json.loads(request.body)
         if not isinstance(data, dict) or 'features' not in data:
-            raise ValueError('Invalid data format. Expected {"features": [{feature with id}, ...]}')
+            raise ValueError('Invalid data format. Expected {"features": [{"properties": {"id": "...", ...}}, ...]}')
 
         features_to_update = data['features']
         if not isinstance(features_to_update, list):
@@ -752,70 +753,79 @@ def update_import_item(request, item_id):
     except (json.JSONDecodeError, ValueError) as e:
         return JsonResponse({'success': False, 'msg': str(e), 'code': 400}, status=400)
 
-    # Build a lookup map of feature ID to updated feature
+    # Build a lookup map of feature ID to partial update fields
     updates_by_id = {}
+    allowed_fields = {'name', 'description', 'created', 'tags'}
+    
     for feature in features_to_update:
-        # Validate and parse the feature
-        c = None
-        geom_type = feature.get('geometry', {}).get('type', '').lower()
-        match geom_type:
-            case 'point':
-                c = PointFeature
-            case 'linestring':
-                c = LineStringFeature
-            case 'polygon':
-                c = PolygonFeature
-            case _:
-                continue
-
-        if c is None:
+        # Extract properties from the feature
+        properties = feature.get('properties', {})
+        if not isinstance(properties, dict):
+            logger.warning(f"Skipping feature with invalid properties: {feature}")
             continue
-
-        # Parse the feature to validate it
-        try:
-            parsed_feature = c(**feature)
-            feature_json = json.loads(parsed_feature.model_dump_json())
-            feature_id = feature_json.get('properties', {}).get('id')
-
-            if not feature_id:
-                logger.warning(f"Skipping feature without ID: {feature.get('properties', {}).get('name', 'Unnamed')}")
-                continue
-
-            # Validate, whitelist, and normalize the feature
-            # Note: system_tags will be preserved when updating existing features below
-            try:
-                feature_json = validate_and_normalize_geojson_feature(
-                    feature_json,
-                    preserve_system_tags=None,  # Will be set when updating existing features
-                    preserve_id=False
-                )
-            except GeometryValidationError as e:
-                logger.warning(f"Skipping feature {feature_id} due to validation error: {str(e)}")
-                continue
-
-            updates_by_id[feature_id] = feature_json
-        except Exception as e:
-            logger.error(f"Error parsing feature: {e}")
-            logger.error(f"Feature parsing error traceback: {traceback.format_exc()}")
+        
+        feature_id = properties.get('id')
+        if not feature_id:
+            logger.warning(f"Skipping feature without ID: {properties.get('name', 'Unnamed')}")
             continue
+        
+        # Extract only allowed fields (name, description, created, tags)
+        update_fields = {}
+        for field in allowed_fields:
+            if field in properties:
+                update_fields[field] = properties[field]
+        
+        # Validate that at least one field is being updated
+        if not update_fields:
+            logger.warning(f"Skipping feature {feature_id}: no updatable fields provided")
+            continue
+        
+        updates_by_id[feature_id] = update_fields
 
     # Update features in the geofeatures array by matching IDs
     updated_count = 0
     for i, existing_feature in enumerate(queue.geofeatures):
         feature_id = existing_feature.get('properties', {}).get('id')
         if feature_id and feature_id in updates_by_id:
+            # Create a deep copy of the original feature to merge updates into
+            merged_feature = copy.deepcopy(existing_feature)
+            
             # Preserve existing system_tags from original feature
             original_system_tags = existing_feature.get('properties', {}).get('system_tags', [])
             if not isinstance(original_system_tags, list):
                 original_system_tags = []
-
-            # Get updated feature and preserve system_tags
-            updated_feature = updates_by_id[feature_id]
             
-            # Re-validate with preserved system_tags to ensure they're included
+            # Get the partial update fields
+            update_fields = updates_by_id[feature_id]
+            
+            # Merge update fields into the feature properties (only update fields that are present)
+            if 'properties' not in merged_feature:
+                merged_feature['properties'] = {}
+            
+            for field, value in update_fields.items():
+                if field == 'tags':
+                    # Handle tags specially - filter out system tags and prepare user tags
+                    if not isinstance(value, list):
+                        value = []
+                    # Filter out any system tags that user might have added
+                    user_tags = filter_protected_tags(value, CONST_INTERNAL_TAGS)
+                    # Prepare user tags (lowercase and deduplicate)
+                    user_tags = prepare_user_tags(user_tags)
+                    merged_feature['properties']['tags'] = user_tags
+                else:
+                    # For name, description, created - update directly
+                    merged_feature['properties'][field] = value
+            
+            # Ensure the feature has the required structure (type, geometry, properties)
+            if 'type' not in merged_feature:
+                merged_feature['type'] = 'Feature'
+            if 'geometry' not in merged_feature:
+                merged_feature['geometry'] = existing_feature.get('geometry', {})
+            
+            # Run the merged feature through validate_and_normalize_geojson_feature()
             try:
-                updated_feature = validate_and_normalize_geojson_feature(
-                    updated_feature,
+                normalized_feature = validate_and_normalize_geojson_feature(
+                    merged_feature,
                     preserve_system_tags=original_system_tags,
                     preserve_id=False
                 )
@@ -823,20 +833,10 @@ def update_import_item(request, item_id):
                 logger.warning(f"Error validating feature {feature_id} during update: {str(e)}")
                 continue
             
-            # Strip system tags from incoming feature tags (defensive)
-            new_tags = updated_feature.get('properties', {}).get('tags', [])
-            if not isinstance(new_tags, list):
-                new_tags = []
-            # Filter out any system tags that user might have added
-            user_tags = filter_protected_tags(new_tags, CONST_INTERNAL_TAGS)
-
-            # Prepare user tags (lowercase and deduplicate)
-            user_tags = prepare_user_tags(user_tags)
-
-            # Store user tags and preserve system tags separately
-            updated_feature['properties']['tags'] = user_tags
-            updated_feature['properties']['system_tags'] = original_system_tags
-            queue.geofeatures[i] = updated_feature
+            # Ensure system_tags are preserved after normalization
+            normalized_feature['properties']['system_tags'] = original_system_tags
+            
+            queue.geofeatures[i] = normalized_feature
             updated_count += 1
 
     # Save the updated queue

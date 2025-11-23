@@ -1261,12 +1261,48 @@ export default {
       if (isNaN(date.getTime())) return '';
       return date.toISOString().slice(0, 16);
     },
+    _prepareFeatureForBackend(feature) {
+      // Prepare a partial update for sending to the backend
+      // Backend now expects only properties with id, name, description, created, tags
+      const properties = feature.properties ? { ...feature.properties } : {};
+      // Ensure properties.id is set - backend requires it to match features
+      // Preserve existing properties.id if present, otherwise use top-level feature.id
+      if (!properties.id) {
+        if (feature.id) {
+          properties.id = feature.id;
+        }
+        // Note: If neither properties.id nor feature.id exists, the backend will skip this feature
+        // This should not happen for valid features from the import queue
+      }
+      // Extract only the allowed fields: id, name, description, created, tags
+      // id is required, others are optional
+      const partialUpdate = {
+        properties: {
+          id: properties.id
+        }
+      };
+      // Add optional fields only if they are defined
+      if (properties.name !== undefined) {
+        partialUpdate.properties.name = properties.name;
+      }
+      if (properties.description !== undefined) {
+        partialUpdate.properties.description = properties.description;
+      }
+      if (properties.created !== undefined) {
+        partialUpdate.properties.created = properties.created;
+      }
+      if (properties.tags !== undefined) {
+        partialUpdate.properties.tags = properties.tags;
+      }
+      return partialUpdate;
+    },
     _getChangedFeatures() {
       // Helper method to collect changed features from current page and cached pages
       // Returns an array of changed features (in comparable format)
       const changedFeatures = [];
 
       // Helper function to get comparable feature data (excluding UI-only properties)
+      // This is used for comparison only - does not modify properties
       const getComparableFeature = (feature) => {
         // Tags are already separated - user tags only in tags field
         const properties = { ...feature.properties };
@@ -1288,8 +1324,8 @@ export default {
       // Check current page for changes
       this.itemsForUser.forEach((feature, idx) => {
         if (!feature.isDuplicate && hasChanged(feature, this.originalItems[idx])) {
-          // Only include features that have changed (but send the full feature with ID)
-          changedFeatures.push(getComparableFeature(feature));
+          // Use _prepareFeatureForBackend to ensure properties.id is set for backend
+          changedFeatures.push(this._prepareFeatureForBackend(feature));
         }
       });
 
@@ -1305,7 +1341,8 @@ export default {
               // Compare with original if we have it
               const original = originalForPage[idx];
               if (!original || hasChanged(feature, original)) {
-                changedFeatures.push(getComparableFeature(feature));
+                // Use _prepareFeatureForBackend to ensure properties.id is set for backend
+                changedFeatures.push(this._prepareFeatureForBackend(feature));
               }
             }
           });
@@ -1332,6 +1369,13 @@ export default {
         // No changes to save
         return {success: true, changedCount: 0};
       }
+
+      // Debug: Log what we're sending
+      console.log(`Preparing to save ${changedFeatures.length} changed feature(s)`);
+      changedFeatures.forEach((feature, idx) => {
+        const featureId = feature.properties?.id || 'NO ID';
+        console.log(`Feature ${idx}: ID=${featureId}, name=${feature.properties?.name || 'Unnamed'}`);
+      });
 
       const csrftoken = getCookie('csrftoken');
 
