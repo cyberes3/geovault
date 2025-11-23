@@ -4,6 +4,7 @@ import traceback
 
 from django.conf import settings
 from django.contrib.gis.geos import GEOSGeometry
+from django.db import transaction
 from django.http import JsonResponse
 from django.views.decorators.csrf import csrf_protect
 from django.views.decorators.http import require_http_methods
@@ -234,6 +235,224 @@ def update_feature_metadata(request, feature_id):
     except Exception as e:
         logger.error(f"Error updating feature metadata {feature_id}: {traceback.format_exc()}")
         return _error_response('Failed to update feature metadata', 500)
+
+
+@login_required_401
+@csrf_protect
+@require_http_methods(["POST"])
+def bulk_update_features_metadata(request):
+    """
+    API endpoint to bulk update metadata for multiple features (name, description, tags, created date).
+    Does not modify geometry or geojson_hash.
+    
+    Request body: JSON object with:
+    - updates: array of update objects, each containing:
+      - feature_id: int (required)
+      - tags: array of strings (optional)
+      - name: string (optional)
+      - description: string (optional)
+      - created: datetime string in ISO format (optional)
+    
+    Returns:
+    - success: bool
+    - updated_count: int (number of successfully updated features)
+    - errors: array of error objects with feature_id and error message
+    """
+    try:
+        # Parse request body
+        try:
+            data = json.loads(request.body)
+        except json.JSONDecodeError:
+            return _error_response('Invalid JSON in request body', 400)
+        
+        # Validate that it's a proper object with updates array
+        if not isinstance(data, dict):
+            return _error_response('Request body must be a valid JSON object', 400)
+        
+        if 'updates' not in data:
+            return _error_response('Request body must contain an "updates" array', 400)
+        
+        updates = data['updates']
+        if not isinstance(updates, list):
+            return _error_response('"updates" must be an array', 400)
+        
+        if not updates:
+            return _error_response('"updates" array cannot be empty', 400)
+        
+        # Process all updates in a single transaction
+        updated_count = 0
+        errors = []
+        
+        with transaction.atomic():
+            for update_data in updates:
+                if not isinstance(update_data, dict):
+                    errors.append({
+                        'feature_id': None,
+                        'error': 'Update item must be an object'
+                    })
+                    continue
+                
+                if 'feature_id' not in update_data:
+                    errors.append({
+                        'feature_id': None,
+                        'error': 'Update item must contain "feature_id"'
+                    })
+                    continue
+                
+                feature_id = update_data['feature_id']
+                try:
+                    feature_id = int(feature_id)
+                except (ValueError, TypeError):
+                    errors.append({
+                        'feature_id': feature_id,
+                        'error': f'"feature_id" must be an integer, got {type(feature_id).__name__}'
+                    })
+                    continue
+                
+                try:
+                    # Get the feature from database
+                    feature = FeatureStore.objects.get(id=feature_id, user=request.user)
+                    
+                    # Extract allowed metadata fields
+                    allowed_fields = {'name', 'description', 'created', 'tags'}
+                    update_fields = {}
+                    updated_fields = []
+                    
+                    for field in allowed_fields:
+                        if field in update_data:
+                            update_fields[field] = update_data[field]
+                            updated_fields.append(field)
+                    
+                    if not updated_fields:
+                        errors.append({
+                            'feature_id': feature_id,
+                            'error': 'No valid fields to update. Supported fields: name, description, tags, created'
+                        })
+                        continue
+                    
+                    # Create a deep copy of the original feature to merge updates into
+                    original_geojson = feature.geojson
+                    
+                    # Ensure original_geojson is a dict (it should be, but be defensive)
+                    if not isinstance(original_geojson, dict):
+                        errors.append({
+                            'feature_id': feature_id,
+                            'error': 'Invalid feature data in database'
+                        })
+                        continue
+                    
+                    merged_feature = copy.deepcopy(original_geojson)
+                    
+                    # Preserve existing system_tags from original feature
+                    original_system_tags = original_geojson.get('properties', {}).get('system_tags', [])
+                    if not isinstance(original_system_tags, list):
+                        original_system_tags = []
+                    
+                    # Ensure the feature has the required structure (type, geometry, properties)
+                    merged_feature['type'] = 'Feature'
+                    if 'geometry' not in merged_feature or not merged_feature['geometry']:
+                        merged_feature['geometry'] = original_geojson.get('geometry', {})
+                    if 'properties' not in merged_feature:
+                        merged_feature['properties'] = {}
+                    
+                    # Merge update fields into the feature properties
+                    for field, value in update_fields.items():
+                        if field == 'tags':
+                            # Validate tags
+                            is_valid, error_response = _validate_tags(value)
+                            if not is_valid:
+                                errors.append({
+                                    'feature_id': feature_id,
+                                    'error': error_response.content.decode('utf-8') if hasattr(error_response, 'content') else str(error_response)
+                                })
+                                continue
+                            
+                            # Strip system tags from incoming tags (defensive - user shouldn't be able to add them)
+                            user_tags = filter_protected_tags(value, CONST_INTERNAL_TAGS)
+                            
+                            # Prepare user tags (lowercase and deduplicate)
+                            user_tags = prepare_user_tags(user_tags)
+                            
+                            merged_feature['properties']['tags'] = user_tags
+                        elif field == 'name':
+                            if not isinstance(value, str):
+                                errors.append({
+                                    'feature_id': feature_id,
+                                    'error': 'name must be a string'
+                                })
+                                continue
+                            merged_feature['properties']['name'] = value
+                        elif field == 'description':
+                            if not isinstance(value, str):
+                                errors.append({
+                                    'feature_id': feature_id,
+                                    'error': 'description must be a string'
+                                })
+                                continue
+                            merged_feature['properties']['description'] = value
+                        elif field == 'created':
+                            if not isinstance(value, str):
+                                errors.append({
+                                    'feature_id': feature_id,
+                                    'error': 'created must be a string'
+                                })
+                                continue
+                            # Validate datetime format
+                            try:
+                                from datetime import datetime
+                                datetime.fromisoformat(value.replace('Z', '+00:00'))
+                            except ValueError:
+                                errors.append({
+                                    'feature_id': feature_id,
+                                    'error': 'created must be a valid ISO datetime string'
+                                })
+                                continue
+                            merged_feature['properties']['created'] = value
+                    
+                    # Run the merged feature through validate_and_normalize_geojson_feature()
+                    try:
+                        normalized_feature = validate_and_normalize_geojson_feature(
+                            merged_feature,
+                            preserve_system_tags=original_system_tags,
+                            preserve_id=False
+                        )
+                    except GeometryValidationError as e:
+                        errors.append({
+                            'feature_id': feature_id,
+                            'error': f'Feature validation failed: {str(e)}'
+                        })
+                        continue
+                    
+                    # Ensure system_tags are preserved after normalization
+                    normalized_feature['properties']['system_tags'] = original_system_tags
+                    
+                    # Update the feature's geojson data
+                    feature.geojson = normalized_feature
+                    feature.save()
+                    
+                    updated_count += 1
+                    
+                except FeatureStore.DoesNotExist:
+                    errors.append({
+                        'feature_id': feature_id,
+                        'error': 'Feature not found or access denied'
+                    })
+                except Exception as e:
+                    logger.error(f"Error updating feature metadata {feature_id} in bulk update: {traceback.format_exc()}")
+                    errors.append({
+                        'feature_id': feature_id,
+                        'error': f'Failed to update feature metadata: {str(e)}'
+                    })
+        
+        return JsonResponse({
+            'success': True,
+            'updated_count': updated_count,
+            'errors': errors
+        })
+    
+    except Exception as e:
+        logger.error(f"Error in bulk update features metadata: {traceback.format_exc()}")
+        return _error_response('Failed to process bulk update request', 500)
 
 
 @login_required_401

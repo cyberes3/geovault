@@ -381,10 +381,11 @@ export default {
         // Get all features with this tag
         const features = this.tagsData[oldTag] || [];
 
-        // Update each feature's tags
-        const updatePromises = features.map(async (feature) => {
+        // Prepare bulk update payload
+        const updates = [];
+        for (const feature of features) {
           if (!feature.properties._id) {
-            return;
+            continue;
           }
 
           // Get current tags
@@ -401,26 +402,43 @@ export default {
             currentTags.push(newTag);
           }
 
-          // Update the feature
+          updates.push({
+            feature_id: feature.properties._id,
+            tags: currentTags
+          });
+        }
+
+        // Send bulk update request
+        if (updates.length > 0) {
           const csrfToken = this.getCookie('csrftoken');
-          const response = await fetch(`/api/data/feature/${feature.properties._id}/update-metadata/`, {
-            method: 'PUT',
+          const response = await fetch('/api/data/features/bulk-update-metadata/', {
+            method: 'POST',
             headers: {
               'Content-Type': 'application/json',
               'X-CSRFToken': csrfToken || ''
             },
             body: JSON.stringify({
-              tags: currentTags
+              updates: updates
             })
           });
 
           if (!response.ok) {
-            throw new Error(`Failed to update feature ${feature.properties._id}`);
+            const errorData = await response.json().catch(() => ({}));
+            throw new Error(errorData.error || `Failed to update features: ${response.status}`);
           }
-        });
 
-        // Wait for all updates to complete
-        await Promise.all(updatePromises);
+          const result = await response.json();
+          if (!result.success) {
+            throw new Error('Bulk update failed');
+          }
+
+          // Check for any errors in the response
+          if (result.errors && result.errors.length > 0) {
+            const errorMessages = result.errors.map(e => `Feature ${e.feature_id}: ${e.error}`).join('\n');
+            console.warn('Some features failed to update:', errorMessages);
+            // Still continue with the update, but log the errors
+          }
+        }
 
         // Update local state
         const newTagsData = {...this.tagsData};
@@ -478,10 +496,11 @@ export default {
       }
 
       try {
-        // Remove the tag from all features
-        const updatePromises = features.map(async (feature) => {
+        // Prepare bulk update payload
+        const updates = [];
+        for (const feature of features) {
           if (!feature.properties._id) {
-            return;
+            continue;
           }
 
           // Get current tags
@@ -492,26 +511,43 @@ export default {
           // Remove the tag from the array
           const filteredTags = currentTags.filter(t => t !== tag);
 
-          // Update the feature
+          updates.push({
+            feature_id: feature.properties._id,
+            tags: filteredTags
+          });
+        }
+
+        // Send bulk update request
+        if (updates.length > 0) {
           const csrfToken = this.getCookie('csrftoken');
-          const response = await fetch(`/api/data/feature/${feature.properties._id}/update-metadata/`, {
-            method: 'PUT',
+          const response = await fetch('/api/data/features/bulk-update-metadata/', {
+            method: 'POST',
             headers: {
               'Content-Type': 'application/json',
               'X-CSRFToken': csrfToken || ''
             },
             body: JSON.stringify({
-              tags: filteredTags
+              updates: updates
             })
           });
 
           if (!response.ok) {
-            throw new Error(`Failed to update feature ${feature.properties._id}`);
+            const errorData = await response.json().catch(() => ({}));
+            throw new Error(errorData.error || `Failed to update features: ${response.status}`);
           }
-        });
 
-        // Wait for all updates to complete
-        await Promise.all(updatePromises);
+          const result = await response.json();
+          if (!result.success) {
+            throw new Error('Bulk update failed');
+          }
+
+          // Check for any errors in the response
+          if (result.errors && result.errors.length > 0) {
+            const errorMessages = result.errors.map(e => `Feature ${e.feature_id}: ${e.error}`).join('\n');
+            console.warn('Some features failed to update:', errorMessages);
+            // Still continue with the update, but log the errors
+          }
+        }
 
         // Remove tag from local state
         const newTagsData = {...this.tagsData};

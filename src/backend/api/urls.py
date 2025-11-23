@@ -5,7 +5,7 @@ from api.views.config import get_config
 from api.views.feature_delete import delete_feature
 from api.views.feature_retrieval import get_feature
 from api.views.feature_search import get_features_by_tag, search_features, filter_features_by_tags, get_all_features
-from api.views.feature_update import update_feature, update_feature_metadata, apply_replacement_geometry, regenerate_feature_tags
+from api.views.feature_update import update_feature, update_feature_metadata, bulk_update_features_metadata, apply_replacement_geometry, regenerate_feature_tags
 from api.views.geolocation_api import get_user_location, get_location_by_ip
 from api.views.icon_management import serve_user_icon, serve_system_icon, upload_icon, recolor_icon, serve_icon_registry
 from api.views.import_item import upload_item, get_processing_status, get_user_processing_jobs, delete_import_item, update_import_item, fetch_import_history_item, \
@@ -28,6 +28,7 @@ urlpatterns = [
     path('features/search/', search_features),
     path('features/filter-by-tags/', filter_features_by_tags),
     path('features/all/', get_all_features),
+    path('features/bulk-update-metadata/', bulk_update_features_metadata),
     path('feature/<int:feature_id>/', get_feature),
     path('feature/<int:feature_id>/update/', update_feature),
     path('feature/<int:feature_id>/update-metadata/', update_feature_metadata),
