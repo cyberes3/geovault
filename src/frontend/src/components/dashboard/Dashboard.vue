@@ -141,22 +141,6 @@ export default {
   },
   async mounted() {
   },
-  activated() {
-    // Refresh user info when navigating back to dashboard (keep-alive component)
-    this.refreshUserInfo();
-  },
-  beforeRouteEnter(to, from, next) {
-    next(async vm => {
-      // Refresh user info when entering the dashboard route
-      await vm.refreshUserInfo();
-    });
-  },
-  beforeRouteUpdate(to, from, next) {
-    // Refresh user info when route updates (e.g., navigating back to dashboard)
-    this.refreshUserInfo().then(() => {
-      next();
-    });
-  },
   watch: {},
 }
 </script>
