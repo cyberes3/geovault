@@ -41,7 +41,14 @@
                     @change="handleFileSelect"
                     class="hidden"
                   />
-                  <div class="flex items-center justify-center px-6 py-3 border-2 border-dashed border-gray-300 rounded-lg hover:border-blue-400 hover:bg-blue-50 transition-colors">
+                  <div 
+                    :class="dropzoneClasses"
+                    class="flex items-center justify-center px-6 py-3 border-2 border-dashed rounded-lg transition-colors"
+                    @drop="onDrop"
+                    @dragover.prevent
+                    @dragenter.prevent="dragEnter"
+                    @dragleave="dragLeave"
+                  >
                     <div class="text-center">
                       <svg class="mx-auto h-12 w-12 text-gray-400" stroke="currentColor" fill="none" viewBox="0 0 48 48">
                         <path d="M28 8H12a4 4 0 00-4 4v20m32-12v8m0 0v8a4 4 0 01-4 4H12a4 4 0 01-4-4v-4m32-4l-3.172-3.172a4 4 0 00-5.656 0L28 28M8 32l9.172-9.172a4 4 0 015.656 0L28 28m0 0l4 4m4-4h-12m-2-5h9.172M17 13h-2a2 2 0 00-2 2v2a2 2 0 002 2h2v-6z" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" />
@@ -100,9 +107,8 @@
                 <div class="w-full bg-gray-200 rounded-full h-3 overflow-hidden">
                   <div 
                     :style="{ width: processingProgress + '%' }" 
-                    class="bg-blue-600 h-3 rounded-full transition-all duration-300 flex items-center justify-end pr-1"
+                    class="bg-blue-600 h-3 rounded-full transition-all duration-300"
                   >
-                    <span v-if="processingProgress > 10" class="text-xs text-white font-medium">{{ Math.round(processingProgress) }}%</span>
                   </div>
                 </div>
                 <p class="text-xs text-gray-500 mt-2">{{ Math.round(processingProgress) }}% complete</p>
@@ -358,7 +364,8 @@ export default {
       existingFeatureGeometryType: null,
       featureMaps: {}, // Store map instances by index
       expandedMapIndex: null, // Index of currently expanded map
-      expandedMap: null // Expanded map instance
+      expandedMap: null, // Expanded map instance
+      isDragOver: false
     }
   },
   computed: {
@@ -379,6 +386,13 @@ export default {
         const nameB = (b.properties?.name || '').toLowerCase()
         return nameA.localeCompare(nameB)
       })
+    },
+    dropzoneClasses() {
+      if (this.isDragOver) {
+        return 'border-blue-400 bg-blue-50'
+      } else {
+        return 'border-gray-300 hover:border-blue-400 hover:bg-blue-50'
+      }
     }
   },
   watch: {
@@ -801,6 +815,58 @@ export default {
         this.$refs.fileInput.value = ''
       }
     },
+    onDrop(e) {
+      e.preventDefault()
+      e.stopPropagation()
+      this.isDragOver = false
+      
+      const droppedFiles = Array.from(e.dataTransfer.files)
+      if (droppedFiles.length === 0) {
+        return
+      }
+      
+      // Only use the first file (this component handles single file upload)
+      const file = droppedFiles[0]
+      
+      // Use the same validation logic as handleFileSelect
+      if (!file) {
+        this.selectedFile = null
+        return
+      }
+
+      // Prevent selecting a new file if one is already being processed
+      if (this.processing || this.importQueueId) {
+        this.errorMessage = 'Please wait for the current upload to complete'
+        return
+      }
+
+      // Validate file type
+      const fileName = file.name.toLowerCase()
+      if (!fileName.endsWith('.kmz') && !fileName.endsWith('.kml') && !fileName.endsWith('.gpx')) {
+        this.errorMessage = 'Please select a KMZ, KML, or GPX file'
+        this.selectedFile = null
+        return
+      }
+
+      // Clear any previous errors
+      this.errorMessage = ''
+      this.selectedFile = file
+    },
+    dragEnter(e) {
+      e.preventDefault()
+      e.stopPropagation()
+      this.isDragOver = true
+    },
+    dragLeave(e) {
+      e.preventDefault()
+      e.stopPropagation()
+      // Only set isDragOver to false if we're leaving the dropzone entirely
+      // Check if the related target is outside the dropzone
+      const dropzone = e.currentTarget
+      if (!dropzone.contains(e.relatedTarget)) {
+        this.isDragOver = false
+      }
+    },
     handleUpload() {
       if (!this.selectedFile) {
         this.errorMessage = 'Please select a file first'
@@ -1023,22 +1089,22 @@ export default {
         this.regeneratingTags = false
       }
     },
-    async handleCancel() {
-      // Delete the ImportQueue row if it exists
-      if (this.importQueueId) {
-        try {
-          await fetch(`${APIHOST}/api/data/item/import/delete/${this.importQueueId}`, {
-            method: 'DELETE',
-            headers: {
-              'X-CSRFToken': this.getCsrfToken()
-            },
-            credentials: 'include'
-          })
-        } catch (error) {
-          console.error('Error deleting import queue item:', error)
-        }
-      }
+    handleCancel() {
+      // Close dialog immediately
       this.handleClose()
+      
+      // Delete the ImportQueue row in the background (fire-and-forget)
+      if (this.importQueueId) {
+        fetch(`${APIHOST}/api/data/item/import/delete/${this.importQueueId}`, {
+          method: 'DELETE',
+          headers: {
+            'X-CSRFToken': this.getCsrfToken()
+          },
+          credentials: 'include'
+        }).catch(error => {
+          console.error('Error deleting import queue item:', error)
+        })
+      }
     },
     handleClose() {
       this.cleanup()
