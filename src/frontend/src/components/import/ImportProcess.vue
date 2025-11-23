@@ -1261,14 +1261,9 @@ export default {
       if (isNaN(date.getTime())) return '';
       return date.toISOString().slice(0, 16);
     },
-    async _saveChangesInternal() {
-      // Internal save function that doesn't manage locks
-      // This can be called by both saveChanges() and performImport()
-
-      // Cache current page changes first
-      this.cacheCurrentPageChanges();
-
-      // Collect only changed features from current page and cached pages
+    _getChangedFeatures() {
+      // Helper method to collect changed features from current page and cached pages
+      // Returns an array of changed features (in comparable format)
       const changedFeatures = [];
 
       // Helper function to get comparable feature data (excluding UI-only properties)
@@ -1284,6 +1279,7 @@ export default {
 
       // Helper function to check if a feature has changed
       const hasChanged = (current, original) => {
+        if (!current || !original) return false;
         const currentComparable = getComparableFeature(current);
         const originalComparable = getComparableFeature(original);
         return JSON.stringify(currentComparable) !== JSON.stringify(originalComparable);
@@ -1315,6 +1311,22 @@ export default {
           });
         }
       });
+
+      return changedFeatures;
+    },
+    hasUnsavedChanges() {
+      // Check if there are any unsaved changes on current page or cached pages
+      return this._getChangedFeatures().length > 0;
+    },
+    async _saveChangesInternal() {
+      // Internal save function that doesn't manage locks
+      // This can be called by both saveChanges() and performImport()
+
+      // Cache current page changes first
+      this.cacheCurrentPageChanges();
+
+      // Collect only changed features from current page and cached pages
+      const changedFeatures = this._getChangedFeatures();
 
       if (changedFeatures.length === 0) {
         // No changes to save
@@ -1362,6 +1374,10 @@ export default {
       } else {
         throw new Error(response.data.msg);
       }
+    },
+    hasUnsavedChanges() {
+      // Check if there are any unsaved changes on current page or cached pages
+      return this._getChangedFeatures().length > 0;
     },
     async saveChanges() {
       // User-facing save function that manages locks and error handling
@@ -1625,8 +1641,8 @@ export default {
   async mounted() {
     // Add navigation warning when user tries to leave the page
     this.beforeUnloadHandler = (event) => {
-      // Only warn if we're not redirecting due to import completion
-      if (!this.loading.redirecting) {
+      // Only warn if we're not redirecting due to import completion and there are unsaved changes
+      if (!this.loading.redirecting && this.hasUnsavedChanges()) {
         event.preventDefault();
         event.returnValue = '';
         return '';
@@ -1662,18 +1678,27 @@ export default {
       return;
     }
 
-    // Warn user before leaving this route
-    const answer = window.confirm('Are you sure you want to leave this page? Your changes may not be saved.');
-    if (answer) {
-      // Remove the beforeunload handler before navigating away
+    // Only warn user if there are unsaved changes
+    if (this.hasUnsavedChanges()) {
+      const answer = window.confirm('Are you sure you want to leave this page? Your changes may not be saved.');
+      if (answer) {
+        // Remove the beforeunload handler before navigating away
+        if (this.beforeUnloadHandler) {
+          window.removeEventListener('beforeunload', this.beforeUnloadHandler);
+        }
+        // Clear component state when user confirms they want to leave
+        this.clearComponentState();
+        next();
+      } else {
+        next(false);
+      }
+    } else {
+      // No unsaved changes, proceed with navigation
       if (this.beforeUnloadHandler) {
         window.removeEventListener('beforeunload', this.beforeUnloadHandler);
       }
-      // Clear component state when user confirms they want to leave
       this.clearComponentState();
       next();
-    } else {
-      next(false);
     }
   },
   beforeRouteUpdate(to, from, next) {
