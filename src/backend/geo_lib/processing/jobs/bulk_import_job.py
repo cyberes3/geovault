@@ -17,7 +17,7 @@ from api.models import ImportQueue, FeatureStore, DatabaseLogging
 from geo_lib.feature_id import generate_feature_hash
 from geo_lib.processing.jobs.base_job import BaseJob
 from geo_lib.processing.status_tracker import ProcessingStatus, JobType
-from geo_lib.const_strings import CONST_INTERNAL_TAGS, filter_protected_tags
+from geo_lib.const_strings import CONST_INTERNAL_TAGS
 from geo_lib.types.feature import PointFeature, PolygonFeature, LineStringFeature, MultiLineStringFeature
 from geo_lib.logging.console import get_job_logger
 

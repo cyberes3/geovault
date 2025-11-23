@@ -24,7 +24,8 @@ class Properties(BaseModel):
     id: Optional[str] = None
     description: Optional[str] = None
     created: Optional[datetime] = None
-    tags: Optional[List[str]] = Field(default_factory=list)
+    tags: Optional[List[str]] = Field(default_factory=list)  # User tags only
+    system_tags: Optional[List[str]] = Field(default_factory=list)  # System-generated tags (type, import-year, import-month, source-file, geocoding)
 
 
 class PointFeatureGeometry(BaseModel):

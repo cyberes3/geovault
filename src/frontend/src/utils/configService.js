@@ -46,15 +46,6 @@ export async function fetchConfig() {
 }
 
 /**
- * Get protected tags (from cache or fetch if needed)
- * @returns {Promise<string[]>}
- */
-export async function getProtectedTags() {
-    const config = await fetchConfig();
-    return config.protectedTags || [];
-}
-
-/**
  * Clear cached config (useful for testing or forced refresh)
  */
 export function clearConfigCache() {

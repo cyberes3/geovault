@@ -188,11 +188,12 @@ def _build_collection_query(user_id: int, collection_id: uuid.UUID) -> QuerySet:
     feature_ids_set = set()
     
     # 1. Get features matching ANY of the collection's tags (OR logic)
+    # Search in both tags and system_tags arrays
     if collection.tags:
         tag_query = Q()
         for tag in collection.tags:
             if tag:  # Only process non-empty tags
-                tag_query |= Q(geojson__properties__tags__contains=[tag])
+                tag_query |= Q(geojson__properties__tags__contains=[tag]) | Q(geojson__properties__system_tags__contains=[tag])
         
         if tag_query:
             tag_features = base_query.filter(tag_query).values_list('id', flat=True)
@@ -234,9 +235,12 @@ def _build_base_query(user_id: int, tag: str | None = None, collection_id: uuid.
     
     base_query = FeatureStore.objects.filter(user_id=user_id).exclude(geometry__isnull=True)
     
-    # Add tag filter if provided
+    # Add tag filter if provided (search in both tags and system_tags)
     if tag:
-        base_query = base_query.filter(geojson__properties__tags__contains=[tag])
+        base_query = base_query.filter(
+            Q(geojson__properties__tags__contains=[tag]) |
+            Q(geojson__properties__system_tags__contains=[tag])
+        )
     
     # Order by id to ensure consistent results when slicing
     return base_query.order_by('id')

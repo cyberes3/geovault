@@ -1,5 +1,4 @@
-import { getProtectedTags, fetchConfig } from '@/utils/configService.js'
-import { filterProtectedTags } from '@/utils/tagUtils.js'
+import { fetchConfig } from '@/utils/configService.js'
 
 class UserStatus {
     constructor(authorized, email, id, featureCount = 0, tags = []) {
@@ -23,11 +22,7 @@ export async function getUserInfo() {
     // Create new promise and cache it
     getUserInfoPromise = (async () => {
         try {
-            // Fetch config in parallel with user status
-            const [response, protectedTags] = await Promise.all([
-                fetch('/api/user/status/'),
-                getProtectedTags()
-            ])
+            const response = await fetch('/api/user/status/')
             
             if (!response.ok) {
                 throw new Error(`HTTP error! status: ${response.status}`)
@@ -35,17 +30,15 @@ export async function getUserInfo() {
             const userStatusData = await response.json()
             
             // Handle new tag structure (array of objects with tag and count) or legacy (array of strings)
+            // Tags are already separated - backend only returns user tags
             let processedTags = []
             if (userStatusData.tags && Array.isArray(userStatusData.tags)) {
                 if (userStatusData.tags.length > 0 && typeof userStatusData.tags[0] === 'object' && 'tag' in userStatusData.tags[0]) {
                     // New structure: array of objects with tag and count
-                    processedTags = userStatusData.tags
-                        .filter(tagObj => !protectedTags.includes(tagObj.tag))
-                        .map(tagObj => ({ tag: tagObj.tag, count: tagObj.count }))
+                    processedTags = userStatusData.tags.map(tagObj => ({ tag: tagObj.tag, count: tagObj.count }))
                 } else {
                     // Legacy structure: array of strings
-                    const filteredTags = filterProtectedTags(userStatusData.tags, protectedTags)
-                    processedTags = filteredTags.map(tag => ({ tag: tag, count: 0 }))
+                    processedTags = userStatusData.tags.map(tag => ({ tag: tag, count: 0 }))
                 }
             }
             

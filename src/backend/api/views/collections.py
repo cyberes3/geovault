@@ -7,7 +7,6 @@ from django.http import JsonResponse
 from django.views.decorators.http import require_http_methods
 
 from api.models import Collection, FeatureStore
-from geo_lib.const_strings import CONST_INTERNAL_TAGS, filter_protected_tags
 from geo_lib.logging.console import get_access_logger
 from geo_lib.website.auth import login_required_401
 
@@ -343,11 +342,11 @@ def get_collection_features(request, collection_id):
         if collection.tags:
             base_query = FeatureStore.objects.filter(user=request.user).exclude(geometry__isnull=True)
             
-            # Build OR query for tags
+            # Build OR query for tags (search in both tags and system_tags)
             tag_query = Q()
             for tag in collection.tags:
                 if tag:  # Only process non-empty tags
-                    tag_query |= Q(geojson__properties__tags__contains=[tag])
+                    tag_query |= Q(geojson__properties__tags__contains=[tag]) | Q(geojson__properties__system_tags__contains=[tag])
             
             if tag_query:
                 tag_features = base_query.filter(tag_query).values_list('id', flat=True)
@@ -372,11 +371,8 @@ def get_collection_features(request, collection_id):
             if geojson_data and 'geometry' in geojson_data:
                 properties = geojson_data.get('properties', {}).copy()
                 
-                # Filter out protected tags from the tags list for display
-                tags_list = properties.get('tags', [])
-                if isinstance(tags_list, list):
-                    filtered_tags = filter_protected_tags(tags_list, CONST_INTERNAL_TAGS)
-                    properties['tags'] = filtered_tags
+                # Tags are already separated - user tags only in tags field
+                # System tags are in system_tags field and not shown to user
                 
                 # Include database ID in properties
                 properties['_id'] = feature.id
@@ -430,7 +426,7 @@ def _count_collection_features(collection: Collection) -> int:
         tag_query = Q()
         for tag in collection.tags:
             if tag:
-                tag_query |= Q(geojson__properties__tags__contains=[tag])
+                tag_query |= Q(geojson__properties__tags__contains=[tag]) | Q(geojson__properties__system_tags__contains=[tag])
         
         if tag_query:
             tag_features = base_query.filter(tag_query).values_list('id', flat=True)

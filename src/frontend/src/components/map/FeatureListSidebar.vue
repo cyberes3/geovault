@@ -191,8 +191,6 @@
 <script>
 import {GeoJSON} from 'ol/format'
 import {APIHOST} from '@/config.js'
-import {getProtectedTags} from '@/utils/configService.js'
-import {isProtectedTag} from '@/utils/tagUtils.js'
 
 export default {
   name: 'FeatureListSidebar',
@@ -220,7 +218,6 @@ export default {
       tagFilteredFeatures: [],
       isFiltering: false,
       filterTimeout: null,
-      protectedTags: []
     }
   },
   computed: {
@@ -232,35 +229,16 @@ export default {
     },
     filteredAvailableTags() {
       // Filter out already selected tags
-      const unselectedTags = this.availableTags.filter(tag => !this.selectedTags.includes(tag))
-      
-      // Separate user tags from system tags
-      const userTags = []
-      const systemTags = []
-      
-      for (const tag of unselectedTags) {
-        if (isProtectedTag(tag, this.protectedTags)) {
-          systemTags.push(tag)
-        } else {
-          userTags.push(tag)
-        }
-      }
-      
-      // Sort each group alphabetically
-      userTags.sort()
-      systemTags.sort()
+      let unselectedTags = this.availableTags.filter(tag => !this.selectedTags.includes(tag))
       
       // Apply search filter if there's a search query
       if (this.tagSearchQuery.trim()) {
         const query = this.tagSearchQuery.toLowerCase()
-        const filteredUserTags = userTags.filter(tag => tag.toLowerCase().includes(query))
-        const filteredSystemTags = systemTags.filter(tag => tag.toLowerCase().includes(query))
-        // Return user tags first, then system tags
-        return [...filteredUserTags, ...filteredSystemTags]
+        unselectedTags = unselectedTags.filter(tag => tag.toLowerCase().includes(query))
       }
       
-      // Return user tags first, then system tags
-      return [...userTags, ...systemTags]
+      // Sort alphabetically
+      return unselectedTags.sort()
     }
   },
   watch: {
@@ -517,8 +495,6 @@ export default {
     }
   },
   async mounted() {
-    // Fetch protected tags to identify system tags
-    this.protectedTags = await getProtectedTags()
     // Fetch available tags when component mounts (will be used when tag filter tab is opened)
     this.fetchAvailableTags()
   },

@@ -2,7 +2,7 @@
   <div v-if="feature" class="absolute bottom-4 right-4 bg-white rounded-lg shadow-xl border border-gray-200 z-10 max-w-md w-80">
     <div class="p-4">
       <!-- Header -->
-      <div class="flex items-start justify-between mb-4">
+      <div class="flex items-start justify-between">
         <h3 class="text-lg font-bold text-gray-900 pr-2">{{ getFeatureName(feature) }}</h3>
         <div class="flex items-center space-x-2 flex-shrink-0">
           <button
@@ -28,10 +28,8 @@
       </div>
 
       <!-- Feature Type -->
-      <div class="mb-4">
-        <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-blue-100 text-blue-800">
-          {{ getFeatureGeometryType(feature) }}
-        </span>
+      <div class="mb-4 text-sm text-gray-600 italic">
+        {{ getFeatureGeometryType(feature) }}
       </div>
 
       <!-- Description -->
@@ -40,14 +38,27 @@
       </div>
 
       <!-- Tags -->
-      <div v-if="getFeatureTags(feature).length > 0" class="flex flex-wrap gap-2">
-        <span
-          v-for="tag in getFeatureTags(feature)"
-          :key="tag"
-          class="inline-flex items-center px-2 py-1 rounded-md text-xs font-medium bg-gray-100 text-gray-800"
-        >
-          {{ tag }}
-        </span>
+      <div v-if="getFeatureTags(feature).userTags.length > 0 || getFeatureTags(feature).systemTags.length > 0" class="space-y-2">
+        <!-- User Tags (Blue) -->
+        <div v-if="getFeatureTags(feature).userTags.length > 0" class="flex flex-wrap gap-2">
+          <span
+            v-for="tag in getFeatureTags(feature).userTags"
+            :key="`user-${tag}`"
+            class="inline-flex items-center px-2 py-1 rounded-md text-xs font-medium bg-blue-100 text-blue-800"
+          >
+            {{ tag }}
+          </span>
+        </div>
+        <!-- System Tags (Grey) -->
+        <div v-if="getFeatureTags(feature).systemTags.length > 0" class="flex flex-wrap gap-2">
+          <span
+            v-for="tag in getFeatureTags(feature).systemTags"
+            :key="`system-${tag}`"
+            class="inline-flex items-center px-2 py-1 rounded-md text-xs font-medium bg-gray-200 text-gray-600"
+          >
+            {{ tag }}
+          </span>
+        </div>
       </div>
     </div>
   </div>
@@ -85,10 +96,13 @@ export default {
     },
     getFeatureTags(feature) {
       const properties = feature.get('properties') || {}
-      if (Array.isArray(properties.tags)) {
-        return properties.tags.filter(tag => tag && tag.trim() !== '')
-      }
-      return []
+      const userTags = Array.isArray(properties.tags) 
+        ? properties.tags.filter(tag => tag && tag.trim() !== '')
+        : []
+      const systemTags = Array.isArray(properties.system_tags)
+        ? properties.system_tags.filter(tag => tag && tag.trim() !== '')
+        : []
+      return { userTags, systemTags }
     },
     renderMarkdown(markdown) {
       if (!markdown) return ''

@@ -9,6 +9,8 @@ When importing, list all new items and make it quick and easy to edit the attrib
 Visibility: private, public, restricted (only logged in users)
 Save the unmodified original imported file in a special table and link it to the item ID
 Bulk tagging and styling on import page
+Display existing tags to select on import process
+Use same tag picking and style as map edit on import process
 
 
 ## Stretch Goals
@@ -22,3 +24,4 @@ Download all data as KML
 A very simple Android app to Make it easy to push data to the server. For example, export from back country navigator, share to this app, import to server using app
 Plugin to automatically pull saved locations from Google maps. Support multiple accounts with the option to automatically apply set tags on imported features per account
 Search box to call novatium/overpass to search for locations and zoom the map to them
+Upload and attach photos to features, add full screen photo gallery viewer

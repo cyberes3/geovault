@@ -790,21 +790,22 @@ def update_import_item(request, item_id):
     for i, existing_feature in enumerate(queue.geofeatures):
         feature_id = existing_feature.get('properties', {}).get('id')
         if feature_id and feature_id in updates_by_id:
-            # Preserve protected tags from original feature
-            original_tags = existing_feature.get('properties', {}).get('tags', [])
-            if not isinstance(original_tags, list):
-                original_tags = []
-            protected_tags = [tag for tag in original_tags if is_protected_tag(tag, CONST_INTERNAL_TAGS)]
+            # Preserve existing system_tags from original feature
+            original_system_tags = existing_feature.get('properties', {}).get('system_tags', [])
+            if not isinstance(original_system_tags, list):
+                original_system_tags = []
 
-            # Filter protected tags from incoming feature
+            # Strip system tags from incoming feature tags (defensive)
             updated_feature = updates_by_id[feature_id]
             new_tags = updated_feature.get('properties', {}).get('tags', [])
             if not isinstance(new_tags, list):
                 new_tags = []
-            filtered_tags = filter_protected_tags(new_tags, CONST_INTERNAL_TAGS)
+            # Filter out any system tags that user might have added
+            user_tags = filter_protected_tags(new_tags, CONST_INTERNAL_TAGS)
 
-            # Combine filtered user tags with preserved protected tags
-            updated_feature['properties']['tags'] = filtered_tags + protected_tags
+            # Store user tags and preserve system tags separately
+            updated_feature['properties']['tags'] = user_tags
+            updated_feature['properties']['system_tags'] = original_system_tags
             queue.geofeatures[i] = updated_feature
             updated_count += 1
 

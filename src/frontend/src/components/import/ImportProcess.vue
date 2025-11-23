@@ -464,18 +464,33 @@
           <!-- Tags Section -->
           <div>
             <label class="block text-sm font-medium text-gray-700 mb-2">Tags</label>
+            
+            <!-- System Tags (Grey, Read-only, Above user tags) -->
+            <div v-if="getSystemTags(item).length > 0" class="mb-3">
+              <div class="flex flex-wrap gap-2">
+                <span
+                  v-for="tag in getSystemTags(item)"
+                  :key="`system-${tag}`"
+                  class="inline-flex items-center px-2.5 py-1 rounded-md text-xs font-medium bg-gray-200 text-gray-600"
+                >
+                  {{ tag }}
+                </span>
+              </div>
+            </div>
+            
+            <!-- User Tags (Editable) -->
             <div class="space-y-2">
-              <div v-for="(tag, tagIndex) in getFilteredTagsWithIndex(item.properties.tags)" :key="`tag-${tagIndex}`" class="flex items-center space-x-2">
+              <div v-for="(tag, tagIndex) in item.properties.tags" :key="`tag-${tagIndex}`" class="flex items-center space-x-2">
                 <input
-                    v-model="item.properties.tags[tag.originalIndex]"
+                    v-model="item.properties.tags[tagIndex]"
                     :class="isImported || item.isDuplicate || isItemSkipped(item, index) || loading.importing ? 'block w-full px-3 py-2 border border-gray-300 rounded-md bg-gray-100 cursor-not-allowed' : 'block w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-blue-500 focus:border-blue-500'"
                     :disabled="isImported || item.isDuplicate || isItemSkipped(item, index) || loading.importing"
-                    :placeholder="getTagPlaceholder(index, tag.tag)"
+                    :placeholder="getTagPlaceholder(index, tag)"
                 />
                 <button
                     v-if="!isImported && !item.isDuplicate && !isItemSkipped(item, index) && !loading.importing"
                     class="inline-flex items-center px-3 py-2 border border-transparent text-sm font-medium rounded-md text-white bg-red-600 hover:bg-red-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-red-500"
-                    @click="removeTag(index, tag.originalIndex)"
+                    @click="removeTag(index, tagIndex)"
                     title="Remove tag"
                 >
                   <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -587,8 +602,6 @@ import {GeoFeatureTypeStrings} from "@/assets/js/types/geofeature-strings";
 import {GeoPoint, GeoLineString, GeoPolygon} from "@/assets/js/types/geofeature-types";
 import {getCookie} from "@/assets/js/auth.js";
 import {APIHOST} from "@/config.js";
-import { getProtectedTags } from "@/utils/configService.js";
-import { filterProtectedTags } from "@/utils/tagUtils.js";
 // Removed flatpickr dependency - using native HTML5 date input
 import Loader from "@/components/parts/Loader.vue";
 import MapPreviewDialog from "@/components/import/parts/MapPreviewDialog.vue";
@@ -627,7 +640,6 @@ export default {
       itemsForUser: [],
       originalItems: [],
       workerLog: [],
-      protectedTags: [],
 
       // Consolidated: Dialog state
       dialogs: {
@@ -1261,40 +1273,19 @@ export default {
       const tags = this.itemsForUser[index].properties.tags;
       return tags.length > 0 && tags[tags.length - 1].trim().length === 0;
     },
-    getFilteredTags(tags) {
-      if (!Array.isArray(tags)) {
-        return [];
-      }
-      return filterProtectedTags(tags, this.protectedTags);
-    },
-    getFilteredTagsWithIndex(tags) {
-      if (!Array.isArray(tags)) {
-        return [];
-      }
-      // Return tags with their original indices for v-model binding
-      return tags
-        .map((tag, index) => ({ tag, originalIndex: index }))
-        .filter(({ tag }) => !this.isProtectedTag(tag))
-        .map(({ tag, originalIndex }) => ({ tag, originalIndex }));
-    },
-    isProtectedTag(tag) {
-      if (!tag || typeof tag !== 'string') {
-        return false;
-      }
-      for (const prefix of this.protectedTags) {
-        if (tag === prefix || tag.startsWith(prefix + ':')) {
-          return true;
-        }
-      }
-      return false;
-    },
     resetTags(index) {
-      // Reset to original tags but filter out protected tags
+      // Reset to original user tags
       const originalTags = [...this.originalItems[index].properties.tags];
-      this.itemsForUser[index].properties.tags = filterProtectedTags(originalTags, this.protectedTags);
+      this.itemsForUser[index].properties.tags = originalTags;
     },
     removeTag(index, tagIndex) {
       this.itemsForUser[index].properties.tags.splice(tagIndex, 1);
+    },
+    getSystemTags(item) {
+      if (!item || !item.properties) return [];
+      return Array.isArray(item.properties.system_tags) 
+        ? item.properties.system_tags.filter(tag => tag && tag.trim() !== '')
+        : [];
     },
     updateDate(index, event) {
       this.itemsForUser[index].properties.created = event.target.value;
@@ -1318,11 +1309,8 @@ export default {
 
       // Helper function to get comparable feature data (excluding UI-only properties)
       const getComparableFeature = (feature) => {
-        // Filter protected tags before comparing/saving
+        // Tags are already separated - user tags only in tags field
         const properties = { ...feature.properties };
-        if (Array.isArray(properties.tags)) {
-          properties.tags = filterProtectedTags(properties.tags, this.protectedTags);
-        }
         return {
           type: feature.type,
           geometry: feature.geometry,
@@ -1671,8 +1659,6 @@ export default {
     }
   },
   async mounted() {
-    // Fetch protected tags on mount
-    this.protectedTags = await getProtectedTags();
     // Add navigation warning when user tries to leave the page
     this.beforeUnloadHandler = (event) => {
       // Only warn if we're not redirecting due to import completion

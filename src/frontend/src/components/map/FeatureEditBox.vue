@@ -343,8 +343,6 @@
 <script>
 import {APIHOST} from '@/config.js'
 import {GeoJSON} from 'ol/format'
-import { getProtectedTags } from '@/utils/configService.js'
-import { filterProtectedTags, isProtectedTag } from '@/utils/tagUtils.js'
 import IconPickerDialog from './IconPickerDialog.vue'
 import ReplacementFeatureDialog from './ReplacementFeatureDialog.vue'
 
@@ -390,7 +388,6 @@ export default {
       hasPngIcon: false,
       isSaving: false,
       errorMessage: '',
-      protectedTags: [],
       uploadedIconFile: null,
       iconPreviewUrl: null,
       iconUploadError: '',
@@ -449,8 +446,6 @@ export default {
     }
   },
   async mounted() {
-    // Fetch protected tags on mount
-    this.protectedTags = await getProtectedTags()
     // Fetch available tags for autocomplete
     await this.fetchAvailableTags()
     this.initializeForm()
@@ -470,10 +465,6 @@ export default {
   watch: {
     feature: {
       async handler() {
-        // Wait for protected tags to be loaded before initializing form
-        if (this.protectedTags.length === 0) {
-          this.protectedTags = await getProtectedTags()
-        }
         this.initializeForm()
         // Reattach scroll listener after form initialization
         this.$nextTick(() => {
@@ -497,9 +488,8 @@ export default {
       // Initialize form data
       this.formData.name = properties.name || ''
       this.formData.description = properties.description || ''
-      // Filter protected tags when initializing
-      const allTags = Array.isArray(properties.tags) ? properties.tags : []
-      this.formData.tags = filterProtectedTags(allTags, this.protectedTags)
+      // Tags are already separated - user tags only in tags field
+      this.formData.tags = Array.isArray(properties.tags) ? properties.tags : []
       this.tagsInput = this.formData.tags.join(', ') // Keep for backward compatibility
       this.tagInput = '' // Clear tag input
       this.$nextTick(() => {
@@ -938,12 +928,11 @@ export default {
         // This ensures the color picker and other form fields work even when raw JSON is provided
         // Use formData.tags array directly (preferred) or fall back to parsing tagsInput for backward compatibility
         const tagsToUse = this.formData.tags.length > 0 ? this.formData.tags : this.parseTags(this.tagsInput)
-        // Filter protected tags before sending
-        const filteredTags = filterProtectedTags(tagsToUse, this.protectedTags)
+        // Tags are already separated - user tags only in tags field
         const formFieldUpdates = {
           name: this.formData.name,
           description: this.formData.description || '',
-          tags: filteredTags
+          tags: tagsToUse
         }
 
         // Handle icon for points
@@ -1033,20 +1022,9 @@ export default {
         // Update the feature object's properties immediately so reopening the dialog shows correct values
         const properties = this.feature.get('properties') || {}
 
-        // Preserve protected tags from the original feature (same logic as backend)
-        // Use originalProperties to get tags before any modifications
-        const originalTags = Array.isArray(originalProperties.tags) ? originalProperties.tags : []
-        const protectedTags = originalTags.filter(tag => isProtectedTag(tag, this.protectedTags))
-
-        // Combine filtered user tags with preserved protected tags (same as backend does)
-        const tagsWithProtected = [...filteredTags, ...protectedTags]
-
-        // Update properties with the form field updates, but use tags with protected tags preserved
-        const updatedFormFieldUpdates = {
-          ...formFieldUpdates,
-          tags: tagsWithProtected
-        }
-        Object.assign(properties, updatedFormFieldUpdates)
+        // Tags are already separated - user tags only in tags field
+        // System tags are preserved separately by the backend
+        Object.assign(properties, formFieldUpdates)
         // Restore _id since we removed it before sending
         properties._id = featureId
         this.feature.set('properties', properties)

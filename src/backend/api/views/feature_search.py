@@ -5,7 +5,7 @@ from django.http import JsonResponse
 from django.views.decorators.http import require_http_methods
 
 from api.models import FeatureStore
-from geo_lib.const_strings import CONST_INTERNAL_TAGS, filter_protected_tags
+from geo_lib.const_strings import CONST_INTERNAL_TAGS
 from geo_lib.logging.console import get_access_logger
 from geo_lib.website.auth import login_required_401
 
@@ -33,10 +33,16 @@ def get_features_by_tag(request):
                 continue
 
             properties = geojson_data.get('properties', {})
-            tags = properties.get('tags', [])
-
-            if not isinstance(tags, list):
-                continue
+            user_tags = properties.get('tags', [])
+            system_tags = properties.get('system_tags', [])
+            
+            if not isinstance(user_tags, list):
+                user_tags = []
+            if not isinstance(system_tags, list):
+                system_tags = []
+            
+            # Combine user tags and system tags for grouping
+            all_tags = user_tags + system_tags
 
             # Include database ID in properties for frontend editing
             feature_properties = properties.copy()
@@ -51,7 +57,7 @@ def get_features_by_tag(request):
             }
 
             # Add feature to each tag's list (including system tags)
-            for tag in tags:
+            for tag in all_tags:
                 if isinstance(tag, str) and tag:  # Ensure tag is a non-empty string
                     if tag not in features_by_tag:
                         features_by_tag[tag] = []
@@ -105,12 +111,13 @@ def search_features(request):
         base_query = FeatureStore.objects.filter(user=request.user).exclude(geometry__isnull=True)
 
         # Build search query using Q objects for OR conditions
-        # Search in name, description, and tags fields
+        # Search in name, description, tags, and system_tags fields
         # Use PostgreSQL JSON field lookups with case-insensitive contains
         search_q = (
                 Q(geojson__properties__name__icontains=query) |
                 Q(geojson__properties__description__icontains=query) |
-                Q(geojson__properties__tags__icontains=query)
+                Q(geojson__properties__tags__icontains=query) |
+                Q(geojson__properties__system_tags__icontains=query)
         )
 
         # Apply search filter
@@ -187,9 +194,12 @@ def filter_features_by_tags(request):
         features_query = base_query
         
         for tag in tags:
-            # Use JSON field lookup to check if tag exists in the tags array
+            # Use JSON field lookup to check if tag exists in either tags or system_tags array
             # This uses PostgreSQL's JSON containment operator
-            features_query = features_query.filter(geojson__properties__tags__contains=[tag])
+            features_query = features_query.filter(
+                Q(geojson__properties__tags__contains=[tag]) |
+                Q(geojson__properties__system_tags__contains=[tag])
+            )
         
         # Convert to GeoJSON format
         geojson_features = []
@@ -198,11 +208,8 @@ def filter_features_by_tags(request):
             if geojson_data and 'geometry' in geojson_data:
                 properties = geojson_data.get('properties', {}).copy()
                 
-                # Filter out protected tags from the tags list for display
-                tags_list = properties.get('tags', [])
-                if isinstance(tags_list, list):
-                    filtered_tags = filter_protected_tags(tags_list, CONST_INTERNAL_TAGS)
-                    properties['tags'] = filtered_tags
+                # Tags are already separated - user tags only in tags field
+                # System tags are in system_tags field and not shown to user
                 
                 # Include database ID in properties for frontend editing
                 properties['_id'] = feature.id
@@ -257,11 +264,8 @@ def get_all_features(request):
             if geojson_data and 'geometry' in geojson_data:
                 properties = geojson_data.get('properties', {}).copy()
                 
-                # Filter out protected tags from the tags list for display
-                tags_list = properties.get('tags', [])
-                if isinstance(tags_list, list):
-                    filtered_tags = filter_protected_tags(tags_list, CONST_INTERNAL_TAGS)
-                    properties['tags'] = filtered_tags
+                # Tags are already separated - user tags only in tags field
+                # System tags are in system_tags field and not shown to user
                 
                 # Include database ID in properties
                 properties['_id'] = feature.id

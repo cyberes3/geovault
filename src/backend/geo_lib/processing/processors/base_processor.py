@@ -24,6 +24,7 @@ from geo_lib.processing.tagging import generate_auto_tags
 from geo_lib.security.file_validation import SecureFileValidator
 from geo_lib.logging.console import get_import_logger
 from geo_lib.types.feature import PointFeature, LineStringFeature, MultiLineStringFeature, PolygonFeature
+from geo_lib.const_strings import CONST_INTERNAL_TAGS, is_protected_tag, filter_protected_tags
 
 logger = get_import_logger()
 
@@ -211,13 +212,18 @@ class BaseProcessor(ABC):
                                 if self._is_cancelled():
                                     break
                                 
-                                # Merge auto tags with existing tags, avoiding duplicates
+                                # Separate system tags from user tags
                                 existing_tags = split_feature['properties'].get('tags', [])
                                 if not isinstance(existing_tags, list):
                                     existing_tags = []
-                                # Combine existing tags with auto tags, avoiding duplicates
-                                all_tags = list(existing_tags) + [tag for tag in auto_tags if tag not in existing_tags]
-                                split_feature['properties']['tags'] = all_tags
+                                
+                                # Strip system tags from existing tags (defensive - in case user added them)
+                                user_tags = filter_protected_tags(existing_tags, CONST_INTERNAL_TAGS)
+                                
+                                # Store system tags separately
+                                split_feature['properties']['system_tags'] = auto_tags
+                                # Store user tags (filtered to remove any system tags)
+                                split_feature['properties']['tags'] = user_tags
                         except Exception as tag_error:
                             # Log error but don't fail the feature processing
                             feature_name = split_feature.get('properties', {}).get('name', 'Unnamed')
