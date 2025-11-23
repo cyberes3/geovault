@@ -1,3 +1,4 @@
+import copy
 import json
 import traceback
 
@@ -135,64 +136,90 @@ def update_feature_metadata(request, feature_id):
         if not isinstance(metadata, dict):
             return _error_response('Request body must be a valid JSON object', 400)
 
-        # Update only the specified metadata fields
+        # Extract allowed metadata fields
+        allowed_fields = {'name', 'description', 'created', 'tags'}
+        update_fields = {}
         updated_fields = []
-        geojson_data = feature.geojson.copy()
-
-        if 'name' in metadata:
-            if not isinstance(metadata['name'], str):
-                return _error_response('name must be a string', 400)
-            geojson_data['properties']['name'] = metadata['name']
-            updated_fields.append('name')
-
-        if 'description' in metadata:
-            if not isinstance(metadata['description'], str):
-                return _error_response('description must be a string', 400)
-            geojson_data['properties']['description'] = metadata['description']
-            updated_fields.append('description')
-
-        if 'tags' in metadata:
-            # Validate tags
-            is_valid, error_response = _validate_tags(metadata['tags'])
-            if not is_valid:
-                return error_response
-
-            # Strip system tags from incoming tags (defensive - user shouldn't be able to add them)
-            user_tags = filter_protected_tags(metadata['tags'], CONST_INTERNAL_TAGS)
-
-            # Prepare user tags (lowercase and deduplicate)
-            user_tags = prepare_user_tags(user_tags)
-
-            # Preserve existing system_tags from the original feature
-            original_system_tags = geojson_data.get('properties', {}).get('system_tags', [])
-            is_valid, error_response, preserved_system_tags = _validate_and_preserve_system_tags(
-                metadata, original_system_tags
-            )
-            if not is_valid:
-                return error_response
-
-            # Store user tags and preserve system tags separately
-            geojson_data['properties']['tags'] = user_tags
-            geojson_data['properties']['system_tags'] = preserved_system_tags
-            updated_fields.append('tags')
-
-        if 'created' in metadata:
-            if not isinstance(metadata['created'], str):
-                return _error_response('created must be a string', 400)
-            # Validate datetime format
-            try:
-                from datetime import datetime
-                datetime.fromisoformat(metadata['created'].replace('Z', '+00:00'))
-            except ValueError:
-                return _error_response('created must be a valid ISO datetime string', 400)
-            geojson_data['properties']['created'] = metadata['created']
-            updated_fields.append('created')
-
+        
+        for field in allowed_fields:
+            if field in metadata:
+                update_fields[field] = metadata[field]
+                updated_fields.append(field)
+        
         if not updated_fields:
             return _error_response('No valid fields to update. Supported fields: name, description, tags, created', 400)
 
+        # Create a deep copy of the original feature to merge updates into
+        original_geojson = feature.geojson
+        
+        # Ensure original_geojson is a dict (it should be, but be defensive)
+        if not isinstance(original_geojson, dict):
+            return _error_response('Invalid feature data in database', 500)
+        
+        merged_feature = copy.deepcopy(original_geojson)
+        
+        # Preserve existing system_tags from original feature
+        original_system_tags = original_geojson.get('properties', {}).get('system_tags', [])
+        if not isinstance(original_system_tags, list):
+            original_system_tags = []
+        
+        # Ensure the feature has the required structure (type, geometry, properties)
+        # Always set these explicitly to ensure they exist
+        merged_feature['type'] = 'Feature'
+        if 'geometry' not in merged_feature or not merged_feature['geometry']:
+            merged_feature['geometry'] = original_geojson.get('geometry', {})
+        if 'properties' not in merged_feature:
+            merged_feature['properties'] = {}
+        
+        # Merge update fields into the feature properties
+        for field, value in update_fields.items():
+            if field == 'tags':
+                # Validate tags
+                is_valid, error_response = _validate_tags(value)
+                if not is_valid:
+                    return error_response
+                
+                # Strip system tags from incoming tags (defensive - user shouldn't be able to add them)
+                user_tags = filter_protected_tags(value, CONST_INTERNAL_TAGS)
+                
+                # Prepare user tags (lowercase and deduplicate)
+                user_tags = prepare_user_tags(user_tags)
+                
+                merged_feature['properties']['tags'] = user_tags
+            elif field == 'name':
+                if not isinstance(value, str):
+                    return _error_response('name must be a string', 400)
+                merged_feature['properties']['name'] = value
+            elif field == 'description':
+                if not isinstance(value, str):
+                    return _error_response('description must be a string', 400)
+                merged_feature['properties']['description'] = value
+            elif field == 'created':
+                if not isinstance(value, str):
+                    return _error_response('created must be a string', 400)
+                # Validate datetime format
+                try:
+                    from datetime import datetime
+                    datetime.fromisoformat(value.replace('Z', '+00:00'))
+                except ValueError:
+                    return _error_response('created must be a valid ISO datetime string', 400)
+                merged_feature['properties']['created'] = value
+        
+        # Run the merged feature through validate_and_normalize_geojson_feature()
+        try:
+            normalized_feature = validate_and_normalize_geojson_feature(
+                merged_feature,
+                preserve_system_tags=original_system_tags,
+                preserve_id=False
+            )
+        except GeometryValidationError as e:
+            return _error_response(f'Feature validation failed: {str(e)}', 400)
+        
+        # Ensure system_tags are preserved after normalization
+        normalized_feature['properties']['system_tags'] = original_system_tags
+        
         # Update the feature's geojson data
-        feature.geojson = geojson_data
+        feature.geojson = normalized_feature
         feature.save()
 
         return JsonResponse({
