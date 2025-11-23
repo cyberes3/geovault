@@ -17,13 +17,11 @@
         <div class="ml-3 flex-1">
           <h3 class="text-sm font-medium text-blue-800">How to Upload and Import</h3>
           <div class="mt-2 text-sm text-blue-700">
-            <ul class="list-disc list-inside space-y-1">
-              <li>Only KML, KMZ, and GPX files are supported (max 5MB per file)</li>
-              <li>You can select and upload multiple files at once</li>
-              <li>Each file can only be imported once</li>
-              <li>Files with the same content or filename are considered duplicates</li>
-              <li>Once imported, items cannot be modified</li>
-            </ul>
+            <ol class="list-decimal list-inside space-y-2">
+              <li><strong>Upload files:</strong> Select KML, KMZ, or GPX files (max 5MB each) and click "Upload". Files are processed and added to your import queue below.</li>
+              <li><strong>Import from queue:</strong> Go to the "Ready to Import" section and click on a file to review/edit features, or use bulk import to add multiple files to your feature store at once.</li>
+            </ol>
+            <p class="mt-3 text-xs text-blue-600">Note: Each file can only be imported once. Files with identical content are detected as duplicates.</p>
           </div>
         </div>
       </div>
