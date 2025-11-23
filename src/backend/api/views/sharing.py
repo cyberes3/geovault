@@ -3,7 +3,7 @@ import traceback
 import uuid
 from typing import Tuple
 
-from django.db.models import F
+from django.db.models import F, Q
 from django.http import JsonResponse
 from django.views.decorators.csrf import csrf_protect
 from django.views.decorators.http import require_http_methods
@@ -73,8 +73,15 @@ def create_share(request):
                 'code': 400
             }, status=400)
 
-        # Verify that the tag exists in the user's features
-        if not FeatureStore.objects.filter(user=request.user, geojson__properties__tags__contains=[tag]).exists():
+        # Verify that the tag exists in the user's features (check both user tags and system tags)
+        tag_exists = FeatureStore.objects.filter(
+            user=request.user
+        ).filter(
+            Q(geojson__properties__tags__contains=[tag]) |
+            Q(geojson__properties__system_tags__contains=[tag])
+        ).exists()
+        
+        if not tag_exists:
             return JsonResponse({
                 'success': False,
                 'error': 'Tag not found in your data',

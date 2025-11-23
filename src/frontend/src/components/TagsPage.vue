@@ -91,8 +91,14 @@
         <div class="bg-gray-50 px-6 py-4 border-b border-gray-200">
           <div class="flex items-center justify-between">
             <div class="flex items-center space-x-3 flex-1">
-              <span v-if="editingTag !== tag" class="inline-flex items-center px-3 py-1 rounded-full text-sm font-medium bg-blue-100 text-blue-800 border border-blue-200">
+              <span v-if="editingTag !== tag" :class="[
+                'inline-flex items-center px-3 py-1 rounded-full text-sm font-medium border',
+                isSystemTag(tag) 
+                  ? 'bg-purple-100 text-purple-800 border-purple-200' 
+                  : 'bg-blue-100 text-blue-800 border-blue-200'
+              ]">
                 {{ tag }}
+                <span v-if="isSystemTag(tag)" class="ml-1.5 text-xs opacity-75" title="System tag">🔒</span>
               </span>
               <input
                   v-else
@@ -120,10 +126,16 @@
                 </svg>
               </button>
               <button
-                  class="p-1.5 text-gray-400 hover:text-gray-600 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-1 rounded"
-                  title="Edit tag name"
+                  :class="[
+                    'p-1.5 rounded focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-1',
+                    isSystemTag(tag)
+                      ? 'text-gray-300 cursor-not-allowed'
+                      : 'text-gray-400 hover:text-gray-600'
+                  ]"
+                  :title="isSystemTag(tag) ? 'System tags cannot be edited' : 'Edit tag name'"
                   type="button"
-                  @click.stop.prevent="startTagEdit(tag)"
+                  :disabled="isSystemTag(tag)"
+                  @click.stop.prevent="!isSystemTag(tag) && startTagEdit(tag)"
                   @mousedown.stop.prevent
               >
                 <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -131,10 +143,16 @@
                 </svg>
               </button>
               <button
-                  class="p-1.5 text-gray-400 hover:text-red-600 focus:outline-none focus:ring-2 focus:ring-red-500 focus:ring-offset-1 rounded"
-                  title="Delete tag"
+                  :class="[
+                    'p-1.5 rounded focus:outline-none focus:ring-2 focus:ring-red-500 focus:ring-offset-1',
+                    isSystemTag(tag)
+                      ? 'text-gray-300 cursor-not-allowed'
+                      : 'text-gray-400 hover:text-red-600'
+                  ]"
+                  :title="isSystemTag(tag) ? 'System tags cannot be deleted' : 'Delete tag'"
                   type="button"
-                  @click.stop.prevent="deleteTag(tag)"
+                  :disabled="isSystemTag(tag)"
+                  @click.stop.prevent="!isSystemTag(tag) && deleteTag(tag)"
                   @mousedown.stop.prevent
               >
                 <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -226,7 +244,9 @@ export default {
   mixins: [authMixin],
   data() {
     return {
-      tagsData: {},
+      tagsData: {}, // Combined user and system tags for display
+      userTagsData: {}, // User tags only
+      systemTagsData: {}, // System tags only
       loading: true,
       error: null,
       searchQuery: '', // Search query for filtering tags
@@ -255,6 +275,10 @@ export default {
     }
   },
   methods: {
+    isSystemTag(tag) {
+      // Check if tag exists in systemTagsData
+      return tag in this.systemTagsData;
+    },
     async fetchTagsData() {
       this.loading = true;
       this.error = null;
@@ -268,8 +292,16 @@ export default {
 
         const data = await response.json();
 
-        if (data.success && data.user_tags) {
-          this.tagsData = data.user_tags;
+        if (data.success) {
+          // Store user and system tags separately
+          this.userTagsData = data.user_tags || {};
+          this.systemTagsData = data.system_tags || {};
+          
+          // Combine both for display
+          this.tagsData = {
+            ...this.userTagsData,
+            ...this.systemTagsData
+          };
         } else {
           throw new Error(data.error || 'Failed to load tags');
         }
@@ -306,6 +338,13 @@ export default {
       this.editingTagValue = '';
     },
     async saveTagEdit(oldTag) {
+      // Prevent editing system tags
+      if (this.isSystemTag(oldTag)) {
+        alert('System tags cannot be edited');
+        this.cancelTagEdit();
+        return;
+      }
+
       const newTag = this.editingTagValue.trim();
 
       // Validate the new tag name
@@ -422,6 +461,12 @@ export default {
       }
     },
     async deleteTag(tag) {
+      // Prevent deleting system tags
+      if (this.isSystemTag(tag)) {
+        alert('System tags cannot be deleted');
+        return;
+      }
+
       // Get the number of features with this tag
       const features = this.tagsData[tag] || [];
       const featureCount = features.length;

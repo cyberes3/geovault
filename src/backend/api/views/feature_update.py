@@ -21,6 +21,85 @@ from geo_lib.website.auth import login_required_401
 logger = get_access_logger()
 
 
+def _error_response(error_message, code=400, status=None):
+    """
+    Create a standardized error JsonResponse.
+    
+    Args:
+        error_message: Error message string
+        code: Error code (default: 400)
+        status: HTTP status code (defaults to code if not provided)
+        
+    Returns:
+        JsonResponse with error format
+    """
+    if status is None:
+        status = code
+    return JsonResponse({
+        'success': False,
+        'error': error_message,
+        'code': code
+    }, status=status)
+
+
+def _validate_tags(tags):
+    """
+    Validate a list of tags.
+    
+    Args:
+        tags: List of tags to validate
+        
+    Returns:
+        Tuple of (is_valid, error_response) where error_response is None if valid
+    """
+    if not isinstance(tags, list):
+        return False, _error_response('tags must be an array', 400)
+    
+    for tag in tags:
+        if not isinstance(tag, str):
+            return False, _error_response('all tags must be strings', 400)
+        
+        # Validate tag length
+        tag_max_length = getattr(settings, 'TAG_MAX_LENGTH', 255)
+        if len(tag) > tag_max_length:
+            return False, _error_response(
+                f'Tag "{tag[:50]}..." exceeds maximum length of {tag_max_length} characters',
+                400
+            )
+        
+        # Validate tag is not empty after stripping
+        if not tag.strip():
+            return False, _error_response('Tags cannot be empty or contain only whitespace', 400)
+        
+        # Validate tag format: no control characters
+        if any(ord(c) < 32 and c not in '\t\n\r' for c in tag):
+            return False, _error_response('Tags cannot contain control characters', 400)
+    
+    return True, None
+
+
+def _validate_and_preserve_system_tags(properties_dict, original_system_tags):
+    """
+    Validate that system_tags are not being modified and return preserved system_tags.
+    
+    Args:
+        properties_dict: Dictionary containing properties (may include system_tags)
+        original_system_tags: Original system_tags from the feature
+        
+    Returns:
+        Tuple of (is_valid, error_response, preserved_system_tags) where error_response is None if valid
+    """
+    # Ensure original_system_tags is a list
+    if not isinstance(original_system_tags, list):
+        original_system_tags = []
+    
+    # Prevent users from directly modifying system_tags
+    if 'system_tags' in properties_dict:
+        return False, _error_response('system_tags cannot be modified directly', 400), None
+    
+    return True, None, original_system_tags
+
+
 @login_required_401
 @csrf_protect
 @require_http_methods(["PUT"])
@@ -46,19 +125,11 @@ def update_feature_metadata(request, feature_id):
         try:
             metadata = json.loads(request.body)
         except json.JSONDecodeError:
-            return JsonResponse({
-                'success': False,
-                'error': 'Invalid JSON in request body',
-                'code': 400
-            }, status=400)
+            return _error_response('Invalid JSON in request body', 400)
 
         # Validate that it's a proper object
         if not isinstance(metadata, dict):
-            return JsonResponse({
-                'success': False,
-                'error': 'Request body must be a valid JSON object',
-                'code': 400
-            }, status=400)
+            return _error_response('Request body must be a valid JSON object', 400)
 
         # Update only the specified metadata fields
         updated_fields = []
@@ -66,104 +137,52 @@ def update_feature_metadata(request, feature_id):
 
         if 'name' in metadata:
             if not isinstance(metadata['name'], str):
-                return JsonResponse({
-                    'success': False,
-                    'error': 'name must be a string',
-                    'code': 400
-                }, status=400)
+                return _error_response('name must be a string', 400)
             geojson_data['properties']['name'] = metadata['name']
             updated_fields.append('name')
 
         if 'description' in metadata:
             if not isinstance(metadata['description'], str):
-                return JsonResponse({
-                    'success': False,
-                    'error': 'description must be a string',
-                    'code': 400
-                }, status=400)
+                return _error_response('description must be a string', 400)
             geojson_data['properties']['description'] = metadata['description']
             updated_fields.append('description')
 
         if 'tags' in metadata:
-            if not isinstance(metadata['tags'], list):
-                return JsonResponse({
-                    'success': False,
-                    'error': 'tags must be an array',
-                    'code': 400
-                }, status=400)
-            # Validate that all tags are strings
-            for tag in metadata['tags']:
-                if not isinstance(tag, str):
-                    return JsonResponse({
-                        'success': False,
-                        'error': 'all tags must be strings',
-                        'code': 400
-                    }, status=400)
-                
-                # Validate tag length
-                tag_max_length = getattr(settings, 'TAG_MAX_LENGTH', 255)
-                if len(tag) > tag_max_length:
-                    return JsonResponse({
-                        'success': False,
-                        'error': f'Tag "{tag[:50]}..." exceeds maximum length of {tag_max_length} characters',
-                        'code': 400
-                    }, status=400)
-                
-                # Validate tag is not empty after stripping
-                if not tag.strip():
-                    return JsonResponse({
-                        'success': False,
-                        'error': 'Tags cannot be empty or contain only whitespace',
-                        'code': 400
-                    }, status=400)
-                
-                # Validate tag format: no control characters
-                if any(ord(c) < 32 and c not in '\t\n\r' for c in tag):
-                    return JsonResponse({
-                        'success': False,
-                        'error': 'Tags cannot contain control characters',
-                        'code': 400
-                    }, status=400)
+            # Validate tags
+            is_valid, error_response = _validate_tags(metadata['tags'])
+            if not is_valid:
+                return error_response
 
             # Strip system tags from incoming tags (defensive - user shouldn't be able to add them)
             user_tags = filter_protected_tags(metadata['tags'], CONST_INTERNAL_TAGS)
 
             # Preserve existing system_tags from the original feature
             original_system_tags = geojson_data.get('properties', {}).get('system_tags', [])
-            if not isinstance(original_system_tags, list):
-                original_system_tags = []
+            is_valid, error_response, preserved_system_tags = _validate_and_preserve_system_tags(
+                metadata, original_system_tags
+            )
+            if not is_valid:
+                return error_response
 
             # Store user tags and preserve system tags separately
             geojson_data['properties']['tags'] = user_tags
-            geojson_data['properties']['system_tags'] = original_system_tags
+            geojson_data['properties']['system_tags'] = preserved_system_tags
             updated_fields.append('tags')
 
         if 'created' in metadata:
             if not isinstance(metadata['created'], str):
-                return JsonResponse({
-                    'success': False,
-                    'error': 'created must be a string',
-                    'code': 400
-                }, status=400)
+                return _error_response('created must be a string', 400)
             # Validate datetime format
             try:
                 from datetime import datetime
                 datetime.fromisoformat(metadata['created'].replace('Z', '+00:00'))
             except ValueError:
-                return JsonResponse({
-                    'success': False,
-                    'error': 'created must be a valid ISO datetime string',
-                    'code': 400
-                }, status=400)
+                return _error_response('created must be a valid ISO datetime string', 400)
             geojson_data['properties']['created'] = metadata['created']
             updated_fields.append('created')
 
         if not updated_fields:
-            return JsonResponse({
-                'success': False,
-                'error': 'No valid fields to update. Supported fields: name, description, tags, created',
-                'code': 400
-            }, status=400)
+            return _error_response('No valid fields to update. Supported fields: name, description, tags, created', 400)
 
         # Update the feature's geojson data
         feature.geojson = geojson_data
@@ -177,18 +196,10 @@ def update_feature_metadata(request, feature_id):
         })
 
     except FeatureStore.DoesNotExist:
-        return JsonResponse({
-            'success': False,
-            'error': 'Feature not found or access denied',
-            'code': 404
-        }, status=404)
+        return _error_response('Feature not found or access denied', 404)
     except Exception as e:
         logger.error(f"Error updating feature metadata {feature_id}: {traceback.format_exc()}")
-        return JsonResponse({
-            'success': False,
-            'error': 'Failed to update feature metadata',
-            'code': 500
-        }, status=500)
+        return _error_response('Failed to update feature metadata', 500)
 
 
 @login_required_401
@@ -211,19 +222,11 @@ def update_feature(request, feature_id):
         try:
             feature_data = json.loads(request.body)
         except json.JSONDecodeError:
-            return JsonResponse({
-                'success': False,
-                'error': 'Invalid JSON in request body',
-                'code': 400
-            }, status=400)
+            return _error_response('Invalid JSON in request body', 400)
 
         # Validate that it's a proper GeoJSON feature or geometry
         if not isinstance(feature_data, dict):
-            return JsonResponse({
-                'success': False,
-                'error': 'Request body must be a valid GeoJSON object',
-                'code': 400
-            }, status=400)
+            return _error_response('Request body must be a valid GeoJSON object', 400)
 
         # Get original feature data for reference
         original_geojson = feature.geojson
@@ -233,19 +236,18 @@ def update_feature(request, feature_id):
         try:
             feature_data = normalize_and_validate_feature_update(feature_data, original_properties)
         except GeometryValidationError as e:
-            return JsonResponse({
-                'success': False,
-                'error': str(e),
-                'code': 400
-            }, status=400)
+            return _error_response(str(e), 400)
 
         # Get new properties (if geometry-only update, properties were already set to original)
         new_properties = feature_data.get('properties', {})
 
         # Preserve existing system_tags from original feature
         original_system_tags = original_properties.get('system_tags', [])
-        if not isinstance(original_system_tags, list):
-            original_system_tags = []
+        is_valid, error_response, preserved_system_tags = _validate_and_preserve_system_tags(
+            new_properties, original_system_tags
+        )
+        if not is_valid:
+            return error_response
 
         # Strip system tags from incoming tags (defensive)
         new_tags = new_properties.get('tags', [])
@@ -253,45 +255,16 @@ def update_feature(request, feature_id):
             new_tags = []
         
         # Validate tags
-        for tag in new_tags:
-            if not isinstance(tag, str):
-                return JsonResponse({
-                    'success': False,
-                    'error': 'all tags must be strings',
-                    'code': 400
-                }, status=400)
-            
-            # Validate tag length
-            tag_max_length = getattr(settings, 'TAG_MAX_LENGTH', 255)
-            if len(tag) > tag_max_length:
-                return JsonResponse({
-                    'success': False,
-                    'error': f'Tag "{tag[:50]}..." exceeds maximum length of {tag_max_length} characters',
-                    'code': 400
-                }, status=400)
-            
-            # Validate tag is not empty after stripping
-            if not tag.strip():
-                return JsonResponse({
-                    'success': False,
-                    'error': 'Tags cannot be empty or contain only whitespace',
-                    'code': 400
-                }, status=400)
-            
-            # Validate tag format: no control characters
-            if any(ord(c) < 32 and c not in '\t\n\r' for c in tag):
-                return JsonResponse({
-                    'success': False,
-                    'error': 'Tags cannot contain control characters',
-                    'code': 400
-                }, status=400)
+        is_valid, error_response = _validate_tags(new_tags)
+        if not is_valid:
+            return error_response
         
         # Filter out any system tags that user might have added
         user_tags = filter_protected_tags(new_tags, CONST_INTERNAL_TAGS)
 
         # Store user tags and preserve system tags separately
         new_properties['tags'] = user_tags
-        new_properties['system_tags'] = original_system_tags
+        new_properties['system_tags'] = preserved_system_tags
 
         # Check for icon URLs in original feature (built-in, uploaded, or custom)
         icon_property_names = ['icon', 'icon-href', 'iconUrl', 'icon_url', 'marker-icon', 'marker-symbol', 'symbol']
