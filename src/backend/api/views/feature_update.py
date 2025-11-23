@@ -344,11 +344,7 @@ def update_feature(request, feature_id):
                 # For GeometryCollection, we do basic validation but skip feature class validation
                 geom_data = feature_data.get('geometry', {})
                 if not geom_data.get('geometries') or not isinstance(geom_data.get('geometries'), list):
-                    return JsonResponse({
-                        'success': False,
-                        'error': 'GeometryCollection must have a geometries array',
-                        'code': 400
-                    }, status=400)
+                    return _error_response('GeometryCollection must have a geometries array', 400)
                 # Skip feature class validation for GeometryCollection
                 feature_class = None
             else:
@@ -362,11 +358,7 @@ def update_feature(request, feature_id):
                     case 'polygon' | 'multipolygon':
                         feature_class = PolygonFeature
                     case _:
-                        return JsonResponse({
-                            'success': False,
-                            'error': f'Unsupported geometry type: {geom_type}',
-                            'code': 400
-                        }, status=400)
+                        return _error_response(f'Unsupported geometry type: {geom_type}', 400)
 
             # Validate by instantiating the feature class (this will raise ValidationError if invalid)
             # Skip for GeometryCollection as it's not supported by feature classes
@@ -377,11 +369,7 @@ def update_feature(request, feature_id):
 
         except Exception as e:
             logger.error(f"Feature validation error for feature {feature_id}: {str(e)}")
-            return JsonResponse({
-                'success': False,
-                'error': f'Feature validation failed: {str(e)}',
-                'code': 400
-            }, status=400)
+            return _error_response(f'Feature validation failed: {str(e)}', 400)
 
         # Update the feature data
         feature.geojson = feature_data
@@ -433,18 +421,10 @@ def update_feature(request, feature_id):
         })
 
     except FeatureStore.DoesNotExist:
-        return JsonResponse({
-            'success': False,
-            'error': 'Feature not found or access denied',
-            'code': 404
-        }, status=404)
+        return _error_response('Feature not found or access denied', 404)
     except Exception as e:
         logger.error(f"Error updating feature {feature_id}: {traceback.format_exc()}")
-        return JsonResponse({
-            'success': False,
-            'error': 'Failed to update feature',
-            'code': 500
-        }, status=500)
+        return _error_response('Failed to update feature', 500)
 
 
 @login_required_401
@@ -470,19 +450,11 @@ def apply_replacement_geometry(request, feature_id):
         try:
             request_data = json.loads(request.body)
         except json.JSONDecodeError:
-            return JsonResponse({
-                'success': False,
-                'error': 'Invalid JSON in request body',
-                'code': 400
-            }, status=400)
+            return _error_response('Invalid JSON in request body', 400)
 
         # Validate required fields
         if 'import_queue_id' not in request_data or 'feature_index' not in request_data:
-            return JsonResponse({
-                'success': False,
-                'error': 'Missing required fields: import_queue_id and feature_index',
-                'code': 400
-            }, status=400)
+            return _error_response('Missing required fields: import_queue_id and feature_index', 400)
 
         import_queue_id = request_data['import_queue_id']
         feature_index = request_data['feature_index']
@@ -491,64 +463,36 @@ def apply_replacement_geometry(request, feature_id):
         try:
             feature_index = int(feature_index)
         except (ValueError, TypeError):
-            return JsonResponse({
-                'success': False,
-                'error': 'feature_index must be an integer',
-                'code': 400
-            }, status=400)
+            return _error_response('feature_index must be an integer', 400)
 
         # Get the ImportQueue entry
         try:
             import_queue = ImportQueue.objects.get(id=import_queue_id, user=request.user)
         except ImportQueue.DoesNotExist:
-            return JsonResponse({
-                'success': False,
-                'error': 'ImportQueue entry not found or access denied',
-                'code': 404
-            }, status=404)
+            return _error_response('ImportQueue entry not found or access denied', 404)
 
         # Verify this is a replacement upload for this feature
         if import_queue.replacement != feature_id:
-            return JsonResponse({
-                'success': False,
-                'error': 'ImportQueue entry is not a replacement for this feature',
-                'code': 400
-            }, status=400)
+            return _error_response('ImportQueue entry is not a replacement for this feature', 400)
 
         # Get the features from the ImportQueue
         geofeatures = import_queue.geofeatures
         if not isinstance(geofeatures, list) or len(geofeatures) == 0:
-            return JsonResponse({
-                'success': False,
-                'error': 'ImportQueue entry has no features',
-                'code': 400
-            }, status=400)
+            return _error_response('ImportQueue entry has no features', 400)
 
         # Validate feature_index is within bounds
         if feature_index < 0 or feature_index >= len(geofeatures):
-            return JsonResponse({
-                'success': False,
-                'error': f'feature_index {feature_index} is out of bounds (0-{len(geofeatures)-1})',
-                'code': 400
-            }, status=400)
+            return _error_response(f'feature_index {feature_index} is out of bounds (0-{len(geofeatures)-1})', 400)
 
         # Get the selected replacement feature
         replacement_feature = geofeatures[feature_index]
         if not isinstance(replacement_feature, dict) or 'geometry' not in replacement_feature:
-            return JsonResponse({
-                'success': False,
-                'error': 'Selected feature has invalid structure or missing geometry',
-                'code': 400
-            }, status=400)
+            return _error_response('Selected feature has invalid structure or missing geometry', 400)
 
         # Get the replacement geometry
         replacement_geometry = replacement_feature.get('geometry')
         if not replacement_geometry:
-            return JsonResponse({
-                'success': False,
-                'error': 'Selected feature has no geometry',
-                'code': 400
-            }, status=400)
+            return _error_response('Selected feature has no geometry', 400)
 
         # Get original feature data
         original_geojson = feature.geojson.copy()
@@ -565,11 +509,7 @@ def apply_replacement_geometry(request, feature_id):
         try:
             feature_data = normalize_and_validate_feature_update(updated_feature, original_properties)
         except GeometryValidationError as e:
-            return JsonResponse({
-                'success': False,
-                'error': str(e),
-                'code': 400
-            }, status=400)
+            return _error_response(str(e), 400)
 
         # Validate feature structure using feature classes
         try:
@@ -581,11 +521,7 @@ def apply_replacement_geometry(request, feature_id):
                 # For GeometryCollection, we do basic validation but skip feature class validation
                 geom_data = feature_data.get('geometry', {})
                 if not geom_data.get('geometries') or not isinstance(geom_data.get('geometries'), list):
-                    return JsonResponse({
-                        'success': False,
-                        'error': 'GeometryCollection must have a geometries array',
-                        'code': 400
-                    }, status=400)
+                    return _error_response('GeometryCollection must have a geometries array', 400)
                 # Skip feature class validation for GeometryCollection
                 feature_class = None
             else:
@@ -599,11 +535,7 @@ def apply_replacement_geometry(request, feature_id):
                     case 'polygon' | 'multipolygon':
                         feature_class = PolygonFeature
                     case _:
-                        return JsonResponse({
-                            'success': False,
-                            'error': f'Unsupported geometry type: {geom_type}',
-                            'code': 400
-                        }, status=400)
+                        return _error_response(f'Unsupported geometry type: {geom_type}', 400)
 
             # Validate by instantiating the feature class (this will raise ValidationError if invalid)
             # Skip for GeometryCollection as it's not supported by feature classes
@@ -614,11 +546,7 @@ def apply_replacement_geometry(request, feature_id):
 
         except Exception as e:
             logger.error(f"Feature validation error for replacement feature {feature_id}: {str(e)}")
-            return JsonResponse({
-                'success': False,
-                'error': f'Feature validation failed: {str(e)}',
-                'code': 400
-            }, status=400)
+            return _error_response(f'Feature validation failed: {str(e)}', 400)
 
         # Update the feature's geometry (preserving all properties)
         feature.geojson = feature_data
@@ -673,18 +601,10 @@ def apply_replacement_geometry(request, feature_id):
         })
 
     except FeatureStore.DoesNotExist:
-        return JsonResponse({
-            'success': False,
-            'error': 'Feature not found or access denied',
-            'code': 404
-        }, status=404)
+        return _error_response('Feature not found or access denied', 404)
     except Exception as e:
         logger.error(f"Error applying replacement geometry for feature {feature_id}: {traceback.format_exc()}")
-        return JsonResponse({
-            'success': False,
-            'error': 'Failed to apply replacement geometry',
-            'code': 500
-        }, status=500)
+        return _error_response('Failed to apply replacement geometry', 500)
 
 
 @login_required_401
@@ -719,29 +639,17 @@ def regenerate_feature_tags(request, feature_id):
             case 'polygon' | 'multipolygon':
                 feature_class = PolygonFeature
             case _:
-                return JsonResponse({
-                    'success': False,
-                    'error': f'Unsupported geometry type: {geom_type}',
-                    'code': 400
-                }, status=400)
+                return _error_response(f'Unsupported geometry type: {geom_type}', 400)
 
         if feature_class is None:
-            return JsonResponse({
-                'success': False,
-                'error': 'Could not determine feature class',
-                'code': 400
-            }, status=400)
+            return _error_response('Could not determine feature class', 400)
 
         # Create feature instance
         try:
             feature_instance: GeoFeatureSupported = feature_class(**geojson_data)
         except Exception as e:
             logger.error(f"Error creating feature instance for tag regeneration {feature_id}: {str(e)}")
-            return JsonResponse({
-                'success': False,
-                'error': f'Invalid feature structure: {str(e)}',
-                'code': 400
-            }, status=400)
+            return _error_response(f'Invalid feature structure: {str(e)}', 400)
 
         # Get existing user tags (preserve them)
         existing_user_tags = geojson_data.get('properties', {}).get('tags', [])
@@ -771,15 +679,7 @@ def regenerate_feature_tags(request, feature_id):
         })
 
     except FeatureStore.DoesNotExist:
-        return JsonResponse({
-            'success': False,
-            'error': 'Feature not found or access denied',
-            'code': 404
-        }, status=404)
+        return _error_response('Feature not found or access denied', 404)
     except Exception as e:
         logger.error(f"Error regenerating tags for feature {feature_id}: {traceback.format_exc()}")
-        return JsonResponse({
-            'success': False,
-            'error': 'Failed to regenerate feature tags',
-            'code': 500
-        }, status=500)
+        return _error_response('Failed to regenerate feature tags', 500)
