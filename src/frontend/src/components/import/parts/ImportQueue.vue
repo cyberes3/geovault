@@ -127,11 +127,11 @@
               <div class="ml-4">
                 <div class="text-sm font-medium text-gray-900">
                   <!-- Disable link for duplicates in queue or when this specific item is being imported/deleted -->
-                  <a v-if="item.duplicate_status !== 'duplicate_in_queue' && !item.deleting && !item.importing" 
-                     :href="`/#/import/process/${item.id}`" 
+                  <router-link v-if="item.duplicate_status !== 'duplicate_in_queue' && !item.deleting && !item.importing" 
+                     :to="`/import/process/${item.id}`" 
                      class="text-blue-600 hover:text-blue-900">
                     {{ item.original_filename }}
-                  </a>
+                  </router-link>
                   <span v-else class="text-gray-500 cursor-not-allowed">
                     {{ item.original_filename }}
                   </span>
