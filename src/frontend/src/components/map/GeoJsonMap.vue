@@ -85,12 +85,14 @@
             :feature="selectedFeature"
             @close="selectedFeature = null"
             @edit="handleEditFeature"
+            @zoom="zoomToFeature(selectedFeature)"
         />
         <FeatureInfoBox
             v-if="!isEditingFeature && isPublicShareMode"
             :feature="selectedFeature"
             :show-edit-button="false"
             @close="selectedFeature = null"
+            @zoom="zoomToFeature(selectedFeature)"
         />
         <FeatureEditBox
             v-if="isEditingFeature && !isPublicShareMode"
