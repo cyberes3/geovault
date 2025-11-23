@@ -463,78 +463,13 @@
 
           <!-- Tags Section -->
           <div>
-            <label class="block text-sm font-medium text-gray-700 mb-2">Tags</label>
-            
-            <!-- System Tags (Grey, Read-only, Above user tags) -->
-            <div v-if="getSystemTags(item).length > 0" class="mb-3">
-              <div class="flex flex-wrap gap-2">
-                <span
-                  v-for="tag in getSystemTags(item)"
-                  :key="`system-${tag}`"
-                  class="inline-flex items-center px-2.5 py-1 rounded-md text-xs font-medium bg-gray-200 text-gray-600"
-                >
-                  {{ tag }}
-                </span>
-              </div>
-            </div>
-            
-            <!-- User Tags (Editable) -->
-            <div class="space-y-2">
-              <div v-for="(tag, tagIndex) in item.properties.tags" :key="`tag-${tagIndex}`" class="flex items-center space-x-2">
-                <div class="relative flex-1">
-                  <input
-                      v-model="item.properties.tags[tagIndex]"
-                      :class="'tag-input ' + (isImported || item.isDuplicate || isItemSkipped(item, index) || loading.importing ? 'block w-full px-3 py-2 border border-gray-300 rounded-md bg-gray-100 cursor-not-allowed' : 'block w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-blue-500 focus:border-blue-500')"
-                      :disabled="isImported || item.isDuplicate || isItemSkipped(item, index) || loading.importing"
-                      :placeholder="getTagPlaceholder(index, tag)"
-                      @input="onTagInput(index, tagIndex, $event.target.value)"
-                      @focus="showSuggestionsForInput(index, tagIndex)"
-                      @blur="handleTagInputBlur(index, tagIndex)"
-                      @keydown.enter.prevent="hideTagSuggestions"
-                      @keydown.escape="hideTagSuggestions"
-                      @keyup="convertTagToLowercase(index, tagIndex)"
-                  />
-                  <!-- Autocomplete Suggestions -->
-                  <div
-                      v-if="showTagSuggestions && activeTagInput.featureIndex === index && activeTagInput.tagIndex === tagIndex && filteredTagSuggestions.length > 0 && !isImported && !item.isDuplicate && !isItemSkipped(item, index) && !loading.importing"
-                      class="absolute z-50 w-full mt-1 bg-white border border-gray-300 rounded-md shadow-lg max-h-48 overflow-auto"
-                  >
-                    <button
-                        v-for="(suggestion, suggestionIndex) in filteredTagSuggestions"
-                        :key="suggestionIndex"
-                        type="button"
-                        @mousedown.prevent="selectTagSuggestion(index, tagIndex, suggestion)"
-                        class="w-full text-left px-3 py-2 text-sm text-gray-700 hover:bg-blue-50 focus:bg-blue-50 focus:outline-none"
-                    >
-                      {{ suggestion }}
-                    </button>
-                  </div>
-                </div>
-                <button
-                    v-if="!isImported && !item.isDuplicate && !isItemSkipped(item, index) && !loading.importing"
-                    class="inline-flex items-center px-3 py-2 border border-transparent text-sm font-medium rounded-md text-white bg-red-600 hover:bg-red-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-red-500"
-                    @click="removeTag(index, tagIndex)"
-                    title="Remove tag"
-                >
-                  <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" stroke-linecap="round" stroke-linejoin="round" stroke-width="2"></path>
-                  </svg>
-                </button>
-              </div>
-            </div>
+            <TagPicker
+              v-model:tags="item.properties.tags"
+              :available-tags="availableUserTags"
+              :system-tags="getSystemTags(item)"
+              :disabled="isImported || item.isDuplicate || isItemSkipped(item, index) || loading.importing"
+            />
             <div v-if="!isImported && !item.isDuplicate && !isItemSkipped(item, index) && !loading.importing" class="flex items-center space-x-2 mt-3">
-              <button
-                  :class="{ 'opacity-50 cursor-not-allowed': isLastTagEmpty(index) }"
-                  :disabled="isLastTagEmpty(index)"
-                  class="inline-flex items-center px-3 py-2 border border-transparent text-sm font-medium rounded-md text-white bg-blue-600 hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 disabled:bg-gray-400"
-                  @click="addTag(index)"
-                  title="Add new tag"
-              >
-                <svg class="w-4 h-4 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path d="M12 6v6m0 0v6m0-6h6m-6 0H6" stroke-linecap="round" stroke-linejoin="round" stroke-width="2"></path>
-                </svg>
-                Add Tag
-              </button>
               <button
                   v-if="!isItemSkipped(item, index)"
                   class="inline-flex items-center px-3 py-2 border border-gray-300 shadow-sm text-sm font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500"
@@ -631,6 +566,7 @@ import MapPreviewDialog from "@/components/import/parts/MapPreviewDialog.vue";
 import FeatureMapDialog from "@/components/import/parts/FeatureMapDialog.vue";
 import LogViewModal from "@/components/import/parts/LogViewModal.vue";
 import ImportControls from "@/components/import/parts/ImportControls.vue";
+import TagPicker from "@/components/TagPicker.vue";
 
 // TODO: for each feature, query the DB and check if there is a duplicate. For points that's duplicate coords, for linestrings and polygons that's duplicate points
 // TODO: redo the entire log feature to include local timestamps
@@ -653,18 +589,8 @@ export default {
       return this.pagination.totalFeatures - this.duplicates.indices.length - this.skippedFeatureIds.size;
     },
 
-    filteredTagSuggestions() {
-      if (!this.tagInputValue.trim()) {
-        return this.availableUserTags.slice(0, 10);
-      }
-
-      const query = this.tagInputValue.toLowerCase().trim();
-      return this.availableUserTags
-        .filter(tag => tag.toLowerCase().includes(query))
-        .slice(0, 10);
-    }
   },
-  components: {Loader, Importqueue: ImportQueue, MapPreviewDialog, FeatureMapDialog, LogViewModal, ImportControls},
+  components: {Loader, Importqueue: ImportQueue, MapPreviewDialog, FeatureMapDialog, LogViewModal, ImportControls, TagPicker},
   data() {
     return {
       // Core data
@@ -743,10 +669,7 @@ export default {
       maxReconnectAttempts: 5,
 
       // Tag autocomplete state
-      availableUserTags: [],
-      activeTagInput: { featureIndex: null, tagIndex: null },
-      tagInputValue: '',
-      showTagSuggestions: false
+      availableUserTags: []
     }
   },
   watch: {
@@ -1300,26 +1223,10 @@ export default {
     resetNestedField(index, nestedField, fieldName) {
       this.itemsForUser[index][nestedField][fieldName] = this.originalItems[index][nestedField][fieldName];
     },
-    addTag(index) {
-      if (!this.isLastTagEmpty(index)) {
-        this.itemsForUser[index].properties.tags.push('');
-      }
-    },
-    getTagPlaceholder(index, tag) {
-      const originalTagIndex = this.originalItems[index].properties.tags.indexOf(tag);
-      return originalTagIndex !== -1 ? this.originalItems[index].properties.tags[originalTagIndex] : '';
-    },
-    isLastTagEmpty(index) {
-      const tags = this.itemsForUser[index].properties.tags;
-      return tags.length > 0 && tags[tags.length - 1].trim().length === 0;
-    },
     resetTags(index) {
       // Reset to original user tags
       const originalTags = [...this.originalItems[index].properties.tags];
       this.itemsForUser[index].properties.tags = originalTags;
-    },
-    removeTag(index, tagIndex) {
-      this.itemsForUser[index].properties.tags.splice(tagIndex, 1);
     },
     getSystemTags(item) {
       if (!item || !item.properties) return [];
@@ -1343,62 +1250,6 @@ export default {
         console.error('Error fetching user tags:', error);
         this.availableUserTags = [];
       }
-    },
-    onTagInput(featureIndex, tagIndex, value) {
-      this.activeTagInput = { featureIndex, tagIndex };
-      // Convert to lowercase
-      const lowerValue = value.toLowerCase();
-      this.tagInputValue = lowerValue;
-      // Update the model with lowercase value
-      if (this.itemsForUser[featureIndex] && this.itemsForUser[featureIndex].properties.tags) {
-        this.itemsForUser[featureIndex].properties.tags[tagIndex] = lowerValue;
-      }
-      if (lowerValue.trim()) {
-        this.showTagSuggestions = true;
-      } else {
-        this.showTagSuggestions = false;
-      }
-    },
-    convertTagToLowercase(featureIndex, tagIndex) {
-      // Ensure tag is always lowercase
-      if (this.itemsForUser[featureIndex] && this.itemsForUser[featureIndex].properties.tags) {
-        const currentTag = this.itemsForUser[featureIndex].properties.tags[tagIndex];
-        if (currentTag && currentTag !== currentTag.toLowerCase()) {
-          this.itemsForUser[featureIndex].properties.tags[tagIndex] = currentTag.toLowerCase();
-        }
-      }
-    },
-    showSuggestionsForInput(featureIndex, tagIndex) {
-      this.activeTagInput = { featureIndex, tagIndex };
-      const currentValue = this.itemsForUser[featureIndex].properties.tags[tagIndex] || '';
-      this.tagInputValue = currentValue;
-      if (currentValue.trim() || this.availableUserTags.length > 0) {
-        this.showTagSuggestions = true;
-      }
-    },
-    hideTagSuggestions() {
-      this.showTagSuggestions = false;
-    },
-    selectTagSuggestion(featureIndex, tagIndex, tag) {
-      if (tag && this.itemsForUser[featureIndex]) {
-        this.itemsForUser[featureIndex].properties.tags[tagIndex] = tag.toLowerCase();
-      }
-      this.tagInputValue = '';
-      this.showTagSuggestions = false;
-      this.activeTagInput = { featureIndex: null, tagIndex: null };
-    },
-    handleTagInputBlur(featureIndex, tagIndex) {
-      // Use setTimeout to allow click events on suggestions to fire first
-      setTimeout(() => {
-        // Only hide if the active input matches (to avoid hiding when switching between inputs)
-        if (this.activeTagInput.featureIndex === featureIndex && this.activeTagInput.tagIndex === tagIndex) {
-          // Check if focus moved to a suggestion button
-          const activeElement = document.activeElement;
-          if (!activeElement || activeElement.tagName !== 'BUTTON' || !activeElement.textContent) {
-            this.showTagSuggestions = false;
-          }
-        }
-      }, 200);
     },
     updateDate(index, event) {
       this.itemsForUser[index].properties.created = event.target.value;
