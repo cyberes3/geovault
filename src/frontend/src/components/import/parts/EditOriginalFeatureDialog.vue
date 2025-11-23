@@ -398,6 +398,11 @@ export default {
         // Tags are already separated - user tags only in tags field
         const featureToSave = JSON.parse(JSON.stringify(this.editableFeature));
         
+        // Remove system_tags from properties before sending (backend will preserve originals from DB)
+        if (featureToSave.properties) {
+          delete featureToSave.properties.system_tags;
+        }
+        
         const csrftoken = getCookie('csrftoken');
         const response = await axios.put(
           `/api/data/feature/${this.originalFeature.id}/update/`,

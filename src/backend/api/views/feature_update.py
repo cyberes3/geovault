@@ -81,6 +81,7 @@ def _validate_tags(tags):
 def _validate_and_preserve_system_tags(properties_dict, original_system_tags):
     """
     Validate that system_tags are not being modified and return preserved system_tags.
+    Silently discards any received system_tags and replaces them with originals from the DB.
     
     Args:
         properties_dict: Dictionary containing properties (may include system_tags)
@@ -93,9 +94,9 @@ def _validate_and_preserve_system_tags(properties_dict, original_system_tags):
     if not isinstance(original_system_tags, list):
         original_system_tags = []
     
-    # Prevent users from directly modifying system_tags
+    # Silently discard any received system_tags and replace with originals from DB
     if 'system_tags' in properties_dict:
-        return False, _error_response('system_tags cannot be modified directly', 400), None
+        del properties_dict['system_tags']
     
     return True, None, original_system_tags
 

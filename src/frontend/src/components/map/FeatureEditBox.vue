@@ -991,6 +991,9 @@ export default {
         // Remove _id from properties before sending (it's only for frontend use)
         delete featureData.properties._id
 
+        // Remove system_tags from properties before sending (backend will preserve originals from DB)
+        delete featureData.properties.system_tags
+
         // Send update request
         const response = await fetch(`${APIHOST}/api/data/feature/${featureId}/update/`, {
           method: 'PUT',
