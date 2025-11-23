@@ -409,29 +409,42 @@ export default {
       if (!geometry) return
 
       // Ensure feature is on the map (for search results that might not be loaded)
-      if (this.vectorSource && !this.vectorSource.getFeatures().includes(feature)) {
-        // Check if feature with same ID already exists
-        const featureId = feature.get('properties')?._id
-        if (featureId) {
-          const existingFeatures = this.vectorSource.getFeatures()
-          const existingFeature = existingFeatures.find(f => {
-            const props = f.get('properties') || {}
-            return props._id === featureId
-          })
-
-          if (existingFeature) {
-            // Use existing feature instead
-            feature = existingFeature
-          } else {
-            // Add new feature to map
+      // Find existing feature by reference or ID to avoid duplicates
+      if (this.vectorSource) {
+        const allFeatures = this.vectorSource.getFeatures()
+        
+        // Check if feature already exists (by reference or ID)
+        let existingFeature = allFeatures.includes(feature) ? feature : null
+        if (!existingFeature) {
+          const featureId = feature.get('properties')?._id
+          if (featureId) {
+            existingFeature = allFeatures.find(f => f.get('properties')?._id === featureId)
+          }
+        }
+        
+        // If not found, try to add it (with error handling for race conditions)
+        if (!existingFeature) {
+          try {
             this.vectorSource.addFeature(feature)
             this.addFeatureTimestamp(feature)
+            existingFeature = feature
+          } catch (error) {
+            // Feature was likely added between checks, find it again
+            existingFeature = allFeatures.includes(feature) ? feature : null
+            if (!existingFeature) {
+              const featureId = feature.get('properties')?._id
+              if (featureId) {
+                existingFeature = this.vectorSource.getFeatures().find(f => f.get('properties')?._id === featureId)
+              }
+            }
+            // Fallback to original feature if still not found
+            if (!existingFeature) {
+              existingFeature = feature
+            }
           }
-        } else {
-          // Add feature to map even without ID
-          this.vectorSource.addFeature(feature)
-          this.addFeatureTimestamp(feature)
         }
+        
+        feature = existingFeature
       }
 
       const view = this.map.getView()
