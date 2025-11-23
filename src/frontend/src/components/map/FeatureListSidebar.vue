@@ -3,16 +3,16 @@
     <!-- Tabs -->
     <div class="flex border-b border-gray-200 mb-2">
       <button
-        @click="activeTab = 'features-in-view'"
+        @click="activeTab = 'features-in-vicinity'"
         :class="[
           'px-2 py-1 text-xs font-medium transition-colors',
-          activeTab === 'features-in-view'
+          activeTab === 'features-in-vicinity'
             ? 'text-blue-600 border-b-2 border-blue-600'
             : 'text-gray-600 hover:text-gray-900'
         ]"
         title="View features in current map view"
       >
-        Features in View
+        Features in Vicinity
       </button>
       <button
         @click="activeTab = 'tag-filter'"
@@ -42,8 +42,8 @@
       </button>
     </div>
 
-    <!-- Features in View Tab Content -->
-    <div v-if="activeTab === 'features-in-view'" class="flex flex-col flex-1">
+    <!-- Features in Vicinity Tab Content -->
+    <div v-if="activeTab === 'features-in-vicinity'" class="flex flex-col flex-1">
       <!-- Search Bar -->
       <div class="mb-2 px-1">
         <div class="relative">
@@ -70,9 +70,9 @@
 
       <!-- Header -->
       <h2 class="text-xs font-semibold text-gray-900 mb-1 px-1">
-        {{ isSearchMode ? 'Search Results' : 'Features in View' }}
+        {{ isSearchMode ? 'Search Results' : '' }}
       </h2>
-      
+
       <!-- Loading Indicator -->
       <div v-if="isSearching" class="flex-1 flex items-center justify-center">
         <div class="flex flex-col items-center space-y-2">
@@ -80,7 +80,7 @@
           <div class="text-xs text-gray-500">Searching...</div>
         </div>
       </div>
-      
+
       <!-- Feature List -->
       <div v-else class="flex-1 overflow-y-auto select-none">
         <div v-if="displayFeatures.length === 0" class="text-xs text-gray-500 text-center py-3">
@@ -100,7 +100,7 @@
           </div>
         </div>
       </div>
-      
+
       <!-- Footer Count -->
       <div class="mt-1 text-xs text-gray-500 border-t border-gray-200 pt-1 px-1">
         {{ displayFeatures.length }}
@@ -209,7 +209,7 @@ export default {
   emits: ['feature-click', 'tag-filter-change'],
   data() {
     return {
-      activeTab: 'features-in-view',
+      activeTab: 'features-in-vicinity',
       searchQuery: '',
       searchResults: [],
       isSearching: false,
@@ -233,13 +233,13 @@ export default {
     filteredAvailableTags() {
       // Filter out already selected tags
       let unselectedTags = this.availableTags.filter(tag => !this.selectedTags.includes(tag))
-      
+
       // Apply search filter if there's a search query
       if (this.tagSearchQuery.trim()) {
         const query = this.tagSearchQuery.toLowerCase()
         unselectedTags = unselectedTags.filter(tag => tag.toLowerCase().includes(query))
       }
-      
+
       // Sort alphabetically
       return unselectedTags.sort()
     }
@@ -273,7 +273,7 @@ export default {
     },
     getGeometryTypeColor(feature) {
       const geometryType = this.getFeatureGeometryType(feature)
-      
+
       const colors = {
         'Point': '#93c5fd',
         'MultiPoint': '#93c5fd',
@@ -282,7 +282,7 @@ export default {
         'Polygon': '#fbbf24',
         'MultiPolygon': '#fbbf24'
       }
-      
+
       return colors[geometryType] || '#d1d5db'
     },
     handleFeatureClick(feature) {
@@ -293,18 +293,18 @@ export default {
       if (this.searchTimeout) {
         clearTimeout(this.searchTimeout)
       }
-      
+
       const query = this.searchQuery.trim()
-      
+
       // If query is empty, clear search immediately
       if (!query) {
         this.clearSearch()
         return
       }
-      
+
       // Show loading spinner immediately while user is typing
       this.isSearching = true
-      
+
       // Debounce search (300ms)
       this.searchTimeout = setTimeout(() => {
         this.performSearch(query)
@@ -315,14 +315,14 @@ export default {
         this.clearSearch()
         return
       }
-      
+
       this.isSearching = true
-      
+
       try {
         const url = `${APIHOST}${this.API_BASE_URL}?query=${encodeURIComponent(query)}`
         const response = await fetch(url)
         const data = await response.json()
-        
+
         if (data.success && data.data && data.data.features) {
           // Convert GeoJSON features to OpenLayers features
           const format = new GeoJSON()
@@ -330,7 +330,7 @@ export default {
             featureProjection: 'EPSG:3857',
             dataProjection: 'EPSG:4326'
           })
-          
+
           // Preserve properties from original GeoJSON
           features.forEach((feature, index) => {
             const originalFeature = data.data.features[index]
@@ -341,14 +341,14 @@ export default {
               feature.set('geojson_hash', originalFeature.geojson_hash)
             }
           })
-          
+
           // Sort features alphabetically by name
           features.sort((a, b) => {
             const nameA = this.getFeatureName(a).toLowerCase()
             const nameB = this.getFeatureName(b).toLowerCase()
             return nameA.localeCompare(nameB)
           })
-          
+
           this.searchResults = features
         } else {
           console.error('Search failed:', data.error || 'Unknown error')
@@ -400,14 +400,14 @@ export default {
       if (this.filterTimeout) {
         clearTimeout(this.filterTimeout)
       }
-      
+
       if (this.selectedTags.length === 0) {
         this.tagFilteredFeatures = []
         // Emit null to clear map filter and restore normal behavior
         this.$emit('tag-filter-change', null)
         return
       }
-      
+
       this.isFiltering = true
       this.filterTimeout = setTimeout(() => {
         this.filterByTags()
@@ -419,16 +419,16 @@ export default {
         this.isFiltering = false
         return
       }
-      
+
       this.isFiltering = true
-      
+
       try {
         // Build URL with multiple tag parameters
         const tagParams = this.selectedTags.map(tag => `tags=${encodeURIComponent(tag)}`).join('&')
         const url = `${APIHOST}/api/data/features/filter-by-tags/?${tagParams}`
         const response = await fetch(url)
         const data = await response.json()
-        
+
         if (data.success && data.data && data.data.features) {
           // Convert GeoJSON features to OpenLayers features
           const format = new GeoJSON()
@@ -436,7 +436,7 @@ export default {
             featureProjection: 'EPSG:3857',
             dataProjection: 'EPSG:4326'
           })
-          
+
           // Preserve properties from original GeoJSON
           features.forEach((feature, index) => {
             const originalFeature = data.data.features[index]
@@ -447,16 +447,16 @@ export default {
               feature.set('geojson_hash', originalFeature.geojson_hash)
             }
           })
-          
+
           // Sort features alphabetically by name
           features.sort((a, b) => {
             const nameA = this.getFeatureName(a).toLowerCase()
             const nameB = this.getFeatureName(b).toLowerCase()
             return nameA.localeCompare(nameB)
           })
-          
+
           this.tagFilteredFeatures = features
-          
+
           // Emit event to parent to update map with filtered features
           this.$emit('tag-filter-change', features)
         } else {

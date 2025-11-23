@@ -549,7 +549,7 @@ export class MapUtils {
         // Check minimum size threshold to prevent flickering at low zoom levels
         // If resolution is provided and polygon is smaller than 2 pixels, hide it
         // Note: Returning null only hides rendering; the feature remains in the vector source
-        // and will still appear in the "features in view" list
+        // and will still appear in the "features in vicinity" list
         if (resolution !== undefined && resolution > 0) {
             const geometry = feature.getGeometry();
             if (geometry) {

@@ -375,20 +375,20 @@ export default {
       const allFeatures = this.vectorSource.getFeatures()
 
       // Filter features that intersect with buffered extent (50 miles around current view)
-      const featuresInView = allFeatures.filter(feature => {
+      const featuresInVicinity = allFeatures.filter(feature => {
         const geometry = feature.getGeometry()
         if (!geometry) return false
         return geometry.intersectsExtent(bufferedExtent)
       })
 
       // Sort features alphabetically by name
-      featuresInView.sort((a, b) => {
+      featuresInVicinity.sort((a, b) => {
         const nameA = this.getFeatureName(a).toLowerCase()
         const nameB = this.getFeatureName(b).toLowerCase()
         return nameA.localeCompare(nameB)
       })
 
-      this.featuresInExtent = featuresInView
+      this.featuresInExtent = featuresInVicinity
     },
 
     // Debounced update of features in extent
