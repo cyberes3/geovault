@@ -7,15 +7,15 @@
     </div>
 
     <!-- File Requirements -->
-    <div class="bg-blue-50 border border-blue-200 rounded-lg p-6">
+    <div class="bg-blue-50 border border-blue-200 rounded-lg p-6 relative">
       <div class="flex">
         <div class="flex-shrink-0">
           <svg class="h-5 w-5 text-blue-400" fill="currentColor" viewBox="0 0 20 20">
             <path clip-rule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7-4a1 1 0 11-2 0 1 1 0 012 0zM9 9a1 1 0 000 2v3a1 1 0 001 1h1a1 1 0 100-2v-3a1 1 0 00-1-1H9z" fill-rule="evenodd"></path>
           </svg>
         </div>
-        <div class="ml-3">
-          <h3 class="text-sm font-medium text-blue-800">Important Guidelines</h3>
+        <div class="ml-3 flex-1">
+          <h3 class="text-sm font-medium text-blue-800">How to Upload and Import</h3>
           <div class="mt-2 text-sm text-blue-700">
             <ul class="list-disc list-inside space-y-1">
               <li>Only KML, KMZ, and GPX files are supported (max 5MB per file)</li>
@@ -27,6 +27,16 @@
           </div>
         </div>
       </div>
+      <button
+          @click="showHelpModal = true"
+          class="absolute top-4 right-4 inline-flex items-center justify-center w-6 h-6 rounded-full border border-blue-600 text-blue-600 hover:text-blue-800 hover:border-blue-800 bg-transparent focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-1 transition-colors duration-150"
+          title="View detailed help"
+          aria-label="View detailed import help"
+      >
+        <svg class="w-4 h-4" fill="currentColor" viewBox="0 0 20 20">
+          <path fill-rule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-8-3a1 1 0 00-.867.5 1 1 0 11-1.731-1A3 3 0 0113 8a3.001 3.001 0 01-2 2.83V11a1 1 0 11-2 0v-1a1 1 0 011-1 1 1 0 100-2zm0 8a1 1 0 100-2 1 1 0 000 2z" clip-rule="evenodd"></path>
+        </svg>
+      </button>
     </div>
 
 
@@ -224,6 +234,9 @@
       </div>
       <Importqueue/>
     </div>
+
+    <!-- Help Modal -->
+    <ImportHelpModal :show="showHelpModal" @close="showHelpModal = false" />
   </div>
 </template>
 
@@ -234,6 +247,7 @@ import axios from "axios";
 import {capitalizeFirstLetter} from "@/assets/js/string.js";
 import {ImportQueueItem} from "@/assets/js/types/import-types"
 import ImportQueue from "@/components/import/parts/ImportQueue.vue";
+import ImportHelpModal from "@/components/import/parts/ImportHelpModal.vue";
 import {getCookie} from "@/assets/js/auth.js";
 import {SECURITY_CONFIG} from "@/config.js";
 import {
@@ -356,7 +370,7 @@ export default {
       }
     }
   },
-  components: {Importqueue: ImportQueue},
+  components: {Importqueue: ImportQueue, ImportHelpModal},
   mixins: [authMixin],
   data() {
     return {
@@ -380,6 +394,8 @@ export default {
       isProcessing: false,
       processingStartTime: null,
       currentFileUploadComplete: false,
+      // Help modal state
+      showHelpModal: false,
     }
   },
   methods: {
