@@ -32,6 +32,29 @@
         <div>
           <label class="block text-sm font-medium text-gray-700 mb-1">Tags</label>
 
+          <!-- System Tags Display (Read-only) -->
+          <div v-if="systemTags.length > 0" class="mb-3">
+            <div class="text-xs text-gray-500 mb-1.5">System Tags (read-only)</div>
+            <div class="relative border border-gray-200 rounded-md bg-gray-50 overflow-hidden">
+              <div class="max-h-20 overflow-y-auto p-2" ref="systemTagsContainer">
+                <div class="flex flex-wrap gap-2">
+                  <span
+                    v-for="tag in systemTags"
+                    :key="`system-${tag}`"
+                    class="inline-flex items-center px-2 py-1 rounded-md text-xs font-medium bg-gray-200 text-gray-600"
+                  >
+                    {{ tag }}
+                  </span>
+                </div>
+              </div>
+              <!-- Gradient fade to indicate more content -->
+              <div
+                v-if="hasSystemTagsOverflow"
+                class="absolute bottom-0 left-0 right-0 h-8 bg-gradient-to-t from-gray-50 to-transparent pointer-events-none"
+              ></div>
+            </div>
+          </div>
+
           <!-- Selected Tags Display -->
           <div v-if="formData.tags.length > 0" class="relative mb-2 border border-gray-200 rounded-md bg-gray-50 overflow-hidden">
             <div class="max-h-24 overflow-y-auto p-2" ref="tagsContainer">
@@ -390,6 +413,7 @@ export default {
       tagInput: '',
       showTagSuggestions: false,
       hasTagsOverflow: false,
+      hasSystemTagsOverflow: false,
       hasPngIcon: false,
       isSaving: false,
       errorMessage: '',
@@ -448,6 +472,13 @@ export default {
           !this.formData.tags.includes(tag)
         )
         .slice(0, 10)
+    },
+    systemTags() {
+      if (!this.feature) return []
+      const properties = this.feature.get('properties') || {}
+      return Array.isArray(properties.system_tags)
+        ? properties.system_tags.filter(tag => tag && tag.trim() !== '')
+        : []
     }
   },
   mounted() {
@@ -458,12 +489,18 @@ export default {
       if (this.$refs.tagsContainer) {
         this.$refs.tagsContainer.addEventListener('scroll', this.checkTagsOverflow)
       }
+      if (this.$refs.systemTagsContainer) {
+        this.$refs.systemTagsContainer.addEventListener('scroll', this.checkSystemTagsOverflow)
+      }
     })
   },
   beforeUnmount() {
     // Remove scroll listener
     if (this.$refs.tagsContainer) {
       this.$refs.tagsContainer.removeEventListener('scroll', this.checkTagsOverflow)
+    }
+    if (this.$refs.systemTagsContainer) {
+      this.$refs.systemTagsContainer.removeEventListener('scroll', this.checkSystemTagsOverflow)
     }
   },
   watch: {
@@ -478,9 +515,21 @@ export default {
             // Add new listener
             this.$refs.tagsContainer.addEventListener('scroll', this.checkTagsOverflow)
           }
+          if (this.$refs.systemTagsContainer) {
+            // Remove old listener if it exists
+            this.$refs.systemTagsContainer.removeEventListener('scroll', this.checkSystemTagsOverflow)
+            // Add new listener
+            this.$refs.systemTagsContainer.addEventListener('scroll', this.checkSystemTagsOverflow)
+          }
         })
       },
       immediate: true
+    },
+    systemTags() {
+      // Check overflow when system tags change
+      this.$nextTick(() => {
+        this.checkSystemTagsOverflow()
+      })
     }
   },
   methods: {
@@ -498,6 +547,7 @@ export default {
       this.tagInput = '' // Clear tag input
       this.$nextTick(() => {
         this.checkTagsOverflow()
+        this.checkSystemTagsOverflow()
       })
       this.formData.markerColor = properties['marker-color'] || '#ff0000'
 
@@ -788,6 +838,14 @@ export default {
         if (this.$refs.tagsContainer) {
           const container = this.$refs.tagsContainer
           this.hasTagsOverflow = container.scrollHeight > container.clientHeight
+        }
+      })
+    },
+    checkSystemTagsOverflow() {
+      this.$nextTick(() => {
+        if (this.$refs.systemTagsContainer) {
+          const container = this.$refs.systemTagsContainer
+          this.hasSystemTagsOverflow = container.scrollHeight > container.clientHeight
         }
       })
     },
