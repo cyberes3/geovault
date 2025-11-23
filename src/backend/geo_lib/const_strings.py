@@ -44,3 +44,26 @@ def filter_protected_tags(tags: List[str], protected_prefixes: List[str]) -> Lis
         return []
     
     return [tag for tag in tags if not is_protected_tag(tag, protected_prefixes)]
+
+
+def deduplicate_tags(tags: List[str]) -> List[str]:
+    """
+    Deduplicate a list of tags while preserving order (first occurrence kept).
+    
+    Args:
+        tags: List of tag strings
+        
+    Returns:
+        List of unique tags in original order
+    """
+    if not tags or not isinstance(tags, list):
+        return []
+    
+    seen = set()
+    result = []
+    for tag in tags:
+        if tag and tag not in seen:
+            seen.add(tag)
+            result.append(tag)
+    
+    return result

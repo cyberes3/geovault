@@ -8,7 +8,7 @@ from django.views.decorators.csrf import csrf_protect
 from django.views.decorators.http import require_http_methods
 
 from api.models import FeatureStore, ImportQueue
-from geo_lib.const_strings import CONST_INTERNAL_TAGS, filter_protected_tags, is_protected_tag
+from geo_lib.const_strings import CONST_INTERNAL_TAGS, filter_protected_tags, is_protected_tag, deduplicate_tags
 from geo_lib.feature_id import generate_feature_hash
 from geo_lib.logging.console import get_access_logger
 from geo_lib.types.feature import PointFeature, LineStringFeature, MultiLineStringFeature, PolygonFeature, GeoFeatureSupported
@@ -156,6 +156,9 @@ def update_feature_metadata(request, feature_id):
             # Strip system tags from incoming tags (defensive - user shouldn't be able to add them)
             user_tags = filter_protected_tags(metadata['tags'], CONST_INTERNAL_TAGS)
 
+            # Deduplicate user tags
+            user_tags = deduplicate_tags(user_tags)
+
             # Preserve existing system_tags from the original feature
             original_system_tags = geojson_data.get('properties', {}).get('system_tags', [])
             is_valid, error_response, preserved_system_tags = _validate_and_preserve_system_tags(
@@ -261,6 +264,9 @@ def update_feature(request, feature_id):
         
         # Filter out any system tags that user might have added
         user_tags = filter_protected_tags(new_tags, CONST_INTERNAL_TAGS)
+
+        # Deduplicate user tags
+        user_tags = deduplicate_tags(user_tags)
 
         # Store user tags and preserve system tags separately
         new_properties['tags'] = user_tags
