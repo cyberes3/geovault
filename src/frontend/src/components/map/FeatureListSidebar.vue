@@ -199,6 +199,11 @@ export default {
       type: Array,
       required: false,
       default: () => []
+    },
+    availableTags: {
+      type: Array,
+      required: false,
+      default: () => []
     }
   },
   emits: ['feature-click', 'tag-filter-change'],
@@ -213,8 +218,6 @@ export default {
       // Tag filter state
       selectedTags: [],
       tagSearchQuery: '',
-      availableTags: [],
-      isLoadingTags: false,
       tagFilteredFeatures: [],
       isFiltering: false,
       filterTimeout: null,
@@ -249,9 +252,7 @@ export default {
       deep: true
     },
     activeTab(newTab) {
-      if (newTab === 'tag-filter' && this.availableTags.length === 0) {
-        this.fetchAvailableTags()
-      }
+      // Tags are now provided via prop, no need to fetch
     }
   },
   methods: {
@@ -370,26 +371,6 @@ export default {
       }
     },
     // Tag filter methods
-    async fetchAvailableTags() {
-      this.isLoadingTags = true
-      try {
-        const response = await fetch(`${APIHOST}/api/data/features/by-tag/`)
-        const data = await response.json()
-        
-        if (data.success && data.tags) {
-          // Extract unique tags from the tags object keys
-          this.availableTags = Object.keys(data.tags).sort()
-        } else {
-          console.error('Failed to fetch tags:', data.error || 'Unknown error')
-          this.availableTags = []
-        }
-      } catch (error) {
-        console.error('Error fetching available tags:', error)
-        this.availableTags = []
-      } finally {
-        this.isLoadingTags = false
-      }
-    },
     handleTagSearchInput() {
       // Tag search is just for filtering the list, no API call needed
     },
@@ -494,9 +475,8 @@ export default {
       }
     }
   },
-  async mounted() {
-    // Fetch available tags when component mounts (will be used when tag filter tab is opened)
-    this.fetchAvailableTags()
+  mounted() {
+    // Tags are now provided via prop from parent component
   },
   beforeUnmount() {
     // Clean up timeouts

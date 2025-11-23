@@ -268,8 +268,8 @@ export default {
 
         const data = await response.json();
 
-        if (data.success && data.tags) {
-          this.tagsData = data.tags;
+        if (data.success && data.user_tags) {
+          this.tagsData = data.user_tags;
         } else {
           throw new Error(data.error || 'Failed to load tags');
         }

@@ -365,6 +365,11 @@ export default {
     feature: {
       type: Object,
       default: null
+    },
+    availableTags: {
+      type: Array,
+      required: false,
+      default: () => []
     }
   },
   emits: ['cancel', 'saved', 'deleted'],
@@ -382,7 +387,6 @@ export default {
       tagsInput: '',
       rawJsonInput: '',
       tagInput: '',
-      availableTags: [],
       showTagSuggestions: false,
       hasTagsOverflow: false,
       hasPngIcon: false,
@@ -445,9 +449,8 @@ export default {
         .slice(0, 10)
     }
   },
-  async mounted() {
-    // Fetch available tags for autocomplete
-    await this.fetchAvailableTags()
+  mounted() {
+    // Tags are now provided via prop from parent component
     this.initializeForm()
     // Add scroll listener for tags container
     this.$nextTick(() => {
@@ -715,22 +718,6 @@ export default {
       if (!tagsString || !tagsString.trim()) return []
       return tagsString.split(',').map(tag => tag.trim()).filter(tag => tag.length > 0)
     },
-    async fetchAvailableTags() {
-      try {
-        const response = await fetch('/api/data/features/by-tag/')
-        if (response.ok) {
-          const data = await response.json()
-          if (data.success && data.tags) {
-            // Extract all tag names from the tags object
-            this.availableTags = Object.keys(data.tags).sort()
-          }
-        }
-      } catch (error) {
-        console.error('Error fetching available tags:', error)
-        // Don't show error to user, just use empty array
-        this.availableTags = []
-      }
-    },
     onTagInput() {
       if (this.tagInput.trim()) {
         this.showTagSuggestions = true
@@ -776,11 +763,6 @@ export default {
       const trimmedInput = this.tagInput.trim()
       if (trimmedInput && !this.formData.tags.includes(trimmedInput)) {
         this.formData.tags.push(trimmedInput)
-        // Add to available tags if not already there
-        if (!this.availableTags.includes(trimmedInput)) {
-          this.availableTags.push(trimmedInput)
-          this.availableTags.sort()
-        }
         this.tagInput = ''
         this.showTagSuggestions = false
         this.checkTagsOverflow()

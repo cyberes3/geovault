@@ -4,6 +4,7 @@
     <FeatureListSidebar
         :class="['transition-opacity duration-300', (publicShareError || loadError) ? 'opacity-50 pointer-events-none' : 'opacity-100']"
         :features="featuresInExtent"
+        :available-tags="availableTags"
         @feature-click="zoomToFeature"
         @tag-filter-change="handleTagFilterChange"
     />
@@ -94,6 +95,7 @@
         <FeatureEditBox
             v-if="isEditingFeature && !isPublicShareMode"
             :feature="selectedFeature"
+            :available-tags="availableTags"
             @cancel="handleCancelEdit"
             @deleted="handleFeatureDeleted"
             @saved="handleFeatureSaved"
@@ -230,7 +232,9 @@ export default {
       tagFilteredFeatures: [], // Store filtered features from tag filter
       // Collection state
       collectionName: null, // Name of the collection being viewed
-      isCollectionMode: false // Track if collection filtering is active
+      isCollectionMode: false, // Track if collection filtering is active
+      // Available tags for autocomplete and filtering
+      availableTags: [] // Tags fetched once and shared with child components
     }
   },
   methods: {
@@ -278,6 +282,27 @@ export default {
           requires_proxy: false,
           client_config: {type: 'osm'}
         }]
+      }
+    },
+    async fetchAvailableTags() {
+      // Only fetch tags for authenticated users (not public share mode)
+      if (this.isPublicShareMode) {
+        return
+      }
+      try {
+        const response = await fetch(`${APIHOST}/api/data/features/by-tag/`)
+        const data = await response.json()
+        
+        if (data.success && data.user_tags) {
+          // Extract unique tags from the user_tags object keys (exclude system tags)
+          this.availableTags = Object.keys(data.user_tags).sort()
+        } else {
+          console.error('Failed to fetch tags:', data.error || 'Unknown error')
+          this.availableTags = []
+        }
+      } catch (error) {
+        console.error('Error fetching available tags:', error)
+        this.availableTags = []
       }
     },
 
@@ -1496,6 +1521,11 @@ export default {
 
     // Fetch tile sources configuration first
     await this.fetchTileSources()
+
+    // Fetch available tags for child components (only for authenticated users)
+    if (!this.isPublicShareMode) {
+      await this.fetchAvailableTags()
+    }
 
     // Wait for map to be fully initialized before loading data
     try {

@@ -277,8 +277,8 @@ export default {
         const response = await fetch('/api/data/features/by-tag/');
         const data = await response.json();
         
-        if (data.success && data.tags) {
-          this.availableTags = Object.keys(data.tags).sort();
+        if (data.success && data.user_tags) {
+          this.availableTags = Object.keys(data.user_tags).sort();
         } else {
           this.availableTags = [];
         }

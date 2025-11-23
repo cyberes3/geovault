@@ -17,14 +17,15 @@ logger = get_access_logger()
 def get_features_by_tag(request):
     """
     API endpoint to get all features grouped by tags (both user-generated and system tags).
-    Returns a dictionary where keys are tags and values are lists of features with that tag.
+    Returns separate dictionaries for user_tags and system_tags where keys are tags and values are lists of features with that tag.
     """
     try:
         # Get all features for the user
         features = FeatureStore.objects.filter(user=request.user)
 
-        # Dictionary to store features by tag
-        features_by_tag = {}
+        # Dictionaries to store features by tag type
+        features_by_user_tag = {}
+        features_by_system_tag = {}
 
         # Iterate through all features
         for feature in features:
@@ -40,40 +41,50 @@ def get_features_by_tag(request):
                 user_tags = []
             if not isinstance(system_tags, list):
                 system_tags = []
-            
-            # Combine user tags and system tags for grouping
-            all_tags = user_tags + system_tags
 
-            # Include database ID in properties for frontend editing
-            feature_properties = properties.copy()
-            feature_properties['_id'] = feature.id
-
-            # Create GeoJSON feature
-            geojson_feature = {
-                "type": "Feature",
-                "geometry": geojson_data.get('geometry'),
-                "properties": feature_properties,
-                "geojson_hash": feature.file_hash
+            # Create minimal feature object with only what's needed for display
+            geometry_data = geojson_data.get('geometry', {})
+            minimal_feature = {
+                "properties": {
+                    "_id": feature.id,
+                    "name": properties.get('name', 'Unnamed Feature'),
+                    "description": properties.get('description', '')
+                },
+                "geometry": {
+                    "type": geometry_data.get('type', 'Unknown') if isinstance(geometry_data, dict) else 'Unknown'
+                }
             }
 
-            # Add feature to each tag's list (including system tags)
-            for tag in all_tags:
+            # Add feature to each user tag's list
+            for tag in user_tags:
                 if isinstance(tag, str) and tag:  # Ensure tag is a non-empty string
-                    if tag not in features_by_tag:
-                        features_by_tag[tag] = []
-                    features_by_tag[tag].append(geojson_feature)
+                    if tag not in features_by_user_tag:
+                        features_by_user_tag[tag] = []
+                    features_by_user_tag[tag].append(minimal_feature)
+
+            # Add feature to each system tag's list
+            for tag in system_tags:
+                if isinstance(tag, str) and tag:  # Ensure tag is a non-empty string
+                    if tag not in features_by_system_tag:
+                        features_by_system_tag[tag] = []
+                    features_by_system_tag[tag].append(minimal_feature)
 
         # Sort tags alphabetically
-        sorted_tags = sorted(features_by_tag.keys())
+        sorted_user_tags = sorted(features_by_user_tag.keys())
+        sorted_system_tags = sorted(features_by_system_tag.keys())
 
         # Build response with sorted tags
         response_data = {
             'success': True,
-            'tags': {}
+            'user_tags': {},
+            'system_tags': {}
         }
 
-        for tag in sorted_tags:
-            response_data['tags'][tag] = features_by_tag[tag]
+        for tag in sorted_user_tags:
+            response_data['user_tags'][tag] = features_by_user_tag[tag]
+
+        for tag in sorted_system_tags:
+            response_data['system_tags'][tag] = features_by_system_tag[tag]
 
         return JsonResponse(response_data)
 
