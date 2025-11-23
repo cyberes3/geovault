@@ -481,12 +481,34 @@
             <!-- User Tags (Editable) -->
             <div class="space-y-2">
               <div v-for="(tag, tagIndex) in item.properties.tags" :key="`tag-${tagIndex}`" class="flex items-center space-x-2">
-                <input
-                    v-model="item.properties.tags[tagIndex]"
-                    :class="isImported || item.isDuplicate || isItemSkipped(item, index) || loading.importing ? 'block w-full px-3 py-2 border border-gray-300 rounded-md bg-gray-100 cursor-not-allowed' : 'block w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-blue-500 focus:border-blue-500'"
-                    :disabled="isImported || item.isDuplicate || isItemSkipped(item, index) || loading.importing"
-                    :placeholder="getTagPlaceholder(index, tag)"
-                />
+                <div class="relative flex-1">
+                  <input
+                      v-model="item.properties.tags[tagIndex]"
+                      :class="isImported || item.isDuplicate || isItemSkipped(item, index) || loading.importing ? 'block w-full px-3 py-2 border border-gray-300 rounded-md bg-gray-100 cursor-not-allowed' : 'block w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-blue-500 focus:border-blue-500'"
+                      :disabled="isImported || item.isDuplicate || isItemSkipped(item, index) || loading.importing"
+                      :placeholder="getTagPlaceholder(index, tag)"
+                      @input="onTagInput(index, tagIndex, $event.target.value)"
+                      @focus="showSuggestionsForInput(index, tagIndex)"
+                      @blur="handleTagInputBlur(index, tagIndex)"
+                      @keydown.enter.prevent="hideTagSuggestions"
+                      @keydown.escape="hideTagSuggestions"
+                  />
+                  <!-- Autocomplete Suggestions -->
+                  <div
+                      v-if="showTagSuggestions && activeTagInput.featureIndex === index && activeTagInput.tagIndex === tagIndex && filteredTagSuggestions.length > 0 && !isImported && !item.isDuplicate && !isItemSkipped(item, index) && !loading.importing"
+                      class="absolute z-50 w-full mt-1 bg-white border border-gray-300 rounded-md shadow-lg max-h-48 overflow-auto"
+                  >
+                    <button
+                        v-for="(suggestion, suggestionIndex) in filteredTagSuggestions"
+                        :key="suggestionIndex"
+                        type="button"
+                        @mousedown.prevent="selectTagSuggestion(index, tagIndex, suggestion)"
+                        class="w-full text-left px-3 py-2 text-sm text-gray-700 hover:bg-blue-50 focus:bg-blue-50 focus:outline-none"
+                    >
+                      {{ suggestion }}
+                    </button>
+                  </div>
+                </div>
                 <button
                     v-if="!isImported && !item.isDuplicate && !isItemSkipped(item, index) && !loading.importing"
                     class="inline-flex items-center px-3 py-2 border border-transparent text-sm font-medium rounded-md text-white bg-red-600 hover:bg-red-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-red-500"
@@ -628,6 +650,17 @@ export default {
 
     importableCount() {
       return this.pagination.totalFeatures - this.duplicates.indices.length - this.skippedFeatureIds.size;
+    },
+
+    filteredTagSuggestions() {
+      if (!this.tagInputValue.trim()) {
+        return this.availableUserTags.slice(0, 10);
+      }
+
+      const query = this.tagInputValue.toLowerCase().trim();
+      return this.availableUserTags
+        .filter(tag => tag.toLowerCase().includes(query))
+        .slice(0, 10);
     }
   },
   components: {Loader, Importqueue: ImportQueue, MapPreviewDialog, FeatureMapDialog, LogViewModal, ImportControls},
@@ -706,7 +739,13 @@ export default {
       ws: null,
       wsConnected: false,
       wsReconnectAttempts: 0,
-      maxReconnectAttempts: 5
+      maxReconnectAttempts: 5,
+
+      // Tag autocomplete state
+      availableUserTags: [],
+      activeTagInput: { featureIndex: null, tagIndex: null },
+      tagInputValue: '',
+      showTagSuggestions: false
     }
   },
   watch: {
@@ -1287,6 +1326,64 @@ export default {
         ? item.properties.system_tags.filter(tag => tag && tag.trim() !== '')
         : [];
     },
+    async fetchUserTags() {
+      try {
+        const response = await fetch('/api/data/features/by-tag/');
+        const data = await response.json();
+        
+        if (data.success && data.user_tags) {
+          // Extract unique tags from the user_tags object keys
+          this.availableUserTags = Object.keys(data.user_tags).sort();
+        } else {
+          console.error('Failed to fetch user tags:', data.error || 'Unknown error');
+          this.availableUserTags = [];
+        }
+      } catch (error) {
+        console.error('Error fetching user tags:', error);
+        this.availableUserTags = [];
+      }
+    },
+    onTagInput(featureIndex, tagIndex, value) {
+      this.activeTagInput = { featureIndex, tagIndex };
+      this.tagInputValue = value;
+      if (value.trim()) {
+        this.showTagSuggestions = true;
+      } else {
+        this.showTagSuggestions = false;
+      }
+    },
+    showSuggestionsForInput(featureIndex, tagIndex) {
+      this.activeTagInput = { featureIndex, tagIndex };
+      const currentValue = this.itemsForUser[featureIndex].properties.tags[tagIndex] || '';
+      this.tagInputValue = currentValue;
+      if (currentValue.trim() || this.availableUserTags.length > 0) {
+        this.showTagSuggestions = true;
+      }
+    },
+    hideTagSuggestions() {
+      this.showTagSuggestions = false;
+    },
+    selectTagSuggestion(featureIndex, tagIndex, tag) {
+      if (tag && this.itemsForUser[featureIndex]) {
+        this.itemsForUser[featureIndex].properties.tags[tagIndex] = tag;
+      }
+      this.tagInputValue = '';
+      this.showTagSuggestions = false;
+      this.activeTagInput = { featureIndex: null, tagIndex: null };
+    },
+    handleTagInputBlur(featureIndex, tagIndex) {
+      // Use setTimeout to allow click events on suggestions to fire first
+      setTimeout(() => {
+        // Only hide if the active input matches (to avoid hiding when switching between inputs)
+        if (this.activeTagInput.featureIndex === featureIndex && this.activeTagInput.tagIndex === tagIndex) {
+          // Check if focus moved to a suggestion button
+          const activeElement = document.activeElement;
+          if (!activeElement || activeElement.tagName !== 'BUTTON' || !activeElement.textContent) {
+            this.showTagSuggestions = false;
+          }
+        }
+      }, 200);
+    },
     updateDate(index, event) {
       this.itemsForUser[index].properties.created = event.target.value;
     },
@@ -1669,6 +1766,9 @@ export default {
       }
     };
     window.addEventListener('beforeunload', this.beforeUnloadHandler);
+    
+    // Fetch available user tags for autocomplete
+    await this.fetchUserTags();
   },
   beforeUnmount() {
     // Remove the navigation warning when component is destroyed
