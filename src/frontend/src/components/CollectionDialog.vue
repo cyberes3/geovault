@@ -277,8 +277,13 @@ export default {
         const response = await fetch('/api/data/features/by-tag/');
         const data = await response.json();
         
-        if (data.success && data.user_tags) {
-          this.availableTags = Object.keys(data.user_tags).sort();
+        if (data.success) {
+          // Get user tags and system tags separately
+          const userTags = data.user_tags ? Object.keys(data.user_tags).sort() : [];
+          const systemTags = data.system_tags ? Object.keys(data.system_tags).sort() : [];
+          
+          // Combine with user tags first, then system tags
+          this.availableTags = [...userTags, ...systemTags];
         } else {
           this.availableTags = [];
         }
