@@ -649,6 +649,9 @@ export default {
 
                 // Update features in extent list
                 this.updateFeaturesInExtent()
+                
+                // Refresh available tags so suggestions are up to date
+                await this.fetchAvailableTags()
                 return
               }
             }
@@ -665,6 +668,9 @@ export default {
       await this.loadDataForCurrentView()
       // Update features in extent list
       this.updateFeaturesInExtent()
+      
+      // Refresh available tags so suggestions are up to date
+      await this.fetchAvailableTags()
     },
 
     // Handle feature deleted
