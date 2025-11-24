@@ -52,7 +52,7 @@
     <!-- Import History Section -->
     <div class="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
       <h2 class="text-lg font-semibold text-gray-900 mb-4">Import History</h2>
-      <p class="text-sm text-gray-600 mb-4">Click filename to download your previously imported files.</p>
+      <p class="text-sm text-gray-600 mb-4">Click to download your previously imported files.</p>
 
       <div class="overflow-hidden">
         <table class="min-w-full divide-y divide-gray-200">
