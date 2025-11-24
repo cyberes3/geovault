@@ -2,8 +2,11 @@
   <div v-if="feature" class="absolute bottom-0 left-0 right-0 bg-white border-t border-gray-200 z-20" style="height: 25%;">
     <div class="h-full flex flex-col">
       <!-- Header -->
-      <div class="flex items-center justify-between px-4 py-3 border-b border-gray-200">
+      <div class="relative flex items-center justify-between px-4 py-3 border-b border-gray-200">
         <h3 class="text-lg font-semibold text-gray-900">Elevation Profile</h3>
+        <div class="absolute left-1/2 transform -translate-x-1/2">
+          <span class="text-lg text-gray-900">{{ getFeatureName(feature) }}</span>
+        </div>
         <button
           @click="$emit('close')"
           class="text-gray-400 hover:text-gray-600 transition-colors"
@@ -146,6 +149,16 @@ export default {
       if (event.key === 'Escape') {
         this.$emit('close')
       }
+    },
+
+    /**
+     * Get feature name from properties
+     * Returns feature name or 'Unnamed Feature' as fallback
+     */
+    getFeatureName(feature) {
+      if (!feature) return 'Unnamed Feature'
+      const properties = feature.get('properties') || {}
+      return properties.name || 'Unnamed Feature'
     },
 
     /**
@@ -540,11 +553,11 @@ export default {
           id: 'markerPlugin',
           afterDraw: (chart) => {
             const ctx = chart.ctx
-            
+
             // Optimize: Get metadata once and check validity before drawing
             const minPointMeta = chart.getDatasetMeta(1)
             const maxPointMeta = chart.getDatasetMeta(2)
-            
+
             // Draw min marker - optimized checks
             if (minPointMeta?.data?.length > 0) {
               const minPoint = minPointMeta.data[0]
@@ -560,7 +573,7 @@ export default {
                 ctx.restore()
               }
             }
-            
+
             // Draw max marker - optimized checks
             if (maxPointMeta?.data?.length > 0) {
               const maxPoint = maxPointMeta.data[0]
@@ -591,7 +604,7 @@ export default {
               const elapsed = Date.now() - renderStartTime
               const minDisplayTime = 300 // Minimum 300ms display time
               const remainingTime = Math.max(0, minDisplayTime - elapsed)
-              
+
               // Wait for browser to paint the chart (multiple frames for reliability)
               requestAnimationFrame(() => {
                 requestAnimationFrame(() => {
@@ -632,14 +645,14 @@ export default {
             if (event.type !== 'mousemove' && event.type !== 'click' && event.type !== 'mouseout') return
 
             const chartArea = chart.chartArea
-            
+
             // Get mouse position relative to chart (cache rect for performance)
             const rect = chart.canvas.getBoundingClientRect()
             const x = event.clientX - rect.left
             const y = event.clientY - rect.top
 
             // Check if mouse is within chart area
-            if (x < chartArea.left || x > chartArea.right || 
+            if (x < chartArea.left || x > chartArea.right ||
                 y < chartArea.top || y > chartArea.bottom) {
               // Mouse left chart area - only emit if we had a previous coordinate
               if (lastHoverCoordinate) {
@@ -661,7 +674,7 @@ export default {
 
             // Convert pixel X to distance value (miles)
             const distanceMiles = xScale.getValueForPixel(x)
-            
+
             // Check if we got a valid distance value
             if (distanceMiles === null || distanceMiles === undefined || isNaN(distanceMiles)) {
               if (lastHoverCoordinate) {
@@ -677,12 +690,12 @@ export default {
               // Only emit if coordinate changed (avoid unnecessary emissions)
               const coordKey = `${coordinate[0].toFixed(6)},${coordinate[1].toFixed(6)}`
               const lastKey = lastHoverCoordinate ? `${lastHoverCoordinate[0].toFixed(6)},${lastHoverCoordinate[1].toFixed(6)}` : null
-              
+
               if (coordKey !== lastKey) {
                 component.$emit('hover-point', coordinate)
                 lastHoverCoordinate = coordinate
               }
-              
+
               // Handle click events (always emit clicks)
               if (event.type === 'click') {
                 component.$emit('click-point', coordinate)
