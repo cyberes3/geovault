@@ -141,6 +141,15 @@ export default {
   },
   async mounted() {
   },
+  beforeRouteEnter(to, from, next) {
+    next(async (vm) => {
+      await vm.refreshUserInfo();
+    });
+  },
+  beforeRouteUpdate(to, from, next) {
+    this.refreshUserInfo();
+    next();
+  },
   watch: {},
 }
 </script>
