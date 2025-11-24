@@ -102,10 +102,7 @@
         :class="isMapRoute ? 'w-full h-[calc(100vh-4rem)] overflow-hidden' : 'max-w-7xl mx-auto py-6 px-4 sm:px-6 lg:px-8'">
       <!-- Show loading state while checking authentication for protected routes -->
       <div v-if="userInfoLoading && !isPublicShareRoute" class="flex items-center justify-center min-h-[400px]">
-        <div class="text-center">
-          <div class="inline-block animate-spin rounded-full h-8 w-8 border-2 border-transparent" style="border-bottom-color: #4B6BAB;"></div>
-          <p class="mt-4 text-sm text-gray-600">Loading...</p>
-        </div>
+        <Loader layout="centered" />
       </div>
       <!-- Render router-view only after auth check completes (or immediately for public routes) -->
       <router-view v-if="!userInfoLoading || isPublicShareRoute" v-slot="{ Component }">
@@ -123,9 +120,13 @@ import {realtimeSocket} from "@/assets/js/websocket/realtimeSocket.js";
 import {getCookie, getUserInfo} from "@/assets/js/auth.js";
 import {UserInfo} from "@/assets/js/types/store-types";
 import axios from "axios";
+import Loader from "@/components/parts/Loader.vue";
 
 export default {
   name: 'App',
+  components: {
+    Loader
+  },
   data() {
     return {
       realtimeListenersAdded: false,

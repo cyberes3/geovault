@@ -42,10 +42,7 @@
 
     <!-- Loading State -->
     <div v-if="loading" class="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
-      <div class="flex items-center justify-center py-12">
-        <div class="animate-spin rounded-full h-8 w-8 border-2 border-transparent" style="border-bottom-color: #4B6BAB;"></div>
-        <span class="ml-3 text-gray-600">Loading tags...</span>
-      </div>
+      <Loader layout="centered" message="Loading tags..." />
     </div>
 
     <!-- Error State -->
@@ -235,11 +232,13 @@
 <script>
 import {authMixin} from "@/assets/js/authMixin.js";
 import TagShareDialog from "./TagShareDialog.vue";
+import Loader from "./parts/Loader.vue";
 
 export default {
   name: 'TagsPage',
   components: {
-    TagShareDialog
+    TagShareDialog,
+    Loader
   },
   mixins: [authMixin],
   data() {
