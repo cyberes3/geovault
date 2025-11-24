@@ -35,7 +35,7 @@
             <!-- Loading Indicator -->
             <div v-show="isLoading" class="absolute top-4 right-4 bg-white bg-opacity-90 px-4 py-2 rounded-lg shadow-md z-10">
               <div class="flex items-center space-x-2">
-                <div class="animate-spin rounded-full h-4 w-4 border-b-2 border-blue-600"></div>
+                <div class="animate-spin rounded-full h-4 w-4 border-2 border-transparent" style="border-bottom-color: #4B6BAB;"></div>
                 <span class="text-sm text-gray-700">Loading map...</span>
               </div>
             </div>

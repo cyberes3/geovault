@@ -294,7 +294,7 @@
     <div v-if="processing.active && processing.progress !== null" class="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
       <div class="flex items-center justify-center py-8">
         <div class="text-center">
-          <div class="animate-spin h-8 w-8 border-2 border-blue-600 border-t-transparent rounded-full mx-auto mb-4"></div>
+          <div class="animate-spin h-8 w-8 border-2 border-transparent rounded-full mx-auto mb-4" style="border-bottom-color: #4B6BAB;"></div>
           <h3 class="text-lg font-medium text-gray-900 mb-2">Processing File</h3>
           <p class="text-gray-600">{{ processing.message }}</p>
           <div class="mt-4">

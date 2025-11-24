@@ -49,13 +49,13 @@
           <canvas ref="chartCanvas"></canvas>
           <!-- Loading Spinner Overlay -->
           <div v-if="isUpdatingChart" class="absolute inset-0 flex items-center justify-center z-10 pointer-events-none">
-            <div class="animate-spin rounded-full h-8 w-8 border-b-2 border-gray-900 bg-white bg-opacity-90 rounded-full p-2"></div>
+            <div class="animate-spin rounded-full h-8 w-8 border-2 border-transparent bg-white bg-opacity-90 rounded-full p-2" style="border-bottom-color: #4B6BAB;"></div>
           </div>
         </div>
         <!-- Loading Spinner -->
         <div v-if="isUpdatingChart && feature" class="absolute inset-0 flex items-center justify-center bg-white z-20">
           <div class="text-center">
-            <div class="inline-block animate-spin rounded-full h-8 w-8 border-b-2 border-gray-600"></div>
+            <div class="inline-block animate-spin rounded-full h-8 w-8 border-2 border-transparent" style="border-bottom-color: #4B6BAB;"></div>
             <p class="mt-4 text-sm text-gray-600">Loading chart...</p>
           </div>
         </div>

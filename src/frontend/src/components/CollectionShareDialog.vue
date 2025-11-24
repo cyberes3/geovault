@@ -81,7 +81,7 @@
             <h4 class="text-sm font-semibold text-gray-900 mb-4">Existing Share Links</h4>
             
             <div v-if="loading" class="text-center py-4">
-              <div class="animate-spin rounded-full h-6 w-6 border-b-2 border-blue-600 mx-auto"></div>
+              <div class="animate-spin rounded-full h-6 w-6 border-2 border-transparent mx-auto" style="border-bottom-color: #4B6BAB;"></div>
               <p class="mt-2 text-sm text-gray-600">Loading shares...</p>
             </div>
 

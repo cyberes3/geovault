@@ -81,7 +81,7 @@
 
                 <!-- Tags List -->
                 <div v-if="loadingTags" class="text-center py-4">
-                  <div class="animate-spin rounded-full h-6 w-6 border-b-2 border-blue-600 mx-auto"></div>
+                  <div class="animate-spin rounded-full h-6 w-6 border-2 border-transparent mx-auto" style="border-bottom-color: #4B6BAB;"></div>
                   <p class="mt-2 text-sm text-gray-600">Loading tags...</p>
                 </div>
 
@@ -155,7 +155,7 @@
 
                 <!-- Features List -->
                 <div v-if="loadingFeatures" class="text-center py-4">
-                  <div class="animate-spin rounded-full h-6 w-6 border-b-2 border-blue-600 mx-auto"></div>
+                  <div class="animate-spin rounded-full h-6 w-6 border-2 border-transparent mx-auto" style="border-bottom-color: #4B6BAB;"></div>
                   <p class="mt-2 text-sm text-gray-600">Loading features...</p>
                 </div>
 

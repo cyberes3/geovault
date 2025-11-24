@@ -217,7 +217,7 @@
           <h2 class="text-lg font-semibold text-gray-900 mb-4">Shared Links</h2>
           
           <div v-if="sharesLoading" class="text-center py-8">
-            <div class="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600 mx-auto"></div>
+            <div class="animate-spin rounded-full h-8 w-8 border-2 border-transparent mx-auto" style="border-bottom-color: #4B6BAB;"></div>
             <p class="mt-2 text-sm text-gray-600">Loading shares...</p>
           </div>
 

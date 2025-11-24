@@ -76,7 +76,7 @@
       <!-- Loading Indicator -->
       <div v-if="isSearching" class="flex-1 flex items-center justify-center">
         <div class="flex flex-col items-center space-y-2">
-          <div class="animate-spin rounded-full h-6 w-6 border-b-2 border-blue-600"></div>
+          <div class="animate-spin rounded-full h-6 w-6 border-2 border-transparent" style="border-bottom-color: #4B6BAB;"></div>
           <div class="text-xs text-gray-500">Searching...</div>
         </div>
       </div>
