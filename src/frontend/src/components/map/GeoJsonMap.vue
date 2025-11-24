@@ -81,18 +81,20 @@
 
         <!-- Feature Info Box or Edit Box -->
         <FeatureInfoBox
-            v-if="!isEditingFeature && !isPublicShareMode"
+            v-if="!isEditingFeature && !isPublicShareMode && !showElevationProfile"
             :feature="selectedFeature"
             @close="selectedFeature = null"
             @edit="handleEditFeature"
             @zoom="zoomToFeature(selectedFeature)"
+            @show-profile="showElevationProfile = true"
         />
         <FeatureInfoBox
-            v-if="!isEditingFeature && isPublicShareMode"
+            v-if="!isEditingFeature && isPublicShareMode && !showElevationProfile"
             :feature="selectedFeature"
             :show-edit-button="false"
             @close="selectedFeature = null"
             @zoom="zoomToFeature(selectedFeature)"
+            @show-profile="showElevationProfile = true"
         />
         <FeatureEditBox
             v-if="isEditingFeature && !isPublicShareMode"
@@ -101,6 +103,15 @@
             @cancel="handleCancelEdit"
             @deleted="handleFeatureDeleted"
             @saved="handleFeatureSaved"
+        />
+
+        <!-- Elevation Profile Dialog -->
+        <ElevationProfileDialog
+            v-if="showElevationProfile"
+            :feature="selectedFeature"
+            @close="handleElevationProfileClose"
+            @hover-point="handleHoverPoint"
+            @hover-clear="handleHoverClear"
         />
 
         <!-- Feature Selection Popup (for overlapping features) -->
@@ -137,6 +148,9 @@ import {Tile as TileLayer, Vector as VectorLayer} from 'ol/layer'
 import {Vector as VectorSource} from 'ol/source'
 import {GeoJSON} from 'ol/format'
 import {fromLonLat, toLonLat} from 'ol/proj'
+import {Point} from 'ol/geom'
+import {Style, Circle, Fill, Stroke} from 'ol/style'
+import {Feature} from 'ol'
 import {getUserInfo} from '@/assets/js/auth.js'
 import {UserInfo} from '@/assets/js/types/store-types'
 import {MapUtils} from '@/utils/map/MapUtils'
@@ -146,6 +160,7 @@ import MapControlsSidebar from './MapControlsSidebar.vue'
 import FeatureInfoBox from './FeatureInfoBox.vue'
 import FeatureEditBox from './FeatureEditBox.vue'
 import FeatureSelectionPopup from './FeatureSelectionPopup.vue'
+import ElevationProfileDialog from './ElevationProfileDialog.vue'
 
 export default {
   name: 'GeoJsonMap',
@@ -154,7 +169,8 @@ export default {
     MapControlsSidebar,
     FeatureInfoBox,
     FeatureEditBox,
-    FeatureSelectionPopup
+    FeatureSelectionPopup,
+    ElevationProfileDialog
   },
   mixins: [],
   computed: {
@@ -214,6 +230,8 @@ export default {
       currentZoom: null,
       featureCountUpdatePending: false, // Flag to batch feature count updates
       isEditingFeature: false, // Track if we're in edit mode
+      showElevationProfile: false, // Track if elevation profile dialog is shown
+      hoverMarker: null, // Temporary marker for chart hover
       publicShareError: null, // Error message for invalid public share
       loadError: null, // Error message for loading failures and exceptions
       publicShareTag: null, // Tag name for public share
@@ -470,6 +488,7 @@ export default {
       // Show info box for the selected feature
       this.selectedFeature = feature
       this.isEditingFeature = false // Reset edit mode when selecting a new feature
+      this.handleHoverClear() // Clear hover marker when feature changes
     },
 
     // Handle feature selection from popup
@@ -588,6 +607,97 @@ export default {
     // Handle cancel edit
     handleCancelEdit() {
       this.isEditingFeature = false
+    },
+
+    /**
+     * Convert hex color to RGB array [r, g, b]
+     */
+    hexToRgb(hex) {
+      const shorthandRegex = /^#?([a-f\d])([a-f\d])([a-f\d])$/i
+      hex = hex.replace(shorthandRegex, (m, r, g, b) => r + r + g + g + b + b)
+      const result = /^#?([a-f\d]{2})([a-f\d]{2})([a-f\d]{2})$/i.exec(hex)
+      return result
+        ? [parseInt(result[1], 16), parseInt(result[2], 16), parseInt(result[3], 16)]
+        : null
+    },
+
+    /**
+     * Get the inverse/opposite color of a hex color
+     */
+    getInverseColor(hex) {
+      const rgb = this.hexToRgb(hex)
+      if (!rgb) {
+        return '#000000' // Default to black if conversion fails
+      }
+      // Invert each RGB component
+      const inverted = rgb.map(c => 255 - c)
+      // Convert back to hex
+      return '#' + inverted.map(c => {
+        const hex = c.toString(16)
+        return hex.length === 1 ? '0' + hex : hex
+      }).join('')
+    },
+
+    // Handle hover point from elevation profile chart
+    handleHoverPoint(coordinate) {
+      if (!this.vectorSource || !coordinate || !Array.isArray(coordinate) || coordinate.length < 2) {
+        return
+      }
+
+      // Remove existing hover marker if any
+      if (this.hoverMarker) {
+        this.vectorSource.removeFeature(this.hoverMarker)
+        this.hoverMarker = null
+      }
+
+      // Get feature stroke color
+      let markerColor = '#ff0000' // Default red
+      if (this.selectedFeature) {
+        const properties = this.selectedFeature.get('properties') || {}
+        const strokeColor = properties.stroke || '#ff0000'
+        markerColor = strokeColor
+      }
+
+      // Calculate inverse color for border
+      const borderColor = this.getInverseColor(markerColor)
+
+      // Create new Point feature at the coordinate
+      const point = new Point(fromLonLat([coordinate[0], coordinate[1]]))
+      const hoverFeature = markRaw(new Feature({
+        geometry: point
+      }))
+
+      // Set style for hover marker (using feature's stroke color, with inverse color border)
+      hoverFeature.setStyle(new Style({
+        image: new Circle({
+          radius: 5.5,
+          fill: new Fill({
+            color: markerColor
+          }),
+          stroke: new Stroke({
+            color: borderColor,
+            width: 1
+          })
+        })
+      }))
+
+      // Add to vector source
+      this.vectorSource.addFeature(hoverFeature)
+      this.hoverMarker = hoverFeature
+    },
+
+    // Handle hover clear from elevation profile chart
+    handleHoverClear() {
+      if (this.hoverMarker && this.vectorSource) {
+        this.vectorSource.removeFeature(this.hoverMarker)
+        this.hoverMarker = null
+      }
+    },
+
+    // Handle elevation profile dialog close
+    handleElevationProfileClose() {
+      this.showElevationProfile = false
+      this.handleHoverClear() // Clear hover marker when dialog closes
     },
 
     // Handle feature saved
@@ -825,10 +935,17 @@ export default {
           this.showFeaturePopup = false
         }
 
+        // Close elevation profile dialog if open when clicking
+        if (this.showElevationProfile) {
+          this.showElevationProfile = false
+          this.handleHoverClear() // Clear hover marker when dialog closes
+        }
+
         if (featuresAtPixel.length === 0) {
           // No features: Clear selection
           this.selectedFeature = null
           this.isEditingFeature = false
+          this.handleHoverClear() // Clear hover marker when selection is cleared
         } else if (featuresAtPixel.length === 1) {
           // Single feature: Select directly (existing behavior)
           this.selectedFeature = featuresAtPixel[0]
@@ -1613,6 +1730,9 @@ export default {
       this.currentAbortController.abort()
       console.log('Cancelled API request on component unmount')
     }
+
+    // Clear hover marker
+    this.handleHoverClear()
 
     // Clear feature timestamps
     this.featureTimestamps = {}
