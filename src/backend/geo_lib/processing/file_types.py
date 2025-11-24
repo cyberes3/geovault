@@ -179,8 +179,45 @@ def validate_mime_type(mime_type: str, file_type: FileType) -> bool:
     return mime_type in FILE_TYPE_CONFIGS[file_type].mime_types
 
 
+def strip_bom_and_whitespace(file_data: bytes) -> bytes:
+    """
+    Strip BOM (Byte Order Mark) and leading whitespace from file data.
+    Handles UTF-8, UTF-16 LE, and UTF-16 BE BOMs.
+    
+    Args:
+        file_data: Raw file bytes
+        
+    Returns:
+        File data with BOM and leading whitespace removed
+    """
+    # Remove BOM markers
+    if file_data.startswith(b'\xef\xbb\xbf'):  # UTF-8 BOM
+        file_data = file_data[3:]
+    elif file_data.startswith(b'\xff\xfe'):  # UTF-16 LE BOM
+        file_data = file_data[2:]
+    elif file_data.startswith(b'\xfe\xff'):  # UTF-16 BE BOM
+        file_data = file_data[2:]
+    
+    # Remove leading whitespace (spaces, tabs, newlines, carriage returns)
+    # But only if it's text-based (XML) files, not binary (ZIP/KMZ)
+    # Check if it looks like text (starts with XML declaration or tag)
+    if file_data.startswith(b'<?xml') or file_data.startswith(b'<'):
+        # Strip leading whitespace for XML-based formats
+        file_data = file_data.lstrip(b' \t\n\r')
+    
+    return file_data
+
+
 def validate_file_signature(file_data: bytes, file_type: FileType) -> bool:
-    """Validate file signature against type-specific signatures."""
+    """
+    Validate file signature against type-specific signatures.
+    Automatically strips BOM and leading whitespace for text-based formats.
+    """
+    # For text-based formats (KML, GPX), strip BOM and whitespace
+    # For binary formats (KMZ/ZIP), check as-is
+    if file_type == FileType.KML or file_type == FileType.GPX:
+        file_data = strip_bom_and_whitespace(file_data)
+    
     return any(file_data.startswith(sig) for sig in FILE_TYPE_CONFIGS[file_type].signatures)
 
 
