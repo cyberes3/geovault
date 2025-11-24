@@ -19,6 +19,7 @@ from geo_lib.processing.geo_processor import (
     split_complex_geometries
 )
 from geo_lib.processing.logging import ImportLog, DatabaseLogLevel
+from geo_lib.processing.elevation_service import fill_missing_elevations
 from geo_lib.processing.status_tracker import ProcessingStatusTracker, ProcessingStatus
 from geo_lib.processing.tagging import generate_auto_tags
 from geo_lib.security.file_validation import SecureFileValidator
@@ -442,6 +443,28 @@ class BaseProcessor(ABC):
             # Check for cancellation
             if self._is_cancelled():
                 self.import_log.add("Processing cancelled during GeoJSON conversion", "Processing", DatabaseLogLevel.WARNING)
+                return {'type': 'FeatureCollection', 'features': []}, self.import_log
+
+            # Step 3.5: Fill missing elevation data for lines and tracks
+            elevation_start = time.time()
+            try:
+                from django.conf import settings
+                if getattr(settings, 'ELEVATION_API_ENABLED', True):
+                    self.geojson_data = fill_missing_elevations(self.geojson_data, self.import_log)
+                    elevation_duration = time.time() - elevation_start
+                    self.import_log.add_timing("Elevation data filling", elevation_duration, "Processing")
+            except Exception as e:
+                # Log error but don't fail processing
+                import traceback
+                elevation_duration = time.time() - elevation_start
+                error_msg = f"Elevation data filling failed: {str(e)}"
+                self.import_log.add(error_msg, "Elevation Service", DatabaseLogLevel.ERROR)
+                logger.error(f"Elevation data filling failed: {str(e)}")
+                logger.error(f"Elevation data filling error traceback:\n{traceback.format_exc()}")
+            
+            # Check for cancellation
+            if self._is_cancelled():
+                self.import_log.add("Processing cancelled during elevation data filling", "Processing", DatabaseLogLevel.WARNING)
                 return {'type': 'FeatureCollection', 'features': []}, self.import_log
 
             # Step 4: Process features

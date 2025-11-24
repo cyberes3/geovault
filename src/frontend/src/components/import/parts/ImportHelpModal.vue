@@ -45,7 +45,7 @@
               <h4 class="text-lg font-semibold text-gray-900 mb-3">Processing Workflow</h4>
               <div class="space-y-4 text-gray-700">
                 <p>Once you click "Upload", your files go through the following automated process:</p>
-                
+
                 <div class="space-y-4">
                   <div>
                     <h5 class="text-base font-semibold text-gray-900 mb-2">1. File Validation</h5>
@@ -58,12 +58,24 @@
                   </div>
 
                   <div>
-                    <h5 class="text-base font-semibold text-gray-900 mb-2">3. Feature Extraction</h5>
+                    <h5 class="text-base font-semibold text-gray-900 mb-2">3. Elevation Data Filling</h5>
+                    <p class="text-sm">For lines and tracks (LineString and MultiLineString features), the system automatically fills in missing elevation data:</p>
+                    <ul class="list-disc list-inside ml-4 mt-1 text-sm">
+                      <li><strong>Automatic detection:</strong> The system identifies points in lines and tracks that are missing elevation information</li>
+                      <li><strong>Preservation:</strong> Existing elevation data is never overwritten - only missing values are filled</li>
+                    </ul>
+                    <div class="mt-2 p-3 bg-blue-50 border border-blue-200 rounded-md">
+                      <p class="text-sm"><strong>Note:</strong> This process only applies to lines and tracks. Points and polygons are not modified. If elevation data filling fails or is disabled, your upload will still proceed successfully - only the elevation data will be missing.</p>
+                    </div>
+                  </div>
+
+                  <div>
+                    <h5 class="text-base font-semibold text-gray-900 mb-2">4. Feature Extraction</h5>
                     <p class="text-sm">Geographic features (points, lines, polygons) are extracted from your file. Complex geometries may be split into simpler components for better processing.</p>
                   </div>
 
                   <div>
-                    <h5 class="text-base font-semibold text-gray-900 mb-2">4. Automatic Tag Generation</h5>
+                    <h5 class="text-base font-semibold text-gray-900 mb-2">5. Automatic Tag Generation</h5>
                     <p class="text-sm">Each feature automatically receives system-generated tags including:</p>
                     <ul class="list-disc list-inside ml-4 mt-1 text-sm">
                       <li><strong>Type tags:</strong> Based on geometry type (point, line, polygon, etc.)</li>
@@ -74,7 +86,7 @@
                   </div>
 
                   <div>
-                    <h5 class="text-base font-semibold text-gray-900 mb-2">5. Duplicate Detection</h5>
+                    <h5 class="text-base font-semibold text-gray-900 mb-2">6. Duplicate Detection</h5>
                     <p class="text-sm">The system performs comprehensive duplicate detection:</p>
                     <ul class="list-disc list-inside ml-4 mt-1 text-sm">
                       <li><strong>Internal duplicates:</strong> Checks for duplicate features within the uploaded file itself</li>
@@ -84,7 +96,7 @@
                   </div>
 
                   <div>
-                    <h5 class="text-base font-semibold text-gray-900 mb-2">6. Storage in Import Queue</h5>
+                    <h5 class="text-base font-semibold text-gray-900 mb-2">7. Storage in Import Queue</h5>
                     <p class="text-sm">Processed features are stored in your import queue, ready for review and final import. You can see all uploaded files in the "Ready to Import" section below.</p>
                   </div>
                 </div>
@@ -99,9 +111,9 @@
                   <p class="text-sm font-semibold text-yellow-900 mb-2">⚠️ Administrator Configuration Required</p>
                   <p class="text-sm">Geocoding must be enabled by your system administrator. If geocoding is not enabled, location-based tags will not be generated.</p>
                 </div>
-                
+
                 <p>When enabled, geocoding automatically adds location-based tags to your features:</p>
-                
+
                 <div class="space-y-4">
                   <div>
                     <h5 class="text-base font-semibold text-gray-900 mb-2">What Gets Geocoded?</h5>
@@ -140,7 +152,7 @@
               <h4 class="text-lg font-semibold text-gray-900 mb-3">Review and Import</h4>
               <div class="space-y-4 text-gray-700">
                 <p>After your files are processed, you can review and import them:</p>
-                
+
                 <div class="space-y-4">
                   <div>
                     <h5 class="text-base font-semibold text-gray-900 mb-2">Accessing the Import Queue</h5>

@@ -374,6 +374,16 @@ LAKE_PROXIMITY_MILES = config.get_float('geocoding.lake_proximity_miles', 1.0)
 OVERPASS_TIMEOUT_SECONDS = config.get_int('geocoding.overpass_timeout_seconds', 10)
 OVERPASS_REQUEST_TIMEOUT_SECONDS = config.get_int('geocoding.overpass_request_timeout_seconds', 15)
 
+# Elevation API Configuration
+# Elevation API server URL (racemap's elevation service)
+ELEVATION_API_URL = config.get_with_env_override('elevation.api_url', 'ELEVATION_API_URL', 'https://elevation.racemap.com/api')
+
+# Enable or disable elevation data filling (enabled by default)
+ELEVATION_API_ENABLED = config.get_bool_with_env_override('elevation.enabled', 'ELEVATION_API_ENABLED', True)
+
+# Elevation API timeout settings (in seconds)
+ELEVATION_API_TIMEOUT = config.get_int('elevation.timeout_seconds', 30)
+
 # Import Processing Configuration
 # Number of threads to use for parallel feature processing during import
 IMPORT_PROCESSING_THREADS = config.get_int('processing.import_threads', 10)
