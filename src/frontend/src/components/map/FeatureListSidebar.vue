@@ -166,11 +166,11 @@
 
       <!-- Available Tags List -->
       <div class="flex-1 overflow-y-auto">
-        <div v-if="isLoadingTags" class="flex items-center justify-center py-4">
-          <div class="animate-spin rounded-full h-4 w-4 border-b-2 border-blue-600"></div>
+        <div v-if="filteredAvailableTags.length === 0 && availableTags.length === 0" class="text-xs text-gray-500 text-center py-3">
+          No tags available
         </div>
         <div v-else-if="filteredAvailableTags.length === 0" class="text-xs text-gray-500 text-center py-3">
-          No tags found
+          No tags match your search
         </div>
         <div v-else class="space-y-0.5">
           <button
