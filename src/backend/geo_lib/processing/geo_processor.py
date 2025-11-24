@@ -224,11 +224,13 @@ def geojson_property_generation(feature: dict) -> dict:
 
 def extract_track_created_date(feature: dict) -> Optional[str]:
     """
-    Extract the first timestamp from a track feature's coordinateProperties.times.
+    Extract the created date from a GPX/KML feature.
     
-    For KML and GPX tracks (LineString/MultiLineString), togeojson preserves timestamps
-    in properties.coordinateProperties.times. This function extracts the first timestamp
-    to use as the created date for the track.
+    For GPX tracks (trk): timestamps are in properties.coordinateProperties.times
+    For GPX routes (rte): timestamp is in properties.time
+    For KML tracks: timestamps are in properties.coordinateProperties.times
+    
+    This function extracts the first available timestamp to use as the created date.
     
     Args:
         feature: GeoJSON feature dictionary
@@ -239,11 +241,19 @@ def extract_track_created_date(feature: dict) -> Optional[str]:
     geometry = feature.get('geometry', {})
     geometry_type = geometry.get('type', '').lower() if geometry else ''
     
-    # Only process tracks (LineString or MultiLineString)
+    # Only process lines (LineString or MultiLineString)
     if geometry_type not in ['linestring', 'multilinestring']:
         return None
     
     properties = feature.get('properties', {})
+    
+    # First, check for GPX route time property (routes have time at the route level)
+    if 'time' in properties and properties['time']:
+        time_value = properties['time']
+        if isinstance(time_value, str):
+            return time_value
+    
+    # Then check for track timestamps in coordinateProperties.times
     coordinate_properties = properties.get('coordinateProperties', {})
     
     if not coordinate_properties:

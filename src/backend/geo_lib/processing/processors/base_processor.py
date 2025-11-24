@@ -167,15 +167,18 @@ class BaseProcessor(ABC):
                 
             if split_feature['geometry']['type'] in ['Point', 'MultiPoint', 'LineString', 'MultiLineString', 'Polygon', 'MultiPolygon']:
                 try:
-                    # Generate properties with appropriate styling based on file type and feature geometry
-                    split_feature['properties'] = geojson_property_generation(split_feature)
-
-                    # Extract track created date from first point timestamp (for KML/GPX tracks)
-                    # Only set if created date is not already present
-                    if 'created' not in split_feature['properties'] or not split_feature['properties']['created']:
+                    # Extract track created date BEFORE normalization (to ensure coordinateProperties is available)
+                    # Only extract if created date is not already present
+                    track_timestamp = None
+                    original_properties = split_feature.get('properties', {})
+                    if 'created' not in original_properties or not original_properties.get('created'):
                         track_timestamp = extract_track_created_date(split_feature)
+                        # Set created date in properties BEFORE normalization so it's preserved
                         if track_timestamp:
                             split_feature['properties']['created'] = track_timestamp
+                    
+                    # Generate properties with appropriate styling based on file type and feature geometry
+                    split_feature['properties'] = geojson_property_generation(split_feature)
 
                     # Skip tag generation in minimal processing mode
                     if not self.minimal_processing:

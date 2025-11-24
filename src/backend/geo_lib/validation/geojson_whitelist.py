@@ -27,6 +27,10 @@ ALLOWED_PROPERTY_KEYS = {
     'description',
     'created',
     'tags',
+    # Time property (for GPX routes and other features with time metadata)
+    'time',
+    # Coordinate properties (for tracks with timestamps/elevation)
+    'coordinateProperties',
     # Point styling
     'icon',
     'icon-href',

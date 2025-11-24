@@ -1,10 +1,10 @@
 import json
-from datetime import datetime
+from datetime import datetime, timezone
 from enum import Enum
-from typing import List, Tuple, Optional, Type
+from typing import List, Tuple, Optional, Type, Any
 from typing import Union
 
-from pydantic import BaseModel, Field, ConfigDict
+from pydantic import BaseModel, Field, ConfigDict, field_validator
 
 from geo_lib.feature_id import generate_feature_hash
 from geo_lib.processing.logging import ImportLog, DatabaseLogLevel
@@ -26,6 +26,32 @@ class Properties(BaseModel):
     created: Optional[datetime] = None
     tags: Optional[List[str]] = Field(default_factory=list)  # User tags only
     system_tags: Optional[List[str]] = Field(default_factory=list)  # System-generated tags (type, import-year, import-month, source-file, geocoding)
+    
+    @field_validator('created', mode='before')
+    @classmethod
+    def parse_created_field(cls, v: Any) -> Optional[datetime]:
+        """Parse created field from string or datetime."""
+        if v is None:
+            return None
+        
+        if isinstance(v, datetime):
+            return v
+        
+        if isinstance(v, str):
+            try:
+                # Try parsing ISO format with Z suffix (UTC)
+                if v.endswith('Z'):
+                    return datetime.fromisoformat(v[:-1] + '+00:00')
+                # Try parsing ISO format with timezone
+                elif '+' in v or v.endswith('00:00'):
+                    return datetime.fromisoformat(v)
+                # Try parsing basic ISO format and assume UTC
+                else:
+                    return datetime.fromisoformat(v).replace(tzinfo=timezone.utc)
+            except ValueError:
+                return None
+        
+        return None
 
 
 class PointFeatureGeometry(BaseModel):

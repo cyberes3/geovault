@@ -79,6 +79,37 @@ def generate_auto_tags(feature: GeoFeatureSupported, import_log=None, filename: 
     tags.append(f'import-year:{now.year}')
     tags.append(f'import-month:{now.strftime("%B")}')
     
+    # Add feature-year and feature-month tags if created date exists
+    if feature.properties.created:
+        try:
+            created_date = feature.properties.created
+            if isinstance(created_date, datetime):
+                tags.append(f'feature-year:{created_date.year}')
+                tags.append(f'feature-month:{created_date.strftime("%B")}')
+            elif isinstance(created_date, str):
+                # Parse ISO format string
+                parsed_date = datetime.fromisoformat(created_date.replace('Z', '+00:00'))
+                tags.append(f'feature-year:{parsed_date.year}')
+                tags.append(f'feature-month:{parsed_date.strftime("%B")}')
+        except (ValueError, AttributeError) as e:
+            logger.warning(f"Failed to parse created date for feature-year/feature-month tags: {e}")
+    
+    # Add is-track:yes tag for LineString/MultiLineString that are tracks or routes
+    # GPX tracks have coordinateProperties.times, GPX routes have time property
+    geometry_type = feature.geometry.type.value.lower()
+    if geometry_type in ['linestring', 'multilinestring']:
+        props_dict = feature.properties.model_dump()
+        
+        # Check for GPX track (has coordinateProperties.times)
+        coordinate_properties = props_dict.get('coordinateProperties', {})
+        if coordinate_properties and isinstance(coordinate_properties, dict):
+            times = coordinate_properties.get('times')
+            if times:
+                tags.append('is-track:yes')
+        # Check for GPX route (has time property)
+        elif props_dict.get('time'):
+            tags.append('is-track:yes')
+    
     # Add source-file tag if filename is provided
     if filename:
         # Extract just the filename (not full path) if needed
@@ -130,3 +161,38 @@ def generate_auto_tags(feature: GeoFeatureSupported, import_log=None, filename: 
                     )
     
     return [str(x) for x in tags]
+
+
+def update_feature_date_tags(system_tags: List[str], created_date: Optional[str]) -> List[str]:
+    """
+    Update feature-year and feature-month system tags based on created date.
+    Removes existing feature-year and feature-month tags and adds new ones if created_date is provided.
+    
+    Args:
+        system_tags: Current list of system tags
+        created_date: ISO format datetime string or None
+        
+    Returns:
+        Updated list of system tags
+    """
+    if not isinstance(system_tags, list):
+        system_tags = []
+    
+    # Remove existing feature-year and feature-month tags
+    updated_tags = [tag for tag in system_tags if not (tag.startswith('feature-year:') or tag.startswith('feature-month:'))]
+    
+    # Add new feature-year and feature-month tags if created_date exists
+    if created_date:
+        try:
+            # Parse ISO format string
+            if isinstance(created_date, str):
+                parsed_date = datetime.fromisoformat(created_date.replace('Z', '+00:00'))
+                updated_tags.append(f'feature-year:{parsed_date.year}')
+                updated_tags.append(f'feature-month:{parsed_date.strftime("%B")}')
+            elif isinstance(created_date, datetime):
+                updated_tags.append(f'feature-year:{created_date.year}')
+                updated_tags.append(f'feature-month:{created_date.strftime("%B")}')
+        except (ValueError, AttributeError) as e:
+            logger.warning(f"Failed to parse created date for feature-year/feature-month tags: {e}")
+    
+    return updated_tags

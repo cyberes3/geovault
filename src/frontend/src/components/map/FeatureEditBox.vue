@@ -47,6 +47,18 @@
           ></textarea>
         </div>
 
+        <!-- Created Date Field -->
+        <div>
+          <label class="block text-sm font-medium text-gray-700 mb-1">Created Date</label>
+          <input
+            type="datetime-local"
+            :disabled="isSaving"
+            :value="formatDateForInput(formData.created)"
+            @change="updateDate"
+            class="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500 disabled:bg-gray-100 disabled:cursor-not-allowed"
+          />
+        </div>
+
         <!-- Icon Section (for points) -->
         <div v-if="isPoint">
           <label class="block text-sm font-medium text-gray-700 mb-1">Icon</label>
@@ -321,6 +333,7 @@ export default {
         name: '',
         description: '',
         tags: [],
+        created: '',
         markerColor: '#ff0000',
         strokeColor: '#ff0000',
         strokeWidth: 2,
@@ -405,6 +418,7 @@ export default {
       // Tags are already separated - user tags only in tags field
       this.formData.tags = Array.isArray(properties.tags) ? properties.tags : []
       this.tagsInput = this.formData.tags.join(', ') // Keep for backward compatibility
+      this.formData.created = this.formatDateForInput(properties.created || '')
       this.formData.markerColor = properties['marker-color'] || '#ff0000'
 
       // Initialize stroke color and width for lines and polygons
@@ -760,6 +774,15 @@ export default {
           tags: tagsToUse
         }
 
+        // Add created date if set
+        if (this.formData.created) {
+          // Convert datetime-local format to ISO format
+          const date = new Date(this.formData.created);
+          if (!isNaN(date.getTime())) {
+            formFieldUpdates.created = date.toISOString();
+          }
+        }
+
         // Handle icon for points
         if (this.isPoint) {
           // If icon was uploaded via old file input, set it
@@ -847,34 +870,72 @@ export default {
           return
         }
 
-        // Update the feature object's properties immediately so reopening the dialog shows correct values
-        const properties = this.feature.get('properties') || {}
-
-        // Tags are already separated - user tags only in tags field
-        // System tags are preserved separately by the backend
-        Object.assign(properties, formFieldUpdates)
-        // Restore _id since we removed it before sending
-        properties._id = featureId
-        this.feature.set('properties', properties)
-
-        // Update icon state if icon was uploaded or removed
-        if (this.isPoint) {
-          if (uploadedIconUrl) {
-            this.currentIconUrl = uploadedIconUrl
-            this.hasPngIcon = true
-            this.iconRemoved = false
-          } else if (this.iconRemoved) {
-            this.currentIconUrl = null
-            this.hasPngIcon = false
-          } else if (this.currentIconUrl && (isSystemIcon(this.currentIconUrl) || isUserIcon(this.currentIconUrl))) {
-            // Icon was selected from picker (preset or uploaded) - state already set in handleIconSelected
-            this.hasPngIcon = true
-            this.iconRemoved = false
+        // Fetch the updated feature from the server to get all updated properties including system_tags
+        try {
+          const fetchResponse = await fetch(`${APIHOST}/api/data/feature/${featureId}/`, {
+            credentials: 'include'
+          })
+          
+          if (fetchResponse.ok) {
+            const fetchData = await fetchResponse.json()
+            if (fetchData.success && fetchData.feature) {
+              // Update the feature with fresh data from the server
+              const format = new GeoJSON()
+              const geojsonData = fetchData.feature.geojson
+              
+              // Read the updated feature from GeoJSON
+              const updatedFeature = format.readFeature(geojsonData, {
+                featureProjection: 'EPSG:3857',
+                dataProjection: 'EPSG:4326'
+              })
+              
+              // Preserve properties from the GeoJSON data
+              const properties = geojsonData && geojsonData.properties
+                  ? {...geojsonData.properties}
+                  : {}
+              
+              // Add the _id to properties
+              properties._id = featureId
+              updatedFeature.set('properties', properties)
+              
+              // Preserve geojson_hash if available
+              if (fetchData.feature.geojson_hash) {
+                updatedFeature.set('geojson_hash', fetchData.feature.geojson_hash)
+              }
+              
+              // Update the feature's geometry and properties
+              this.feature.setGeometry(updatedFeature.getGeometry())
+              this.feature.set('properties', properties)
+              
+              // Update icon state if icon was uploaded or removed
+              if (this.isPoint) {
+                if (uploadedIconUrl) {
+                  this.currentIconUrl = uploadedIconUrl
+                  this.hasPngIcon = true
+                  this.iconRemoved = false
+                } else if (this.iconRemoved) {
+                  this.currentIconUrl = null
+                  this.hasPngIcon = false
+                } else if (this.currentIconUrl && (isSystemIcon(this.currentIconUrl) || isUserIcon(this.currentIconUrl))) {
+                  // Icon was selected from picker (preset or uploaded) - state already set in handleIconSelected
+                  this.hasPngIcon = true
+                  this.iconRemoved = false
+                }
+              }
+              
+              // Trigger feature change to update any listeners
+              this.feature.changed()
+            }
           }
+        } catch (fetchError) {
+          console.error('Error fetching updated feature:', fetchError)
+          // Fall back to local update if fetch fails
+          const properties = this.feature.get('properties') || {}
+          Object.assign(properties, formFieldUpdates)
+          properties._id = featureId
+          this.feature.set('properties', properties)
+          this.feature.changed()
         }
-
-        // Trigger feature change to update any listeners
-        this.feature.changed()
 
         // Close dialog immediately on success (no message)
         this.isSaving = false
@@ -999,6 +1060,16 @@ export default {
     },
     closeCoordinatesDialog() {
       this.coordinatesDialogOpen = false
+    },
+    formatDateForInput(dateString) {
+      if (!dateString) return '';
+      // Convert date string to datetime-local format (YYYY-MM-DDTHH:MM)
+      const date = new Date(dateString);
+      if (isNaN(date.getTime())) return '';
+      return date.toISOString().slice(0, 16);
+    },
+    updateDate(event) {
+      this.formData.created = event.target.value;
     }
   }
 }

@@ -13,6 +13,7 @@ from api.models import FeatureStore, ImportQueue
 from geo_lib.const_strings import CONST_INTERNAL_TAGS, filter_protected_tags, is_protected_tag, prepare_user_tags
 from geo_lib.feature_id import generate_feature_hash
 from geo_lib.logging.console import get_access_logger
+from geo_lib.processing.tagging import update_feature_date_tags
 from geo_lib.types.feature import PointFeature, LineStringFeature, MultiLineStringFeature, PolygonFeature, GeoFeatureSupported
 from geo_lib.validation.geometry_validation import (
     normalize_and_validate_feature_update,
@@ -206,18 +207,23 @@ def update_feature_metadata(request, feature_id):
                     return _error_response('created must be a valid ISO datetime string', 400)
                 merged_feature['properties']['created'] = value
         
+        # Update system tags if created date was changed
+        updated_system_tags = original_system_tags
+        if 'created' in update_fields:
+            updated_system_tags = update_feature_date_tags(original_system_tags, update_fields['created'])
+        
         # Run the merged feature through validate_and_normalize_geojson_feature()
         try:
             normalized_feature = validate_and_normalize_geojson_feature(
                 merged_feature,
-                preserve_system_tags=original_system_tags,
+                preserve_system_tags=updated_system_tags,
                 preserve_id=False
             )
         except GeometryValidationError as e:
             return _error_response(f'Feature validation failed: {str(e)}', 400)
         
         # Ensure system_tags are preserved after normalization
-        normalized_feature['properties']['system_tags'] = original_system_tags
+        normalized_feature['properties']['system_tags'] = updated_system_tags
         
         # Update the feature's geojson data
         feature.geojson = normalized_feature
@@ -409,11 +415,16 @@ def bulk_update_features_metadata(request):
                                 continue
                             merged_feature['properties']['created'] = value
                     
+                    # Update system tags if created date was changed
+                    updated_system_tags = original_system_tags
+                    if 'created' in update_fields:
+                        updated_system_tags = update_feature_date_tags(original_system_tags, update_fields['created'])
+                    
                     # Run the merged feature through validate_and_normalize_geojson_feature()
                     try:
                         normalized_feature = validate_and_normalize_geojson_feature(
                             merged_feature,
-                            preserve_system_tags=original_system_tags,
+                            preserve_system_tags=updated_system_tags,
                             preserve_id=False
                         )
                     except GeometryValidationError as e:
@@ -424,7 +435,7 @@ def bulk_update_features_metadata(request):
                         continue
                     
                     # Ensure system_tags are preserved after normalization
-                    normalized_feature['properties']['system_tags'] = original_system_tags
+                    normalized_feature['properties']['system_tags'] = updated_system_tags
                     
                     # Update the feature's geojson data
                     feature.geojson = normalized_feature
@@ -513,6 +524,17 @@ def update_feature(request, feature_id):
         )
         if not is_valid:
             return error_response
+
+        # Update system tags if created date was changed
+        original_created = original_properties.get('created')
+        new_created = new_properties.get('created')
+        if new_created and new_created != original_created:
+            # Created date was updated, update feature-year and feature-month tags
+            if isinstance(new_created, str):
+                preserved_system_tags = update_feature_date_tags(preserved_system_tags, new_created)
+            elif hasattr(new_created, 'isoformat'):
+                # datetime object
+                preserved_system_tags = update_feature_date_tags(preserved_system_tags, new_created.isoformat())
 
         # Strip system tags from incoming tags (defensive)
         new_tags = new_properties.get('tags', [])
