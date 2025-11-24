@@ -112,7 +112,8 @@
             @close="handleElevationProfileClose"
             @hover-point="handleHoverPoint"
             @hover-clear="handleHoverClear"
-        />
+            @click-point="handleClickPoint"
+          />
 
         <!-- Feature Selection Popup (for overlapping features) -->
         <FeatureSelectionPopup
@@ -692,6 +693,22 @@ export default {
         this.vectorSource.removeFeature(this.hoverMarker)
         this.hoverMarker = null
       }
+    },
+
+    // Handle click point from elevation profile chart - center map on that point
+    handleClickPoint(coordinate) {
+      if (!this.map || !coordinate || !Array.isArray(coordinate) || coordinate.length < 2) {
+        return
+      }
+
+      const view = this.map.getView()
+      const center = fromLonLat([coordinate[0], coordinate[1]])
+      
+      // Get current zoom level to preserve it
+      const currentZoom = view.getZoom()
+      
+      // Center the map without changing zoom
+      view.setCenter(center)
     },
 
     // Handle elevation profile dialog close

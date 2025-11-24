@@ -73,7 +73,7 @@ export default {
       default: null
     }
   },
-  emits: ['close', 'hover-point', 'hover-clear'],
+          emits: ['close', 'hover-point', 'hover-clear', 'click-point'],
   data() {
     return {
       chart: null,
@@ -569,7 +569,7 @@ export default {
           }
         }
 
-        // Create hover tracking plugin
+        // Create hover and click tracking plugin
         // Store reference to component instance for use in plugin
         const component = this
         const hoverPlugin = {
@@ -614,6 +614,11 @@ export default {
             const coordinate = component.mapDistanceToCoordinate(distanceMiles)
             if (coordinate && Array.isArray(coordinate) && coordinate.length >= 2) {
               component.$emit('hover-point', coordinate)
+              
+              // Handle click events
+              if (event.type === 'click') {
+                component.$emit('click-point', coordinate)
+              }
             } else {
               component.$emit('hover-clear')
             }
