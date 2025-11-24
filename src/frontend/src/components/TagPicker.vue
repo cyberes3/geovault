@@ -6,7 +6,7 @@
     <div v-if="systemTags.length > 0" class="mb-3">
       <div class="text-xs text-gray-500 mb-1.5">System Tags (read-only)</div>
       <div class="relative border border-gray-200 rounded-md bg-gray-50 overflow-hidden">
-        <div class="max-h-20 overflow-y-auto p-2" ref="systemTagsContainer">
+        <div class="max-h-20 overflow-y-auto p-2 pb-10" ref="systemTagsContainer">
           <div class="flex flex-wrap gap-2">
             <span
               v-for="tag in systemTags"
@@ -27,7 +27,7 @@
 
     <!-- Selected Tags Display -->
     <div v-if="localTags.length > 0" class="relative mb-2 border border-gray-200 rounded-md bg-gray-50 overflow-hidden">
-      <div class="max-h-24 overflow-y-auto p-2" ref="tagsContainer">
+      <div class="max-h-24 overflow-y-auto p-2 pb-10" ref="tagsContainer">
         <div class="flex flex-wrap gap-2">
           <span
             v-for="(tag, index) in localTags"
