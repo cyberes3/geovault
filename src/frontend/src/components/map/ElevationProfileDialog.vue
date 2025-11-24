@@ -41,9 +41,13 @@
 
       <!-- Chart Container, Loading Spinner, or Warning -->
       <div class="flex-1 overflow-hidden relative">
-        <!-- Chart Container - always render when feature exists so canvas is available for Chart.js -->
-        <div v-if="feature" ref="chartContainer" class="h-full w-full">
+        <!-- Chart Container -->
+        <div v-if="hasElevationData" ref="chartContainer" class="h-full w-full relative">
           <canvas ref="chartCanvas"></canvas>
+          <!-- Loading Spinner Overlay -->
+          <div v-if="isUpdatingChart" class="absolute inset-0 flex items-center justify-center z-10 pointer-events-none">
+            <div class="animate-spin rounded-full h-8 w-8 border-b-2 border-gray-900 bg-white bg-opacity-90 rounded-full p-2"></div>
+          </div>
         </div>
         <!-- Loading Spinner -->
         <div v-if="isUpdatingChart && feature" class="absolute inset-0 flex items-center justify-center bg-white z-20">
@@ -469,6 +473,7 @@ export default {
       this.hasElevationData = true
 
       // Wait for next tick to ensure canvas is rendered
+      const renderStartTime = Date.now()
       this.$nextTick(() => {
         if (!this.$refs.chartCanvas) {
           this.isUpdatingChart = false
@@ -535,78 +540,122 @@ export default {
           id: 'markerPlugin',
           afterDraw: (chart) => {
             const ctx = chart.ctx
-            const minDataset = chart.data.datasets[1]
-            const maxDataset = chart.data.datasets[2]
             
-            // Draw min marker - find point in dataset that matches min distance
-            if (minDataset && minDataset.data && minDataset.data.length > 0) {
-              const minPointMeta = chart.getDatasetMeta(1)
-              if (minPointMeta && minPointMeta.data && minPointMeta.data.length > 0) {
-                const minPoint = minPointMeta.data[0] // Should be the only point in the dataset
-                if (minPoint && typeof minPoint.x === 'number' && typeof minPoint.y === 'number') {
-                  ctx.save()
-                  ctx.beginPath()
-                  ctx.arc(minPoint.x, minPoint.y, 6, 0, 2 * Math.PI)
-                  ctx.fillStyle = '#ef4444'
-                  ctx.fill()
-                  ctx.strokeStyle = '#000000'
-                  ctx.lineWidth = 2
-                  ctx.stroke()
-                  ctx.restore()
-                }
+            // Optimize: Get metadata once and check validity before drawing
+            const minPointMeta = chart.getDatasetMeta(1)
+            const maxPointMeta = chart.getDatasetMeta(2)
+            
+            // Draw min marker - optimized checks
+            if (minPointMeta?.data?.length > 0) {
+              const minPoint = minPointMeta.data[0]
+              if (minPoint && typeof minPoint.x === 'number' && typeof minPoint.y === 'number') {
+                ctx.save()
+                ctx.beginPath()
+                ctx.arc(minPoint.x, minPoint.y, 6, 0, 2 * Math.PI)
+                ctx.fillStyle = '#ef4444'
+                ctx.fill()
+                ctx.strokeStyle = '#000000'
+                ctx.lineWidth = 2
+                ctx.stroke()
+                ctx.restore()
               }
             }
             
-            // Draw max marker - find point in dataset that matches max distance
-            if (maxDataset && maxDataset.data && maxDataset.data.length > 0) {
-              const maxPointMeta = chart.getDatasetMeta(2)
-              if (maxPointMeta && maxPointMeta.data && maxPointMeta.data.length > 0) {
-                const maxPoint = maxPointMeta.data[0] // Should be the only point in the dataset
-                if (maxPoint && typeof maxPoint.x === 'number' && typeof maxPoint.y === 'number') {
-                  ctx.save()
-                  ctx.beginPath()
-                  ctx.arc(maxPoint.x, maxPoint.y, 6, 0, 2 * Math.PI)
-                  ctx.fillStyle = '#10b981'
-                  ctx.fill()
-                  ctx.strokeStyle = '#000000'
-                  ctx.lineWidth = 2
-                  ctx.stroke()
-                  ctx.restore()
-                }
+            // Draw max marker - optimized checks
+            if (maxPointMeta?.data?.length > 0) {
+              const maxPoint = maxPointMeta.data[0]
+              if (maxPoint && typeof maxPoint.x === 'number' && typeof maxPoint.y === 'number') {
+                ctx.save()
+                ctx.beginPath()
+                ctx.arc(maxPoint.x, maxPoint.y, 6, 0, 2 * Math.PI)
+                ctx.fillStyle = '#10b981'
+                ctx.fill()
+                ctx.strokeStyle = '#000000'
+                ctx.lineWidth = 2
+                ctx.stroke()
+                ctx.restore()
               }
+            }
+          }
+        }
+
+        // Create render completion plugin to detect when chart is fully rendered
+        const component = this
+        let spinnerHidden = false
+        const renderCompletePlugin = {
+          id: 'renderCompletePlugin',
+          afterDraw: (chart) => {
+            // Hide spinner after chart is drawn (only once)
+            if (!spinnerHidden) {
+              spinnerHidden = true
+              const elapsed = Date.now() - renderStartTime
+              const minDisplayTime = 300 // Minimum 300ms display time
+              const remainingTime = Math.max(0, minDisplayTime - elapsed)
+              
+              // Wait for browser to paint the chart (multiple frames for reliability)
+              requestAnimationFrame(() => {
+                requestAnimationFrame(() => {
+                  requestAnimationFrame(() => {
+                    // Ensure minimum display time, then hide spinner
+                    setTimeout(() => {
+                      // Verify canvas has content before hiding
+                      const canvas = chart.canvas
+                      if (canvas && canvas.width > 0 && canvas.height > 0) {
+                        component.isUpdatingChart = false
+                      } else {
+                        // Canvas not ready, wait a bit more
+                        setTimeout(() => {
+                          component.isUpdatingChart = false
+                        }, 100)
+                      }
+                    }, remainingTime)
+                  })
+                })
+              })
             }
           }
         }
 
         // Create hover and click tracking plugin
         // Store reference to component instance for use in plugin
-        const component = this
+        let lastHoverCoordinate = null
         const hoverPlugin = {
           id: 'hoverPlugin',
           afterEvent: (chart, args) => {
-            if (!args.event || !chart.chartArea) return
+            // Early return if no event or chart area
+            if (!args?.event || !chart?.chartArea) return
 
             const event = args.event.native
             if (!event) return
 
-            // Get mouse position relative to chart
+            // Early return for non-mouse events (skip touch, etc.)
+            if (event.type !== 'mousemove' && event.type !== 'click' && event.type !== 'mouseout') return
+
+            const chartArea = chart.chartArea
+            
+            // Get mouse position relative to chart (cache rect for performance)
             const rect = chart.canvas.getBoundingClientRect()
             const x = event.clientX - rect.left
             const y = event.clientY - rect.top
 
             // Check if mouse is within chart area
-            const chartArea = chart.chartArea
             if (x < chartArea.left || x > chartArea.right || 
                 y < chartArea.top || y > chartArea.bottom) {
-              // Mouse left chart area
-              component.$emit('hover-clear')
+              // Mouse left chart area - only emit if we had a previous coordinate
+              if (lastHoverCoordinate) {
+                component.$emit('hover-clear')
+                lastHoverCoordinate = null
+              }
               return
             }
 
             // Get the x-scale to convert pixel position to distance value
             const xScale = chart.scales.x
             if (!xScale) {
-              component.$emit('hover-clear')
+              if (lastHoverCoordinate) {
+                component.$emit('hover-clear')
+                lastHoverCoordinate = null
+              }
               return
             }
 
@@ -615,21 +664,34 @@ export default {
             
             // Check if we got a valid distance value
             if (distanceMiles === null || distanceMiles === undefined || isNaN(distanceMiles)) {
-              component.$emit('hover-clear')
+              if (lastHoverCoordinate) {
+                component.$emit('hover-clear')
+                lastHoverCoordinate = null
+              }
               return
             }
 
             // Map distance to coordinate
             const coordinate = component.mapDistanceToCoordinate(distanceMiles)
             if (coordinate && Array.isArray(coordinate) && coordinate.length >= 2) {
-              component.$emit('hover-point', coordinate)
+              // Only emit if coordinate changed (avoid unnecessary emissions)
+              const coordKey = `${coordinate[0].toFixed(6)},${coordinate[1].toFixed(6)}`
+              const lastKey = lastHoverCoordinate ? `${lastHoverCoordinate[0].toFixed(6)},${lastHoverCoordinate[1].toFixed(6)}` : null
               
-              // Handle click events
+              if (coordKey !== lastKey) {
+                component.$emit('hover-point', coordinate)
+                lastHoverCoordinate = coordinate
+              }
+              
+              // Handle click events (always emit clicks)
               if (event.type === 'click') {
                 component.$emit('click-point', coordinate)
               }
             } else {
-              component.$emit('hover-clear')
+              if (lastHoverCoordinate) {
+                component.$emit('hover-clear')
+                lastHoverCoordinate = null
+              }
             }
           }
         }
@@ -640,11 +702,14 @@ export default {
           y: elev
         }))
 
+        // Optimize fill for large datasets - disable for very large datasets to improve performance
+        const shouldFill = chartData.length < 10000 // Disable fill for datasets with >10k points
+
         // Create chart
         try {
           this.chart = new Chart(ctx, {
           type: 'line',
-          plugins: [markerPlugin, hoverPlugin],
+          plugins: [markerPlugin, hoverPlugin, renderCompletePlugin],
           data: {
             datasets: [
               {
@@ -652,7 +717,7 @@ export default {
                 data: chartData,
                 borderColor: featureColor, // Use feature's stroke color (adjusted if needed)
                 backgroundColor: bgColor, // Semi-transparent version of feature color
-                fill: true,
+                fill: shouldFill ? 'origin' : false, // Use 'origin' for better performance, disable for large datasets
                 tension: 0, // No smoothing - raw line
                 pointRadius: 0, // Hide points by default for cleaner look
                 pointHoverRadius: 4
@@ -678,12 +743,20 @@ export default {
           options: {
             responsive: true,
             maintainAspectRatio: false,
+            resizeDelay: 0, // Disable resize delay for immediate updates
+            devicePixelRatio: Math.min(window.devicePixelRatio || 1, 2), // Limit to 2x for performance
+            parsing: false, // Data is already in correct format, skip parsing
             layout: {
               padding: {
                 top: 15,
                 right: 15,
                 bottom: 15,
                 left: 15
+              }
+            },
+            elements: {
+              line: {
+                borderJoinStyle: 'round' // Better performance than 'miter'
               }
             },
             plugins: {
@@ -756,7 +829,6 @@ export default {
         } catch (e) {
           console.error('Error creating chart:', e)
           this.hasElevationData = false
-        } finally {
           this.isUpdatingChart = false
         }
       })
