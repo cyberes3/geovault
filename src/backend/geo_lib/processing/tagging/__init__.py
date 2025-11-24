@@ -16,6 +16,7 @@ from geo_lib.processing.tagging.modules.import_date import ImportDateTagGenerato
 from geo_lib.processing.tagging.modules.feature_date import FeatureDateTagGenerator, update_feature_date_tags
 from geo_lib.processing.tagging.modules.track_detection import TrackDetectionTagGenerator
 from geo_lib.processing.tagging.modules.source_file import SourceFileTagGenerator
+from geo_lib.processing.tagging.modules.elevation import ElevationTagGenerator
 from geo_lib.processing.tagging.modules.geocoding import GeocodingTagGenerator
 
 # Export update_feature_date_tags for backward compatibility
@@ -42,6 +43,7 @@ def _discover_tag_generators():
         FeatureDateTagGenerator(),
         TrackDetectionTagGenerator(),
         SourceFileTagGenerator(),
+        ElevationTagGenerator(),
         GeocodingTagGenerator(),
     ]
     
