@@ -291,6 +291,12 @@ SESSION_COOKIE_SECURE = not DEBUG  # True in production, False in development
 CSRF_COOKIE_SAMESITE = 'Lax'
 SESSION_COOKIE_SAMESITE = 'Lax'
 
+# Session Configuration
+# Session cookie expires after 60 days of inactivity
+SESSION_COOKIE_AGE = 60 * 24 * 60 * 60  # 5,184,000 seconds = 60 days
+# Save session on every request to track last activity and extend expiration
+SESSION_SAVE_EVERY_REQUEST = True
+
 # File Upload Security Settings
 # Note: File type configurations are now centralized in geo_lib.processing.file_types
 FILE_UPLOAD_MAX_MEMORY_SIZE = config.get_int('processing.file_upload_max_memory_size', 2 * 1024 * 1024)  # 2MB
