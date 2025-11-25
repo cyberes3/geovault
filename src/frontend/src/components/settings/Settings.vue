@@ -770,6 +770,8 @@ export default {
         if (response.data.success) {
           this.elevationProfileSourceMessage = 'Setting saved successfully.';
           this.elevationProfileSourceMessageType = 'success';
+          // Refresh cached settings in the store
+          await this.$store.dispatch('fetchUserSettings');
           // Clear message after 3 seconds
           setTimeout(() => {
             this.elevationProfileSourceMessage = '';
