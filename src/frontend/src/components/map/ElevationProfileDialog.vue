@@ -373,6 +373,25 @@ export default {
     },
 
     /**
+     * Smooth elevation data using a moving average to reduce GPS noise
+     * This is commonly used in GPS software to get more accurate elevation gain/loss
+     */
+    smoothElevationData(elevations, windowSize = 10) {
+      if (elevations.length === 0) return []
+      if (elevations.length <= windowSize) return elevations
+
+      const smoothed = []
+      for (let i = 0; i < elevations.length; i++) {
+        const start = Math.max(0, i - Math.floor(windowSize / 2))
+        const end = Math.min(elevations.length, i + Math.ceil(windowSize / 2))
+        const window = elevations.slice(start, end)
+        const avg = window.reduce((a, b) => a + b, 0) / window.length
+        smoothed.push(avg)
+      }
+      return smoothed
+    },
+
+    /**
      * Calculate statistics from elevation data
      * Returns stats object with formatted values
      */
@@ -387,27 +406,32 @@ export default {
         ? `${totalDistanceMiles.toFixed(2)} mi`
         : `${(totalDistanceMiles * 5280).toFixed(0)} ft`
 
-      // Total elevation change (end - start)
+      // Total elevation change (end - start) - use original elevations
       const totalElevationChange = elevations[elevations.length - 1] - elevations[0]
       const totalElevationChangeFormatted = totalElevationChange >= 0
         ? `+${totalElevationChange.toFixed(0)} ft`
         : `${totalElevationChange.toFixed(0)} ft`
 
-      // Elevation range (max - min)
+      // Elevation range (max - min) - use original elevations
       const minElevation = Math.min(...elevations)
       const maxElevation = Math.max(...elevations)
       const elevationRange = `${(maxElevation - minElevation).toFixed(0)} ft`
 
       // Gross elevation change (sum of all positive and negative changes)
+      // Use smoothed elevation data to filter out GPS noise
+      const smoothedElevations = this.smoothElevationData(elevations)
       let grossAscent = 0
       let grossDescent = 0
 
-      for (let i = 1; i < elevations.length; i++) {
-        const change = elevations[i] - elevations[i - 1]
-        if (change > 0) {
-          grossAscent += change
-        } else {
-          grossDescent += Math.abs(change)
+      for (let i = 1; i < smoothedElevations.length; i++) {
+        const change = smoothedElevations[i] - smoothedElevations[i - 1]
+        // Filter out very small changes (GPS noise)
+        if (Math.abs(change) >= 0.1) {
+          if (change > 0) {
+            grossAscent += change
+          } else {
+            grossDescent += Math.abs(change)
+          }
         }
       }
 
