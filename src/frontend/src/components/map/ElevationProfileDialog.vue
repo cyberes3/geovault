@@ -624,7 +624,7 @@ export default {
         const maxDistance = distances[maxIndex]
         const markerPlugin = {
           id: 'markerPlugin',
-          afterDraw: (chart) => {
+          beforeTooltipDraw: (chart) => {
             const ctx = chart.ctx
 
             // Optimize: Get metadata once and check validity before drawing
