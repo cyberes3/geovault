@@ -12,6 +12,7 @@ from api.views.import_item import upload_item, get_processing_status, get_user_p
     import_to_featurestore, get_import_queue_item_features
 from api.views.sharing import create_share, list_shares, delete_share, get_public_share_info, get_public_share, create_collection_share, get_public_collection_share
 from api.views.collections import list_collections, create_collection, get_collection, update_collection, delete_collection, get_collection_features
+from api.views.user_settings import get_user_settings, update_user_setting
 
 urlpatterns = [
     path('item/import/upload', upload_item),
@@ -64,4 +65,7 @@ urlpatterns = [
     path('collections/<uuid:collection_id>/update/', update_collection),
     path('collections/<uuid:collection_id>/delete/', delete_collection),
     path('collections/<uuid:collection_id>/features/', get_collection_features),
+    # User settings API endpoints
+    path('user/settings/', get_user_settings),
+    path('user/settings/update/', update_user_setting),
 ]

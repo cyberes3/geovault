@@ -156,6 +156,8 @@ export default {
         // If user becomes unauthorized (userInfo is cleared), disconnect WebSocket and redirect
         if (oldUserInfo && !newUserInfo) {
           this.handleLogout();
+          // Clear user settings when user logs out
+          this.$store.commit('userSettings', null);
           // Redirect to login if not on a public share route
           const hash = window.location.hash || '';
           const isPublicShare = hash.startsWith('#/mapshare');
@@ -229,6 +231,14 @@ export default {
         this.$router.push('/');
       }
 
+      // Load user settings after authentication
+      try {
+        await this.$store.dispatch('fetchUserSettings');
+      } catch (error) {
+        console.error('Error loading user settings:', error);
+        // Continue even if settings fail to load
+      }
+
       // Always setup WebSocket connection if user is authorized (not just for non-public routes)
       // The setupRealtimeConnection method will skip public share routes internally
       await this.setupRealtimeConnection();
@@ -291,6 +301,7 @@ export default {
           console.error('CSRF token not found');
           // Even if CSRF token is missing, clear local state and redirect
           this.$store.commit('userInfo', null);
+          this.$store.commit('userSettings', null);
           window.location.href = '/accounts/login/';
           return;
         }
@@ -307,8 +318,9 @@ export default {
           }
         });
 
-        // Clear user info from store
+        // Clear user info and settings from store
         this.$store.commit('userInfo', null);
+        this.$store.commit('userSettings', null);
 
         // Redirect to login page
         window.location.href = '/accounts/login/';
@@ -316,6 +328,7 @@ export default {
         console.error('Logout error:', error);
         // Even if logout fails, clear local state and redirect
         this.$store.commit('userInfo', null);
+        this.$store.commit('userSettings', null);
         window.location.href = '/accounts/login/';
       }
     },

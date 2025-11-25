@@ -1,6 +1,6 @@
 import { createStore, Commit } from 'vuex'
 import { UserInfo } from './types/store-types'
-import { getUserInfo } from './auth'
+import { getUserInfo, getCookie } from './auth'
 
 // Define import queue item interface
 interface ImportQueueItem {
@@ -17,9 +17,15 @@ interface ImportHistoryItem {
     timestamp: string
 }
 
+// Define user settings interface
+interface UserSettings {
+    [key: string]: any
+}
+
 // Define the state interface
 interface State {
     userInfo: UserInfo | null
+    userSettings: UserSettings | null
     importQueue: ImportQueueItem[]
     importHistory: ImportHistoryItem[]
     importHistoryLoaded: boolean
@@ -38,6 +44,7 @@ interface State {
 export default createStore<State>({
     state: {
         userInfo: null,
+        userSettings: null,
         importQueue: [],
         importHistory: [],
         importHistoryLoaded: false,
@@ -52,6 +59,15 @@ export default createStore<State>({
     mutations: {
         userInfo(state: State, payload: UserInfo | null) {
             state.userInfo = payload
+        },
+        userSettings(state: State, payload: UserSettings | null) {
+            state.userSettings = payload
+        },
+        updateUserSetting(state: State, { key, value }: { key: string, value: any }) {
+            if (!state.userSettings) {
+                state.userSettings = {}
+            }
+            state.userSettings[key] = value
         },
         importQueue(state: State, payload: ImportQueueItem[]) {
             state.importQueue = payload
@@ -166,13 +182,101 @@ export default createStore<State>({
                     commit('userInfo', userInfo);
                     return userStatus;
                 } else {
-                    // If not authorized, clear user info
+                    // If not authorized, clear user info and settings
                     commit('userInfo', null);
+                    commit('userSettings', null);
                     return userStatus;
                 }
             } catch (error) {
                 console.error('Error fetching user info:', error);
                 commit('userInfo', null);
+                commit('userSettings', null);
+                throw error;
+            }
+        },
+        async fetchUserSettings({ commit, state }: { commit: Commit, state: State }) {
+            // Only fetch settings if user is authenticated
+            if (!state.userInfo) {
+                commit('userSettings', null);
+                return null;
+            }
+
+            try {
+                const csrfToken = getCookie('csrftoken');
+                
+                const response = await fetch('/api/data/user/settings/', {
+                    method: 'GET',
+                    headers: {
+                        'X-CSRFToken': csrfToken || '',
+                    },
+                    credentials: 'include'
+                });
+
+                if (!response.ok) {
+                    if (response.status === 401) {
+                        // User not authenticated, clear settings
+                        commit('userSettings', null);
+                        return null;
+                    }
+                    throw new Error(`HTTP error! status: ${response.status}`);
+                }
+
+                const data = await response.json();
+                
+                if (data.success && data.settings) {
+                    commit('userSettings', data.settings);
+                    return data.settings;
+                } else {
+                    // No settings found, initialize with empty object
+                    commit('userSettings', {});
+                    return {};
+                }
+            } catch (error) {
+                console.error('Error fetching user settings:', error);
+                // On error, initialize with empty object rather than null
+                commit('userSettings', {});
+                return {};
+            }
+        },
+        async updateUserSetting({ commit, state }: { commit: Commit, state: State }, { key, value }: { key: string, value: any }) {
+            // Optimistically update local state
+            commit('updateUserSetting', { key, value });
+
+            // Only update on server if user is authenticated
+            if (!state.userInfo) {
+                return;
+            }
+
+            try {
+                const csrfToken = getCookie('csrftoken');
+                
+                const response = await fetch('/api/data/user/settings/update/', {
+                    method: 'PATCH',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'X-CSRFToken': csrfToken || '',
+                    },
+                    credentials: 'include',
+                    body: JSON.stringify({ key, value })
+                });
+
+                if (!response.ok) {
+                    // Revert optimistic update on error
+                    const data = await response.json();
+                    throw new Error(data.error || `HTTP error! status: ${response.status}`);
+                }
+
+                const data = await response.json();
+                
+                if (data.success && data.settings) {
+                    // Update with server response (in case server modified the value)
+                    commit('userSettings', data.settings);
+                    return data.settings;
+                }
+            } catch (error) {
+                console.error('Error updating user setting:', error);
+                // Optionally revert the optimistic update here
+                // For now, we'll keep the optimistic update and log the error
                 throw error;
             }
         },

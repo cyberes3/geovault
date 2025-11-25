@@ -153,3 +153,15 @@ class Collection(django_models.Model):
         indexes = [
             django_models.Index(fields=['user', 'created_at'], name='collection_user_created'),
         ]
+
+
+class UserSettings(django_models.Model):
+    user = django_models.OneToOneField(get_user_model(), on_delete=django_models.CASCADE, primary_key=True)
+    settings = django_models.JSONField(default=dict, help_text="Key-value pairs for user settings")
+    created_at = django_models.DateTimeField(auto_now_add=True)
+    updated_at = django_models.DateTimeField(auto_now=True)
+
+    class Meta:
+        indexes = [
+            django_models.Index(fields=['user'], name='usersettings_user'),
+        ]
