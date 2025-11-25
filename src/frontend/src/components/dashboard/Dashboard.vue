@@ -109,46 +109,21 @@
 
 <script>
 import {mapState} from "vuex";
-import {authMixin} from "@/assets/js/authMixin.js";
-import {getUserInfo} from "@/assets/js/auth.js";
-import {UserInfo} from "@/assets/js/types/store-types";
 
 export default {
   computed: {
     ...mapState(["userInfo"]),
   },
   components: {},
-  mixins: [authMixin],
   data() {
     return {
     }
   },
   methods: {
-    async refreshUserInfo() {
-      try {
-        const userStatus = await getUserInfo();
-        if (!userStatus || !userStatus.authorized) {
-          return;
-        }
-        const userInfo = new UserInfo(userStatus.email, userStatus.id, userStatus.featureCount, userStatus.tags || []);
-        this.$store.commit('userInfo', userInfo);
-      } catch (error) {
-        console.error('Error refreshing user info:', error);
-      }
-    },
   },
   async created() {
   },
   async mounted() {
-  },
-  beforeRouteEnter(to, from, next) {
-    next(async (vm) => {
-      await vm.refreshUserInfo();
-    });
-  },
-  beforeRouteUpdate(to, from, next) {
-    this.refreshUserInfo();
-    next();
   },
   watch: {},
 }

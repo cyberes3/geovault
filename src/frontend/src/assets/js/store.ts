@@ -1,5 +1,6 @@
 import { createStore, Commit } from 'vuex'
 import { UserInfo } from './types/store-types'
+import { getUserInfo } from './auth'
 
 // Define import queue item interface
 interface ImportQueueItem {
@@ -150,6 +151,30 @@ export default createStore<State>({
         },
         updateRealtimeModuleData({ commit }: { commit: Commit }, payload: { module: string, updates: any }) {
             commit('updateRealtimeModuleData', payload);
+        },
+        async fetchUserInfo({ commit }: { commit: Commit }) {
+            try {
+                const userStatus = await getUserInfo();
+                if (userStatus && userStatus.authorized) {
+                    const userInfo = new UserInfo(
+                        userStatus.email, 
+                        userStatus.id, 
+                        userStatus.featureCount, 
+                        userStatus.tags || [], 
+                        userStatus.isSuperuser
+                    );
+                    commit('userInfo', userInfo);
+                    return userStatus;
+                } else {
+                    // If not authorized, clear user info
+                    commit('userInfo', null);
+                    return userStatus;
+                }
+            } catch (error) {
+                console.error('Error fetching user info:', error);
+                commit('userInfo', null);
+                throw error;
+            }
         },
     },
 })

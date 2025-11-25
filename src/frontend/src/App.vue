@@ -83,6 +83,14 @@
                 >
                   Settings
                 </router-link>
+                <router-link
+                    v-if="userInfo?.isSuperuser"
+                    class="block px-4 py-2 text-sm text-gray-700 hover:bg-gray-100"
+                    to="/admin"
+                    @click="closeUserMenu"
+                >
+                  Admin Panel
+                </router-link>
                 <div class="border-t border-gray-200 my-1"></div>
                 <button
                     class="block w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-gray-100"
@@ -117,8 +125,7 @@
 <script>
 import {mapState} from "vuex";
 import {realtimeSocket} from "@/assets/js/websocket/realtimeSocket.js";
-import {getCookie, getUserInfo} from "@/assets/js/auth.js";
-import {UserInfo} from "@/assets/js/types/store-types";
+import {getCookie} from "@/assets/js/auth.js";
 import axios from "axios";
 import Loader from "@/components/parts/Loader.vue";
 
@@ -175,6 +182,13 @@ export default {
           window.location.href = '/accounts/login/';
           return;
         }
+        
+        // Check admin access
+        if (to.meta.requiresAdmin && this.userInfo && !this.userInfo.isSuperuser) {
+          this.$router.push('/');
+          return;
+        }
+
         // When navigating to authenticated routes, ensure WebSocket is connected if user is authorized
         if (to.path !== '/mapshare' && this.userInfo && !realtimeSocket.isConnected) {
           this.setupRealtimeConnection();
@@ -191,7 +205,9 @@ export default {
       const isPublicShare = hash.startsWith('#/mapshare');
 
       this.userInfoLoading = true;
-      const userStatus = await getUserInfo();
+      
+      // Use centralized store action to fetch user info
+      const userStatus = await this.$store.dispatch('fetchUserInfo');
 
       if (!userStatus || !userStatus.authorized) {
         // User is not authorized (guest)
@@ -205,10 +221,13 @@ export default {
         return;
       }
 
-      // User is authorized, set user info in store
-      const userInfo = new UserInfo(userStatus.email, userStatus.id, userStatus.featureCount, userStatus.tags || []);
-      this.$store.commit('userInfo', userInfo);
       this.userInfoLoading = false;
+      const userInfo = this.$store.state.userInfo;
+
+      // Check admin access for initial route
+      if (this.$route.meta.requiresAdmin && !userInfo.isSuperuser) {
+        this.$router.push('/');
+      }
 
       // Always setup WebSocket connection if user is authorized (not just for non-public routes)
       // The setupRealtimeConnection method will skip public share routes internally

@@ -152,8 +152,6 @@ import {fromLonLat, toLonLat} from 'ol/proj'
 import {Point} from 'ol/geom'
 import {Style, Circle, Fill, Stroke} from 'ol/style'
 import {Feature} from 'ol'
-import {getUserInfo} from '@/assets/js/auth.js'
-import {UserInfo} from '@/assets/js/types/store-types'
 import {MapUtils} from '@/utils/map/MapUtils'
 import {APIHOST} from '@/config.js'
 import FeatureListSidebar from './FeatureListSidebar.vue'
@@ -1647,25 +1645,9 @@ export default {
     }
   },
   async created() {
-    // Only check auth if not in public share mode
-    if (!this.isPublicShareMode) {
-      // Check if userInfo already exists in store (set by App.vue)
-      const existingUserInfo = this.$store.state.userInfo;
-
-      if (existingUserInfo && existingUserInfo.email) {
-        // User info already loaded, no need to make API call
-        return;
-      }
-
-      // Only call API if store is empty
-      const userStatus = await getUserInfo()
-      if (!userStatus || !userStatus.authorized) {
-        window.location = "/accounts/login/"
-        return
-      }
-      const userInfo = new UserInfo(userStatus.email, userStatus.id, userStatus.featureCount, userStatus.tags || [])
-      this.$store.commit('userInfo', userInfo)
-    }
+    // App.vue handles all authentication checks before components are created
+    // For public shares, App.vue allows unauthenticated access
+    // For authenticated routes, App.vue ensures user is logged in before components are created
   },
   async mounted() {
     // Initialize featureTimestamps as empty object

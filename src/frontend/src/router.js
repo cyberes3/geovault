@@ -50,6 +50,12 @@ const routes = [
         path: '/settings',
         name: 'Settings',
         component: () => import('./components/settings/Settings.vue'),
+    },
+    {
+        path: '/admin',
+        name: 'Admin',
+        component: () => import('./components/admin/AdminPanel.vue'),
+        meta: { requiresAdmin: true }
     }
 ]
 

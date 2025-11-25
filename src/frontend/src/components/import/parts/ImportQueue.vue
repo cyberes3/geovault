@@ -232,7 +232,6 @@
 
 <script>
 import {mapState} from "vuex";
-import {authMixin} from "@/assets/js/authMixin.js";
 import axios from "axios";
 import {ImportQueueItem} from "@/assets/js/types/import-types";
 import {getCookie} from "@/assets/js/auth.js";
@@ -287,7 +286,6 @@ export default {
   components: {
     Loader
   },
-  mixins: [authMixin],
   data() {
     return {
       internalLoading: true,

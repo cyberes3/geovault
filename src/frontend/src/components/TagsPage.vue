@@ -230,7 +230,6 @@
 </template>
 
 <script>
-import {authMixin} from "@/assets/js/authMixin.js";
 import TagShareDialog from "./TagShareDialog.vue";
 import Loader from "./parts/Loader.vue";
 
@@ -240,7 +239,6 @@ export default {
     TagShareDialog,
     Loader
   },
-  mixins: [authMixin],
   data() {
     return {
       tagsData: {}, // Combined user and system tags for display

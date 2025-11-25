@@ -27,7 +27,8 @@ def check_auth(request):
             'email': primary_email,
             'id': request.user.id,
             'featureCount': feature_count,
-            'tags': []
+            'tags': [],
+            'is_superuser': request.user.is_superuser
         }
     else:
         data = {

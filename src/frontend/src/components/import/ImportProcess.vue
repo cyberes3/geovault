@@ -545,7 +545,6 @@
 
 <script>
 import {mapState} from "vuex";
-import {authMixin} from "@/assets/js/authMixin.js";
 import axios from "axios";
 import moment from "moment";
 import {capitalizeFirstLetter} from "@/assets/js/string.js";
@@ -685,7 +684,6 @@ export default {
     // Clean up polling interval
     this.stopProcessingPolling()
   },
-  mixins: [authMixin],
   props: ['id'],
   methods: {
     // WebSocket methods

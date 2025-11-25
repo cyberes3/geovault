@@ -1,12 +1,13 @@
 import { fetchConfig } from '@/utils/configService.js'
 
 class UserStatus {
-    constructor(authorized, email, id, featureCount = 0, tags = []) {
+    constructor(authorized, email, id, featureCount = 0, tags = [], isSuperuser = false) {
         this.authorized = authorized;
         this.email = email;
         this.id = id;
         this.featureCount = featureCount;
         this.tags = tags;
+        this.isSuperuser = isSuperuser;
     }
 }
 
@@ -42,7 +43,7 @@ export async function getUserInfo() {
                 }
             }
             
-            return new UserStatus(userStatusData.authorized, userStatusData.email, userStatusData.id, userStatusData.featureCount, processedTags)
+            return new UserStatus(userStatusData.authorized, userStatusData.email, userStatusData.id, userStatusData.featureCount, processedTags, userStatusData.is_superuser || false)
         } catch (error) {
             console.error(error)
             return null

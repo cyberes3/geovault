@@ -159,7 +159,6 @@
 </template>
 
 <script>
-import {authMixin} from "@/assets/js/authMixin.js";
 import { getCookie } from "@/assets/js/auth.js";
 import CollectionDialog from "./CollectionDialog.vue";
 import CollectionShareDialog from "./CollectionShareDialog.vue";
@@ -170,7 +169,6 @@ export default {
     CollectionDialog,
     CollectionShareDialog
   },
-  mixins: [authMixin],
   data() {
     return {
       collections: [],

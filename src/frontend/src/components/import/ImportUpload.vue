@@ -236,7 +236,6 @@
 
 <script>
 import {mapState} from "vuex"
-import {authMixin} from "@/assets/js/authMixin.js";
 import axios from "axios";
 import {capitalizeFirstLetter} from "@/assets/js/string.js";
 import {ImportQueueItem} from "@/assets/js/types/import-types"
@@ -365,7 +364,6 @@ export default {
     }
   },
   components: {Importqueue: ImportQueue, ImportHelpModal},
-  mixins: [authMixin],
   data() {
     return {
       files: [],
