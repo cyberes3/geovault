@@ -3,6 +3,7 @@ Custom allauth adapters to prevent username from being used.
 """
 import uuid
 from allauth.account.adapter import DefaultAccountAdapter
+from django.contrib.auth import get_user_model
 
 
 class NoUsernameAccountAdapter(DefaultAccountAdapter):
@@ -17,6 +18,7 @@ class NoUsernameAccountAdapter(DefaultAccountAdapter):
         Override save_user to set username to a unique UUID.
         This satisfies Django's requirement for a username field while
         ensuring we never actually use it (we only use email).
+        Also sets the first registered user as a superuser/admin.
         """
         # Call parent method first to handle email, password, etc.
         user = super().save_user(request, user, form, commit=False)
@@ -25,6 +27,13 @@ class NoUsernameAccountAdapter(DefaultAccountAdapter):
         # Using UUID ensures uniqueness and prevents conflicts
         # Set it after parent processing to ensure it's not overwritten
         user.username = str(uuid.uuid4())
+        
+        # Check if this is the first user to register
+        # If no users exist yet, make this user a superuser and staff member
+        User = get_user_model()
+        if not User.objects.exists():
+            user.is_superuser = True
+            user.is_staff = True
         
         if commit:
             user.save()
