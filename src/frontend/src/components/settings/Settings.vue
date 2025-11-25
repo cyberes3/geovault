@@ -124,7 +124,7 @@
           <!-- Email Change Section -->
           <div class="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
             <h2 class="text-lg font-semibold text-gray-900 mb-4">Email Address</h2>
-            
+
             <!-- Current Email Status -->
             <div class="mb-6 p-4 bg-gray-50 rounded-md">
               <div class="flex items-center justify-between">
@@ -209,56 +209,46 @@
         <!-- Map Tab -->
         <div v-if="activeTab === 'map'" class="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
           <h2 class="text-lg font-semibold text-gray-900 mb-4">Map Settings</h2>
-          
-          <!-- Elevation Profile Source Setting -->
-          <div class="space-y-4">
-            <div>
-              <label class="block text-sm font-medium text-gray-700 mb-2">
-                Elevation Profile Data Source
-              </label>
-              <div class="space-y-3">
-                <div class="flex items-start">
-                  <input
-                    id="elevation-gps"
-                    v-model="elevationProfileSource"
-                    type="radio"
-                    value="gps"
-                    @change="saveElevationProfileSource"
-                    class="mt-1 h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300"
-                  />
-                  <div class="ml-3">
-                    <label for="elevation-gps" class="block text-sm font-medium text-gray-700 cursor-pointer">
-                      Use GPS Elevations
-                    </label>
-                    <p class="text-sm text-gray-500 mt-1">
-                      Use elevation data from the original file. This is faster but may be less accurate, especially in areas with poor GPS signal.
-                    </p>
-                  </div>
-                </div>
-                <div class="flex items-start">
-                  <input
-                    id="elevation-api"
-                    v-model="elevationProfileSource"
-                    type="radio"
-                    value="api"
-                    @change="saveElevationProfileSource"
-                    class="mt-1 h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300"
-                  />
-                  <div class="ml-3">
-                    <label for="elevation-api" class="block text-sm font-medium text-gray-700 cursor-pointer">
-                      Use API Elevations
-                    </label>
-                    <p class="text-sm text-gray-500 mt-1">
-                      Fetch more accurate elevation data from an external elevation service. This provides better accuracy but requires an API call each time the elevation profile is viewed.
-                    </p>
-                  </div>
-                </div>
+
+          <!-- Dynamically generated settings -->
+          <div class="space-y-6">
+            <div v-for="setting in getSettingsForSection('map')" :key="setting.key" class="space-y-4">
+              <div class="flex items-center gap-2">
+                <label class="block text-sm font-medium text-gray-700">
+                  {{ setting.title }}
+                </label>
+                <Transition name="fade">
+                  <svg
+                    v-if="successCheckmarks[setting.key]"
+                    class="h-5 w-5 text-green-600"
+                    fill="currentColor"
+                    viewBox="0 0 20 20"
+                  >
+                    <path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clip-rule="evenodd" />
+                  </svg>
+                </Transition>
               </div>
-              <div v-if="elevationProfileSourceMessage" :class="[
-                'mt-3 p-3 rounded-md text-sm',
-                elevationProfileSourceMessageType === 'success' ? 'bg-green-50 text-green-800' : 'bg-red-50 text-red-800'
-              ]">
-                {{ elevationProfileSourceMessage }}
+
+              <!-- Radio button type -->
+              <div v-if="setting.type === 'radio'" class="space-y-3">
+                <div v-for="option in setting.options" :key="option.value" class="flex items-start">
+                  <input
+                    :id="`${setting.key}-${option.value}`"
+                    v-model="settingsValues[setting.key]"
+                    type="radio"
+                    :value="option.value"
+                    @change="handleSettingChange(setting.key, $event.target.value)"
+                    class="mt-1 h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300"
+                  />
+                  <div class="ml-3">
+                    <label :for="`${setting.key}-${option.value}`" class="block text-sm font-medium text-gray-700 cursor-pointer">
+                      {{ option.label }}
+                    </label>
+                    <p v-if="option.description" class="text-sm text-gray-500 mt-1">
+                      {{ option.description }}
+                    </p>
+                  </div>
+                </div>
               </div>
             </div>
           </div>
@@ -267,7 +257,7 @@
         <!-- Sharing Tab -->
         <div v-if="activeTab === 'sharing'" class="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
           <h2 class="text-lg font-semibold text-gray-900 mb-4">Shared Links</h2>
-          
+
           <div v-if="sharesLoading" class="text-center py-8">
             <div class="animate-spin rounded-full h-8 w-8 border-2 border-transparent mx-auto" style="border-bottom-color: #4B6BAB;"></div>
             <p class="mt-2 text-sm text-gray-600">Loading shares...</p>
@@ -303,7 +293,7 @@
                   <!-- Share Type and Name -->
                   <div class="mb-2 flex items-center gap-2">
                     <!-- Share Type Badge -->
-                    <span 
+                    <span
                       v-if="share.share_type === 'tag'"
                       class="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-purple-100 text-purple-800"
                       title="Tag Share"
@@ -313,7 +303,7 @@
                       </svg>
                       Tag
                     </span>
-                    <span 
+                    <span
                       v-else-if="share.share_type === 'collection'"
                       class="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-green-100 text-green-800"
                       title="Collection Share"
@@ -324,13 +314,13 @@
                       Collection
                     </span>
                     <!-- Tag or Collection Name -->
-                    <span 
+                    <span
                       v-if="share.share_type === 'tag'"
                       class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-blue-100 text-blue-800"
                     >
                       {{ share.tag }}
                     </span>
-                    <span 
+                    <span
                       v-else-if="share.share_type === 'collection'"
                       class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-blue-100 text-blue-800"
                     >
@@ -392,15 +382,23 @@
         </div>
       </div>
     </div>
+
+    <!-- Toast Notifications -->
+    <Toast ref="toast" />
   </div>
 </template>
 
 <script>
 import axios from "axios";
 import { getCookie } from "@/assets/js/auth.js";
+import Toast from "@/components/parts/Toast.vue";
+import settingsConfig from "@/settings-map.json";
 
 export default {
   name: 'Settings',
+  components: {
+    Toast
+  },
   data() {
     return {
       activeTab: 'account',
@@ -431,11 +429,14 @@ export default {
       sharesError: null,
       copiedShareId: null,
       deletingShareId: null,
-      // Map settings data
-      elevationProfileSource: 'gps', // Default to 'gps'
-      elevationProfileSourceMessage: '',
-      elevationProfileSourceMessageType: '',
-      mapSettingsLoading: false
+      // Settings configuration - loaded from external JSON file
+      settingsConfig: settingsConfig,
+      // Reactive values for all settings
+      settingsValues: {},
+      // Track which settings were recently saved successfully
+      successCheckmarks: {},
+      // Debounce timers for save operations
+      saveTimers: {}
     }
   },
   methods: {
@@ -449,7 +450,7 @@ export default {
         if (response.data.success) {
           this.currentEmail = response.data.primary_email || 'Not set';
           this.pendingEmails = response.data.pending_verification || [];
-          
+
           // Find the primary email status
           if (response.data.emails && response.data.emails.length > 0) {
             const primaryEmail = response.data.emails.find(e => e.primary) || response.data.emails[0];
@@ -459,7 +460,7 @@ export default {
               primary: primaryEmail.primary
             };
           }
-          
+
           // Update cooldown status
           if (response.data.resend_on_cooldown && response.data.resend_cooldown_remaining) {
             this.resendCooldown = response.data.resend_cooldown_remaining;
@@ -594,7 +595,7 @@ export default {
         if (response.data.success) {
           this.emailMessage = response.data.message || 'Verification email sent. Please check your inbox.';
           this.emailMessageType = 'success';
-          
+
           // Start cooldown timer
           if (response.data.cooldown_remaining) {
             this.resendCooldown = response.data.cooldown_remaining;
@@ -731,59 +732,64 @@ export default {
       const date = new Date(dateString);
       return date.toLocaleDateString() + ' ' + date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
     },
-    async loadMapSettings() {
-      this.mapSettingsLoading = true;
-      try {
-        const response = await axios.get('/api/data/user/settings/', {
-          headers: {
-            'X-CSRFToken': getCookie('csrftoken')
-          }
-        });
-        if (response.data.success && response.data.settings) {
-          const settings = response.data.settings;
-          // Load elevation profile source setting, default to 'gps'
-          this.elevationProfileSource = settings['map.elevation_profile_source'] || 'gps';
-        }
-      } catch (error) {
-        console.error('Error loading map settings:', error);
-        // Use default value on error
-        this.elevationProfileSource = 'gps';
-      } finally {
-        this.mapSettingsLoading = false;
-      }
+    getSettingsForSection(section) {
+      return this.settingsConfig.filter(setting => setting.section === section);
     },
-    async saveElevationProfileSource() {
-      this.elevationProfileSourceMessage = '';
-      this.elevationProfileSourceMessageType = '';
-      
+    loadMapSettings() {
+      // Settings are already loaded by App.vue into the Vuex store
+      const settings = this.$store.state.userSettings || {};
+
+      // Load all settings from configuration, using store values or defaults
+      this.settingsConfig.forEach(setting => {
+        this.settingsValues[setting.key] = settings[setting.key] || setting.defaultValue;
+      });
+    },
+    handleSettingChange(settingKey, value) {
+      // Update the value immediately for reactive UI
+      this.settingsValues[settingKey] = value;
+      // Debounce the save operation
+      this.debouncedSave(settingKey, value);
+    },
+    debouncedSave(settingKey, value) {
+      // Clear existing timer for this setting
+      if (this.saveTimers[settingKey]) {
+        clearTimeout(this.saveTimers[settingKey]);
+      }
+      // Set new timer
+      this.saveTimers[settingKey] = setTimeout(() => {
+        this.saveSetting(settingKey, value);
+      }, 500); // 500ms debounce
+    },
+    async saveSetting(settingKey, value) {
       try {
         const response = await axios.put('/api/data/user/settings/update/', {
-          key: 'map.elevation_profile_source',
-          value: this.elevationProfileSource
+          key: settingKey,
+          value: value
         }, {
           headers: {
             'X-CSRFToken': getCookie('csrftoken'),
             'Content-Type': 'application/json'
           }
         });
-        
+
         if (response.data.success) {
-          this.elevationProfileSourceMessage = 'Setting saved successfully.';
-          this.elevationProfileSourceMessageType = 'success';
+          // Show success checkmark
+          this.successCheckmarks[settingKey] = true;
           // Refresh cached settings in the store
           await this.$store.dispatch('fetchUserSettings');
-          // Clear message after 3 seconds
+          // Hide checkmark after 3 seconds
           setTimeout(() => {
-            this.elevationProfileSourceMessage = '';
+            this.successCheckmarks[settingKey] = false;
           }, 3000);
         } else {
-          this.elevationProfileSourceMessage = response.data.error || 'Failed to save setting.';
-          this.elevationProfileSourceMessageType = 'error';
+          // Show error toast
+          const errorMessage = response.data.error || 'Failed to save setting.';
+          this.$refs.toast.error(errorMessage);
         }
       } catch (error) {
-        console.error('Error saving elevation profile source setting:', error);
-        this.elevationProfileSourceMessage = error.response?.data?.error || 'An error occurred while saving the setting.';
-        this.elevationProfileSourceMessageType = 'error';
+        console.error(`Error saving setting ${settingKey}:`, error);
+        const errorMessage = error.response?.data?.error || 'An error occurred while saving the setting.';
+        this.$refs.toast.error(errorMessage);
       }
     }
   },
@@ -797,7 +803,7 @@ export default {
           query: { ...this.$route.query, tab: newTab }
         });
       }
-      
+
       if (newTab === 'sharing') {
         this.loadShares();
       } else if (newTab === 'map') {
@@ -835,15 +841,17 @@ export default {
         });
       }
     }
-    
+
     // Mark initialization as complete after a tick to ensure watchers are set up
     this.$nextTick(() => {
       this.isInitializing = false;
     });
-    
+
     await this.loadCurrentEmail();
     if (this.activeTab === 'sharing') {
       await this.loadShares();
+    } else if (this.activeTab === 'map') {
+      await this.loadMapSettings();
     }
   },
   beforeDestroy() {
@@ -853,6 +861,15 @@ export default {
 </script>
 
 <style scoped>
+.fade-enter-active,
+.fade-leave-active {
+  transition: opacity 0.3s ease;
+}
+
+.fade-enter-from,
+.fade-leave-to {
+  opacity: 0;
+}
 </style>
 
 

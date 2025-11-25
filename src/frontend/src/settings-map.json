@@ -1,0 +1,22 @@
+[
+  {
+    "key": "map.elevation_profile_source",
+    "title": "Elevation Profile Data Source",
+    "type": "radio",
+    "section": "map",
+    "defaultValue": "gps",
+    "options": [
+      {
+        "value": "gps",
+        "label": "Use GPS Elevations",
+        "description": "Use elevation data from the original file recored by the GPS device."
+      },
+      {
+        "value": "api",
+        "label": "Use API Elevations",
+        "description": "Fetch more accurate elevation data sourced from a global land dataset. Increases processing time."
+      }
+    ]
+  }
+]
+
