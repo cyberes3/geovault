@@ -3,7 +3,7 @@ from django.urls import path
 from api.views.bbox_query import get_geojson_data
 from api.views.config import get_config
 from api.views.feature_delete import delete_feature
-from api.views.feature_retrieval import get_feature
+from api.views.feature_retrieval import get_feature, get_feature_elevations
 from api.views.feature_search import get_features_by_tag, search_features, filter_features_by_tags, get_all_features
 from api.views.feature_update import update_feature, update_feature_metadata, bulk_update_features_metadata, apply_replacement_geometry, regenerate_feature_tags
 from api.views.geolocation_api import get_user_location, get_location_by_ip
@@ -31,6 +31,7 @@ urlpatterns = [
     path('features/all/', get_all_features),
     path('features/bulk-update-metadata/', bulk_update_features_metadata),
     path('feature/<int:feature_id>/', get_feature),
+    path('feature/<int:feature_id>/elevations/', get_feature_elevations),
     path('feature/<int:feature_id>/update/', update_feature),
     path('feature/<int:feature_id>/update-metadata/', update_feature_metadata),
     path('feature/<int:feature_id>/apply-replacement/', apply_replacement_geometry),

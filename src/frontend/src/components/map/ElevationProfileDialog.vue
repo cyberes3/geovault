@@ -75,9 +75,11 @@
 </template>
 
 <script>
+import axios from 'axios'
 import { Chart, registerables } from 'chart.js'
 import { GeoJSON } from 'ol/format'
 import { toLonLat } from 'ol/proj'
+import { getCookie } from '@/assets/js/auth.js'
 
 Chart.register(...registerables)
 
@@ -98,6 +100,13 @@ export default {
       stats: null,
       coordinateMapping: null, // Maps chart data indices to original coordinates [lon, lat]
       distances: null // Store distances array for mapping
+    }
+  },
+  computed: {
+    elevationProfileSource() {
+      // Get elevation profile source from store, default to 'gps'
+      const settings = this.$store.state.userSettings
+      return settings?.['map.elevation_profile_source'] || 'gps'
     }
   },
   watch: {
@@ -445,9 +454,29 @@ export default {
     },
 
     /**
+     * Fetch elevations from API for a feature
+     */
+    async fetchElevationsFromAPI(featureId) {
+      try {
+        const response = await axios.get(`/api/data/feature/${featureId}/elevations/`, {
+          headers: {
+            'X-CSRFToken': getCookie('csrftoken')
+          }
+        })
+        if (response.data.success && response.data.coordinates) {
+          return response.data.coordinates
+        }
+        return null
+      } catch (error) {
+        console.error('Error fetching elevations from API:', error)
+        return null
+      }
+    },
+
+    /**
      * Update the chart with current feature data
      */
-    updateChart() {
+    async updateChart() {
       // Prevent concurrent chart updates
       if (this.isUpdatingChart) {
         return
@@ -481,13 +510,33 @@ export default {
       }
 
       // Extract coordinates
-      const coordinates = this.extractCoordinates(geometry)
+      let coordinates = this.extractCoordinates(geometry)
       if (coordinates.length === 0) {
         this.hasElevationData = false
         this.stats = null
         this.isUpdatingChart = false
         return
       }
+
+      // If using API elevations, fetch them
+      if (this.elevationProfileSource === 'api') {
+        const featureId = this.feature.get('properties')?._id || this.feature.get('properties')?.id
+        if (featureId) {
+          const apiCoordinates = await this.fetchElevationsFromAPI(featureId)
+          if (apiCoordinates && apiCoordinates.length > 0) {
+            // Use API coordinates (they already have elevations)
+            coordinates = apiCoordinates
+          } else {
+            // API fetch failed, fallback to GPS elevations
+            console.warn('Failed to fetch elevations from API, falling back to GPS elevations')
+            // coordinates already contains GPS elevations, continue with them
+          }
+        } else {
+          // No feature ID available, use GPS elevations
+          console.warn('No feature ID available, using GPS elevations')
+        }
+      }
+      // If using GPS elevations, coordinates already contain them from extractCoordinates
 
       // Process elevation data
       const { distances, elevations, coordinateMapping } = this.processElevationData(coordinates)

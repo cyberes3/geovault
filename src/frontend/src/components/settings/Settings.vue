@@ -209,7 +209,59 @@
         <!-- Map Tab -->
         <div v-if="activeTab === 'map'" class="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
           <h2 class="text-lg font-semibold text-gray-900 mb-4">Map Settings</h2>
-          <p class="text-gray-500">Map settings coming soon.</p>
+          
+          <!-- Elevation Profile Source Setting -->
+          <div class="space-y-4">
+            <div>
+              <label class="block text-sm font-medium text-gray-700 mb-2">
+                Elevation Profile Data Source
+              </label>
+              <div class="space-y-3">
+                <div class="flex items-start">
+                  <input
+                    id="elevation-gps"
+                    v-model="elevationProfileSource"
+                    type="radio"
+                    value="gps"
+                    @change="saveElevationProfileSource"
+                    class="mt-1 h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300"
+                  />
+                  <div class="ml-3">
+                    <label for="elevation-gps" class="block text-sm font-medium text-gray-700 cursor-pointer">
+                      Use GPS Elevations
+                    </label>
+                    <p class="text-sm text-gray-500 mt-1">
+                      Use elevation data from the original file. This is faster but may be less accurate, especially in areas with poor GPS signal.
+                    </p>
+                  </div>
+                </div>
+                <div class="flex items-start">
+                  <input
+                    id="elevation-api"
+                    v-model="elevationProfileSource"
+                    type="radio"
+                    value="api"
+                    @change="saveElevationProfileSource"
+                    class="mt-1 h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300"
+                  />
+                  <div class="ml-3">
+                    <label for="elevation-api" class="block text-sm font-medium text-gray-700 cursor-pointer">
+                      Use API Elevations
+                    </label>
+                    <p class="text-sm text-gray-500 mt-1">
+                      Fetch more accurate elevation data from an external elevation service. This provides better accuracy but requires an API call each time the elevation profile is viewed.
+                    </p>
+                  </div>
+                </div>
+              </div>
+              <div v-if="elevationProfileSourceMessage" :class="[
+                'mt-3 p-3 rounded-md text-sm',
+                elevationProfileSourceMessageType === 'success' ? 'bg-green-50 text-green-800' : 'bg-red-50 text-red-800'
+              ]">
+                {{ elevationProfileSourceMessage }}
+              </div>
+            </div>
+          </div>
         </div>
 
         <!-- Sharing Tab -->
@@ -378,7 +430,12 @@ export default {
       sharesLoading: false,
       sharesError: null,
       copiedShareId: null,
-      deletingShareId: null
+      deletingShareId: null,
+      // Map settings data
+      elevationProfileSource: 'gps', // Default to 'gps'
+      elevationProfileSourceMessage: '',
+      elevationProfileSourceMessageType: '',
+      mapSettingsLoading: false
     }
   },
   methods: {
@@ -673,6 +730,59 @@ export default {
     formatDate(dateString) {
       const date = new Date(dateString);
       return date.toLocaleDateString() + ' ' + date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+    },
+    async loadMapSettings() {
+      this.mapSettingsLoading = true;
+      try {
+        const response = await axios.get('/api/data/user/settings/', {
+          headers: {
+            'X-CSRFToken': getCookie('csrftoken')
+          }
+        });
+        if (response.data.success && response.data.settings) {
+          const settings = response.data.settings;
+          // Load elevation profile source setting, default to 'gps'
+          this.elevationProfileSource = settings['map.elevation_profile_source'] || 'gps';
+        }
+      } catch (error) {
+        console.error('Error loading map settings:', error);
+        // Use default value on error
+        this.elevationProfileSource = 'gps';
+      } finally {
+        this.mapSettingsLoading = false;
+      }
+    },
+    async saveElevationProfileSource() {
+      this.elevationProfileSourceMessage = '';
+      this.elevationProfileSourceMessageType = '';
+      
+      try {
+        const response = await axios.put('/api/data/user/settings/update/', {
+          key: 'map.elevation_profile_source',
+          value: this.elevationProfileSource
+        }, {
+          headers: {
+            'X-CSRFToken': getCookie('csrftoken'),
+            'Content-Type': 'application/json'
+          }
+        });
+        
+        if (response.data.success) {
+          this.elevationProfileSourceMessage = 'Setting saved successfully.';
+          this.elevationProfileSourceMessageType = 'success';
+          // Clear message after 3 seconds
+          setTimeout(() => {
+            this.elevationProfileSourceMessage = '';
+          }, 3000);
+        } else {
+          this.elevationProfileSourceMessage = response.data.error || 'Failed to save setting.';
+          this.elevationProfileSourceMessageType = 'error';
+        }
+      } catch (error) {
+        console.error('Error saving elevation profile source setting:', error);
+        this.elevationProfileSourceMessage = error.response?.data?.error || 'An error occurred while saving the setting.';
+        this.elevationProfileSourceMessageType = 'error';
+      }
     }
   },
   watch: {
@@ -688,6 +798,8 @@ export default {
       
       if (newTab === 'sharing') {
         this.loadShares();
+      } else if (newTab === 'map') {
+        this.loadMapSettings();
       }
     },
     '$route.query.tab'(newTab) {
