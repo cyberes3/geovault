@@ -7,7 +7,7 @@
     </div>
 
     <!-- File Requirements -->
-    <div class="bg-blue-50 border border-blue-200 rounded-lg p-6 relative">
+    <div class="bg-blue-50 border border-blue-200 rounded-lg p-6">
       <div class="flex">
         <div class="flex-shrink-0">
           <svg class="h-5 w-5 text-blue-400" fill="currentColor" viewBox="0 0 20 20">
@@ -22,21 +22,17 @@
               <li><strong>Import from queue:</strong> Go to the "Ready to Import" section and click on a file to review/edit features, or use bulk import to add multiple files to your feature store at once.</li>
             </ol>
             <p class="mt-3 text-xs text-blue-600">Note: Each file can only be imported once. Files with identical content are detected as duplicates.</p>
+            <button
+                @click="showHelpModal = true"
+                class="mt-2 text-sm text-blue-600 hover:text-blue-800 underline focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-1"
+                aria-label="View detailed import help"
+            >
+              More info
+            </button>
           </div>
         </div>
       </div>
-      <button
-          @click="showHelpModal = true"
-          class="absolute top-4 right-4 inline-flex items-center justify-center w-6 h-6 rounded-full border border-blue-600 text-blue-600 hover:text-blue-800 hover:border-blue-800 bg-transparent focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-1 transition-colors duration-150"
-          title="View detailed help"
-          aria-label="View detailed import help"
-      >
-        <svg class="w-4 h-4" fill="currentColor" viewBox="0 0 20 20">
-          <path fill-rule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-8-3a1 1 0 00-.867.5 1 1 0 11-1.731-1A3 3 0 0113 8a3.001 3.001 0 01-2 2.83V11a1 1 0 11-2 0v-1a1 1 0 011-1 1 1 0 100-2zm0 8a1 1 0 100-2 1 1 0 000 2z" clip-rule="evenodd"></path>
-        </svg>
-      </button>
     </div>
-
 
     <!-- Upload Section -->
     <div class="bg-white rounded-lg shadow-sm border border-gray-200 p-6">

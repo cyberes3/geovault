@@ -6,6 +6,9 @@ An outdoorsman tends to collect all sorts of spatial data: tracks of hikes, poin
 tends to be scattered across numerous files stored in your documents and it isn't easy to see where you've been.
 *GeoVault* is a web platform that stores this data and presents *all* of it on one map.
 
+The goal of this project is to automate as much of the pipeline as possible and focus on the user experience. Many GIS
+platforms end up extremely complicated. GeoVault aims to automate much of that complication.
+
 Development is done on my personal Git server, [git.evulid.cc](https://git.evulid.cc/cyberes/geovault), and is mirrored
 to [GitHub](https://github.com/Cyberes/geovault).
 
@@ -16,12 +19,6 @@ to [GitHub](https://github.com/Cyberes/geovault).
 - Tag and collection based organization
 - Link-based public sharing
 - Reverse geocoding to show what features are associated with
+- Heavy data processing behind the scenes
 
 **This platform does not support editing.** Use your own preferred tool and then upload your data to the server.
-
-https://trac.osgeo.org/postgis/wiki/UsersWikiPostGIS3UbuntuPGSQLApt
-
-sudo add-apt-repository ppa:deadsnakes/ppa
-sudo apt install python3.12 python3.12-dev
-
-python manage.py createsuperuser

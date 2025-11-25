@@ -11,6 +11,7 @@ Save the unmodified original imported file in a special table and link it to the
 Bulk tagging and styling on import page
 Display existing tags to select on import process
 Use same tag picking and style as map edit on import process
+need to automatically send user a verification email on registration
 
 
 ## Stretch Goals
