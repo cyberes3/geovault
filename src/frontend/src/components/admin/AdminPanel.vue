@@ -27,17 +27,28 @@
     </div>
 
     <div class="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
-      <div class="flex items-center justify-center py-12">
-        <div class="text-center">
-          <svg class="mx-auto h-12 w-12 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z"></path>
-            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"></path>
+      <div class="flex items-start space-x-4">
+        <div class="flex-shrink-0">
+          <svg class="h-8 w-8 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1zm0 0h6v-1a6 6 0 00-9-5.197M13 7a4 4 0 11-8 0 4 4 0 018 0z"></path>
           </svg>
-          <h2 class="mt-4 text-lg font-medium text-gray-900">Admin Panel</h2>
-          <p class="mt-2 text-sm text-gray-500">
-            This is a placeholder for the admin panel.<br>
-            Admin functionality will be added here.
+        </div>
+        <div class="flex-1">
+          <h2 class="text-lg font-medium text-gray-900 mb-2">Django User Admin</h2>
+          <p class="text-sm text-gray-600 mb-4">
+            Access the Django admin interface to manage users, permissions, and other database models.
+            This is the standard Django admin panel where you can create, edit, and delete user accounts,
+            manage user permissions, and access other administrative functions.
           </p>
+          <a
+            href="/admin/"
+            class="inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md text-white bg-blue-600 hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500"
+          >
+            Open Django Admin
+            <svg class="ml-2 -mr-1 w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14"></path>
+            </svg>
+          </a>
         </div>
       </div>
     </div>
@@ -57,7 +68,7 @@ export default {
   },
   mounted() {
     document.title = 'Admin Panel - GeoVault';
-    
+
     // Redirect if not authorized (defense in depth)
     if (!this.isAuthorized) {
       // Small delay to show the error message, then redirect
