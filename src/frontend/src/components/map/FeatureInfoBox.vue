@@ -8,7 +8,7 @@
           <button
             v-if="isLineOrTrack"
             @click="$emit('show-profile')"
-            class="text-gray-400 hover:text-primary-500 transition-colors"
+            class="text-gray-400 hover:text-blue-500 transition-colors"
             title="Show elevation profile"
           >
             <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -18,7 +18,7 @@
           <button
             v-if="showEditButton"
             @click="$emit('edit')"
-            class="text-gray-400 hover:text-primary-500 transition-colors"
+            class="text-gray-400 hover:text-blue-500 transition-colors"
             title="Edit feature"
           >
             <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -27,7 +27,7 @@
           </button>
           <button
             @click="$emit('zoom')"
-            class="text-gray-400 hover:text-primary-500 transition-colors"
+            class="text-gray-400 hover:text-blue-500 transition-colors"
             title="Zoom to feature"
           >
             <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -54,7 +54,7 @@
 
       <!-- Description -->
       <div v-if="getFeatureDescription(feature)" class="mb-4">
-        <div class="text-sm text-gray-700 prose prose-sm max-w-none prose-headings:text-gray-900 prose-p:text-gray-700 prose-a:text-primary-500 prose-strong:text-gray-900 prose-ul:text-gray-700 prose-ol:text-gray-700" v-html="renderMarkdown(getFeatureDescription(feature))"></div>
+        <div class="text-sm text-gray-700 prose prose-sm max-w-none prose-headings:text-gray-900 prose-p:text-gray-700 prose-a:text-blue-500 prose-strong:text-gray-900 prose-ul:text-gray-700 prose-ol:text-gray-700" v-html="renderMarkdown(getFeatureDescription(feature))"></div>
       </div>
 
       <!-- Tags -->
@@ -64,7 +64,7 @@
           <span
             v-for="tag in getFeatureTags(feature).userTags"
             :key="`user-${tag}`"
-            class="inline-flex items-center px-2 py-1 rounded-md text-xs font-medium bg-primary-100 text-primary-700"
+            class="inline-flex items-center px-2 py-1 rounded-md text-xs font-medium bg-blue-100 text-blue-700"
           >
             {{ tag }}
           </span>

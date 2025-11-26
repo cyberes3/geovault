@@ -32,14 +32,14 @@
           <span
             v-for="(tag, index) in localTags"
             :key="index"
-            class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-primary-100 text-primary-700 border border-primary-200"
+            class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-blue-100 text-blue-700 border border-blue-200"
           >
             {{ tag }}
             <button
               type="button"
               @click="removeTag(index)"
               :disabled="disabled"
-              class="ml-1.5 inline-flex items-center justify-center w-4 h-4 rounded-full text-primary-600 hover:border-primary-200 hover:text-primary-500 focus:outline-none focus:border-primary-200 focus:text-primary-500 disabled:opacity-50 disabled:cursor-not-allowed"
+              class="ml-1.5 inline-flex items-center justify-center w-4 h-4 rounded-full text-blue-600 hover:border-blue-200 hover:text-blue-500 focus:outline-none focus:border-blue-200 focus:text-blue-500 disabled:opacity-50 disabled:cursor-not-allowed"
               title="Remove tag"
             >
               <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -68,7 +68,7 @@
         @focus="showSuggestionsOnFocus"
         @blur="handleTagInputBlur"
         @keyup="convertTagInputToLowercase"
-        class="tag-input w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-primary-500 focus:border-primary-500 disabled:bg-gray-100 disabled:cursor-not-allowed"
+        class="tag-input w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500 disabled:bg-gray-100 disabled:cursor-not-allowed"
         :placeholder="placeholder"
       />
 
@@ -82,7 +82,7 @@
           :key="index"
           type="button"
           @mousedown.prevent="selectTagSuggestion(suggestion)"
-          class="w-full text-left px-3 py-2 text-sm text-gray-700 hover:bg-primary-50 focus:bg-primary-50 focus:outline-none"
+          class="w-full text-left px-3 py-2 text-sm text-gray-700 hover:bg-blue-50 focus:bg-blue-50 focus:outline-none"
         >
           {{ suggestion }}
         </button>

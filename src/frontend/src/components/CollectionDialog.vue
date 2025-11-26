@@ -37,7 +37,7 @@
                 v-model="formData.name"
                 type="text"
                 required
-                class="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-primary-500 focus:border-primary-500"
+                class="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500"
                 placeholder="Enter collection name"
               />
             </div>
@@ -50,7 +50,7 @@
               <textarea
                 v-model="formData.description"
                 rows="3"
-                class="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-primary-500 focus:border-primary-500"
+                class="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500"
                 placeholder="Enter collection description (optional)"
               ></textarea>
             </div>
@@ -74,7 +74,7 @@
                   <input
                     v-model="tagSearchQuery"
                     type="text"
-                    class="block w-full pl-10 pr-3 py-2 border border-gray-300 rounded-md leading-5 bg-white placeholder-gray-500 focus:outline-none focus:placeholder-gray-400 focus:ring-1 focus:ring-primary-500 focus:border-primary-500 sm:text-sm"
+                    class="block w-full pl-10 pr-3 py-2 border border-gray-300 rounded-md leading-5 bg-white placeholder-gray-500 focus:outline-none focus:placeholder-gray-400 focus:ring-1 focus:ring-blue-500 focus:border-blue-500 sm:text-sm"
                     placeholder="Search tags..."
                   />
                 </div>
@@ -98,7 +98,7 @@
                       type="checkbox"
                       :value="tag"
                       v-model="formData.tags"
-                      class="h-4 w-4 text-primary-500 focus:ring-primary-500 border-gray-300 rounded"
+                      class="h-4 w-4 text-blue-500 focus:ring-blue-500 border-gray-300 rounded"
                     />
                     <span class="ml-2 text-sm text-gray-700">{{ tag }}</span>
                   </label>
@@ -112,13 +112,13 @@
                       v-for="tag in formData.tags"
                       :key="tag"
                       @click="removeTag(tag)"
-                      class="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium bg-primary-100 text-primary-700 cursor-pointer hover:bg-primary-200"
+                      class="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium bg-blue-100 text-blue-700 cursor-pointer hover:bg-blue-200"
                     >
                       {{ tag }}
                       <button
                         type="button"
                         @click.stop="removeTag(tag)"
-                        class="ml-1 text-primary-500 hover:text-primary-700"
+                        class="ml-1 text-blue-500 hover:text-blue-700"
                         title="Remove tag"
                       >
                         <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -147,7 +147,7 @@
                   <input
                     v-model="featureSearchQuery"
                     type="text"
-                    class="block w-full pl-10 pr-3 py-2 border border-gray-300 rounded-md leading-5 bg-white placeholder-gray-500 focus:outline-none focus:placeholder-gray-400 focus:ring-1 focus:ring-primary-500 focus:border-primary-500 sm:text-sm"
+                    class="block w-full pl-10 pr-3 py-2 border border-gray-300 rounded-md leading-5 bg-white placeholder-gray-500 focus:outline-none focus:placeholder-gray-400 focus:ring-1 focus:ring-blue-500 focus:border-blue-500 sm:text-sm"
                     placeholder="Search features..."
                   />
                 </div>
@@ -171,7 +171,7 @@
                       type="checkbox"
                       :value="feature.properties._id"
                       v-model="formData.feature_ids"
-                      class="h-4 w-4 text-primary-500 focus:ring-primary-500 border-gray-300 rounded"
+                      class="h-4 w-4 text-blue-500 focus:ring-blue-500 border-gray-300 rounded"
                     />
                     <span class="ml-2 text-sm text-gray-700">{{ feature.properties.name || 'Unnamed Feature' }}</span>
                   </label>
@@ -194,7 +194,7 @@
               <button
                 type="button"
                 @click="closeDialog"
-                class="px-4 py-2 border border-gray-300 rounded-md shadow-sm text-sm font-medium text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primary-500"
+                class="px-4 py-2 border border-gray-300 rounded-md shadow-sm text-sm font-medium text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500"
                 title="Cancel"
               >
                 Cancel
@@ -202,7 +202,7 @@
               <button
                 type="submit"
                 :disabled="saving || !formData.name.trim()"
-                class="px-4 py-2 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-primary-500 hover:bg-primary-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primary-500 disabled:opacity-50 disabled:cursor-not-allowed"
+                class="px-4 py-2 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-blue-500 hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 disabled:opacity-50 disabled:cursor-not-allowed"
                 title="Save collection"
               >
                 <span v-if="saving">Saving...</span>

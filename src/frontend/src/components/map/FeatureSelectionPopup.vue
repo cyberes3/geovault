@@ -26,7 +26,7 @@
             class="py-1.5 px-2 rounded-md hover:bg-gray-50 transition-colors"
         >
           <button
-              class="w-full text-left flex items-center gap-2 text-sm text-gray-900 hover:text-primary-500 transition-colors"
+              class="w-full text-left flex items-center gap-2 text-sm text-gray-900 hover:text-blue-500 transition-colors"
               @click="$emit('select', feature)"
               title="Select this feature"
           >
@@ -125,8 +125,8 @@ export default {
       const geometryType = this.getFeatureGeometryType(feature)
 
       const classes = {
-        'Point': 'bg-primary-100 text-primary-700',
-        'MultiPoint': 'bg-primary-100 text-primary-700',
+        'Point': 'bg-blue-100 text-blue-700',
+        'MultiPoint': 'bg-blue-100 text-blue-700',
         'LineString': 'bg-green-100 text-green-800',
         'MultiLineString': 'bg-green-100 text-green-800',
         'Polygon': 'bg-yellow-100 text-yellow-800',

@@ -45,7 +45,7 @@
               type="checkbox"
               :checked="selectedItems.size === filteredImportQueue.length && filteredImportQueue.length > 0"
               @change="toggleSelectAll"
-              class="h-4 w-4 text-primary-500 focus:ring-primary-500 border-gray-300 rounded"
+              class="h-4 w-4 text-blue-500 focus:ring-blue-500 border-gray-300 rounded"
             />
           </th>
           <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">File Name</th>
@@ -87,7 +87,7 @@
               </p>
               <router-link
                 to="/import/upload"
-                class="inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md text-white bg-primary-500 hover:bg-primary-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primary-500 transition-colors duration-200"
+                class="inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md text-white bg-blue-500 hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 transition-colors duration-200"
               >
                 <svg class="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12"></path>
@@ -106,14 +106,14 @@
               :checked="selectedItems.has(item.id)"
               @change="toggleItemSelection(item.id)"
               :disabled="item.imported || item.processing === true || (item.processing === false && item.feature_count === -1) || item.deleting || item.importing"
-              class="h-4 w-4 text-primary-500 focus:ring-primary-500 border-gray-300 rounded disabled:opacity-50 disabled:cursor-not-allowed"
+              class="h-4 w-4 text-blue-500 focus:ring-blue-500 border-gray-300 rounded disabled:opacity-50 disabled:cursor-not-allowed"
             />
           </td>
           <td class="px-6 py-4 whitespace-nowrap">
             <div class="flex items-center">
               <div class="flex-shrink-0">
-                <div class="w-8 h-8 bg-primary-100 rounded-lg flex items-center justify-center">
-                  <svg class="w-4 h-4 text-primary-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <div class="w-8 h-8 bg-blue-100 rounded-lg flex items-center justify-center">
+                  <svg class="w-4 h-4 text-blue-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"></path>
                   </svg>
                 </div>
@@ -123,7 +123,7 @@
                   <!-- Disable link for duplicates in queue or when this specific item is being imported/deleted -->
                   <router-link v-if="item.duplicate_status !== 'duplicate_in_queue' && !item.deleting && !item.importing" 
                      :to="`/import/process/${item.id}`" 
-                     class="text-primary-500 hover:text-primary-700">
+                     class="text-blue-500 hover:text-blue-700">
                     {{ item.original_filename }}
                   </router-link>
                   <span v-else class="text-gray-500 cursor-not-allowed">
@@ -144,7 +144,7 @@
               <Loader size="sm" layout="inline" :showMessage="false" />
               <span class="ml-1">Deleting</span>
             </span>
-            <span v-else-if="item.importing" class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-primary-100 text-primary-700">
+            <span v-else-if="item.importing" class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-blue-100 text-blue-700">
               <Loader size="sm" layout="inline" :showMessage="false" />
               <span class="ml-1">Importing</span>
             </span>
@@ -175,7 +175,7 @@
               </svg>
               Duplicate
             </span>
-            <span v-else class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-primary-100 text-primary-700">
+            <span v-else class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-blue-100 text-blue-700">
               <svg class="w-3 h-3 mr-1" fill="currentColor" viewBox="0 0 20 20">
                 <path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clip-rule="evenodd"></path>
               </svg>

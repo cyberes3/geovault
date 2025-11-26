@@ -54,7 +54,7 @@
                         <path d="M28 8H12a4 4 0 00-4 4v20m32-12v8m0 0v8a4 4 0 01-4 4H12a4 4 0 01-4-4v-4m32-4l-3.172-3.172a4 4 0 00-5.656 0L28 28M8 32l9.172-9.172a4 4 0 015.656 0L28 28m0 0l4 4m4-4h-12m-2-5h9.172M17 13h-2a2 2 0 00-2 2v2a2 2 0 002 2h2v-6z" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" />
                       </svg>
                       <p class="mt-2 text-sm text-gray-600">
-                        <span class="font-medium text-primary-500 hover:text-primary-700">Click to browse</span> or drag and drop
+                        <span class="font-medium text-blue-500 hover:text-blue-700">Click to browse</span> or drag and drop
                       </p>
                       <p class="mt-1 text-xs text-gray-500">KMZ, KML, or GPX files only (max 5MB)</p>
                     </div>
@@ -64,10 +64,10 @@
             </div>
 
             <!-- Selected File Display (shown when file is selected) -->
-            <div v-if="selectedFile" class="p-4 bg-primary-50 border border-primary-200 rounded-lg">
+            <div v-if="selectedFile" class="p-4 bg-blue-50 border border-blue-200 rounded-lg">
               <div class="flex items-center justify-between">
                 <div class="flex items-center space-x-3 flex-1 min-w-0">
-                  <svg class="h-5 w-5 text-primary-500 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <svg class="h-5 w-5 text-blue-500 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
                   </svg>
                   <div class="flex-1 min-w-0">
@@ -106,7 +106,7 @@
                 <div class="w-full bg-gray-200 rounded-full h-3 overflow-hidden">
                   <div 
                     :style="{ width: processingProgress + '%' }" 
-                    class="bg-primary-500 h-3 rounded-full transition-all duration-300"
+                    class="bg-blue-500 h-3 rounded-full transition-all duration-300"
                   >
                   </div>
                 </div>
@@ -151,7 +151,7 @@
                   :class="[
                     'p-4 border-2 rounded-lg cursor-pointer transition-colors',
                     selectedFeatureIndex === index
-                      ? 'border-primary-500bg-primary-50'
+                      ? 'border-blue-500 bg-blue-50'
                       : 'border-gray-200 hover:border-gray-300'
                   ]"
                 >
@@ -188,7 +188,7 @@
                           </p>
                         </div>
                         <div v-if="selectedFeatureIndex === index" class="ml-4 flex-shrink-0">
-                          <svg class="h-5 w-5 text-primary-500" fill="currentColor" viewBox="0 0 20 20">
+                          <svg class="h-5 w-5 text-blue-500" fill="currentColor" viewBox="0 0 20 20">
                             <path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clip-rule="evenodd" />
                           </svg>
                         </div>
@@ -222,7 +222,7 @@
           <button
             v-if="selectedFile && !importQueueId && !processing"
             @click="handleUpload"
-            class="px-4 py-2 text-sm font-medium text-white bg-primary-500 border border-transparent rounded-md hover:bg-primary-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primary-500 flex items-center"
+            class="px-4 py-2 text-sm font-medium text-white bg-blue-500 border border-transparent rounded-md hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 flex items-center"
             title="Upload and process file"
           >
             <svg class="h-4 w-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -235,7 +235,7 @@
           <button
             v-if="!importQueueId || (!processing && features.length === 0)"
             @click="handleCancel"
-            class="px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-md hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primary-500"
+            class="px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-md hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500"
             title="Cancel"
           >
             Cancel
@@ -246,7 +246,7 @@
             v-if="sortedFeatures.length > 0 && !applied"
             @click="handleApply"
             :disabled="applying || selectedFeatureIndex === null"
-            class="px-4 py-2 text-sm font-medium text-white bg-primary-500 border border-transparent rounded-md hover:bg-primary-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primary-500 disabled:opacity-50 disabled:cursor-not-allowed disabled:bg-gray-400 disabled:hover:bg-gray-400 flex items-center"
+            class="px-4 py-2 text-sm font-medium text-white bg-blue-500 border border-transparent rounded-md hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 disabled:opacity-50 disabled:cursor-not-allowed disabled:bg-gray-400 disabled:hover:bg-gray-400 flex items-center"
             title="Apply selected feature's spatial data"
           >
             <svg v-if="!applying" class="h-4 w-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -275,7 +275,7 @@
           <button
             v-if="applied"
             @click="handleClose"
-            class="px-4 py-2 text-sm font-medium text-white bg-primary-500 border border-transparent rounded-md hover:bg-primary-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primary-500"
+            class="px-4 py-2 text-sm font-medium text-white bg-blue-500 border border-transparent rounded-md hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500"
             title="Close dialog"
           >
             Close
@@ -392,9 +392,9 @@ export default {
     },
     dropzoneClasses() {
       if (this.isDragOver) {
-        return 'border-primary-600bg-primary-50'
+        return 'border-blue-600 bg-blue-50'
       } else {
-        return 'border-gray-300 hover:border-primary-600hover:bg-primary-50'
+        return 'border-gray-300 hover:border-blue-600 hover:bg-blue-50'
       }
     }
   },
@@ -424,18 +424,12 @@ export default {
   },
   methods: {
     /**
-     * Get CSS variable color value and convert to rgba with optional opacity
-     * @param {string} cssVar - CSS variable name (e.g., '--color-primary-500')
+     * Get color value and convert to rgba with optional opacity
+     * @param {string} color - Hex color value (e.g., '#163D8A')
      * @param {number} opacity - Optional opacity (0-1), defaults to 1
      * @returns {string} rgba color string
      */
-    getCssVarColor(cssVar, opacity = 1) {
-      const color = getComputedStyle(document.documentElement).getPropertyValue(cssVar).trim()
-      if (!color) {
-        // Fallback to default primary color if variable not found
-        return opacity === 1 ? '#163d8a' : `rgba(22, 61, 138, ${opacity})`
-      }
-      
+    getColorWithOpacity(color, opacity = 1) {
       // Convert hex to rgb
       if (color.startsWith('#')) {
         const hex = color.replace('#', '')
@@ -454,8 +448,8 @@ export default {
         return `rgba(${r}, ${g}, ${b}, ${opacity})`
       }
       
-      // Fallback
-      return opacity === 1 ? color : `rgba(22, 61, 138, ${opacity})`
+      // Fallback to blue-500
+      return opacity === 1 ? '#163D8A' : `rgba(22, 61, 138, ${opacity})`
     },
     resetDialog() {
       // Clean up all maps
@@ -537,17 +531,17 @@ export default {
               })
             } else if (geometryType === 'LineString' || geometryType === 'MultiLineString') {
               return new Style({
-                stroke: new Stroke({ color: this.getCssVarColor('--color-primary-500'), width: 3 })
+                stroke: new Stroke({ color: this.getColorWithOpacity('#163D8A'), width: 3 })
               })
             } else if (geometryType === 'Polygon' || geometryType === 'MultiPolygon') {
               return new Style({
-                fill: new Fill({ color: this.getCssVarColor('--color-primary-500', 0.3) }),
-                stroke: new Stroke({ color: this.getCssVarColor('--color-primary-500'), width: 2 })
+                fill: new Fill({ color: this.getColorWithOpacity('#163D8A', 0.3) }),
+                stroke: new Stroke({ color: this.getColorWithOpacity('#163D8A'), width: 2 })
               })
             }
             return new Style({
-              stroke: new Stroke({ color: this.getCssVarColor('--color-primary-500'), width: 2 }),
-              fill: new Fill({ color: this.getCssVarColor('--color-primary-500', 0.3) })
+              stroke: new Stroke({ color: this.getColorWithOpacity('#163D8A'), width: 2 }),
+              fill: new Fill({ color: this.getColorWithOpacity('#163D8A', 0.3) })
             })
           }
         }))
@@ -692,17 +686,17 @@ export default {
               })
             } else if (geometryType === 'LineString' || geometryType === 'MultiLineString') {
               return new Style({
-                stroke: new Stroke({ color: this.getCssVarColor('--color-primary-500'), width: 3 })
+                stroke: new Stroke({ color: this.getColorWithOpacity('#163D8A'), width: 3 })
               })
             } else if (geometryType === 'Polygon' || geometryType === 'MultiPolygon') {
               return new Style({
-                fill: new Fill({ color: this.getCssVarColor('--color-primary-500', 0.3) }),
-                stroke: new Stroke({ color: this.getCssVarColor('--color-primary-500'), width: 2 })
+                fill: new Fill({ color: this.getColorWithOpacity('#163D8A', 0.3) }),
+                stroke: new Stroke({ color: this.getColorWithOpacity('#163D8A'), width: 2 })
               })
             }
             return new Style({
-              stroke: new Stroke({ color: this.getCssVarColor('--color-primary-500'), width: 2 }),
-              fill: new Fill({ color: this.getCssVarColor('--color-primary-500', 0.3) })
+              stroke: new Stroke({ color: this.getColorWithOpacity('#163D8A'), width: 2 }),
+              fill: new Fill({ color: this.getColorWithOpacity('#163D8A', 0.3) })
             })
           }
         }))

@@ -34,8 +34,8 @@
                 :key="icon.url"
                 @click="selectIcon(icon.url)"
                 :class="[
-                  'relative w-6 h-6 flex items-center justify-center hover:bg-primary-100 transition-colors',
-                  selectedIconUrl === icon.url ? 'border-2 border-primary-500' : ''
+                  'relative w-6 h-6 flex items-center justify-center hover:bg-blue-100 transition-colors',
+                  selectedIconUrl === icon.url ? 'border-2 border-blue-500' : ''
                 ]"
                 :title="icon.filename"
               >
@@ -60,8 +60,8 @@
                 :key="icon.url"
                 @click="selectIcon(icon.url)"
                 :class="[
-                  'relative w-6 h-6 flex items-center justify-center hover:bg-primary-100 transition-colors',
-                  selectedIconUrl === icon.url ? 'border-2 border-primary-500' : ''
+                  'relative w-6 h-6 flex items-center justify-center hover:bg-blue-100 transition-colors',
+                  selectedIconUrl === icon.url ? 'border-2 border-blue-500' : ''
                 ]"
                 :title="icon.filename"
               >
@@ -83,7 +83,7 @@
             <div class="mb-2">
               <select
                 v-model="selectedStyle"
-                class="px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-primary-500 focus:border-primary-500"
+                class="px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500"
               >
                 <option value="standard">Standard</option>
                 <option value="circle">Circle</option>
@@ -102,8 +102,8 @@
                 :key="icon.url"
                 @click="selectIcon(icon.url)"
                 :class="[
-                  'relative w-6 h-6 flex items-center justify-center hover:bg-primary-100 transition-colors',
-                  selectedIconUrl === icon.url ? 'border-2 border-primary-500' : ''
+                  'relative w-6 h-6 flex items-center justify-center hover:bg-blue-100 transition-colors',
+                  selectedIconUrl === icon.url ? 'border-2 border-blue-500' : ''
                 ]"
                 :title="icon.filename"
               >
@@ -128,7 +128,7 @@
                 type="file"
                 accept=".png,.jpg,.jpeg,.ico"
                 @change="handleCustomIconSelect"
-                class="block w-full text-sm text-gray-500 file:mr-4 file:py-2 file:px-4 file:rounded-md file:border-0 file:text-sm file:font-semibold file:bg-primary-50 file:text-primary-700 hover:file:bg-primary-600 r"
+                class="block w-full text-sm text-gray-500 file:mr-4 file:py-2 file:px-4 file:rounded-md file:border-0 file:text-sm file:font-semibold file:bg-blue-50 file:text-blue-700 hover:file:bg-blue-600 r"
               />
               <p class="text-xs text-gray-500">
                 Supported formats: PNG, JPG, ICO (max 500KB)
@@ -153,7 +153,7 @@
           <div class="flex justify-end">
             <button
               @click="closeDialog"
-              class="mr-3 inline-flex items-center px-4 py-2 border border-gray-300 shadow-sm text-sm font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primary-500"
+              class="mr-3 inline-flex items-center px-4 py-2 border border-gray-300 shadow-sm text-sm font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500"
               title="Cancel icon selection"
             >
               Cancel
@@ -161,7 +161,7 @@
             <button
               @click="handleOk"
               :disabled="!selectedIconUrl && !customIconFile"
-              class="inline-flex items-center px-4 py-2 border border-transparent shadow-sm text-sm font-medium rounded-md text-white bg-primary-500 hover:bg-primary-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primary-500 disabled:opacity-50 disabled:cursor-not-allowed"
+              class="inline-flex items-center px-4 py-2 border border-transparent shadow-sm text-sm font-medium rounded-md text-white bg-blue-500 hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 disabled:opacity-50 disabled:cursor-not-allowed"
               title="Confirm icon selection"
             >
               OK

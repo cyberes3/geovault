@@ -26,7 +26,6 @@
   <button
     type="button"
     :class="toggleClasses"
-    :style="toggleStyle"
     :aria-label="label || (modelValue ? 'Enabled' : 'Disabled')"
     :aria-pressed="modelValue"
     @click="handleToggle"
@@ -103,6 +102,7 @@ const toggleClasses = computed(() => {
     'focus:outline-none',
     'focus:ring-2',
     'focus:ring-offset-2',
+    'focus:ring-blue-500',
     sizeConfig.value.track
   ]
   
@@ -112,24 +112,16 @@ const toggleClasses = computed(() => {
     base.push('cursor-pointer')
   }
   
-  return base.join(' ')
-})
-
-// Toggle style (using CSS variables)
-const toggleStyle = computed(() => {
+  // Add background color based on state
   if (props.modelValue) {
-    // On state - use primary color
-    return {
-      backgroundColor: 'var(--color-primary-500)',
-      '--tw-ring-color': 'var(--color-primary-500)'
-    }
+    // On state - use blue-500
+    base.push('bg-blue-500')
   } else {
-    // Off state - use dark primary color
-    return {
-      backgroundColor: 'var(--color-primary-700)',
-      '--tw-ring-color': 'var(--color-primary-500)'
-    }
+    // Off state - use blue-700
+    base.push('bg-blue-700')
   }
+  
+  return base.join(' ')
 })
 
 // Knob classes
@@ -157,10 +149,4 @@ const knobClasses = computed(() => {
 
 </script>
 
-<style scoped>
-/* Focus ring color using CSS variable */
-button:focus {
-  --tw-ring-color: var(--color-primary-500);
-}
-</style>
 

@@ -7,7 +7,7 @@
         :class="[
           'px-2 py-1 text-xs font-medium transition-colors',
           activeTab === 'features-in-vicinity'
-            ? 'text-primary-500 border-b-2 border-primary-500'
+            ? 'text-blue-500 border-b-2 border-blue-500'
             : 'text-gray-600 hover:text-gray-900'
         ]"
         title="View features in current map view"
@@ -19,7 +19,7 @@
         :class="[
           'px-2 py-1 text-xs font-medium transition-colors flex items-center gap-1',
           activeTab === 'tag-filter'
-            ? 'text-primary-500 border-b-2 border-primary-500'
+            ? 'text-blue-500 border-b-2 border-blue-500'
             : 'text-gray-600 hover:text-gray-900'
         ]"
         title="Filter features by tags"
@@ -27,7 +27,7 @@
         Tag Filter
         <svg
           v-if="selectedTags.length > 0"
-          class="w-3 h-3 text-primary-500"
+          class="w-3 h-3 text-blue-500"
           fill="none"
           stroke="currentColor"
           viewBox="0 0 24 24"
@@ -52,7 +52,7 @@
             @input="handleSearchInput"
             type="text"
             placeholder="Search features..."
-            class="w-full px-2 py-1.5 pr-7 text-xs border border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent"
+            class="w-full px-2 py-1.5 pr-7 text-xs border border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
           />
           <button
             v-if="searchQuery"
@@ -119,7 +119,7 @@
             @input="handleTagSearchInput"
             type="text"
             placeholder="Search tags..."
-            class="w-full px-2 py-1.5 pr-7 text-xs border border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent"
+            class="w-full px-2 py-1.5 pr-7 text-xs border border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
           />
           <button
             v-if="tagSearchQuery"
@@ -141,12 +141,12 @@
           <span
             v-for="tag in selectedTags"
             :key="tag"
-            class="inline-flex items-center gap-1 px-2 py-0.5 bg-primary-600 r text-primary-700 text-xs rounded"
+            class="inline-flex items-center gap-1 px-2 py-0.5 bg-blue-600 r text-blue-700 text-xs rounded"
           >
             {{ tag }}
             <button
               @click="removeTag(tag)"
-              class="text-primary-500 hover:text-primary-700 focus:outline-none"
+              class="text-blue-500 hover:text-blue-700 focus:outline-none"
               type="button"
               title="Remove tag from filter"
             >
@@ -158,7 +158,7 @@
         </div>
         <button
           @click="clearTagFilters"
-          class="text-xs text-primary-500 hover:text-primary-700 focus:outline-none"
+          class="text-xs text-blue-500 hover:text-blue-700 focus:outline-none"
           type="button"
           title="Clear all tag filters"
         >
