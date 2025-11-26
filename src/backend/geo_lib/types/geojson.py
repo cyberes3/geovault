@@ -1,4 +1,4 @@
-from typing import Optional, List, Any
+from typing import Optional, List, Any, Dict, Union
 from datetime import datetime, timezone
 import logging
 
@@ -6,13 +6,38 @@ from pydantic import BaseModel, Field, field_validator, ConfigDict
 
 
 class GeojsonRawProperty(BaseModel):
-    model_config = ConfigDict(extra='allow')  # Allow additional properties from togeojson
-    
     # A class to whitelist these properties.
+    # Core properties
     name: str = "Unnamed Feature"  # Default name for features without explicit names
+    id: Optional[str] = None
     description: Optional[str] = None
     created: Optional[datetime] = None
     tags: List[str] = Field(default_factory=list, alias='feature_tags')  # kml2geojson calls this field `feature_tags`
+    
+    # Time property (for GPX routes and other features with time metadata)
+    time: Optional[str] = None
+    
+    # Coordinate properties (for tracks with timestamps/elevation)
+    coordinateProperties: Optional[Dict[str, Any]] = None
+    
+    # System-generated tags (added during processing)
+    system_tags: Optional[List[str]] = Field(default_factory=list)
+    
+    # Point styling
+    icon: Optional[str] = None
+    icon_href: Optional[str] = Field(default=None, alias='icon-href')
+    iconUrl: Optional[str] = None
+    icon_url: Optional[str] = None
+    marker_icon: Optional[str] = Field(default=None, alias='marker-icon')
+    marker_symbol: Optional[str] = Field(default=None, alias='marker-symbol')
+    symbol: Optional[str] = None
+    marker_color: Optional[str] = Field(default=None, alias='marker-color')
+    
+    # Line/Polygon styling
+    stroke: Optional[str] = None
+    stroke_width: Optional[Union[int, float]] = Field(default=None, alias='stroke-width')
+    fill: Optional[str] = None
+    fill_opacity: Optional[Union[int, float]] = Field(default=None, alias='fill-opacity')
     
     @field_validator('name', mode='before')
     @classmethod

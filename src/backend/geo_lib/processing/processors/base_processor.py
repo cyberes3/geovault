@@ -177,7 +177,11 @@ class BaseProcessor(ABC):
                         if track_timestamp:
                             split_feature['properties']['created'] = track_timestamp
                     
-                    # Generate properties with appropriate styling based on file type and feature geometry
+                    # First, normalize raw togeojson output (converts feature_tags -> tags, etc.)
+                    from geo_lib.types.geojson import GeojsonRawProperty
+                    split_feature['properties'] = GeojsonRawProperty(**split_feature['properties']).model_dump(mode='json')
+                    
+                    # Then validate and normalize properties with styling (uses PropertiesModel)
                     split_feature['properties'] = geojson_property_generation(split_feature)
 
                     # Skip tag generation in minimal processing mode
@@ -245,10 +249,6 @@ class BaseProcessor(ABC):
                     # Check for cancellation before finalizing feature
                     if self._is_cancelled():
                         break
-                    
-                    # Convert to our property format
-                    from geo_lib.types.geojson import GeojsonRawProperty
-                    split_feature['properties'] = GeojsonRawProperty(**split_feature['properties']).model_dump(mode='json')
                     
                     # Generate and set feature ID if not already present
                     if 'id' not in split_feature.get('properties', {}):

@@ -2,10 +2,10 @@
 GeoJSON validation and normalization with key whitelisting.
 
 This module provides a comprehensive validation function that:
-- Whitelists only explicitly allowed keys at all levels
-- Removes all non-whitelisted keys
+- Uses Pydantic models to whitelist only explicitly allowed keys at all levels
+- Automatically removes all non-whitelisted keys via Pydantic validation
 - Performs style normalization
-- Uses Pydantic for validation
+- Validates structure using Pydantic
 """
 
 import logging
@@ -18,48 +18,6 @@ from geo_lib.validation.geometry_validation import GeometryValidationError
 
 logger = logging.getLogger(__name__)
 
-
-# Whitelisted property keys
-ALLOWED_PROPERTY_KEYS = {
-    # Core properties
-    'name',
-    'id',
-    'description',
-    'created',
-    'tags',
-    # Time property (for GPX routes and other features with time metadata)
-    'time',
-    # Coordinate properties (for tracks with timestamps/elevation)
-    'coordinateProperties',
-    # Point styling
-    'icon',
-    'icon-href',
-    'iconUrl',
-    'icon_url',
-    'marker-icon',
-    'marker-symbol',
-    'symbol',
-    'marker-color',
-    # Line/Polygon styling
-    'stroke',
-    'stroke-width',
-    'fill',
-    'fill-opacity',
-}
-
-# Unused style properties to remove
-UNUSED_STYLE_PROPERTIES = {
-    'stroke-opacity',
-    'opacity',
-    'weight',
-    'dashArray',
-    'dash-array',
-    'lineCap',
-    'line-cap',
-    'lineJoin',
-    'line-join',
-    'color',
-}
 
 # Valid geometry types
 VALID_GEOMETRY_TYPES = {
@@ -81,8 +39,7 @@ POLYGON_GEOMETRY_TYPES = {'Polygon', 'MultiPolygon'}
 
 class GeometryModel(BaseModel):
     """Pydantic model for GeoJSON geometry validation."""
-    model_config = ConfigDict(extra='allow')  # Allow extra for now, we'll filter manually
-    
+
     type: str
     coordinates: Optional[Union[List, List[List], List[List[List]]]] = None
     geometries: Optional[List[Dict[str, Any]]] = None
@@ -97,13 +54,22 @@ class GeometryModel(BaseModel):
 
 class PropertiesModel(BaseModel):
     """Pydantic model for GeoJSON properties validation."""
-    model_config = ConfigDict(extra='allow')  # Allow extra for now, we'll filter manually
-    
+
+    # Core properties
     name: str = "Unnamed Feature"
     id: Optional[str] = None
     description: Optional[str] = None
     created: Optional[Union[str, datetime]] = None
     tags: Optional[List[str]] = Field(default_factory=list)
+    
+    # Time property (for GPX routes and other features with time metadata)
+    time: Optional[str] = None
+    
+    # Coordinate properties (for tracks with timestamps/elevation)
+    coordinateProperties: Optional[Dict[str, Any]] = None
+    
+    # System-generated tags (added during processing)
+    system_tags: Optional[List[str]] = Field(default_factory=list)
     
     # Point styling
     icon: Optional[str] = None
@@ -138,22 +104,6 @@ class PropertiesModel(BaseModel):
         return [str(tag) for tag in v if isinstance(tag, str)]
 
 
-class FeatureModel(BaseModel):
-    """Pydantic model for GeoJSON Feature validation."""
-    model_config = ConfigDict(extra='allow')  # Allow extra for now, we'll filter manually
-    
-    type: str = 'Feature'
-    geometry: GeometryModel
-    properties: PropertiesModel
-    
-    @field_validator('type')
-    @classmethod
-    def validate_type(cls, v: str) -> str:
-        if v != 'Feature':
-            raise ValueError('Feature type must be "Feature"')
-        return v
-
-
 def _normalize_geometry(geometry: Dict[str, Any]) -> Dict[str, Any]:
     """
     Normalize geometry by whitelisting keys.
@@ -183,7 +133,9 @@ def _normalize_geometry(geometry: Dict[str, Any]) -> Dict[str, Any]:
 
 def _normalize_properties(properties: Dict[str, Any], geometry_type: str) -> Dict[str, Any]:
     """
-    Normalize properties by whitelisting keys and applying style normalization.
+    Normalize properties by validating with Pydantic and applying style normalization.
+    
+    Pydantic automatically filters out any fields not defined in PropertiesModel.
     
     Args:
         properties: Properties dictionary
@@ -192,14 +144,15 @@ def _normalize_properties(properties: Dict[str, Any], geometry_type: str) -> Dic
     Returns:
         Normalized properties with only whitelisted keys and normalized styles
     """
-    # Start with whitelisted keys only
-    normalized = {k: v for k, v in properties.items() if k in ALLOWED_PROPERTY_KEYS}
-    
-    # Remove unused style properties
-    for prop_name in UNUSED_STYLE_PROPERTIES:
-        if prop_name in normalized:
-            del normalized[prop_name]
-            logger.debug(f"Removed unused style property: {prop_name}")
+    # Validate with Pydantic - this automatically filters out extra fields
+    try:
+        validated_properties = PropertiesModel(**properties)
+        normalized = validated_properties.model_dump(exclude_none=False, by_alias=True)
+    except Exception as e:
+        # If validation fails, log and return empty dict or minimal properties
+        logger.warning(f"Property validation failed: {str(e)}, using minimal properties")
+        # Try with just name field as fallback
+        normalized = {'name': properties.get('name', 'Unnamed Feature')}
     
     # Apply style normalization based on geometry type
     geom_type_lower = geometry_type.lower()
@@ -240,13 +193,13 @@ def validate_and_normalize_geojson_feature(
     Validate and normalize a GeoJSON Feature by whitelisting keys and normalizing styles.
     
     This function:
-    - Whitelists only explicitly allowed keys at all levels
-    - Removes all non-whitelisted keys
+    - Uses Pydantic models to whitelist only explicitly allowed keys at all levels
+    - Automatically removes all non-whitelisted keys via Pydantic validation
     - Performs style normalization (stroke-width, fill, fill-opacity)
     - Validates structure using Pydantic
     
-    Note: `system_tags` and `_id` are NOT in the whitelist and must be handled by the caller.
-    This function will remove them if present. Use preserve_system_tags to add them back.
+    Note: `system_tags` and `_id` are preserved if present in the original properties.
+    Use preserve_system_tags to explicitly set system_tags after normalization.
     
     Args:
         feature: GeoJSON Feature dictionary
@@ -289,16 +242,9 @@ def validate_and_normalize_geojson_feature(
     # Get geometry type for style normalization
     geometry_type = normalized_geometry.get('type', '')
     
-    # Whitelist and normalize properties
+    # Normalize properties (Pydantic validation happens inside _normalize_properties)
     original_properties = filtered_feature.get('properties', {})
     normalized_properties = _normalize_properties(original_properties, geometry_type)
-    
-    # Validate properties structure using Pydantic
-    try:
-        validated_properties = PropertiesModel(**normalized_properties)
-        normalized_properties = validated_properties.model_dump(exclude_none=False, by_alias=True)
-    except Exception as e:
-        raise GeometryValidationError(f'Properties validation failed: {str(e)}')
     
     # Restore preserved values (after validation)
     if preserve_system_tags is not None:
