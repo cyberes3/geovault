@@ -6,6 +6,7 @@ from typing import Optional, Dict, Any, List
 
 import requests
 from django.conf import settings
+from website.settings_utils import get_required_setting
 
 from geo_lib.logging.console import get_geocode_logger
 
@@ -25,16 +26,16 @@ def haversine_distance(lat1: float, lon1: float, lat2: float, lon2: float) -> fl
 
 class ReverseGeocodingService:
     def __init__(self, overpass_url: Optional[str] = None, nominatim_url: Optional[str] = None):
-        self.overpass_url = overpass_url or getattr(settings, 'OVERPASS_API_URL', 'https://overpass-api.de/api/interpreter')
-        self.nominatim_url = nominatim_url or getattr(settings, 'NOMINATIM_API_URL', 'https://nominatim.openstreetmap.org')
+        self.overpass_url = overpass_url or get_required_setting('OVERPASS_API_URL')
+        self.nominatim_url = nominatim_url or get_required_setting('NOMINATIM_API_URL')
         self.user_agent = "GeoVault/1.0"
-        self.overpass_timeout = getattr(settings, 'OVERPASS_TIMEOUT_SECONDS', 10)
-        self.overpass_request_timeout = getattr(settings, 'OVERPASS_REQUEST_TIMEOUT_SECONDS', 15)
+        self.overpass_timeout = get_required_setting('OVERPASS_TIMEOUT_SECONDS')
+        self.overpass_request_timeout = get_required_setting('OVERPASS_REQUEST_TIMEOUT_SECONDS')
 
     def is_point_in_water(self, latitude: float, longitude: float) -> bool:
         """Check if a point is in water using Overpass API."""
         # Check if geocoding is enabled
-        if not getattr(settings, 'REVERSE_GEOCODING_ENABLED', True):
+        if not get_required_setting('REVERSE_GEOCODING_ENABLED'):
             return False
         
         try:
@@ -72,7 +73,7 @@ out count;"""
             import_log: Optional ImportLog for database logging
         """
         # Check if geocoding is enabled
-        if not getattr(settings, 'REVERSE_GEOCODING_ENABLED', True):
+        if not get_required_setting('REVERSE_GEOCODING_ENABLED'):
             return None
         
         try:
@@ -190,7 +191,7 @@ out tags;"""
             import_log: Optional ImportLog for database logging
         """
         # Check if geocoding is enabled
-        if not getattr(settings, 'REVERSE_GEOCODING_ENABLED', True):
+        if not get_required_setting('REVERSE_GEOCODING_ENABLED'):
             return None
         
         try:
@@ -333,7 +334,7 @@ out tags;"""
     def search_protected_areas_overpass(self, latitude: float, longitude: float) -> List[Dict[str, Any]]:
         """Search for protected areas using Overpass API with point-in-polygon queries."""
         # Check if geocoding is enabled
-        if not getattr(settings, 'REVERSE_GEOCODING_ENABLED', True):
+        if not get_required_setting('REVERSE_GEOCODING_ENABLED'):
             return []
         
         try:
@@ -380,7 +381,7 @@ out tags;"""
     def search_lakes(self, latitude: float, longitude: float, proximity_miles: float = 1.0) -> List[Dict[str, Any]]:
         """Search for lakes and water bodies within proximity_miles of the point."""
         # Check if geocoding is enabled
-        if not getattr(settings, 'REVERSE_GEOCODING_ENABLED', True):
+        if not get_required_setting('REVERSE_GEOCODING_ENABLED'):
             return []
         
         try:
@@ -526,7 +527,7 @@ out tags center;"""
                 tags.append(f"country:{location_data['country_code'].lower()}")
 
         # Step 2: If no city was found, check for nearby cities within 5 miles
-        city_prox_threshold = getattr(settings, 'CITY_PROXIMITY_MILES', 5.0)
+        city_prox_threshold = get_required_setting('CITY_PROXIMITY_MILES')
         if not any(tag.startswith('city:') for tag in tags):
             city_prox = self.check_city_proximity(latitude, longitude, city_prox_threshold, import_log)
             if city_prox:
@@ -562,7 +563,7 @@ out tags center;"""
             elif 'wilderness' in name_lower:
                 wilderness_tag = area_name.lower().replace(' ', '-')
                 tags.append(f"wilderness:{wilderness_tag}")
-        lake_prox_threshold = getattr(settings, 'LAKE_PROXIMITY_MILES', 1.0)
+        lake_prox_threshold = get_required_setting('LAKE_PROXIMITY_MILES')
         try:
             lakes = self.search_lakes(latitude, longitude, proximity_miles=lake_prox_threshold)
         except Exception as e:

@@ -5,6 +5,7 @@ Generates location-based tags (city, state, country, protected areas, lakes, etc
 from typing import List, Tuple, Optional
 
 from django.conf import settings
+from website.settings_utils import get_required_setting
 
 from geo_lib.types.feature import GeoFeatureSupported
 from geo_lib.geolocation.reverse_geocode import get_reverse_geocoding_service
@@ -90,7 +91,7 @@ class GeocodingTagGenerator(TagGenerator):
         geometry_type = feature.geometry.type.value.lower()
         if geometry_type in ['point', 'multipoint', 'linestring', 'multilinestring']:
             # Check if geocoding is enabled before attempting to geocode
-            if getattr(settings, 'REVERSE_GEOCODING_ENABLED', True):
+            if get_required_setting('REVERSE_GEOCODING_ENABLED'):
                 try:
                     points = get_representative_points(feature)
                     if points:

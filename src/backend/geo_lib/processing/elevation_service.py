@@ -8,6 +8,7 @@ from typing import Dict, Any, List, Tuple, Optional
 
 import requests
 from django.conf import settings
+from website.settings_utils import get_required_setting
 
 from geo_lib.processing.logging import ImportLog, DatabaseLogLevel
 from geo_lib.logging.console import get_import_logger
@@ -34,13 +35,13 @@ def fill_missing_elevations(geojson_data: Dict[str, Any], import_log: ImportLog)
         Updated GeoJSON data dictionary with elevation data filled in
     """
     # Check if elevation API is enabled
-    if not getattr(settings, 'ELEVATION_API_ENABLED', True):
+    if not get_required_setting('ELEVATION_API_ENABLED'):
         import_log.add("Elevation API is disabled - elevation data will not be filled for lines and tracks", "Elevation Service", DatabaseLogLevel.INFO)
         return geojson_data
     
     elevation_start = time.time()
-    api_url = getattr(settings, 'ELEVATION_API_URL', 'https://elevation.racemap.com/api')
-    api_timeout = getattr(settings, 'ELEVATION_API_TIMEOUT', 30)
+    api_url = get_required_setting('ELEVATION_API_URL')
+    api_timeout = get_required_setting('ELEVATION_API_TIMEOUT')
     
     features = geojson_data.get('features', [])
     if not features:

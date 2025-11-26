@@ -9,6 +9,7 @@ from typing import List, Dict, Tuple, Any, Optional
 from django import forms
 from django.conf import settings
 from django.contrib.gis.geos import GEOSGeometry
+from website.settings_utils import get_required_setting
 from django.http import HttpResponse, JsonResponse
 from django.views.decorators.csrf import csrf_protect
 from django.views.decorators.http import require_http_methods
@@ -145,7 +146,7 @@ def find_coordinate_duplicates(features: List[Dict], user_id: int) -> Tuple[List
     import_log.add(f"Checking {len(features)} features against existing features in your library", "Duplicate Detection", DatabaseLogLevel.INFO)
 
     # For large files, use batched approach to reduce database queries
-    batch_threshold = getattr(settings, 'DUPLICATE_DETECTION_BATCH_THRESHOLD', 1000)
+    batch_threshold = get_required_setting('DUPLICATE_DETECTION_BATCH_THRESHOLD')
     if len(features) > batch_threshold:
         import_log.add("Using optimized batch processing for large file", "Duplicate Detection", DatabaseLogLevel.INFO)
         return _find_coordinate_duplicates_batched(features, user_id, import_log)
@@ -225,7 +226,7 @@ def _find_coordinate_duplicates_batched(features: List[Dict], user_id: int, impo
         import_log.add(f"Processing {len(type_features)} {geom_type} features for duplicates", 'Find Coordinate Duplicates')
 
         # Process in batches to avoid memory issues
-        batch_size = getattr(settings, 'DUPLICATE_DETECTION_BATCH_SIZE', 100)
+        batch_size = get_required_setting('DUPLICATE_DETECTION_BATCH_SIZE')
         for batch_start in range(0, len(type_features), batch_size):
             batch_end = min(batch_start + batch_size, len(type_features))
             batch_features = type_features[batch_start:batch_end]
@@ -1039,8 +1040,7 @@ def import_to_featurestore(request, item_id):
         features_to_process.append(feature)
 
     # Get number of threads from settings
-    from django.conf import settings
-    num_threads = getattr(settings, 'IMPORT_PROCESSING_THREADS', 4)
+    num_threads = get_required_setting('IMPORT_PROCESSING_THREADS')
 
     # Process features in parallel using ThreadPoolExecutor
     if len(features_to_process) > 0:
@@ -1064,7 +1064,7 @@ def import_to_featurestore(request, item_id):
         try:
             # Importing features to database
 
-            bulk_batch_size = getattr(settings, 'BULK_CREATE_BATCH_SIZE', 1000)
+            bulk_batch_size = get_required_setting('BULK_CREATE_BATCH_SIZE')
             FeatureStore.objects.bulk_create(features_to_create, batch_size=bulk_batch_size)
             successful_imports = len(features_to_create)
             # Features imported successfully

@@ -24,6 +24,7 @@ from django.db import connection
 from django.core.exceptions import ImproperlyConfigured
 from django.conf import settings
 from channels.layers import get_channel_layer
+from website.settings_utils import get_required_setting
 from asgiref.sync import async_to_sync
 from geo_lib.logging.console import get_startup_logger
 
@@ -221,8 +222,8 @@ def check_writable_directories():
         all_ok = True
         
         # Check tile cache directory if caching is enabled
-        if getattr(settings, 'TILE_CACHE_ENABLED', True):
-            tile_cache_dir = Path(getattr(settings, 'TILE_CACHE_DIR', '/tmp/geovault-tiles'))
+        if get_required_setting('TILE_CACHE_ENABLED'):
+            tile_cache_dir = Path(get_required_setting('TILE_CACHE_DIR'))
             try:
                 # Create directory if it doesn't exist
                 tile_cache_dir.mkdir(parents=True, exist_ok=True)
@@ -241,8 +242,8 @@ def check_writable_directories():
                 all_ok = False
         
         # Check icon storage directory if icon processing is enabled
-        if getattr(settings, 'ICON_PROCESSING_ENABLED', True):
-            icon_storage_dir_value = getattr(settings, 'ICON_STORAGE_DIR', None)
+        if get_required_setting('ICON_PROCESSING_ENABLED'):
+            icon_storage_dir_value = get_required_setting('ICON_STORAGE_DIR')
             if icon_storage_dir_value is None:
                 icon_storage_dir = settings.BASE_DIR / 'data' / 'icons'
             elif isinstance(icon_storage_dir_value, Path):
@@ -398,7 +399,7 @@ def check_secret_key():
     """
     try:
         default_secret = 'django-insecure-f(1zo%f)wm*rl97q0^3!9exd%(s8mz92nagf4q7c2cno&bmyx='
-        current_secret = getattr(settings, 'SECRET_KEY', '')
+        current_secret = get_required_setting('SECRET_KEY')
         
         if current_secret == default_secret:
             logger.warning("⚠ SECRET_KEY is using the default insecure value!")
@@ -416,7 +417,7 @@ def check_maxmind_database():
     This is a warning-only check (optional feature).
     """
     try:
-        maxmind_path = getattr(settings, 'MAXMIND_DATABASE_PATH', None)
+        maxmind_path = get_required_setting('MAXMIND_DATABASE_PATH')
         if maxmind_path:
             maxmind_file = Path(maxmind_path)
             if not maxmind_file.exists():
@@ -437,10 +438,10 @@ def check_email_config():
     This is a warning-only check (optional feature).
     """
     try:
-        email_host = getattr(settings, 'EMAIL_HOST', '')
-        email_user = getattr(settings, 'EMAIL_HOST_USER', '')
-        email_password = getattr(settings, 'EMAIL_HOST_PASSWORD', '')
-        from_email = getattr(settings, 'DEFAULT_FROM_EMAIL', '')
+        email_host = get_required_setting('EMAIL_HOST')
+        email_user = get_required_setting('EMAIL_HOST_USER')
+        email_password = get_required_setting('EMAIL_HOST_PASSWORD')
+        from_email = get_required_setting('DEFAULT_FROM_EMAIL')
         
         # Check for default/unconfigured values
         is_default = False

@@ -24,6 +24,7 @@ from geo_lib.processing.status_tracker import ProcessingStatusTracker, Processin
 from geo_lib.processing.tagging import generate_auto_tags
 from geo_lib.security.file_validation import SecureFileValidator
 from geo_lib.logging.console import get_import_logger
+from website.settings_utils import get_required_setting
 from geo_lib.types.feature import PointFeature, LineStringFeature, MultiLineStringFeature, PolygonFeature
 from geo_lib.const_strings import CONST_INTERNAL_TAGS, is_protected_tag, filter_protected_tags, prepare_user_tags
 
@@ -312,7 +313,7 @@ class BaseProcessor(ABC):
 
         # Count features that will be geocoded (points and lines only)
         from django.conf import settings
-        geocoding_enabled = getattr(settings, 'REVERSE_GEOCODING_ENABLED', True)
+        geocoding_enabled = get_required_setting('REVERSE_GEOCODING_ENABLED')
         geocoding_count = 0
         if geocoding_enabled:
             for feature in features:
@@ -325,7 +326,7 @@ class BaseProcessor(ABC):
                 feature_log.add(f"Geocoding {geocoding_count} feature(s)", "Geocoding", DatabaseLogLevel.INFO)
 
         # Get number of threads from settings
-        num_threads = getattr(settings, 'IMPORT_PROCESSING_THREADS', 4)
+        num_threads = get_required_setting('IMPORT_PROCESSING_THREADS')
 
         # Process features in parallel using ThreadPoolExecutor
         # Use submit() instead of map() to allow cancellation checking between tasks
@@ -451,7 +452,7 @@ class BaseProcessor(ABC):
             elevation_start = time.time()
             try:
                 from django.conf import settings
-                if getattr(settings, 'ELEVATION_API_ENABLED', True):
+                if get_required_setting('ELEVATION_API_ENABLED'):
                     self.geojson_data = fill_missing_elevations(self.geojson_data, self.import_log)
                     elevation_duration = time.time() - elevation_start
                     self.import_log.add_timing("Elevation data filling", elevation_duration, "Processing")
@@ -505,8 +506,8 @@ class BaseProcessor(ABC):
         file_size_mb = file_size / (1024 * 1024)
 
         # Base timeout plus additional timeout per MB for large files
-        timeout_base = getattr(settings, 'PROCESSING_TIMEOUT_BASE_SECONDS', 30)
-        timeout_per_mb = getattr(settings, 'PROCESSING_TIMEOUT_PER_MB_SECONDS', 2)
+        timeout_base = get_required_setting('PROCESSING_TIMEOUT_BASE_SECONDS')
+        timeout_per_mb = get_required_setting('PROCESSING_TIMEOUT_PER_MB_SECONDS')
         timeout_seconds = max(timeout_base, int(timeout_base + (file_size_mb * timeout_per_mb)))
 
         self.import_log.add(f'Calculated timeout: {timeout_seconds}s for {file_size_mb:.1f}MB file', 'Processing', DatabaseLogLevel.DEBUG)

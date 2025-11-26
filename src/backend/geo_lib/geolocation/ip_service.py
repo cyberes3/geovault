@@ -28,7 +28,8 @@ class IPGeolocationService:
             # Try to get from Django settings first
             try:
                 from django.conf import settings
-                database_path = getattr(settings, 'MAXMIND_DATABASE_PATH', None)
+                from website.settings_utils import get_required_setting
+                database_path = get_required_setting('MAXMIND_DATABASE_PATH')
             except Exception:
                 # Django not initialized yet, fall back to environment variable
                 database_path = None

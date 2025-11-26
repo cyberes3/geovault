@@ -11,6 +11,7 @@ from enum import Enum
 from typing import Dict, Optional, Any
 
 from django.conf import settings
+from website.settings_utils import get_required_setting
 from geo_lib.logging.console import get_job_logger
 
 logger = get_job_logger()
@@ -60,8 +61,8 @@ class ProcessingStatusTracker:
     def __init__(self):
         self._jobs: Dict[str, ProcessingJob] = {}
         self._lock = threading.RLock()
-        self._cleanup_interval = getattr(settings, 'JOB_CLEANUP_INTERVAL_SECONDS', 3600)  # 1 hour
-        self._max_job_age = getattr(settings, 'MAX_JOB_AGE_SECONDS', 7200)  # 2 hours
+        self._cleanup_interval = get_required_setting('JOB_CLEANUP_INTERVAL_SECONDS')  # 1 hour
+        self._max_job_age = get_required_setting('MAX_JOB_AGE_SECONDS')  # 2 hours
         self._last_cleanup = time.time()
 
     def create_job(self, filename: str, user_id: int, job_type: JobType = JobType.UPLOAD) -> str:

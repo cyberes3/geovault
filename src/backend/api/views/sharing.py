@@ -64,7 +64,8 @@ def create_share(request):
 
         # Validate tag length
         from django.conf import settings
-        tag_max_length = getattr(settings, 'TAG_MAX_LENGTH', 255)
+        from website.settings_utils import get_required_setting
+        tag_max_length = get_required_setting('TAG_MAX_LENGTH')
         if len(tag) > tag_max_length:
             return JsonResponse({
                 'error': f'Tag name exceeds maximum length of {tag_max_length} characters',

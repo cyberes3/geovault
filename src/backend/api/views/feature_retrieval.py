@@ -4,6 +4,7 @@ from typing import List, Tuple, Optional
 import requests
 from django.conf import settings
 from django.http import JsonResponse
+from website.settings_utils import get_required_setting
 from django.views.decorators.http import require_http_methods
 
 from api.models import FeatureStore
@@ -94,12 +95,12 @@ def _fetch_elevations_from_api(coordinates: List[Tuple[float, float]]) -> List[O
         List of elevation values (in meters) or None for failed requests
     """
     # Check if elevation API is enabled
-    if not getattr(settings, 'ELEVATION_API_ENABLED', True):
+    if not get_required_setting('ELEVATION_API_ENABLED'):
         logger.warning("Elevation API is disabled")
         return [None] * len(coordinates)
     
-    api_url = getattr(settings, 'ELEVATION_API_URL', 'https://elevation.racemap.com/api')
-    api_timeout = getattr(settings, 'ELEVATION_API_TIMEOUT', 30)
+    api_url = get_required_setting('ELEVATION_API_URL')
+    api_timeout = get_required_setting('ELEVATION_API_TIMEOUT')
     
     # Convert coordinates to API format: [lat, lon]
     api_coords = [[lat, lon] for lon, lat in coordinates]

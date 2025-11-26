@@ -11,6 +11,7 @@ from typing import Dict, Any, List, Tuple, Optional
 
 from django.conf import settings
 from django.contrib.gis.geos import GEOSGeometry
+from website.settings_utils import get_required_setting
 from django.db import transaction
 
 from api.models import ImportQueue, FeatureStore, DatabaseLogging
@@ -276,8 +277,7 @@ class BulkImportJob(BaseJob):
                 )
 
             # Get number of threads from settings
-            from django.conf import settings
-            num_threads = getattr(settings, 'IMPORT_PROCESSING_THREADS', 4)
+            num_threads = get_required_setting('IMPORT_PROCESSING_THREADS')
             
             # Process features in parallel using ThreadPoolExecutor
             if len(import_item.geofeatures) > 0:
@@ -297,7 +297,7 @@ class BulkImportJob(BaseJob):
             # Bulk create all features at once for better performance
             if features_to_create:
                 try:
-                    bulk_batch_size = getattr(settings, 'BULK_CREATE_BATCH_SIZE', 1000)
+                    bulk_batch_size = get_required_setting('BULK_CREATE_BATCH_SIZE')
                     FeatureStore.objects.bulk_create(features_to_create, batch_size=bulk_batch_size)
                     successful_imports = len(features_to_create)
                 except Exception as e:

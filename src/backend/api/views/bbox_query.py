@@ -5,6 +5,7 @@ from typing import List, Tuple, Dict, NamedTuple, Union
 
 from django.conf import settings
 from django.contrib.gis.geos import Polygon
+from website.settings_utils import get_required_setting
 from django.http import JsonResponse
 from django.views.decorators.http import require_http_methods
 
@@ -55,9 +56,9 @@ def _detect_world_wide_extent(bbox: Tuple[float, float, float, float]) -> Tuple[
     # Improved world-wide extent detection with more conservative thresholds
     # Lower threshold from 300° to 280° for more conservative detection
     # Also check latitude span (>170° indicates world-wide view)
-    world_wide_lon_threshold_1 = getattr(settings, 'BBOX_WORLD_WIDE_LON_THRESHOLD_1', 280)
-    world_wide_lon_threshold_2 = getattr(settings, 'BBOX_WORLD_WIDE_LON_THRESHOLD_2', 270)
-    world_wide_lat_threshold = getattr(settings, 'BBOX_WORLD_WIDE_LAT_THRESHOLD', 170)
+    world_wide_lon_threshold_1 = get_required_setting('BBOX_WORLD_WIDE_LON_THRESHOLD_1')
+    world_wide_lon_threshold_2 = get_required_setting('BBOX_WORLD_WIDE_LON_THRESHOLD_2')
+    world_wide_lat_threshold = get_required_setting('BBOX_WORLD_WIDE_LAT_THRESHOLD')
     
     world_wide_extent = False
     if crosses_dateline:
@@ -130,7 +131,7 @@ def _build_bbox_response(features: List[Dict], total_count: int, zoom_level: int
         Dictionary ready to be converted to JsonResponse
     """
     # Get the configured limit for comparison
-    max_features = getattr(settings, 'MAX_FEATURES_PER_REQUEST', -1)
+    max_features = get_required_setting('MAX_FEATURES_PER_REQUEST')
 
     # Create GeoJSON FeatureCollection
     geojson_data = {
@@ -302,7 +303,7 @@ def _get_features_in_bbox(bbox: Tuple[float, float, float, float], user_id: int,
     crosses_dateline, world_wide_extent, lon_span, lat_span = _detect_world_wide_extent(bbox)
 
     # Get the maximum features limit from settings
-    max_features = getattr(settings, 'MAX_FEATURES_PER_REQUEST', -1)
+    max_features = get_required_setting('MAX_FEATURES_PER_REQUEST')
 
     # Build base query with user filter, optional tag/collection filter, and ordering
     base_query_filter = _build_base_query(user_id, tag, collection_id)
@@ -343,9 +344,9 @@ def _get_features_in_bbox(bbox: Tuple[float, float, float, float], user_id: int,
     if not (crosses_dateline or world_wide_extent):
         # If we used a spatial query but got very few results for a large extent, something might be wrong
         # Check if the extent is large (>200° longitude or >150° latitude) but we got very few results
-        large_extent_lon_threshold = getattr(settings, 'BBOX_LARGE_EXTENT_LON_THRESHOLD', 200)
-        large_extent_lat_threshold = getattr(settings, 'BBOX_LARGE_EXTENT_LAT_THRESHOLD', 150)
-        suspicious_result_min_count = getattr(settings, 'BBOX_SUSPICIOUS_RESULT_MIN_COUNT', 10)
+        large_extent_lon_threshold = get_required_setting('BBOX_LARGE_EXTENT_LON_THRESHOLD')
+        large_extent_lat_threshold = get_required_setting('BBOX_LARGE_EXTENT_LAT_THRESHOLD')
+        suspicious_result_min_count = get_required_setting('BBOX_SUSPICIOUS_RESULT_MIN_COUNT')
         
         is_large_extent = lon_span > large_extent_lon_threshold or lat_span > large_extent_lat_threshold
         suspicious_result = is_large_extent and total_count < suspicious_result_min_count and total_count > 0
