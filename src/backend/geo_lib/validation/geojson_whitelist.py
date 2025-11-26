@@ -131,27 +131,58 @@ def _normalize_geometry(geometry: Dict[str, Any]) -> Dict[str, Any]:
     return normalized
 
 
-def _normalize_properties(properties: Dict[str, Any], geometry_type: str) -> Dict[str, Any]:
+def _has_polygon_geometry(geometry: Dict[str, Any]) -> bool:
+    """
+    Check if a geometry contains any polygon geometries.
+    
+    For GeometryCollection, recursively checks all geometries.
+    For Polygon/MultiPolygon, returns True.
+    Otherwise, returns False.
+    
+    Args:
+        geometry: Geometry dictionary
+        
+    Returns:
+        True if geometry contains any polygon geometries, False otherwise
+    """
+    geom_type_lower = geometry.get('type', '').lower()
+    
+    # Check if this is a polygon type (case-insensitive)
+    if geom_type_lower in {'polygon', 'multipolygon'}:
+        return True
+    
+    # For GeometryCollection, recursively check all geometries
+    if geom_type_lower == 'geometrycollection':
+        geometries = geometry.get('geometries', [])
+        return any(_has_polygon_geometry(g) for g in geometries if isinstance(g, dict))
+    
+    return False
+
+
+def _normalize_properties(feature: Dict[str, Any]) -> Dict[str, Any]:
     """
     Normalize properties by validating with Pydantic and applying style normalization.
     
     Pydantic automatically filters out any fields not defined in PropertiesModel.
     
     Args:
-        properties: Properties dictionary
-        geometry_type: Geometry type string
+        feature: Full GeoJSON Feature dictionary (used to access both properties and geometry)
         
     Returns:
         Normalized properties with only whitelisted keys and normalized styles
     """
+    properties = feature.get('properties', {})
+    geometry = feature.get('geometry', {})
+    
     # Validate with Pydantic - this automatically filters out extra fields
     validated_properties = PropertiesModel(**properties)
     normalized = validated_properties.model_dump(exclude_none=True, by_alias=True)
     
     # Apply style normalization based on geometry type
-    geom_type_lower = geometry_type.lower()
+    geom_type = geometry.get('type', '').lower()
+    has_polygon = _has_polygon_geometry(geometry)
     
-    if geom_type_lower in LINE_GEOMETRY_TYPES:
+    if geom_type in LINE_GEOMETRY_TYPES:
         # Lines: normalize stroke-width to 2
         if 'stroke' in normalized:
             normalized['stroke-width'] = 2
@@ -161,8 +192,9 @@ def _normalize_properties(properties: Dict[str, Any], geometry_type: str) -> Dic
         if 'fill-opacity' in normalized:
             del normalized['fill-opacity']
     
-    elif geom_type_lower in POLYGON_GEOMETRY_TYPES:
+    elif geom_type in POLYGON_GEOMETRY_TYPES or has_polygon:
         # Polygons: normalize stroke-width, fill, and fill-opacity
+        # Also applies to GeometryCollection that contains polygon geometries
         if 'stroke' in normalized:
             normalized['stroke-width'] = 2
             # Set fill to match stroke color (or default to #ff0000)
@@ -233,12 +265,10 @@ def validate_and_normalize_geojson_feature(
     except Exception as e:
         raise GeometryValidationError(f'Geometry validation failed: {str(e)}')
     
-    # Get geometry type for style normalization
-    geometry_type = normalized_geometry.get('type', '')
-    
     # Normalize properties (Pydantic validation happens inside _normalize_properties)
-    original_properties = filtered_feature.get('properties', {})
-    normalized_properties = _normalize_properties(original_properties, geometry_type)
+    # Pass the full feature object to detect polygon geometries in GeometryCollection
+    filtered_feature['geometry'] = normalized_geometry
+    normalized_properties = _normalize_properties(filtered_feature)
     
     # Restore preserved values (after validation)
     if preserve_system_tags is not None:

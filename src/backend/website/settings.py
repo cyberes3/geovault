@@ -356,7 +356,7 @@ ICON_UPLOAD_MAX_SIZE_BYTES = config.get_int('icons.upload_max_size_bytes', 51200
 ICON_UPLOAD_ALLOWED_EXTENSIONS = set(config.get_list('icons.upload_allowed_extensions', ['.png', '.jpg', '.jpeg', '.ico']))
 
 # Timeout for fetching remote icons in seconds
-ICON_FETCH_TIMEOUT = config.get_float('icons.fetch_timeout', 1.0)
+ICON_FETCH_TIMEOUT = config.get_float('icons.fetch_timeout', 5.0)
 
 # Allow or disallow hot-linking of hosted icons from external domains
 # Default: True (hot-linking allowed)

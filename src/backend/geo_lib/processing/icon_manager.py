@@ -9,12 +9,13 @@ import os
 import re
 import zipfile
 from pathlib import Path
-from typing import Dict, List, Optional, Tuple
+from typing import Dict, Optional, Tuple
+from urllib.error import URLError, HTTPError
 from urllib.parse import urlparse, parse_qs, unquote
 from urllib.request import urlopen, Request
-from urllib.error import URLError, HTTPError
 
 from django.conf import settings
+
 from geo_lib.logging.console import get_import_logger
 from geo_lib.processing.logging import ImportLog, DatabaseLogLevel
 
@@ -37,7 +38,7 @@ def _get_icon_extension(filename_or_url: str) -> Optional[str]:
     # Parse URL or filename
     parsed = urlparse(filename_or_url)
     path = parsed.path or filename_or_url
-    
+
     # Extract extension
     ext = os.path.splitext(path)[1].lower()
     return ext if ext in VALID_ICON_EXTENSIONS else None
@@ -106,21 +107,21 @@ def extract_icon_from_kmz(kmz_data: bytes, icon_path: str) -> Optional[bytes]:
             normalized_path = normalized_path[2:]
         elif normalized_path.startswith('files/'):
             normalized_path = normalized_path[6:]
-        
+
         # Open KMZ as ZIP archive
         with zipfile.ZipFile(io.BytesIO(kmz_data), 'r') as zip_file:
             # Try exact match first
             if normalized_path in zip_file.namelist():
                 return zip_file.read(normalized_path)
-            
+
             # Try case-insensitive search
             for entry_name in zip_file.namelist():
                 if entry_name.lower() == normalized_path.lower():
                     return zip_file.read(entry_name)
-            
+
             logger.warning(f"Icon not found in KMZ archive: {icon_path}")
             return None
-            
+
     except zipfile.BadZipFile:
         logger.error(f"Invalid KMZ/ZIP file format")
         return None
@@ -143,7 +144,7 @@ def fetch_remote_icon(url: str, timeout: float) -> Optional[bytes]:
     try:
         # Create request with user agent
         req = Request(url, headers={'User-Agent': 'GeoVault/1.0'})
-        
+
         # Fetch with timeout
         with urlopen(req, timeout=timeout) as response:
             # Check content length if available
@@ -153,12 +154,12 @@ def fetch_remote_icon(url: str, timeout: float) -> Optional[bytes]:
                 if size > settings.ICON_MAX_SIZE_BYTES:
                     logger.warning(f"Icon exceeds size limit: {url} ({size} bytes)")
                     return None
-            
+
             # Read data with size limit
             icon_data = b''
             max_size = settings.ICON_MAX_SIZE_BYTES
             chunk_size = min(8192, max_size)
-            
+
             while True:
                 chunk = response.read(chunk_size)
                 if not chunk:
@@ -167,9 +168,9 @@ def fetch_remote_icon(url: str, timeout: float) -> Optional[bytes]:
                 if len(icon_data) > max_size:
                     logger.warning(f"Icon exceeds size limit during download: {url}")
                     return None
-            
+
             return icon_data
-            
+
     except HTTPError as e:
         logger.warning(f"HTTP error fetching icon: {url} - {e.code}")
         return None
@@ -200,19 +201,19 @@ def store_icon(icon_data: bytes, original_path: str) -> Optional[str]:
         if len(icon_data) > settings.ICON_MAX_SIZE_BYTES:
             logger.warning(f"Icon exceeds size limit: {len(icon_data)} bytes")
             return None
-        
+
         # Get extension
         extension = _get_icon_extension(original_path)
         if not extension:
             logger.warning(f"Invalid icon extension: {original_path}")
             return None
-        
+
         # Calculate hash
         icon_hash = _calculate_hash(icon_data)
-        
+
         # Get storage path
         storage_path = _get_storage_path(icon_hash, extension)
-        
+
         # Check if already exists
         if storage_path.exists():
             logger.debug(f"Icon already exists: {icon_hash}")
@@ -220,10 +221,10 @@ def store_icon(icon_data: bytes, original_path: str) -> Optional[str]:
             # Write icon to storage
             storage_path.write_bytes(icon_data)
             logger.debug(f"Stored icon: {storage_path}")
-        
+
         # Return URL path
         return f"/api/icons/user/{icon_hash}{extension}"
-        
+
     except Exception as e:
         logger.error(f"Failed to store icon: {str(e)}")
         return None
@@ -244,21 +245,21 @@ def process_icon_href(href: str, file_type: str, file_data: Optional[bytes] = No
     """
     if not settings.ICON_PROCESSING_ENABLED:
         return None
-    
+
     if not href or not isinstance(href, str):
         return None
-    
+
     # Validate icon type
     if not _is_valid_icon_type(href):
         logger.debug(f"Skipping non-image href: {href}")
         return None
-    
+
     icon_data = None
-    
+
     # Check if it's a remote URL
     parsed = urlparse(href)
     is_remote = parsed.scheme in ('http', 'https')
-    
+
     if file_type.lower() == 'kmz':
         # For KMZ, check if it's an embedded icon (not a remote URL)
         if not is_remote and file_data:
@@ -275,18 +276,18 @@ def process_icon_href(href: str, file_type: str, file_data: Optional[bytes] = No
             # Local path in KML - not supported (would need file system access)
             logger.debug(f"Skipping local file path in KML: {href}")
             return None
-    
+
     if icon_data:
         return store_icon(icon_data, href)
-    
+
     return None
 
 
 def process_geojson_icons(
-    geojson_data: dict,
-    file_type: str,
-    file_data: Optional[bytes] = None,
-    import_log: Optional[ImportLog] = None
+        geojson_data: dict,
+        file_type: str,
+        file_data: Optional[bytes] = None,
+        import_log: Optional[ImportLog] = None
 ) -> dict:
     """
     Process all icon hrefs in GeoJSON data structure.
@@ -304,23 +305,23 @@ def process_geojson_icons(
     """
     if not settings.ICON_PROCESSING_ENABLED:
         return geojson_data
-    
+
     if not isinstance(geojson_data, dict):
         return geojson_data
-    
+
     # Create mapping of original hrefs to new hrefs
     href_mapping: Dict[str, str] = {}
-    
+
     # Process features - only process icons for Point geometries
     if 'features' in geojson_data:
         for feature in geojson_data['features']:
             if not isinstance(feature, dict):
                 continue
-            
+
             # Check geometry type - only process icons for Point features
             geometry = feature.get('geometry', {})
             geometry_type = geometry.get('type', '').lower() if isinstance(geometry, dict) else ''
-            
+
             if geometry_type == 'point' and 'properties' in feature:
                 _process_properties_icons(
                     feature['properties'],
@@ -339,13 +340,13 @@ def process_geojson_icons(
                     for prop_name in icon_props:
                         del props[prop_name]
                 # Note: We keep 'styleUrl' as it's a style reference, not an icon URL
-    
+
     # Process properties at root level if present
     # Root-level properties should not contain feature-specific icons, but if they do,
     # we should skip them since we don't know the geometry type
     # (Root-level properties are typically metadata, not feature icons)
     pass
-    
+
     return geojson_data
 
 
@@ -368,26 +369,26 @@ def _fix_nested_caltopo_url(url: str) -> str:
     """
     try:
         parsed = urlparse(url)
-        
+
         # Check if it's a CalTopo URL
         if 'caltopo.com' not in parsed.netloc.lower():
             return url
-        
+
         # Check if path is /icon.png
         if parsed.path.lower() != '/icon.png':
             return url
-        
+
         # Parse query parameters
         query_params = parse_qs(parsed.query)
-        
+
         # Get cfg parameter
         if 'cfg' not in query_params:
             return url
-        
+
         cfg_value = query_params['cfg'][0]
         # URL decode
         cfg_decoded = unquote(cfg_value)
-        
+
         # Check if cfg contains a full CalTopo URL (nested)
         # Look for http://caltopo.com or https://caltopo.com in the decoded cfg
         if 'http://caltopo.com' in cfg_decoded.lower() or 'https://caltopo.com' in cfg_decoded.lower():
@@ -400,10 +401,10 @@ def _fix_nested_caltopo_url(url: str) -> str:
                 inner_url = inner_url_match.group(1)
                 logger.debug(f"Fixed nested CalTopo URL: {url} -> {inner_url}")
                 return inner_url
-        
+
         # Not nested, return original
         return url
-        
+
     except Exception as e:
         logger.debug(f"Failed to fix nested CalTopo URL {url}: {str(e)}")
         return url
@@ -424,30 +425,30 @@ def _is_caltopo_point_icon(url: str) -> bool:
     """
     try:
         parsed = urlparse(url)
-        
+
         # Check if it's a CalTopo URL
         if 'caltopo.com' not in parsed.netloc.lower():
             return False
-        
+
         # Check if path is /icon.png
         if parsed.path.lower() != '/icon.png':
             return False
-        
+
         # Parse query parameters
         query_params = parse_qs(parsed.query)
-        
+
         # Get cfg parameter
         if 'cfg' not in query_params:
             return False
-        
+
         cfg_value = query_params['cfg'][0]
         # URL decode
         cfg_decoded = unquote(cfg_value)
-        
+
         # Check if it starts with "point" (could be "point" or "c:point" or similar)
         # The point icon typically has cfg=point or cfg=c:point
         return cfg_decoded.startswith('point') or cfg_decoded.startswith('c:point')
-        
+
     except Exception as e:
         logger.debug(f"Failed to check if CalTopo URL is point icon {url}: {str(e)}")
         return False
@@ -469,42 +470,128 @@ def _extract_color_from_caltopo_url(url: str) -> Optional[str]:
     """
     try:
         parsed = urlparse(url)
-        
+
         # Check if it's a CalTopo URL
         if 'caltopo.com' not in parsed.netloc.lower():
             return None
-        
+
         # Parse query parameters
         query_params = parse_qs(parsed.query)
-        
+
         # Get cfg parameter
         if 'cfg' not in query_params:
             return None
-        
+
         cfg_value = query_params['cfg'][0]
         # URL decode
         cfg_decoded = unquote(cfg_value)
-        
+
         # Format is typically: point,COLOR#SCALE or similar
         # Look for hex color pattern (6 hex digits)
         color_match = re.search(r'([0-9A-Fa-f]{6})', cfg_decoded)
         if color_match:
             hex_color = color_match.group(1).upper()
             return f'#{hex_color}'
-        
+
         return None
     except Exception as e:
-        logger.debug(f"Failed to extract color from CalTopo URL {url}: {str(e)}")
         return None
+
+
+def _process_single_icon_href(
+        href: str,
+        file_type: str,
+        file_data: Optional[bytes] = None,
+        href_mapping: Optional[Dict[str, str]] = None,
+        import_log: Optional[ImportLog] = None
+) -> Tuple[Optional[str], Optional[str]]:
+    """
+    Process a single icon href and return the result.
+    
+    Args:
+        href: Icon href to process
+        file_type: File type ('kmz' or 'kml')
+        file_data: File data as bytes (required for KMZ)
+        href_mapping: Optional pre-computed mapping of old hrefs to new hrefs
+        import_log: Optional ImportLog for recording warnings
+        
+    Returns:
+        Tuple of (new_href, extracted_color):
+        - new_href: New local href if icon was fetched/stored, None if should be removed
+        - extracted_color: Extracted color from CalTopo URL, or None
+    """
+    # START CALTOPO ICON PROCESSING
+
+    # Fix nested CalTopo URLs first
+    href = _fix_nested_caltopo_url(href)
+
+    # Extract color from CalTopo URL (works on both nested and fixed URLs)
+    caltopo_color = _extract_color_from_caltopo_url(href)
+
+    # Check if this is a CalTopo point icon - if so, skip fetching and just use the color
+    parsed = urlparse(href)
+    is_caltopo = 'caltopo.com' in parsed.netloc.lower() if parsed.netloc else False
+    if is_caltopo and caltopo_color and _is_caltopo_point_icon(href):
+        return None, caltopo_color  # Point icons use default marker, no need to fetch
+
+    # Check href mapping if available
+    if href_mapping and href in href_mapping:
+        mapped_href = _fix_nested_caltopo_url(href_mapping[href])
+        mapped_color = _extract_color_from_caltopo_url(mapped_href)
+        mapped_parsed = urlparse(mapped_href)
+        mapped_is_caltopo = 'caltopo.com' in mapped_parsed.netloc.lower() if mapped_parsed.netloc else False
+
+        # If mapped href is a point icon with color, return it
+        if mapped_is_caltopo and mapped_color and _is_caltopo_point_icon(mapped_href):
+            return None, mapped_color
+
+        # Use mapped href, prefer mapped color over original
+        return mapped_href, mapped_color if mapped_color else caltopo_color
+
+    # For non-point CalTopo icons, fetch the icon (we still want the actual icon image)
+    # For non-CalTopo URLs, also fetch the icon
+    if is_caltopo and caltopo_color:
+        # Non-point CalTopo icon with color - fetch icon and return both
+        new_href = process_icon_href(href, file_type, file_data)
+        if new_href:
+            return new_href, caltopo_color  # Return icon and color
+        # Fetch failed but we have color - return color
+        if import_log is not None:
+            import_log.add(
+                f"Failed to load icon '{href}', but extracted color {caltopo_color} from URL",
+                "Icon Processing",
+                DatabaseLogLevel.WARNING
+            )
+        return None, caltopo_color
+
+    # END CALTOPO ICON PROCESSING
+    # ===========================================================================================================
+
+    # Make sure that we aren't dealing with caltopo in any way
+    assert caltopo_color is None
+
+    # For non-CalTopo URLs, fetch/store the icon
+    new_href = process_icon_href(href, file_type, file_data)
+    if new_href:
+        return new_href, None
+
+    # Fetch failed and no color - log warning
+    if import_log is not None:
+        import_log.add(
+            f"Failed to load icon '{href}', using default red icon",
+            "Icon Processing",
+            DatabaseLogLevel.WARNING
+        )
+    return None, None
 
 
 def _process_properties_icons(
-    properties: dict,
-    file_type: str,
-    file_data: Optional[bytes] = None,
-    href_mapping: Optional[Dict[str, str]] = None,
-    is_point: bool = False,
-    import_log: Optional[ImportLog] = None
+        properties: dict,
+        file_type: str,
+        file_data: Optional[bytes] = None,
+        href_mapping: Optional[Dict[str, str]] = None,
+        is_point: bool = False,
+        import_log: Optional[ImportLog] = None
 ) -> None:
     """
     Process icon hrefs in properties dictionary.
@@ -518,12 +605,9 @@ def _process_properties_icons(
         href_mapping: Optional pre-computed mapping of old hrefs to new hrefs
         is_point: Whether this is a Point feature (only True for Point geometries)
     """
-    if not is_point:
-        # Don't process icons for non-Point features
+    if not is_point or not isinstance(properties, dict):
         return
-    if not isinstance(properties, dict):
-        return
-    
+
     # Common property names that might contain icon hrefs
     icon_property_names = [
         'marker-symbol',
@@ -534,74 +618,58 @@ def _process_properties_icons(
         'marker-icon',
         'symbol'
     ]
-    
+
     # Process known icon properties
     for prop_name in icon_property_names:
-        if prop_name in properties and properties[prop_name]:
-            href = properties[prop_name]
-            if isinstance(href, str):
-                # Fix nested CalTopo URLs first (before processing)
-                href = _fix_nested_caltopo_url(href)
-                properties[prop_name] = href
-                
-                # Check if this is a CalTopo point icon - if so, extract color and remove icon
-                # Only point icons should be replaced with default icon
-                if _is_caltopo_point_icon(href):
-                    color = _extract_color_from_caltopo_url(href)
-                    if color:
-                        # Set marker-color and remove icon property to use default icon
-                        properties['marker-color'] = color
-                        del properties[prop_name]
-                        logger.debug(f"Replaced CalTopo point icon with marker-color: {color}")
-                        continue
-                
-                # Check mapping first if available
-                if href_mapping and href in href_mapping:
-                    mapped_href = href_mapping[href]
-                    # Fix nested CalTopo URLs in mapped href too
-                    mapped_href = _fix_nested_caltopo_url(mapped_href)
-                    # Check if mapped href is also a CalTopo point icon (shouldn't happen, but be safe)
-                    if _is_caltopo_point_icon(mapped_href):
-                        mapped_color = _extract_color_from_caltopo_url(mapped_href)
-                        if mapped_color:
-                            properties['marker-color'] = mapped_color
-                            del properties[prop_name]
-                            logger.debug(f"Replaced mapped CalTopo point icon with marker-color: {mapped_color}")
-                            continue
-                    properties[prop_name] = mapped_href
-                else:
-                    # Process directly (this will fetch/store remote or embedded icons)
-                    new_href = process_icon_href(href, file_type, file_data)
-                    if new_href:
-                        # Successfully fetched and stored icon - update href to local path
-                        properties[prop_name] = new_href
-                    else:
-                        # Fetch/extract failed – fall back to default red icon.
-                        # 1) Remove the broken/remote icon reference so the frontend
-                        #    doesn't try to render a missing custom icon.
-                        # 2) Ensure marker-color is set so the frontend uses a red circle.
-                        if import_log is not None:
-                            import_log.add(
-                                f"Failed to load icon '{href}', using default red icon",
-                                "Icon Processing",
-                                DatabaseLogLevel.WARNING
-                            )
-                        del properties[prop_name]
-                        if 'marker-color' not in properties or not properties['marker-color']:
-                            properties['marker-color'] = '#ff0000'
+        if prop_name not in properties or not properties[prop_name]:
+            continue
 
-    # Also check for nested structures (e.g., style objects)
-    # Only process nested structures if this is a Point feature
-    if is_point:
-        for key, value in properties.items():
-            if isinstance(value, dict):
-                _process_properties_icons(value, file_type, file_data, href_mapping, is_point=True, import_log=import_log)
-            elif isinstance(value, list):
-                for item in value:
-                    if isinstance(item, dict):
-                        _process_properties_icons(item, file_type, file_data, href_mapping, is_point=True, import_log=import_log)
-            elif isinstance(value, str) and key not in icon_property_names:
-                # Check if any string value matches a href in the mapping
-                if href_mapping and value in href_mapping:
-                    properties[key] = href_mapping[value]
+        href = properties[prop_name]
+        if not isinstance(href, str):
+            continue
 
+        # Check if this is a CalTopo URL before processing
+        parsed = urlparse(href)
+        is_caltopo = 'caltopo.com' in parsed.netloc.lower() if parsed.netloc else False
+
+        # Process the href
+        new_href, extracted_color = _process_single_icon_href(
+            href, file_type, file_data, href_mapping, import_log
+        )
+
+        # Handle the result
+        if new_href and extracted_color:
+            # Both icon fetched and color extracted - keep icon and set marker-color
+            properties[prop_name] = new_href
+            properties['marker-color'] = extracted_color
+        elif extracted_color and not new_href:
+            # Color extracted but no icon (point icon) - set marker-color and remove icon property
+            properties['marker-color'] = extracted_color
+            del properties[prop_name]
+        elif is_caltopo and not extracted_color and not new_href:
+            # CalTopo URL detected but both color extraction and fetch failed
+            logger.warning(f"CalTopo URL detected but color extraction failed: {href}")
+            del properties[prop_name]
+            if 'marker-color' not in properties or not properties['marker-color']:
+                properties['marker-color'] = '#ff0000'
+        elif new_href:
+            # Icon successfully fetched/stored - update href to local path
+            properties[prop_name] = new_href
+        else:
+            # Icon fetch failed - remove icon property and set default red color if needed
+            del properties[prop_name]
+            if 'marker-color' not in properties or not properties['marker-color']:
+                properties['marker-color'] = '#ff0000'
+
+    # Process nested structures (e.g., style objects)
+    for key, value in properties.items():
+        if isinstance(value, dict):
+            _process_properties_icons(value, file_type, file_data, href_mapping, is_point=True, import_log=import_log)
+        elif isinstance(value, list):
+            for item in value:
+                if isinstance(item, dict):
+                    _process_properties_icons(item, file_type, file_data, href_mapping, is_point=True, import_log=import_log)
+        elif isinstance(value, str) and key not in icon_property_names:
+            # Check if any string value matches a href in the mapping
+            if href_mapping and value in href_mapping:
+                properties[key] = href_mapping[value]

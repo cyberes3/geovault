@@ -59,7 +59,7 @@ icons:
   storage_dir: data/icons
 
   # Timeout for fetching remote icons in seconds
-  fetch_timeout: 1.0
+  fetch_timeout: 5
 
   # Allow or disallow hot-linking of hosted icons from external domains
   # Set to true (default) to allow external websites to link to your icons
