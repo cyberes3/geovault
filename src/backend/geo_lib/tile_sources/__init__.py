@@ -67,4 +67,5 @@ def get_tile_sources_for_client():
 # Import all tile source modules to trigger registration
 from . import osm
 from . import mb_topo
+from . import global_imagery
 

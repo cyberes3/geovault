@@ -175,7 +175,7 @@ def tile_proxy(request, service, z, x, y):
                 if tile_data:
                     tile_logger.debug(f"Tile cache hit: {service}/{z}/{x}/{y}")
                     http_response = HttpResponse(tile_data, content_type='image/png')
-                    http_response['Cache-Control'] = 'public, max-age=86400'  # Cache for 1 day
+                    http_response['Cache-Control'] = 'public, max-age=2592000'  # Cache for 1 month
                     return http_response
         except Exception as e:
             # Log cache error but continue to fetch from source
@@ -205,7 +205,7 @@ def tile_proxy(request, service, z, x, y):
             
             # Return the tile with appropriate headers
             http_response = HttpResponse(tile_data, content_type=content_type)
-            http_response['Cache-Control'] = 'public, max-age=86400'  # Cache for 1 day
+            http_response['Cache-Control'] = 'public, max-age=2592000'  # Cache for 1 month
             return http_response
             
     except URLError as e:
