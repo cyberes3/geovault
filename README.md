@@ -25,4 +25,8 @@ to [GitHub](https://github.com/Cyberes/geovault).
 
 ## Installation
 
-Installation instructions are in the [installation/](https://git.evulid.cc/cyberes/geovault/src/branch/master/installation) folder
+Installation instructions are in the [installation/](https://git.evulid.cc/cyberes/geovault/src/branch/master/installation) folder.
+
+## Development
+
+Test files are in the [geovault-tests](https://git.evulid.cc/cyberes/geovault-tests) repository. Please submit issues on Gitea.
