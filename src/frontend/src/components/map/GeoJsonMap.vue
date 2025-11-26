@@ -312,7 +312,7 @@ export default {
         const response = await fetch(`${APIHOST}/api/data/features/by-tag/`)
         const data = await response.json()
         
-        if (data.success) {
+        if (response.ok) {
           // Get user tags and system tags separately
           const userTags = data.user_tags ? Object.keys(data.user_tags).sort() : []
           const systemTags = data.system_tags ? Object.keys(data.system_tags).sort() : []
@@ -567,7 +567,7 @@ export default {
 
         const collectionData = await collectionResponse.json()
 
-        if (collectionData.success) {
+        if (collectionResponse.ok && collectionData.collection) {
           this.collectionName = collectionData.collection.name
           this.isCollectionMode = true
 
@@ -731,7 +731,7 @@ export default {
           const response = await fetch(`${APIHOST}/api/data/feature/${featureId}/`)
           if (response.ok) {
             const data = await response.json()
-            if (data.success && data.feature) {
+            if (response.ok && data.feature) {
               // Find the existing feature in the vector source by ID
               const existingFeatures = this.vectorSource.getFeatures()
               const existingFeature = existingFeatures.find(f => {
@@ -1088,7 +1088,7 @@ export default {
         const response = await fetch(this.LOCATION_API_URL)
         const data = await response.json()
 
-        if (data.success && data.location) {
+        if (response.ok && data.location) {
           this.userLocation = data.location
           console.log('User location detected:', this.userLocation)
         } else {
@@ -1196,10 +1196,7 @@ export default {
             }
 
             const infoData = await infoResponse.json()
-            if (!infoData.success) {
-              this.handlePublicShareError(infoData.error || 'Invalid share link')
-              return
-            }
+            // Response is successful if we got here (infoResponse.ok is true)
 
             // Cache the share info
             this.publicShareInfo = {
@@ -1264,7 +1261,7 @@ export default {
         }
 
         // Check if the response indicates an error
-        if (!data.success) {
+        if (!response.ok) {
           if (this.isPublicShareMode) {
             this.handlePublicShareError(data.error || 'Failed to load shared features.')
           } else {
@@ -1274,7 +1271,7 @@ export default {
           return
         }
 
-        if (data.success && data.data.features) {
+        if (response.ok && data.data && data.data.features) {
           // Log error if fallback mechanism was used
           if (data.fallback_used) {
             console.error(
@@ -1490,7 +1487,7 @@ export default {
         }
 
         const data = await response.json()
-        if (!data.success || !data.feature) {
+        if (!response.ok || !data.feature) {
           console.error(`Feature ${featureId} not found or access denied`)
           this.removeFeatureIdFromUrl()
           return

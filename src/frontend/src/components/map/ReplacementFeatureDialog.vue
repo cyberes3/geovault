@@ -742,7 +742,7 @@ export default {
         })
         const data = await response.json()
         
-        if (data.success && data.feature && data.feature.geojson) {
+        if (response.ok && data.feature && data.feature.geojson) {
           const geojson = data.feature.geojson
           if (geojson.geometry && geojson.geometry.type) {
             this.existingFeatureGeometryType = geojson.geometry.type
@@ -896,7 +896,7 @@ export default {
 
         const data = await response.json()
 
-        if (!response.ok || !data.success) {
+        if (!response.ok) {
           this.errorMessage = data.msg || 'Failed to upload file'
           this.processing = false
           return
@@ -925,7 +925,7 @@ export default {
           })
           const data = await response.json()
 
-          if (data.success && data.job_status) {
+          if (response.ok && data.job_status) {
             this.processingProgress = data.job_status.progress || 0
             this.processingMessage = data.job_status.message || 'Processing...'
 
@@ -980,7 +980,7 @@ export default {
           })
           const data = await response.json()
 
-          if (data.success && data.job_status && data.job_status.import_queue_id) {
+          if (response.ok && data.job_status && data.job_status.import_queue_id) {
             this.importQueueId = data.job_status.import_queue_id
             clearInterval(pollForQueueItem)
             await this.fetchFeatures()
@@ -999,7 +999,7 @@ export default {
         })
         const data = await response.json()
 
-        if (data.success && data.geofeatures) {
+        if (response.ok && data.geofeatures) {
           this.features = data.geofeatures
           this.processing = false
         } else {
@@ -1043,7 +1043,7 @@ export default {
 
         const data = await response.json()
 
-        if (!response.ok || !data.success) {
+        if (!response.ok) {
           this.errorMessage = data.error || 'Failed to apply replacement geometry'
           this.applying = false
           return
@@ -1075,7 +1075,7 @@ export default {
 
         const data = await response.json()
 
-        if (!response.ok || !data.success) {
+        if (!response.ok) {
           this.errorMessage = data.error || 'Failed to regenerate tags'
           this.regeneratingTags = false
           return

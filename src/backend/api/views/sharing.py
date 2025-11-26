@@ -58,7 +58,6 @@ def create_share(request):
 
         if not tag:
             return JsonResponse({
-                'success': False,
                 'error': 'tag parameter is required',
                 'code': 400
             }, status=400)
@@ -68,7 +67,6 @@ def create_share(request):
         tag_max_length = getattr(settings, 'TAG_MAX_LENGTH', 255)
         if len(tag) > tag_max_length:
             return JsonResponse({
-                'success': False,
                 'error': f'Tag name exceeds maximum length of {tag_max_length} characters',
                 'code': 400
             }, status=400)
@@ -83,7 +81,6 @@ def create_share(request):
         
         if not tag_exists:
             return JsonResponse({
-                'success': False,
                 'error': 'Tag not found in your data',
                 'code': 404
             }, status=404)
@@ -107,7 +104,6 @@ def create_share(request):
         share_url = f"{base_url}/#/mapshare?id={tag_share.share_id}"
 
         return JsonResponse({
-            'success': True,
             'share_id': tag_share.share_id,
             'url': share_url,
             'created_at': tag_share.created_at.isoformat()
@@ -115,14 +111,12 @@ def create_share(request):
 
     except json.JSONDecodeError:
         return JsonResponse({
-            'success': False,
             'error': 'Invalid JSON in request body',
             'code': 400
         }, status=400)
     except Exception:
         logger.error(f"Error creating share: {traceback.format_exc()}")
         return JsonResponse({
-            'success': False,
             'error': 'Failed to create share',
             'code': 500
         }, status=500)
@@ -173,14 +167,12 @@ def list_shares(request):
         shares_list.sort(key=lambda x: x['created_at'], reverse=True)
 
         return JsonResponse({
-            'success': True,
             'shares': shares_list
         })
 
     except Exception:
         logger.error(f"Error listing shares: {traceback.format_exc()}")
         return JsonResponse({
-            'success': False,
             'error': 'Failed to list shares',
             'code': 500
         }, status=500)
@@ -199,7 +191,6 @@ def delete_share(request, share_id):
         # Validate share_id format
         if not _validate_share_id(share_id):
             return JsonResponse({
-                'success': False,
                 'error': 'Invalid share ID',
                 'code': 400
             }, status=400)
@@ -214,7 +205,6 @@ def delete_share(request, share_id):
         if not share:
             # Return generic error to prevent information disclosure
             return JsonResponse({
-                'success': False,
                 'error': 'Share not found or access denied',
                 'code': 404
             }, status=404)
@@ -222,14 +212,12 @@ def delete_share(request, share_id):
         share.delete()
 
         return JsonResponse({
-            'success': True,
             'message': 'Share deleted successfully'
         })
 
     except Exception:
         logger.error(f"Error deleting share: {traceback.format_exc()}")
         return JsonResponse({
-            'success': False,
             'error': 'Failed to delete share',
             'code': 500
         }, status=500)
@@ -251,7 +239,6 @@ def get_public_share_info(request, share_id):
         # Validate share_id format (must be UUID4)
         if not _validate_share_id(share_id):
             return JsonResponse({
-                'success': False,
                 'error': 'Invalid share link',
                 'code': 404
             }, status=404)
@@ -261,7 +248,6 @@ def get_public_share_info(request, share_id):
         
         if tag_share:
             return JsonResponse({
-                'success': True,
                 'share_type': 'tag',
                 'tag': tag_share.tag
             })
@@ -271,7 +257,6 @@ def get_public_share_info(request, share_id):
         
         if collection_share:
             return JsonResponse({
-                'success': True,
                 'share_type': 'collection',
                 'collection_name': collection_share.collection.name,
                 'collection_id': str(collection_share.collection.id),
@@ -280,7 +265,6 @@ def get_public_share_info(request, share_id):
         
         # Share not found
         return JsonResponse({
-            'success': False,
             'error': 'Invalid share link',
             'code': 404
         }, status=404)
@@ -288,7 +272,6 @@ def get_public_share_info(request, share_id):
     except Exception:
         logger.error(f"Error getting public share info: {traceback.format_exc()}")
         return JsonResponse({
-            'success': False,
             'error': 'Failed to get share info',
             'code': 500
         }, status=500)
@@ -310,7 +293,6 @@ def get_public_share(request, share_id):
         # Validate share_id format (must be UUID4)
         if not _validate_share_id(share_id):
             return JsonResponse({
-                'success': False,
                 'error': 'Invalid share link',
                 'code': 404
             }, status=404)
@@ -321,7 +303,6 @@ def get_public_share(request, share_id):
         if not share:
             # Return same error message to prevent information disclosure
             return JsonResponse({
-                'success': False,
                 'error': 'Invalid share link',
                 'code': 404
             }, status=404)
@@ -349,7 +330,6 @@ def get_public_share(request, share_id):
     except Exception:
         logger.error(f"Error getting public share: {traceback.format_exc()}")
         return JsonResponse({
-            'success': False,
             'error': 'Failed to get shared features',
             'code': 500
         }, status=500)
@@ -375,7 +355,6 @@ def create_collection_share(request):
 
         if not collection_id_str:
             return JsonResponse({
-                'success': False,
                 'error': 'collection_id parameter is required',
                 'code': 400
             }, status=400)
@@ -385,7 +364,6 @@ def create_collection_share(request):
             collection_id = uuid.UUID(collection_id_str)
         except ValueError:
             return JsonResponse({
-                'success': False,
                 'error': 'Invalid collection ID format',
                 'code': 400
             }, status=400)
@@ -395,7 +373,6 @@ def create_collection_share(request):
             collection = Collection.objects.get(id=collection_id, user=request.user)
         except Collection.DoesNotExist:
             return JsonResponse({
-                'success': False,
                 'error': 'Collection not found or access denied',
                 'code': 404
             }, status=404)
@@ -419,7 +396,6 @@ def create_collection_share(request):
         share_url = f"{base_url}/#/mapshare?id={collection_share.share_id}"
 
         return JsonResponse({
-            'success': True,
             'share_id': collection_share.share_id,
             'url': share_url,
             'created_at': collection_share.created_at.isoformat()
@@ -427,14 +403,12 @@ def create_collection_share(request):
 
     except json.JSONDecodeError:
         return JsonResponse({
-            'success': False,
             'error': 'Invalid JSON in request body',
             'code': 400
         }, status=400)
     except Exception:
         logger.error(f"Error creating collection share: {traceback.format_exc()}")
         return JsonResponse({
-            'success': False,
             'error': 'Failed to create collection share',
             'code': 500
         }, status=500)
@@ -458,7 +432,6 @@ def get_public_collection_share(request, share_id):
         # Validate share_id format (must be UUID4)
         if not _validate_share_id(share_id):
             return JsonResponse({
-                'success': False,
                 'error': 'Invalid share link',
                 'code': 404
             }, status=404)
@@ -469,7 +442,6 @@ def get_public_collection_share(request, share_id):
         if not share:
             # Return same error message to prevent information disclosure
             return JsonResponse({
-                'success': False,
                 'error': 'Invalid share link',
                 'code': 404
             }, status=404)
@@ -497,7 +469,6 @@ def get_public_collection_share(request, share_id):
     except Exception:
         logger.error(f"Error getting public collection share: {traceback.format_exc()}")
         return JsonResponse({
-            'success': False,
             'error': 'Failed to get shared features',
             'code': 500
         }, status=500)

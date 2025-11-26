@@ -217,7 +217,7 @@ export default createStore<State>({
 
                 const data = await response.json();
                 
-                if (data.success && data.settings) {
+                if (response.ok && data.settings) {
                     commit('userSettings', data.settings);
                     return data.settings;
                 } else {

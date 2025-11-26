@@ -289,7 +289,7 @@ export default {
 
         const data = await response.json();
 
-        if (data.success) {
+        if (response.ok) {
           // Store user and system tags separately
           this.userTagsData = data.user_tags || {};
           this.systemTagsData = data.system_tags || {};
@@ -425,9 +425,7 @@ export default {
           }
 
           const result = await response.json();
-          if (!result.success) {
-            throw new Error('Bulk update failed');
-          }
+          // Response is successful if we got here (response.ok is true)
 
           // Check for any errors in the response
           if (result.errors && result.errors.length > 0) {
@@ -534,9 +532,7 @@ export default {
           }
 
           const result = await response.json();
-          if (!result.success) {
-            throw new Error('Bulk update failed');
-          }
+          // Response is successful if we got here (response.ok is true)
 
           // Check for any errors in the response
           if (result.errors && result.errors.length > 0) {

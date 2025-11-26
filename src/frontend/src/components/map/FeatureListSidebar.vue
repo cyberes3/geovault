@@ -323,7 +323,7 @@ export default {
         const response = await fetch(url)
         const data = await response.json()
 
-        if (data.success && data.data && data.data.features) {
+        if (response.ok && data.data && data.data.features) {
           // Convert GeoJSON features to OpenLayers features
           const format = new GeoJSON()
           const features = format.readFeatures(data.data, {
@@ -429,7 +429,7 @@ export default {
         const response = await fetch(url)
         const data = await response.json()
 
-        if (data.success && data.data && data.data.features) {
+        if (response.ok && data.data && data.data.features) {
           // Convert GeoJSON features to OpenLayers features
           const format = new GeoJSON()
           const features = format.readFeatures(data.data, {

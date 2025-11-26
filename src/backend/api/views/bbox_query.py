@@ -90,7 +90,6 @@ def _validate_bbox_params(request) -> Union[Tuple[Tuple[float, ...], int], JsonR
     # Validate bbox parameter
     if not bbox_str:
         return JsonResponse({
-            'success': False,
             'error': 'bbox parameter is required',
             'code': 400
         }, status=400)
@@ -98,7 +97,6 @@ def _validate_bbox_params(request) -> Union[Tuple[Tuple[float, ...], int], JsonR
     bbox = _parse_bbox(bbox_str)
     if not bbox:
         return JsonResponse({
-            'success': False,
             'error': 'Invalid bbox format. Expected: min_lon,min_lat,max_lon,max_lat',
             'code': 400
         }, status=400)
@@ -110,7 +108,6 @@ def _validate_bbox_params(request) -> Union[Tuple[Tuple[float, ...], int], JsonR
             raise ValueError("Zoom level out of range")
     except ValueError:
         return JsonResponse({
-            'success': False,
             'error': 'Invalid zoom level. Expected integer between 1 and 20',
             'code': 400
         }, status=400)
@@ -142,7 +139,6 @@ def _build_bbox_response(features: List[Dict], total_count: int, zoom_level: int
     }
 
     response_data = {
-        'success': True,
         'data': geojson_data,
         'feature_count': len(features),
         'total_features_in_bbox': total_count,
@@ -408,13 +404,11 @@ def get_geojson_data(request):
                 Collection.objects.get(id=collection_id, user=request.user)
             except Collection.DoesNotExist:
                 return JsonResponse({
-                    'success': False,
                     'error': 'Collection not found',
                     'code': 404
                 }, status=404)
         except (ValueError, TypeError):
             return JsonResponse({
-                'success': False,
                 'error': 'Invalid collection ID. Expected UUID',
                 'code': 400
             }, status=400)
@@ -434,7 +428,6 @@ def get_geojson_data(request):
     except Exception:
         logger.error(f"Error in get_geojson_data API: {traceback.format_exc()}")
         return JsonResponse({
-            'success': False,
             'error': 'Failed to get features in bounding box',
             'code': 500
         }, status=500)

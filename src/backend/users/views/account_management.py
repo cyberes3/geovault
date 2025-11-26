@@ -17,7 +17,6 @@ def change_password_api(request):
         if form.is_valid():
             form.save()
             return JsonResponse({
-                'success': True,
                 'message': 'Password changed successfully.'
             })
         else:
@@ -29,18 +28,15 @@ def change_password_api(request):
             # Return first error message for simplicity
             first_error = list(errors.values())[0] if errors else 'Invalid form data'
             return JsonResponse({
-                'success': False,
                 'error': first_error,
                 'errors': errors
             }, status=400)
     except json.JSONDecodeError:
         return JsonResponse({
-            'success': False,
             'error': 'Invalid JSON data'
         }, status=400)
     except Exception as e:
         return JsonResponse({
-            'success': False,
             'error': f'An error occurred: {str(e)}'
         }, status=500)
 
@@ -55,7 +51,6 @@ def email_management_api(request):
         
         if not new_email:
             return JsonResponse({
-                'success': False,
                 'error': 'Email address is required'
             }, status=400)
         
@@ -63,7 +58,6 @@ def email_management_api(request):
         existing_primary = EmailAddress.objects.filter(user=request.user, primary=True).first()
         if existing_primary and existing_primary.email.lower() == new_email.lower():
             return JsonResponse({
-                'success': False,
                 'error': 'This is already your current email address'
             }, status=400)
         
@@ -86,7 +80,6 @@ def email_management_api(request):
             
             # Allauth automatically sends verification email when ACCOUNT_EMAIL_VERIFICATION is mandatory
             return JsonResponse({
-                'success': True,
                 'message': 'Email address changed. Please check your email to verify it.',
                 'email': email_address.email,
                 'verified': email_address.verified,
@@ -100,18 +93,15 @@ def email_management_api(request):
             
             first_error = list(errors.values())[0] if errors else 'Invalid form data'
             return JsonResponse({
-                'success': False,
                 'error': first_error,
                 'errors': errors
             }, status=400)
     except json.JSONDecodeError:
         return JsonResponse({
-            'success': False,
             'error': 'Invalid JSON data'
         }, status=400)
     except Exception as e:
         return JsonResponse({
-            'success': False,
             'error': f'An error occurred: {str(e)}'
         }, status=500)
 
@@ -159,7 +149,6 @@ def get_email_status_api(request):
                         on_cooldown = True
         
         return JsonResponse({
-            'success': True,
             'emails': emails,
             'primary_email': primary_email or (emails[0]['email'] if emails else None),
             'pending_verification': pending_emails,
@@ -169,7 +158,6 @@ def get_email_status_api(request):
         })
     except Exception as e:
         return JsonResponse({
-            'success': False,
             'error': f'An error occurred: {str(e)}'
         }, status=500)
 
@@ -184,7 +172,6 @@ def resend_verification_api(request):
         
         if not email:
             return JsonResponse({
-                'success': False,
                 'error': 'Email address is required'
             }, status=400)
         
@@ -193,13 +180,11 @@ def resend_verification_api(request):
             email_address = EmailAddress.objects.get(user=request.user, email=email)
         except EmailAddress.DoesNotExist:
             return JsonResponse({
-                'success': False,
                 'error': 'Email address not found'
             }, status=404)
         
         if email_address.verified:
             return JsonResponse({
-                'success': False,
                 'error': 'Email address is already verified'
             }, status=400)
         
@@ -215,7 +200,6 @@ def resend_verification_api(request):
             
             if remaining > 0:
                 return JsonResponse({
-                    'success': False,
                     'error': 'Please wait before requesting another verification email',
                     'cooldown_remaining': int(remaining),
                     'on_cooldown': True
@@ -228,19 +212,16 @@ def resend_verification_api(request):
         cache.set(cache_key, timezone.now(), timeout=60)
         
         return JsonResponse({
-            'success': True,
             'message': f'Verification email sent to {email}. Please check your inbox.',
             'cooldown_remaining': 60,
             'on_cooldown': False
         })
     except json.JSONDecodeError:
         return JsonResponse({
-            'success': False,
             'error': 'Invalid JSON data'
         }, status=400)
     except Exception as e:
         return JsonResponse({
-            'success': False,
             'error': f'An error occurred: {str(e)}'
         }, status=500)
 

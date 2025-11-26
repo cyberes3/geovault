@@ -125,7 +125,6 @@ def upload_icon(request):
     try:
         if not request.FILES:
             return JsonResponse({
-                'success': False,
                 'error': 'No file provided',
                 'code': 400
             }, status=400)
@@ -133,7 +132,6 @@ def upload_icon(request):
         form = IconUploadForm(request.POST, request.FILES)
         if not form.is_valid():
             return JsonResponse({
-                'success': False,
                 'error': 'Invalid form data',
                 'code': 400
             }, status=400)
@@ -145,7 +143,6 @@ def upload_icon(request):
         file_ext = os.path.splitext(file_name)[1].lower()
         if file_ext not in settings.ICON_UPLOAD_ALLOWED_EXTENSIONS:
             return JsonResponse({
-                'success': False,
                 'error': f'Invalid file extension. Allowed extensions: {", ".join(sorted(settings.ICON_UPLOAD_ALLOWED_EXTENSIONS))}',
                 'code': 400
             }, status=400)
@@ -156,7 +153,6 @@ def upload_icon(request):
         except Exception as e:
             logger.error(f"Error reading uploaded icon file: {str(e)}")
             return JsonResponse({
-                'success': False,
                 'error': 'Failed to read file',
                 'code': 500
             }, status=500)
@@ -165,7 +161,6 @@ def upload_icon(request):
         if len(icon_data) > settings.ICON_UPLOAD_MAX_SIZE_BYTES:
             max_size_mb = settings.ICON_UPLOAD_MAX_SIZE_BYTES / 1024
             return JsonResponse({
-                'success': False,
                 'error': f'File size exceeds maximum allowed size of {max_size_mb:.0f}KB',
                 'code': 400
             }, status=400)
@@ -175,13 +170,11 @@ def upload_icon(request):
 
         if not icon_url:
             return JsonResponse({
-                'success': False,
                 'error': 'Failed to store icon',
                 'code': 500
             }, status=500)
 
         return JsonResponse({
-            'success': True,
             'icon_url': icon_url,
             'code': 200
         }, status=200)
@@ -189,7 +182,6 @@ def upload_icon(request):
     except Exception as e:
         logger.error(f"Error uploading icon: {traceback.format_exc()}")
         return JsonResponse({
-            'success': False,
             'error': f'Internal server error: {str(e)}',
             'code': 500
         }, status=500)
@@ -351,7 +343,6 @@ def recolor_icon(request):
         # Validate icon path
         if not icon_path_param:
             return JsonResponse({
-                'success': False,
                 'error': 'Missing required parameter: icon',
                 'code': 400
             }, status=400)
@@ -359,7 +350,6 @@ def recolor_icon(request):
         # Validate color format (hex color: #RRGGBB)
         if not color or not re.match(r'^#[0-9A-Fa-f]{6}$', color):
             return JsonResponse({
-                'success': False,
                 'error': 'Invalid color format. Must be hex color (e.g., #00ff30)',
                 'code': 400
             }, status=400)
@@ -367,7 +357,6 @@ def recolor_icon(request):
         # Security: Prevent directory traversal
         if '..' in icon_path_param or icon_path_param.startswith('/'):
             return JsonResponse({
-                'success': False,
                 'error': 'Invalid icon path',
                 'code': 400
             }, status=400)
@@ -381,13 +370,11 @@ def recolor_icon(request):
             assets_icons_dir_resolved = assets_icons_dir.resolve()
             if not str(icon_path).startswith(str(assets_icons_dir_resolved)):
                 return JsonResponse({
-                    'success': False,
                     'error': 'Invalid icon path',
                     'code': 400
                 }, status=400)
         except (OSError, ValueError):
             return JsonResponse({
-                'success': False,
                 'error': 'Invalid icon path',
                 'code': 400
             }, status=400)
@@ -409,7 +396,6 @@ def recolor_icon(request):
         except Exception as e:
             logger.error(f"Error loading icon {icon_path_param}: {str(e)}")
             return JsonResponse({
-                'success': False,
                 'error': f'Failed to load icon: {str(e)}',
                 'code': 500
             }, status=500)
@@ -463,7 +449,6 @@ def recolor_icon(request):
     except Exception as e:
         logger.error(f"Error recoloring icon: {traceback.format_exc()}")
         return JsonResponse({
-            'success': False,
             'error': f'Internal server error: {str(e)}',
             'code': 500
         }, status=500)

@@ -37,18 +37,16 @@ def get_user_location(request):
 
         if location_data is None:
             return JsonResponse({
-                'success': False,
                 'error': 'Unable to determine location from IP address',
                 'location': None,
                 'ip_info': {
                     'ip': client_ip,
                     'accuracy_radius': None
                 }
-            })
+            }, status=404)
 
         # Prepare response data
         response_data = {
-            'success': True,
             'location': {
                 'city': location_data.get('city'),
                 'state': location_data.get('state'),
@@ -72,7 +70,6 @@ def get_user_location(request):
     except Exception as e:
         logger.error(f"Error in get_user_location API: {traceback.format_exc()}")
         return JsonResponse({
-            'success': False,
             'error': 'Internal server error occurred',
             'code': 500
         }, status=500)
@@ -103,7 +100,6 @@ def get_location_by_ip(request):
         # Validate IP format (basic validation)
         if not ip_address or len(ip_address.split('.')) != 4:
             return JsonResponse({
-                'success': False,
                 'error': 'Invalid IP address format',
                 'code': 400
             }, status=400)
@@ -113,18 +109,16 @@ def get_location_by_ip(request):
 
         if location_data is None:
             return JsonResponse({
-                'success': False,
                 'error': f'Location not found for IP address: {ip_address}',
                 'location': None,
                 'ip_info': {
                     'ip': ip_address,
                     'accuracy_radius': None
                 }
-            })
+            }, status=404)
 
         # Prepare response data
         response_data = {
-            'success': True,
             'location': {
                 'city': location_data.get('city'),
                 'state': location_data.get('state'),
@@ -149,7 +143,6 @@ def get_location_by_ip(request):
     except Exception as e:
         logger.error(f"Error in get_location_by_ip API: {traceback.format_exc()}")
         return JsonResponse({
-            'success': False,
             'error': 'Internal server error occurred',
             'code': 500
         }, status=500)

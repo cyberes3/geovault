@@ -194,7 +194,7 @@ export default {
 
         const data = await response.json();
 
-        if (data.success && data.collections) {
+        if (response.ok && data.collections) {
           this.collections = data.collections;
         } else {
           throw new Error(data.error || 'Failed to load collections');
@@ -240,7 +240,7 @@ export default {
 
         const data = await response.json();
 
-        if (data.success) {
+        if (response.ok) {
           // Refresh the collections list
           this.fetchCollections();
         } else {

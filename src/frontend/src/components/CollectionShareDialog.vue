@@ -259,7 +259,7 @@ export default {
 
         const data = await response.json();
 
-        if (data.success && data.shares) {
+        if (response.ok && data.shares) {
           // Filter shares for this collection
           const collectionIdStr = String(this.collectionId);
           this.collectionShares = data.shares.filter(
@@ -296,7 +296,7 @@ export default {
 
         const data = await response.json();
 
-        if (data.success) {
+        if (response.ok) {
           this.successMessage = 'Share link created successfully!';
           // Reload shares to show the new one
           await this.loadShares();
@@ -330,7 +330,7 @@ export default {
 
         const data = await response.json();
 
-        if (data.success) {
+        if (response.ok) {
           // Reload shares
           await this.loadShares();
         } else {

@@ -161,7 +161,7 @@ export default {
           }
         });
 
-        if (response.data.success && response.data.shares) {
+        if (response.status === 200 && response.data.shares) {
           this.shares = response.data.shares;
         } else {
           throw new Error(response.data.error || 'Failed to load shares');
@@ -189,7 +189,7 @@ export default {
           }
         });
 
-        if (response.data.success) {
+        if (response.status === 200) {
           // Reload shares
           await this.loadShares();
         } else {

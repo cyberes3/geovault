@@ -42,7 +42,6 @@ def _error_response(error_message, code=400, status=None):
     if status is None:
         status = code
     return JsonResponse({
-        'success': False,
         'error': error_message,
         'code': code
     }, status=status)
@@ -230,7 +229,6 @@ def update_feature_metadata(request, feature_id):
         feature.save()
 
         return JsonResponse({
-            'success': True,
             'message': f'Feature metadata updated successfully. Updated fields: {", ".join(updated_fields)}',
             'feature_id': feature.id,
             'updated_fields': updated_fields
@@ -456,7 +454,6 @@ def bulk_update_features_metadata(request):
                     })
         
         return JsonResponse({
-            'success': True,
             'updated_count': updated_count,
             'errors': errors
         })
@@ -699,7 +696,6 @@ def update_feature(request, feature_id):
         feature.save()
 
         return JsonResponse({
-            'success': True,
             'message': 'Feature updated successfully',
             'feature_id': feature.id
         })
@@ -889,7 +885,6 @@ def apply_replacement_geometry(request, feature_id):
         import_queue.delete()
 
         return JsonResponse({
-            'success': True,
             'message': 'Replacement geometry applied successfully',
             'feature_id': feature.id
         })
@@ -965,7 +960,6 @@ def regenerate_feature_tags(request, feature_id):
         feature.save()
 
         return JsonResponse({
-            'success': True,
             'message': 'Feature tags regenerated successfully',
             'feature_id': feature.id,
             'tags': existing_user_tags,

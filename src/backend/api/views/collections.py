@@ -39,14 +39,12 @@ def list_collections(request):
             })
         
         return JsonResponse({
-            'success': True,
             'collections': collections_data
         })
     
     except Exception:
         logger.error(f"Error listing collections: {traceback.format_exc()}")
         return JsonResponse({
-            'success': False,
             'error': 'Failed to list collections',
             'code': 500
         }, status=500)
@@ -77,7 +75,6 @@ def create_collection(request):
         
         if not name:
             return JsonResponse({
-                'success': False,
                 'error': 'name is required',
                 'code': 400
             }, status=400)
@@ -116,7 +113,6 @@ def create_collection(request):
         feature_count = _count_collection_features(collection)
         
         return JsonResponse({
-            'success': True,
             'collection': {
                 'id': collection.id,
                 'name': collection.name,
@@ -131,14 +127,12 @@ def create_collection(request):
     
     except json.JSONDecodeError:
         return JsonResponse({
-            'success': False,
             'error': 'Invalid JSON in request body',
             'code': 400
         }, status=400)
     except Exception:
         logger.error(f"Error creating collection: {traceback.format_exc()}")
         return JsonResponse({
-            'success': False,
             'error': 'Failed to create collection',
             'code': 500
         }, status=500)
@@ -156,7 +150,6 @@ def get_collection(request, collection_id):
         feature_count = _count_collection_features(collection)
         
         return JsonResponse({
-            'success': True,
             'collection': {
                 'id': collection.id,
                 'name': collection.name,
@@ -171,14 +164,12 @@ def get_collection(request, collection_id):
     
     except Collection.DoesNotExist:
         return JsonResponse({
-            'success': False,
             'error': 'Collection not found',
             'code': 404
         }, status=404)
     except Exception:
         logger.error(f"Error getting collection: {traceback.format_exc()}")
         return JsonResponse({
-            'success': False,
             'error': 'Failed to get collection',
             'code': 500
         }, status=500)
@@ -208,7 +199,6 @@ def update_collection(request, collection_id):
                 collection.name = name
             else:
                 return JsonResponse({
-                    'success': False,
                     'error': 'name cannot be empty',
                     'code': 400
                 }, status=400)
@@ -257,7 +247,6 @@ def update_collection(request, collection_id):
         feature_count = _count_collection_features(collection)
         
         return JsonResponse({
-            'success': True,
             'collection': {
                 'id': collection.id,
                 'name': collection.name,
@@ -272,20 +261,17 @@ def update_collection(request, collection_id):
     
     except Collection.DoesNotExist:
         return JsonResponse({
-            'success': False,
             'error': 'Collection not found',
             'code': 404
         }, status=404)
     except json.JSONDecodeError:
         return JsonResponse({
-            'success': False,
             'error': 'Invalid JSON in request body',
             'code': 400
         }, status=400)
     except Exception:
         logger.error(f"Error updating collection: {traceback.format_exc()}")
         return JsonResponse({
-            'success': False,
             'error': 'Failed to update collection',
             'code': 500
         }, status=500)
@@ -302,20 +288,17 @@ def delete_collection(request, collection_id):
         collection.delete()
         
         return JsonResponse({
-            'success': True,
             'message': 'Collection deleted successfully'
         })
     
     except Collection.DoesNotExist:
         return JsonResponse({
-            'success': False,
             'error': 'Collection not found',
             'code': 404
         }, status=404)
     except Exception:
         logger.error(f"Error deleting collection: {traceback.format_exc()}")
         return JsonResponse({
-            'success': False,
             'error': 'Failed to delete collection',
             'code': 500
         }, status=500)
@@ -392,21 +375,18 @@ def get_collection_features(request, collection_id):
         }
         
         return JsonResponse({
-            'success': True,
             'data': geojson_data,
             'feature_count': len(geojson_features)
         })
     
     except Collection.DoesNotExist:
         return JsonResponse({
-            'success': False,
             'error': 'Collection not found',
             'code': 404
         }, status=404)
     except Exception:
         logger.error(f"Error getting collection features: {traceback.format_exc()}")
         return JsonResponse({
-            'success': False,
             'error': 'Failed to get collection features',
             'code': 500
         }, status=500)

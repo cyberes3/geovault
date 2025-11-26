@@ -183,7 +183,7 @@ export default {
             'X-CSRFToken': getCookie('csrftoken')
           }
         });
-        if (response.data.success) {
+        if (response.status === 200) {
           this.currentEmail = response.data.primary_email || 'Not set';
           this.pendingEmails = response.data.pending_verification || [];
 
@@ -229,7 +229,7 @@ export default {
           }
         });
 
-        if (response.data.success) {
+        if (response.status === 200) {
           this.passwordMessage = response.data.message || 'Password changed successfully.';
           this.passwordMessageType = 'success';
           // Clear form
@@ -277,7 +277,7 @@ export default {
           }
         });
 
-        if (response.data.success) {
+        if (response.status === 200) {
           this.emailMessage = response.data.message || 'Email address changed. Please check your email to verify it.';
           this.emailMessageType = 'success';
           // Clear form
@@ -328,7 +328,7 @@ export default {
           }
         });
 
-        if (response.data.success) {
+        if (response.status === 200) {
           this.emailMessage = response.data.message || 'Verification email sent. Please check your inbox.';
           this.emailMessageType = 'success';
 

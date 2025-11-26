@@ -599,7 +599,7 @@ export default {
 
         const data = await response.json()
 
-        if (!response.ok || !data.success) {
+        if (!response.ok) {
           this.iconUploadError = data.error || 'Failed to upload icon'
           return null
         }
@@ -864,7 +864,7 @@ export default {
 
         const data = await response.json()
 
-        if (!response.ok || !data.success) {
+        if (!response.ok) {
           this.errorMessage = data.error || 'Failed to update feature'
           this.isSaving = false
           return
@@ -878,7 +878,7 @@ export default {
           
           if (fetchResponse.ok) {
             const fetchData = await fetchResponse.json()
-            if (fetchData.success && fetchData.feature) {
+            if (fetchResponse.ok && fetchData.feature) {
               // Update the feature with fresh data from the server
               const format = new GeoJSON()
               const geojsonData = fetchData.feature.geojson
@@ -982,7 +982,7 @@ export default {
 
         const data = await response.json()
 
-        if (!response.ok || !data.success) {
+        if (!response.ok) {
           this.errorMessage = data.error || 'Failed to delete feature'
           this.isSaving = false
           return

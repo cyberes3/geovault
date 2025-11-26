@@ -40,7 +40,6 @@ def custom_exception_handler(request, exception=None):
     if request.path.startswith('/api/'):
         # Return JSON error response for API endpoints
         return JsonResponse({
-            'success': False,
             'msg': 'Internal server error occurred',
             'code': 500
         }, status=500)

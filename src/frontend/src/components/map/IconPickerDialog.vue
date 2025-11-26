@@ -328,7 +328,7 @@ export default {
 
           const data = await response.json()
 
-          if (!response.ok || !data.success) {
+          if (!response.ok) {
             this.customIconError = data.error || 'Failed to upload icon'
             return
           }

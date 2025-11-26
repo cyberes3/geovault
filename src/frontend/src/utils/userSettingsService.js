@@ -16,7 +16,7 @@ export async function updateUserSetting(settingsUpdate) {
       }
     });
 
-    if (response.data.success) {
+    if (response.status === 200) {
       return {
         success: true,
         settings: response.data.settings

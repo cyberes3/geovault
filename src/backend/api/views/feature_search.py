@@ -75,7 +75,6 @@ def get_features_by_tag(request):
 
         # Build response with sorted tags
         response_data = {
-            'success': True,
             'user_tags': {},
             'system_tags': {}
         }
@@ -91,7 +90,6 @@ def get_features_by_tag(request):
     except Exception:
         logger.error(f"Error getting features by tag: {traceback.format_exc()}")
         return JsonResponse({
-            'success': False,
             'error': 'Failed to get features by tag',
             'code': 500
         }, status=500)
@@ -112,7 +110,6 @@ def search_features(request):
 
     if not query:
         return JsonResponse({
-            'success': False,
             'error': 'query parameter is required',
             'code': 400
         }, status=400)
@@ -157,7 +154,6 @@ def search_features(request):
         }
 
         response_data = {
-            'success': True,
             'data': geojson_data,
             'feature_count': len(geojson_features),
             'query': query
@@ -168,7 +164,6 @@ def search_features(request):
     except Exception:
         logger.error(f"Error searching features: {traceback.format_exc()}")
         return JsonResponse({
-            'success': False,
             'error': 'Failed to search features',
             'code': 500
         }, status=500)
@@ -191,7 +186,6 @@ def filter_features_by_tags(request):
     
     if not tags:
         return JsonResponse({
-            'success': False,
             'error': 'At least one tag parameter is required',
             'code': 400
         }, status=400)
@@ -240,7 +234,6 @@ def filter_features_by_tags(request):
         }
         
         response_data = {
-            'success': True,
             'data': geojson_data,
             'feature_count': len(geojson_features),
             'tags': tags
@@ -251,7 +244,6 @@ def filter_features_by_tags(request):
     except Exception:
         logger.error(f"Error filtering features by tags: {traceback.format_exc()}")
         return JsonResponse({
-            'success': False,
             'error': 'Failed to filter features by tags',
             'code': 500
         }, status=500)
@@ -296,7 +288,6 @@ def get_all_features(request):
         }
         
         response_data = {
-            'success': True,
             'data': geojson_data,
             'feature_count': len(geojson_features)
         }
@@ -306,7 +297,6 @@ def get_all_features(request):
     except Exception:
         logger.error(f"Error getting all features: {traceback.format_exc()}")
         return JsonResponse({
-            'success': False,
             'error': 'Failed to get all features',
             'code': 500
         }, status=500)

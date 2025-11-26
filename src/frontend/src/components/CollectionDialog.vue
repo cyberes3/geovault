@@ -277,7 +277,7 @@ export default {
         const response = await fetch('/api/data/features/by-tag/');
         const data = await response.json();
         
-        if (data.success) {
+        if (response.ok) {
           // Get user tags and system tags separately
           const userTags = data.user_tags ? Object.keys(data.user_tags).sort() : [];
           const systemTags = data.system_tags ? Object.keys(data.system_tags).sort() : [];
@@ -300,7 +300,7 @@ export default {
         const response = await fetch('/api/data/features/all/');
         const data = await response.json();
         
-        if (data.success && data.data && data.data.features) {
+        if (response.ok && data.data && data.data.features) {
           this.availableFeatures = data.data.features;
         } else {
           this.availableFeatures = [];
@@ -350,7 +350,7 @@ export default {
 
         const data = await response.json();
 
-        if (data.success) {
+        if (response.ok) {
           this.$emit('saved');
         } else {
           this.error = data.error || 'Failed to save collection';

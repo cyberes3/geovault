@@ -403,7 +403,7 @@ export default {
           }
         });
 
-        if (response.data.success) {
+        if (response.status === 200) {
           alert(`Successfully imported "${item.original_filename}"!`);
           // Refresh the queue
           this.$store.dispatch('refreshImportQueue');
@@ -434,7 +434,7 @@ export default {
             }
           });
 
-          if (response.data.success && response.data.job_id) {
+          if (response.status === 200 && response.data.job_id) {
             // Store the job ID for tracking
             this.deleteJobIds.set(item.id, response.data.job_id);
             console.log(`Delete job started for item ${item.id}: ${response.data.job_id}`);

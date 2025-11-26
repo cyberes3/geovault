@@ -57,14 +57,12 @@ def get_user_settings(request):
             validated_settings = {}
         
         return JsonResponse({
-            'success': True,
             'settings': validated_settings or {}
         })
     
     except Exception:
         logger.error(f"Error getting user settings: {traceback.format_exc()}")
         return JsonResponse({
-            'success': False,
             'error': 'Failed to get user settings',
             'code': 500
         }, status=500)
@@ -85,7 +83,6 @@ def update_user_setting(request):
         # Validate that data is a dictionary
         if not isinstance(data, dict):
             return JsonResponse({
-                'success': False,
                 'error': 'Request body must be a JSON object',
                 'code': 400
             }, status=400)
@@ -104,7 +101,6 @@ def update_user_setting(request):
         
         if not is_valid:
             response_data = {
-                'success': False,
                 'error': error_message,
                 'code': 400
             }
@@ -119,20 +115,17 @@ def update_user_setting(request):
         user_settings.save()
         
         return JsonResponse({
-            'success': True,
             'settings': validated_settings
         })
     
     except json.JSONDecodeError:
         return JsonResponse({
-            'success': False,
             'error': 'Invalid JSON in request body',
             'code': 400
         }, status=400)
     except Exception:
         logger.error(f"Error updating user setting: {traceback.format_exc()}")
         return JsonResponse({
-            'success': False,
             'error': 'Failed to update user setting',
             'code': 500
         }, status=500)

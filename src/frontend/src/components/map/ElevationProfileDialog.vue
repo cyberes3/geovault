@@ -463,7 +463,7 @@ export default {
             'X-CSRFToken': getCookie('csrftoken')
           }
         })
-        if (response.data.success && response.data.coordinates) {
+        if (response.status === 200 && response.data.coordinates) {
           return response.data.coordinates
         }
         return null

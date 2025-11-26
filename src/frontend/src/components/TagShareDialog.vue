@@ -219,7 +219,7 @@ export default {
 
         const data = await response.json();
 
-        if (data.success && data.shares) {
+        if (response.ok && data.shares) {
           // Filter shares for this tag
           this.tagShares = data.shares.filter(share => share.tag === this.tag);
         } else {
@@ -252,7 +252,7 @@ export default {
 
         const data = await response.json();
 
-        if (data.success) {
+        if (response.ok) {
           this.successMessage = 'Share link created successfully!';
           // Reload shares to show the new one
           await this.loadShares();
@@ -286,7 +286,7 @@ export default {
 
         const data = await response.json();
 
-        if (data.success) {
+        if (response.ok) {
           // Reload shares
           await this.loadShares();
         } else {

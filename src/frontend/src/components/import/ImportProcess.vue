@@ -936,7 +936,7 @@ export default {
 
       try {
         const response = await axios.get(`/api/data/item/import/get/${this.currentId}?page=1&page_size=${this.pagination.pageSize}`)
-        if (response.data.success) {
+        if (response.status === 200) {
           this.processing.active = response.data.processing
           if (this.processing.active && response.data.job_details) {
             this.processing.message = response.data.job_details.message || 'Processing file...'
@@ -963,7 +963,7 @@ export default {
           axios.get(`/api/data/item/import/logs/${this.currentId}`)
         ])
 
-        if (itemsResponse.data.success) {
+        if (itemsResponse.status === 200) {
           // Load logs first (they're already fetched)
           if (logsResponse.data && logsResponse.data.logs) {
             this.workerLog = logsResponse.data.logs || []
@@ -1231,7 +1231,7 @@ export default {
         const response = await fetch('/api/data/features/by-tag/');
         const data = await response.json();
         
-        if (data.success && data.user_tags) {
+        if (response.ok && data.user_tags) {
           // Extract unique tags from the user_tags object keys
           this.availableUserTags = Object.keys(data.user_tags).sort();
         } else {
@@ -1380,7 +1380,7 @@ export default {
         }
       });
 
-      if (response.data.success) {
+      if (response.status === 200) {
         // Update original items to reflect saved state for current page
         this.itemsForUser.forEach((feature, idx) => {
           this.originalItems[idx] = JSON.parse(JSON.stringify(feature));
@@ -1462,7 +1462,7 @@ export default {
           }
         });
 
-        if (response.data.success) {
+        if (response.status === 200) {
           this.$store.dispatch('refreshImportQueue');
           // Remove the beforeunload handler before redirecting
           if (this.beforeUnloadHandler) {

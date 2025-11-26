@@ -36,7 +36,6 @@ def get_feature(request, feature_id):
 
         # Return the feature data
         return JsonResponse({
-            'success': True,
             'feature': {
                 'id': feature.id,
                 'geojson': geojson_data,
@@ -47,14 +46,12 @@ def get_feature(request, feature_id):
 
     except FeatureStore.DoesNotExist:
         return JsonResponse({
-            'success': False,
             'error': 'Feature not found or access denied',
             'code': 404
         }, status=404)
     except Exception:
         logger.error(f"Error getting feature {feature_id}: {traceback.format_exc()}")
         return JsonResponse({
-            'success': False,
             'error': 'Failed to get feature',
             'code': 500
         }, status=500)
@@ -176,7 +173,6 @@ def get_feature_elevations(request, feature_id):
         
         if not coordinates:
             return JsonResponse({
-                'success': False,
                 'error': 'Feature does not contain LineString or MultiLineString geometry',
                 'code': 400
             }, status=400)
@@ -194,20 +190,17 @@ def get_feature_elevations(request, feature_id):
                 coordinates_with_elevations.append([lon, lat])
         
         return JsonResponse({
-            'success': True,
             'coordinates': coordinates_with_elevations
         })
         
     except FeatureStore.DoesNotExist:
         return JsonResponse({
-            'success': False,
             'error': 'Feature not found or access denied',
             'code': 404
         }, status=404)
     except Exception:
         logger.error(f"Error getting elevations for feature {feature_id}: {traceback.format_exc()}")
         return JsonResponse({
-            'success': False,
             'error': 'Failed to get feature elevations',
             'code': 500
         }, status=500)
