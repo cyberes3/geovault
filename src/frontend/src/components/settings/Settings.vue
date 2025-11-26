@@ -28,6 +28,23 @@
               </div>
             </button>
             <button
+                @click="activeTab = 'sharing'"
+                :class="[
+                'w-full text-left px-4 py-3 rounded-md text-sm font-medium transition-colors duration-200',
+                activeTab === 'sharing'
+                  ? 'bg-blue-50 text-blue-700 border-l-4 border-blue-500'
+                  : 'text-gray-700 hover:bg-gray-50'
+              ]"
+                title="Sharing settings"
+            >
+              <div class="flex items-center">
+                <svg class="w-5 h-5 mr-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8.684 13.342C8.885 12.938 9 12.482 9 12c0-.482-.115-.938-.316-1.342m0 2.684a3 3 0 110-2.684m0 2.684l6.632 3.316m-6.632-6l6.632-3.316m0 0a3 3 0 105.367-2.684 3 3 0 00-5.367 2.684zm0 9.316a3 3 0 105.368 2.684 3 3 0 00-5.368-2.684z"></path>
+                </svg>
+                Sharing
+              </div>
+            </button>
+            <button
               @click="activeTab = 'map'"
               :class="[
                 'w-full text-left px-4 py-3 rounded-md text-sm font-medium transition-colors duration-200',
@@ -45,20 +62,20 @@
               </div>
             </button>
             <button
-              @click="activeTab = 'sharing'"
+              @click="activeTab = 'import'"
               :class="[
                 'w-full text-left px-4 py-3 rounded-md text-sm font-medium transition-colors duration-200',
-                activeTab === 'sharing'
+                activeTab === 'import'
                   ? 'bg-blue-50 text-blue-700 border-l-4 border-blue-500'
                   : 'text-gray-700 hover:bg-gray-50'
               ]"
-              title="Sharing settings"
+              title="Import settings"
             >
               <div class="flex items-center">
                 <svg class="w-5 h-5 mr-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8.684 13.342C8.885 12.938 9 12.482 9 12c0-.482-.115-.938-.316-1.342m0 2.684a3 3 0 110-2.684m0 2.684l6.632 3.316m-6.632-6l6.632-3.316m0 0a3 3 0 105.367-2.684 3 3 0 00-5.367 2.684zm0 9.316a3 3 0 105.368 2.684 3 3 0 00-5.368-2.684z"></path>
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12"></path>
                 </svg>
-                Sharing
+                Import
               </div>
             </button>
           </nav>
@@ -83,6 +100,7 @@ import Toast from "@/components/parts/Toast.vue";
 import AccountSettingsTab from "./AccountSettingsTab.vue";
 import MapSettingsTab from "./MapSettingsTab.vue";
 import SharingSettingsTab from "./SharingSettingsTab.vue";
+import ImportSettingsTab from "./ImportSettingsTab.vue";
 
 export default {
   name: 'Settings',
@@ -90,7 +108,8 @@ export default {
     Toast,
     AccountSettingsTab,
     MapSettingsTab,
-    SharingSettingsTab
+    SharingSettingsTab,
+    ImportSettingsTab
   },
   data() {
     return {
@@ -106,7 +125,8 @@ export default {
       const components = {
         'account': 'AccountSettingsTab',
         'map': 'MapSettingsTab',
-        'sharing': 'SharingSettingsTab'
+        'sharing': 'SharingSettingsTab',
+        'import': 'ImportSettingsTab'
       };
       return components[this.activeTab] || 'AccountSettingsTab';
     }
@@ -131,7 +151,7 @@ export default {
         return;
       }
       // Update activeTab when route query parameter changes
-      if (newTab && ['account', 'map', 'sharing'].includes(newTab)) {
+      if (newTab && ['account', 'map', 'sharing', 'import'].includes(newTab)) {
         if (this.activeTab !== newTab) {
           this.activeTab = newTab;
         }
@@ -155,7 +175,7 @@ export default {
 
     // Initialize activeTab from query parameter
     const tabFromQuery = this.$route.query.tab;
-    if (tabFromQuery && ['account', 'map', 'sharing'].includes(tabFromQuery)) {
+    if (tabFromQuery && ['account', 'map', 'sharing', 'import'].includes(tabFromQuery)) {
       this.activeTab = tabFromQuery;
       // Clean up any other query params that shouldn't be here
       const otherParams = Object.keys(this.$route.query).filter(key => key !== 'tab');
