@@ -7,15 +7,10 @@ Tailwind CSS handles the utility classes automatically via tailwind.config.js.
 
 import colorsys
 import os
+import re
 
-# Base colors (500 level)
-BASE_COLORS = {
-    'blue': '#163D8A',
-    'red': '#FF3E41',
-    'green': '#5B8A3C',  # More muted natural green instead of bright electric green
-    'yellow': '#F4AC45',
-    'purple': '#CB48B7'
-}
+# Base colors will be parsed from root.css
+BASE_COLORS = {}
 
 # Color scale numbers
 SCALE_NUMBERS = [50, 100, 200, 300, 400, 500, 600, 700, 800, 900]
@@ -59,6 +54,19 @@ def hsl_to_rgb(hsl):
     h, s, l = hsl
     r, g, b = colorsys.hls_to_rgb(h / 360, l / 100, s / 100)
     return (int(r * 255), int(g * 255), int(b * 255))
+
+
+def parse_root_css(root_css_path):
+    """Parse root.css to extract base color values."""
+    colors = {}
+    with open(root_css_path, 'r') as f:
+        content = f.read()
+        # Match patterns like --main-blue: #163D8A;
+        pattern = r'--main-(\w+):\s*(#[0-9A-Fa-f]{6});'
+        matches = re.findall(pattern, content)
+        for color_name, hex_value in matches:
+            colors[color_name] = hex_value.upper()
+    return colors
 
 
 def generate_color_scale(base_hex, color_name):
@@ -107,19 +115,20 @@ def generate_color_scale(base_hex, color_name):
             else:
                 target_lightness = LIGHTNESS_TARGETS[num]
             
-            # Adjust saturation: lighter colors get less saturation, darker colors maintain or slightly increase
+            # Adjust saturation: keep colors vibrant, especially for lighter shades
             if num < 500:
-                # Lighter shades: reduce saturation progressively
-                saturation = max(10, base_s * (0.2 + (num / 500) * 0.6))
+                # Lighter shades: maintain high saturation for vibrancy
+                # Scale from 60% to 95% of base saturation for more vibrant colors
+                saturation = max(40, base_s * (0.6 + (num / 500) * 0.35))
             elif num == 600:
-                # 600: slightly more saturated than base for richness
-                saturation = min(100, base_s * 1.15)
+                # 600: more saturated than base for richness
+                saturation = min(100, base_s * 1.25)
             elif num == 700:
-                # 700: maintain good saturation for visibility
-                saturation = min(100, base_s * 1.1)
+                # 700: maintain high saturation for visibility
+                saturation = min(100, base_s * 1.2)
             elif num >= 800:
-                # 800, 900: maintain saturation but allow slight reduction if needed
-                saturation = min(100, base_s * 1.05)
+                # 800, 900: maintain high saturation for vibrancy
+                saturation = min(100, base_s * 1.15)
             
             # Generate the color
             new_hsl = (base_h, saturation, target_lightness)
@@ -150,6 +159,24 @@ def main():
     # Get the directory where this script is located
     script_dir = os.path.dirname(os.path.abspath(__file__))
     css_dir = os.path.join(script_dir, 'src', 'assets', 'css')
+    root_css_path = os.path.join(css_dir, 'root.css')
+    
+    # Parse base colors from root.css
+    global BASE_COLORS
+    BASE_COLORS = parse_root_css(root_css_path)
+    
+    if not BASE_COLORS:
+        print(f'Warning: No colors found in {root_css_path}')
+        print('Falling back to default colors')
+        BASE_COLORS = {
+            'blue': '#163D8A',
+            'red': '#FF3E41',
+            'green': '#5B8A3C',
+            'yellow': '#F4AC45',
+            'purple': '#CB48B7'
+        }
+    else:
+        print(f'Parsed {len(BASE_COLORS)} colors from root.css: {", ".join(BASE_COLORS.keys())}')
     
     # Generate colors.css
     colors_css = generate_colors_css()
