@@ -17,7 +17,7 @@
 </template>
 
 <script>
-import settingsConfig from "@/components/settings-map.json";
+import settingsConfig from "@/components/settings-data.json";
 import SettingsMixin from "./mixins/SettingsMixin.js";
 import SettingsInput from "./components/SettingsInput.vue";
 

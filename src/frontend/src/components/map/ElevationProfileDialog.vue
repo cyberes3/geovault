@@ -106,7 +106,7 @@ export default {
     elevationProfileSource() {
       // Get elevation profile source from store, default to 'gps'
       const settings = this.$store.state.userSettings
-      return settings?.['map.elevation_profile_source'] || 'gps'
+      return settings?.map?.elevation_profile_source || 'gps'
     }
   },
   watch: {

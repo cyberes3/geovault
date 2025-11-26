@@ -14,7 +14,7 @@
       {
         "value": "api",
         "label": "Use API Elevations",
-        "description": "Fetch more accurate elevation data sourced from a global land dataset. Increases processing time."
+        "description": "Fetch more accurate elevation data sourced from a global land dataset. Increases processing time and not really needed."
       }
     ]
   }

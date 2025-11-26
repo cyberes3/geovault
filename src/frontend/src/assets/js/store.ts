@@ -63,12 +63,6 @@ export default createStore<State>({
         userSettings(state: State, payload: UserSettings | null) {
             state.userSettings = payload
         },
-        updateUserSetting(state: State, { key, value }: { key: string, value: any }) {
-            if (!state.userSettings) {
-                state.userSettings = {}
-            }
-            state.userSettings[key] = value
-        },
         importQueue(state: State, payload: ImportQueueItem[]) {
             state.importQueue = payload
         },
@@ -236,48 +230,6 @@ export default createStore<State>({
                 // On error, initialize with empty object rather than null
                 commit('userSettings', {});
                 return {};
-            }
-        },
-        async updateUserSetting({ commit, state }: { commit: Commit, state: State }, { key, value }: { key: string, value: any }) {
-            // Optimistically update local state
-            commit('updateUserSetting', { key, value });
-
-            // Only update on server if user is authenticated
-            if (!state.userInfo) {
-                return;
-            }
-
-            try {
-                const csrfToken = getCookie('csrftoken');
-                
-                const response = await fetch('/api/data/user/settings/update/', {
-                    method: 'PATCH',
-                    headers: {
-                        'Content-Type': 'application/json',
-                        'X-CSRFToken': csrfToken || '',
-                    },
-                    credentials: 'include',
-                    body: JSON.stringify({ key, value })
-                });
-
-                if (!response.ok) {
-                    // Revert optimistic update on error
-                    const data = await response.json();
-                    throw new Error(data.error || `HTTP error! status: ${response.status}`);
-                }
-
-                const data = await response.json();
-                
-                if (data.success && data.settings) {
-                    // Update with server response (in case server modified the value)
-                    commit('userSettings', data.settings);
-                    return data.settings;
-                }
-            } catch (error) {
-                console.error('Error updating user setting:', error);
-                // Optionally revert the optimistic update here
-                // For now, we'll keep the optimistic update and log the error
-                throw error;
             }
         },
     },

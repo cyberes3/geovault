@@ -40,6 +40,53 @@ export default {
     },
 
     /**
+     * Convert dot-notation key to nested object path
+     * @param {string} key - Dot notation key (e.g., "map.elevation_profile_source")
+     * @returns {Array} - Array of path segments (e.g., ["map", "elevation_profile_source"])
+     */
+    keyToPath(key) {
+      return key.split('.');
+    },
+
+    /**
+     * Get value from nested object using dot-notation key
+     * @param {Object} obj - Nested object
+     * @param {string} key - Dot notation key (e.g., "map.elevation_profile_source")
+     * @returns {any} - Value or undefined
+     */
+    getNestedValue(obj, key) {
+      const path = this.keyToPath(key);
+      let current = obj;
+      for (const segment of path) {
+        if (current === null || current === undefined) {
+          return undefined;
+        }
+        current = current[segment];
+      }
+      return current;
+    },
+
+    /**
+     * Convert dot-notation key and value to nested object
+     * @param {string} key - Dot notation key (e.g., "map.elevation_profile_source")
+     * @param {any} value - Value to set
+     * @returns {Object} - Nested object (e.g., {"map": {"elevation_profile_source": value}})
+     */
+    keyValueToNested(key, value) {
+      const path = this.keyToPath(key);
+      const result = {};
+      let current = result;
+      
+      for (let i = 0; i < path.length - 1; i++) {
+        current[path[i]] = {};
+        current = current[path[i]];
+      }
+      
+      current[path[path.length - 1]] = value;
+      return result;
+    },
+
+    /**
      * Load settings from Vuex store with defaults from configuration
      * @param {Array} config - Settings configuration array (optional, uses this.settingsConfig if not provided)
      */
@@ -55,8 +102,9 @@ export default {
 
       // Load all settings from configuration, using store values or defaults
       settingsConfig.forEach(setting => {
-        this.settingsValues[setting.key] = settings[setting.key] !== undefined 
-          ? settings[setting.key] 
+        const value = this.getNestedValue(settings, setting.key);
+        this.settingsValues[setting.key] = value !== undefined 
+          ? value 
           : setting.defaultValue;
       });
     },
@@ -92,12 +140,14 @@ export default {
 
     /**
      * Save setting to server
-     * @param {string} settingKey - The setting key
+     * @param {string} settingKey - The setting key (dot notation)
      * @param {any} value - The value to save
      */
     async saveSetting(settingKey, value) {
       try {
-        await updateUserSetting(settingKey, value);
+        // Convert dot-notation key to nested object
+        const nestedUpdate = this.keyValueToNested(settingKey, value);
+        await updateUserSetting(nestedUpdate);
         
         // Show success checkmark
         this.successCheckmarks[settingKey] = true;
