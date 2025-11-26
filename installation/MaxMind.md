@@ -1,6 +1,6 @@
 # MaxMind GeoIP2 Database Setup for Ubuntu
 
-The GeoVault application uses MaxMind's GeoIP2 database to determine user location based on their IP address. This allows the map to automatically center on the user's location instead of using a hardcoded default.
+MaxMind's GeoIP2 database is used to determine user location based on their IP address. This allows the map to automatically center on their location instead of using a hardcoded default.
 
 
 
@@ -49,6 +49,8 @@ The GeoVault application uses MaxMind's GeoIP2 database to determine user locati
    ```bash
    sudo geoipupdate
    ```
+
+5. Make sure the database is located at `/var/lib/GeoIP/GeoLite2-Country.mmdb`. If not, you will need to update `maxmind.database_path` in your `config.yaml`
 
 
 

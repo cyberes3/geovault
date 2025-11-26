@@ -34,10 +34,17 @@ SECRET_KEY = config.get_with_env_override(
 # SECURITY WARNING: don't run with debug turned on in production!
 DEBUG = config.get_bool('security.debug', False)
 
+# Site Framework Configuration
+# These settings control the Site model used by django.contrib.sites
+SITE_DOMAIN = config.get_str('site.domain', 'geovault.example.com')
+SITE_NAME = config.get_str('site.name', 'GeoVault')
+
 # Allowed hosts (required when DEBUG is False)
-# Defaults to ['*'] (allow everything) if not specified in config
-# To restrict, set security.allowed_hosts in config.yaml to a list of allowed domains
-ALLOWED_HOSTS = config.get_list('security.allowed_hosts', ['*'])
+# By default, allow the primary site domain from site.domain
+# To add more, set security.additional_allowed_hosts in config.yaml to a list
+# of additional domains or proxy IPs
+_additional_allowed_hosts = config.get_list('security.additional_allowed_hosts', [])
+ALLOWED_HOSTS = [SITE_DOMAIN] + _additional_allowed_hosts
 
 # Application definition
 
@@ -229,12 +236,6 @@ AUTHENTICATION_BACKENDS = [
 ]
 
 SITE_ID = 1  # Required by allauth
-
-# Site Framework Configuration
-# These settings control the Site model used by django.contrib.sites
-# The Site model is automatically updated on startup to match these settings
-SITE_DOMAIN = config.get_str('site.domain', 'geovault.example.com')
-SITE_NAME = config.get_str('site.name', 'GeoVault')
 
 # Account settings
 ACCOUNT_ADAPTER = 'users.adapters.NoUsernameAccountAdapter'  # Custom adapter to prevent username usage

@@ -1,0 +1,13 @@
+[Unit]
+Description=GeoVault Server
+After=network.target
+
+[Service]
+Type=simple
+User=geovault
+ExecStart=/srv/geovault/geovault/src/backend/server-prod.sh
+Restart=always
+RestartSec=5s
+
+[Install]
+WantedBy=multi-user.target

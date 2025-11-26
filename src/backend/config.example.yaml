@@ -1,18 +1,28 @@
 # GeoVault Configuration File
 
+site:
+  # Site domain name (used in email links and Site framework)
+  # This should match your actual domain
+  domain: geovault.example.com
+
+  # Site display name (used in email templates and Site framework)
+  name: GeoVault
+
+
 security:
   # Django secret key (REQUIRED for production)
   # Can be overridden with SECRET_KEY environment variable
   secret_key: django-insecure-change-this-in-production
-  
+
   # Debug mode for development (set to false in production)
-  debug: true
-  
-  # If commented out or not specified, defaults to ['*'] (allow everything)
-  # Note: CSRF_TRUSTED_ORIGINS will be automatically derived from allowed_hosts
-  # allowed_hosts:
-  #   - yourdomain.com
-  #   - www.yourdomain.com
+  debug: false
+
+  # Additional hosts that can access the Django server
+  # The primary host is always site.domain (see above).
+  # Use this list for extra domains or reverse proxy IPs. For example, if
+  # 192.168.1.88 is your internal reverse proxy:
+  # additional_allowed_hosts:
+  #   - 192.168.1.88
 
 
 database:
@@ -29,18 +39,13 @@ redis:
   port: 6379
 
 
-api:
-  # Maximum length for tag names
-  tag_max_length: 255
-
-
 tiles:
   # Directory where proxied tiles will be cached on disk
   cache_dir: /tmp/geovault-tiles
-  
+
   # Enable or disable tile caching
   cache_enabled: true
-  
+
   # Number of days before cached tiles expire
   cache_expiry_days: 30
 
@@ -48,14 +53,14 @@ tiles:
 icons:
   # Enable or disable icon processing for KML/KMZ files
   processing_enabled: true
-  
+
   # Directory where processed icons will be stored
   # Relative paths are relative to backend directory
   storage_dir: data/icons
 
   # Timeout for fetching remote icons in seconds
   fetch_timeout: 1.0
-  
+
   # Allow or disallow hot-linking of hosted icons from external domains
   # Set to true (default) to allow external websites to link to your icons
   allow_hotlinking: true
@@ -72,15 +77,15 @@ icons:
 
 
 geocoding:
-  # Overpass API server URL
-  overpass_api_url: https://overpass-api.de/api/interpreter
-  
-  # Nominatim API server URL
-  nominatim_api_url: https://nominatim.openstreetmap.org
-  
   # Enable or disable reverse geocoding (disabled by default)
   enabled: false
-  
+
+  # Overpass API server URL
+  overpass_api_url: https://overpass-api.de/api/interpreter
+
+  # Nominatim API server URL
+  nominatim_api_url: https://nominatim.openstreetmap.org
+
   # Distance thresholds for proximity tags (in miles)
   city_proximity_miles: 5.0
   lake_proximity_miles: 1.0
@@ -95,26 +100,26 @@ geocoding:
 processing:
   # Number of threads to use for parallel feature processing during import
   import_threads: 10
-  
+
   # File upload limits (in bytes)
   file_upload_max_memory_size: 2097152  # 2MB
   data_upload_max_memory_size: 2097152  # 2MB
-  
+
   # Base timeout for file processing
   timeout_base_seconds: 30
 
   # Additional timeout per MB of file size
   timeout_per_mb_seconds: 2
-  
+
   # Batch size for duplicate detection
   duplicate_detection_batch_size: 100
 
   # Threshold for using batched approach
   duplicate_detection_batch_threshold: 1000
-  
+
   # Batch size for bulk database operations
   bulk_create_batch_size: 1000
-  
+
   # Interval for cleaning up old jobs (1 hour)
   job_cleanup_interval_seconds: 3600
 
@@ -125,10 +130,10 @@ processing:
 validation:
   # Enable secure XML parsing
   secure_xml_parsing: true
-  
+
   # Enable file signature validation
   enable_file_signature_validation: true
-  
+
   # Enable MIME type validation
   enable_mime_type_validation: true
 
@@ -142,37 +147,27 @@ email:
   smtp:
     # SMTP server host
     host: smtp.gmail.com
-    
+
     # SMTP server port (587 for TLS, 465 for SSL, 25 for unencrypted)
     port: 587
-    
+
     # Use TLS encryption
     use_tls: true
-    
+
     # Use SSL encryption (typically on port 465)
     use_ssl: false
-    
+
     # SMTP username (usually your email address)
     username: your-email@gmail.com
-    
+
     # SMTP password (can be overridden with EMAIL_HOST_PASSWORD environment variable)
     password: your-password
-  
+
   # Email sender configuration
   from_email: noreply@example.com
-  
+
   # Default "from" name
   from_name: GeoVault
-  
+
   # Subject prefix for emails
   subject_prefix: "[GeoVault] "
-
-
-site:
-  # Site domain name (used in email links and Site framework)
-  # This should match your actual domain
-  domain: geovault.example.com
-  
-  # Site display name (used in email templates and Site framework)
-  name: GeoVault
-
