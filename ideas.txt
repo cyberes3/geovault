@@ -12,7 +12,9 @@ Bulk tagging and styling on import page
 Display existing tags to select on import process
 Use same tag picking and style as map edit on import process
 need to automatically send user a verification email on registration
-
+download individual features from map
+download tags
+download collections
 
 ## Stretch Goals
 Additional map layers

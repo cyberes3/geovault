@@ -24,11 +24,11 @@
         </div>
 
         <!-- Content -->
-        <div class="bg-white p-6 max-h-[80vh] overflow-y-auto">
+        <div class="bg-white p-6 max-h-[80vh] flex flex-col">
           <!-- Create New Share Section -->
-          <div class="mb-6">
+          <div class="mb-6 flex-shrink-0">
             <h4 class="text-sm font-semibold text-gray-900 mb-4">Create New Share Link</h4>
-            
+
             <div class="space-y-4">
               <!-- Collection Name (read-only) -->
               <div>
@@ -49,7 +49,20 @@
                   class="h-4 w-4 text-blue-500 focus:ring-blue-500 border-gray-300 rounded"
                 />
                 <label for="includeTags" class="ml-2 block text-sm text-gray-700">
-                  Include tags
+                  Include Tags
+                </label>
+              </div>
+
+              <!-- Allow Downloads Checkbox -->
+              <div class="flex items-center">
+                <input
+                  type="checkbox"
+                  id="allowDownloads"
+                  v-model="allowDownloads"
+                  class="h-4 w-4 text-blue-500 focus:ring-blue-500 border-gray-300 rounded"
+                />
+                <label for="allowDownloads" class="ml-2 block text-sm text-gray-700">
+                  Allow Download
                 </label>
               </div>
 
@@ -77,20 +90,21 @@
           </div>
 
           <!-- Existing Shares Section -->
-          <div>
-            <h4 class="text-sm font-semibold text-gray-900 mb-4">Existing Share Links</h4>
-            
-            <div v-if="loading" class="text-center py-4">
-              <Loader size="sm" layout="centered" message="Loading shares..." />
-            </div>
+          <div class="flex-1 min-h-0 flex flex-col">
+            <h4 class="text-sm font-semibold text-gray-900 mb-4 flex-shrink-0">Existing Share Links</h4>
 
-            <div v-else-if="collectionShares.length === 0" class="text-center py-8 text-gray-500">
-              <p class="text-sm">No share links created yet for this collection.</p>
-            </div>
+            <div class="overflow-y-auto flex-1 min-h-[100px] -mr-2 pr-2">
+              <div v-if="loading" class="text-center py-4">
+                <Loader size="sm" layout="centered" message="Loading shares..." />
+              </div>
 
-            <div v-else class="space-y-3">
-              <div
-                v-for="share in collectionShares"
+              <div v-else-if="collectionShares.length === 0" class="text-center py-8 text-gray-500">
+                <p class="text-sm">No share links created yet for this collection.</p>
+              </div>
+
+              <div v-else class="space-y-3">
+                <div
+                  v-for="share in collectionShares"
                 :key="share.share_id"
                 class="border border-gray-200 rounded-lg p-4 hover:bg-gray-50 transition-colors"
               >
@@ -121,18 +135,22 @@
                     </div>
 
                     <!-- Share Info -->
-                    <div class="grid grid-cols-2 gap-4 text-xs text-gray-600">
-                      <div>
+                    <div class="flex flex-wrap gap-x-4 gap-y-2 text-xs text-gray-600">
+                      <div class="flex-shrink-0">
                         <span class="font-medium">Created:</span>
-                        <span class="ml-1">{{ formatDate(share.created_at) }}</span>
+                        <span class="ml-1 whitespace-nowrap">{{ formatDate(share.created_at) }}</span>
                       </div>
-                      <div>
+                      <div class="flex-shrink-0">
                         <span class="font-medium">Access Count:</span>
                         <span class="ml-1">{{ share.access_count }}</span>
                       </div>
-                      <div v-if="share.include_tags !== undefined">
-                        <span class="font-medium">Include Tags:</span>
+                      <div v-if="share.include_tags !== undefined" class="flex-shrink-0">
+                        <span class="font-medium">Tags:</span>
                         <span class="ml-1">{{ share.include_tags ? 'Yes' : 'No' }}</span>
+                      </div>
+                      <div v-if="share.allow_downloads !== undefined" class="flex-shrink-0">
+                        <span class="font-medium">Download:</span>
+                        <span class="ml-1">{{ share.allow_downloads ? 'Yes' : 'No' }}</span>
                       </div>
                     </div>
                   </div>
@@ -155,6 +173,7 @@
         </div>
       </div>
     </div>
+  </div>
   </div>
 </template>
 
@@ -196,7 +215,8 @@ export default {
       collectionShares: [],
       copiedShareId: null,
       deletingShareId: null,
-      includeTags: false
+      includeTags: false,
+      allowDownloads: false
     }
   },
   mounted() {
@@ -204,6 +224,7 @@ export default {
     document.addEventListener('keydown', this.handleEscapeKey);
     // If dialog is already open when component mounts (v-if case), load shares
     if (this.isOpen) {
+      document.body.classList.add('overflow-hidden');
       this.loadShares();
       this.resetForm();
     }
@@ -211,6 +232,7 @@ export default {
   watch: {
     isOpen(newVal) {
       if (newVal) {
+        document.body.classList.add('overflow-hidden');
         this.loadShares();
         this.resetForm();
         // Focus the dialog so it can receive keyboard events
@@ -219,6 +241,8 @@ export default {
             this.$refs.dialogBackdrop.focus();
           }
         });
+      } else {
+        document.body.classList.remove('overflow-hidden');
       }
     }
   },
@@ -243,6 +267,7 @@ export default {
       this.successMessage = null;
       this.copiedShareId = null;
       this.includeTags = false;
+      this.allowDownloads = false;
     },
     async loadShares() {
       this.loading = true;
@@ -293,7 +318,8 @@ export default {
           },
           body: JSON.stringify({
             collection_id: this.collectionId,
-            include_tags: this.includeTags
+            include_tags: this.includeTags,
+            allow_downloads: this.allowDownloads
           })
         });
 
@@ -389,6 +415,7 @@ export default {
   beforeUnmount() {
     // Clean up event listener when component is destroyed
     document.removeEventListener('keydown', this.handleEscapeKey);
+    document.body.classList.remove('overflow-hidden');
   }
 }
 </script>

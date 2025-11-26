@@ -16,16 +16,16 @@ from geo_lib.website.auth import login_required_401
 logger = get_access_logger()
 
 
-def _get_public_share_features_in_bbox(bbox: Tuple[float, float, float, float], user_id: int, tag: str, zoom_level: int) -> BboxQueryResult:
+def _get_public_share_features_in_bbox(bbox: Tuple[float, float, float, float], user_id: int, tag: str, zoom_level: int, allow_downloads: bool = False) -> BboxQueryResult:
     """
     Get features within bounding box that have a specific tag.
     Handles world-wide extents that cross the International Date Line.
     Returns both the features and the total count in a single optimized operation.
-    Features are returned with public-safe properties (excludes _id and tags).
+    Features are returned with public-safe properties (excludes _id and tags unless allow_downloads is True).
     
     This is a wrapper around the consolidated _get_features_in_bbox() function.
     """
-    return _get_features_in_bbox(bbox, user_id, zoom_level, tag=tag, public_safe=True)
+    return _get_features_in_bbox(bbox, user_id, zoom_level, tag=tag, public_safe=True, allow_downloads=allow_downloads)
 
 
 def _validate_share_id(share_id: str) -> bool:
@@ -92,12 +92,15 @@ def create_share(request):
         while TagShare.objects.filter(share_id=share_id).exists() or CollectionShare.objects.filter(share_id=share_id).exists():
             share_id = str(uuid.uuid4())
 
-        # Create new share (always use UUID4, no use_tag_as_id option)
+        # Get allow_downloads from request (default False)
+        allow_downloads = data.get('allow_downloads', False)
+
+        # Create new share (always use UUID4)
         tag_share = TagShare.objects.create(
             share_id=share_id,
             tag=tag,
             user=request.user,
-            use_tag_as_id=False
+            allow_downloads=allow_downloads
         )
 
         # Build full URL
@@ -146,7 +149,7 @@ def list_shares(request):
                 'created_at': share.created_at.isoformat(),
                 'access_count': share.access_count,
                 'url': share_url,
-                'use_tag_as_id': share.use_tag_as_id
+                'allow_downloads': share.allow_downloads
             })
         
         # Get collection shares
@@ -161,7 +164,8 @@ def list_shares(request):
                 'created_at': share.created_at.isoformat(),
                 'access_count': share.access_count,
                 'url': share_url,
-                'include_tags': share.include_tags
+                'include_tags': share.include_tags,
+                'allow_downloads': share.allow_downloads
             })
         
         # Sort by created_at descending (newest first)
@@ -250,7 +254,8 @@ def get_public_share_info(request, share_id):
         if tag_share:
             return JsonResponse({
                 'share_type': 'tag',
-                'tag': tag_share.tag
+                'tag': tag_share.tag,
+                'allow_downloads': tag_share.allow_downloads
             })
         
         # If not found, try collection share
@@ -261,7 +266,8 @@ def get_public_share_info(request, share_id):
                 'share_type': 'collection',
                 'collection_name': collection_share.collection.name,
                 'collection_id': str(collection_share.collection.id),
-                'include_tags': collection_share.include_tags
+                'include_tags': collection_share.include_tags,
+                'allow_downloads': collection_share.allow_downloads
             })
         
         # Share not found
@@ -315,7 +321,7 @@ def get_public_share(request, share_id):
         bbox, zoom_level = validation_result
 
         # Fetch data from database with optimized single query
-        query_result = _get_public_share_features_in_bbox(bbox, share.user.id, share.tag, zoom_level)
+        query_result = _get_public_share_features_in_bbox(bbox, share.user.id, share.tag, zoom_level, allow_downloads=share.allow_downloads)
         features = query_result.features
         total_features_in_bbox = query_result.total_count
         fallback_used = query_result.fallback_used
@@ -384,12 +390,16 @@ def create_collection_share(request):
         while TagShare.objects.filter(share_id=share_id).exists() or CollectionShare.objects.filter(share_id=share_id).exists():
             share_id = str(uuid.uuid4())
 
+        # Get allow_downloads from request (default False)
+        allow_downloads = data.get('allow_downloads', False)
+
         # Create new share
         collection_share = CollectionShare.objects.create(
             share_id=share_id,
             collection=collection,
             user=request.user,
-            include_tags=include_tags
+            include_tags=include_tags,
+            allow_downloads=allow_downloads
         )
 
         # Build full URL
@@ -454,7 +464,7 @@ def get_public_collection_share(request, share_id):
         bbox, zoom_level = validation_result
 
         # Fetch data from database using collection query
-        query_result = _get_features_in_bbox(bbox, share.user.id, zoom_level, collection_id=share.collection.id, public_safe=True, include_tags=share.include_tags)
+        query_result = _get_features_in_bbox(bbox, share.user.id, zoom_level, collection_id=share.collection.id, public_safe=True, include_tags=share.include_tags, allow_downloads=share.allow_downloads)
         features = query_result.features
         total_features_in_bbox = query_result.total_count
         fallback_used = query_result.fallback_used

@@ -24,7 +24,7 @@
     </div>
 
     <!-- Feature Stats -->
-    <div v-if="allowedOptions.featureStats || allowedOptions.userLocation" class="mt-auto text-xs text-gray-600">
+    <div v-if="allowedOptions.featureStats || allowedOptions.userLocation" class="mt-auto text-xs text-gray-600 mb-4">
       <div class="space-y-1">
         <div v-if="allowedOptions.featureStats">
           Features: <span class="font-medium">{{ featureCount }}</span> / <span class="font-medium">{{ maxFeatures }}</span>
@@ -34,10 +34,31 @@
         </div>
       </div>
     </div>
+
+    <!-- Download Button (for public shares with downloads enabled) -->
+    <div v-if="isPublicShareMode && allowDownloads" class="mt-auto">
+      <button
+        @click="handleDownload"
+        class="w-full inline-flex items-center justify-center px-4 py-2 border border-transparent text-sm font-medium rounded-md text-white bg-blue-500 hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 transition-colors"
+        title="Download all features as KMZ"
+      >
+        <svg class="w-5 h-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path
+            stroke-linecap="round"
+            stroke-linejoin="round"
+            stroke-width="2"
+            d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1M12 4v10m0 0l-4-4m4 4l4-4"
+          ></path>
+        </svg>
+        Download All
+      </button>
+    </div>
   </div>
 </template>
 
 <script>
+import {APIHOST} from '@/config.js'
+
 export default {
   name: 'MapControlsSidebar',
   props: {
@@ -75,9 +96,30 @@ export default {
         featureStats: true,
         userLocation: true
       })
+    },
+    isPublicShareMode: {
+      type: Boolean,
+      default: false
+    },
+    shareId: {
+      type: String,
+      default: null
+    },
+    allowDownloads: {
+      type: Boolean,
+      default: false
     }
   },
-  emits: ['layer-change']
+  emits: ['layer-change'],
+  methods: {
+    handleDownload() {
+      if (!this.shareId) {
+        return
+      }
+      const url = `${APIHOST}/api/export-kmz?share=${encodeURIComponent(this.shareId)}`
+      window.open(url, '_blank')
+    }
+  }
 }
 </script>
 

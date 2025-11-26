@@ -16,6 +16,21 @@
             </svg>
           </button>
           <button
+              v-if="showDownloadButton"
+              @click="$emit('download')"
+              class="text-gray-400 hover:text-blue-500 transition-colors"
+              title="Download KMZ"
+          >
+            <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path
+                  stroke-linecap="round"
+                  stroke-linejoin="round"
+                  stroke-width="2"
+                  d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1M12 4v10m0 0l-4-4m4 4l4-4"
+              ></path>
+            </svg>
+          </button>
+          <button
             v-if="showEditButton"
             @click="$emit('edit')"
             class="text-gray-400 hover:text-blue-500 transition-colors"
@@ -94,12 +109,20 @@ export default {
       type: Object,
       default: null
     },
+    showDownloadButton: {
+      type: Boolean,
+      default: true
+    },
     showEditButton: {
       type: Boolean,
       default: true
+    },
+    shareId: {
+      type: String,
+      default: null
     }
   },
-  emits: ['close', 'edit', 'zoom', 'show-profile'],
+  emits: ['close', 'edit', 'zoom', 'show-profile', 'download'],
   computed: {
     isLineOrTrack() {
       if (!this.feature) return false
@@ -125,7 +148,7 @@ export default {
     },
     getFeatureTags(feature) {
       const properties = feature.get('properties') || {}
-      const userTags = Array.isArray(properties.tags) 
+      const userTags = Array.isArray(properties.tags)
         ? properties.tags.filter(tag => tag && tag.trim() !== '')
         : []
       const systemTags = Array.isArray(properties.system_tags)

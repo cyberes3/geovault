@@ -123,6 +123,17 @@
                 </svg>
               </button>
               <button
+                  class="p-1.5 text-gray-400 hover:text-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-1 rounded"
+                  title="Download Tag KMZ"
+                  type="button"
+                  @click.stop.prevent="downloadTagKmz(tag)"
+                  @mousedown.stop.prevent
+              >
+                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1M12 4v10m0 0l-4-4m4 4l4-4"></path>
+                </svg>
+              </button>
+              <button
                   :class="[
                     'p-1.5 rounded focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-1',
                     isSystemTag(tag)
@@ -624,6 +635,10 @@ export default {
     openShareDialog(tag) {
       this.selectedTagForShare = tag;
       this.shareDialogOpen = true;
+    },
+    downloadTagKmz(tag) {
+      const url = `/api/export-kmz?tag=${encodeURIComponent(tag)}`;
+      window.open(url, '_blank');
     }
   },
   async mounted() {

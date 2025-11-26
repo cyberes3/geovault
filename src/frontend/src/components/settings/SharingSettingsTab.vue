@@ -96,14 +96,22 @@
             </div>
 
             <!-- Share Info -->
-            <div class="grid grid-cols-2 gap-4 text-xs text-gray-600">
-              <div>
+            <div class="flex flex-wrap gap-x-4 gap-y-2 text-xs text-gray-600">
+              <div class="flex-shrink-0">
                 <span class="font-medium">Created:</span>
-                <span class="ml-1">{{ formatDate(share.created_at) }}</span>
+                <span class="ml-1 whitespace-nowrap">{{ formatDate(share.created_at) }}</span>
               </div>
-              <div>
+              <div class="flex-shrink-0">
                 <span class="font-medium">Access Count:</span>
                 <span class="ml-1">{{ share.access_count }}</span>
+              </div>
+              <div v-if="share.allow_downloads !== undefined" class="flex-shrink-0">
+                <span class="font-medium">Download:</span>
+                <span class="ml-1">{{ share.allow_downloads ? 'Yes' : 'No' }}</span>
+              </div>
+              <div v-if="share.include_tags !== undefined" class="flex-shrink-0">
+                <span class="font-medium">Tags:</span>
+                <span class="ml-1">{{ share.include_tags ? 'Yes' : 'No' }}</span>
               </div>
             </div>
           </div>

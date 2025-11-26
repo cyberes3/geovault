@@ -14,6 +14,7 @@ from api.views.sharing import create_share, list_shares, delete_share, get_publi
 from api.views.collections import list_collections, create_collection, get_collection, update_collection, delete_collection, get_collection_features
 from api.views.user_settings import get_user_settings, update_user_setting
 from api.views.tiles import tile_proxy, get_tile_sources
+from api.views.feature_export import export_feature_kmz
 
 urlpatterns = [
     path('item/import/upload', upload_item),
@@ -38,6 +39,7 @@ urlpatterns = [
     path('feature/<int:feature_id>/apply-replacement/', apply_replacement_geometry),
     path('feature/<int:feature_id>/regenerate-tags/', regenerate_feature_tags),
     path('feature/<int:feature_id>/delete/', delete_feature),
+    path('export-kmz', export_feature_kmz, name='export_feature_kmz'),
     # Config endpoint
     path('config/', get_config),
     # Icon endpoints

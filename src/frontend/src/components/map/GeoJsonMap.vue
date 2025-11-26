@@ -85,14 +85,18 @@
             @edit="handleEditFeature"
             @zoom="zoomToFeature(selectedFeature)"
             @show-profile="showElevationProfile = true"
+            @download="handleDownloadFeatureKmz"
         />
         <FeatureInfoBox
             v-if="!isEditingFeature && isPublicShareMode && !showElevationProfile"
             :feature="selectedFeature"
             :show-edit-button="false"
+            :show-download-button="publicShareInfo && publicShareInfo.allow_downloads"
+            :share-id="shareId"
             @close="selectedFeature = null"
             @zoom="zoomToFeature(selectedFeature)"
             @show-profile="showElevationProfile = true"
+            @download="handleDownloadFeatureKmz"
         />
         <FeatureEditBox
             v-if="isEditingFeature && !isPublicShareMode"
@@ -134,6 +138,9 @@
         :selected-layer="selectedLayer"
         :tile-sources="tileSources"
         :user-location="userLocation"
+        :is-public-share-mode="isPublicShareMode"
+        :share-id="shareId"
+        :allow-downloads="publicShareInfo && publicShareInfo.allow_downloads"
         @layer-change="updateMapLayer"
     />
   </div>
@@ -500,6 +507,28 @@ export default {
       this.selectedFeature = feature
       this.isEditingFeature = false
       this.showFeaturePopup = false
+    },
+
+    // Download selected feature as KMZ (authenticated mode only)
+    handleDownloadFeatureKmz() {
+      const feature = this.selectedFeature
+      if (!feature) {
+        return
+      }
+      const properties = feature.get('properties') || {}
+      const featureId = properties._id
+      if (!featureId) {
+        return
+      }
+
+      let url = `${APIHOST}/api/export-kmz?feature=${encodeURIComponent(featureId)}`
+      
+      // If in public share mode, include share_id parameter
+      if (this.isPublicShareMode && this.shareId) {
+        url += `&share=${encodeURIComponent(this.shareId)}`
+      }
+
+      window.open(url, '_blank')
     },
 
     // Handle tag filter change from sidebar
@@ -1206,7 +1235,8 @@ export default {
               tag: infoData.tag || null,
               collection_name: infoData.collection_name || null,
               collection_id: infoData.collection_id || null,
-              include_tags: infoData.include_tags || false
+              include_tags: infoData.include_tags || false,
+              allow_downloads: infoData.allow_downloads || false
             }
 
             // Store tag/collection name for display

@@ -243,7 +243,7 @@ def _build_base_query(user_id: int, tag: str | None = None, collection_id: uuid.
     return base_query.order_by('id')
 
 
-def _convert_feature_to_geojson(feature: FeatureStore, public_safe: bool = False, include_tags: bool = False) -> Dict:
+def _convert_feature_to_geojson(feature: FeatureStore, public_safe: bool = False, include_tags: bool = False, allow_downloads: bool = False) -> Dict:
     """
     Convert FeatureStore instance to GeoJSON Feature dictionary.
     
@@ -266,6 +266,9 @@ def _convert_feature_to_geojson(feature: FeatureStore, public_safe: bool = False
         # Don't include database ID in public view
         if '_id' in properties:
             del properties['_id']
+        # If downloads are allowed, include _id so features can be exported
+        if allow_downloads:
+            properties['_id'] = feature.id
         # Don't include tags in public view unless explicitly requested
         # (they can contain private information)
         if not include_tags and 'tags' in properties:
@@ -282,7 +285,7 @@ def _convert_feature_to_geojson(feature: FeatureStore, public_safe: bool = False
     }
 
 
-def _get_features_in_bbox(bbox: Tuple[float, float, float, float], user_id: int, zoom_level: int, tag: str | None = None, collection_id: uuid.UUID | None = None, public_safe: bool = False, include_tags: bool = False) -> BboxQueryResult:
+def _get_features_in_bbox(bbox: Tuple[float, float, float, float], user_id: int, zoom_level: int, tag: str | None = None, collection_id: uuid.UUID | None = None, public_safe: bool = False, include_tags: bool = False, allow_downloads: bool = False) -> BboxQueryResult:
     """
     Get features within bounding box from database, handling world-wide extents that cross the International Date Line.
     Returns both the features and the total count in a single optimized operation.
@@ -334,7 +337,7 @@ def _get_features_in_bbox(bbox: Tuple[float, float, float, float], user_id: int,
     # Convert to GeoJSON format
     geojson_features = []
     for feature in features_query:
-        geojson_feature = _convert_feature_to_geojson(feature, public_safe, include_tags)
+        geojson_feature = _convert_feature_to_geojson(feature, public_safe, include_tags, allow_downloads)
         if geojson_feature:
             geojson_features.append(geojson_feature)
 
@@ -370,7 +373,7 @@ def _get_features_in_bbox(bbox: Tuple[float, float, float, float], user_id: int,
             # Re-convert to GeoJSON format
             geojson_features = []
             for feature in features_query:
-                geojson_feature = _convert_feature_to_geojson(feature, public_safe, include_tags)
+                geojson_feature = _convert_feature_to_geojson(feature, public_safe, include_tags, allow_downloads)
                 if geojson_feature:
                     geojson_features.append(geojson_feature)
 

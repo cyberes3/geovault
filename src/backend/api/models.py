@@ -108,12 +108,12 @@ class DatabaseLogging(django_models.Model):
 
 
 class TagShare(django_models.Model):
-    share_id = django_models.CharField(max_length=255, unique=True, db_index=True, help_text="UUID4 or sanitized tag name")
+    share_id = django_models.CharField(max_length=255, unique=True, db_index=True, help_text="UUID4")
     tag = django_models.CharField(max_length=255, help_text="The tag being shared")
     user = django_models.ForeignKey(get_user_model(), on_delete=django_models.CASCADE)
     created_at = django_models.DateTimeField(auto_now_add=True)
     access_count = django_models.IntegerField(default=0, help_text="Number of times this share has been accessed")
-    use_tag_as_id = django_models.BooleanField(default=False, help_text="Whether share_id is the tag name or UUID4")
+    allow_downloads = django_models.BooleanField(default=False, help_text="Whether viewers can download features as KMZ")
 
     class Meta:
         indexes = [
@@ -130,6 +130,7 @@ class CollectionShare(django_models.Model):
     created_at = django_models.DateTimeField(auto_now_add=True)
     access_count = django_models.IntegerField(default=0, help_text="Number of times this share has been accessed")
     include_tags = django_models.BooleanField(default=False, help_text="Whether to include tags in the shared features")
+    allow_downloads = django_models.BooleanField(default=False, help_text="Whether viewers can download features as KMZ")
 
     class Meta:
         indexes = [

@@ -135,6 +135,31 @@
         </form>
       </div>
     </div>
+
+    <!-- Data Export Section -->
+    <div class="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
+      <h2 class="text-lg font-semibold text-gray-900 mb-4">Data Export</h2>
+      <p class="text-sm text-gray-600 mb-4">
+        Download all your features and associated data as a single KMZ file. This file can be opened in Google Earth or other GIS software.
+      </p>
+      
+      <div v-if="downloadMessage" :class="[
+        'p-3 rounded-md text-sm mb-4',
+        downloadMessageType === 'success' ? 'bg-green-50 text-green-800' : 'bg-red-50 text-red-800'
+      ]">
+        {{ downloadMessage }}
+      </div>
+
+      <button
+        @click="handleDownloadFeatures"
+        :disabled="downloadLoading"
+        class="inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md text-white bg-blue-500 hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 disabled:opacity-50 disabled:cursor-not-allowed"
+        title="Download all features as KMZ"
+      >
+        <span v-if="downloadLoading">Preparing Download...</span>
+        <span v-else>Download All Features (KMZ)</span>
+      </button>
+    </div>
   </div>
 </template>
 
@@ -167,12 +192,15 @@ export default {
       passwordLoading: false,
       emailLoading: false,
       resendLoading: false,
+      downloadLoading: false,
       resendCooldown: 0,
       cooldownInterval: null,
       passwordMessage: '',
       passwordMessageType: '',
       emailMessage: '',
-      emailMessageType: ''
+      emailMessageType: '',
+      downloadMessage: '',
+      downloadMessageType: ''
     }
   },
   methods: {
@@ -375,6 +403,73 @@ export default {
       if (this.cooldownInterval) {
         clearInterval(this.cooldownInterval);
         this.cooldownInterval = null;
+      }
+    },
+    async handleDownloadFeatures() {
+      this.downloadLoading = true;
+      this.downloadMessage = '';
+      this.downloadMessageType = '';
+
+      try {
+        const response = await axios.get('/api/export-kmz?all=true', {
+          headers: {
+            'X-CSRFToken': getCookie('csrftoken')
+          },
+          responseType: 'blob' // Important for file downloads
+        });
+
+        if (response.status === 200) {
+          // Create a blob link to download the file
+          const url = window.URL.createObjectURL(new Blob([response.data]));
+          const link = document.createElement('a');
+          link.href = url;
+          
+          // Extract filename from Content-Disposition header if available
+          let filename = 'all-features.kmz';
+          const contentDisposition = response.headers['content-disposition'];
+          if (contentDisposition) {
+            const filenameMatch = contentDisposition.match(/filename="?([^"]+)"?/);
+            if (filenameMatch && filenameMatch.length === 2) {
+              filename = filenameMatch[1];
+            }
+          }
+          
+          link.setAttribute('download', filename);
+          document.body.appendChild(link);
+          link.click();
+          
+          // Cleanup
+          document.body.removeChild(link);
+          window.URL.revokeObjectURL(url);
+          
+          // Only show error messages, success is obvious by the download starting
+          this.downloadMessage = '';
+          this.downloadMessageType = '';
+        } else {
+          this.downloadMessage = 'Failed to download features.';
+          this.downloadMessageType = 'error';
+        }
+      } catch (error) {
+        console.error('Error downloading features:', error);
+        if (error.response && error.response.data) {
+           // Try to parse JSON error from blob
+           if (error.response.data instanceof Blob && error.response.data.type === 'application/json') {
+              try {
+                const text = await error.response.data.text();
+                const json = JSON.parse(text);
+                this.downloadMessage = json.error || 'An error occurred during download.';
+              } catch (e) {
+                this.downloadMessage = 'An error occurred during download.';
+              }
+           } else {
+             this.downloadMessage = error.response.data.error || 'An error occurred during download.';
+           }
+        } else {
+          this.downloadMessage = 'An error occurred during download.';
+        }
+        this.downloadMessageType = 'error';
+      } finally {
+        this.downloadLoading = false;
       }
     }
   },
