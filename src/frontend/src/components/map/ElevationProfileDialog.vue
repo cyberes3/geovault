@@ -39,6 +39,14 @@
             <span class="text-gray-600 ml-2">Descent:</span>
             <span class="font-medium text-gray-900 ml-1">{{ stats.grossDescent }}</span>
           </div>
+          <div>
+            <span class="text-gray-600">Min Elevation:</span>
+            <span class="font-medium text-gray-900 ml-1">{{ stats.minElevation }}</span>
+          </div>
+          <div>
+            <span class="text-gray-600">Max Elevation:</span>
+            <span class="font-medium text-gray-900 ml-1">{{ stats.maxElevation }}</span>
+          </div>
         </div>
       </div>
 
@@ -450,7 +458,9 @@ export default {
         totalElevationChange: totalElevationChangeFormatted,
         elevationRange,
         grossAscent: `${grossAscent.toFixed(0)} ft`,
-        grossDescent: `${grossDescent.toFixed(0)} ft`
+        grossDescent: `${grossDescent.toFixed(0)} ft`,
+        minElevation: `${minElevation.toFixed(0)} ft`,
+        maxElevation: `${maxElevation.toFixed(0)} ft`
       }
     },
 
@@ -625,7 +635,7 @@ export default {
         const maxDistance = distances[maxIndex]
         const markerPlugin = {
           id: 'markerPlugin',
-          beforeTooltipDraw: (chart) => {
+          afterDatasetsDraw: (chart) => {
             const ctx = chart.ctx
 
             // Optimize: Get metadata once and check validity before drawing
