@@ -27,11 +27,22 @@ class MapSettings(BaseModel):
     )
 
 
+class ImportSettings(BaseModel):
+    """Pydantic model for import settings section."""
+    model_config = ConfigDict(extra='ignore')
+    
+    overwrite_single_track_name_with_filename: Optional[bool] = Field(
+        default=None,
+        description="When enabled, overwrite single track feature name with filename (excluding extension)"
+    )
+
+
 class UserSettingsModel(BaseModel):
     """Unified Pydantic model for all user settings."""
     model_config = ConfigDict(extra='ignore')
     
     map: Optional[MapSettings] = Field(default=None)
+    import_: Optional[ImportSettings] = Field(default=None, alias='import')
 
 
 def validate_settings(settings: Dict[str, Any]) -> tuple[bool, Optional[str], Optional[Dict[str, Any]], Optional[Dict[str, Any]]]:
@@ -54,8 +65,8 @@ def validate_settings(settings: Dict[str, Any]) -> tuple[bool, Optional[str], Op
     try:
         # Validate using the unified model
         validated_model = UserSettingsModel.model_validate(settings)
-        # Convert back to dict, excluding None values
-        validated_dict = validated_model.model_dump(exclude_none=True)
+        # Convert back to dict, excluding None values, using aliases for field names
+        validated_dict = validated_model.model_dump(exclude_none=True, by_alias=True)
         return True, None, None, validated_dict
     except ValidationError as e:
         # Extract detailed error information

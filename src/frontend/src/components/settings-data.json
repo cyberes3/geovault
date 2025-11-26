@@ -17,6 +17,14 @@
         "description": "Fetch more accurate elevation data sourced from a global land dataset. Increases processing time and not really needed."
       }
     ]
+  },
+  {
+    "key": "import.overwrite_single_track_name_with_filename",
+    "title": "Overwrite Single Track Name with Filename",
+    "type": "checkbox",
+    "section": "import",
+    "defaultValue": false,
+    "description": "When a file contains a single track feature, overwrite the track name with the filename."
   }
 ]
 

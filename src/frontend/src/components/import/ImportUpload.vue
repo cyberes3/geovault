@@ -349,7 +349,7 @@ export default {
     },
     dropzoneClasses() {
       if (this.isDragOver) {
-        return "border-blue-600bg-blue-50"
+        return "border-blue-600 bg-blue-50"
       } else if (this.files.length > 0) {
         if (this.disableUpload) {
           return "border-gray-300 bg-gray-50"

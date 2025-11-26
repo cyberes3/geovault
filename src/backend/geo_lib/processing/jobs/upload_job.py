@@ -2,6 +2,7 @@
 Upload job processor for asynchronous file processing.
 """
 
+import os
 import subprocess
 import time
 import traceback
@@ -10,7 +11,7 @@ from typing import Dict, Any, Optional
 from django.contrib.auth.models import User
 from django.db import transaction
 
-from api.models import ImportQueue
+from api.models import ImportQueue, UserSettings
 from geo_lib.processing.jobs.base_job import BaseJob
 from geo_lib.processing.logging import RealTimeImportLog, DatabaseLogLevel
 from geo_lib.processing.processors import get_processor
@@ -242,6 +243,40 @@ class UploadJob(BaseJob):
             if job and job.status == ProcessingStatus.CANCELLED:
                 logger.info(f"Job {job_id} was cancelled during GeoJSON conversion/processing")
                 return
+
+            # Apply user setting: overwrite single track name with filename if enabled
+            try:
+                user_settings_obj = UserSettings.objects.filter(user_id=user_id).first()
+                if user_settings_obj and user_settings_obj.settings:
+                    import_settings = user_settings_obj.settings.get('import', {})
+                    overwrite_enabled = import_settings.get('overwrite_single_track_name_with_filename', False)
+                    
+                    if overwrite_enabled:
+                        features = geojson_data.get('features', [])
+                        # Check if there's exactly one feature
+                        if len(features) == 1:
+                            feature = features[0]
+                            geometry = feature.get('geometry', {})
+                            geometry_type = geometry.get('type', '').lower() if geometry else ''
+                            properties = feature.get('properties', {})
+                            
+                            # Check if it's a track (LineString or MultiLineString)
+                            is_track_geometry = geometry_type in ['linestring', 'multilinestring']
+                            
+                            # Check if it has the is-track:yes tag
+                            system_tags = properties.get('system_tags', [])
+                            is_track_tagged = 'is-track:yes' in system_tags if isinstance(system_tags, list) else False
+                            
+                            if is_track_geometry and is_track_tagged:
+                                # Extract filename without extension
+                                filename_without_ext = os.path.splitext(filename)[0]
+                                # Overwrite the name property
+                                properties['name'] = filename_without_ext
+                                feature['properties'] = properties
+                                logger.info(f"Overwrote single track name with filename '{filename_without_ext}' for job {job_id}")
+            except Exception as e:
+                # Log error but don't fail the job if setting check fails
+                logger.warning(f"Error checking/applying overwrite_single_track_name_with_filename setting for job {job_id}: {str(e)}")
 
             # Add processing log messages to real-time log
             realtime_log.extend(processing_log)

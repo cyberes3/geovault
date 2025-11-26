@@ -1,6 +1,7 @@
 <template>
   <div class="space-y-4">
-    <div class="flex items-center gap-2">
+    <!-- Title label - only show for non-checkbox types -->
+    <div v-if="setting.type !== 'checkbox'" class="flex items-center gap-2">
       <label class="block text-sm font-medium text-gray-700">
         {{ setting.title }}
       </label>
@@ -47,10 +48,22 @@
         @change="$emit('update:modelValue', $event.target.checked)"
         class="mt-1 h-4 w-4 text-blue-500 focus:ring-blue-500 border-gray-300 rounded"
       />
-      <div class="ml-3">
-        <label :for="setting.key" class="block text-sm font-medium text-gray-700 cursor-pointer">
-          {{ setting.label || setting.title }}
-        </label>
+      <div class="ml-3 flex-1">
+        <div class="flex items-center gap-2">
+          <label :for="setting.key" class="block text-sm font-medium text-gray-700 cursor-pointer">
+            {{ setting.label || setting.title }}
+          </label>
+          <Transition name="fade">
+            <svg
+              v-if="showSuccess"
+              class="h-5 w-5 text-green-600"
+              fill="currentColor"
+              viewBox="0 0 20 20"
+            >
+              <path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clip-rule="evenodd" />
+            </svg>
+          </Transition>
+        </div>
         <p v-if="setting.description" class="text-sm text-gray-500 mt-1">
           {{ setting.description }}
         </p>

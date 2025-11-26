@@ -103,9 +103,12 @@ export default {
       // Load all settings from configuration, using store values or defaults
       settingsConfig.forEach(setting => {
         const value = this.getNestedValue(settings, setting.key);
-        this.settingsValues[setting.key] = value !== undefined 
-          ? value 
-          : setting.defaultValue;
+        // Use store value if available, otherwise use default
+        // Only update if the value has actually changed to avoid unnecessary reactivity triggers
+        const newValue = value !== undefined ? value : setting.defaultValue;
+        if (this.settingsValues[setting.key] !== newValue) {
+          this.settingsValues[setting.key] = newValue;
+        }
       });
     },
 
@@ -147,14 +150,24 @@ export default {
       try {
         // Convert dot-notation key to nested object
         const nestedUpdate = this.keyValueToNested(settingKey, value);
-        await updateUserSetting(nestedUpdate);
+        const response = await updateUserSetting(nestedUpdate);
+        
+        // Update local state immediately with the saved value from response
+        if (response && response.settings) {
+          const savedValue = this.getNestedValue(response.settings, settingKey);
+          if (savedValue !== undefined) {
+            this.settingsValues[settingKey] = savedValue;
+          }
+        }
         
         // Show success checkmark
         this.successCheckmarks[settingKey] = true;
         
-        // Refresh cached settings in the store
-        if (this.$store) {
-          await this.$store.dispatch('fetchUserSettings');
+        // Update store directly with settings from response (no need to fetch again)
+        if (this.$store && response && response.settings) {
+          this.$store.commit('userSettings', response.settings);
+          // Reload settings from store to ensure UI is in sync
+          this.loadSettingsFromStore();
         }
         
         // Hide checkmark after 3 seconds
@@ -164,6 +177,12 @@ export default {
       } catch (error) {
         console.error(`Error saving setting ${settingKey}:`, error);
         const errorMessage = error.message || 'An error occurred while saving the setting.';
+        
+        // Revert to previous value on error
+        // Reload from store to get the last known good value
+        if (this.$store) {
+          this.loadSettingsFromStore();
+        }
         
         // Show error toast if available
         const toastRef = this.toastRef || this.$refs?.toast;
@@ -183,10 +202,34 @@ export default {
         }
       });
       this.saveTimers = {};
+    },
+
+    /**
+     * Flush all pending saves immediately (without debounce)
+     * This is called before component destruction to ensure changes are saved
+     */
+    flushPendingSaves() {
+      Object.keys(this.saveTimers).forEach(settingKey => {
+        // Clear the timer
+        if (this.saveTimers[settingKey]) {
+          clearTimeout(this.saveTimers[settingKey]);
+          delete this.saveTimers[settingKey];
+          // Get the current value and save it immediately (fire and forget)
+          const value = this.settingsValues[settingKey];
+          if (value !== undefined) {
+            // Save immediately without debounce
+            this.saveSetting(settingKey, value).catch(error => {
+              console.error(`Error flushing save for ${settingKey}:`, error);
+            });
+          }
+        }
+      });
     }
   },
   beforeDestroy() {
-    // Cleanup timers when component is destroyed
+    // Flush any pending saves immediately before destroying
+    this.flushPendingSaves();
+    // Cleanup any remaining timers
     this.cleanupTimers();
   }
 }

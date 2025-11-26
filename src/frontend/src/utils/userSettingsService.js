@@ -16,13 +16,13 @@ export async function updateUserSetting(settingsUpdate) {
       }
     });
 
-    if (response.status === 200) {
+    if (response.status === 200 && response.data.settings) {
       return {
         success: true,
         settings: response.data.settings
       };
     } else {
-      throw new Error(response.data.error || 'Failed to save setting.');
+      throw new Error(response.data?.error || 'Failed to save setting.');
     }
   } catch (error) {
     // Re-throw with a more descriptive error message

@@ -42,6 +42,16 @@ export default {
   created() {
     // Load settings from store using mixin method
     this.loadSettingsFromStore();
+  },
+  watch: {
+    // Watch for changes in the store and reload settings
+    '$store.state.userSettings': {
+      handler() {
+        // Reload settings when store updates
+        this.loadSettingsFromStore();
+      },
+      deep: true
+    }
   }
 }
 </script>
