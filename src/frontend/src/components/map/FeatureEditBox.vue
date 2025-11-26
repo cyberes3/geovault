@@ -301,11 +301,11 @@ import TagPicker from '@/components/TagPicker.vue'
 
 // Helper functions for icon type checking
 function isSystemIcon(iconUrl) {
-  return iconUrl.startsWith('/api/data/icons/system/')
+  return iconUrl.startsWith('/api/icons/system/')
 }
 
 function isUserIcon(iconUrl) {
-  return iconUrl.startsWith('/api/data/icons/user/')
+  return iconUrl.startsWith('/api/icons/user/')
 }
 
 export default {
@@ -588,7 +588,7 @@ export default {
         const formData = new FormData()
         formData.append('file', this.uploadedIconFile)
 
-        const response = await fetch(`${APIHOST}/api/data/icons/upload/`, {
+        const response = await fetch(`${APIHOST}/api/icons/upload/`, {
           method: 'POST',
           headers: {
             'X-CSRFToken': this.getCsrfToken()
@@ -852,7 +852,7 @@ export default {
         delete featureData.properties.system_tags
 
         // Send update request
-        const response = await fetch(`${APIHOST}/api/data/feature/${featureId}/update/`, {
+        const response = await fetch(`${APIHOST}/api/feature/${featureId}/update/`, {
           method: 'PUT',
           headers: {
             'Content-Type': 'application/json',
@@ -872,7 +872,7 @@ export default {
 
         // Fetch the updated feature from the server to get all updated properties including system_tags
         try {
-          const fetchResponse = await fetch(`${APIHOST}/api/data/feature/${featureId}/`, {
+          const fetchResponse = await fetch(`${APIHOST}/api/feature/${featureId}/`, {
             credentials: 'include'
           })
           
@@ -971,7 +971,7 @@ export default {
 
       try {
         // Send delete request
-        const response = await fetch(`${APIHOST}/api/data/feature/${featureId}/delete/`, {
+        const response = await fetch(`${APIHOST}/api/feature/${featureId}/delete/`, {
           method: 'DELETE',
           headers: {
             'Content-Type': 'application/json',

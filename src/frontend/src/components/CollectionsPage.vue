@@ -186,7 +186,7 @@ export default {
       this.error = null;
 
       try {
-        const response = await fetch('/api/data/collections/');
+        const response = await fetch('/api/collections/');
 
         if (!response.ok) {
           throw new Error(`HTTP error! status: ${response.status}`);
@@ -231,7 +231,7 @@ export default {
 
       try {
         const csrfToken = getCookie('csrftoken');
-        const response = await fetch(`/api/data/collections/${collection.id}/delete/`, {
+        const response = await fetch(`/api/collections/${collection.id}/delete/`, {
           method: 'DELETE',
           headers: {
             'X-CSRFToken': csrfToken || ''

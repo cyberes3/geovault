@@ -232,7 +232,7 @@ export default {
     async loadIconRegistry() {
       this.isLoading = true
       try {
-        const response = await fetch(`${APIHOST}/api/data/icons/registry/`)
+        const response = await fetch(`${APIHOST}/api/icons/registry/`)
         if (!response.ok) {
           throw new Error(`Failed to load icon registry: ${response.statusText}`)
         }
@@ -317,7 +317,7 @@ export default {
           const formData = new FormData()
           formData.append('file', this.customIconFile)
 
-          const response = await fetch(`${APIHOST}/api/data/icons/upload/`, {
+          const response = await fetch(`${APIHOST}/api/icons/upload/`, {
             method: 'POST',
             headers: {
               'X-CSRFToken': this.getCsrfToken()

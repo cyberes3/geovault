@@ -458,7 +458,7 @@ export default {
      */
     async fetchElevationsFromAPI(featureId) {
       try {
-        const response = await axios.get(`/api/data/feature/${featureId}/elevations/`, {
+        const response = await axios.get(`/api/feature/${featureId}/elevations/`, {
           headers: {
             'X-CSRFToken': getCookie('csrftoken')
           }

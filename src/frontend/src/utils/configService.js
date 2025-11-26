@@ -21,7 +21,7 @@ export async function fetchConfig() {
     }
     
     // Fetch config from server
-    configPromise = fetch('/api/data/config/')
+    configPromise = fetch('/api/config/')
         .then(response => {
             if (!response.ok) {
                 throw new Error(`Failed to fetch config: ${response.status}`);

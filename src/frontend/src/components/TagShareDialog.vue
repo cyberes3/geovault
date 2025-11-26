@@ -207,7 +207,7 @@ export default {
 
       try {
         const csrfToken = getCookie('csrftoken');
-        const response = await fetch('/api/data/sharing/list/', {
+        const response = await fetch('/api/sharing/list/', {
           headers: {
             'X-CSRFToken': csrfToken || ''
           }
@@ -239,7 +239,7 @@ export default {
 
       try {
         const csrfToken = getCookie('csrftoken');
-        const response = await fetch('/api/data/sharing/create/', {
+        const response = await fetch('/api/sharing/create/', {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
@@ -277,7 +277,7 @@ export default {
 
       try {
         const csrfToken = getCookie('csrftoken');
-        const response = await fetch(`/api/data/sharing/${shareId}/`, {
+        const response = await fetch(`/api/sharing/${shareId}/`, {
           method: 'DELETE',
           headers: {
             'X-CSRFToken': csrfToken || ''

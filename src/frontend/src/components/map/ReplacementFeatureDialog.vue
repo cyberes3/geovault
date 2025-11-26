@@ -737,7 +737,7 @@ export default {
     },
     async fetchExistingFeatureGeometryType() {
       try {
-        const response = await fetch(`${APIHOST}/api/data/feature/${this.featureId}/`, {
+        const response = await fetch(`${APIHOST}/api/feature/${this.featureId}/`, {
           credentials: 'include'
         })
         const data = await response.json()
@@ -885,7 +885,7 @@ export default {
         formData.append('file', file)
         formData.append('replacement', this.featureId.toString())
 
-        const response = await fetch(`${APIHOST}/api/data/item/import/upload`, {
+        const response = await fetch(`${APIHOST}/api/item/import/upload`, {
           method: 'POST',
           headers: {
             'X-CSRFToken': this.getCsrfToken()
@@ -920,7 +920,7 @@ export default {
         if (!this.jobId) return
 
         try {
-          const response = await fetch(`${APIHOST}/api/data/item/import/status/${this.jobId}`, {
+          const response = await fetch(`${APIHOST}/api/item/import/status/${this.jobId}`, {
             credentials: 'include'
           })
           const data = await response.json()
@@ -975,7 +975,7 @@ export default {
             return
           }
 
-          const response = await fetch(`${APIHOST}/api/data/item/import/status/${this.jobId}`, {
+          const response = await fetch(`${APIHOST}/api/item/import/status/${this.jobId}`, {
             credentials: 'include'
           })
           const data = await response.json()
@@ -994,7 +994,7 @@ export default {
       if (!this.importQueueId) return
 
       try {
-        const response = await fetch(`${APIHOST}/api/data/item/import/get/features/${this.importQueueId}`, {
+        const response = await fetch(`${APIHOST}/api/item/import/get/features/${this.importQueueId}`, {
           credentials: 'include'
         })
         const data = await response.json()
@@ -1028,7 +1028,7 @@ export default {
       this.errorMessage = ''
 
       try {
-        const response = await fetch(`${APIHOST}/api/data/feature/${this.featureId}/apply-replacement/`, {
+        const response = await fetch(`${APIHOST}/api/feature/${this.featureId}/apply-replacement/`, {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
@@ -1064,7 +1064,7 @@ export default {
       this.errorMessage = ''
 
       try {
-        const response = await fetch(`${APIHOST}/api/data/feature/${this.featureId}/regenerate-tags/`, {
+        const response = await fetch(`${APIHOST}/api/feature/${this.featureId}/regenerate-tags/`, {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
@@ -1095,7 +1095,7 @@ export default {
       
       // Delete the ImportQueue row in the background (fire-and-forget)
       if (this.importQueueId) {
-        fetch(`${APIHOST}/api/data/item/import/delete/${this.importQueueId}`, {
+        fetch(`${APIHOST}/api/item/import/delete/${this.importQueueId}`, {
           method: 'DELETE',
           headers: {
             'X-CSRFToken': this.getCsrfToken()

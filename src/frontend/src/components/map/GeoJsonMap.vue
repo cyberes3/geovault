@@ -219,9 +219,9 @@ export default {
       selectedFeature: null, // Currently selected feature from map click
       tileSources: [], // Available tile sources from backend
       // Configuration
-      API_BASE_URL: '/api/data/geojson/',
-      SHARE_API_BASE_URL: '/api/data/sharing/public/',
-      LOCATION_API_URL: '/api/data/location/user/',
+      API_BASE_URL: '/api/geojson/',
+      SHARE_API_BASE_URL: '/api/sharing/public/',
+      LOCATION_API_URL: '/api/location/user/',
       TILE_SOURCES_API_URL: '/api/tiles/sources/',
       MAX_FEATURES: 5000, // Maximum number of features to keep on the map
       featureTimestamps: {}, // Use plain object instead of Map
@@ -309,7 +309,7 @@ export default {
         return
       }
       try {
-        const response = await fetch(`${APIHOST}/api/data/features/by-tag/`)
+        const response = await fetch(`${APIHOST}/api/features/by-tag/`)
         const data = await response.json()
         
         if (response.ok) {
@@ -559,7 +559,7 @@ export default {
 
       try {
         // Fetch collection info only (name for display)
-        const collectionResponse = await fetch(`${APIHOST}/api/data/collections/${collectionId}/`)
+        const collectionResponse = await fetch(`${APIHOST}/api/collections/${collectionId}/`)
 
         if (!collectionResponse.ok) {
           throw new Error('Failed to load collection')
@@ -728,7 +728,7 @@ export default {
       if (featureId && this.vectorSource) {
         try {
           // Fetch the updated feature
-          const response = await fetch(`${APIHOST}/api/data/feature/${featureId}/`)
+          const response = await fetch(`${APIHOST}/api/feature/${featureId}/`)
           if (response.ok) {
             const data = await response.json()
             if (response.ok && data.feature) {
@@ -1184,7 +1184,7 @@ export default {
         if (this.isPublicShareMode) {
           // Get share info (cached after first call)
           if (!this.publicShareInfo || this.publicShareInfo.share_id !== this.shareId) {
-            const infoUrl = `/api/data/sharing/public/info/${this.shareId}/`
+            const infoUrl = `/api/sharing/public/info/${this.shareId}/`
             const infoResponse = await fetch(infoUrl, {
               signal: this.currentAbortController.signal
             })
@@ -1222,7 +1222,7 @@ export default {
           if (this.publicShareInfo.share_type === 'tag') {
             url = `${this.SHARE_API_BASE_URL}${this.shareId}/?bbox=${bboxString}&zoom=${roundedZoom}`
           } else if (this.publicShareInfo.share_type === 'collection') {
-            url = `/api/data/sharing/public/collection/${this.shareId}/?bbox=${bboxString}&zoom=${roundedZoom}`
+            url = `/api/sharing/public/collection/${this.shareId}/?bbox=${bboxString}&zoom=${roundedZoom}`
           } else {
             this.publicShareError = 'Unknown share type'
             return
@@ -1479,7 +1479,7 @@ export default {
 
       try {
         // Fetch the feature from the API
-        const response = await fetch(`${APIHOST}/api/data/feature/${featureId}/`)
+        const response = await fetch(`${APIHOST}/api/feature/${featureId}/`)
         if (!response.ok) {
           console.error(`Failed to fetch feature ${featureId}: ${response.statusText}`)
           this.removeFeatureIdFromUrl()

@@ -137,8 +137,8 @@ def generate_registry(icons_dir, output_file):
         # Convert to string and use forward slashes (for URLs)
         relative_path_str = str(relative_path).replace('\\', '/')
         
-        # Use icon route format: /api/data/icons/system/{relative_path}
-        url = f"/api/data/icons/system/{relative_path_str}"
+        # Use icon route format: /api/icons/system/{relative_path}
+        url = f"/api/icons/system/{relative_path_str}"
         
         icon_entry = {
             'url': url,

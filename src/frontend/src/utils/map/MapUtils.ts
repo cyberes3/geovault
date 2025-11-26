@@ -17,7 +17,7 @@ export class MapUtils {
      * @returns true if the icon is a system icon
      */
     private static isSystemIcon(iconUrl: string): boolean {
-        return iconUrl.startsWith('/api/data/icons/system/');
+        return iconUrl.startsWith('/api/icons/system/');
     }
 
     /**
@@ -26,7 +26,7 @@ export class MapUtils {
      * @returns true if the icon is a user icon
      */
     private static isUserIcon(iconUrl: string): boolean {
-        return iconUrl.startsWith('/api/data/icons/user/');
+        return iconUrl.startsWith('/api/icons/user/');
     }
 
     /**
@@ -343,8 +343,8 @@ export class MapUtils {
         }
 
         // If relative URL starting with /api/, prepend APIHOST
-        // The backend stores icons with path /api/data/icons/{hash}.png
-        // and the endpoint is /api/data/icons/{hash} (routed through api.urls)
+        // The backend stores icons with path /api/icons/{hash}.png
+        // and the endpoint is /api/icons/{hash} (routed through api.urls)
         if (iconUrl.startsWith('/api/')) {
             return `${APIHOST}${iconUrl}`;
         }
@@ -463,13 +463,13 @@ export class MapUtils {
             // backend recoloring: https://caltopo.com/icon.png?cfg=campfire%2CFF0000%231
             
             // Extract icon path relative to assets/icons/ for recolor endpoint
-            // Extract path after /api/data/icons/system/ (e.g., 'caltopo/4wd.png')
-            const iconPathForRecolor = iconUrl.replace('/api/data/icons/system/', '');
+            // Extract path after /api/icons/system/ (e.g., 'caltopo/4wd.png')
+            const iconPathForRecolor = iconUrl.replace('/api/icons/system/', '');
             
             // Construct server-side recoloring URL
             const encodedColor = encodeURIComponent(markerColor);
             const encodedIcon = encodeURIComponent(iconPathForRecolor);
-            iconSrc = `${APIHOST}/api/data/icons/recolor/?icon=${encodedIcon}&color=${encodedColor}`;
+            iconSrc = `${APIHOST}/api/icons/recolor/?icon=${encodedIcon}&color=${encodedColor}`;
         } else {
             // Use original icon URL
             iconSrc = this.resolveIconUrl(iconUrl);

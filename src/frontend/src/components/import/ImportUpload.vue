@@ -561,7 +561,7 @@ export default {
             this.isProcessing = false
             this.currentFileUploadComplete = false
 
-            const response = await axios.post('/api/data/item/import/upload', formData, {
+            const response = await axios.post('/api/item/import/upload', formData, {
               headers: {
                 'X-CSRFToken': getCookie('csrftoken')
               },

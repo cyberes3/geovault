@@ -198,7 +198,7 @@ export default createStore<State>({
             try {
                 const csrfToken = getCookie('csrftoken');
                 
-                const response = await fetch('/api/data/user/settings/', {
+                const response = await fetch('/api/user/settings/', {
                     method: 'GET',
                     headers: {
                         'X-CSRFToken': csrfToken || '',

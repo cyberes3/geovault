@@ -935,7 +935,7 @@ export default {
       }
 
       try {
-        const response = await axios.get(`/api/data/item/import/get/${this.currentId}?page=1&page_size=${this.pagination.pageSize}`)
+        const response = await axios.get(`/api/item/import/get/${this.currentId}?page=1&page_size=${this.pagination.pageSize}`)
         if (response.status === 200) {
           this.processing.active = response.data.processing
           if (this.processing.active && response.data.job_details) {
@@ -959,8 +959,8 @@ export default {
       try {
         // Fetch items and logs in parallel for better performance
         const [itemsResponse, logsResponse] = await Promise.all([
-          axios.get(`/api/data/item/import/get/${this.currentId}?page=1&page_size=${this.pagination.pageSize}`),
-          axios.get(`/api/data/item/import/logs/${this.currentId}`)
+          axios.get(`/api/item/import/get/${this.currentId}?page=1&page_size=${this.pagination.pageSize}`),
+          axios.get(`/api/item/import/logs/${this.currentId}`)
         ])
 
         if (itemsResponse.status === 200) {
@@ -1106,7 +1106,7 @@ export default {
       }
 
       // If relative URL starting with /api/, prepend APIHOST
-      // The backend stores icons with path /api/data/icons/{hash}.png
+      // The backend stores icons with path /api/icons/{hash}.png
       if (iconUrl.startsWith('/api/')) {
         return `${APIHOST}${iconUrl}`;
       }
@@ -1228,7 +1228,7 @@ export default {
     },
     async fetchUserTags() {
       try {
-        const response = await fetch('/api/data/features/by-tag/');
+        const response = await fetch('/api/features/by-tag/');
         const data = await response.json();
         
         if (response.ok && data.user_tags) {
@@ -1372,7 +1372,7 @@ export default {
       const csrftoken = getCookie('csrftoken');
 
       // Save only changed features using the new API format
-      const response = await axios.put('/api/data/item/import/update/' + this.currentId, {
+      const response = await axios.put('/api/item/import/update/' + this.currentId, {
         features: changedFeatures
       }, {
         headers: {
@@ -1453,7 +1453,7 @@ export default {
         // Convert skippedFeatureIds Set to array for JSON serialization
         // Filter out index-based IDs (temp IDs) - only send actual feature IDs to backend
         const skippedFeatureIdsArray = Array.from(this.skippedFeatureIds).filter(id => !id.startsWith('index_'));
-        const response = await axios.post('/api/data/item/import/perform/' + this.currentId, {
+        const response = await axios.post('/api/item/import/perform/' + this.currentId, {
           import_custom_icons: this.importCustomIcons,
           skipped_feature_ids: skippedFeatureIdsArray
         }, {

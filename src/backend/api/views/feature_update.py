@@ -562,14 +562,14 @@ def update_feature(request, feature_id):
                 if isinstance(icon_url, str) and icon_url.strip():
                     # Check if it's an icon (built-in, uploaded, or ends with image extension)
                     if (icon_url.startswith('assets/') or 
-                            icon_url.startswith('/api/data/icons/') or 
+                            icon_url.startswith('/api/icons/') or 
                             icon_url.endswith(('.png', '.jpg', '.jpeg', '.gif', '.bmp', '.svg', '.webp', '.ico'))):
                         original_icon_url = icon_url
                         break
 
         # Handle icon URL changes
         # Allow: removing icons (null/empty), setting new built-in icons (assets/), 
-        #        setting new uploaded icons (/api/data/icons/), keeping same icon
+        #        setting new uploaded icons (/api/icons/), keeping same icon
         # Prevent: manually changing existing icon URLs to arbitrary external URLs
         new_icon_url = new_properties.get('icon', '')
         
@@ -583,10 +583,10 @@ def update_feature(request, feature_id):
                     new_properties['marker-color'] = original_properties.get('marker-color', '#ff0000')
             elif isinstance(new_icon_url, str) and new_icon_url.strip():
                 # Icon is being changed - validate new icon URL
-                # Allow: same icon, built-in icons (assets/), uploaded icons (/api/data/icons/)
+                # Allow: same icon, built-in icons (assets/), uploaded icons (/api/icons/)
                 if (new_icon_url == original_icon_url or 
                         new_icon_url.startswith('assets/') or 
-                        new_icon_url.startswith('/api/data/icons/')):
+                        new_icon_url.startswith('/api/icons/')):
                     # Valid icon change - clear other icon property names to avoid conflicts
                     for prop_name in icon_property_names:
                         if prop_name != 'icon' and prop_name in new_properties:
@@ -602,8 +602,8 @@ def update_feature(request, feature_id):
         else:
             # No original icon - validate that new icons are built-in or uploaded (not external URLs)
             if isinstance(new_icon_url, str) and new_icon_url.strip():
-                # Only allow built-in icons (assets/) or uploaded icons (/api/data/icons/)
-                if not (new_icon_url.startswith('assets/') or new_icon_url.startswith('/api/data/icons/')):
+                # Only allow built-in icons (assets/) or uploaded icons (/api/icons/)
+                if not (new_icon_url.startswith('assets/') or new_icon_url.startswith('/api/icons/')):
                     # Remove invalid external icon URL
                     new_properties['icon'] = ''
                     # Clear other icon properties

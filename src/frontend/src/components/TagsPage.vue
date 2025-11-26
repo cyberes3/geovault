@@ -281,7 +281,7 @@ export default {
       this.error = null;
 
       try {
-        const response = await fetch('/api/data/features/by-tag/');
+        const response = await fetch('/api/features/by-tag/');
 
         if (!response.ok) {
           throw new Error(`HTTP error! status: ${response.status}`);
@@ -408,7 +408,7 @@ export default {
         // Send bulk update request
         if (updates.length > 0) {
           const csrfToken = this.getCookie('csrftoken');
-          const response = await fetch('/api/data/features/bulk-update-metadata/', {
+          const response = await fetch('/api/features/bulk-update-metadata/', {
             method: 'POST',
             headers: {
               'Content-Type': 'application/json',
@@ -515,7 +515,7 @@ export default {
         // Send bulk update request
         if (updates.length > 0) {
           const csrfToken = this.getCookie('csrftoken');
-          const response = await fetch('/api/data/features/bulk-update-metadata/', {
+          const response = await fetch('/api/features/bulk-update-metadata/', {
             method: 'POST',
             headers: {
               'Content-Type': 'application/json',
@@ -577,7 +577,7 @@ export default {
 
         // Update the feature
         const csrfToken = this.getCookie('csrftoken');
-        const response = await fetch(`/api/data/feature/${feature.properties._id}/update-metadata/`, {
+        const response = await fetch(`/api/feature/${feature.properties._id}/update-metadata/`, {
           method: 'PUT',
           headers: {
             'Content-Type': 'application/json',

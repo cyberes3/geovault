@@ -155,7 +155,7 @@ export default {
       this.sharesError = null;
 
       try {
-        const response = await axios.get('/api/data/sharing/list/', {
+        const response = await axios.get('/api/sharing/list/', {
           headers: {
             'X-CSRFToken': getCookie('csrftoken')
           }
@@ -183,7 +183,7 @@ export default {
 
       try {
         // Single endpoint handles both tag and collection shares
-        const response = await axios.delete(`/api/data/sharing/${shareId}/`, {
+        const response = await axios.delete(`/api/sharing/${shareId}/`, {
           headers: {
             'X-CSRFToken': getCookie('csrftoken')
           }

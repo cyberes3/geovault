@@ -9,7 +9,7 @@ import { getCookie } from "@/assets/js/auth.js";
  */
 export async function updateUserSetting(settingsUpdate) {
   try {
-    const response = await axios.put('/api/data/user/settings/update/', settingsUpdate, {
+    const response = await axios.put('/api/user/settings/update/', settingsUpdate, {
       headers: {
         'X-CSRFToken': getCookie('csrftoken'),
         'Content-Type': 'application/json'

@@ -214,7 +214,7 @@ export default {
       searchResults: [],
       isSearching: false,
       searchTimeout: null,
-      API_BASE_URL: '/api/data/features/search/',
+      API_BASE_URL: '/api/features/search/',
       // Tag filter state
       selectedTags: [],
       tagSearchQuery: '',
@@ -425,7 +425,7 @@ export default {
       try {
         // Build URL with multiple tag parameters
         const tagParams = this.selectedTags.map(tag => `tags=${encodeURIComponent(tag)}`).join('&')
-        const url = `${APIHOST}/api/data/features/filter-by-tags/?${tagParams}`
+        const url = `${APIHOST}/api/features/filter-by-tags/?${tagParams}`
         const response = await fetch(url)
         const data = await response.json()
 

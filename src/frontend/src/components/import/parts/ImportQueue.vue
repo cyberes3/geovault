@@ -397,7 +397,7 @@ export default {
       const csrftoken = getCookie('csrftoken');
 
       try {
-        const response = await axios.post(`/api/data/item/import/perform/${item.id}`, [], {
+        const response = await axios.post(`/api/item/import/perform/${item.id}`, [], {
           headers: {
             'X-CSRFToken': csrftoken
           }
@@ -428,7 +428,7 @@ export default {
         this.$forceUpdate();
 
         try {
-          const response = await axios.delete('/api/data/item/import/delete/' + item.id, {
+          const response = await axios.delete('/api/item/import/delete/' + item.id, {
             headers: {
               'X-CSRFToken': getCookie('csrftoken')
             }

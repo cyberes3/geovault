@@ -274,7 +274,7 @@ export default {
     async fetchTags() {
       this.loadingTags = true;
       try {
-        const response = await fetch('/api/data/features/by-tag/');
+        const response = await fetch('/api/features/by-tag/');
         const data = await response.json();
         
         if (response.ok) {
@@ -297,7 +297,7 @@ export default {
     async fetchFeatures() {
       this.loadingFeatures = true;
       try {
-        const response = await fetch('/api/data/features/all/');
+        const response = await fetch('/api/features/all/');
         const data = await response.json();
         
         if (response.ok && data.data && data.data.features) {
@@ -329,8 +329,8 @@ export default {
 
       try {
         const url = this.collection 
-          ? `/api/data/collections/${this.collection.id}/update/`
-          : '/api/data/collections/create/';
+          ? `/api/collections/${this.collection.id}/update/`
+          : '/api/collections/create/';
         
         const method = this.collection ? 'PUT' : 'POST';
         
