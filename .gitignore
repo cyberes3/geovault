@@ -1,4 +1,5 @@
 .idea
+*.timestamp-*
 
 # ---> Python
 # Byte-compiled / optimized / DLL files
