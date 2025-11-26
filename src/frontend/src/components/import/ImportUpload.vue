@@ -58,8 +58,6 @@
           <div class="flex justify-between text-sm text-gray-600">
             <span class="flex items-center">
               {{ progressStatusText }}
-              <!-- Processing spinner -->
-              <Loader v-if="isProcessing" size="sm" layout="inline" :showMessage="false" />
             </span>
             <span v-if="overallProgress > 0">{{ overallProgress }}%</span>
           </div>
@@ -182,7 +180,7 @@
 
             <!-- Successful uploads -->
             <div v-if="uploadResults.successful.length > 0">
-              <h5 class="text-xs font-medium text-green-700 mb-1">✓ Successful ({{ uploadResults.successful.length }})</h5>
+              <h5 class="text-xs font-medium text-green-600 mb-1">✓ Successful ({{ uploadResults.successful.length }})</h5>
               <div class="space-y-1 ml-2">
                 <div v-for="result in uploadResults.successful" :key="result.filename" class="text-xs text-green-600">
                   <span class="font-medium">{{ result.filename }}</span>
@@ -193,7 +191,7 @@
 
             <!-- Skipped uploads -->
             <div v-if="uploadResults.skipped.length > 0">
-              <h5 class="text-xs font-medium text-yellow-700 mb-1">⚠ Skipped ({{ uploadResults.skipped.length }})</h5>
+              <h5 class="text-xs font-medium text-yellow-600 mb-1">⚠ Skipped ({{ uploadResults.skipped.length }})</h5>
               <div class="space-y-1 ml-2">
                 <div v-for="result in uploadResults.skipped" :key="result.filename" class="text-xs text-yellow-600">
                   <span class="font-medium">{{ result.filename }}</span>
@@ -204,7 +202,7 @@
 
             <!-- Failed uploads -->
             <div v-if="uploadResults.failed.length > 0">
-              <h5 class="text-xs font-medium text-red-700 mb-1">✗ Failed ({{ uploadResults.failed.length }})</h5>
+              <h5 class="text-xs font-medium text-red-600 mb-1">✗ Failed ({{ uploadResults.failed.length }})</h5>
               <div class="space-y-1 ml-2">
                 <div v-for="result in uploadResults.failed" :key="result.filename" class="text-xs text-red-600">
                   <span class="font-medium">{{ result.filename }}</span>
@@ -238,7 +236,6 @@ import {capitalizeFirstLetter} from "@/assets/js/string.js";
 import {ImportQueueItem} from "@/assets/js/types/import-types"
 import ImportQueue from "@/components/import/parts/ImportQueue.vue";
 import ImportHelpModal from "@/components/import/parts/ImportHelpModal.vue";
-import Loader from "@/components/parts/Loader.vue";
 import {getCookie} from "@/assets/js/auth.js";
 import {SECURITY_CONFIG} from "@/config.js";
 import {
@@ -264,18 +261,25 @@ export default {
         return "Select files to upload"
       } else if (this.uploadProgress === 0 && this.files.length > 0 && this.overallProgress === 0) {
         return `Ready to upload ${this.files.length} file${this.files.length > 1 ? 's' : ''}`
+      } else if (this.allFilesComplete && !this.uploadMsg) {
+        // All files truly complete - show completion message
+        return `Upload complete (${this.currentFileIndex + 1}/${this.totalFiles})`
       } else if (this.uploadProgress > 0 && this.uploadProgress < 100) {
         return `Uploading ${this.currentFileIndex + 1}/${this.totalFiles} items...`
       } else if (this.uploadProgress === 100 && this.isProcessing && !this.uploadMsg) {
         return `Uploading ${this.currentFileIndex + 1}/${this.totalFiles} items...`
-      } else if (this.uploadProgress === 100 && this.overallProgress < 100 && !this.uploadMsg && !this.isProcessing) {
+      } else if (this.uploadProgress === 100 && this.overallProgress === 100 && !this.allFilesComplete && !this.uploadMsg) {
+        // Last file uploaded but still processing - show uploading, not complete
+        return `Uploading ${this.currentFileIndex + 1}/${this.totalFiles} items...`
+      } else if (this.uploadProgress === 100 && this.overallProgress < 100 && !this.uploadMsg && this.currentFileUploadComplete && !this.isProcessing) {
         return `Uploaded ${this.currentFileIndex + 1}/${this.totalFiles} items...`
-      } else if (this.overallProgress === 100 && !this.uploadMsg) {
-        return `Upload complete (${this.currentFileIndex + 1}/${this.totalFiles})`
       } else if (this.uploadMsg.toLowerCase().includes("failed") || this.uploadMsg.toLowerCase().includes("error")) {
-        return `Upload completed with errors (${this.currentFileIndex + 1}/${this.totalFiles})`
+        return "Completed with errors!"
       } else if (this.uploadMsg.toLowerCase().includes("successfully") || this.uploadMsg.toLowerCase().includes("skipped")) {
         return `Upload completed (${this.currentFileIndex + 1}/${this.totalFiles})`
+      } else if (this.uploadProgress === 100 && !this.allFilesComplete) {
+        // Fallback: if upload is 100% but not all files complete, show uploading
+        return `Uploading ${this.currentFileIndex + 1}/${this.totalFiles} items...`
       } else {
         return `Upload complete (${this.currentFileIndex + 1}/${this.totalFiles})`
       }
@@ -361,7 +365,7 @@ export default {
       }
     }
   },
-  components: {Importqueue: ImportQueue, ImportHelpModal, Loader},
+  components: {Importqueue: ImportQueue, ImportHelpModal},
   data() {
     return {
       files: [],
@@ -384,6 +388,7 @@ export default {
       isProcessing: false,
       processingStartTime: null,
       currentFileUploadComplete: false,
+      allFilesComplete: false,
       // Help modal state
       showHelpModal: false,
     }
@@ -406,6 +411,7 @@ export default {
       this.isProcessing = false
       this.processingStartTime = null
       this.currentFileUploadComplete = false
+      this.allFilesComplete = false
 
       // Enhanced file validation
       for (const file of selectedFiles) {
@@ -509,6 +515,7 @@ export default {
       this.isProcessing = false
       this.processingStartTime = null
       this.currentFileUploadComplete = false
+      this.allFilesComplete = false
     },
     formatFileSize(bytes) {
       if (bytes === 0) return '0 Bytes'
@@ -539,6 +546,7 @@ export default {
       this.isProcessing = false
       this.processingStartTime = null
       this.currentFileUploadComplete = false
+      this.allFilesComplete = false
 
       try {
         for (let i = 0; i < this.files.length; i++) {
@@ -579,9 +587,10 @@ export default {
               },
             })
 
-            // Server processing complete - clear processing state
+            // Server processing complete - clear processing state but keep currentFileUploadComplete
+            // until we start the next file to prevent flickering
             this.isProcessing = false
-            this.currentFileUploadComplete = false
+            // Don't clear currentFileUploadComplete here - it will be cleared when starting next file
 
             // Calculate processing time if we tracked it
             if (this.processingStartTime) {
@@ -640,6 +649,9 @@ export default {
         // All files processed - show organized results
         this.overallProgress = 100
         this.uploadProgress = 100
+        this.isProcessing = false
+        this.currentFileUploadComplete = false
+        this.allFilesComplete = true
 
         // Generate organized message
         this.uploadMsg = this.generateUploadSummary(this.uploadResults)
