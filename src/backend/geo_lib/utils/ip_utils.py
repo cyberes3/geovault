@@ -68,43 +68,32 @@ def get_user_identifier(request_or_scope):
     Returns:
         Email if available, otherwise user ID, otherwise 'Anonymous'
     """
-    def get_user_email(user):
-        """Helper function to get primary email for a user."""
-        try:
-            email_address = EmailAddress.objects.filter(user=user, primary=True).first()
-            if email_address:
-                return email_address.email
-            else:
-                # Fallback to first email if no primary is set
-                email_address = EmailAddress.objects.filter(user=user).first()
-                if email_address:
-                    return email_address.email
-        except Exception:
-            pass
-        return None
-    
-    # Handle Django request object
+    # Extract user from either request object or scope dict
     if hasattr(request_or_scope, 'user'):
         user = request_or_scope.user
-        if hasattr(user, 'is_authenticated') and user.is_authenticated:
-            # Prefer email if available
-            email = get_user_email(user)
-            if email:
-                return email
-            elif hasattr(user, 'id'):
-                return str(user.id)
-        return 'Anonymous'
-    
-    # Handle WebSocket scope dict
-    if isinstance(request_or_scope, dict):
+    elif isinstance(request_or_scope, dict):
         user = request_or_scope.get('user')
-        if user and hasattr(user, 'is_authenticated') and user.is_authenticated:
-            email = get_user_email(user)
-            if email:
-                return email
-            elif hasattr(user, 'id'):
-                return str(user.id)
+    else:
         return 'Anonymous'
     
-    return 'Anonymous'
+    # Check if user is authenticated
+    if not user or not (hasattr(user, 'is_authenticated') and user.is_authenticated):
+        return 'Anonymous'
+    
+    # Try to get email - first from user.email, then from EmailAddress
+    if hasattr(user, 'email') and user.email:
+        return user.email
+    
+    try:
+        email_address = EmailAddress.objects.filter(user=user, primary=True).first()
+        if email_address:
+            return email_address.email
+        email_address = EmailAddress.objects.filter(user=user).first()
+        if email_address:
+            return email_address.email
+    except Exception:
+        pass
+    
+    # Fallback to user ID
+    return str(user.id) if hasattr(user, 'id') else 'Anonymous'
 

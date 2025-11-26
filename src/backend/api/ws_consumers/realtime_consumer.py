@@ -85,6 +85,7 @@ class RealtimeConsumer(AsyncWebsocketConsumer):
         except Exception as e:
             # Log the full traceback for debugging
             traceback_str = traceback.format_exc()
+            user_identifier = get_user_identifier(self.scope)
             logger.error(f"WebSocket connection error: {path} - {user_identifier}@{client_ip}\n{traceback_str}")
             
             # Try to accept and close the connection with error code if not already accepted
@@ -121,6 +122,7 @@ class RealtimeConsumer(AsyncWebsocketConsumer):
         except Exception as e:
             # Log the error but don't raise - we're already disconnecting
             traceback_str = traceback.format_exc()
+            user_identifier = get_user_identifier(self.scope)
             logger.error(f"WebSocket disconnect error: {path} - {user_identifier}@{client_ip}\n{traceback_str}")
 
     async def receive(self, text_data=None, bytes_data=None):
