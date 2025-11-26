@@ -5,14 +5,18 @@
       <div class="text-center">
         <h1 class="text-4xl font-bold text-gray-900 mb-4">Welcome to the GeoVault</h1>
 
-        <div class="geo-anim-container my-8 mx-auto" aria-hidden="true">
-          <div class="geo-grid"></div>
-          <div class="geo-rings">
-            <div class="geo-ring ring-1"></div>
-            <div class="geo-ring ring-2"></div>
-            <div class="geo-ring ring-3"></div>
+        <div class="geo-anim-wrapper my-8 mx-auto">
+          <div class="geo-anim-container" aria-hidden="true">
+            <div class="geo-grid"></div>
+            <div class="geo-rings">
+              <div class="geo-ring ring-1"></div>
+              <div class="geo-ring ring-2"></div>
+              <div class="geo-ring ring-3"></div>
+            </div>
+            <div class="geo-pulse"></div>
           </div>
-          <div class="geo-pulse"></div>
+          <div class="geo-border-blur geo-border-left"></div>
+          <div class="geo-border-blur geo-border-right"></div>
         </div>
 
         <p class="text-xl text-gray-600 mb-8 max-w-2xl mx-auto">
@@ -130,18 +134,70 @@ export default {
 </script>
 
 <style scoped>
-.geo-anim-container {
+.geo-anim-wrapper {
   position: relative;
   width: 100%;
   max-width: 600px;
   height: 200px;
+}
+
+.geo-anim-container {
+  position: relative;
+  width: 100%;
+  height: 100%;
   overflow: hidden;
   background: linear-gradient(to bottom, #ffffff, #f0f9ff);
   border-radius: 0.5rem;
   perspective: 1000px;
-  /* Fade out the bottom slightly to blend */
-  mask-image: linear-gradient(to bottom, black 85%, transparent 100%);
-  -webkit-mask-image: linear-gradient(to bottom, black 85%, transparent 100%);
+}
+
+.geo-anim-wrapper::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 30px;
+  pointer-events: none;
+  z-index: 10;
+  background: linear-gradient(to bottom, rgba(255, 255, 255, 1), rgba(255, 255, 255, 0));
+  filter: blur(10px);
+  -webkit-filter: blur(10px);
+}
+
+.geo-anim-wrapper::after {
+  content: '';
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  height: 30px;
+  pointer-events: none;
+  z-index: 10;
+  background: linear-gradient(to top, rgba(240, 249, 255, 1), rgba(240, 249, 255, 0));
+  filter: blur(10px);
+  -webkit-filter: blur(10px);
+}
+
+.geo-border-blur {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  width: 30px;
+  pointer-events: none;
+  z-index: 10;
+  filter: blur(10px);
+  -webkit-filter: blur(10px);
+}
+
+.geo-border-left {
+  left: 0;
+  background: linear-gradient(to right, rgba(255, 255, 255, 1), rgba(255, 255, 255, 0));
+}
+
+.geo-border-right {
+  right: 0;
+  background: linear-gradient(to left, rgba(240, 249, 255, 1), rgba(240, 249, 255, 0));
 }
 
 .geo-grid {

@@ -128,7 +128,7 @@
                 type="file"
                 accept=".png,.jpg,.jpeg,.ico"
                 @change="handleCustomIconSelect"
-                class="block w-full text-sm text-gray-500 file:mr-4 file:py-2 file:px-4 file:rounded-md file:border-0 file:text-sm file:font-semibold file:bg-blue-50 file:text-blue-700 hover:file:bg-blue-600 r"
+                class="block w-full text-sm text-gray-500 file:mr-4 file:py-2 file:px-4 file:rounded-md file:border-0 file:text-sm file:font-semibold file:bg-blue-50 file:text-blue-700 hover:file:bg-blue-600 hover:file:text-white"
               />
               <p class="text-xs text-gray-500">
                 Supported formats: PNG, JPG, ICO (max 500KB)

@@ -141,12 +141,12 @@
           <span
             v-for="tag in selectedTags"
             :key="tag"
-            class="inline-flex items-center gap-1 px-2 py-0.5 bg-blue-600 r text-blue-700 text-xs rounded"
+            class="inline-flex items-center gap-1 px-2 py-0.5 bg-blue-100 text-blue-800 text-xs rounded"
           >
             {{ tag }}
             <button
               @click="removeTag(tag)"
-              class="text-blue-500 hover:text-blue-700 focus:outline-none"
+              class="text-blue-600 hover:text-blue-800 focus:outline-none"
               type="button"
               title="Remove tag from filter"
             >
@@ -198,6 +198,7 @@
 import {GeoJSON} from 'ol/format'
 import {APIHOST} from '@/config.js'
 import Loader from '@/components/parts/Loader.vue'
+import {fetchConfig} from '@/utils/configService.js'
 
 export default {
   name: 'FeatureListSidebar',
@@ -236,6 +237,8 @@ export default {
       tagFilteredFeatures: [],
       isFiltering: false,
       filterTimeout: null,
+      // System tag prefixes from config
+      systemTagPrefixes: [],
     }
   },
   computed: {
@@ -255,8 +258,24 @@ export default {
         unselectedTags = unselectedTags.filter(tag => tag.toLowerCase().includes(query))
       }
 
-      // Sort alphabetically
-      return unselectedTags.sort()
+      // Separate user tags and system tags
+      const userTags = []
+      const systemTags = []
+
+      for (const tag of unselectedTags) {
+        if (this.isSystemTag(tag)) {
+          systemTags.push(tag)
+        } else {
+          userTags.push(tag)
+        }
+      }
+
+      // Sort each group alphabetically
+      userTags.sort()
+      systemTags.sort()
+
+      // Return user tags first, then system tags
+      return [...userTags, ...systemTags]
     }
   },
   watch: {
@@ -392,6 +411,25 @@ export default {
     clearTagSearch() {
       this.tagSearchQuery = ''
     },
+    isSystemTag(tag) {
+      // Check if tag matches any system tag prefix (exact match or prefix:value)
+      if (!tag || typeof tag !== 'string') {
+        return false
+      }
+      
+      for (const prefix of this.systemTagPrefixes) {
+        // Exact match
+        if (tag === prefix) {
+          return true
+        }
+        // Prefix match (e.g., "type:point" matches "type")
+        if (tag.startsWith(prefix + ':')) {
+          return true
+        }
+      }
+      
+      return false
+    },
     toggleTag(tag) {
       if (this.selectedTags.includes(tag)) {
         this.removeTag(tag)
@@ -490,8 +528,16 @@ export default {
       }
     }
   },
-  mounted() {
+  async mounted() {
     // Tags are now provided via prop from parent component
+    // Fetch config to get system tag prefixes
+    try {
+      const config = await fetchConfig()
+      this.systemTagPrefixes = config.systemTagPrefixes || []
+    } catch (error) {
+      console.error('Error fetching config for system tag prefixes:', error)
+      this.systemTagPrefixes = []
+    }
   },
   beforeUnmount() {
     // Clean up timeouts

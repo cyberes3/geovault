@@ -7,11 +7,11 @@ from geo_lib.const_strings import CONST_INTERNAL_TAGS
 @require_http_methods(["GET"])
 def get_config(request):
     """
-    API endpoint to get server configuration, including protected tags.
+    API endpoint to get server configuration, including system tag prefixes.
     
     Returns:
-        JSON object with protectedTags list
+        JSON object with systemTagPrefixes list
     """
     return JsonResponse({
-        'protectedTags': CONST_INTERNAL_TAGS
+        'systemTagPrefixes': CONST_INTERNAL_TAGS
     })

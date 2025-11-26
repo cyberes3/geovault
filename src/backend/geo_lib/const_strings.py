@@ -1,7 +1,19 @@
 from typing import List
 
-# Tags that the user should not be allowed to edit.
-CONST_INTERNAL_TAGS = ['type', 'import-year', 'import-month', 'source-file']
+# System tag prefixes that identify automatically generated tags.
+# These are tags that users should not be allowed to edit.
+# Used by tag generators to create system tags and by validation to filter them out.
+CONST_INTERNAL_TAGS = [
+    'type',
+    'import-year',
+    'import-month',
+    'feature-year',
+    'feature-month',
+    'source-file',
+    'is-track',
+    'elevation',
+    'geocoding'
+]
 
 
 def is_protected_tag(tag: str, protected_prefixes: List[str]) -> bool:
