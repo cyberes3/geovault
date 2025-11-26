@@ -1,2 +1,101 @@
 @import 'root.css';
 @import 'colors.css';
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* Universal checkbox styling to match color scheme */
+input[type="checkbox"].checkbox-custom {
+  width: 1.25rem;
+  height: 1.25rem;
+  cursor: pointer;
+  appearance: none;
+  -webkit-appearance: none;
+  -moz-appearance: none;
+  border: 2px solid #C4D2ED; /* blue-200 */
+  border-radius: 0.25rem;
+  background-color: white;
+  position: relative;
+  flex-shrink: 0;
+}
+
+input[type="checkbox"].checkbox-custom:hover:not(:disabled) {
+  border-color: #6C93DE; /* blue-400 */
+}
+
+input[type="checkbox"].checkbox-custom:checked {
+  background-color: #163D8A; /* blue-500 */
+  border-color: #163D8A; /* blue-500 */
+}
+
+input[type="checkbox"].checkbox-custom:checked::after {
+  content: '';
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  transform: translate(-50%, -50%) rotate(45deg);
+  width: 0.375rem;
+  height: 0.75rem;
+  border: solid white;
+  border-width: 0 2px 2px 0;
+}
+
+input[type="checkbox"].checkbox-custom:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+  background-color: #F3F4F6; /* gray-100 */
+  border-color: #D1D5DB; /* gray-300 */
+}
+
+input[type="checkbox"].checkbox-custom:focus {
+  outline: 2px solid #163D8A; /* blue-500 */
+  outline-offset: 2px;
+}
+
+/* Universal radio button styling to match color scheme */
+input[type="radio"].radio-custom {
+  width: 1.25rem;
+  height: 1.25rem;
+  cursor: pointer;
+  appearance: none;
+  -webkit-appearance: none;
+  -moz-appearance: none;
+  border: 2px solid #C4D2ED; /* blue-200 */
+  border-radius: 50%;
+  background-color: white;
+  position: relative;
+  flex-shrink: 0;
+}
+
+input[type="radio"].radio-custom:hover:not(:disabled) {
+  border-color: #6C93DE; /* blue-400 */
+}
+
+input[type="radio"].radio-custom:checked {
+  border-color: #163D8A; /* blue-500 */
+}
+
+input[type="radio"].radio-custom:checked::after {
+  content: '';
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  transform: translate(-50%, -50%);
+  width: 0.5rem;
+  height: 0.5rem;
+  border-radius: 50%;
+  background-color: #163D8A; /* blue-500 */
+}
+
+input[type="radio"].radio-custom:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+  background-color: #F3F4F6; /* gray-100 */
+  border-color: #D1D5DB; /* gray-300 */
+}
+
+input[type="radio"].radio-custom:focus {
+  outline: 2px solid #163D8A; /* blue-500 */
+  outline-offset: 2px;
+}

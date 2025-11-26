@@ -40,11 +40,12 @@
       <thead class="bg-gray-50">
         <tr>
           <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-            <ToggleButton
+            <input
+              type="checkbox"
               ref="selectAllCheckbox"
-              :model-value="selectedItems.size === filteredImportQueue.length && filteredImportQueue.length > 0"
-              @update:model-value="handleSelectAllToggle"
-              size="sm"
+              :checked="selectedItems.size === filteredImportQueue.length && filteredImportQueue.length > 0"
+              @change="handleSelectAllToggle($event.target.checked)"
+              class="checkbox-custom"
             />
           </th>
           <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">File Name</th>
@@ -100,11 +101,12 @@
         <!-- Actual data rows -->
         <tr v-for="(item, index) in filteredImportQueue" :key="`item-${index}`" :class="(item.deleting || item.importing) ? 'opacity-50 bg-gray-100' : 'hover:bg-gray-50'">
           <td class="px-6 py-4 whitespace-nowrap">
-            <ToggleButton
-              :model-value="selectedItems.has(item.id)"
-              @update:model-value="(value) => handleItemToggle(item.id, value)"
+            <input
+              type="checkbox"
+              :checked="selectedItems.has(item.id)"
+              @change="handleItemToggle(item.id, $event.target.checked)"
               :disabled="item.imported || item.processing === true || (item.processing === false && item.feature_count === -1) || item.deleting || item.importing"
-              size="sm"
+              class="checkbox-custom"
             />
           </td>
           <td class="px-6 py-4 whitespace-nowrap">
@@ -221,7 +223,6 @@ import {getCookie} from "@/assets/js/auth.js";
 import {realtimeSocket} from "@/assets/js/websocket/realtimeSocket.js";
 import { toggleSetItem } from "@/assets/js/toggle-utils.js";
 import Loader from "@/components/parts/Loader.vue";
-import ToggleButton from "@/components/parts/ToggleButton.vue";
 
 export default {
   props: {
@@ -266,8 +267,7 @@ export default {
     }
   },
   components: {
-    Loader,
-    ToggleButton
+    Loader
   },
   data() {
     return {
@@ -800,5 +800,5 @@ export default {
 </script>
 
 <style scoped>
-
+/* Checkbox styles are now in main.css */
 </style>

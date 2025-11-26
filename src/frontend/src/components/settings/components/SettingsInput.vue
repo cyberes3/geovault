@@ -42,16 +42,17 @@
     <!-- Checkbox type -->
     <div v-else-if="setting.type === 'checkbox'" class="flex items-start gap-3">
       <div class="flex-shrink-0 pt-0.5">
-        <ToggleButton
-          :model-value="modelValue"
-          :label="setting.label || setting.title"
-          @update:model-value="$emit('update:modelValue', $event)"
-          size="md"
+        <input
+          type="checkbox"
+          :id="setting.key"
+          :checked="modelValue"
+          @change="$emit('update:modelValue', $event.target.checked)"
+          class="checkbox-custom"
         />
       </div>
       <div class="flex-1 min-w-0">
         <div class="flex items-center gap-2">
-          <label class="block text-sm font-medium text-gray-700 cursor-pointer" @click="$emit('update:modelValue', !modelValue)">
+          <label :for="setting.key" class="block text-sm font-medium text-gray-700 cursor-pointer">
             {{ setting.label || setting.title }}
           </label>
           <Transition name="fade">
@@ -146,13 +147,9 @@
 </template>
 
 <script>
-import ToggleButton from '@/components/parts/ToggleButton.vue'
-
 export default {
   name: 'SettingsInput',
-  components: {
-    ToggleButton
-  },
+  components: {},
   props: {
     setting: {
       type: Object,
@@ -185,36 +182,6 @@ export default {
   opacity: 0;
 }
 
-/* Custom radio button styling to use custom blue colors */
-.radio-custom {
-  accent-color: var(--color-blue-500);
-  cursor: pointer;
-}
-
-.radio-custom:checked {
-  accent-color: var(--color-blue-500);
-  border-color: var(--color-blue-500);
-}
-
-.radio-custom:focus {
-  border-color: var(--color-blue-500);
-  outline: 2px solid var(--color-blue-500);
-  outline-offset: 2px;
-}
-
-/* Ensure the radio button uses custom colors */
-.radio-custom[type="radio"]:checked {
-  background-color: var(--color-blue-500);
-  border-color: var(--color-blue-500);
-}
-
-.radio-custom[type="radio"] {
-  border-color: #d1d5db;
-}
-
-.radio-custom[type="radio"]:focus {
-  outline: 2px solid var(--color-blue-500);
-  outline-offset: 2px;
-}
+/* Radio button styles are now in main.css */
 </style>
 

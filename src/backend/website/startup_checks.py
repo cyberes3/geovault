@@ -374,8 +374,8 @@ def check_togeojson_installation():
 
 def check_file_type_max_size():
     """
-    Check that all FILE_TYPE_CONFIGS max_size values are less than 200.
-    This is critical because values >= 200 will break the database.
+    Check that all FILE_TYPE_CONFIGS max_size values are less than 200MB.
+    This is critical because values >= 200MB will break the database.
     
     Returns:
         bool: True if all max_size values are valid, False otherwise
@@ -383,23 +383,24 @@ def check_file_type_max_size():
     try:
         from geo_lib.processing.file_types import FILE_TYPE_CONFIGS
         
-        MAX_ALLOWED_SIZE = 200
+        MAX_ALLOWED_SIZE_BYTES = 200 * 1024 * 1024  # 200MB in bytes
         invalid_configs = []
         
         for file_type, config in FILE_TYPE_CONFIGS.items():
-            if config.max_size >= MAX_ALLOWED_SIZE:
-                invalid_configs.append((file_type.value, config.max_size))
+            if config.max_size >= MAX_ALLOWED_SIZE_BYTES:
+                max_size_mb = config.max_size / (1024 * 1024)
+                invalid_configs.append((file_type.value, config.max_size, max_size_mb))
         
         if invalid_configs:
             logger.error("✗ File type max_size validation failed!")
-            logger.error(f"  The following file types have max_size >= {MAX_ALLOWED_SIZE} (which will break the database):")
-            for file_type_name, max_size in invalid_configs:
-                logger.error(f"    - {file_type_name}: max_size = {max_size}")
-            logger.error(f"  All max_size values must be less than {MAX_ALLOWED_SIZE}")
+            logger.error(f"  The following file types have max_size >= 200MB (which will break the database):")
+            for file_type_name, max_size_bytes, max_size_mb in invalid_configs:
+                logger.error(f"    - {file_type_name}: max_size = {max_size_bytes} bytes ({max_size_mb:.1f}MB)")
+            logger.error(f"  All max_size values must be less than 200MB ({MAX_ALLOWED_SIZE_BYTES} bytes)")
             logger.error("  Please fix FILE_TYPE_CONFIGS in geo_lib/processing/file_types.py")
             return False
         
-        logger.info("✓ File type max_size validation passed (all values < 200)")
+        logger.info("✓ File type max_size validation passed (all values < 200MB)")
         return True
         
     except Exception as e:
@@ -523,7 +524,7 @@ def run_startup_checks():
     6. Check writable directories (create if needed)
     7. Check frontend files are built
     8. Check togeojson installation
-    9. Validate file type max_size values (< 200)
+    9. Validate file type max_size values (< 200MB)
     
     Warning checks (don't fail startup):
     - Configuration file
