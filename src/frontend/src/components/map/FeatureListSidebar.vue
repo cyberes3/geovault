@@ -73,8 +73,13 @@
         {{ isSearchMode ? 'Search Results' : '' }}
       </h2>
 
-      <!-- Loading Indicator -->
-      <div v-if="isSearching" class="flex-1 flex items-center justify-center">
+      <!-- Initial Loading Indicator -->
+      <div v-if="isLoading && features.length === 0 && !isSearching" class="flex-1 flex items-center justify-center">
+        <Loader size="md" layout="centered" message="Loading features..." />
+      </div>
+
+      <!-- Loading Indicator for Search -->
+      <div v-else-if="isSearching" class="flex-1 flex items-center justify-center">
         <div class="flex flex-col items-center space-y-2">
           <div class="animate-spin rounded-full h-6 w-6 border-2 border-transparent" style="border-bottom-color: #4B6BAB;"></div>
           <div class="text-xs text-gray-500">Searching...</div>
@@ -166,7 +171,11 @@
 
       <!-- Available Tags List -->
       <div class="flex-1 overflow-y-auto">
-        <div v-if="filteredAvailableTags.length === 0 && availableTags.length === 0" class="text-xs text-gray-500 text-center py-3">
+        <!-- Initial Loading Indicator -->
+        <div v-if="isLoading && availableTags.length === 0" class="flex items-center justify-center h-full">
+          <Loader size="md" layout="centered" message="Loading tags..." />
+        </div>
+        <div v-else-if="filteredAvailableTags.length === 0 && availableTags.length === 0" class="text-xs text-gray-500 text-center py-3">
           No tags available
         </div>
         <div v-else-if="filteredAvailableTags.length === 0" class="text-xs text-gray-500 text-center py-3">
@@ -191,9 +200,13 @@
 <script>
 import {GeoJSON} from 'ol/format'
 import {APIHOST} from '@/config.js'
+import Loader from '@/components/parts/Loader.vue'
 
 export default {
   name: 'FeatureListSidebar',
+  components: {
+    Loader
+  },
   props: {
     features: {
       type: Array,
@@ -204,6 +217,11 @@ export default {
       type: Array,
       required: false,
       default: () => []
+    },
+    isLoading: {
+      type: Boolean,
+      required: false,
+      default: false
     }
   },
   emits: ['feature-click', 'tag-filter-change'],

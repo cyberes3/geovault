@@ -5,6 +5,7 @@
         :class="['transition-opacity duration-300', (publicShareError || loadError) ? 'opacity-50 pointer-events-none' : 'opacity-100']"
         :features="featuresInExtent"
         :available-tags="availableTags"
+        :is-loading="isLoading && isInitialLoad"
         @feature-click="zoomToFeature"
         @tag-filter-change="handleTagFilterChange"
     />
@@ -207,6 +208,7 @@ export default {
       textLayer: null, // Layer for text labels (with declutter)
       tileLayer: null, // Reference to the tile layer for updates
       isLoading: false,
+      isInitialLoad: true, // Track if this is the first network call
       loadedBounds: new Set(),
       lastUpdateTime: null,
       featureCount: 0,
@@ -311,12 +313,12 @@ export default {
       try {
         const response = await fetch(`${APIHOST}/api/features/by-tag/`)
         const data = await response.json()
-        
+
         if (response.ok) {
           // Get user tags and system tags separately
           const userTags = data.user_tags ? Object.keys(data.user_tags).sort() : []
           const systemTags = data.system_tags ? Object.keys(data.system_tags).sort() : []
-          
+
           // Combine with user tags first, then system tags (like TagPicker expects)
           this.availableTags = [...userTags, ...systemTags]
         } else {
@@ -435,7 +437,7 @@ export default {
       // Find existing feature by reference or ID to avoid duplicates
       if (this.vectorSource) {
         const allFeatures = this.vectorSource.getFeatures()
-        
+
         // Check if feature already exists (by reference or ID)
         let existingFeature = allFeatures.includes(feature) ? feature : null
         if (!existingFeature) {
@@ -444,7 +446,7 @@ export default {
             existingFeature = allFeatures.find(f => f.get('properties')?._id === featureId)
           }
         }
-        
+
         // If not found, try to add it (with error handling for race conditions)
         if (!existingFeature) {
           try {
@@ -466,7 +468,7 @@ export default {
             }
           }
         }
-        
+
         feature = existingFeature
       }
 
@@ -705,10 +707,10 @@ export default {
 
       const view = this.map.getView()
       const center = fromLonLat([coordinate[0], coordinate[1]])
-      
+
       // Get current zoom level to preserve it
       const currentZoom = view.getZoom()
-      
+
       // Center the map without changing zoom
       view.setCenter(center)
     },
@@ -780,7 +782,7 @@ export default {
 
                 // Update features in extent list
                 this.updateFeaturesInExtent()
-                
+
                 // Refresh available tags so suggestions are up to date
                 await this.fetchAvailableTags()
                 return
@@ -799,7 +801,7 @@ export default {
       await this.loadDataForCurrentView()
       // Update features in extent list
       this.updateFeaturesInExtent()
-      
+
       // Refresh available tags so suggestions are up to date
       await this.fetchAvailableTags()
     },
@@ -1012,14 +1014,14 @@ export default {
         // Debounce the zoom change handling
         zoomChangeTimeout = setTimeout(() => {
           let newZoom = this.map.getView().getZoom()
-          
+
           // Defensive check: clamp zoom to 20 if it somehow exceeds the limit
           if (newZoom > 20) {
             console.warn(`Zoom level ${newZoom} exceeds maximum of 20, clamping to 20`)
             this.map.getView().setZoom(20)
             newZoom = 20
           }
-          
+
           if (newZoom !== this.currentZoom) {
             // Clear cache when zoom changes significantly to ensure data reload
             const zoomDiff = Math.abs(newZoom - (this.currentZoom || 0))
@@ -1370,6 +1372,11 @@ export default {
           if (data.total_features_in_bbox && data.total_features_in_bbox > features.length) {
             console.log(`Note: ${data.total_features_in_bbox - features.length} additional features not shown due to limit (${data.max_features_limit})`)
           }
+
+          // Mark initial load as complete after first successful load
+          if (this.isInitialLoad) {
+            this.isInitialLoad = false
+          }
         } else {
           console.error('Error loading data:', data.error)
         }
@@ -1380,6 +1387,10 @@ export default {
         } else {
           console.error('Error fetching data:', error)
           this.loadError = error.message || 'Failed to load map data. Please try again.'
+          // Mark initial load as complete even on error so spinner doesn't stay forever
+          if (this.isInitialLoad) {
+            this.isInitialLoad = false
+          }
         }
       } finally {
         this.isLoading = false
@@ -1647,6 +1658,8 @@ export default {
     // For authenticated routes, App.vue ensures user is logged in before components are created
   },
   async mounted() {
+    this.isLoading = true
+
     // Initialize featureTimestamps as empty object
     this.featureTimestamps = {}
 
