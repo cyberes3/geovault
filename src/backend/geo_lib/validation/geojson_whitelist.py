@@ -145,14 +145,8 @@ def _normalize_properties(properties: Dict[str, Any], geometry_type: str) -> Dic
         Normalized properties with only whitelisted keys and normalized styles
     """
     # Validate with Pydantic - this automatically filters out extra fields
-    try:
-        validated_properties = PropertiesModel(**properties)
-        normalized = validated_properties.model_dump(exclude_none=False, by_alias=True)
-    except Exception as e:
-        # If validation fails, log and return empty dict or minimal properties
-        logger.warning(f"Property validation failed: {str(e)}, using minimal properties")
-        # Try with just name field as fallback
-        normalized = {'name': properties.get('name', 'Unnamed Feature')}
+    validated_properties = PropertiesModel(**properties)
+    normalized = validated_properties.model_dump(exclude_none=True, by_alias=True)
     
     # Apply style normalization based on geometry type
     geom_type_lower = geometry_type.lower()
@@ -235,7 +229,7 @@ def validate_and_normalize_geojson_feature(
     # Validate geometry structure using Pydantic
     try:
         validated_geometry = GeometryModel(**normalized_geometry)
-        normalized_geometry = validated_geometry.model_dump(exclude_none=False)
+        normalized_geometry = validated_geometry.model_dump(exclude_none=True)
     except Exception as e:
         raise GeometryValidationError(f'Geometry validation failed: {str(e)}')
     

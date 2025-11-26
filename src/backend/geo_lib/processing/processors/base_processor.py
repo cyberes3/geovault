@@ -171,7 +171,7 @@ class BaseProcessor(ABC):
                     # Only extract if created date is not already present
                     track_timestamp = None
                     original_properties = split_feature.get('properties', {})
-                    if 'created' not in original_properties or not original_properties.get('created'):
+                    if not original_properties.get('created'):
                         track_timestamp = extract_track_created_date(split_feature)
                         # Set created date in properties BEFORE normalization so it's preserved
                         if track_timestamp:
@@ -179,7 +179,7 @@ class BaseProcessor(ABC):
                     
                     # First, normalize raw togeojson output (converts feature_tags -> tags, etc.)
                     from geo_lib.types.geojson import GeojsonRawProperty
-                    split_feature['properties'] = GeojsonRawProperty(**split_feature['properties']).model_dump(mode='json')
+                    split_feature['properties'] = GeojsonRawProperty(**split_feature['properties']).model_dump(mode='json', exclude_none=True)
                     
                     # Then validate and normalize properties with styling (uses PropertiesModel)
                     split_feature['properties'] = geojson_property_generation(split_feature)
@@ -250,11 +250,10 @@ class BaseProcessor(ABC):
                     if self._is_cancelled():
                         break
                     
-                    # Generate and set feature ID if not already present
-                    if 'id' not in split_feature.get('properties', {}):
-                        from geo_lib.feature_id import generate_feature_hash
-                        feature_id = generate_feature_hash(split_feature)
-                        split_feature['properties']['id'] = feature_id
+                    # Generate and set feature ID (get_feature_id_from_geojson handles existing IDs)
+                    from geo_lib.feature_id import get_feature_id_from_geojson
+                    feature_id = get_feature_id_from_geojson(split_feature)
+                    split_feature['properties']['id'] = feature_id
                     
                     processed_features.append(split_feature)
                 except Exception as e:

@@ -786,8 +786,7 @@ def update_import_item(request, item_id):
             update_fields = updates_by_id[feature_id]
             
             # Merge update fields into the feature properties (only update fields that are present)
-            if 'properties' not in merged_feature:
-                merged_feature['properties'] = {}
+            merged_feature.setdefault('properties', {})
             
             for field, value in update_fields.items():
                 if field == 'tags':
