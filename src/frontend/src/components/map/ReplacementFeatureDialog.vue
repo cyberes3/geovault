@@ -137,12 +137,22 @@
             
             <!-- Features list -->
             <div v-else>
-              <h4 class="text-sm font-medium text-gray-900 mb-3">
-                Select a feature to apply its spatial data:
-                <span v-if="features.length !== sortedFeatures.length" class="text-xs font-normal text-gray-500 ml-2">
-                  ({{ sortedFeatures.length }} of {{ features.length }} matching geometry type)
-                </span>
-              </h4>
+              <div class="flex items-center justify-between mb-3">
+                <h4 class="text-sm font-medium text-gray-900">
+                  Select a feature to apply its spatial data:
+                  <span v-if="features.length !== sortedFeatures.length" class="text-xs font-normal text-gray-500 ml-2">
+                    ({{ sortedFeatures.length }} of {{ features.length }} matching geometry type)
+                  </span>
+                </h4>
+                <label class="flex items-center text-sm text-gray-700 cursor-pointer">
+                  <input
+                    type="checkbox"
+                    v-model="regenerateTags"
+                    class="h-4 w-4 text-green-600 focus:ring-green-500 border-gray-300 rounded"
+                  />
+                  <span class="ml-2">Regenerate tags when applying spatial data</span>
+                </label>
+              </div>
               <div class="space-y-2 max-h-96 overflow-y-auto">
                 <div
                   v-for="(feature, index) in sortedFeatures"
@@ -256,21 +266,6 @@
             {{ applying ? 'Applying...' : 'Apply Spatial Data' }}
           </button>
           
-          <!-- Regenerate Tags Button -->
-          <button
-            v-if="applied"
-            @click="handleRegenerateTags"
-            :disabled="regeneratingTags"
-            class="px-4 py-2 text-sm font-medium text-white bg-green-600 border border-transparent rounded-md hover:bg-green-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-green-500 disabled:opacity-50 disabled:cursor-not-allowed flex items-center"
-            title="Regenerate tags for this feature"
-          >
-            <svg v-if="!regeneratingTags" class="h-4 w-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
-            </svg>
-            <Loader v-if="regeneratingTags" size="sm" layout="inline" :showMessage="false" color="white" />
-            {{ regeneratingTags ? 'Regenerating...' : 'Regenerate Tags' }}
-          </button>
-          
           <!-- Close Button -->
           <button
             v-if="applied"
@@ -359,7 +354,7 @@ export default {
       successMessage: '',
       applying: false,
       applied: false,
-      regeneratingTags: false,
+      regenerateTags: false,
       ws: null,
       wsConnected: false,
       pollingInterval: null,
@@ -466,7 +461,7 @@ export default {
       this.successMessage = ''
       this.applying = false
       this.applied = false
-      this.regeneratingTags = false
+      this.regenerateTags = false
       this.selectedFile = null
       this.existingFeatureGeometryType = null
       this.expandedMapIndex = null
@@ -1068,7 +1063,8 @@ export default {
           credentials: 'include',
           body: JSON.stringify({
             import_queue_id: this.importQueueId,
-            feature_index: originalIndex
+            feature_index: originalIndex,
+            regenerate_tags: this.regenerateTags
           })
         })
 
@@ -1088,36 +1084,6 @@ export default {
         console.error('Error applying replacement:', error)
         this.errorMessage = `Error: ${error.message}`
         this.applying = false
-      }
-    },
-    async handleRegenerateTags() {
-      this.regeneratingTags = true
-      this.errorMessage = ''
-
-      try {
-        const response = await fetch(`${APIHOST}/api/feature/${this.featureId}/regenerate-tags/`, {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            'X-CSRFToken': this.getCsrfToken()
-          },
-          credentials: 'include'
-        })
-
-        const data = await response.json()
-
-        if (!response.ok) {
-          this.errorMessage = data.error || 'Failed to regenerate tags'
-          this.regeneratingTags = false
-          return
-        }
-
-        this.successMessage = 'Tags regenerated successfully!'
-        this.regeneratingTags = false
-      } catch (error) {
-        console.error('Error regenerating tags:', error)
-        this.errorMessage = `Error: ${error.message}`
-        this.regeneratingTags = false
       }
     },
     handleCancel() {

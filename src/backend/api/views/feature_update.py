@@ -721,6 +721,7 @@ def apply_replacement_geometry(request, feature_id):
     Request body: JSON object with:
     - import_queue_id: ID of the ImportQueue entry containing the replacement features
     - feature_index: Index of the feature in the ImportQueue.geofeatures array to use
+    - regenerate_tags: (optional) Boolean, if True, regenerates tags based on the new geometry
     """
     try:
         # Get the feature from database
@@ -738,6 +739,7 @@ def apply_replacement_geometry(request, feature_id):
 
         import_queue_id = request_data['import_queue_id']
         feature_index = request_data['feature_index']
+        regenerate_tags = request_data.get('regenerate_tags', False)
 
         # Validate feature_index is an integer
         try:
@@ -877,6 +879,77 @@ def apply_replacement_geometry(request, feature_id):
         except Exception as e:
             logger.warning(f"Error updating geometry for feature {feature_id}: {e}")
             # Continue without updating geometry if there's an error
+
+        # Regenerate tags if requested (using the new geometry)
+        if regenerate_tags:
+            try:
+                # Preserve original import-year and import-month tags from the original feature
+                original_system_tags = original_geojson.get('properties', {}).get('system_tags', [])
+                if not isinstance(original_system_tags, list):
+                    original_system_tags = []
+                
+                # Extract import-year and import-month tags from original system_tags
+                preserved_import_tags = [
+                    tag for tag in original_system_tags
+                    if isinstance(tag, str) and (tag.startswith('import-year:') or tag.startswith('import-month:'))
+                ]
+
+                # Get the updated feature's geometry type
+                geom_type = feature_data.get('geometry', {}).get('type', '').lower()
+                tag_feature_class = None
+
+                match geom_type:
+                    case 'point' | 'multipoint':
+                        tag_feature_class = PointFeature
+                    case 'linestring':
+                        tag_feature_class = LineStringFeature
+                    case 'multilinestring':
+                        tag_feature_class = MultiLineStringFeature
+                    case 'polygon' | 'multipolygon':
+                        tag_feature_class = PolygonFeature
+                    case _:
+                        # Skip tag regeneration for unsupported geometry types (e.g., GeometryCollection)
+                        logger.warning(f"Skipping tag regeneration for unsupported geometry type: {geom_type}")
+                        tag_feature_class = None
+
+                if tag_feature_class is not None:
+                    # Create feature instance with the updated geometry for tag generation
+                    try:
+                        feature_instance: GeoFeatureSupported = tag_feature_class(**feature_data)
+                    except Exception as e:
+                        logger.error(f"Error creating feature instance for tag regeneration {feature_id}: {str(e)}")
+                        # Continue without regenerating tags if feature instance creation fails
+                    else:
+                        # Get existing user tags (preserve them)
+                        existing_user_tags = feature_data.get('properties', {}).get('tags', [])
+                        if not isinstance(existing_user_tags, list):
+                            existing_user_tags = []
+
+                        # Generate new system tags based on the new geometry
+                        from geo_lib.processing.tagging import generate_auto_tags
+                        new_system_tags = generate_auto_tags(feature_instance, import_log=None)
+
+                        # Remove any import-year and import-month tags from new system tags
+                        # (we'll add back the preserved ones)
+                        new_system_tags = [
+                            tag for tag in new_system_tags
+                            if not (isinstance(tag, str) and (tag.startswith('import-year:') or tag.startswith('import-month:')))
+                        ]
+
+                        # Add back the preserved import-year and import-month tags
+                        new_system_tags.extend(preserved_import_tags)
+
+                        # Update the feature's tags - preserve user tags, regenerate system tags
+                        if 'properties' not in feature_data:
+                            feature_data['properties'] = {}
+                        feature_data['properties']['tags'] = existing_user_tags
+                        feature_data['properties']['system_tags'] = new_system_tags
+
+                        # Update the feature's geojson with regenerated tags
+                        feature.geojson = feature_data
+            except Exception as e:
+                logger.error(f"Error regenerating tags for feature {feature_id}: {traceback.format_exc()}")
+                # Continue without regenerating tags if there's an error
 
         # Save the updated feature
         feature.save()
