@@ -22,3 +22,7 @@ to [GitHub](https://github.com/Cyberes/geovault).
 - Heavy data processing behind the scenes
 
 **This platform does not support editing.** Use your own preferred tool and then upload your data to the server.
+
+## Installation
+
+Installation instructions are in the [installation/](https://git.evulid.cc/cyberes/geovault/src/branch/master/installation) folder
