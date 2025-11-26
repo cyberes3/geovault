@@ -18,7 +18,9 @@ logger = logging.getLogger(__name__)
 # Configuration from environment variables
 GITHUB_TOKEN = os.environ.get('GITHUB_TOKEN')
 GITHUB_REPO = os.environ.get('GITHUB_REPO', 'Cyberes/geovault')
-GITHUB_API_URL = f'https://api.github.com/repos/{GITHUB_REPO}/dispatches'
+GITHUB_WORKFLOW_BRANCH = os.environ.get('GITHUB_WORKFLOW_BRANCH', '__mirror')
+GITHUB_WORKFLOW_NAME = os.environ.get('GITHUB_WORKFLOW_NAME', 'mirror.yml')
+GITHUB_API_URL = f'https://api.github.com/repos/{GITHUB_REPO}/actions/workflows/{GITHUB_WORKFLOW_NAME}/dispatches'
 
 if not GITHUB_TOKEN:
     raise ValueError("GITHUB_TOKEN environment variable must be set")
@@ -51,12 +53,9 @@ def webhook():
         }
         
         payload = {
-            'event_type': 'gitea-push',
-            'client_payload': {
-                'ref': ref,
-                'repository': {
-                    'full_name': data.get('repository', {}).get('full_name', GITHUB_REPO.lower())
-                }
+            'ref': GITHUB_WORKFLOW_BRANCH,  # Trigger workflow from __mirror branch
+            'inputs': {
+                'ref': ref  # Pass the Gitea ref as an input
             }
         }
         
@@ -85,6 +84,7 @@ def health():
     return jsonify({
         'status': 'healthy',
         'github_repo': GITHUB_REPO,
+        'workflow_branch': GITHUB_WORKFLOW_BRANCH,
         'token_configured': bool(GITHUB_TOKEN)
     }), 200
 

@@ -4,7 +4,7 @@ This guide explains how to set up automatic mirroring from your Gitea repository
 
 ## Overview
 
-When you push commits to the `master` branch in your Gitea repository, a webhook will trigger a GitHub Action that mirrors the changes to your GitHub repository.
+When you push commits to the `master` branch in your Gitea repository, a webhook will trigger a GitHub Action that mirrors the changes to your GitHub repository. The workflow file is located on the `__mirror` branch to avoid conflicts when the workflow tries to update the repository.
 
 ## Prerequisites
 
@@ -52,18 +52,22 @@ A ready-to-deploy webhook proxy script is included in `installation/webhook-prox
 4. Add environment variables:
    - `GITHUB_TOKEN`: Your GitHub PAT
    - `GITHUB_REPO`: `Cyberes/geovault` (or your repo)
+   - `GITHUB_WORKFLOW_BRANCH`: `__mirror` (the branch where the workflow file exists)
 5. Railway will provide a URL like `https://your-app.railway.app`
 
 **Quick Deploy to Fly.io:**
 1. Install flyctl: `curl -L https://fly.io/install.sh | sh`
 2. Run `fly launch` in the directory with `webhook-proxy.py`
-3. Set secrets: `fly secrets set GITHUB_TOKEN=your_token GITHUB_REPO=Cyberes/geovault`
+3. Set secrets: `fly secrets set GITHUB_TOKEN=your_token GITHUB_REPO=Cyberes/geovault GITHUB_WORKFLOW_BRANCH=__mirror`
 4. Deploy: `fly deploy`
 
 **Deploy to Your Own Server:**
 1. Install Python 3 and pip
-2. Install dependencies: `pip install -r webhook-proxy-requirements.txt`
-3. Set environment variable: `export GITHUB_TOKEN=your_token`
+2. Install dependencies: `pip install -r requirements.txt`
+3. Set environment variables:
+   - `export GITHUB_TOKEN=your_token`
+   - `export GITHUB_REPO=Cyberes/geovault` (optional, defaults to Cyberes/geovault)
+   - `export GITHUB_WORKFLOW_BRANCH=__mirror` (optional, defaults to __mirror)
 4. Run: `python webhook-proxy.py`
 5. Use a reverse proxy (nginx/caddy) or run behind a process manager (systemd/supervisor)
 
@@ -100,10 +104,12 @@ The proxy will be available at `http://your-server:5000/webhook` (or your config
 - Check your proxy service logs for any errors when forwarding to GitHub
 
 ### Workflow not running
-- Check GitHub Actions tab for any errors
+- Check GitHub Actions tab for any errors (make sure you're viewing the `__mirror` branch)
 - Verify the `GITHUB_TOKEN` secret is set correctly in GitHub
-- Ensure the workflow file exists at `.github/workflows/mirror.yml`
+- Ensure the workflow file exists at `.github/workflows/mirror.yml` on the `__mirror` branch
 - Check that the event type matches: `gitea-push`
+- Verify the `GITHUB_WORKFLOW_BRANCH` environment variable is set to `__mirror` in your webhook proxy
+- The webhook proxy must include `ref: '__mirror'` in the API payload to trigger the workflow on the correct branch
 
 ### Only master branch should be mirrored
 - The workflow includes a branch check that only processes `refs/heads/master`
