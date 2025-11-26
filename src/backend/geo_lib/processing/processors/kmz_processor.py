@@ -36,7 +36,8 @@ class KMZProcessor(KMLProcessor):
         geojson_data = process_geojson_icons(
             geojson_data,
             file_type='kmz',
-            file_data=kmz_data
+            file_data=kmz_data,
+            import_log=self.import_log
         )
 
         return geojson_data

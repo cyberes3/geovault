@@ -44,7 +44,12 @@ FILE_TYPE_CONFIGS: Dict[FileType, FileTypeConfig] = {
             'application/xml',
             'text/plain',
             'application/vnd.google-earth.kml+xml',
-            'application/vnd.google-earth.kml'
+            'application/vnd.google-earth.kml',
+            # Some KML files with rich HTML content in CDATA (like simpledata.kml)
+            # are detected by libmagic/python-magic as text/html. We still treat
+            # these as valid KML as long as the subsequent XML/content validation
+            # passes, so allow text/html here.
+            'text/html'
         ],
         max_size=5 * 1024 * 1024,  # 5MB
         xml_root_elements=['kml'],

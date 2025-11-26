@@ -14,19 +14,25 @@ logger = __import__('logging').getLogger(__name__)
 
 def _remove_namespaces(content: str) -> str:
     """
-    Remove namespace declarations and prefixes from KML content.
-    The togeojson library doesn't handle namespaced XML well.
-
+    Remove problematic namespace prefixes from KML content.
+    Historically this was needed because older togeojson versions had trouble
+    with *prefixed* namespaces like:
+        <ns0:kml xmlns:ns0="http://www.opengis.net/kml/2.2">
+    
+    However, modern @tmcw/togeojson handles the standard default namespace
+    (`xmlns="http://www.opengis.net/kml/2.2"`) correctly, so we avoid stripping
+    that (or any generic xmlns declarations) to prevent breaking valid files
+    like cdata.kml.
+    
     Args:
         content: KML content string
-
+    
     Returns:
-        KML content with namespaces removed
+        KML content with only prefixed tag names normalized (e.g. <ns0:Placemark> -> <Placemark>).
     """
-    # Remove namespace declarations
-    content = re.sub(r'xmlns:ns\d+="[^"]*"', '', content)
-    # Remove namespace prefixes from tags
-    content = re.sub(r'ns\d+:', '', content)
+    # Keep xmlns declarations intact; only strip namespace *prefixes* from tag names.
+    # Example: <ns0:Placemark> -> <Placemark>, </ns0:Placemark> -> </Placemark>
+    content = re.sub(r'(<\/?)(\w+):', r'\1', content)
     return content
 
 
@@ -54,7 +60,8 @@ class KMLProcessor(BaseProcessor):
         geojson_data = process_geojson_icons(
             geojson_data,
             file_type='kml',
-            file_data=None
+            file_data=None,
+            import_log=self.import_log
         )
 
         return geojson_data

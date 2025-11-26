@@ -16,6 +16,7 @@ from urllib.error import URLError, HTTPError
 
 from django.conf import settings
 from geo_lib.logging.console import get_import_logger
+from geo_lib.processing.logging import ImportLog, DatabaseLogLevel
 
 logger = get_import_logger()
 
@@ -281,7 +282,12 @@ def process_icon_href(href: str, file_type: str, file_data: Optional[bytes] = No
     return None
 
 
-def process_geojson_icons(geojson_data: dict, file_type: str, file_data: Optional[bytes] = None) -> dict:
+def process_geojson_icons(
+    geojson_data: dict,
+    file_type: str,
+    file_data: Optional[bytes] = None,
+    import_log: Optional[ImportLog] = None
+) -> dict:
     """
     Process all icon hrefs in GeoJSON data structure.
     Recursively searches for icon hrefs in properties and replaces them with local paths.
@@ -291,6 +297,7 @@ def process_geojson_icons(geojson_data: dict, file_type: str, file_data: Optiona
         geojson_data: GeoJSON data dictionary
         file_type: File type ('kmz' or 'kml')
         file_data: File data as bytes (required for KMZ)
+        import_log: Optional ImportLog for recording user-visible warnings
         
     Returns:
         Modified GeoJSON data with replaced icon hrefs
@@ -315,7 +322,14 @@ def process_geojson_icons(geojson_data: dict, file_type: str, file_data: Optiona
             geometry_type = geometry.get('type', '').lower() if isinstance(geometry, dict) else ''
             
             if geometry_type == 'point' and 'properties' in feature:
-                _process_properties_icons(feature['properties'], file_type, file_data, href_mapping, is_point=True)
+                _process_properties_icons(
+                    feature['properties'],
+                    file_type,
+                    file_data,
+                    href_mapping,
+                    is_point=True,
+                    import_log=import_log
+                )
             elif geometry_type != 'point' and 'properties' in feature:
                 # For non-Point features, remove icon properties entirely
                 # This prevents fetching icons for LineString, Polygon, etc.
@@ -484,7 +498,14 @@ def _extract_color_from_caltopo_url(url: str) -> Optional[str]:
         return None
 
 
-def _process_properties_icons(properties: dict, file_type: str, file_data: Optional[bytes] = None, href_mapping: Optional[Dict[str, str]] = None, is_point: bool = False) -> None:
+def _process_properties_icons(
+    properties: dict,
+    file_type: str,
+    file_data: Optional[bytes] = None,
+    href_mapping: Optional[Dict[str, str]] = None,
+    is_point: bool = False,
+    import_log: Optional[ImportLog] = None
+) -> None:
     """
     Process icon hrefs in properties dictionary.
     Looks for common icon-related property names and replaces hrefs.
@@ -511,8 +532,7 @@ def _process_properties_icons(properties: dict, file_type: str, file_data: Optio
         'iconUrl',
         'icon_url',
         'marker-icon',
-        'symbol',
-        'styleUrl',  # KML style URLs might reference icons
+        'symbol'
     ]
     
     # Process known icon properties
@@ -550,21 +570,36 @@ def _process_properties_icons(properties: dict, file_type: str, file_data: Optio
                             continue
                     properties[prop_name] = mapped_href
                 else:
-                    # Process directly (this will fetch non-point CalTopo icons)
+                    # Process directly (this will fetch/store remote or embedded icons)
                     new_href = process_icon_href(href, file_type, file_data)
                     if new_href:
+                        # Successfully fetched and stored icon - update href to local path
                         properties[prop_name] = new_href
-    
+                    else:
+                        # Fetch/extract failed – fall back to default red icon.
+                        # 1) Remove the broken/remote icon reference so the frontend
+                        #    doesn't try to render a missing custom icon.
+                        # 2) Ensure marker-color is set so the frontend uses a red circle.
+                        if import_log is not None:
+                            import_log.add(
+                                f"Failed to load icon '{href}', using default red icon",
+                                "Icon Processing",
+                                DatabaseLogLevel.WARNING
+                            )
+                        del properties[prop_name]
+                        if 'marker-color' not in properties or not properties['marker-color']:
+                            properties['marker-color'] = '#ff0000'
+
     # Also check for nested structures (e.g., style objects)
     # Only process nested structures if this is a Point feature
     if is_point:
         for key, value in properties.items():
             if isinstance(value, dict):
-                _process_properties_icons(value, file_type, file_data, href_mapping, is_point=True)
+                _process_properties_icons(value, file_type, file_data, href_mapping, is_point=True, import_log=import_log)
             elif isinstance(value, list):
                 for item in value:
                     if isinstance(item, dict):
-                        _process_properties_icons(item, file_type, file_data, href_mapping, is_point=True)
+                        _process_properties_icons(item, file_type, file_data, href_mapping, is_point=True, import_log=import_log)
             elif isinstance(value, str) and key not in icon_property_names:
                 # Check if any string value matches a href in the mapping
                 if href_mapping and value in href_mapping:
