@@ -410,7 +410,10 @@ JOB_CLEANUP_INTERVAL_SECONDS = config.get_int('processing.job_cleanup_interval_s
 MAX_JOB_AGE_SECONDS = config.get_int('processing.max_job_age_seconds', 7200)
 
 # API Configuration
-TAG_MAX_LENGTH = config.get_int('api.tag_max_length', 255)
+# Maximum length for tag names.
+# This is intentionally configured only in Django settings (not in config.yaml)
+# to keep tag validation logic centralized here.
+TAG_MAX_LENGTH = 255
 
 # Bounding Box Configuration (hardcoded - not user configurable)
 BBOX_WORLD_WIDE_LON_THRESHOLD_1 = 280
