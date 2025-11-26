@@ -140,8 +140,6 @@ export default {
     }
   },
   mounted() {
-    document.title = 'Admin Panel - GeoVault';
-
     // Redirect if not authorized (defense in depth)
     if (!this.isAuthorized) {
       // Small delay to show the error message, then redirect

@@ -4,13 +4,9 @@ Bulk tagging and styling on import page
 need to automatically send user a verification email on registration
 
 ## Stretch Goals
-Additional map layers
-Option to add external custom layers
-Ability to set layer when sharing web map
 Geotagged photo support (set path to scan)
 Group support and share to group
 Some way to record and push to server from an app. Use GPSLogger with %ALL
-Download all data as KML
 A very simple Android app to Make it easy to push data to the server. For example, export from back country navigator, share to this app, import to server using app
 Plugin to automatically pull saved locations from Google maps. Support multiple accounts with the option to automatically apply set tags on imported features per account
 Search box to call novatium/overpass to search for locations and zoom the map to them

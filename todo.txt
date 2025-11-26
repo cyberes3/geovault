@@ -1,9 +1,5 @@
 insane linework test isn't showing up on the map
-show feature stats (length, area, elevation, etc)
 instead of hiding small polygons and lines, render them as a point at low zooms the color of their border/line
-make sure the map data loading is vertically centered
 
 Later:
 See how https://trails.colorado.gov loads their data in the map
-Debug log messages are hidden by default and only shown if a user enables that in his settings
-validate that `FILE_TYPE_CONFIGS[file_type].max_size` is always less than 200 or else the database will break

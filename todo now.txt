@@ -1,3 +1,0 @@
-Also, prevent adding empty tags or tags with only spaces/tabs/etc
-
-Also check for system tags that only have the name, ie `source-file:` or `type:`

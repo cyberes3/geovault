@@ -372,6 +372,41 @@ def check_togeojson_installation():
         return False
 
 
+def check_file_type_max_size():
+    """
+    Check that all FILE_TYPE_CONFIGS max_size values are less than 200.
+    This is critical because values >= 200 will break the database.
+    
+    Returns:
+        bool: True if all max_size values are valid, False otherwise
+    """
+    try:
+        from geo_lib.processing.file_types import FILE_TYPE_CONFIGS
+        
+        MAX_ALLOWED_SIZE = 200
+        invalid_configs = []
+        
+        for file_type, config in FILE_TYPE_CONFIGS.items():
+            if config.max_size >= MAX_ALLOWED_SIZE:
+                invalid_configs.append((file_type.value, config.max_size))
+        
+        if invalid_configs:
+            logger.error("✗ File type max_size validation failed!")
+            logger.error(f"  The following file types have max_size >= {MAX_ALLOWED_SIZE} (which will break the database):")
+            for file_type_name, max_size in invalid_configs:
+                logger.error(f"    - {file_type_name}: max_size = {max_size}")
+            logger.error(f"  All max_size values must be less than {MAX_ALLOWED_SIZE}")
+            logger.error("  Please fix FILE_TYPE_CONFIGS in geo_lib/processing/file_types.py")
+            return False
+        
+        logger.info("✓ File type max_size validation passed (all values < 200)")
+        return True
+        
+    except Exception as e:
+        logger.error(f"✗ File type max_size check failed: {e}")
+        return False
+
+
 def check_config_file():
     """
     Check if configuration file exists.
@@ -488,6 +523,7 @@ def run_startup_checks():
     6. Check writable directories (create if needed)
     7. Check frontend files are built
     8. Check togeojson installation
+    9. Validate file type max_size values (< 200)
     
     Warning checks (don't fail startup):
     - Configuration file
@@ -510,6 +546,7 @@ def run_startup_checks():
         ("Writable Directories", check_writable_directories),
         ("Frontend Files", check_frontend_files),
         ("togeojson Installation", check_togeojson_installation),
+        ("File Type Max Size", check_file_type_max_size),
     ]
     
     failed_checks = []
