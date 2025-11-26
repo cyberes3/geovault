@@ -3,8 +3,7 @@
     <h2 class="text-lg font-semibold text-gray-900 mb-4">Shared Links</h2>
 
     <div v-if="sharesLoading" class="text-center py-8">
-      <div class="animate-spin rounded-full h-8 w-8 border-2 border-transparent mx-auto" style="border-bottom-color: #4B6BAB;"></div>
-      <p class="mt-2 text-sm text-gray-600">Loading shares...</p>
+      <Loader size="md" layout="centered" message="Loading shares..." />
     </div>
 
     <div v-else-if="sharesError" class="p-4 bg-red-50 border border-red-200 rounded-md">
@@ -129,9 +128,13 @@
 <script>
 import axios from "axios";
 import { getCookie } from "@/assets/js/auth.js";
+import Loader from "@/components/parts/Loader.vue";
 
 export default {
   name: 'SharingSettingsTab',
+  components: {
+    Loader
+  },
   props: {
     toastRef: {
       type: Object,

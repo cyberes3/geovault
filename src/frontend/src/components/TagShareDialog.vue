@@ -68,8 +68,7 @@
             <h4 class="text-sm font-semibold text-gray-900 mb-4">Existing Share Links</h4>
             
             <div v-if="loading" class="text-center py-4">
-              <div class="animate-spin rounded-full h-6 w-6 border-2 border-transparent mx-auto" style="border-bottom-color: #4B6BAB;"></div>
-              <p class="mt-2 text-sm text-gray-600">Loading shares...</p>
+              <Loader size="sm" layout="centered" message="Loading shares..." />
             </div>
 
             <div v-else-if="tagShares.length === 0" class="text-center py-8 text-gray-500">
@@ -144,6 +143,7 @@
 
 <script>
 import { getCookie } from "@/assets/js/auth.js";
+import Loader from "@/components/parts/Loader.vue";
 
 export default {
   name: 'TagShareDialog',
@@ -158,6 +158,9 @@ export default {
     }
   },
   emits: ['close'],
+  components: {
+    Loader
+  },
   data() {
     return {
       creating: false,

@@ -29,10 +29,7 @@
 
     <!-- Loading State -->
     <div v-if="loading" class="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
-      <div class="flex items-center justify-center py-12">
-        <div class="animate-spin rounded-full h-8 w-8 border-2 border-transparent" style="border-bottom-color: #4B6BAB;"></div>
-        <span class="ml-3 text-gray-600">Loading collections...</span>
-      </div>
+      <Loader size="md" layout="centered" message="Loading collections..." />
     </div>
 
     <!-- Error State -->
@@ -162,12 +159,14 @@
 import { getCookie } from "@/assets/js/auth.js";
 import CollectionDialog from "./CollectionDialog.vue";
 import CollectionShareDialog from "./CollectionShareDialog.vue";
+import Loader from "./parts/Loader.vue";
 
 export default {
   name: 'CollectionsPage',
   components: {
     CollectionDialog,
-    CollectionShareDialog
+    CollectionShareDialog,
+    Loader
   },
   data() {
     return {

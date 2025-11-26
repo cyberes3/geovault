@@ -80,10 +80,7 @@
 
       <!-- Loading Indicator for Search -->
       <div v-else-if="isSearching" class="flex-1 flex items-center justify-center">
-        <div class="flex flex-col items-center space-y-2">
-          <div class="animate-spin rounded-full h-6 w-6 border-2 border-transparent" style="border-bottom-color: #4B6BAB;"></div>
-          <div class="text-xs text-gray-500">Searching...</div>
-        </div>
+        <Loader size="md" layout="centered" message="Searching..." />
       </div>
 
       <!-- Feature List -->

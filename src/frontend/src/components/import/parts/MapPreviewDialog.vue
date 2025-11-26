@@ -31,10 +31,7 @@
 
             <!-- Loading Indicator -->
             <div v-show="isLoading" class="absolute top-4 right-4 bg-white bg-opacity-90 px-4 py-2 rounded-lg shadow-md z-10">
-              <div class="flex items-center space-x-2">
-                <div class="animate-spin rounded-full h-4 w-4 border-2 border-transparent" style="border-bottom-color: #4B6BAB;"></div>
-                <span class="text-sm text-gray-700">Loading preview...</span>
-              </div>
+              <Loader size="sm" layout="inline" message="Loading preview..." />
             </div>
 
             <!-- Feature Info -->
@@ -72,9 +69,13 @@ import {Vector as VectorSource} from 'ol/source'
 import {Style, Fill, Stroke, Circle, Text} from 'ol/style'
 import {GeoJSON} from 'ol/format'
 import {fromLonLat} from 'ol/proj'
+import Loader from '@/components/parts/Loader.vue'
 
 export default {
   name: 'MapPreviewDialog',
+  components: {
+    Loader
+  },
   props: {
     isOpen: {
       type: Boolean,

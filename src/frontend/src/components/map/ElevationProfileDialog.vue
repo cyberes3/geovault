@@ -49,15 +49,12 @@
           <canvas ref="chartCanvas"></canvas>
           <!-- Loading Spinner Overlay -->
           <div v-if="isUpdatingChart" class="absolute inset-0 flex items-center justify-center z-10 pointer-events-none">
-            <div class="animate-spin rounded-full h-8 w-8 border-2 border-transparent bg-white bg-opacity-90 rounded-full p-2" style="border-bottom-color: #4B6BAB;"></div>
+            <Loader size="md" layout="centered" :showMessage="false" />
           </div>
         </div>
         <!-- Loading Spinner -->
         <div v-if="isUpdatingChart && feature" class="absolute inset-0 flex items-center justify-center bg-white z-20">
-          <div class="text-center">
-            <div class="inline-block animate-spin rounded-full h-8 w-8 border-2 border-transparent" style="border-bottom-color: #4B6BAB;"></div>
-            <p class="mt-4 text-sm text-gray-600">Loading chart...</p>
-          </div>
+          <Loader size="md" layout="centered" message="Loading chart..." />
         </div>
         <!-- No Data Warning -->
         <div v-else-if="!hasElevationData && feature" class="absolute inset-0 flex items-center justify-center bg-white z-10">
@@ -80,6 +77,7 @@ import { Chart, registerables } from 'chart.js'
 import { GeoJSON } from 'ol/format'
 import { toLonLat } from 'ol/proj'
 import { getCookie } from '@/assets/js/auth.js'
+import Loader from '@/components/parts/Loader.vue'
 
 Chart.register(...registerables)
 
@@ -92,6 +90,9 @@ export default {
     }
   },
           emits: ['close', 'hover-point', 'hover-clear', 'click-point'],
+  components: {
+    Loader
+  },
   data() {
     return {
       chart: null,

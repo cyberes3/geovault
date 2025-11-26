@@ -7,11 +7,8 @@
           <div class="flex items-center">
             <h1 class="text-2xl font-bold text-gray-900 mb-2">Import Data</h1>
             <div v-if="isRefreshing" class="ml-3 flex items-center text-sm text-gray-500">
-              <svg class="animate-spin -ml-1 mr-2 h-4 w-4 text-gray-400" fill="none" viewBox="0 0 24 24">
-                <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
-                <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
-              </svg>
-              Updating...
+              <Loader size="sm" layout="inline" :showMessage="false" />
+              <span class="ml-2">Updating...</span>
             </div>
           </div>
           <p class="text-gray-600">Manage your geospatial data imports and view processing history.</p>
@@ -23,7 +20,8 @@
             class="inline-flex items-center px-3 py-2 border border-gray-300 text-sm font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 transition-colors duration-200 disabled:opacity-50 disabled:cursor-not-allowed"
             title="Refresh import queue and history"
           >
-            <svg class="w-4 h-4 mr-2" :class="{ 'animate-spin': isRefreshing }" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <Loader v-if="isRefreshing" size="sm" layout="inline" :showMessage="false" />
+            <svg v-else class="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"></path>
             </svg>
             {{ isRefreshing ? 'Refreshing...' : 'Refresh' }}
@@ -108,6 +106,7 @@
 import {mapState} from "vuex"
 import {IMPORT_HISTORY_URL} from "@/assets/js/import/url.js";
 import ImportQueue from "@/components/import/parts/ImportQueue.vue";
+import Loader from "@/components/parts/Loader.vue";
 
 export default {
   computed: {
@@ -119,7 +118,7 @@ export default {
       return !this.importHistoryLoaded && this.importHistory.length === 0;
     }
   },
-  components: {ImportQueue: ImportQueue},
+  components: {ImportQueue: ImportQueue, Loader},
   data() {
     return {
       importQueueIsLoading: true,

@@ -288,9 +288,7 @@
     <div v-if="processing.active && processing.progress !== null" class="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
       <div class="flex items-center justify-center py-8">
         <div class="text-center">
-          <div class="animate-spin h-8 w-8 border-2 border-transparent rounded-full mx-auto mb-4" style="border-bottom-color: #4B6BAB;"></div>
-          <h3 class="text-lg font-medium text-gray-900 mb-2">Processing File</h3>
-          <p class="text-gray-600">{{ processing.message }}</p>
+          <Loader size="md" layout="centered" :message="processing.message" />
           <div class="mt-4">
             <div class="w-full bg-gray-200 rounded-full h-2">
               <div :style="{ width: processing.progress + '%' }" class="bg-blue-600 h-2 rounded-full transition-all duration-300"></div>

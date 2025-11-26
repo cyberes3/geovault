@@ -81,8 +81,7 @@
 
                 <!-- Tags List -->
                 <div v-if="loadingTags" class="text-center py-4">
-                  <div class="animate-spin rounded-full h-6 w-6 border-2 border-transparent mx-auto" style="border-bottom-color: #4B6BAB;"></div>
-                  <p class="mt-2 text-sm text-gray-600">Loading tags...</p>
+                  <Loader size="sm" layout="centered" message="Loading tags..." />
                 </div>
 
                 <div v-else-if="filteredTags.length === 0" class="text-center py-4 text-gray-500 text-sm">
@@ -155,8 +154,7 @@
 
                 <!-- Features List -->
                 <div v-if="loadingFeatures" class="text-center py-4">
-                  <div class="animate-spin rounded-full h-6 w-6 border-2 border-transparent mx-auto" style="border-bottom-color: #4B6BAB;"></div>
-                  <p class="mt-2 text-sm text-gray-600">Loading features...</p>
+                  <Loader size="sm" layout="centered" message="Loading features..." />
                 </div>
 
                 <div v-else-if="filteredFeatures.length === 0" class="text-center py-4 text-gray-500 text-sm">
@@ -220,9 +218,13 @@
 
 <script>
 import { getCookie } from "@/assets/js/auth.js";
+import Loader from "@/components/parts/Loader.vue";
 
 export default {
   name: 'CollectionDialog',
+  components: {
+    Loader
+  },
   props: {
     collection: {
       type: Object,

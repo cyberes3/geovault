@@ -101,8 +101,7 @@
           <!-- Processing Section -->
           <div v-else-if="processing" class="space-y-4">
             <div class="text-center py-6">
-              <div class="inline-block animate-spin rounded-full h-12 w-12 border-2 border-transparent" style="border-bottom-color: #4B6BAB;"></div>
-              <p class="mt-4 text-sm font-medium text-gray-900">{{ processingMessage }}</p>
+              <Loader size="lg" layout="centered" :message="processingMessage" />
               <div v-if="processingProgress !== null" class="mt-6 max-w-md mx-auto">
                 <div class="w-full bg-gray-200 rounded-full h-3 overflow-hidden">
                   <div 
@@ -253,7 +252,7 @@
             <svg v-if="!applying" class="h-4 w-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7" />
             </svg>
-            <span v-if="applying" class="inline-block animate-spin rounded-full h-4 w-4 border-2 border-transparent mr-2" style="border-bottom-color: white;"></span>
+            <Loader v-if="applying" size="sm" layout="inline" :showMessage="false" color="white" />
             {{ applying ? 'Applying...' : 'Apply Spatial Data' }}
           </button>
           
@@ -268,7 +267,7 @@
             <svg v-if="!regeneratingTags" class="h-4 w-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
             </svg>
-            <span v-if="regeneratingTags" class="inline-block animate-spin rounded-full h-4 w-4 border-2 border-transparent mr-2" style="border-bottom-color: white;"></span>
+            <Loader v-if="regeneratingTags" size="sm" layout="inline" :showMessage="false" color="white" />
             {{ regeneratingTags ? 'Regenerating...' : 'Regenerate Tags' }}
           </button>
           
@@ -329,6 +328,7 @@ import {fromLonLat} from 'ol/proj'
 import {getCenter} from 'ol/extent'
 import {DragPan, MouseWheelZoom} from 'ol/interaction'
 import {markRaw} from 'vue'
+import Loader from '@/components/parts/Loader.vue'
 
 export default {
   name: 'ReplacementFeatureDialog',
@@ -343,6 +343,9 @@ export default {
     }
   },
   emits: ['close', 'applied'],
+  components: {
+    Loader
+  },
   data() {
     return {
       importQueueId: null,
