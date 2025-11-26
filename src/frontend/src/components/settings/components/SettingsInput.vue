@@ -25,7 +25,7 @@
           :checked="modelValue === option.value"
           type="radio"
           @change="$emit('update:modelValue', $event.target.value)"
-          class="mt-1 h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300"
+          class="mt-1 h-4 w-4 text-primary-500 focus:ring-primary-500 border-gray-300"
         />
         <div class="ml-3">
           <label :for="`${setting.key}-${option.value}`" class="block text-sm font-medium text-gray-700 cursor-pointer">
@@ -45,7 +45,7 @@
         :checked="modelValue"
         type="checkbox"
         @change="$emit('update:modelValue', $event.target.checked)"
-        class="mt-1 h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300 rounded"
+        class="mt-1 h-4 w-4 text-primary-500 focus:ring-primary-500 border-gray-300 rounded"
       />
       <div class="ml-3">
         <label :for="setting.key" class="block text-sm font-medium text-gray-700 cursor-pointer">
@@ -63,7 +63,7 @@
         :id="setting.key"
         :value="modelValue"
         @change="$emit('update:modelValue', $event.target.value)"
-        class="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500"
+        class="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-primary-500 focus:border-primary-500"
       >
         <option v-for="option in setting.options" :key="option.value" :value="option.value">
           {{ option.label }}
@@ -82,7 +82,7 @@
         type="text"
         :placeholder="setting.placeholder"
         @input="$emit('update:modelValue', $event.target.value)"
-        class="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500"
+        class="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-primary-500 focus:border-primary-500"
       />
       <p v-if="setting.description" class="text-sm text-gray-500">
         {{ setting.description }}
@@ -100,7 +100,7 @@
         :step="setting.step"
         :placeholder="setting.placeholder"
         @input="$emit('update:modelValue', parseFloat($event.target.value) || 0)"
-        class="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500"
+        class="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-primary-500 focus:border-primary-500"
       />
       <p v-if="setting.description" class="text-sm text-gray-500">
         {{ setting.description }}
@@ -115,7 +115,7 @@
         :rows="setting.rows || 4"
         :placeholder="setting.placeholder"
         @input="$emit('update:modelValue', $event.target.value)"
-        class="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500"
+        class="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-primary-500 focus:border-primary-500"
       ></textarea>
       <p v-if="setting.description" class="text-sm text-gray-500">
         {{ setting.description }}

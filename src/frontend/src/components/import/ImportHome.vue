@@ -17,7 +17,7 @@
           <button
             @click="refreshTables"
             :disabled="isRefreshing"
-            class="inline-flex items-center px-3 py-2 border border-gray-300 text-sm font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 transition-colors duration-200 disabled:opacity-50 disabled:cursor-not-allowed"
+            class="inline-flex items-center px-3 py-2 border border-gray-300 text-sm font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primary-500 transition-colors duration-200 disabled:opacity-50 disabled:cursor-not-allowed"
             title="Refresh import queue and history"
           >
             <Loader v-if="isRefreshing" size="sm" layout="inline" :showMessage="false" />
@@ -28,7 +28,7 @@
           </button>
           <router-link
             to="/import/upload"
-            class="inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md text-white bg-blue-600 hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 transition-colors duration-200"
+            class="inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md text-white bg-primary-500 hover:bg-primary-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primary-500 transition-colors duration-200"
           >
             <svg class="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6v6m0 0v6m0-6h6m-6 0H6"></path>
@@ -63,7 +63,7 @@
           <tbody class="bg-white divide-y divide-gray-200">
             <tr v-for="(item, index) in importHistory" :key="`history-${index}`" class="hover:bg-gray-50">
               <td class="px-6 py-4 whitespace-nowrap">
-                <a :href="`${IMPORT_HISTORY_URL()}/${item.id}`" class="text-sm font-medium text-blue-600 hover:text-blue-900">
+                <a :href="`${IMPORT_HISTORY_URL()}/${item.id}`" class="text-sm font-medium text-primary-500 hover:text-primary-700">
                   {{ item.original_filename }}
                 </a>
               </td>

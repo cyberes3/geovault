@@ -7,24 +7,24 @@
     </div>
 
     <!-- File Requirements -->
-    <div class="bg-blue-50 border border-blue-200 rounded-lg p-6">
+    <div class="bg-primary-50 border border-primary-200 rounded-lg p-6">
       <div class="flex">
         <div class="flex-shrink-0">
-          <svg class="h-5 w-5 text-blue-400" fill="currentColor" viewBox="0 0 20 20">
+          <svg class="h-5 w-5 text-primary-600" fill="currentColor" viewBox="0 0 20 20">
             <path clip-rule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7-4a1 1 0 11-2 0 1 1 0 012 0zM9 9a1 1 0 000 2v3a1 1 0 001 1h1a1 1 0 100-2v-3a1 1 0 00-1-1H9z" fill-rule="evenodd"></path>
           </svg>
         </div>
         <div class="ml-3 flex-1">
-          <h3 class="text-sm font-medium text-blue-800">How to Upload and Import</h3>
-          <div class="mt-2 text-sm text-blue-700">
+          <h3 class="text-sm font-medium text-primary-700">How to Upload and Import</h3>
+          <div class="mt-2 text-sm text-primary-700">
             <ol class="list-decimal list-inside space-y-2">
               <li><strong>Upload files:</strong> Select KML, KMZ, or GPX files (max 5MB each) and click "Upload". Files are processed and added to your import queue below.</li>
               <li><strong>Import from queue:</strong> Go to the "Ready to Import" section and click on a file to review/edit features, or use bulk import to add multiple files to your feature store at once.</li>
             </ol>
-            <p class="mt-3 text-xs text-blue-600">Note: Each file can only be imported once. Files with identical content are detected as duplicates.</p>
+            <p class="mt-3 text-xs text-primary-500">Note: Each file can only be imported once. Files with identical content are detected as duplicates.</p>
             <button
                 @click="showHelpModal = true"
-                class="mt-2 text-sm text-blue-600 hover:text-blue-800 underline focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-1"
+                class="mt-2 text-sm text-primary-500 hover:text-primary-700 underline focus:outline-none focus:ring-2 focus:ring-primary-500 focus:ring-offset-1"
                 aria-label="View detailed import help"
             >
               More info
@@ -42,7 +42,7 @@
         <div class="flex justify-end">
           <button
               :disabled="disableUpload || files.length === 0"
-              class="inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md text-white bg-blue-600 hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 disabled:bg-gray-400 disabled:cursor-not-allowed transition-colors duration-200"
+              class="inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md text-white bg-primary-500 hover:bg-primary-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primary-500 disabled:bg-gray-400 disabled:cursor-not-allowed transition-colors duration-200"
               @click="upload"
               title="Upload selected files"
           >
@@ -91,7 +91,7 @@
             </svg>
             <div class="mt-4">
               <p class="text-sm text-gray-600">
-                <span class="font-medium text-blue-600 hover:text-blue-500 cursor-pointer" @click="$refs.fileInput.click()">Click to upload</span>
+                <span class="font-medium text-primary-500 hover:text-primary-500 cursor-pointer" @click="$refs.fileInput.click()">Click to upload</span>
                 or drag and drop
               </p>
               <p class="text-xs text-gray-500 mt-1">KML, KMZ, or GPX files only (max 5MB)</p>
@@ -130,7 +130,7 @@
 
                 <!-- File icon -->
                 <div class="flex justify-center mb-2">
-                  <svg class="h-8 w-8 text-blue-500" fill="currentColor" viewBox="0 0 20 20">
+                  <svg class="h-8 w-8 text-primary-500" fill="currentColor" viewBox="0 0 20 20">
                     <path clip-rule="evenodd" d="M4 4a2 2 0 012-2h4.586A2 2 0 0112 2.586L15.414 6A2 2 0 0116 7.414V16a2 2 0 01-2 2H6a2 2 0 01-2-2V4zm2 6a1 1 0 011-1h6a1 1 0 110 2H7a1 1 0 01-1-1zm1 3a1 1 0 100 2h6a1 1 0 100-2H7z" fill-rule="evenodd"></path>
                   </svg>
                 </div>
@@ -295,16 +295,16 @@ export default {
     },
     progressBarColor() {
       if (this.isProcessing) {
-        return "bg-blue-600"
+        return "bg-primary-500"
       } else if (this.overallProgress === 100 && !this.uploadMsg) {
         return "bg-green-600"
       } else if (this.uploadMsg.toLowerCase().includes("failed") || this.uploadMsg.toLowerCase().includes("error")) {
         return "bg-red-600"
       } else if (this.uploadMsg.toLowerCase().includes("skipped") || this.uploadMsg.toLowerCase().includes("already exists")) {
         return "bg-yellow-600"
-      } else if (this.overallProgress > 0) {
-        return "bg-blue-600"
-      } else {
+        } else if (this.overallProgress > 0) {
+          return "bg-primary-500"
+        } else {
         return "bg-gray-300"
       }
     },
@@ -349,7 +349,7 @@ export default {
     },
     dropzoneClasses() {
       if (this.isDragOver) {
-        return "border-blue-400 bg-blue-50"
+        return "border-primary-600bg-primary-50"
       } else if (this.files.length > 0) {
         if (this.disableUpload) {
           return "border-gray-300 bg-gray-50"

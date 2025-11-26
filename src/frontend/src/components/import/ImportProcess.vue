@@ -41,7 +41,7 @@
       <div class="flex items-center justify-between mb-4">
         <h2 class="text-lg font-semibold text-gray-900">Processing Logs</h2>
         <button
-            class="inline-flex items-center p-2 border border-gray-300 shadow-sm text-sm font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500"
+            class="inline-flex items-center p-2 border border-gray-300 shadow-sm text-sm font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primary-500"
             title="Open full log view"
             @click="dialogs.logs = true"
         >
@@ -79,19 +79,19 @@
     <div class="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
       <h3 class="text-lg font-semibold text-gray-900 mb-4">Import Summary</h3>
       <div v-if="loading.page" class="text-center py-8">
-        <span class="text-blue-600 font-medium">Loading...</span>
+        <span class="text-primary-500 font-medium">Loading...</span>
       </div>
       <div v-else class="grid grid-cols-1 md:grid-cols-3 gap-4">
-        <div class="bg-blue-50 border border-blue-200 rounded-lg p-4">
+        <div class="bg-primary-50 border border-primary-200 rounded-lg p-4">
           <div class="flex items-center">
             <div class="flex-shrink-0">
-              <svg class="h-8 w-8 text-blue-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <svg class="h-8 w-8 text-primary-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" stroke-linecap="round" stroke-linejoin="round" stroke-width="2"></path>
               </svg>
             </div>
             <div class="ml-3">
-              <p class="text-sm font-medium text-blue-800">Total Features</p>
-              <p class="text-2xl font-bold text-blue-900">{{ pagination.totalFeatures || itemsForUser.length }}</p>
+              <p class="text-sm font-medium text-primary-700">Total Features</p>
+              <p class="text-2xl font-bold text-primary-700">{{ pagination.totalFeatures || itemsForUser.length }}</p>
             </div>
           </div>
         </div>
@@ -167,7 +167,7 @@
             id="import-custom-icons"
             v-model="importCustomIcons"
             :disabled="lockButtons || loading.importing || loading.saving || isImported"
-            class="h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300 rounded disabled:opacity-50 disabled:cursor-not-allowed"
+            class="h-4 w-4 text-primary-500 focus:ring-primary-500 border-gray-300 rounded disabled:opacity-50 disabled:cursor-not-allowed"
             type="checkbox"
         />
         <label
@@ -197,7 +197,7 @@
         </button>
         <button
             :disabled="lockButtons || loading.importing || importableCount === 0"
-            class="inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md text-white bg-blue-600 hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 disabled:bg-gray-400 disabled:cursor-not-allowed transition-colors duration-200"
+            class="inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md text-white bg-primary-500 hover:bg-primary-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primary-500 disabled:bg-gray-400 disabled:cursor-not-allowed transition-colors duration-200"
             @click="performImport"
             title="Import all features"
         >
@@ -291,7 +291,7 @@
           <Loader size="md" layout="centered" :message="processing.message" />
           <div class="mt-4">
             <div class="w-full bg-gray-200 rounded-full h-2">
-              <div :style="{ width: processing.progress + '%' }" class="bg-blue-600 h-2 rounded-full transition-all duration-300"></div>
+              <div :style="{ width: processing.progress + '%' }" class="bg-primary-500 h-2 rounded-full transition-all duration-300"></div>
             </div>
             <p class="text-sm text-gray-500 mt-2">{{ Math.round(processing.progress) }}% complete</p>
           </div>
@@ -334,7 +334,7 @@
               {{ isItemSkipped(item, index) ? 'Restore' : 'Skip' }}
             </button>
             <button
-                :class="isItemSkipped(item, index) ? 'inline-flex items-center px-3 py-1.5 border border-gray-300 shadow-sm text-xs font-medium rounded-md text-gray-400 bg-gray-100 cursor-not-allowed' : 'inline-flex items-center px-3 py-1.5 border border-gray-300 shadow-sm text-xs font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500'"
+                :class="isItemSkipped(item, index) ? 'inline-flex items-center px-3 py-1.5 border border-gray-300 shadow-sm text-xs font-medium rounded-md text-gray-400 bg-gray-100 cursor-not-allowed' : 'inline-flex items-center px-3 py-1.5 border border-gray-300 shadow-sm text-xs font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primary-500'"
                 :disabled="isItemSkipped(item, index)"
                 @click="showFeatureMap(index)"
                 title="View feature on map"
@@ -344,7 +344,7 @@
               </svg>
               View on Map
             </button>
-            <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-blue-100 text-blue-800">
+            <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-primary-100 text-primary-700">
               {{ item.geometry.type }}
             </span>
           </div>
@@ -367,7 +367,7 @@
                 <div class="mt-2" v-if="item.duplicateInfo && item.duplicateInfo.existing_features && item.duplicateInfo.existing_features.length > 0">
                   <router-link
                       :to="{ path: '/map', query: { featureId: item.duplicateInfo.existing_features[0].id } }"
-                      class="inline-flex items-center px-3 py-1.5 border border-gray-300 rounded-md text-xs font-medium text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500"
+                      class="inline-flex items-center px-3 py-1.5 border border-gray-300 rounded-md text-xs font-medium text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primary-500"
                   >
                     <svg class="w-3 h-3 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                       <path d="M9 20l-5.447-2.724A1 1 0 013 16.382V5.618a1 1 0 011.447-.894L9 7m0 13l6-3m-6 3V7m6 10l4.553 2.276A1 1 0 0021 18.382V7.618a1 1 0 00-.553-.894L15 4m0 13V4m0 0L9 7" stroke-linecap="round" stroke-linejoin="round" stroke-width="2"></path>
@@ -387,13 +387,13 @@
             <div class="flex items-center space-x-2">
               <input
                   v-model="item.properties.name"
-                  :class="isImported || item.isDuplicate || isItemSkipped(item, index) || loading.importing ? 'block w-full px-3 py-2 border border-gray-300 rounded-md bg-gray-100 cursor-not-allowed' : 'block w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-blue-500 focus:border-blue-500'"
+                  :class="isImported || item.isDuplicate || isItemSkipped(item, index) || loading.importing ? 'block w-full px-3 py-2 border border-gray-300 rounded-md bg-gray-100 cursor-not-allowed' : 'block w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-primary-500 focus:border-primary-500'"
                   :disabled="isImported || item.isDuplicate || isItemSkipped(item, index) || loading.importing"
                   :placeholder="originalItems[index].properties.name"
               />
               <button
                   v-if="!isImported && !item.isDuplicate && !isItemSkipped(item, index) && !loading.importing"
-                  class="inline-flex items-center px-3 py-2 border border-gray-300 shadow-sm text-sm leading-4 font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500"
+                  class="inline-flex items-center px-3 py-2 border border-gray-300 shadow-sm text-sm leading-4 font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primary-500"
                   @click="resetNestedField(index, 'properties', 'name')"
                   title="Reset to original name"
               >
@@ -410,7 +410,7 @@
             <div class="flex items-start space-x-2">
               <textarea
                   v-model="item.properties.description"
-                  :class="isImported || item.isDuplicate || isItemSkipped(item, index) || loading.importing ? 'block w-full px-3 py-2 border border-gray-300 rounded-md bg-gray-100 cursor-not-allowed resize-none' : 'block w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-blue-500 focus:border-blue-500 resize-none'"
+                  :class="isImported || item.isDuplicate || isItemSkipped(item, index) || loading.importing ? 'block w-full px-3 py-2 border border-gray-300 rounded-md bg-gray-100 cursor-not-allowed resize-none' : 'block w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-primary-500 focus:border-primary-500 resize-none'"
                   :disabled="isImported || item.isDuplicate || isItemSkipped(item, index) || loading.importing"
                   :placeholder="originalItems[index].properties.description"
                   class="text-sm"
@@ -418,7 +418,7 @@
               ></textarea>
               <button
                   v-if="!isImported && !item.isDuplicate && !isItemSkipped(item, index) && !loading.importing"
-                  class="inline-flex items-center px-3 py-2 border border-gray-300 shadow-sm text-sm leading-4 font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 mt-1"
+                  class="inline-flex items-center px-3 py-2 border border-gray-300 shadow-sm text-sm leading-4 font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primary-500 mt-1"
                   @click="resetNestedField(index, 'properties', 'description')"
                   title="Reset to original description"
               >
@@ -434,7 +434,7 @@
             <label class="block text-sm font-medium text-gray-700 mb-2">Created Date</label>
             <div class="flex items-center space-x-2">
               <input
-                  :class="isImported || item.isDuplicate || isItemSkipped(item, index) || loading.importing ? 'block w-full px-3 py-2 border border-gray-300 rounded-md bg-gray-100 cursor-not-allowed' : 'block w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-blue-500 focus:border-blue-500'"
+                  :class="isImported || item.isDuplicate || isItemSkipped(item, index) || loading.importing ? 'block w-full px-3 py-2 border border-gray-300 rounded-md bg-gray-100 cursor-not-allowed' : 'block w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-primary-500 focus:border-primary-500'"
                   :disabled="isImported || item.isDuplicate || isItemSkipped(item, index) || loading.importing"
                   :value="formatDateForInput(item.properties.created)"
                   type="datetime-local"
@@ -442,7 +442,7 @@
               />
               <button
                   v-if="!isImported && !item.isDuplicate && !isItemSkipped(item, index) && !loading.importing"
-                  class="inline-flex items-center px-3 py-2 border border-gray-300 shadow-sm text-sm leading-4 font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500"
+                  class="inline-flex items-center px-3 py-2 border border-gray-300 shadow-sm text-sm leading-4 font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primary-500"
                   @click="resetNestedField(index, 'properties', 'created')"
                   title="Reset to original date"
               >
@@ -464,7 +464,7 @@
             <div v-if="!isImported && !item.isDuplicate && !isItemSkipped(item, index) && !loading.importing" class="flex items-center space-x-2 mt-3">
               <button
                   v-if="!isItemSkipped(item, index)"
-                  class="inline-flex items-center px-3 py-2 border border-gray-300 shadow-sm text-sm font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500"
+                  class="inline-flex items-center px-3 py-2 border border-gray-300 shadow-sm text-sm font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primary-500"
                   @click="resetTags(index)"
                   title="Reset all tags to original"
               >
@@ -1049,7 +1049,7 @@ export default {
       } else if (level >= 30) { // WARNING
         return 'bg-yellow-100 text-yellow-800';
       } else if (level >= 20) { // INFO
-        return 'bg-blue-100 text-blue-800';
+        return 'bg-primary-100 text-primary-700';
       } else { // DEBUG
         return 'bg-gray-100 text-gray-800';
       }

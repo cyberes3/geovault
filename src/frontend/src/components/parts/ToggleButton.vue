@@ -120,14 +120,14 @@ const toggleStyle = computed(() => {
   if (props.modelValue) {
     // On state - use primary color
     return {
-      backgroundColor: 'var(--color-primary)',
-      '--tw-ring-color': 'var(--color-primary)'
+      backgroundColor: 'var(--color-primary-500)',
+      '--tw-ring-color': 'var(--color-primary-500)'
     }
   } else {
     // Off state - use dark primary color
     return {
-      backgroundColor: 'var(--color-primary-dark)',
-      '--tw-ring-color': 'var(--color-primary)'
+      backgroundColor: 'var(--color-primary-700)',
+      '--tw-ring-color': 'var(--color-primary-500)'
     }
   }
 })
@@ -160,7 +160,7 @@ const knobClasses = computed(() => {
 <style scoped>
 /* Focus ring color using CSS variable */
 button:focus {
-  --tw-ring-color: var(--color-primary);
+  --tw-ring-color: var(--color-primary-500);
 }
 </style>
 

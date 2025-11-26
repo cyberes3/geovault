@@ -8,7 +8,7 @@
         </div>
         <button
             @click="openCreateDialog"
-            class="inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md shadow-sm text-white bg-blue-600 hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500"
+            class="inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md shadow-sm text-white bg-primary-500 hover:bg-primary-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primary-500"
             title="Create a new collection"
         >
           <svg class="w-5 h-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -19,7 +19,7 @@
       </div>
 
       <!-- Explanatory Text -->
-      <div class="m-4 p-4 bg-blue-50 border border-blue-200 rounded-lg">
+      <div class="m-4 p-4 bg-primary-50 border border-primary-200 rounded-lg">
         <p class="text-sm text-gray-700">
           Collections are custom groupings of features that allow you to organize and view related geographic data together.
           You can create collections by matching tags (features with ANY of the specified tags) or by individually selecting features, then view them all together on the map, edit them, and share them with others.
@@ -53,7 +53,7 @@
         <div class="mt-6">
           <button
               @click="openCreateDialog"
-              class="inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md shadow-sm text-white bg-blue-600 hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500"
+              class="inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md shadow-sm text-white bg-primary-500 hover:bg-primary-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primary-500"
           >
             Create New Collection
           </button>
@@ -73,7 +73,7 @@
             <h3 class="text-lg font-semibold text-gray-900 truncate flex-1">{{ collection.name }}</h3>
             <div class="flex items-center space-x-1 ml-2">
               <button
-                  class="p-1.5 text-gray-400 hover:text-blue-600 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-1 rounded"
+                  class="p-1.5 text-gray-400 hover:text-primary-500 focus:outline-none focus:ring-2 focus:ring-primary-500 focus:ring-offset-1 rounded"
                   title="Share collection"
                   type="button"
                   @click.stop.prevent="openShareDialog(collection)"
@@ -84,7 +84,7 @@
                 </svg>
               </button>
               <button
-                  class="p-1.5 text-gray-400 hover:text-gray-600 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-1 rounded"
+                  class="p-1.5 text-gray-400 hover:text-gray-600 focus:outline-none focus:ring-2 focus:ring-primary-500 focus:ring-offset-1 rounded"
                   title="Edit collection"
                   type="button"
                   @click.stop.prevent="openEditDialog(collection)"
@@ -124,7 +124,7 @@
           <div class="flex space-x-2">
             <button
                 @click="viewOnMap(collection.id)"
-                class="flex-1 inline-flex items-center justify-center px-3 py-2 border border-gray-300 shadow-sm text-sm font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500"
+                class="flex-1 inline-flex items-center justify-center px-3 py-2 border border-gray-300 shadow-sm text-sm font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primary-500"
                 title="View collection on map"
             >
               <svg class="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">

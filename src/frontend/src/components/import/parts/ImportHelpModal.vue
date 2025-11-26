@@ -11,7 +11,7 @@
           <h3 class="text-xl font-semibold text-gray-900" id="modal-title">Import Process Guide</h3>
           <button
               @click="close"
-              class="text-gray-400 hover:text-gray-500 focus:outline-none focus:ring-2 focus:ring-blue-500 rounded-md p-1"
+              class="text-gray-400 hover:text-gray-500 focus:outline-none focus:ring-2 focus:ring-primary-500 rounded-md p-1"
               aria-label="Close modal"
           >
             <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -33,7 +33,7 @@
                   <li><strong>Drag and drop:</strong> Drag files directly from your computer onto the upload area</li>
                   <li><strong>Multiple files:</strong> You can select or drag multiple files at once for batch processing</li>
                 </ul>
-                <div class="mt-3 p-3 bg-blue-50 border border-blue-200 rounded-md">
+                <div class="mt-3 p-3 bg-primary-50 border border-primary-200 rounded-md">
                   <p class="text-sm"><strong>Supported formats:</strong> KML, KMZ, and GPX files</p>
                   <p class="text-sm"><strong>File size limit:</strong> Maximum 5MB per file</p>
                 </div>
@@ -64,7 +64,7 @@
                       <li><strong>Automatic detection:</strong> The system identifies points in lines and tracks that are missing elevation information</li>
                       <li><strong>Preservation:</strong> Existing elevation data is never overwritten - only missing values are filled</li>
                     </ul>
-                    <div class="mt-2 p-3 bg-blue-50 border border-blue-200 rounded-md">
+                    <div class="mt-2 p-3 bg-primary-50 border border-primary-200 rounded-md">
                       <p class="text-sm"><strong>Note:</strong> This process only applies to lines and tracks. Points and polygons are not modified. If elevation data filling fails or is disabled, your upload will still proceed successfully - only the elevation data will be missing.</p>
                     </div>
                   </div>
@@ -216,7 +216,7 @@
         <div class="px-6 py-4 border-t border-gray-200 flex justify-end">
           <button
               @click="close"
-              class="inline-flex items-center px-4 py-2 border border-gray-300 text-sm font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 transition-colors duration-200"
+              class="inline-flex items-center px-4 py-2 border border-gray-300 text-sm font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primary-500 transition-colors duration-200"
           >
             Close
           </button>

@@ -7,7 +7,7 @@
       </div>
 
       <!-- Explanatory Text -->
-      <div class="m-4 p-4 bg-blue-50 border border-blue-200 rounded-lg">
+      <div class="m-4 p-4 bg-primary-50 border border-primary-200 rounded-lg">
         <p class="text-sm text-gray-700">
           Tags are labels attached to your geographic features that help you organize, filter, and find them easily.
           You can create custom tags, edit or delete them, share them with others, and each feature can have multiple tags for flexible categorization.
@@ -23,7 +23,7 @@
         </div>
         <input
             v-model="searchQuery"
-            class="block w-full pl-10 pr-3 py-2 border border-gray-300 rounded-md leading-5 bg-white placeholder-gray-500 focus:outline-none focus:placeholder-gray-400 focus:ring-1 focus:ring-blue-500 focus:border-blue-500 sm:text-sm"
+            class="block w-full pl-10 pr-3 py-2 border border-gray-300 rounded-md leading-5 bg-white placeholder-gray-500 focus:outline-none focus:placeholder-gray-400 focus:ring-1 focus:ring-primary-500 focus:border-primary-500 sm:text-sm"
             placeholder="Search tags..."
             type="text"
         />
@@ -92,7 +92,7 @@
                 'inline-flex items-center px-3 py-1 rounded-full text-sm font-medium border',
                 isSystemTag(tag) 
                   ? 'bg-purple-100 text-purple-800 border-purple-200' 
-                  : 'bg-blue-100 text-blue-800 border-blue-200'
+                  : 'bg-primary-100 text-primary-700 border-primary-200'
               ]">
                 {{ tag }}
                 <span v-if="isSystemTag(tag)" class="ml-1.5 text-xs opacity-75" title="System tag">🔒</span>
@@ -101,7 +101,7 @@
                   v-else
                   ref="tagEditInput"
                   v-model="editingTagValue"
-                  class="inline-flex items-center px-3 py-1 rounded-md text-sm font-medium bg-white text-gray-900 border border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-1"
+                  class="inline-flex items-center px-3 py-1 rounded-md text-sm font-medium bg-white text-gray-900 border border-primary-500 focus:outline-none focus:ring-2 focus:ring-primary-500 focus:ring-offset-1"
                   type="text"
                   @keyup.enter="saveTagEdit(tag)"
                   @keyup.esc="cancelTagEdit"
@@ -111,7 +111,7 @@
             </div>
             <div v-if="editingTag !== tag" class="flex items-center space-x-1">
               <button
-                  class="p-1.5 text-gray-400 hover:text-blue-600 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-1 rounded"
+                  class="p-1.5 text-gray-400 hover:text-primary-500 focus:outline-none focus:ring-2 focus:ring-primary-500 focus:ring-offset-1 rounded"
                   title="Share tag"
                   type="button"
                   @click.stop.prevent="openShareDialog(tag)"
@@ -124,7 +124,7 @@
               </button>
               <button
                   :class="[
-                    'p-1.5 rounded focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-1',
+                    'p-1.5 rounded focus:outline-none focus:ring-2 focus:ring-primary-500 focus:ring-offset-1',
                     isSystemTag(tag)
                       ? 'text-gray-300 cursor-not-allowed'
                       : 'text-gray-400 hover:text-gray-600'
@@ -159,7 +159,7 @@
             </div>
             <button
                 v-else
-                class="ml-2 p-1.5 bg-blue-600 text-white hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-1 rounded"
+                class="ml-2 p-1.5 bg-primary-500 text-white hover:bg-primary-700 focus:outline-none focus:ring-2 focus:ring-primary-500 focus:ring-offset-1 rounded"
                 title="Save tag name"
                 @click.stop="saveTagEdit(tag)"
             >
@@ -205,7 +205,7 @@
                 <router-link
                     v-if="feature.properties._id"
                     :to="{ path: '/map', query: { featureId: feature.properties._id } }"
-                    class="inline-flex items-center px-3 py-1.5 border border-gray-300 rounded-md text-xs font-medium text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 cursor-pointer"
+                    class="inline-flex items-center px-3 py-1.5 border border-gray-300 rounded-md text-xs font-medium text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primary-500 cursor-pointer"
                     @click.stop
                 >
                   View on Map

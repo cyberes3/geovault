@@ -68,12 +68,12 @@
           <span v-if="!isLoadingPage">
             Showing features {{ (currentPage - 1) * pageSize + 1 }} - {{ Math.min(currentPage * pageSize, totalFeatures) }} of {{ totalFeatures }}
           </span>
-          <span v-else class="text-blue-600 font-medium">Loading...</span>
+          <span v-else class="text-primary-500 font-medium">Loading...</span>
         </div>
         <div class="flex items-center space-x-2">
           <button
               :disabled="!hasPreviousPage || isLoadingPage || totalPages <= 1"
-              class="inline-flex items-center px-3 py-2 border border-gray-300 shadow-sm text-sm font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 disabled:opacity-50 disabled:cursor-not-allowed"
+              class="inline-flex items-center px-3 py-2 border border-gray-300 shadow-sm text-sm font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primary-500 disabled:opacity-50 disabled:cursor-not-allowed"
               @click="$emit('previous-page')"
               title="Go to previous page"
           >
@@ -85,7 +85,7 @@
           <span class="text-sm text-gray-700">Page {{ currentPage }} of {{ totalPages }}</span>
           <button
               :disabled="!hasNextPage || isLoadingPage || totalPages <= 1"
-              class="inline-flex items-center px-3 py-2 border border-gray-300 shadow-sm text-sm font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 disabled:opacity-50 disabled:cursor-not-allowed"
+              class="inline-flex items-center px-3 py-2 border border-gray-300 shadow-sm text-sm font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primary-500 disabled:opacity-50 disabled:cursor-not-allowed"
               @click="$emit('next-page')"
               title="Go to next page"
           >
@@ -101,14 +101,14 @@
                 v-model.number="gotoPageInputLocal"
                 :disabled="isLoadingPage || totalPages <= 1"
                 :max="totalPages"
-                class="w-16 px-2 py-1 border border-gray-300 rounded-md text-sm focus:ring-blue-500 focus:border-blue-500 disabled:opacity-50 disabled:cursor-not-allowed"
+                class="w-16 px-2 py-1 border border-gray-300 rounded-md text-sm focus:ring-primary-500 focus:border-primary-500 disabled:opacity-50 disabled:cursor-not-allowed"
                 min="1"
                 type="number"
                 @keyup.enter="jumpToPage"
             />
             <button
                 :disabled="isLoadingPage || !isValidPageNumber || totalPages <= 1"
-                class="inline-flex items-center px-3 py-2 border border-gray-300 shadow-sm text-sm font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 disabled:opacity-50 disabled:cursor-not-allowed"
+                class="inline-flex items-center px-3 py-2 border border-gray-300 shadow-sm text-sm font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primary-500 disabled:opacity-50 disabled:cursor-not-allowed"
                 @click="jumpToPage"
                 title="Jump to page"
             >
@@ -117,7 +117,7 @@
           </div>
           <button
               :disabled="isLoadingPage || !hasFeatures"
-              class="inline-flex items-center px-3 py-2 border border-gray-300 shadow-sm text-sm font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 disabled:opacity-50 disabled:cursor-not-allowed ml-4 pl-4 border-l"
+              class="inline-flex items-center px-3 py-2 border border-gray-300 shadow-sm text-sm font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primary-500 disabled:opacity-50 disabled:cursor-not-allowed ml-4 pl-4 border-l"
               @click="$emit('show-map-preview')"
               title="Preview all features on current page"
           >
@@ -133,7 +133,7 @@
     <!-- Action Buttons -->
     <div v-if="showActionButtons && shouldShowActions" class="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
       <div v-if="isLoadingPage" class="text-center py-4">
-        <span class="text-blue-600 font-medium">Loading...</span>
+        <span class="text-primary-500 font-medium">Loading...</span>
       </div>
       <div v-else-if="hasFeatures" class="flex items-center space-x-4">
           <button
@@ -150,7 +150,7 @@
         </button>
         <button
             :disabled="lockButtons || isImporting || importableCount === 0"
-            class="inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md text-white bg-blue-600 hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 disabled:bg-gray-400 disabled:cursor-not-allowed transition-colors duration-200"
+            class="inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md text-white bg-primary-500 hover:bg-primary-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primary-500 disabled:bg-gray-400 disabled:cursor-not-allowed transition-colors duration-200"
             @click="$emit('perform-import')"
             title="Import selected features"
         >

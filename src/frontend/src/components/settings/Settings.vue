@@ -15,7 +15,7 @@
               :class="[
                 'w-full text-left px-4 py-3 rounded-md text-sm font-medium transition-colors duration-200',
                 activeTab === 'account'
-                  ? 'bg-blue-50 text-blue-700 border-l-4 border-blue-600'
+                  ? 'bg-primary-50 text-primary-700 border-l-4 border-primary-500'
                   : 'text-gray-700 hover:bg-gray-50'
               ]"
               title="Account settings"
@@ -32,7 +32,7 @@
               :class="[
                 'w-full text-left px-4 py-3 rounded-md text-sm font-medium transition-colors duration-200',
                 activeTab === 'map'
-                  ? 'bg-blue-50 text-blue-700 border-l-4 border-blue-600'
+                  ? 'bg-primary-50 text-primary-700 border-l-4 border-primary-500'
                   : 'text-gray-700 hover:bg-gray-50'
               ]"
               title="Map settings"
@@ -49,7 +49,7 @@
               :class="[
                 'w-full text-left px-4 py-3 rounded-md text-sm font-medium transition-colors duration-200',
                 activeTab === 'sharing'
-                  ? 'bg-blue-50 text-blue-700 border-l-4 border-blue-600'
+                  ? 'bg-primary-50 text-primary-700 border-l-4 border-primary-500'
                   : 'text-gray-700 hover:bg-gray-50'
               ]"
               title="Sharing settings"
