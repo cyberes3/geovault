@@ -53,7 +53,7 @@
       <div class="bg-gray-50 rounded-lg p-4">
         <div ref="logsContainer" class="h-32 overflow-auto">
           <ul class="space-y-2">
-            <li v-for="(item, index) in workerLog" :key="`logitem-${index}`"
+            <li v-for="(item, index) in filteredWorkerLog" :key="`logitem-${index}`"
                 :class="{'bg-red-50 border-l-4 border-red-400 pl-2 py-1': item.level >= 40}"
                 class="flex items-start space-x-2">
               <span class="text-sm text-gray-500">{{ formatTimestamp(item.timestamp) }}</span>
@@ -67,7 +67,7 @@
               </span>
               <span :class="item.level >= 40 ? 'text-red-800 font-medium' : 'text-gray-700'" class="text-sm">{{ item.msg }}</span>
             </li>
-            <li v-if="workerLog.length === 0" class="text-sm text-gray-500 italic">
+            <li v-if="filteredWorkerLog.length === 0" class="text-sm text-gray-500 italic">
               {{ loading.logs ? 'Fetching logs...' : 'No logs available yet...' }}
             </li>
           </ul>
@@ -535,7 +535,7 @@
     <!-- Log View Modal -->
     <LogViewModal
         :is-open="dialogs.logs"
-        :logs="workerLog"
+        :logs="filteredWorkerLog"
         @close="closeLogModal"
     />
   </div>
@@ -564,7 +564,7 @@ import TagPicker from "@/components/TagPicker.vue";
 
 export default {
   computed: {
-    ...mapState(["userInfo"]),
+    ...mapState(["userInfo", "userSettings"]),
     isValidPageNumber() {
       return this.pagination.gotoInput &&
           this.pagination.gotoInput >= 1 &&
@@ -578,6 +578,20 @@ export default {
 
     importableCount() {
       return this.pagination.totalFeatures - this.duplicates.indices.length - this.skippedFeatureIds.size;
+    },
+
+    showDebugLogs() {
+      // Get the setting value, default to false if not set
+      const settings = this.userSettings || {};
+      return settings.import?.show_debug_logs === true;
+    },
+
+    filteredWorkerLog() {
+      // If showDebugLogs is false, filter out DEBUG level logs (level 10)
+      if (!this.showDebugLogs) {
+        return this.workerLog.filter(log => log.level !== 10);
+      }
+      return this.workerLog;
     },
 
   },

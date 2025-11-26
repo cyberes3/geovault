@@ -35,6 +35,11 @@ class ImportSettings(BaseModel):
         default=None,
         description="When enabled, overwrite single track feature name with filename (excluding extension)"
     )
+    
+    show_debug_logs: Optional[bool] = Field(
+        default=None,
+        description="When enabled, show DEBUG level logs in the import process page"
+    )
 
 
 class UserSettingsModel(BaseModel):

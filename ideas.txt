@@ -1,20 +1,7 @@
-Tagging support (tag roads, trails, etc)
-Sharing (share individual items or select items or tags to include)
-Organization by folder
-When updating items, create a new version
-No spatial editing
 Spatial statistics
-Track replay and stats
-When importing, list all new items and make it quick and easy to edit the attributes of new items
 Visibility: private, public, restricted (only logged in users)
-Save the unmodified original imported file in a special table and link it to the item ID
 Bulk tagging and styling on import page
-Display existing tags to select on import process
-Use same tag picking and style as map edit on import process
 need to automatically send user a verification email on registration
-download individual features from map
-download tags
-download collections
 
 ## Stretch Goals
 Additional map layers
