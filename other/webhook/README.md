@@ -93,33 +93,3 @@ The proxy will be available at `http://your-server:5000/webhook` (or your config
 2. Check the webhook delivery in Gitea (Settings → Webhooks → your webhook → Recent Deliveries)
 3. Check the GitHub Actions tab in your GitHub repository to see if the workflow ran
 4. Verify that the changes appear in your GitHub repository
-
-## Troubleshooting
-
-### Webhook not triggering
-- Verify the webhook URL points to your proxy service (not directly to GitHub)
-- Check that your proxy service is running and accessible
-- Verify the proxy service has the correct `GITHUB_TOKEN` environment variable set
-- Check webhook delivery logs in Gitea for error messages
-- Check your proxy service logs for any errors when forwarding to GitHub
-
-### Workflow not running
-- Check GitHub Actions tab for any errors (make sure you're viewing the `__mirror` branch)
-- Verify the `GITHUB_TOKEN` secret is set correctly in GitHub
-- Ensure the workflow file exists at `.github/workflows/mirror.yml` on the `__mirror` branch
-- Check that the event type matches: `gitea-push`
-- Verify the `GITHUB_WORKFLOW_BRANCH` environment variable is set to `__mirror` in your webhook proxy
-- The webhook proxy must include `ref: '__mirror'` in the API payload to trigger the workflow on the correct branch
-
-### Only master branch should be mirrored
-- The workflow includes a branch check that only processes `refs/heads/master`
-- Verify the Gitea webhook branch filter is set to `master`
-- Check that the payload includes `"ref": "refs/heads/master"`
-
-## Security Notes
-
-- The PAT is stored as a GitHub secret and used by the workflow
-- The PAT is also used in the Gitea webhook Authorization header
-- Keep your PAT secure and rotate it if compromised
-- Consider using a fine-grained PAT with minimal permissions if available
-

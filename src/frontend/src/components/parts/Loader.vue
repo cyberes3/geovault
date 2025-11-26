@@ -34,6 +34,10 @@ const props = defineProps({
   showMessage: {
     type: Boolean,
     default: null // Will be computed based on layout if not provided
+  },
+  bold: {
+    type: Boolean,
+    default: false
   }
 })
 
@@ -96,10 +100,11 @@ const spinnerStyle = computed(() => {
 // Message classes
 const messageClasses = computed(() => {
   const base = sizeClasses.value.message
+  const boldClass = props.bold ? 'font-bold' : ''
   if (props.layout === 'inline') {
-    return `${base} ml-2 text-gray-600`
+    return `${base} ml-2 text-gray-600 ${boldClass}`.trim()
   }
-  return `${base} mt-4 text-gray-600`
+  return `${base} mt-4 text-gray-600 ${boldClass}`.trim()
 })
 </script>
 
