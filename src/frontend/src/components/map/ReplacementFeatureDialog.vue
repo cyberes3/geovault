@@ -144,14 +144,13 @@
                     ({{ sortedFeatures.length }} of {{ features.length }} matching geometry type)
                   </span>
                 </h4>
-                <label class="flex items-center text-sm text-gray-700 cursor-pointer">
-                  <input
-                    type="checkbox"
+                <div class="flex items-center">
+                  <ToggleButton
                     v-model="regenerateTags"
-                    class="h-4 w-4 text-green-600 focus:ring-green-500 border-gray-300 rounded"
+                    label="Regenerate tags when applying spatial data"
+                    size="md"
                   />
-                  <span class="ml-2">Regenerate tags when applying spatial data</span>
-                </label>
+                </div>
               </div>
               <div class="space-y-2 max-h-96 overflow-y-auto">
                 <div
@@ -324,6 +323,7 @@ import {getCenter} from 'ol/extent'
 import {DragPan, MouseWheelZoom} from 'ol/interaction'
 import {markRaw} from 'vue'
 import Loader from '@/components/parts/Loader.vue'
+import ToggleButton from '@/components/parts/ToggleButton.vue'
 
 export default {
   name: 'ReplacementFeatureDialog',
@@ -339,7 +339,8 @@ export default {
   },
   emits: ['close', 'applied'],
   components: {
-    Loader
+    Loader,
+    ToggleButton
   },
   data() {
     return {

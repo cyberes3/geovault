@@ -89,19 +89,18 @@
                 </div>
 
                 <div v-else class="max-h-48 overflow-y-auto border border-gray-200 rounded-md p-2">
-                  <label
+                  <div
                     v-for="tag in filteredTags"
                     :key="tag"
-                    class="flex items-center px-3 py-2 hover:bg-gray-50 rounded cursor-pointer"
+                    class="flex items-center px-3 py-2 hover:bg-gray-50 rounded"
                   >
-                    <input
-                      type="checkbox"
-                      :value="tag"
-                      v-model="formData.tags"
-                      class="h-4 w-4 text-blue-500 focus:ring-blue-500 border-gray-300 rounded"
+                    <ToggleButton
+                      :model-value="formData.tags.includes(tag)"
+                      @update:model-value="(value) => toggleTag(tag, value)"
+                      :label="tag"
+                      size="sm"
                     />
-                    <span class="ml-2 text-sm text-gray-700">{{ tag }}</span>
-                  </label>
+                  </div>
                 </div>
 
                 <!-- Selected Tags -->
@@ -162,19 +161,18 @@
                 </div>
 
                 <div v-else class="max-h-48 overflow-y-auto border border-gray-200 rounded-md p-2">
-                  <label
+                  <div
                     v-for="feature in filteredFeatures"
                     :key="feature.properties._id"
-                    class="flex items-center px-3 py-2 hover:bg-gray-50 rounded cursor-pointer"
+                    class="flex items-center px-3 py-2 hover:bg-gray-50 rounded"
                   >
-                    <input
-                      type="checkbox"
-                      :value="feature.properties._id"
-                      v-model="formData.feature_ids"
-                      class="h-4 w-4 text-blue-500 focus:ring-blue-500 border-gray-300 rounded"
+                    <ToggleButton
+                      :model-value="formData.feature_ids.includes(String(feature.properties._id)) || formData.feature_ids.includes(Number(feature.properties._id))"
+                      @update:model-value="(value) => toggleFeature(feature.properties._id, value)"
+                      :label="feature.properties.name || 'Unnamed Feature'"
+                      size="sm"
                     />
-                    <span class="ml-2 text-sm text-gray-700">{{ feature.properties.name || 'Unnamed Feature' }}</span>
-                  </label>
+                  </div>
                 </div>
 
                 <!-- Selected Features -->
@@ -218,12 +216,15 @@
 
 <script>
 import { getCookie } from "@/assets/js/auth.js";
+import { createToggleHandler } from "@/assets/js/toggle-utils.js";
 import Loader from "@/components/parts/Loader.vue";
+import ToggleButton from "@/components/parts/ToggleButton.vue";
 
 export default {
   name: 'CollectionDialog',
   components: {
-    Loader
+    Loader,
+    ToggleButton
   },
   props: {
     collection: {
@@ -273,6 +274,14 @@ export default {
     }
   },
   methods: {
+    toggleTag(tag, value) {
+      const handler = createToggleHandler(this.formData.tags);
+      return handler(tag, value);
+    },
+    toggleFeature(featureId, value) {
+      const handler = createToggleHandler(this.formData.feature_ids, { normalizeTypes: true });
+      return handler(featureId, value);
+    },
     async fetchTags() {
       this.loadingTags = true;
       try {
@@ -319,6 +328,12 @@ export default {
       if (index > -1) {
         this.formData.tags.splice(index, 1);
       }
+    },
+    toggleTag(tag, value) {
+      return this.toggleTagHandler(tag, value);
+    },
+    toggleFeature(featureId, value) {
+      return this.toggleFeatureHandler(featureId, value);
     },
     async saveCollection() {
       if (!this.formData.name.trim()) {

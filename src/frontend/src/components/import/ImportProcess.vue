@@ -163,20 +163,12 @@
     <div v-if="itemsForUser.length > 0 && !loading.page && !processing.active" class="bg-white rounded-lg shadow-sm border border-gray-200 p-4">
       <h3 class="text-sm font-semibold text-gray-900 mb-3">Global Options</h3>
       <div class="flex items-center space-x-2">
-        <input
-            id="import-custom-icons"
+        <ToggleButton
             v-model="importCustomIcons"
+            label="Import custom icons for all features"
             :disabled="lockButtons || loading.importing || loading.saving || isImported"
-            class="h-4 w-4 text-blue-500 focus:ring-blue-500 border-gray-300 rounded disabled:opacity-50 disabled:cursor-not-allowed"
-            type="checkbox"
+            size="md"
         />
-        <label
-            for="import-custom-icons"
-            :class="lockButtons || loading.importing || loading.saving || isImported ? 'text-gray-400 cursor-not-allowed' : 'text-gray-700 cursor-pointer'"
-            class="text-sm font-medium"
-        >
-          Import custom icons for all features
-        </label>
       </div>
     </div>
 
@@ -553,6 +545,7 @@ import {getCookie} from "@/assets/js/auth.js";
 import {APIHOST} from "@/config.js";
 // Removed flatpickr dependency - using native HTML5 date input
 import Loader from "@/components/parts/Loader.vue";
+import ToggleButton from "@/components/parts/ToggleButton.vue";
 import MapPreviewDialog from "@/components/import/parts/MapPreviewDialog.vue";
 import FeatureMapDialog from "@/components/import/parts/FeatureMapDialog.vue";
 import LogViewModal from "@/components/import/parts/LogViewModal.vue";
@@ -595,7 +588,7 @@ export default {
     },
 
   },
-  components: {Loader, Importqueue: ImportQueue, MapPreviewDialog, FeatureMapDialog, LogViewModal, ImportControls, TagPicker},
+  components: {Loader, ToggleButton, Importqueue: ImportQueue, MapPreviewDialog, FeatureMapDialog, LogViewModal, ImportControls, TagPicker},
   data() {
     return {
       // Core data

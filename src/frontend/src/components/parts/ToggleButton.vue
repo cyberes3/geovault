@@ -114,11 +114,11 @@ const toggleClasses = computed(() => {
   
   // Add background color based on state
   if (props.modelValue) {
-    // On state - use blue-500
+    // On state - use custom blue-500 (#163D8A - main brand color)
     base.push('bg-blue-500')
   } else {
-    // Off state - use blue-700
-    base.push('bg-blue-700')
+    // Off state - use custom blue-200 for a very light blue appearance (#C4D2ED)
+    base.push('bg-blue-200')
   }
   
   return base.join(' ')

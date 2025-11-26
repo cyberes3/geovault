@@ -21,7 +21,7 @@
               class="text-gray-400 hover:text-blue-500 transition-colors"
               title="Download KMZ"
           >
-            <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">t
               <path
                   stroke-linecap="round"
                   stroke-linejoin="round"

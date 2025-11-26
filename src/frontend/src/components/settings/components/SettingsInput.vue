@@ -26,7 +26,7 @@
           :checked="modelValue === option.value"
           type="radio"
           @change="$emit('update:modelValue', $event.target.value)"
-          class="mt-1 h-4 w-4 text-blue-500 focus:ring-blue-500 border-gray-300"
+          class="radio-custom mt-1 h-4 w-4 text-blue-500 focus:ring-blue-500 border-gray-300"
         />
         <div class="ml-3">
           <label :for="`${setting.key}-${option.value}`" class="block text-sm font-medium text-gray-700 cursor-pointer">
@@ -40,23 +40,24 @@
     </div>
 
     <!-- Checkbox type -->
-    <div v-else-if="setting.type === 'checkbox'" class="flex items-start">
-      <input
-        :id="setting.key"
-        :checked="modelValue"
-        type="checkbox"
-        @change="$emit('update:modelValue', $event.target.checked)"
-        class="mt-1 h-4 w-4 text-blue-500 focus:ring-blue-500 border-gray-300 rounded"
-      />
-      <div class="ml-3 flex-1">
+    <div v-else-if="setting.type === 'checkbox'" class="flex items-start gap-3">
+      <div class="flex-shrink-0 pt-0.5">
+        <ToggleButton
+          :model-value="modelValue"
+          :label="setting.label || setting.title"
+          @update:model-value="$emit('update:modelValue', $event)"
+          size="md"
+        />
+      </div>
+      <div class="flex-1 min-w-0">
         <div class="flex items-center gap-2">
-          <label :for="setting.key" class="block text-sm font-medium text-gray-700 cursor-pointer">
+          <label class="block text-sm font-medium text-gray-700 cursor-pointer" @click="$emit('update:modelValue', !modelValue)">
             {{ setting.label || setting.title }}
           </label>
           <Transition name="fade">
             <svg
               v-if="showSuccess"
-              class="h-5 w-5 text-green-600"
+              class="h-5 w-5 text-green-600 flex-shrink-0"
               fill="currentColor"
               viewBox="0 0 20 20"
             >
@@ -145,8 +146,13 @@
 </template>
 
 <script>
+import ToggleButton from '@/components/parts/ToggleButton.vue'
+
 export default {
   name: 'SettingsInput',
+  components: {
+    ToggleButton
+  },
   props: {
     setting: {
       type: Object,
@@ -177,6 +183,38 @@ export default {
 .fade-enter-from,
 .fade-leave-to {
   opacity: 0;
+}
+
+/* Custom radio button styling to use custom blue colors */
+.radio-custom {
+  accent-color: var(--color-blue-500);
+  cursor: pointer;
+}
+
+.radio-custom:checked {
+  accent-color: var(--color-blue-500);
+  border-color: var(--color-blue-500);
+}
+
+.radio-custom:focus {
+  border-color: var(--color-blue-500);
+  outline: 2px solid var(--color-blue-500);
+  outline-offset: 2px;
+}
+
+/* Ensure the radio button uses custom colors */
+.radio-custom[type="radio"]:checked {
+  background-color: var(--color-blue-500);
+  border-color: var(--color-blue-500);
+}
+
+.radio-custom[type="radio"] {
+  border-color: #d1d5db;
+}
+
+.radio-custom[type="radio"]:focus {
+  outline: 2px solid var(--color-blue-500);
+  outline-offset: 2px;
 }
 </style>
 

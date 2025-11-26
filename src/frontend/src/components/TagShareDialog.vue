@@ -40,15 +40,16 @@
                 />
               </div>
 
-              <!-- Allow Downloads Checkbox -->
-              <div class="flex items-center">
-                <input
-                  type="checkbox"
-                  id="allowDownloads"
-                  v-model="allowDownloads"
-                  class="h-4 w-4 text-blue-500 focus:ring-blue-500 border-gray-300 rounded"
-                />
-                <label for="allowDownloads" class="ml-2 block text-sm text-gray-700">
+              <!-- Allow Downloads Toggle -->
+              <div class="flex items-center gap-3">
+                <div class="flex-shrink-0">
+                  <ToggleButton
+                    v-model="allowDownloads"
+                    label="Allow Download"
+                    size="md"
+                  />
+                </div>
+                <label class="block text-sm font-medium text-gray-700 cursor-pointer" @click="allowDownloads = !allowDownloads">
                   Allow Download
                 </label>
               </div>
@@ -163,6 +164,7 @@
 <script>
 import { getCookie } from "@/assets/js/auth.js";
 import Loader from "@/components/parts/Loader.vue";
+import ToggleButton from "@/components/parts/ToggleButton.vue";
 
 export default {
   name: 'TagShareDialog',
@@ -178,7 +180,8 @@ export default {
   },
   emits: ['close'],
   components: {
-    Loader
+    Loader,
+    ToggleButton
   },
   data() {
     return {

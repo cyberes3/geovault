@@ -40,12 +40,11 @@
       <thead class="bg-gray-50">
         <tr>
           <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-            <input
+            <ToggleButton
               ref="selectAllCheckbox"
-              type="checkbox"
-              :checked="selectedItems.size === filteredImportQueue.length && filteredImportQueue.length > 0"
-              @change="toggleSelectAll"
-              class="h-4 w-4 text-blue-500 focus:ring-blue-500 border-gray-300 rounded"
+              :model-value="selectedItems.size === filteredImportQueue.length && filteredImportQueue.length > 0"
+              @update:model-value="handleSelectAllToggle"
+              size="sm"
             />
           </th>
           <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">File Name</th>
@@ -101,12 +100,11 @@
         <!-- Actual data rows -->
         <tr v-for="(item, index) in filteredImportQueue" :key="`item-${index}`" :class="(item.deleting || item.importing) ? 'opacity-50 bg-gray-100' : 'hover:bg-gray-50'">
           <td class="px-6 py-4 whitespace-nowrap">
-            <input
-              type="checkbox"
-              :checked="selectedItems.has(item.id)"
-              @change="toggleItemSelection(item.id)"
+            <ToggleButton
+              :model-value="selectedItems.has(item.id)"
+              @update:model-value="(value) => handleItemToggle(item.id, value)"
               :disabled="item.imported || item.processing === true || (item.processing === false && item.feature_count === -1) || item.deleting || item.importing"
-              class="h-4 w-4 text-blue-500 focus:ring-blue-500 border-gray-300 rounded disabled:opacity-50 disabled:cursor-not-allowed"
+              size="sm"
             />
           </td>
           <td class="px-6 py-4 whitespace-nowrap">
@@ -221,7 +219,9 @@ import axios from "axios";
 import {ImportQueueItem} from "@/assets/js/types/import-types";
 import {getCookie} from "@/assets/js/auth.js";
 import {realtimeSocket} from "@/assets/js/websocket/realtimeSocket.js";
+import { toggleSetItem } from "@/assets/js/toggle-utils.js";
 import Loader from "@/components/parts/Loader.vue";
+import ToggleButton from "@/components/parts/ToggleButton.vue";
 
 export default {
   props: {
@@ -249,9 +249,6 @@ export default {
       // 3. AND we don't have any data in the store yet
       return (this.isLoading || this.internalLoading) && !this.hasInitiallyLoaded && (!this.importQueue || this.importQueue.length === 0);
     },
-    isIndeterminate() {
-      return this.selectedItems.size > 0 && this.selectedItems.size < this.filteredImportQueue.length;
-    },
     validImportableCount() {
       // Count items that can actually be imported (same logic as bulkImport)
       let count = 0;
@@ -269,7 +266,8 @@ export default {
     }
   },
   components: {
-    Loader
+    Loader,
+    ToggleButton
   },
   data() {
     return {
@@ -292,11 +290,6 @@ export default {
     }
   },
   watch: {
-    isIndeterminate(newVal) {
-      if (this.$refs.selectAllCheckbox) {
-        this.$refs.selectAllCheckbox.indeterminate = newVal;
-      }
-    },
     websocketConnected(newVal) {
       if (newVal) {
         // WebSocket connected - delete job events are now handled directly by store actions
@@ -447,11 +440,8 @@ export default {
     },
     // Bulk import methods
     updateSelectAllCheckbox() {
-      this.$nextTick(() => {
-        if (this.$refs.selectAllCheckbox) {
-          this.$refs.selectAllCheckbox.indeterminate = this.isIndeterminate;
-        }
-      });
+      // ToggleButton doesn't support indeterminate state, so this method is no longer needed
+      // The toggle will show as checked when all items are selected, unchecked otherwise
     },
     toggleItemSelection(itemId) {
       if (this.selectedItems.has(itemId)) {
@@ -460,6 +450,17 @@ export default {
         this.selectedItems.add(itemId);
       }
       this.updateSelectAllCheckbox();
+    },
+    handleItemToggle(itemId, value) {
+      toggleSetItem(this.selectedItems, itemId, value);
+      this.updateSelectAllCheckbox();
+    },
+    handleSelectAllToggle(value) {
+      if (value) {
+        this.selectAll();
+      } else {
+        this.clearSelection();
+      }
     },
     toggleSelectAll() {
       if (this.selectedItems.size === this.filteredImportQueue.length) {
