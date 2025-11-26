@@ -45,11 +45,13 @@
       </div>
     </div>
 
-    <!-- Feature Count Display -->
-    <div class="bg-white rounded-lg shadow-sm border border-gray-200 p-4 text-center">
-      <p class="text-sm text-gray-600">
-        You have <span class="font-semibold text-gray-900">{{ userInfo.featureCount }}</span> features in your vault.
-      </p>
+    <!-- Feature Count and Storage Display -->
+    <div class="bg-white rounded-lg shadow-sm border border-gray-200 p-4">
+      <div class="text-center">
+        <p class="text-sm text-gray-600">
+          You have <span class="font-semibold text-gray-900">{{ userInfo.featureCount }}</span> features in your vault<span v-if="storageLoading"> and calculating storage usage...</span><span v-else-if="storageBytes !== null"> and using <span class="font-semibold text-gray-900">{{ formatStorage(storageBytes) }}</span> of storage.</span><span v-else-if="storageError">.</span>
+        </p>
+      </div>
     </div>
 
     <!-- Quick Actions -->
@@ -121,13 +123,77 @@ export default {
   components: {},
   data() {
     return {
+      storageBytes: null,
+      storageLoading: false,
+      storageError: false,
     }
   },
   methods: {
+    formatStorage(bytes) {
+      if (bytes === null || bytes === undefined) {
+        return '0 B'
+      }
+      
+      const kb = 1024
+      const mb = kb * 1024
+      const gb = mb * 1024
+      
+      if (bytes >= gb) {
+        return (bytes / gb).toFixed(2) + ' GB'
+      } else if (bytes >= mb) {
+        return (bytes / mb).toFixed(2) + ' MB'
+      } else if (bytes >= kb) {
+        return (bytes / kb).toFixed(2) + ' KB'
+      } else {
+        return bytes + ' B'
+      }
+    },
+    async fetchStorageUsage() {
+      this.storageLoading = true
+      this.storageError = false
+      
+      // Create AbortController for timeout handling
+      const controller = new AbortController()
+      const timeoutId = setTimeout(() => controller.abort(), 10000) // 10 second timeout
+      
+      try {
+        const response = await fetch('/api/user/storage/', {
+          signal: controller.signal
+        })
+        
+        clearTimeout(timeoutId)
+        
+        if (!response.ok) {
+          throw new Error(`HTTP error! status: ${response.status}`)
+        }
+        
+        const data = await response.json()
+        this.storageBytes = data.storage_bytes || 0
+        this.storageError = false
+      } catch (error) {
+        clearTimeout(timeoutId)
+        
+        // Handle timeout or other errors
+        if (error.name === 'AbortError') {
+          // Request timed out
+          this.storageError = true
+          console.warn('Storage usage request timed out')
+        } else {
+          // Other errors
+          this.storageError = true
+          console.error('Failed to fetch storage usage:', error)
+        }
+        this.storageBytes = null
+      } finally {
+        this.storageLoading = false
+      }
+    },
   },
   async created() {
   },
   async mounted() {
+    // Fetch storage usage when component mounts
+    await this.fetchStorageUsage()
   },
   watch: {},
 }
