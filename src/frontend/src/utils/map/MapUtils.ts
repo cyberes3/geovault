@@ -7,6 +7,7 @@
 
 import type {MapConfig} from '@/types/geospatial';
 import {Circle, Fill, Icon, Stroke, Style, Text} from 'ol/style';
+import {getLength} from 'ol/sphere';
 import {APIHOST} from '@/config.js';
 
 export class MapUtils {
@@ -227,12 +228,58 @@ export class MapUtils {
      * Get text-only style for a feature (no icon/image)
      * Used for rendering labels on a separate layer with decluttering
      * @param feature - OpenLayers feature
-     * @returns OpenLayers Style object with only text
+     * @param resolution - Map resolution (meters per pixel), optional
+     * @returns OpenLayers Style object with only text, or null to hide text
      */
-    static getFeatureTextStyle(feature: any): Style {
+    static getFeatureTextStyle(feature: any, resolution?: number): Style | null {
         const properties = feature.get('properties') || {};
-        const geometryType = feature.getGeometry().getType();
-        const name = properties.name || 'Unnamed Feature';
+        const geometry = feature.getGeometry();
+        const geometryType = geometry.getType();
+        let name = properties.name || 'Unnamed Feature';
+
+        // Truncate long feature names for map labels
+        const maxNameLength = 30;
+        if (name.length > maxNameLength) {
+            name = name.substring(0, maxNameLength) + '...';
+        }
+
+        // For lines, check if they're too small when zoomed out
+        if ((geometryType === 'LineString' || geometryType === 'MultiLineString') && resolution !== undefined && resolution > 0) {
+            // Calculate line length in meters
+            const lengthMeters = getLength(geometry);
+            
+            // Convert to pixels
+            const lengthPixels = lengthMeters / resolution;
+            
+            // Hide text for small lines when zoomed out (zoom < 10 corresponds to resolution > ~1500 meters/pixel)
+            // Threshold: hide if line is less than 50 pixels and resolution is high (zoomed out)
+            const minLineLengthPixels = 50;
+            const maxResolutionForSmallLines = 1500; // meters per pixel
+            
+            if (lengthPixels < minLineLengthPixels && resolution > maxResolutionForSmallLines) {
+                return null; // Hide text for small lines when zoomed out
+            }
+        }
+
+        // For polygons, check if they're too small when zoomed out
+        if ((geometryType === 'Polygon' || geometryType === 'MultiPolygon') && resolution !== undefined && resolution > 0) {
+            const extent = geometry.getExtent();
+            const widthMeters = extent[2] - extent[0];  // maxX - minX
+            const heightMeters = extent[3] - extent[1]; // maxY - minY
+            
+            // Convert to screen pixels (meters / meters per pixel = pixels)
+            const widthPixels = widthMeters / resolution;
+            const heightPixels = heightMeters / resolution;
+            
+            // Hide text for small polygons when zoomed out
+            // Threshold: hide if either dimension is less than 50 pixels and resolution is high (zoomed out)
+            const minPolygonSizePixels = 50;
+            const maxResolutionForSmallPolygons = 1500; // meters per pixel
+            
+            if ((widthPixels < minPolygonSizePixels || heightPixels < minPolygonSizePixels) && resolution > maxResolutionForSmallPolygons) {
+                return null; // Hide text for small polygons when zoomed out
+            }
+        }
 
         // Create text style for labels (different positioning for each geometry type)
         let textStyle: Text;

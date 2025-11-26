@@ -872,7 +872,7 @@ export default {
       // Layer for text labels - with declutter, so overlapping labels are hidden
       this.textLayer = markRaw(new VectorLayer({
         source: this.vectorSource,
-        style: (feature) => MapUtils.getFeatureTextStyle(feature),
+        style: (feature, resolution) => MapUtils.getFeatureTextStyle(feature, resolution),
         // Performance optimizations
         renderBuffer: 100,
         updateWhileAnimating: true,
