@@ -114,15 +114,22 @@ export default {
   watch: {
     activeTab(newTab) {
       // Update URL query parameter when tab changes (but not during initialization)
-      if (!this.isInitializing && this.$route.query.tab !== newTab) {
+      // Only update if we're on the /settings route
+      if (!this.isInitializing && this.$route.path === '/settings' && this.$route.query.tab !== newTab) {
         // Use push instead of replace so tab changes create history entries
         // This allows back button to navigate through tabs
+        // Only include the tab param, don't spread other query params
         this.$router.push({
-          query: { ...this.$route.query, tab: newTab }
+          path: '/settings',
+          query: { tab: newTab }
         });
       }
     },
     '$route.query.tab'(newTab) {
+      // Only process tab changes when on /settings route
+      if (this.$route.path !== '/settings') {
+        return;
+      }
       // Update activeTab when route query parameter changes
       if (newTab && ['account', 'map', 'sharing'].includes(newTab)) {
         if (this.activeTab !== newTab) {
@@ -134,11 +141,30 @@ export default {
       }
     }
   },
+  beforeRouteLeave(to, from, next) {
+    // Let navigation proceed - the global router guard will clean up the tab query param
+    // This guard is kept for potential future use or component-specific cleanup
+    next();
+  },
   created() {
+    // Only initialize if we're on the /settings route
+    if (this.$route.path !== '/settings') {
+      this.isInitializing = false;
+      return;
+    }
+
     // Initialize activeTab from query parameter
     const tabFromQuery = this.$route.query.tab;
     if (tabFromQuery && ['account', 'map', 'sharing'].includes(tabFromQuery)) {
       this.activeTab = tabFromQuery;
+      // Clean up any other query params that shouldn't be here
+      const otherParams = Object.keys(this.$route.query).filter(key => key !== 'tab');
+      if (otherParams.length > 0) {
+        this.$router.replace({
+          path: '/settings',
+          query: { tab: tabFromQuery }
+        });
+      }
     } else {
       // If no valid tab in query, set default tab
       // Update URL immediately using replace to avoid creating history entry
@@ -146,12 +172,11 @@ export default {
       const targetTab = 'account';
       this.activeTab = targetTab;
       // Use replace synchronously during initialization before watchers can fire
-      if (this.$route.path === '/settings' && !this.$route.query.tab) {
-        this.$router.replace({
-          path: '/settings',
-          query: { tab: targetTab }
-        });
-      }
+      // Clean up any unrelated query params
+      this.$router.replace({
+        path: '/settings',
+        query: { tab: targetTab }
+      });
     }
 
     // Mark initialization as complete after a tick to ensure watchers are set up
