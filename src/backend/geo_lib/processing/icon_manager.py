@@ -487,8 +487,8 @@ def _extract_color_from_caltopo_url(url: str) -> Optional[str]:
         cfg_decoded = unquote(cfg_value)
 
         # Format is typically: point,COLOR#SCALE or similar
-        # Look for hex color pattern (6 hex digits)
-        color_match = re.search(r'([0-9A-Fa-f]{6})', cfg_decoded)
+        # Look for hex color pattern (6 hex digits) preceded by a comma
+        color_match = re.search(r',([0-9A-Fa-f]{6})', cfg_decoded)
         if color_match:
             hex_color = color_match.group(1).upper()
             return f'#{hex_color}'

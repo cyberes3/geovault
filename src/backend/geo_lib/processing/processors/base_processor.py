@@ -180,7 +180,7 @@ class BaseProcessor(ABC):
                     
                     # First, normalize raw togeojson output (converts feature_tags -> tags, etc.)
                     from geo_lib.types.geojson import GeojsonRawProperty
-                    split_feature['properties'] = GeojsonRawProperty(**split_feature['properties']).model_dump(mode='json', exclude_none=True)
+                    split_feature['properties'] = GeojsonRawProperty(**split_feature['properties']).model_dump(mode='json', exclude_none=True, by_alias=True)
                     
                     # Then validate and normalize properties with styling (uses PropertiesModel)
                     split_feature['properties'] = geojson_property_generation(split_feature)
