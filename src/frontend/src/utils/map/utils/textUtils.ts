@@ -206,7 +206,7 @@ export function getFeatureTextStyle(feature: any, resolution?: number): Style | 
     }
 
     // For lines, check if they're too small when zoomed out
-    // Note: If line is < 2 pixels, it will be rendered as a point, so we still show the label
+    // Note: This includes lines < 2 pixels which are rendered as points (dots)
     if ((geometryType === 'LineString' || geometryType === 'MultiLineString') && resolution !== undefined && resolution > 0) {
         // Calculate line length in meters
         const lengthMeters = getLength(geometry);
@@ -214,20 +214,18 @@ export function getFeatureTextStyle(feature: any, resolution?: number): Style | 
         // Convert to pixels
         const lengthPixels = lengthMeters / resolution;
         
-        // Only hide text for lines that are small but not rendered as points
-        // Lines < 2 pixels are rendered as points, so keep their labels
-        // Hide text for lines between 2-50 pixels when zoomed out
+        // Hide text for lines < 50 pixels when zoomed out
+        // Threshold is approx Zoom 13 (19.1 m/px)
         const minLineLengthPixels = 50;
-        const pointThresholdPixels = 2; // Same threshold as point rendering
-        const maxResolutionForSmallLines = 1500; // meters per pixel
+        const maxResolutionForSmallLines = 19.1; // meters per pixel (approx Zoom 13)
         
-        if (lengthPixels >= pointThresholdPixels && lengthPixels < minLineLengthPixels && resolution > maxResolutionForSmallLines) {
-            return null; // Hide text for small lines when zoomed out (but not if rendered as point)
+        if (lengthPixels < minLineLengthPixels && resolution > maxResolutionForSmallLines) {
+            return null; // Hide text for small lines (including dots) when zoomed out
         }
     }
 
     // For polygons, check if they're too small when zoomed out
-    // Note: If polygon is < 2 pixels, it will be rendered as a point, so we still show the label
+    // Note: This includes polygons < 2 pixels which are rendered as points (dots)
     if ((geometryType === 'Polygon' || geometryType === 'MultiPolygon') && resolution !== undefined && resolution > 0) {
         const extent = geometry.getExtent();
         const widthMeters = extent[2] - extent[0];  // maxX - minX
@@ -237,16 +235,14 @@ export function getFeatureTextStyle(feature: any, resolution?: number): Style | 
         const widthPixels = widthMeters / resolution;
         const heightPixels = heightMeters / resolution;
         
-        // Only hide text for polygons that are small but not rendered as points
-        // Polygons < 2 pixels are rendered as points, so keep their labels
-        // Hide text for polygons between 2-50 pixels when zoomed out
+        // Hide text for polygons < 50 pixels when zoomed out
+        // Threshold is approx Zoom 13 (19.1 m/px)
         const minPolygonSizePixels = 50;
-        const pointThresholdPixels = 2; // Same threshold as point rendering
-        const maxResolutionForSmallPolygons = 1500; // meters per pixel
+        const maxResolutionForSmallPolygons = 19.1; // meters per pixel (approx Zoom 13)
         
         const minDimensionPixels = Math.min(widthPixels, heightPixels);
-        if (minDimensionPixels >= pointThresholdPixels && minDimensionPixels < minPolygonSizePixels && resolution > maxResolutionForSmallPolygons) {
-            return null; // Hide text for small polygons when zoomed out (but not if rendered as point)
+        if (minDimensionPixels < minPolygonSizePixels && resolution > maxResolutionForSmallPolygons) {
+            return null; // Hide text for small polygons (including dots) when zoomed out
         }
     }
 
