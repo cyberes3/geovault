@@ -8,6 +8,8 @@
 import type {MapConfig} from '@/types/geospatial';
 import {Circle, Fill, Icon, Stroke, Style, Text} from 'ol/style';
 import {getLength} from 'ol/sphere';
+import {getCenter} from 'ol/extent';
+import {Point} from 'ol/geom';
 import {APIHOST} from '@/config.js';
 
 export class MapUtils {
@@ -215,7 +217,7 @@ export class MapUtils {
             // Fall back to circle style if no icon (no black border for normal points)
             return this.getDefaultIconStyle(properties);
         } else if (geometryType === 'LineString') {
-            return this.createLineStringStyle(properties);
+            return this.createLineStringStyle(feature, properties, resolution);
         } else if (geometryType === 'Polygon' || geometryType === 'MultiPolygon') {
             return this.createPolygonStyle(feature, properties, resolution);
         } else {
@@ -244,6 +246,7 @@ export class MapUtils {
         }
 
         // For lines, check if they're too small when zoomed out
+        // Note: If line is < 2 pixels, it will be rendered as a point, so we still show the label
         if ((geometryType === 'LineString' || geometryType === 'MultiLineString') && resolution !== undefined && resolution > 0) {
             // Calculate line length in meters
             const lengthMeters = getLength(geometry);
@@ -251,17 +254,20 @@ export class MapUtils {
             // Convert to pixels
             const lengthPixels = lengthMeters / resolution;
             
-            // Hide text for small lines when zoomed out (zoom < 10 corresponds to resolution > ~1500 meters/pixel)
-            // Threshold: hide if line is less than 50 pixels and resolution is high (zoomed out)
+            // Only hide text for lines that are small but not rendered as points
+            // Lines < 2 pixels are rendered as points, so keep their labels
+            // Hide text for lines between 2-50 pixels when zoomed out
             const minLineLengthPixels = 50;
+            const pointThresholdPixels = 2; // Same threshold as point rendering
             const maxResolutionForSmallLines = 1500; // meters per pixel
             
-            if (lengthPixels < minLineLengthPixels && resolution > maxResolutionForSmallLines) {
-                return null; // Hide text for small lines when zoomed out
+            if (lengthPixels >= pointThresholdPixels && lengthPixels < minLineLengthPixels && resolution > maxResolutionForSmallLines) {
+                return null; // Hide text for small lines when zoomed out (but not if rendered as point)
             }
         }
 
         // For polygons, check if they're too small when zoomed out
+        // Note: If polygon is < 2 pixels, it will be rendered as a point, so we still show the label
         if ((geometryType === 'Polygon' || geometryType === 'MultiPolygon') && resolution !== undefined && resolution > 0) {
             const extent = geometry.getExtent();
             const widthMeters = extent[2] - extent[0];  // maxX - minX
@@ -271,13 +277,16 @@ export class MapUtils {
             const widthPixels = widthMeters / resolution;
             const heightPixels = heightMeters / resolution;
             
-            // Hide text for small polygons when zoomed out
-            // Threshold: hide if either dimension is less than 50 pixels and resolution is high (zoomed out)
+            // Only hide text for polygons that are small but not rendered as points
+            // Polygons < 2 pixels are rendered as points, so keep their labels
+            // Hide text for polygons between 2-50 pixels when zoomed out
             const minPolygonSizePixels = 50;
+            const pointThresholdPixels = 2; // Same threshold as point rendering
             const maxResolutionForSmallPolygons = 1500; // meters per pixel
             
-            if ((widthPixels < minPolygonSizePixels || heightPixels < minPolygonSizePixels) && resolution > maxResolutionForSmallPolygons) {
-                return null; // Hide text for small polygons when zoomed out
+            const minDimensionPixels = Math.min(widthPixels, heightPixels);
+            if (minDimensionPixels >= pointThresholdPixels && minDimensionPixels < minPolygonSizePixels && resolution > maxResolutionForSmallPolygons) {
+                return null; // Hide text for small polygons when zoomed out (but not if rendered as point)
             }
         }
 
@@ -565,12 +574,61 @@ export class MapUtils {
     }
 
     /**
+     * Create a point style at the center of a geometry's extent
+     * @param geometry - OpenLayers geometry
+     * @param color - Color for the point (fill and stroke)
+     * @param radius - Point radius in pixels (default: 3)
+     * @returns OpenLayers Style object with a circle at the extent center
+     */
+    private static createPointStyleAtExtentCenter(geometry: any, color: string, radius: number = 3): Style {
+        const extent = geometry.getExtent();
+        const center = getCenter(extent);
+        const centerPoint = new Point(center);
+        
+        return new Style({
+            geometry: centerPoint,
+            image: new Circle({
+                radius: radius,
+                fill: new Fill({
+                    color: color
+                }),
+                stroke: new Stroke({
+                    color: color,
+                    width: 1
+                })
+            })
+        });
+    }
+
+    /**
      * Create LineString style
+     * @param feature - OpenLayers feature
      * @param properties - Feature properties
+     * @param resolution - Map resolution (meters per pixel), optional
      * @param textStyle - Optional text style for labels
      * @returns OpenLayers Style object
      */
-    private static createLineStringStyle(properties: any, textStyle?: Text): Style {
+    private static createLineStringStyle(feature: any, properties: any, resolution?: number, textStyle?: Text): Style {
+        // Check minimum size threshold to prevent flickering at low zoom levels
+        // If resolution is provided and line is smaller than 2 pixels, render as point
+        if (resolution !== undefined && resolution > 0) {
+            const geometry = feature.getGeometry();
+            if (geometry) {
+                // Calculate line length in meters
+                const lengthMeters = getLength(geometry);
+                
+                // Convert to pixels
+                const lengthPixels = lengthMeters / resolution;
+                
+                // Render as point if line is less than 2 pixels
+                const minPixelSize = 2;
+                if (lengthPixels < minPixelSize) {
+                    const strokeColor = this.hexToColor(properties.stroke, '#ff0000');
+                    return this.createPointStyleAtExtentCenter(geometry, strokeColor);
+                }
+            }
+        }
+
         const strokeColor = this.hexToColor(properties.stroke, '#ff0000');
         const styleConfig: any = {
             stroke: new Stroke({
@@ -590,13 +648,11 @@ export class MapUtils {
      * @param properties - Feature properties
      * @param resolution - Map resolution (meters per pixel), optional
      * @param textStyle - Optional text style for labels
-     * @returns OpenLayers Style object, or null to hide feature if too small
+     * @returns OpenLayers Style object, or point style if too small
      */
-    private static createPolygonStyle(feature: any, properties: any, resolution?: number, textStyle?: Text): Style | null {
+    private static createPolygonStyle(feature: any, properties: any, resolution?: number, textStyle?: Text): Style {
         // Check minimum size threshold to prevent flickering at low zoom levels
-        // If resolution is provided and polygon is smaller than 2 pixels, hide it
-        // Note: Returning null only hides rendering; the feature remains in the vector source
-        // and will still appear in the "features in vicinity" list
+        // If resolution is provided and polygon is smaller than 2 pixels, render as point
         if (resolution !== undefined && resolution > 0) {
             const geometry = feature.getGeometry();
             if (geometry) {
@@ -608,12 +664,12 @@ export class MapUtils {
                 const widthPixels = widthMeters / resolution;
                 const heightPixels = heightMeters / resolution;
                 
-                // Hide polygon if either dimension is less than 2 pixels
+                // Render as point if either dimension is less than 2 pixels
                 // This prevents flickering when polygons fold into themselves at low zoom
-                // The feature will still be visible in the features list sidebar
                 const minPixelSize = 2;
                 if (widthPixels < minPixelSize || heightPixels < minPixelSize) {
-                    return null;
+                    const strokeColor = this.hexToColor(properties.stroke, '#ff0000');
+                    return this.createPointStyleAtExtentCenter(geometry, strokeColor);
                 }
             }
         }

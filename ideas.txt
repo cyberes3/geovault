@@ -1,7 +1,6 @@
 Spatial statistics
 Visibility: private, public, restricted (only logged in users)
 Bulk tagging and styling on import page
-need to automatically send user a verification email on registration
 
 ## Stretch Goals
 Geotagged photo support (set path to scan)
