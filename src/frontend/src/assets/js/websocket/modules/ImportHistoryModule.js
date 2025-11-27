@@ -19,7 +19,6 @@ export class ImportHistoryModule extends BaseModule {
 
         // Handle initial state
         this.subscribe('initial_state', (data) => {
-            console.log('Received import history initial state:', data);
             this.store.dispatch('setRealtimeModuleData', {module: 'importHistory', data});
             // Also update the legacy importHistory state for backward compatibility
             this.store.commit('setImportHistory', data);
@@ -29,7 +28,6 @@ export class ImportHistoryModule extends BaseModule {
 
         // Handle new item added to history
         this.subscribe('item_added', (data) => {
-            console.log('Import history item added:', data);
             this.store.dispatch('addImportHistoryItem', data);
         });
     }
@@ -39,6 +37,5 @@ export class ImportHistoryModule extends BaseModule {
      */
     cleanup() {
         super.cleanup();
-        console.log('Import history module cleaned up');
     }
 }

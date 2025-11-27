@@ -712,7 +712,6 @@ export default {
     },
 
     onWebSocketOpen() {
-      console.log('WebSocket connected');
       this.wsConnected = true;
       this.wsReconnectAttempts = 0;
     },
@@ -752,7 +751,6 @@ export default {
     },
 
     onWebSocketClose(event) {
-      console.log('WebSocket closed:', event.code, event.reason);
       this.wsConnected = false;
 
       // Handle 404 - item not found
@@ -771,7 +769,6 @@ export default {
       // Attempt to reconnect if not a normal closure and we haven't exceeded max attempts
       if (event.code !== 1000 && this.wsReconnectAttempts < this.maxReconnectAttempts) {
         this.wsReconnectAttempts++;
-        console.log(`Attempting to reconnect (${this.wsReconnectAttempts}/${this.maxReconnectAttempts})...`);
         setTimeout(() => this.connectWebSocket(), 2000);
       }
     },
@@ -1186,11 +1183,9 @@ export default {
       if (this.skippedFeatureIds.has(featureId)) {
         // Restore item
         this.skippedFeatureIds.delete(featureId);
-        console.log('Restored item:', featureId, 'at index', index);
       } else {
         // Skip item
         this.skippedFeatureIds.add(featureId);
-        console.log('Skipped item:', featureId, 'at index', index);
       }
 
       // Update editCache to persist skipped state
@@ -1370,12 +1365,6 @@ export default {
         return {success: true, changedCount: 0};
       }
 
-      // Debug: Log what we're sending
-      console.log(`Preparing to save ${changedFeatures.length} changed feature(s)`);
-      changedFeatures.forEach((feature, idx) => {
-        const featureId = feature.properties?.id || 'NO ID';
-        console.log(`Feature ${idx}: ID=${featureId}, name=${feature.properties?.name || 'Unnamed'}`);
-      });
 
       const csrftoken = getCookie('csrftoken');
 
@@ -1411,7 +1400,6 @@ export default {
 
         // Show success message
         if (response.data.updated_count > 0) {
-          console.log(`Successfully saved ${response.data.updated_count} feature(s)`);
         }
 
         return {success: true, changedCount: response.data.updated_count};
@@ -1448,7 +1436,6 @@ export default {
         try {
           const saveResult = await this._saveChangesInternal();
           if (saveResult.changedCount > 0) {
-            console.log(`Saved ${saveResult.changedCount} change(s) before import`);
           }
         } catch (saveError) {
           this.msg = 'Error saving changes before import: ' + (saveError.response?.data?.msg || saveError.message);

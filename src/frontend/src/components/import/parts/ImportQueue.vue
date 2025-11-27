@@ -309,7 +309,6 @@ export default {
       });
     },
     async refreshData() {
-      console.log("IMPORT QUEUE: refreshing")
       await this.fetchQueueList()
     },
     async fetchQueueList() {
@@ -346,9 +345,8 @@ export default {
         // Check if this item still exists on the server
         const stillExistsOnServer = serverQueue.some(item => item.id === itemId);
 
-        if (stillExistsOnServer && timeoutCount >= 2) { // 3 refresh cycles (0, 1, 2)
+          if (stillExistsOnServer && timeoutCount >= 2) { // 3 refresh cycles (0, 1, 2)
           // Item still exists on server after 3 refresh cycles, restore it
-          console.log(`Restoring item ${itemId} - still exists on server after 3 refresh cycles`);
           this.deletedItems.delete(itemId);
           this.deletedItemTimeouts.delete(itemId);
         } else if (!stillExistsOnServer) {
@@ -415,7 +413,6 @@ export default {
           if (response.status === 200 && response.data.job_id) {
             // Store the job ID for tracking
             this.deleteJobIds.set(item.id, response.data.job_id);
-            console.log(`Delete job started for item ${item.id}: ${response.data.job_id}`);
           } else {
             throw new Error(response.data.msg || "server reported failure");
           }
@@ -634,7 +631,6 @@ export default {
       // Define handlers
       const bulkImportJobStarted = (data) => {
         this.bulkImportJobId = data.job_id;
-        console.log('Bulk import job started:', data.job_id);
       };
 
       const bulkImportStatusUpdated = (data) => {
@@ -680,7 +676,6 @@ export default {
 
       const bulkDeleteJobStarted = (data) => {
         this.bulkDeleteJobId = data.job_id;
-        console.log('Bulk delete job started:', data.job_id);
       };
 
       const bulkDeleteStatusUpdated = (data) => {

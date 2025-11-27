@@ -19,7 +19,6 @@ export class ImportQueueModule extends BaseModule {
 
         // Handle initial state
         this.subscribe('initial_state', (data) => {
-            console.log('Received import queue initial state:', data);
             this.store.dispatch('setRealtimeModuleData', {module: 'importQueue', data});
             // Also update the legacy importQueue state for backward compatibility
             this.store.commit('setImportQueue', data);
@@ -27,26 +26,22 @@ export class ImportQueueModule extends BaseModule {
 
         // Handle new item added
         this.subscribe('item_added', (data) => {
-            console.log('Import queue item added:', data);
             // Request refresh to get updated data
             this.requestRefresh();
         });
 
         // Handle item deleted
         this.subscribe('item_deleted', (data) => {
-            console.log('Import queue item deleted:', data);
             this.store.dispatch('removeImportQueueItem', data.id);
         });
 
         // Handle items deleted (bulk)
         this.subscribe('items_deleted', (data) => {
-            console.log('Import queue items deleted:', data);
             this.store.dispatch('removeImportQueueItems', data.ids);
         });
 
         // Handle item imported
         this.subscribe('item_imported', (data) => {
-            console.log('Import queue item imported:', data);
             this.store.dispatch('updateImportQueueItem', {
                 id: data.id,
                 updates: {imported: true}
@@ -55,7 +50,6 @@ export class ImportQueueModule extends BaseModule {
 
         // Handle status updates (processing -> completed)
         this.subscribe('status_updated', (data) => {
-            console.log('Import queue status updated:', data);
             let updates = {
                 processing: data.status === 'processing',
                 processing_failed: data.status === 'failed'
@@ -88,6 +82,5 @@ export class ImportQueueModule extends BaseModule {
      */
     cleanup() {
         super.cleanup();
-        console.log('Import queue module cleaned up');
     }
 }

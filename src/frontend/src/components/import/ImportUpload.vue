@@ -436,7 +436,6 @@ export default {
     validateFile(file) {
       // Skip frontend validation if disabled (for testing backend validation)
       if (!SECURITY_CONFIG.ENABLE_FRONTEND_VALIDATION) {
-        console.log('Frontend validation disabled - file will be validated by backend only')
         return {isValid: true, error: null}
       }
 
@@ -559,8 +558,6 @@ export default {
           let formData = new FormData()
           formData.append('file', file)
 
-          // Debug: Log the file being uploaded
-          console.log('Uploading file:', file.name, 'Size:', file.size, 'Type:', file.type)
 
           try {
             // Reset processing state for this file
@@ -592,11 +589,6 @@ export default {
             this.isProcessing = false
             // Don't clear currentFileUploadComplete here - it will be cleared when starting next file
 
-            // Calculate processing time if we tracked it
-            if (this.processingStartTime) {
-              const processingTime = Date.now() - this.processingStartTime
-              console.log(`File ${file.name} processed in ${processingTime}ms`)
-            }
 
             // Handle response message
             if (response.data.msg.toLowerCase().includes("success")) {

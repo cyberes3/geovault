@@ -271,13 +271,11 @@ export default {
     addRealtimeListeners() {
       // Handle connection status
       realtimeSocket.on('connected', () => {
-        console.log('Realtime WebSocket connected');
         this.$store.dispatch('setWebSocketConnected', true);
         this.$store.dispatch('setWebSocketReconnectAttempts', 0);
       });
 
       realtimeSocket.on('disconnected', () => {
-        console.log('Realtime WebSocket disconnected');
         this.$store.dispatch('setWebSocketConnected', false);
       });
 

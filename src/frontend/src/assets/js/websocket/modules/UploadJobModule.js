@@ -19,20 +19,17 @@ export class UploadJobModule extends BaseModule {
 
         // Handle status updates
         this.subscribe('status_updated', (data) => {
-            console.log('Upload job status updated:', data);
             this.handleStatusUpdate(data);
         });
 
         // Handle upload job completion
         this.subscribe('completed', (data) => {
-            console.log('Upload job completed:', data);
             // Request refresh of import queue to get updated data
             this.socket.requestRefresh('import_queue');
         });
 
         // Handle upload job failure
         this.subscribe('failed', (data) => {
-            console.log('Upload job failed:', data);
             // Request refresh of import queue to get updated data
             this.socket.requestRefresh('import_queue');
         });
@@ -74,6 +71,5 @@ export class UploadJobModule extends BaseModule {
      */
     cleanup() {
         super.cleanup();
-        console.log('Upload job module cleaned up');
     }
 }

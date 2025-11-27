@@ -289,7 +289,6 @@ export default {
 
         if (data.sources && Array.isArray(data.sources)) {
           this.tileSources = data.sources
-          console.log('Loaded tile sources:', this.tileSources)
 
           // Set default layer if not already set or if current selection is invalid
           if (!this.selectedLayer || !this.tileSources.find(s => s.id === this.selectedLayer)) {
@@ -567,8 +566,6 @@ export default {
         })
 
         this.vectorSource.addFeatures(filteredFeatures)
-        console.log(`Applied tag filter: ${filteredFeatures.length} features`)
-
         // Update feature count
         this.updateFeatureCount()
 
@@ -578,7 +575,6 @@ export default {
         // No features match the filter
         this.updateFeatureCount()
         this.updateFeaturesInExtent()
-        console.log('Tag filter: No features match the selected tags')
       }
     },
 
@@ -610,8 +606,6 @@ export default {
           // Trigger bbox loading for current view
           // This will use the collection parameter automatically via loadDataForCurrentView
           await this.loadDataForCurrentView()
-
-          console.log(`Collection filter enabled: ${this.collectionName} (ID: ${collectionId})`)
         } else {
           throw new Error('Failed to load collection info')
         }
@@ -1046,7 +1040,7 @@ export default {
 
           // Defensive check: clamp zoom to 20 if it somehow exceeds the limit
           if (newZoom > 20) {
-            console.warn(`Zoom level ${newZoom} exceeds maximum of 20, clamping to 20`)
+            // Zoom level exceeds maximum, clamping to 20
             this.map.getView().setZoom(20)
             newZoom = 20
           }
@@ -1055,13 +1049,11 @@ export default {
             // Clear cache when zoom changes significantly to ensure data reload
             const zoomDiff = Math.abs(newZoom - (this.currentZoom || 0))
             if (zoomDiff >= 3) {
-              console.log(`Significant zoom change detected (${zoomDiff} levels), clearing cache`)
               this.loadedBounds.clear()
             }
 
             // Clear cache when zooming out to world view (zoom <= 3)
             if (newZoom <= 3) {
-              console.log(`Zooming to world view (zoom: ${newZoom}), clearing cache`)
               this.loadedBounds.clear()
             }
 
@@ -1072,7 +1064,6 @@ export default {
       // Clear cache if map starts at world view level
       const initialZoom = this.map.getView().getZoom()
       if (initialZoom <= 3) {
-        console.log(`Map initialized at world view (zoom: ${initialZoom}), clearing cache`)
         this.loadedBounds.clear()
       }
 
@@ -1082,7 +1073,6 @@ export default {
       setTimeout(() => {
         if (this.map) {
           this.map.updateSize()
-          console.log('Map size updated after initialization')
         }
       }, 100)
 
@@ -1090,12 +1080,10 @@ export default {
       return new Promise((resolve) => {
         // Wait for the map to be fully rendered
         this.map.once('rendercomplete', () => {
-          console.log('Map rendercomplete event fired')
           // Update size again after render
           setTimeout(() => {
             if (this.map) {
               this.map.updateSize()
-              console.log('Map size updated after rendercomplete')
             }
           }, 100)
           resolve()
@@ -1103,11 +1091,9 @@ export default {
 
         // Fallback timeout in case rendercomplete doesn't fire
         setTimeout(() => {
-          console.log('Map initialization timeout, proceeding anyway')
           // Update size before resolving
           if (this.map) {
             this.map.updateSize()
-            console.log('Map size updated after timeout')
           }
           resolve()
         }, 1000)
@@ -1121,10 +1107,8 @@ export default {
 
         if (response.ok && data.location) {
           this.userLocation = data.location
-          console.log('User location detected:', this.userLocation)
         } else {
           console.warn('Failed to get user location:', data.error || 'Unknown error')
-          console.log('Using default location: Denver, Colorado')
           this.userLocation = null
         }
       } catch (error) {
@@ -1172,7 +1156,6 @@ export default {
       // Cancel any existing request
       if (this.currentAbortController) {
         this.currentAbortController.abort()
-        console.log('Cancelled previous API request')
       }
 
       const view = this.map.getView()
@@ -1193,7 +1176,6 @@ export default {
       const isWorldWide = lonSpan > 300 || latSpan > 150 || zoom <= 2
 
       if (isWorldWide) {
-        console.log(`World-wide extent detected (zoom: ${zoom}, lonSpan: ${lonSpan.toFixed(1)}, latSpan: ${latSpan.toFixed(1)}), clearing cache and forcing reload`)
         this.loadedBounds.clear()
         // Don't return here - continue to load data
       } else if (this.loadedBounds.has(bboxKey)) {
@@ -1377,13 +1359,11 @@ export default {
 
             if (this.vectorSource) {
               this.vectorSource.addFeatures(newFeatures)
-              console.log(`Added ${newFeatures.length} new features (filtered ${features.length - newFeatures.length} duplicates)`)
             }
 
             // Enforce feature limit after adding new features
             this.enforceFeatureLimit()
           } else {
-            console.log(`No new features to add (all ${features.length} were duplicates)`)
           }
 
           this.loadedBounds.add(bboxKey)
@@ -1398,10 +1378,6 @@ export default {
           // Update features in extent list after loading new features
           this.debouncedUpdateFeaturesInExtent()
 
-          console.log(`Loaded ${features.length} features for bbox: ${bboxString} (zoom: ${roundedZoom})`)
-          if (data.total_features_in_bbox && data.total_features_in_bbox > features.length) {
-            console.log(`Note: ${data.total_features_in_bbox - features.length} additional features not shown due to limit (${data.max_features_limit})`)
-          }
 
           // Mark initial load as complete after first successful load
           if (this.isInitialLoad) {
@@ -1412,9 +1388,7 @@ export default {
         }
       } catch (error) {
         // Don't log errors for aborted requests
-        if (error.name === 'AbortError') {
-          console.log('Request was cancelled')
-        } else {
+        if (error.name !== 'AbortError') {
           console.error('Error fetching data:', error)
           this.loadError = error.message || 'Failed to load map data. Please try again.'
           // Mark initial load as complete even on error so spinner doesn't stay forever
@@ -1432,7 +1406,6 @@ export default {
       // Cancel any pending request when starting a new debounced request
       if (this.currentAbortController) {
         this.currentAbortController.abort()
-        console.log('Cancelled previous API request due to new view change')
       }
 
       clearTimeout(this.loadTimeout)
@@ -1488,7 +1461,6 @@ export default {
         delete this.featureTimestamps[featureId]
       }
 
-      console.log(`Removed ${featuresToRemove} oldest features to maintain limit of ${this.MAX_FEATURES}`)
       this.scheduleFeatureCountUpdate()
       // Update feature list after removing features
       this.debouncedUpdateFeaturesInExtent()
@@ -1507,7 +1479,6 @@ export default {
       this.featureTimestamps = {}
       this.loadedBounds.clear()
       this.scheduleFeatureCountUpdate()
-      console.log('Cleared all features from the map')
     },
 
     // Handle featureId from URL parameter
@@ -1599,7 +1570,6 @@ export default {
     destroyMapResources() {
       // Check if we need to destroy the map to free up memory
       if (this.featureCount > MAP_CONFIG.DESTROY_MAP_THRESHOLD) {
-        console.log(`Feature count (${this.featureCount}) exceeds threshold (${MAP_CONFIG.DESTROY_MAP_THRESHOLD}). Destroying map to release memory.`)
         
         // Clear vector source to release feature geometries immediately
         if (this.vectorSource) {
@@ -1628,7 +1598,6 @@ export default {
     async restoreMap() {
       if (this.map) return
 
-      console.log('Restoring map after destruction...')
       this.isLoading = true
       this.isRestoring = true
 
@@ -1644,7 +1613,6 @@ export default {
       try {
         // Re-initialize map
         await this.initializeMap()
-        console.log('Map restored successfully')
 
         // Restore layer selection
         if (this.selectedLayer && this.tileSources.length > 0) {
@@ -1690,7 +1658,6 @@ export default {
       if (newCollectionId !== oldCollectionId) {
         if (newCollectionId) {
           // Collection ID changed or added, load the collection
-          console.log('Collection ID changed, loading collection:', newCollectionId)
           // Wait for map to be ready if it's not yet
           if (this.map && this.vectorSource) {
             this.handleCollectionFilter(newCollectionId)
@@ -1704,7 +1671,6 @@ export default {
           }
         } else if (oldCollectionId) {
           // Collection parameter was removed, clear collection mode
-          console.log('Collection parameter removed, clearing collection mode')
           this.collectionName = null
           this.isCollectionMode = false
           // Clear the map and reload data for current view
@@ -1724,7 +1690,6 @@ export default {
 
         // If share ID changed, reload the share data
         if (newShareId !== oldShareId) {
-          console.log('Share ID changed, reloading share data:', newShareId)
           // Reset state
           this.publicShareError = null
           this.publicShareTag = null
@@ -1792,7 +1757,6 @@ export default {
     // Wait for map to be fully initialized before loading data
     try {
       await this.initializeMap()
-      console.log('Map initialized successfully')
     } catch (error) {
       console.error('Error initializing map:', error)
       this.loadError = error.message || 'Failed to initialize map. Please refresh the page.'
@@ -1813,7 +1777,6 @@ export default {
       await this.handleUrlFeatureId()
 
       // Initial data load - now the map is ready (only if not in collection mode)
-      console.log('Loading data for current view, isPublicShareMode:', this.isPublicShareMode, 'shareId:', this.shareId)
       await this.loadDataForCurrentView()
     }
 
@@ -1822,7 +1785,6 @@ export default {
     if (this.map) {
       setTimeout(() => {
         this.map.updateSize()
-        console.log('Map size updated after data load')
       }, 100)
     }
 
@@ -1867,7 +1829,6 @@ export default {
     // Cancel any pending API request
     if (this.currentAbortController) {
       this.currentAbortController.abort()
-      console.log('Cancelled API request on component unmount')
     }
 
     // Clear hover marker

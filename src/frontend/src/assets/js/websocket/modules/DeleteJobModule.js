@@ -18,13 +18,11 @@ export class DeleteJobModule extends BaseModule {
 
         // Handle initial state
         this.subscribe('initial_state', (data) => {
-            console.log('Received delete job initial state:', data);
             // Delete jobs don't have persistent state, so no action needed
         });
 
         // Handle delete job started - update item state
         this.subscribe('started', (data) => {
-            console.log('Delete job started:', data);
             // Mark item as deleting in the queue
             this.store.dispatch('updateImportQueueItem', {
                 id: data.item_id,
@@ -34,7 +32,6 @@ export class DeleteJobModule extends BaseModule {
 
         // Handle delete job status updated
         this.subscribe('status_updated', (data) => {
-            console.log('Delete job status updated:', data);
             // Could update progress here if needed
             this.store.dispatch('updateImportQueueItem', {
                 id: data.item_id,
@@ -47,14 +44,12 @@ export class DeleteJobModule extends BaseModule {
 
         // Handle delete job completed - remove item
         this.subscribe('completed', (data) => {
-            console.log('Delete job completed:', data);
             // Remove the deleted item from the queue
             this.store.dispatch('removeImportQueueItem', data.item_id);
         });
 
         // Handle delete job failed - clear deleting state
         this.subscribe('failed', (data) => {
-            console.log('Delete job failed:', data);
             // Clear deleting state and optionally set error
             this.store.dispatch('updateImportQueueItem', {
                 id: data.item_id,

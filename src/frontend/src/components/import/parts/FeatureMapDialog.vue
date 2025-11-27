@@ -535,7 +535,6 @@ export default {
         // Fit map to show all features
         this.fitMapToAllFeatures()
 
-        console.log(`Loaded ${features.length} features for feature map view`)
       } catch (error) {
         console.error('Error loading features for feature map view:', error)
       } finally {

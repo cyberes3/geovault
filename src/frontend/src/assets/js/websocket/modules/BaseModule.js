@@ -15,7 +15,6 @@ export class BaseModule {
      * Override this method in subclasses to set up event handlers
      */
     initialize() {
-        console.log(`Initializing module: ${this.moduleName}`);
         // Override in subclasses
     }
 
@@ -24,7 +23,6 @@ export class BaseModule {
      * Override this method in subclasses for custom cleanup
      */
     cleanup() {
-        console.log(`Cleaning up module: ${this.moduleName}`);
         // Override in subclasses if needed
     }
 

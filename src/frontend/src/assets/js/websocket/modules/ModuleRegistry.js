@@ -37,7 +37,6 @@ export function loadAllModules(store) {
         try {
             const module = new ModuleClass(store);
             modules.push(module);
-            console.log(`Loaded module: ${module.moduleName}`);
         } catch (error) {
             console.error(`Failed to load module ${ModuleClass.name}:`, error);
         }

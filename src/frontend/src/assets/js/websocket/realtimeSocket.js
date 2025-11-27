@@ -26,21 +26,17 @@ class RealtimeSocket {
         
         // If already connected, don't create another connection
         if (this.socket && this.socket.readyState === WebSocket.OPEN) {
-            console.log('Realtime WebSocket already connected');
             return;
         }
 
         // If already connecting, wait for it to complete
         if (this.socket && this.socket.readyState === WebSocket.CONNECTING) {
-            console.log('Realtime WebSocket already connecting, waiting...');
             return;
         }
 
         const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
         const host = window.location.host;
         const wsUrl = `${protocol}//${host}/ws/realtime/`;
-        
-        console.log('Connecting to Realtime WebSocket:', wsUrl);
         
         try {
             this.socket = new WebSocket(wsUrl);
@@ -56,7 +52,6 @@ class RealtimeSocket {
      */
     setupEventHandlers() {
         this.socket.onopen = (event) => {
-            console.log('Realtime WebSocket connected');
             this.isConnected = true;
             this.reconnectAttempts = 0;
             this.reconnectInterval = 1000;
@@ -75,7 +70,6 @@ class RealtimeSocket {
         };
 
         this.socket.onclose = (event) => {
-            console.log('Realtime WebSocket disconnected:', event.code, event.reason);
             this.isConnected = false;
             this.stopPing();
             this.cleanupModules(); // Cleanup all registered modules
@@ -333,7 +327,6 @@ class RealtimeSocket {
                 this.registerModule(module);
             }
             
-            console.log(`Loaded ${modules.length} modules from registry`);
         } catch (error) {
             console.error('Failed to load modules from registry:', error);
         }
@@ -352,7 +345,6 @@ class RealtimeSocket {
         module.socket = this;
         
         this.modules.set(module.moduleName, module);
-        console.log(`Registered module: ${module.moduleName}`);
         
         // If already connected, initialize the module immediately
         if (this.isConnected) {
@@ -369,7 +361,6 @@ class RealtimeSocket {
         if (module) {
             module.cleanup();
             this.modules.delete(moduleName);
-            console.log(`Unregistered module: ${moduleName}`);
         }
     }
 

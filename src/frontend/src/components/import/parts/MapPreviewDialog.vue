@@ -330,7 +330,6 @@ export default {
           })
         }
 
-        console.log(`Loaded ${features.length} features for preview`)
       } catch (error) {
         console.error('Error loading features for preview:', error)
       } finally {
