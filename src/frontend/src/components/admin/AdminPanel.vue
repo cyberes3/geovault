@@ -7,7 +7,7 @@
             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"></path>
           </svg>
           <h2 class="mt-4 text-lg font-medium text-gray-900">Access Denied</h2>
-          <p class="mt-2 text-sm text-gray-500">
+          <p class="mt-2 text-sm text-gray-800">
             You do not have permission to access this page.
           </p>
           <router-link
@@ -23,7 +23,7 @@
   <div v-else class="max-w-7xl mx-auto">
     <div class="bg-white rounded-lg shadow-sm border border-gray-200 p-6 mb-6">
       <h1 class="text-2xl font-bold text-gray-900">Admin Panel</h1>
-      <p class="text-gray-600 mt-1">System administration and management.</p>
+      <p class="text-gray-800 mt-1">System administration and management.</p>
     </div>
 
     <div class="flex flex-col lg:flex-row gap-6">
@@ -37,7 +37,7 @@
                 'w-full text-left px-4 py-3 rounded-md text-sm font-medium transition-colors duration-200',
                 activeTab === 'overview'
                   ? 'bg-blue-50 text-blue-700 border-l-4 border-blue-500'
-                  : 'text-gray-700 hover:bg-gray-50'
+                  : 'text-gray-900 hover:bg-gray-50'
               ]"
               title="Overview"
             >
@@ -54,7 +54,7 @@
                 'w-full text-left px-4 py-3 rounded-md text-sm font-medium transition-colors duration-200',
                 activeTab === 'users'
                   ? 'bg-blue-50 text-blue-700 border-l-4 border-blue-500'
-                  : 'text-gray-700 hover:bg-gray-50'
+                  : 'text-gray-900 hover:bg-gray-50'
               ]"
               title="Users list"
             >

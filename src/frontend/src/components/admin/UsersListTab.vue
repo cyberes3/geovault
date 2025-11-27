@@ -10,7 +10,7 @@
         </div>
         <div class="flex-1">
           <h2 class="text-lg font-medium text-gray-900 mb-2">Django User Admin</h2>
-          <p class="text-sm text-gray-600 mb-4">
+          <p class="text-sm text-gray-800 mb-4">
             Access the Django admin interface to manage users, permissions, and other database models.
             This is the standard Django admin panel where you can create, edit, and delete user accounts,
             manage user permissions, and access other administrative functions.
@@ -36,7 +36,7 @@
       <div v-if="loading" class="flex items-center justify-center py-12">
         <div class="text-center">
           <div class="inline-block animate-spin rounded-full h-8 w-8 border-b-2 border-blue-500"></div>
-          <p class="mt-2 text-sm text-gray-600">Loading users...</p>
+          <p class="mt-2 text-sm text-gray-800">Loading users...</p>
         </div>
       </div>
 
@@ -60,12 +60,12 @@
         <table class="min-w-full divide-y divide-gray-200">
           <thead class="bg-gray-50">
             <tr>
-              <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Email</th>
-              <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Last Login</th>
-              <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Creation Date</th>
-              <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Features</th>
-              <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Shares</th>
-              <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Storage</th>
+              <th class="px-6 py-3 text-left text-xs font-medium text-gray-900 uppercase tracking-wider">Email</th>
+              <th class="px-6 py-3 text-left text-xs font-medium text-gray-900 uppercase tracking-wider">Last Login</th>
+              <th class="px-6 py-3 text-left text-xs font-medium text-gray-900 uppercase tracking-wider">Creation Date</th>
+              <th class="px-6 py-3 text-left text-xs font-medium text-gray-900 uppercase tracking-wider">Features</th>
+              <th class="px-6 py-3 text-left text-xs font-medium text-gray-900 uppercase tracking-wider">Shares</th>
+              <th class="px-6 py-3 text-left text-xs font-medium text-gray-900 uppercase tracking-wider">Storage</th>
             </tr>
           </thead>
           <tbody class="bg-white divide-y divide-gray-200">
@@ -73,19 +73,19 @@
               <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
                 {{ user.email || 'N/A' }}
               </td>
-              <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+              <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-800">
                 {{ formatDate(user.last_login) }}
               </td>
-              <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+              <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-800">
                 {{ formatDate(user.date_joined) }}
               </td>
-              <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+              <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-800">
                 {{ user.feature_count }}
               </td>
-              <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+              <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-800">
                 {{ user.share_count }}
               </td>
-              <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+              <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-800">
                 {{ formatStorage(user.storage_bytes) }}
               </td>
             </tr>
@@ -95,7 +95,7 @@
 
       <!-- Empty State -->
       <div v-else class="text-center py-12">
-        <p class="text-gray-500">No users found.</p>
+        <p class="text-gray-800">No users found.</p>
       </div>
     </div>
   </div>

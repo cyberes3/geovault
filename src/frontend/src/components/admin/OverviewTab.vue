@@ -4,7 +4,7 @@
     
     <div class="space-y-6">
       <div>
-        <p class="text-gray-600">
+        <p class="text-gray-800">
           Welcome to the Admin Panel. Use the navigation on the left to access different administrative functions.
         </p>
       </div>
