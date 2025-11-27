@@ -3,26 +3,20 @@ Import job processor for asynchronous import operations.
 Handles importing a single import queue item to the feature store.
 """
 
-import json
 import threading
 import traceback
 from concurrent.futures import ThreadPoolExecutor
 from typing import Dict, Any, List, Tuple, Optional
 
-from django.contrib.gis.geos import GEOSGeometry
-
 from api.models import ImportQueue, FeatureStore
-from geo_lib.const_strings import prepare_user_tags
-from geo_lib.feature_id import generate_feature_hash
 from geo_lib.logging.console import get_job_logger
 from geo_lib.processing.import_utils import (
-    strip_icon_properties,
     delete_logs_by_log_id,
-    broadcast_item_imported
+    broadcast_item_imported,
+    process_single_feature_for_import,
 )
 from geo_lib.processing.jobs.base_job import BaseJob
 from geo_lib.processing.status_tracker import ProcessingStatus
-from geo_lib.types.feature import PointFeature, LineStringFeature, MultiLineStringFeature, PolygonFeature
 from website.settings_utils import get_required_setting
 
 logger = get_job_logger()
@@ -108,135 +102,22 @@ class ImportJob(BaseJob):
         duplicate_check_lock = threading.Lock()
 
         def process_feature_with_index(args: Tuple[int, Dict[str, Any]]) -> Optional[FeatureStore]:
-            """Wrapper to unpack index and feature for executor.map()"""
+            """
+            Wrapper to unpack index and feature for executor.map() that delegates
+            to the shared process_single_feature_for_import helper so that
+            single-item imports and bulk imports use identical duplicate logic.
+            """
             feature_index, feature = args
-            return process_single_feature_for_import(feature, feature_index)
-
-        def process_single_feature_for_import(feature: Dict[str, Any], feature_index: int) -> Optional[FeatureStore]:
-            """
-            Process a single feature for import, including validation, tag generation, and FeatureStore creation.
-            This is a worker function designed to be called in parallel.
-            
-            Args:
-                feature: Feature dictionary from geofeatures
-                feature_index: Index of the feature (for logging)
-                
-            Returns:
-                FeatureStore object if successful, None if skipped or failed
-            """
-            try:
-                c = None
-                if 'geometry' not in feature or not feature['geometry']:
-                    logger.warning(f"Skipping feature {feature_index} due to missing or empty geometry: {feature.get('properties', {}).get('name', 'Unnamed')}")
-                    return None
-
-                geometry_type = feature['geometry']['type'].lower()
-                match geometry_type:
-                    case 'point':
-                        c = PointFeature
-                    case 'multipoint':
-                        c = PointFeature
-                    case 'linestring':
-                        c = LineStringFeature
-                    case 'multilinestring':
-                        c = MultiLineStringFeature
-                    case 'polygon':
-                        c = PolygonFeature
-                    case 'multipolygon':
-                        c = PolygonFeature
-                    case _:
-                        feature_name = feature.get('properties', {}).get('name', 'Unnamed')
-                        logger.warning(f"Skipping feature {feature_index} '{feature_name}' due to unsupported geometry type: {geometry_type}")
-                        return None
-
-                assert c is not None
-
-                # Strip icon properties if import_custom_icons is False
-                if not import_custom_icons:
-                    feature = strip_icon_properties(feature.copy())
-
-                feature_instance = c(**feature)
-                # Tags are already generated during processing step, just use existing tags
-                existing_tags = feature_instance.properties.tags or []
-                # Prepare tags before storing (lowercase and deduplicate)
-                existing_tags = prepare_user_tags(existing_tags)
-                feature_instance.properties.tags = existing_tags
-
-                # Create the GeoJSON data
-                geojson_data = json.loads(feature_instance.model_dump_json())
-
-                # Generate hash-based ID for the feature
-                feature_hash = generate_feature_hash(geojson_data)
-
-                # Check if this feature already exists for this user or in current batch (thread-safe)
-                with duplicate_check_lock:
-                    if feature_hash in existing_hashes or feature_hash in current_batch_hashes:
-                        # Skip importing duplicate features
-                        feature_name = geojson_data.get('properties', {}).get('name', 'Unnamed')
-                        # Skipping duplicate feature (normal operation)
-                        return None
-
-                    # Add to current batch hashes to prevent duplicates within the same import
-                    current_batch_hashes.add(feature_hash)
-
-                # Update the feature's ID in the GeoJSON data
-                geojson_data['properties']['id'] = feature_hash
-
-                # Create geometry object for spatial queries
-                geometry = None
-                if 'geometry' in geojson_data and geojson_data['geometry']:
-                    try:
-                        # Ensure coordinates are properly formatted for GEOSGeometry
-                        geom_data = geojson_data['geometry'].copy()
-
-                        # Handle 3D coordinates by ensuring they're properly structured
-                        if geom_data['type'] == 'Point':
-                            coords = geom_data['coordinates']
-                            # Ensure Point has exactly 3 coordinates (x, y, z) or 2 (x, y)
-                            if len(coords) == 2:
-                                coords = [coords[0], coords[1], 0.0]  # Add Z=0 for 2D points
-                            elif len(coords) == 3:
-                                coords = [coords[0], coords[1], coords[2]]  # Keep 3D
-                            geom_data['coordinates'] = coords
-
-                        elif geom_data['type'] == 'LineString':
-                            coords = geom_data['coordinates']
-                            # Ensure each coordinate in LineString has 3 dimensions
-                            geom_data['coordinates'] = [
-                                [coord[0], coord[1], coord[2] if len(coord) > 2 else 0.0]
-                                for coord in coords
-                            ]
-
-                        elif geom_data['type'] == 'Polygon':
-                            coords = geom_data['coordinates']
-                            # Ensure each coordinate in Polygon has 3 dimensions
-                            geom_data['coordinates'] = [
-                                [
-                                    [coord[0], coord[1], coord[2] if len(coord) > 2 else 0.0]
-                                    for coord in ring
-                                ]
-                                for ring in coords
-                            ]
-
-                        geometry = GEOSGeometry(json.dumps(geom_data))
-                    except Exception as e:
-                        # Log internal error details for debugging - don't expose to user
-                        logger.warning(f"Error creating geometry for feature {feature_index}: {type(e).__name__}: {str(e)}")
-                        logger.error(f"Geometry creation error traceback for feature {feature_index}: {traceback.format_exc()}")
-
-                # Create FeatureStore object
-                return FeatureStore(
-                    geojson=geojson_data,
-                    file_hash=feature_hash,
-                    geometry=geometry,
-                    source=import_item,
-                    user_id=user_id
-                )
-            except Exception as e:
-                feature_name = feature.get('properties', {}).get('name', 'Unnamed')
-                logger.error(f"Error processing feature {feature_index} '{feature_name}': {type(e).__name__}: {str(e)}")
-                logger.error(f"Feature processing error traceback: {traceback.format_exc()}")
-                return None
+            return process_single_feature_for_import(
+                feature=feature,
+                feature_index=feature_index,
+                import_item=import_item,
+                user_id=user_id,
+                import_custom_icons=import_custom_icons,
+                existing_hashes=existing_hashes,
+                current_batch_hashes=current_batch_hashes,
+                duplicate_check_lock=duplicate_check_lock,
+            )
 
         # Filter out skipped features before processing
         features_to_process = []

@@ -16,6 +16,7 @@ from geo_lib.const_strings import prepare_user_tags
 from geo_lib.feature_id import generate_feature_hash
 from geo_lib.types.feature import PointFeature, PolygonFeature, LineStringFeature, MultiLineStringFeature
 from geo_lib.logging.console import get_job_logger
+from geo_lib.processing.duplicate_detection import normalize_coordinates
 
 logger = get_job_logger()
 
@@ -157,6 +158,43 @@ def process_single_feature_for_import(
                 return None
 
         assert c is not None
+
+        # Skip features that were previously detected as coordinate-duplicates
+        # against the existing feature store during processing. This ensures
+        # that items shown as \"Exact Duplicates\" on the import process page
+        # are not re-imported, even if they have different names or tags.
+        duplicate_coord_keys = getattr(import_item, "_duplicate_coord_keys", None)
+        if duplicate_coord_keys is None:
+            duplicate_coord_keys = set()
+            try:
+                for dup in (import_item.duplicate_features or []):
+                    dup_feature = dup.get("feature") if isinstance(dup, dict) else None
+                    if not isinstance(dup_feature, dict):
+                        continue
+                    geom = dup_feature.get("geometry") or {}
+                    dup_geom_type = (geom.get("type") or "").lower()
+                    coords = geom.get("coordinates")
+                    if not dup_geom_type or coords is None:
+                        continue
+                    norm_coords = normalize_coordinates(coords)
+                    key = (dup_geom_type, json.dumps(norm_coords, sort_keys=True))
+                    duplicate_coord_keys.add(key)
+            except Exception:
+                # If anything goes wrong while building duplicate keys, fall back
+                # to hash-based duplicate detection only.
+                duplicate_coord_keys = set()
+
+            setattr(import_item, "_duplicate_coord_keys", duplicate_coord_keys)
+
+        geom = feature.get("geometry") or {}
+        coords = geom.get("coordinates")
+        if coords is not None and duplicate_coord_keys:
+            norm_coords = normalize_coordinates(coords)
+            feature_key = (geometry_type, json.dumps(norm_coords, sort_keys=True))
+            if feature_key in duplicate_coord_keys:
+                # This feature was flagged as a coordinate-duplicate of an
+                # existing feature in the user's library – skip importing it.
+                return None
 
         # Strip icon properties if import_custom_icons is False
         if not import_custom_icons:

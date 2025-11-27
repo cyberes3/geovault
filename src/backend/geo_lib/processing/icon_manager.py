@@ -399,7 +399,6 @@ def _fix_nested_caltopo_url(url: str) -> str:
             inner_url_match = re.search(r'(https?://caltopo\.com/icon\.png\?cfg=[^#]+(?:#1\.0)?)', cfg_decoded, re.IGNORECASE)
             if inner_url_match:
                 inner_url = inner_url_match.group(1)
-                logger.debug(f"Fixed nested CalTopo URL: {url} -> {inner_url}")
                 return inner_url
 
         # Not nested, return original
