@@ -9,7 +9,7 @@ import type {MapConfig} from '@/types/geospatial';
 import {Circle, Fill, Icon, Stroke, Style, Text} from 'ol/style';
 import {getLength} from 'ol/sphere';
 import {getCenter} from 'ol/extent';
-import {Point} from 'ol/geom';
+import {Point, LineString, Polygon} from 'ol/geom';
 import {APIHOST} from '@/config.js';
 
 export class MapUtils {
@@ -227,6 +227,128 @@ export class MapUtils {
     }
 
     /**
+     * Calculate distance from a point to a line segment
+     * @param point - Point [x, y]
+     * @param lineStart - Line segment start [x, y]
+     * @param lineEnd - Line segment end [x, y]
+     * @returns Distance in map units (meters)
+     */
+    private static distanceToLineSegment(point: number[], lineStart: number[], lineEnd: number[]): number {
+        const dx = lineEnd[0] - lineStart[0];
+        const dy = lineEnd[1] - lineStart[1];
+        const lengthSquared = dx * dx + dy * dy;
+
+        if (lengthSquared === 0) {
+            // Line segment is a point
+            const dx2 = point[0] - lineStart[0];
+            const dy2 = point[1] - lineStart[1];
+            return Math.sqrt(dx2 * dx2 + dy2 * dy2);
+        }
+
+        // Calculate parameter t (position along line segment)
+        const t = Math.max(0, Math.min(1, 
+            ((point[0] - lineStart[0]) * dx + (point[1] - lineStart[1]) * dy) / lengthSquared
+        ));
+
+        // Find closest point on line segment
+        const closestX = lineStart[0] + t * dx;
+        const closestY = lineStart[1] + t * dy;
+
+        // Calculate distance
+        const dx2 = point[0] - closestX;
+        const dy2 = point[1] - closestY;
+        return Math.sqrt(dx2 * dx2 + dy2 * dy2);
+    }
+
+    /**
+     * Check if a polygon label would intersect with the polygon's border
+     * @param geometry - Polygon or MultiPolygon geometry
+     * @param text - Label text
+     * @param resolution - Map resolution (meters per pixel)
+     * @param strokeWidth - Stroke width in pixels (default: 2)
+     * @returns true if label would intersect with border
+     */
+    private static checkLabelBorderIntersection(
+        geometry: any,
+        text: string,
+        resolution: number,
+        strokeWidth: number = 2
+    ): boolean {
+        if (!geometry || resolution <= 0) {
+            return false;
+        }
+
+        const geometryType = geometry.getType();
+        if (geometryType !== 'Polygon' && geometryType !== 'MultiPolygon') {
+            return false;
+        }
+
+        // Estimate text dimensions
+        // Font is 12px Arial, approximate character width is 7px, height is 12px
+        const fontHeightPixels = 12;
+        const avgCharWidthPixels = 7;
+        const textWidthPixels = text.length * avgCharWidthPixels;
+        const textHeightPixels = fontHeightPixels;
+        
+        // Convert to meters
+        const textHeightMeters = textHeightPixels * resolution;
+        const textWidthMeters = textWidthPixels * resolution;
+        const strokeWidthMeters = strokeWidth * resolution;
+
+        // Get polygon extent and centroid
+        const extent = geometry.getExtent();
+        const centroid = getCenter(extent);
+        const widthMeters = extent[2] - extent[0];
+        const heightMeters = extent[3] - extent[1];
+        const minDimensionMeters = Math.min(widthMeters, heightMeters);
+
+        // Check if polygon is too small to fit label without intersection
+        // Label needs space: text height/2 on each side + stroke width
+        const minRequiredDimension = textHeightMeters + (strokeWidthMeters * 2);
+        
+        if (minDimensionMeters < minRequiredDimension) {
+            return true;
+        }
+
+        // For more accurate check, calculate distance from centroid to boundary
+        // Get the exterior ring(s) of the polygon
+        let exteriorRings: any[] = [];
+        
+        if (geometryType === 'Polygon') {
+            const coordinates = geometry.getCoordinates();
+            if (coordinates && coordinates.length > 0) {
+                exteriorRings.push(new LineString(coordinates[0]));
+            }
+        } else if (geometryType === 'MultiPolygon') {
+            const coordinates = geometry.getCoordinates();
+            if (coordinates && Array.isArray(coordinates)) {
+                for (const polygonCoords of coordinates) {
+                    if (polygonCoords && polygonCoords.length > 0) {
+                        exteriorRings.push(new LineString(polygonCoords[0]));
+                    }
+                }
+            }
+        }
+
+        // Check distance from centroid to nearest point on boundary
+        // Calculate distance to each line segment and take the minimum
+        let minDistanceToBoundary = Infinity;
+        for (const ring of exteriorRings) {
+            const coords = ring.getCoordinates();
+            for (let i = 0; i < coords.length - 1; i++) {
+                const p1 = coords[i];
+                const p2 = coords[i + 1];
+                const distance = this.distanceToLineSegment(centroid, p1, p2);
+                minDistanceToBoundary = Math.min(minDistanceToBoundary, distance);
+            }
+        }
+
+        // If centroid is too close to boundary (less than text height/2 + stroke), label would intersect
+        const requiredDistance = (textHeightMeters / 2) + strokeWidthMeters;
+        return minDistanceToBoundary < requiredDistance;
+    }
+
+    /**
      * Get text-only style for a feature (no icon/image)
      * Used for rendering labels on a separate layer with decluttering
      * @param feature - OpenLayers feature
@@ -292,6 +414,7 @@ export class MapUtils {
 
         // Create text style for labels (different positioning for each geometry type)
         let textStyle: Text;
+        let styleGeometry: any = undefined;
 
         if (geometryType === 'Point') {
             // Points: text below, closer to the point
@@ -301,13 +424,44 @@ export class MapUtils {
             const hasWorkingIcon = iconUrl && !iconFailed;
             const offsetY = hasWorkingIcon ? 8 : 15;
             textStyle = this.createTextStyle(name, geometryType, offsetY);
+        } else if (geometryType === 'Polygon' || geometryType === 'MultiPolygon') {
+            // For polygons, check if label would intersect with borders
+            // If so, place label below polygon (like points) instead of at centroid
+            let shouldPlaceBelow = false;
+            let offsetY = 0;
+            let placement: string | undefined = 'point';
+
+            if (resolution !== undefined && resolution > 0) {
+                const strokeWidth = properties['stroke-width'] || 2;
+                shouldPlaceBelow = this.checkLabelBorderIntersection(geometry, name, resolution, strokeWidth);
+                
+                if (shouldPlaceBelow) {
+                    // Place label below polygon, similar to points
+                    offsetY = 15; // Same offset as default circle icons for points
+                    placement = null; // Remove 'point' placement to use extent-based positioning
+                    
+                    // Use the bottom of the polygon extent for label placement
+                    const extent = geometry.getExtent();
+                    const bottomCenter = [getCenter(extent)[0], extent[1]]; // [centerX, minY]
+                    styleGeometry = new Point(bottomCenter);
+                }
+            }
+
+            textStyle = this.createTextStyle(name, geometryType, offsetY, placement);
         } else {
             textStyle = this.createTextStyle(name, geometryType);
         }
 
-        return new Style({
+        const styleConfig: any = {
             text: textStyle
-        });
+        };
+        
+        // Use custom geometry for text placement when label is placed below polygon
+        if (styleGeometry) {
+            styleConfig.geometry = styleGeometry;
+        }
+
+        return new Style(styleConfig);
     }
 
     /**
@@ -442,7 +596,7 @@ export class MapUtils {
         name: string,
         geometryType: string,
         offsetY?: number,
-        placement?: string
+        placement?: string | null
     ): Text {
         // Default offsets based on geometry type
         let defaultOffsetY: number;
@@ -452,7 +606,14 @@ export class MapUtils {
             defaultOffsetY = offsetY !== undefined ? offsetY : 8;
         } else if (geometryType === 'Polygon') {
             defaultOffsetY = offsetY !== undefined ? offsetY : 0;
-            defaultPlacement = placement !== undefined ? placement : 'point';
+            // If placement is null, don't set it (allows custom geometry placement)
+            // If placement is undefined (not provided), default to 'point' for centroid placement
+            // Otherwise, use the provided placement value
+            if (placement === null) {
+                defaultPlacement = undefined;
+            } else {
+                defaultPlacement = placement !== undefined ? placement : 'point';
+            }
         } else {
             defaultOffsetY = offsetY !== undefined ? offsetY : 10;
         }
