@@ -1,5 +1,6 @@
 import traceback
 
+from django.contrib.auth.models import AnonymousUser
 from django.http import JsonResponse, HttpResponse
 
 from geo_lib.logging.console import get_access_logger
@@ -124,6 +125,33 @@ class LoggingMiddleware:
                     access_logger.warning(f"{log_msg} - Status: {response.status_code}")
                 else:
                     access_logger.info(log_msg)
+        
+        return response
+
+
+class ActivityTrackingMiddleware:
+    """Middleware to track user activity by updating last_activity timestamp."""
+    
+    def __init__(self, get_response):
+        self.get_response = get_response
+
+    def __call__(self, request):
+        # Process request first
+        response = self.get_response(request)
+        
+        # Update activity for authenticated users
+        # Skip static files and other non-user-interactive paths
+        if (request.user and 
+            not isinstance(request.user, AnonymousUser) and
+            not request.path.startswith('/static/') and
+            request.path != '/favicon.ico'):
+            try:
+                from users.models import UserProfile
+                profile = UserProfile.get_or_create_profile(request.user)
+                profile.update_activity()
+            except Exception:
+                # Silently fail - don't break the request if activity tracking fails
+                pass
         
         return response
 

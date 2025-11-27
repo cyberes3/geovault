@@ -8,6 +8,7 @@ from django.http import JsonResponse
 
 from api.models import FeatureStore, ImportQueue, TagShare, CollectionShare
 from geo_lib.website.auth import login_required_401
+from users.models import UserProfile
 
 User = get_user_model()
 
@@ -16,7 +17,7 @@ User = get_user_model()
 def list_all_users(request):
     """
     List all users with their statistics (admin only).
-    Returns email, last login, creation date, feature count, share count, and storage usage.
+    Returns email, last activity, creation date, feature count, share count, and storage usage.
     """
     # Check if user is superuser
     if not request.user.is_superuser:
@@ -68,6 +69,12 @@ def list_all_users(request):
             .values_list('user_id', 'count')
         )
 
+        # Pre-fetch user profiles for last_activity
+        user_profiles = {
+            profile.user_id: profile
+            for profile in UserProfile.objects.filter(user_id__in=user_ids).select_related('user')
+        }
+
         # Calculate storage usage for all users in batch
         # Use raw SQL for efficient calculation
         storage_map = {}
@@ -103,10 +110,20 @@ def list_all_users(request):
             collection_shares = collection_share_counts.get(user.id, 0)
             total_shares = tag_shares + collection_shares
 
+            # Get last activity from profile, fallback to last_login if profile doesn't exist
+            profile = user_profiles.get(user.id)
+            if profile and profile.last_activity:
+                last_activity = profile.last_activity.isoformat()
+            elif user.last_login:
+                # Fallback to last_login for users without activity tracking yet
+                last_activity = user.last_login.isoformat()
+            else:
+                last_activity = None
+
             users_data.append({
                 'id': user.id,
                 'email': email_map.get(user.id, None),
-                'last_login': user.last_login.isoformat() if user.last_login else None,
+                'last_activity': last_activity,
                 'date_joined': user.date_joined.isoformat() if user.date_joined else None,
                 'feature_count': feature_counts.get(user.id, 0),
                 'share_count': total_shares,
