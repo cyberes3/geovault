@@ -462,12 +462,26 @@ class BaseProcessor(ABC):
                 self.import_log.add("Processing cancelled during GeoJSON conversion", "Processing", DatabaseLogLevel.WARNING)
                 return {'type': 'FeatureCollection', 'features': []}, self.import_log
 
-            # Step 3.5: Fill missing elevation data for lines and tracks
+            # Step 4: Process features (splitting, validation, tagging)
+            feature_processing_start = time.time()
+            self.processed_features, processing_log = self.process_features(self.geojson_data)
+            feature_processing_duration = time.time() - feature_processing_start
+            # Extend processing log first, then add timing so logs appear in correct order
+            self.import_log.extend(processing_log)
+            self.import_log.add_timing("Feature processing", feature_processing_duration, "Processing")
+
+            # Step 5: Fill missing elevation data (on processed features)
+            # We do this AFTER feature processing so that:
+            # 1. Coordinates have been validated (skips invalid/garbage coords that would crash the API)
+            # 2. Complex geometries (GeometryCollection) have been split into simple ones
             elevation_start = time.time()
             try:
                 from django.conf import settings
-                if get_required_setting('ELEVATION_API_ENABLED'):
-                    self.geojson_data = fill_missing_elevations(self.geojson_data, self.import_log)
+                if get_required_setting('ELEVATION_API_ENABLED') and self.processed_features:
+                    # Wrap processed features in a temporary structure for the service
+                    # The service modifies features in-place
+                    temp_geojson = {'type': 'FeatureCollection', 'features': self.processed_features}
+                    fill_missing_elevations(temp_geojson, self.import_log)
                     elevation_duration = time.time() - elevation_start
                     self.import_log.add_timing("Elevation data filling", elevation_duration, "Processing")
             except Exception as e:
@@ -483,14 +497,6 @@ class BaseProcessor(ABC):
             if self._is_cancelled():
                 self.import_log.add("Processing cancelled during elevation data filling", "Processing", DatabaseLogLevel.WARNING)
                 return {'type': 'FeatureCollection', 'features': []}, self.import_log
-
-            # Step 4: Process features
-            feature_processing_start = time.time()
-            self.processed_features, processing_log = self.process_features(self.geojson_data)
-            feature_processing_duration = time.time() - feature_processing_start
-            # Extend processing log first, then add timing so logs appear in correct order
-            self.import_log.extend(processing_log)
-            self.import_log.add_timing("Feature processing", feature_processing_duration, "Processing")
 
             # Create final GeoJSON structure
             final_geojson = {
