@@ -288,9 +288,10 @@
             <!-- Skip/Restore Button -->
             <button
                 v-if="!isImported && !loading.importing"
-                :class="isItemSkipped(item, index) ? 'relative z-20 inline-flex items-center px-3 py-1.5 border border-transparent text-xs font-medium rounded-md text-white bg-green-600 hover:bg-green-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-green-500' : 'relative z-20 inline-flex items-center px-3 py-1.5 border border-gray-300 shadow-sm text-xs font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-gray-500'"
-                @click.stop="toggleSkipItem(index)"
-                :title="isItemSkipped(item, index) ? 'Restore this item' : 'Skip this item'"
+                :class="item.isDuplicate ? 'relative z-20 inline-flex items-center px-3 py-1.5 border border-gray-300 shadow-sm text-xs font-medium rounded-md text-gray-400 bg-gray-100 cursor-not-allowed' : (isItemSkipped(item, index) ? 'relative z-20 inline-flex items-center px-3 py-1.5 border border-transparent text-xs font-medium rounded-md text-white bg-green-600 hover:bg-green-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-green-500' : 'relative z-20 inline-flex items-center px-3 py-1.5 border border-gray-300 shadow-sm text-xs font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-gray-500')"
+                @click.stop="item.isDuplicate ? null : toggleSkipItem(index)"
+                :disabled="item.isDuplicate"
+                :title="item.isDuplicate ? 'Cannot skip duplicate items' : (isItemSkipped(item, index) ? 'Restore this item' : 'Skip this item')"
                 type="button"
                 style="opacity: 1 !important;"
             >

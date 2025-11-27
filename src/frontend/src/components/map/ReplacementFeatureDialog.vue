@@ -27,6 +27,22 @@
         <div class="bg-white px-6 py-4">
           <!-- File Selection Section (shown before upload starts) -->
           <div v-if="!importQueueId && !processing" class="space-y-4">
+            <!-- Help Text -->
+            <div class="p-4 bg-blue-50 border border-blue-200 rounded-lg">
+              <div class="flex">
+                <svg class="h-5 w-5 text-blue-400 mr-3 flex-shrink-0 mt-0.5" fill="currentColor" viewBox="0 0 20 20">
+                  <path fill-rule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7-4a1 1 0 11-2 0 1 1 0 012 0zM9 9a1 1 0 000 2v3a1 1 0 001 1h1a1 1 0 100-2v-3a1 1 0 00-1-1H9z" clip-rule="evenodd" />
+                </svg>
+                <div class="flex-1">
+                  <p class="text-xs text-blue-800">
+                    Upload a KMZ, KML, or GPX file to replace the spatial geometry of this feature.
+                    Only features with matching geometry types (Point, LineString, or Polygon) will be available for selection.
+                    The feature's name, description, and other properties will remain unchanged.
+                  </p>
+                </div>
+              </div>
+            </div>
+
             <!-- File Drop Zone (only shown when no file is selected) -->
             <div v-if="!selectedFile">
               <label class="block text-sm font-medium text-gray-700 mb-2">
@@ -41,7 +57,7 @@
                     @change="handleFileSelect"
                     class="hidden"
                   />
-                  <div 
+                  <div
                     :class="dropzoneClasses"
                     class="flex items-center justify-center px-6 py-3 border-2 border-dashed rounded-lg transition-colors"
                     @drop="onDrop"
@@ -104,8 +120,8 @@
               <Loader size="lg" layout="centered" :message="processingMessage" />
               <div v-if="processingProgress !== null" class="mt-6 max-w-md mx-auto">
                 <div class="w-full bg-gray-200 rounded-full h-3 overflow-hidden">
-                  <div 
-                    :style="{ width: processingProgress + '%' }" 
+                  <div
+                    :style="{ width: processingProgress + '%' }"
                     class="bg-blue-500 h-3 rounded-full transition-all duration-300"
                   >
                   </div>
@@ -127,14 +143,14 @@
                 <div>
                   <p class="text-sm font-medium text-yellow-800">No matching geometry types found</p>
                   <p class="text-xs text-yellow-700 mt-1">
-                    The uploaded file contains {{ features.length }} feature{{ features.length !== 1 ? 's' : '' }}, 
+                    The uploaded file contains {{ features.length }} feature{{ features.length !== 1 ? 's' : '' }},
                     but none match the geometry type of the existing feature ({{ existingFeatureGeometryType }}).
                     Only features with the same geometry type (Point/LineString/Polygon) can be used for replacement.
                   </p>
                 </div>
               </div>
             </div>
-            
+
             <!-- Features list -->
             <div v-else>
               <div class="flex items-center justify-between mb-3">
@@ -167,7 +183,7 @@
                   <div class="flex items-start gap-4">
                     <!-- Map Preview -->
                     <div class="flex-shrink-0 relative">
-                      <div 
+                      <div
                         :ref="el => setMapRef(el, index)"
                         :id="`feature-map-${index}`"
                         class="w-32 h-32 border border-gray-300 rounded-md overflow-hidden"
@@ -184,7 +200,7 @@
                         </svg>
                       </button>
                     </div>
-                    
+
                     <!-- Feature Info -->
                     <div class="flex-1 min-w-0">
                       <div class="flex items-start justify-between">
@@ -239,7 +255,7 @@
             </svg>
             Upload & Process
           </button>
-          
+
           <!-- Cancel Button -->
           <button
             v-if="!importQueueId || (!processing && features.length === 0)"
@@ -249,7 +265,7 @@
           >
             Cancel
           </button>
-          
+
           <!-- Apply Button (always shown when features are available, disabled when not ready) -->
           <button
             v-if="sortedFeatures.length > 0 && !applied"
@@ -264,7 +280,7 @@
             <Loader v-if="applying" size="sm" layout="inline" :showMessage="false" color="white" />
             {{ applying ? 'Applying...' : 'Apply Spatial Data' }}
           </button>
-          
+
           <!-- Close Button -->
           <button
             v-if="applied"
@@ -296,10 +312,10 @@
             </svg>
           </button>
         </div>
-        
+
         <!-- Expanded Map Container -->
         <div class="p-6 h-[calc(100%-73px)]">
-          <div 
+          <div
             :ref="el => setExpandedMapRef(el)"
             id="expanded-feature-map"
             class="w-full h-full border border-gray-300 rounded-md overflow-hidden"
@@ -372,14 +388,14 @@ export default {
     sortedFeatures() {
       // Filter features by geometry type matching the existing feature
       let filtered = this.features
-      
+
       if (this.existingFeatureGeometryType) {
         filtered = this.features.filter(feature => {
           const featureType = feature.geometry?.type
           return this.geometryTypesMatch(this.existingFeatureGeometryType, featureType)
         })
       }
-      
+
       // Sort features alphabetically by name
       return filtered.sort((a, b) => {
         const nameA = (a.properties?.name || '').toLowerCase()
@@ -435,7 +451,7 @@ export default {
         const b = parseInt(hex.substring(4, 6), 16)
         return opacity === 1 ? color : `rgba(${r}, ${g}, ${b}, ${opacity})`
       }
-      
+
       // If already rgb/rgba, extract values and apply opacity
       const rgbMatch = color.match(/rgba?\((\d+),\s*(\d+),\s*(\d+)/)
       if (rgbMatch) {
@@ -444,14 +460,14 @@ export default {
         const b = parseInt(rgbMatch[3])
         return `rgba(${r}, ${g}, ${b}, ${opacity})`
       }
-      
+
       // Fallback to blue-500
       return opacity === 1 ? '#163D8A' : `rgba(22, 61, 138, ${opacity})`
     },
     resetDialog() {
       // Clean up all maps
       this.cleanupMaps()
-      
+
       this.importQueueId = null
       this.jobId = null
       this.processing = false
@@ -484,7 +500,7 @@ export default {
         }
       })
       this.featureMaps = {}
-      
+
       // Clean up expanded map
       if (this.expandedMap) {
         this.expandedMap.map.setTarget(null)
@@ -505,14 +521,14 @@ export default {
     },
     initializeFeatureMap(container, index) {
       if (!container || this.featureMaps[index]) return
-      
+
       const feature = this.sortedFeatures[index]
       if (!feature || !feature.geometry) return
 
       try {
         // Create vector source
         const vectorSource = markRaw(new VectorSource())
-        
+
         // Create vector layer with simple styling
         const vectorLayer = markRaw(new VectorLayer({
           source: vectorSource,
@@ -566,7 +582,7 @@ export default {
         // Calculate center and extent
         const extent = vectorSource.getExtent()
         const center = getCenter(extent)
-        
+
         // Create a 50 mile extent (50 miles = 80,467 meters)
         // Buffer the center by 50 miles in each direction
         const bufferDistance = 50 * 1609.34 // 50 miles in meters
@@ -576,7 +592,7 @@ export default {
           center[0] + bufferDistance, // maxX
           center[1] + bufferDistance  // maxY
         ]
-        
+
         // Create map with pan and zoom interactions
         const map = markRaw(new Map({
           target: container,
@@ -614,7 +630,7 @@ export default {
       const width = extent[2] - extent[0]
       const height = extent[3] - extent[1]
       const maxDim = Math.max(width, height)
-      
+
       // Approximate zoom level based on extent size
       if (maxDim > 20000000) return 3
       if (maxDim > 10000000) return 4
@@ -657,17 +673,17 @@ export default {
     },
     initializeExpandedMap() {
       if (this.expandedMapIndex === null || this.expandedMap) return
-      
+
       const container = document.getElementById('expanded-feature-map')
       if (!container) return
-      
+
       const feature = this.sortedFeatures[this.expandedMapIndex]
       if (!feature || !feature.geometry) return
 
       try {
         // Create vector source
         const vectorSource = markRaw(new VectorSource())
-        
+
         // Create vector layer with same styling as small maps
         const vectorLayer = markRaw(new VectorLayer({
           source: vectorSource,
@@ -721,7 +737,7 @@ export default {
         // Calculate center and extent
         const extent = vectorSource.getExtent()
         const center = getCenter(extent)
-        
+
         // Create a 50 mile extent (50 miles = 80,467 meters)
         const bufferDistance = 50 * 1609.34 // 50 miles in meters
         const bufferedExtent = [
@@ -730,7 +746,7 @@ export default {
           center[0] + bufferDistance,
           center[1] + bufferDistance
         ]
-        
+
         // Create map with full interactions
         const map = markRaw(new Map({
           target: container,
@@ -769,7 +785,7 @@ export default {
           credentials: 'include'
         })
         const data = await response.json()
-        
+
         if (response.ok && data.feature && data.feature.geojson) {
           const geojson = data.feature.geojson
           if (geojson.geometry && geojson.geometry.type) {
@@ -783,7 +799,7 @@ export default {
     },
     geometryTypesMatch(existingType, replacementType) {
       if (!existingType || !replacementType) return false
-      
+
       // Normalize geometry types to base types
       const normalizeType = (type) => {
         if (type === 'Point' || type === 'MultiPoint') return 'Point'
@@ -791,7 +807,7 @@ export default {
         if (type === 'Polygon' || type === 'MultiPolygon') return 'Polygon'
         return type
       }
-      
+
       return normalizeType(existingType) === normalizeType(replacementType)
     },
     cleanup() {
@@ -847,15 +863,15 @@ export default {
       e.preventDefault()
       e.stopPropagation()
       this.isDragOver = false
-      
+
       const droppedFiles = Array.from(e.dataTransfer.files)
       if (droppedFiles.length === 0) {
         return
       }
-      
+
       // Only use the first file (this component handles single file upload)
       const file = droppedFiles[0]
-      
+
       // Use the same validation logic as handleFileSelect
       if (!file) {
         this.selectedFile = null
@@ -987,7 +1003,7 @@ export default {
       // This should rarely be needed as the job result should contain it
       let attempts = 0
       const maxAttempts = 10
-      
+
       const pollForQueueItem = setInterval(async () => {
         attempts++
         if (attempts > maxAttempts) {
@@ -1046,7 +1062,7 @@ export default {
       // Get the selected feature from sorted list and find its index in the original features array
       const selectedFeature = this.sortedFeatures[this.selectedFeatureIndex]
       const originalIndex = this.features.findIndex(f => f === selectedFeature)
-      
+
       if (originalIndex === -1) {
         this.errorMessage = 'Selected feature not found'
         return
@@ -1091,7 +1107,7 @@ export default {
     handleCancel() {
       // Close dialog immediately
       this.handleClose()
-      
+
       // Delete the ImportQueue row in the background (fire-and-forget)
       if (this.importQueueId) {
         fetch(`${APIHOST}/api/item/import/delete/${this.importQueueId}`, {
