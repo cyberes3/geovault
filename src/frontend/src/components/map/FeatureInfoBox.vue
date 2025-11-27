@@ -67,6 +67,24 @@
         {{ getFeatureGeometryType(feature) }}
       </div>
 
+      <!-- Elevation (for Point/MultiPoint features) -->
+      <div v-if="getFeatureElevation(feature) !== null" class="mb-4 bg-gray-100 border border-gray-300 rounded px-2 py-1.5 flex items-center space-x-2">
+        <svg class="w-4 h-4 flex-shrink-0 text-gray-600" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor">
+          <!-- Top horizontal bar -->
+          <line x1="8" y1="2" x2="16" y2="2" stroke-linecap="round" />
+          <!-- Upward arrow -->
+          <path stroke-linecap="round" stroke-linejoin="round" d="M12 10V4m-3 3 3-3 3 3" />
+          <!-- Center vertical line -->
+          <line x1="12" y1="10" x2="12" y2="14" stroke-linecap="round" />
+          <!-- Downward arrow -->
+          <path stroke-linecap="round" stroke-linejoin="round" d="M12 14v6m-3-3 3 3 3-3" />
+          <!-- Bottom horizontal bar -->
+          <line x1="8" y1="22" x2="16" y2="22" stroke-linecap="round" />
+        </svg>
+        <span class="text-xs font-semibold text-gray-900 uppercase tracking-wide">Elevation:</span>
+        <span class="ml-1.5 text-sm text-gray-700">{{ formatElevation(getFeatureElevation(feature)) }}</span>
+      </div>
+
       <!-- Description -->
       <div v-if="getFeatureDescription(feature)" class="mb-4">
         <div class="text-sm text-gray-700 prose prose-sm max-w-none prose-headings:text-gray-900 prose-p:text-gray-700 prose-a:text-blue-500 prose-strong:text-gray-900 prose-ul:text-gray-700 prose-ol:text-gray-700" v-html="renderMarkdown(getFeatureDescription(feature))"></div>
@@ -101,6 +119,7 @@
 
 <script>
 import { marked } from 'marked'
+import { GeoJSON } from 'ol/format'
 
 export default {
   name: 'FeatureInfoBox',
@@ -130,6 +149,13 @@ export default {
       if (!geometry) return false
       const geomType = geometry.getType()
       return geomType === 'LineString' || geomType === 'MultiLineString'
+    },
+    isPointOrMultiPoint() {
+      if (!this.feature) return false
+      const geometry = this.feature.getGeometry()
+      if (!geometry) return false
+      const geomType = geometry.getType()
+      return geomType === 'Point' || geomType === 'MultiPoint'
     }
   },
   methods: {
@@ -159,6 +185,62 @@ export default {
     renderMarkdown(markdown) {
       if (!markdown) return ''
       return marked.parse(markdown)
+    },
+    getFeatureElevation(feature) {
+      if (!feature) return null
+      const geometry = feature.getGeometry()
+      if (!geometry) return null
+
+      const geomType = geometry.getType()
+
+      // Only process Point and MultiPoint features
+      if (geomType !== 'Point' && geomType !== 'MultiPoint') {
+        return null
+      }
+
+      try {
+        // Convert OpenLayers geometry to GeoJSON format
+        const format = new GeoJSON()
+        const geometryJson = format.writeGeometryObject(geometry, {
+          featureProjection: 'EPSG:3857',
+          dataProjection: 'EPSG:4326'
+        })
+
+        const coords = geometryJson.coordinates
+
+        if (geomType === 'Point') {
+          // Point: coordinates is [lon, lat] or [lon, lat, elevation]
+          if (Array.isArray(coords) && coords.length >= 3) {
+            const elevation = coords[2]
+            if (elevation != null && elevation !== 0) {
+              return elevation // Elevation is in meters
+            }
+          }
+        } else if (geomType === 'MultiPoint') {
+          // MultiPoint: coordinates is [[lon, lat], ...] or [[lon, lat, elevation], ...]
+          // For MultiPoint, we'll use the first point's elevation
+          if (Array.isArray(coords) && coords.length > 0) {
+            const firstPoint = coords[0]
+            if (Array.isArray(firstPoint) && firstPoint.length >= 3) {
+              const elevation = firstPoint[2]
+              if (elevation != null && elevation !== 0) {
+                return elevation // Elevation is in meters
+              }
+            }
+          }
+        }
+      } catch (error) {
+        console.error('Error extracting elevation from feature:', error)
+      }
+
+      return null
+    },
+    formatElevation(elevationMeters) {
+      if (elevationMeters == null) return 'N/A'
+      // Convert meters to feet (1 meter = 3.28084 feet)
+      const elevationFeet = elevationMeters * 3.28084
+      // Format to 1 decimal place
+      return `${elevationFeet.toFixed(1)} ft`
     }
   }
 }

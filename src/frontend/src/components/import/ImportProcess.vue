@@ -162,13 +162,16 @@
     <!-- Global Options -->
     <div v-if="itemsForUser.length > 0 && !loading.page && !processing.active" class="bg-white rounded-lg shadow-sm border border-gray-200 p-4">
       <h3 class="text-sm font-semibold text-gray-900 mb-3">Global Options</h3>
-      <div class="flex items-center space-x-2">
+      <div class="flex items-center space-x-3">
         <ToggleButton
             v-model="importCustomIcons"
             label="Import custom icons for all features"
             :disabled="lockButtons || loading.importing || loading.saving || isImported"
             size="md"
         />
+        <label class="text-sm font-medium text-gray-700 cursor-pointer" @click="!lockButtons && !loading.importing && !loading.saving && !isImported && (importCustomIcons = !importCustomIcons)">
+          Import custom icons for all features
+        </label>
       </div>
     </div>
 

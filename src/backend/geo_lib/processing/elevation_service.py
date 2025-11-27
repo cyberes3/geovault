@@ -1,5 +1,5 @@
 """
-Elevation service for filling missing elevation data in LineString and MultiLineString features.
+Elevation service for filling missing elevation data in Point, MultiPoint, LineString and MultiLineString features.
 Uses racemap's elevation API to fetch elevation data for coordinates.
 """
 import time
@@ -21,9 +21,9 @@ MAX_POINTS_PER_REQUEST = 10000
 
 def fill_missing_elevations(geojson_data: Dict[str, Any], import_log: ImportLog) -> Dict[str, Any]:
     """
-    Fill missing elevation data for LineString and MultiLineString features.
+    Fill missing elevation data for Point, MultiPoint, LineString and MultiLineString features.
     
-    Identifies points with missing elevation (coordinates with only 2 elements: [lon, lat])
+    Identifies points with missing elevation (coordinates with only 2 elements: [lon, lat] or third element is 0.0)
     and fetches elevation data from racemap's elevation API. Updates coordinates to include
     elevation: [lon, lat, elevation].
     
@@ -36,7 +36,7 @@ def fill_missing_elevations(geojson_data: Dict[str, Any], import_log: ImportLog)
     """
     # Check if elevation API is enabled
     if not get_required_setting('ELEVATION_API_ENABLED'):
-        import_log.add("Elevation API is disabled - elevation data will not be filled for lines and tracks", "Elevation Service", DatabaseLogLevel.INFO)
+        import_log.add("Elevation API is disabled - elevation data will not be filled for points, lines and tracks", "Elevation Service", DatabaseLogLevel.INFO)
         return geojson_data
     
     elevation_start = time.time()
@@ -48,8 +48,9 @@ def fill_missing_elevations(geojson_data: Dict[str, Any], import_log: ImportLog)
         return geojson_data
     
     # Collect all points that need elevation data
-    points_to_fetch: List[Tuple[int, int, int]] = []  # (feature_idx, coord_path, point_idx)
-    # coord_path: for LineString it's the index in coordinates, for MultiLineString it's (line_idx, point_idx)
+    points_to_fetch: List[Tuple[int, int, int]] = []  # (feature_idx, line_idx, point_idx)
+    # line_idx: -2 for Point, -3 for MultiPoint, -1 for LineString, >= 0 for MultiLineString line index
+    # point_idx: 0 for Point, point index for MultiPoint/MultiLineString, coordinate index for LineString
     
     total_points_checked = 0
     total_points_missing = 0
@@ -59,15 +60,34 @@ def fill_missing_elevations(geojson_data: Dict[str, Any], import_log: ImportLog)
         geometry = feature.get('geometry', {})
         geom_type = geometry.get('type', '').lower()
         
-        # Only process LineString and MultiLineString
-        if geom_type not in ['linestring', 'multilinestring']:
+        # Process Point, MultiPoint, LineString and MultiLineString
+        if geom_type not in ['point', 'multipoint', 'linestring', 'multilinestring']:
             continue
         
         coordinates = geometry.get('coordinates', [])
         if not coordinates:
             continue
         
-        if geom_type == 'linestring':
+        if geom_type == 'point':
+            # Point: coordinates is [lon, lat] or [lon, lat, elevation]
+            total_points_checked += 1
+            # Missing elevation if: no third coordinate OR third coordinate is 0.0 (common placeholder)
+            if len(coordinates) == 2 or (len(coordinates) >= 3 and coordinates[2] == 0.0):
+                # Store as (feature_idx, -2, 0) where -2 indicates Point
+                points_to_fetch.append((feature_idx, -2, 0))
+                total_points_missing += 1
+        
+        elif geom_type == 'multipoint':
+            # MultiPoint: coordinates is [[lon, lat], ...] or [[lon, lat, elevation], ...]
+            for point_idx, coord in enumerate(coordinates):
+                total_points_checked += 1
+                # Missing elevation if: no third coordinate OR third coordinate is 0.0 (common placeholder)
+                if len(coord) == 2 or (len(coord) >= 3 and coord[2] == 0.0):
+                    # Store as (feature_idx, -3, point_idx) where -3 indicates MultiPoint
+                    points_to_fetch.append((feature_idx, -3, point_idx))
+                    total_points_missing += 1
+        
+        elif geom_type == 'linestring':
             # LineString: coordinates is [[lon, lat], [lon, lat], ...] or [[lon, lat, ele], ...]
             for point_idx, coord in enumerate(coordinates):
                 total_points_checked += 1
@@ -91,12 +111,14 @@ def fill_missing_elevations(geojson_data: Dict[str, Any], import_log: ImportLog)
     
     if total_points_missing == 0:
         if total_points_checked > 0:
-            import_log.add(f"All {total_points_checked} points in lines/tracks already have elevation data", "Elevation Service", DatabaseLogLevel.INFO)
+            import_log.add(f"All {total_points_checked} points already have elevation data", "Elevation Service", DatabaseLogLevel.INFO)
         return geojson_data
     
     # Prepare coordinate pairs for API (convert GeoJSON [lon, lat] to API [lat, lon])
     api_coords: List[List[float]] = []
     point_mapping: List[Tuple[int, int, int]] = []  # Maps API response index to (feature_idx, line_idx, point_idx)
+    # For Point: line_idx = -2, point_idx = 0
+    # For MultiPoint: line_idx = -3, point_idx = point index
     # For LineString: line_idx = -1, point_idx = coordinate index
     # For MultiLineString: line_idx = line index, point_idx = point index within line
     
@@ -107,7 +129,38 @@ def fill_missing_elevations(geojson_data: Dict[str, Any], import_log: ImportLog)
                 geometry = feature.get('geometry', {})
                 coordinates = geometry.get('coordinates', [])
                 
-                if line_idx == -1:  # LineString
+                if line_idx == -2:  # Point
+                    # For Point, coordinates is [lon, lat] or [lon, lat, elevation]
+                    if not isinstance(coordinates, (list, tuple)) or len(coordinates) < 2:
+                        logger.warning(f"Skipping invalid Point coordinate at feature {feature_idx}: expected list/tuple with 2+ elements, got {type(coordinates).__name__}")
+                        continue
+                    # Convert [lon, lat] to [lat, lon] for API
+                    try:
+                        api_coords.append([float(coordinates[1]), float(coordinates[0])])
+                        point_mapping.append((feature_idx, -2, 0))  # -2 indicates Point
+                    except (IndexError, ValueError, TypeError) as e:
+                        logger.warning(f"Skipping Point coordinate at feature {feature_idx}: cannot convert to lat/lon - {str(e)}")
+                        continue
+                
+                elif line_idx == -3:  # MultiPoint
+                    # For MultiPoint, coordinates is [[lon, lat], ...] or [[lon, lat, elevation], ...]
+                    if point_idx >= len(coordinates):
+                        logger.warning(f"Skipping invalid point index {point_idx} for MultiPoint feature {feature_idx} (has {len(coordinates)} points)")
+                        continue
+                    coord = coordinates[point_idx]
+                    # Validate coordinate is a list with at least 2 elements
+                    if not isinstance(coord, (list, tuple)) or len(coord) < 2:
+                        logger.warning(f"Skipping invalid coordinate at feature {feature_idx}, point {point_idx}: expected list/tuple with 2+ elements, got {type(coord).__name__}")
+                        continue
+                    # Convert [lon, lat] to [lat, lon] for API
+                    try:
+                        api_coords.append([float(coord[1]), float(coord[0])])
+                        point_mapping.append((feature_idx, -3, point_idx))  # -3 indicates MultiPoint
+                    except (IndexError, ValueError, TypeError) as e:
+                        logger.warning(f"Skipping coordinate at feature {feature_idx}, point {point_idx}: cannot convert to lat/lon - {str(e)}")
+                        continue
+                
+                elif line_idx == -1:  # LineString
                     # For LineString, coordinates is a list of points: [[lon, lat], ...]
                     if point_idx >= len(coordinates):
                         logger.warning(f"Skipping invalid point index {point_idx} for LineString feature {feature_idx} (has {len(coordinates)} points)")
@@ -234,7 +287,22 @@ def fill_missing_elevations(geojson_data: Dict[str, Any], import_log: ImportLog)
             geometry = feature.get('geometry', {})
             coordinates = geometry.get('coordinates', [])
             
-            if line_idx == -1:  # LineString
+            if line_idx == -2:  # Point
+                # Update coordinate from [lon, lat] to [lon, lat, elevation]
+                if len(coordinates) >= 3:
+                    coordinates[2] = elevation
+                else:
+                    coordinates.append(elevation)
+                updated_count += 1
+            elif line_idx == -3:  # MultiPoint
+                # Update coordinate from [lon, lat] to [lon, lat, elevation]
+                coord = coordinates[point_idx]
+                if len(coord) >= 3:
+                    coord[2] = elevation
+                else:
+                    coord.append(elevation)
+                updated_count += 1
+            elif line_idx == -1:  # LineString
                 # Update coordinate from [lon, lat] to [lon, lat, elevation]
                 coordinates[point_idx] = [coordinates[point_idx][0], coordinates[point_idx][1], elevation]
                 updated_count += 1
