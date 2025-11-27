@@ -165,6 +165,10 @@ def update_feature_metadata(request, feature_id):
         if not isinstance(original_system_tags, list):
             original_system_tags = []
         
+        # Validate that system_tags are not being modified (reject if present in request)
+        if 'system_tags' in metadata:
+            return _error_response('System tags cannot be modified or removed', 400)
+        
         # Ensure the feature has the required structure (type, geometry, properties)
         # Always set these explicitly to ensure they exist
         merged_feature['type'] = 'Feature'
@@ -352,6 +356,14 @@ def bulk_update_features_metadata(request):
                     original_system_tags = original_geojson.get('properties', {}).get('system_tags', [])
                     if not isinstance(original_system_tags, list):
                         original_system_tags = []
+                    
+                    # Validate that system_tags are not being modified (reject if present in request)
+                    if 'system_tags' in update_data:
+                        errors.append({
+                            'feature_id': feature_id,
+                            'error': 'System tags cannot be modified or removed'
+                        })
+                        continue
                     
                     # Ensure the feature has the required structure (type, geometry, properties)
                     merged_feature['type'] = 'Feature'

@@ -120,31 +120,21 @@
                 <ArrowDownTrayIcon class="w-4 h-4" />
               </button>
               <button
-                  :class="[
-                    'p-1.5 rounded focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-1',
-                    isSystemTag(tag)
-                      ? 'text-gray-300 cursor-not-allowed'
-                      : 'text-gray-400 hover:text-gray-600'
-                  ]"
-                  :title="isSystemTag(tag) ? 'System tags cannot be edited' : 'Edit tag name'"
+                  v-if="!isSystemTag(tag)"
+                  class="p-1.5 text-gray-400 hover:text-gray-600 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-1 rounded"
+                  title="Edit tag name"
                   type="button"
-                  :disabled="isSystemTag(tag)"
-                  @click.stop.prevent="!isSystemTag(tag) && startTagEdit(tag)"
+                  @click.stop.prevent="startTagEdit(tag)"
                   @mousedown.stop.prevent
               >
                 <PencilIcon class="w-4 h-4" />
               </button>
               <button
-                  :class="[
-                    'p-1.5 rounded focus:outline-none focus:ring-2 focus:ring-red-500 focus:ring-offset-1',
-                    isSystemTag(tag)
-                      ? 'text-gray-300 cursor-not-allowed'
-                      : 'text-gray-400 hover:text-red-600'
-                  ]"
-                  :title="isSystemTag(tag) ? 'System tags cannot be deleted' : 'Delete tag'"
+                  v-if="!isSystemTag(tag)"
+                  class="p-1.5 text-gray-400 hover:text-red-600 focus:outline-none focus:ring-2 focus:ring-red-500 focus:ring-offset-1 rounded"
+                  title="Delete tag"
                   type="button"
-                  :disabled="isSystemTag(tag)"
-                  @click.stop.prevent="!isSystemTag(tag) && deleteTag(tag)"
+                  @click.stop.prevent="deleteTag(tag)"
                   @mousedown.stop.prevent
               >
                 <TrashIcon class="w-4 h-4" />
@@ -208,6 +198,7 @@
               </div>
               <div class="ml-4 flex-shrink-0 relative z-10 flex items-center space-x-2">
                 <button
+                    v-if="!isSystemTag(tag)"
                     class="p-1.5 text-gray-400 hover:text-red-600 focus:outline-none focus:ring-2 focus:ring-red-500 focus:ring-offset-1 rounded"
                     title="Remove this feature from tag"
                     type="button"
@@ -809,6 +800,12 @@ export default {
     },
     async removeTagFromFeature(tag, feature) {
       if (!feature.properties._id) {
+        return;
+      }
+
+      // Prevent removing system tags
+      if (this.isSystemTag(tag)) {
+        alert('System tags cannot be removed from features');
         return;
       }
 
