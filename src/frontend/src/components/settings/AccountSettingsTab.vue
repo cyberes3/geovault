@@ -160,15 +160,39 @@
         <span v-else>Download All Features (KMZ)</span>
       </button>
     </div>
+
+    <!-- Account Settings Section -->
+    <div class="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
+      <h2 class="text-lg font-semibold text-gray-900 mb-4">Account Preferences</h2>
+
+      <!-- Dynamically generated settings -->
+      <div class="space-y-6">
+        <SettingsInput
+          v-for="setting in getSettingsForSection('account')"
+          :key="setting.key"
+          :setting="setting"
+          :model-value="settingsValues[setting.key]"
+          :show-success="successCheckmarks[setting.key]"
+          @update:model-value="handleSettingChange(setting.key, $event)"
+        />
+      </div>
+    </div>
   </div>
 </template>
 
 <script>
 import axios from "axios";
 import { getCookie } from "@/assets/js/auth.js";
+import settingsConfig from "@/components/settings-data.json";
+import SettingsMixin from "./mixins/SettingsMixin.js";
+import SettingsInput from "./components/SettingsInput.vue";
 
 export default {
   name: 'AccountSettingsTab',
+  components: {
+    SettingsInput
+  },
+  mixins: [SettingsMixin],
   props: {
     toastRef: {
       type: Object,
@@ -177,6 +201,8 @@ export default {
   },
   data() {
     return {
+      // Settings configuration - loaded from external JSON file
+      settingsConfig: settingsConfig,
       dataLoaded: false,
       currentEmail: '',
       emailStatus: null,
@@ -477,6 +503,18 @@ export default {
     if (!this.dataLoaded) {
       await this.loadCurrentEmail();
       this.dataLoaded = true;
+    }
+    // Load settings from store using mixin method
+    this.loadSettingsFromStore();
+  },
+  watch: {
+    // Watch for changes in the store and reload settings
+    '$store.state.userSettings': {
+      handler() {
+        // Reload settings when store updates
+        this.loadSettingsFromStore();
+      },
+      deep: true
     }
   },
   beforeDestroy() {

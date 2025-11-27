@@ -13,7 +13,7 @@ input[type="checkbox"].checkbox-custom {
   appearance: none;
   -webkit-appearance: none;
   -moz-appearance: none;
-  border: 2px solid #C4D2ED; /* blue-200 */
+  border: 2px solid var(--color-blue-200);
   border-radius: 0.25rem;
   background-color: white;
   position: relative;
@@ -21,12 +21,12 @@ input[type="checkbox"].checkbox-custom {
 }
 
 input[type="checkbox"].checkbox-custom:hover:not(:disabled) {
-  border-color: #6C93DE; /* blue-400 */
+  border-color: var(--color-blue-400);
 }
 
 input[type="checkbox"].checkbox-custom:checked {
-  background-color: #163D8A; /* blue-500 */
-  border-color: #163D8A; /* blue-500 */
+  background-color: var(--color-blue-500);
+  border-color: var(--color-blue-500);
 }
 
 input[type="checkbox"].checkbox-custom:checked::after {
@@ -49,7 +49,7 @@ input[type="checkbox"].checkbox-custom:disabled {
 }
 
 input[type="checkbox"].checkbox-custom:focus {
-  outline: 2px solid #163D8A; /* blue-500 */
+  outline: 2px solid var(--color-blue-500);
   outline-offset: 2px;
 }
 
@@ -61,7 +61,7 @@ input[type="radio"].radio-custom {
   appearance: none;
   -webkit-appearance: none;
   -moz-appearance: none;
-  border: 2px solid #C4D2ED; /* blue-200 */
+  border: 2px solid var(--color-blue-200);
   border-radius: 50%;
   background-color: white;
   position: relative;
@@ -69,11 +69,11 @@ input[type="radio"].radio-custom {
 }
 
 input[type="radio"].radio-custom:hover:not(:disabled) {
-  border-color: #6C93DE; /* blue-400 */
+  border-color: var(--color-blue-400);
 }
 
 input[type="radio"].radio-custom:checked {
-  border-color: #163D8A; /* blue-500 */
+  border-color: var(--color-blue-500);
 }
 
 input[type="radio"].radio-custom:checked::after {
@@ -85,7 +85,7 @@ input[type="radio"].radio-custom:checked::after {
   width: 0.5rem;
   height: 0.5rem;
   border-radius: 50%;
-  background-color: #163D8A; /* blue-500 */
+  background-color: var(--color-blue-500);
 }
 
 input[type="radio"].radio-custom:disabled {
@@ -96,6 +96,37 @@ input[type="radio"].radio-custom:disabled {
 }
 
 input[type="radio"].radio-custom:focus {
-  outline: 2px solid #163D8A; /* blue-500 */
+  outline: 2px solid var(--color-blue-500);
   outline-offset: 2px;
+}
+
+/* Universal select dropdown styling to match color scheme */
+select.select-custom {
+  cursor: pointer;
+  appearance: none;
+  -webkit-appearance: none;
+  -moz-appearance: none;
+  background-color: white;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' fill='none' viewBox='0 0 20 20'%3E%3Cpath stroke='%236B7280' stroke-linecap='round' stroke-linejoin='round' stroke-width='1.5' d='M6 8l4 4 4-4'/%3E%3C/svg%3E");
+  background-position: right 0.5rem center;
+  background-repeat: no-repeat;
+  background-size: 1.5em 1.5em;
+  padding-right: 2.5rem;
+}
+
+select.select-custom:hover:not(:disabled) {
+  border-color: var(--color-blue-400);
+}
+
+select.select-custom:focus {
+  outline: 2px solid var(--color-blue-500);
+  outline-offset: 2px;
+  border-color: var(--color-blue-500);
+}
+
+select.select-custom:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+  background-color: #F3F4F6; /* gray-100 */
+  border-color: #D1D5DB; /* gray-300 */
 }

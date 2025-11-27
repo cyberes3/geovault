@@ -150,6 +150,7 @@
 <script>
 import {markRaw} from 'vue'
 import {Map, View} from 'ol'
+import {defaults as defaultControls, ScaleLine} from 'ol/control'
 import {OSM, XYZ} from 'ol/source'
 import {Tile as TileLayer, Vector as VectorLayer} from 'ol/layer'
 import {Vector as VectorSource} from 'ol/source'
@@ -162,7 +163,11 @@ import {getFeatureIconStyle} from '@/utils/map/utils/styleUtils'
 import {getFeatureTextStyle} from '@/utils/map/utils/textUtils'
 import {getInitialMapConfig, getLocationDisplayName} from '@/utils/map/utils/mapConfigUtils'
 import {getBoundingBoxKey, getBoundingBoxString} from '@/utils/map/utils/coordinateUtils'
+import {getCookie} from '@/assets/js/auth.js'
+import {getUnitPreference} from '@/utils/units'
 import {APIHOST, MAP_CONFIG} from '@/config.js'
+
+// Components
 import FeatureListSidebar from './FeatureListSidebar.vue'
 import MapControlsSidebar from './MapControlsSidebar.vue'
 import FeatureInfoBox from './FeatureInfoBox.vue'
@@ -962,8 +967,19 @@ export default {
 
       // Create map
       // Use markRaw to prevent Vue from making the map object reactive
+      const scaleLineControl = new ScaleLine({
+        units: getUnitPreference(),
+        bar: false,
+        steps: 4,
+        text: true,
+        minWidth: 100
+      })
+
       this.map = markRaw(new Map({
         target: this.$refs.mapContainer,
+        controls: defaultControls().extend([
+          scaleLineControl
+        ]),
         layers: [
           this.tileLayer,
           this.vectorLayer,  // Icons layer (rendered first, below text)
@@ -1713,6 +1729,19 @@ export default {
   },
 
   watch: {
+    // Watch for unit preference changes
+    '$store.state.userSettings.account.units': {
+      handler(newUnits) {
+        if (this.map) {
+          // Find the ScaleLine control and update its units
+          this.map.getControls().forEach(control => {
+            if (control instanceof ScaleLine) {
+              control.setUnits(newUnits || 'imperial')
+            }
+          })
+        }
+      }
+    },
     '$route'(to, from) {
       // Watch for route changes, especially share ID and collection changes
 

@@ -17,12 +17,18 @@ class ElevationProfileSource(str, Enum):
     API = 'api'
 
 
+class UnitsPreference(str, Enum):
+    """Valid values for account.units setting."""
+    METRIC = 'metric'
+    IMPERIAL = 'imperial'
+
+
 class MapSettings(BaseModel):
     """Pydantic model for map settings section."""
     model_config = ConfigDict(extra='ignore')
     
     elevation_profile_source: Optional[ElevationProfileSource] = Field(
-        default=None,
+        default='gps',
         description="Elevation profile data source: 'gps' or 'api'"
     )
 
@@ -32,13 +38,23 @@ class ImportSettings(BaseModel):
     model_config = ConfigDict(extra='ignore')
     
     overwrite_single_track_name_with_filename: Optional[bool] = Field(
-        default=None,
+        default=False,
         description="When enabled, overwrite single track feature name with filename (excluding extension)"
     )
     
     show_debug_logs: Optional[bool] = Field(
-        default=None,
+        default=False,
         description="When enabled, show DEBUG level logs in the import process page"
+    )
+
+
+class AccountSettings(BaseModel):
+    """Pydantic model for account settings section."""
+    model_config = ConfigDict(extra='ignore')
+    
+    units: Optional[UnitsPreference] = Field(
+        default='imperial',
+        description="Units preference: 'metric' or 'imperial'"
     )
 
 
@@ -46,8 +62,9 @@ class UserSettingsModel(BaseModel):
     """Unified Pydantic model for all user settings."""
     model_config = ConfigDict(extra='ignore')
     
-    map: Optional[MapSettings] = Field(default=None)
-    import_: Optional[ImportSettings] = Field(default=None, alias='import')
+    map: Optional[MapSettings] = Field(default_factory=MapSettings)
+    import_: Optional[ImportSettings] = Field(default_factory=ImportSettings, alias='import')
+    account: Optional[AccountSettings] = Field(default_factory=AccountSettings)
 
 
 def validate_settings(settings: Dict[str, Any]) -> tuple[bool, Optional[str], Optional[Dict[str, Any]], Optional[Dict[str, Any]]]:
@@ -65,10 +82,11 @@ def validate_settings(settings: Dict[str, Any]) -> tuple[bool, Optional[str], Op
         - validated_dict: Validated and normalized settings dictionary (or None if validation fails)
     """
     if not settings:
-        return True, None, None, {}
+        settings = {}
     
     try:
         # Validate using the unified model
+        # Pydantic will use default_factory to create nested models with defaults if missing
         validated_model = UserSettingsModel.model_validate(settings)
         # Convert back to dict, excluding None values, using aliases for field names
         validated_dict = validated_model.model_dump(exclude_none=True, by_alias=True)

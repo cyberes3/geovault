@@ -53,20 +53,26 @@
 
       <!-- Elevation (for Point/MultiPoint features) -->
       <div v-if="getFeatureElevation(feature) !== null" class="mb-4 bg-gray-100 border border-gray-300 rounded px-2 py-1.5 flex items-center space-x-2">
-        <svg class="w-4 h-4 flex-shrink-0 text-gray-600" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor">
-          <!-- Top horizontal bar -->
-          <line x1="8" y1="2" x2="16" y2="2" stroke-linecap="round" />
-          <!-- Upward arrow -->
-          <path stroke-linecap="round" stroke-linejoin="round" d="M12 10V4m-3 3 3-3 3 3" />
-          <!-- Center vertical line -->
-          <line x1="12" y1="10" x2="12" y2="14" stroke-linecap="round" />
-          <!-- Downward arrow -->
-          <path stroke-linecap="round" stroke-linejoin="round" d="M12 14v6m-3-3 3 3 3-3" />
-          <!-- Bottom horizontal bar -->
-          <line x1="8" y1="22" x2="16" y2="22" stroke-linecap="round" />
-        </svg>
+        <MeasurementIcon />
         <span class="text-xs font-semibold text-gray-900 uppercase tracking-wide">Elevation:</span>
         <span class="ml-1.5 text-sm text-gray-700">{{ formatElevation(getFeatureElevation(feature)) }}</span>
+      </div>
+
+      <!-- Length (for LineString/MultiLineString features) -->
+      <div v-if="featureLength !== null" class="mb-4 bg-gray-100 border border-gray-300 rounded px-2 py-1.5 flex items-center space-x-2">
+        <MeasurementIcon :rotation="90" />
+        <span class="text-xs font-semibold text-gray-900 uppercase tracking-wide">Length:</span>
+        <span class="ml-1.5 text-sm text-gray-700">{{ formatDistance(featureLength) }}</span>
+      </div>
+
+      <!-- Area (for Polygon/MultiPolygon features) -->
+      <div v-if="featureArea !== null" class="mb-4 bg-gray-100 border border-gray-300 rounded px-2 py-1.5 flex items-center space-x-2">
+        <!-- Area Icon (Custom Polygon) -->
+        <svg class="w-4 h-4 flex-shrink-0 text-gray-600" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor">
+          <path stroke-linecap="round" stroke-linejoin="round" d="M12 2l8 4v12l-6 4-3-5-7 2V6l8-4z" />
+        </svg>
+        <span class="text-xs font-semibold text-gray-900 uppercase tracking-wide">Area:</span>
+        <span class="ml-1.5 text-sm text-gray-700">{{ formatArea(featureArea) }}</span>
       </div>
 
       <!-- Description -->
@@ -104,7 +110,10 @@
 <script>
 import { marked } from 'marked'
 import { GeoJSON } from 'ol/format'
+import { getLength, getArea } from 'ol/sphere'
 import { ChartBarIcon, ArrowDownTrayIcon, PencilIcon, MapPinIcon, XMarkIcon } from '@heroicons/vue/24/outline'
+import { formatElevation, formatDistance, formatArea } from '@/utils/units'
+import MeasurementIcon from '@/components/icons/MeasurementIcon.vue'
 
 export default {
   name: 'FeatureInfoBox',
@@ -113,7 +122,8 @@ export default {
     ArrowDownTrayIcon,
     PencilIcon,
     MapPinIcon,
-    XMarkIcon
+    XMarkIcon,
+    MeasurementIcon
   },
   props: {
     feature: {
@@ -148,6 +158,23 @@ export default {
       if (!geometry) return false
       const geomType = geometry.getType()
       return geomType === 'Point' || geomType === 'MultiPoint'
+    },
+    isPolygon() {
+      if (!this.feature) return false
+      const geometry = this.feature.getGeometry()
+      if (!geometry) return false
+      const geomType = geometry.getType()
+      return geomType === 'Polygon' || geomType === 'MultiPolygon'
+    },
+    featureLength() {
+      if (!this.isLineOrTrack) return null
+      const geometry = this.feature.getGeometry()
+      return getLength(geometry, { projection: 'EPSG:3857' })
+    },
+    featureArea() {
+      if (!this.isPolygon) return null
+      const geometry = this.feature.getGeometry()
+      return getArea(geometry, { projection: 'EPSG:3857' })
     }
   },
   methods: {
@@ -228,11 +255,13 @@ export default {
       return null
     },
     formatElevation(elevationMeters) {
-      if (elevationMeters == null) return 'N/A'
-      // Convert meters to feet (1 meter = 3.28084 feet)
-      const elevationFeet = elevationMeters * 3.28084
-      // Format to 1 decimal place
-      return `${elevationFeet.toFixed(1)} ft`
+      return formatElevation(elevationMeters)
+    },
+    formatDistance(distanceMeters) {
+      return formatDistance(distanceMeters)
+    },
+    formatArea(areaSqMeters) {
+      return formatArea(areaSqMeters)
     }
   }
 }

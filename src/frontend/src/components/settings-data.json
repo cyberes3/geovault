@@ -33,6 +33,24 @@
     "section": "import",
     "defaultValue": false,
     "description": "Show DEBUG level logs in the import process page"
+  },
+  {
+    "key": "account.units",
+    "title": "Units",
+    "type": "select",
+    "section": "account",
+    "defaultValue": "imperial",
+    "description": "Choose your preferred unit system for distances and measurements.",
+    "options": [
+      {
+        "value": "metric",
+        "label": "Metric"
+      },
+      {
+        "value": "imperial",
+        "label": "Imperial"
+      }
+    ]
   }
 ]
 

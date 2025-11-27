@@ -86,6 +86,14 @@ import { GeoJSON } from 'ol/format'
 import { toLonLat } from 'ol/proj'
 import { getCookie } from '@/assets/js/auth.js'
 import Loader from '@/components/parts/Loader.vue'
+import { 
+  getElevationMultiplier, 
+  getDistanceMultiplier, 
+  getElevationUnitLabel, 
+  getDistanceUnitLabel,
+  formatDistance,
+  formatElevation 
+} from '@/utils/units'
 
 Chart.register(...registerables)
 
@@ -291,14 +299,18 @@ export default {
 
     /**
      * Process elevation data and calculate cumulative distances
-     * Returns { distances: [], elevations: [], coordinateMapping: [] } where distances are in miles and elevations are in feet
+     * Returns { distances: [], elevations: [], coordinateMapping: [] } where distances and elevations are in user preferred units
      * coordinateMapping maps chart data indices to original coordinates [lon, lat]
      */
     processElevationData(coordinates) {
-      const distances = [0] // Start at 0 miles
+      const distances = [0] // Start at 0
       const elevations = []
       const coordinateMapping = [] // Maps chart index to [lon, lat]
       let cumulativeDistance = 0 // in meters
+
+      // Get conversion factors
+      const elevationMultiplier = getElevationMultiplier()
+      const distanceMultiplier = getDistanceMultiplier()
 
       // Filter out points without elevation data and process
       const validPoints = []
@@ -316,8 +328,8 @@ export default {
         return { distances: [], elevations: [], coordinateMapping: [] }
       }
 
-      // Add first point - convert elevation from meters to feet (1 meter = 3.28084 feet)
-      elevations.push(validPoints[0][2] * 3.28084)
+      // Add first point - convert elevation from meters to user unit
+      elevations.push(validPoints[0][2] * elevationMultiplier)
       coordinateMapping.push([validPoints[0][0], validPoints[0][1]]) // [lon, lat]
 
       // Process remaining points
@@ -336,12 +348,12 @@ export default {
         // Add to cumulative distance
         cumulativeDistance += distanceMeters
 
-        // Convert to miles (1 meter = 0.000621371 miles)
-        const distanceMiles = cumulativeDistance * 0.000621371
+        // Convert to user distance unit (miles or km)
+        const distanceUserUnit = cumulativeDistance * distanceMultiplier
 
-        distances.push(distanceMiles)
-        // Convert elevation from meters to feet
-        elevations.push(currCoord[2] * 3.28084)
+        distances.push(distanceUserUnit)
+        // Convert elevation from meters to user unit (feet or meters)
+        elevations.push(currCoord[2] * elevationMultiplier)
         // Store coordinate mapping
         coordinateMapping.push([currCoord[0], currCoord[1]]) // [lon, lat]
       }
@@ -350,10 +362,10 @@ export default {
     },
 
     /**
-     * Map chart distance (in miles) to corresponding coordinate on the line
+     * Map chart distance (in user units) to corresponding coordinate on the line
      * Returns [lon, lat] or null if not found
      */
-    mapDistanceToCoordinate(targetDistanceMiles) {
+    mapDistanceToCoordinate(targetDistance) {
       if (!this.distances || !this.coordinateMapping || this.distances.length === 0) {
         return null
       }
@@ -363,9 +375,9 @@ export default {
         const dist1 = this.distances[i]
         const dist2 = this.distances[i + 1]
 
-        if (targetDistanceMiles >= dist1 && targetDistanceMiles <= dist2) {
+        if (targetDistance >= dist1 && targetDistance <= dist2) {
           // Interpolate between the two points
-          const ratio = (targetDistanceMiles - dist1) / (dist2 - dist1)
+          const ratio = (targetDistance - dist1) / (dist2 - dist1)
           const coord1 = this.coordinateMapping[i]
           const coord2 = this.coordinateMapping[i + 1]
 
@@ -378,12 +390,12 @@ export default {
       }
 
       // If beyond the last point, return the last coordinate
-      if (targetDistanceMiles >= this.distances[this.distances.length - 1]) {
+      if (targetDistance >= this.distances[this.distances.length - 1]) {
         return this.coordinateMapping[this.coordinateMapping.length - 1]
       }
 
       // If before the first point, return the first coordinate
-      if (targetDistanceMiles <= this.distances[0]) {
+      if (targetDistance <= this.distances[0]) {
         return this.coordinateMapping[0]
       }
 
@@ -418,22 +430,24 @@ export default {
         return null
       }
 
+      const distUnit = getDistanceUnitLabel()
+      const elevUnit = getElevationUnitLabel()
+      const elevMultiplier = getElevationMultiplier()
+
       // Total distance (last distance value)
-      const totalDistanceMiles = distances[distances.length - 1]
-      const totalDistance = totalDistanceMiles >= 1
-        ? `${totalDistanceMiles.toFixed(2)} mi`
-        : `${(totalDistanceMiles * 5280).toFixed(0)} ft`
+      const totalDistanceVal = distances[distances.length - 1]
+      const totalDistance = `${totalDistanceVal.toFixed(2)} ${distUnit}`
 
       // Total elevation change (end - start) - use original elevations
       const totalElevationChange = elevations[elevations.length - 1] - elevations[0]
       const totalElevationChangeFormatted = totalElevationChange >= 0
-        ? `+${totalElevationChange.toFixed(0)} ft`
-        : `${totalElevationChange.toFixed(0)} ft`
+        ? `+${totalElevationChange.toFixed(0)} ${elevUnit}`
+        : `${totalElevationChange.toFixed(0)} ${elevUnit}`
 
       // Elevation range (max - min) - use original elevations
       const minElevation = Math.min(...elevations)
       const maxElevation = Math.max(...elevations)
-      const elevationRange = `${(maxElevation - minElevation).toFixed(0)} ft`
+      const elevationRange = `${(maxElevation - minElevation).toFixed(0)} ${elevUnit}`
 
       // Gross elevation change (sum of all positive and negative changes)
       // Use smoothed elevation data to filter out GPS noise
@@ -441,10 +455,13 @@ export default {
       let grossAscent = 0
       let grossDescent = 0
 
+      // Threshold for noise filtering (approx 0.1 ft or 0.03 m)
+      const noiseThreshold = 0.1 * (elevUnit === 'ft' ? 1 : 0.3048)
+
       for (let i = 1; i < smoothedElevations.length; i++) {
         const change = smoothedElevations[i] - smoothedElevations[i - 1]
         // Filter out very small changes (GPS noise)
-        if (Math.abs(change) >= 0.1) {
+        if (Math.abs(change) >= noiseThreshold) {
           if (change > 0) {
             grossAscent += change
           } else {
@@ -457,10 +474,10 @@ export default {
         totalDistance,
         totalElevationChange: totalElevationChangeFormatted,
         elevationRange,
-        grossAscent: `${grossAscent.toFixed(0)} ft`,
-        grossDescent: `${grossDescent.toFixed(0)} ft`,
-        minElevation: `${minElevation.toFixed(0)} ft`,
-        maxElevation: `${maxElevation.toFixed(0)} ft`
+        grossAscent: `${grossAscent.toFixed(0)} ${elevUnit}`,
+        grossDescent: `${grossDescent.toFixed(0)} ${elevUnit}`,
+        minElevation: `${minElevation.toFixed(0)} ${elevUnit}`,
+        maxElevation: `${maxElevation.toFixed(0)} ${elevUnit}`
       }
     },
 
