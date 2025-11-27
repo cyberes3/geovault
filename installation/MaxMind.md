@@ -34,13 +34,9 @@ MaxMind's GeoIP2 database is used to determine user location based on their IP a
 
 3. **Add your MaxMind license key to the config:**
    ```ini
-   # The following UserId and LicenseKey are required placeholders and
-   # do not work as actual license keys.  You must sign up for a free
-   # MaxMind account in order to get a working license key.  You can
-   # do so at https://www.maxmind.com/en/geolite2/signup.
    UserId YOUR_USER_ID
    LicenseKey YOUR_LICENSE_KEY
-   
+
    # GeoLite2 databases to download
    EditionIDs GeoLite2-City
    ```

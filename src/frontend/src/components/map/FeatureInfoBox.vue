@@ -6,6 +6,14 @@
         <h3 class="text-lg font-bold text-gray-900 pr-2">{{ getFeatureName(feature) }}</h3>
         <div class="flex items-center space-x-2 flex-shrink-0">
           <button
+            v-if="showEditButton"
+            @click="$emit('edit')"
+            class="text-gray-400 hover:text-blue-500 transition-colors"
+            title="Edit feature"
+          >
+            <PencilSquareIcon class="w-5 h-5" />
+          </button>
+          <button
             v-if="isLineOrTrack"
             @click="$emit('show-profile')"
             class="text-gray-400 hover:text-blue-500 transition-colors"
@@ -20,14 +28,6 @@
               title="Download KMZ"
           >
             <ArrowDownTrayIcon class="w-5 h-5" />
-          </button>
-          <button
-            v-if="showEditButton"
-            @click="$emit('edit')"
-            class="text-gray-400 hover:text-blue-500 transition-colors"
-            title="Edit feature"
-          >
-            <PencilIcon class="w-5 h-5" />
           </button>
           <button
             @click="$emit('zoom')"
@@ -111,7 +111,7 @@
 import { marked } from 'marked'
 import { GeoJSON } from 'ol/format'
 import { getLength, getArea } from 'ol/sphere'
-import { ChartBarIcon, ArrowDownTrayIcon, PencilIcon, MapPinIcon, XMarkIcon } from '@heroicons/vue/24/outline'
+import { ChartBarIcon, ArrowDownTrayIcon, PencilSquareIcon, MapPinIcon, XMarkIcon } from '@heroicons/vue/24/outline'
 import { formatElevation, formatDistance, formatArea } from '@/utils/units'
 import MeasurementIcon from '@/components/icons/MeasurementIcon.vue'
 
@@ -120,7 +120,7 @@ export default {
   components: {
     ChartBarIcon,
     ArrowDownTrayIcon,
-    PencilIcon,
+    PencilSquareIcon,
     MapPinIcon,
     XMarkIcon,
     MeasurementIcon
