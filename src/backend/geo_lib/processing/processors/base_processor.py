@@ -23,6 +23,7 @@ from geo_lib.processing.elevation_service import fill_missing_elevations
 from geo_lib.processing.status_tracker import ProcessingStatusTracker, ProcessingStatus
 from geo_lib.processing.tagging import generate_auto_tags
 from geo_lib.security.file_validation import SecureFileValidator
+from geo_lib.validation.geometry_validation import validate_coordinates_values, GeometryValidationError
 from geo_lib.logging.console import get_job_logger
 from website.settings_utils import get_required_setting
 from geo_lib.types.feature import PointFeature, LineStringFeature, MultiLineStringFeature, PolygonFeature
@@ -165,6 +166,19 @@ class BaseProcessor(ABC):
             # Check for cancellation before processing each split feature
             if self._is_cancelled():
                 break
+            
+            # Validate coordinates
+            try:
+                validate_coordinates_values(split_feature['geometry'])
+            except GeometryValidationError as e:
+                feature_name = split_feature.get('properties', {}).get('name', 'Unnamed')
+                feature_log.add(
+                    f"Skipping feature '{feature_name}' due to invalid coordinates: {str(e)}",
+                    "Feature Processing",
+                    DatabaseLogLevel.WARNING
+                )
+                skipped_count += 1
+                continue
                 
             if split_feature['geometry']['type'] in ['Point', 'MultiPoint', 'LineString', 'MultiLineString', 'Polygon', 'MultiPolygon']:
                 try:
