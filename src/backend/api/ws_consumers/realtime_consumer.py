@@ -10,7 +10,7 @@ from django.contrib.auth.models import AnonymousUser
 from geo_lib.websocket.modules.delete_job_module import DeleteJobModule
 from geo_lib.websocket.modules.import_history_module import ImportHistoryModule
 from geo_lib.websocket.modules.import_queue_module import ImportQueueModule
-from geo_lib.websocket.modules.upload_job_module import UploadJobModule
+from geo_lib.websocket.modules.process_job_module import ProcessJobModule
 from geo_lib.websocket.modules.bulk_import_job_module import BulkImportJobModule
 from geo_lib.websocket.modules.bulk_delete_job_module import BulkDeleteJobModule
 from geo_lib.logging.console import get_websocket_logger
@@ -30,7 +30,7 @@ class RealtimeConsumer(AsyncWebsocketConsumer):
         """Load all available WebSocket modules."""
         self.modules['import_queue'] = ImportQueueModule(self)
         self.modules['import_history'] = ImportHistoryModule(self)
-        self.modules['upload_job'] = UploadJobModule(self)
+        self.modules['process_job'] = ProcessJobModule(self)
         self.modules['delete_job'] = DeleteJobModule(self)
         self.modules['bulk_import_job'] = BulkImportJobModule(self)
         self.modules['bulk_delete_job'] = BulkDeleteJobModule(self)

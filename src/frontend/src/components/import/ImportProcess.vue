@@ -17,21 +17,6 @@
       </div>
     </div>
 
-    <!-- Error Message -->
-    <div v-if="msg !== '' && msg != null" class="bg-red-50 border border-red-200 rounded-lg p-4">
-      <div class="flex">
-        <div class="flex-shrink-0">
-          <ExclamationCircleIcon class="h-5 w-5 text-red-400" />
-        </div>
-        <div class="ml-3">
-          <h3 class="text-sm font-medium text-red-800">Processing Failed</h3>
-          <div class="mt-2 text-sm text-red-700">
-            <p>{{ msg }}</p>
-          </div>
-        </div>
-      </div>
-    </div>
-
     <!-- Import Logs -->
     <div class="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
       <div class="flex items-center justify-between mb-4">
@@ -123,6 +108,7 @@
         :duplicate-count="duplicates.indices.length"
         :duplicate-original-filename="duplicateOriginalFilename"
         :duplicate-status="duplicateStatus"
+        :error-message="msg"
         :goto-page-input="pagination.gotoInput"
         :has-features="itemsForUser.length > 0"
         :has-next-page="pagination.hasNext"
@@ -511,6 +497,7 @@ import {mapState} from "vuex";
 import axios from "axios";
 import moment from "moment";
 import {capitalizeFirstLetter} from "@/assets/js/string.js";
+import {PROCESSING_MESSAGES} from "@/assets/js/constants/processing-messages.js";
 import ImportQueue from "@/components/import/parts/ImportQueue.vue";
 import {GeoFeatureTypeStrings} from "@/assets/js/types/geofeature-strings";
 import {GeoPoint, GeoLineString, GeoPolygon} from "@/assets/js/types/geofeature-types";
@@ -780,6 +767,14 @@ export default {
         this.processing.progress = data.job_details.progress || 0;
       }
 
+      // Check if file is unparsable (failed processing)
+      if (data.unparsable) {
+        this.processing.active = false;
+        this.processing.message = PROCESSING_MESSAGES.PROCESSING_FAILED;
+        this.processing.progress = null;
+        // Error message will be set by handlePageData if it contains error data
+      }
+
       if (data.features) {
         this.handlePageData(data.features);
       }
@@ -840,14 +835,29 @@ export default {
       this.processing.active = false;
       this.processing.message = 'Processing failed';
       this.processing.progress = null;
-      this.msg = data.error_message || 'Processing failed';
+      this.msg = data.error_message || PROCESSING_MESSAGES.PROCESSING_FAILED_DEFAULT;
       this.stopProcessingPolling();
     },
 
     handlePageData(data) {
       this.itemsForUser = [];
       if (data.data && data.data.length > 0) {
+        // Check if this is an error response (unprocessable file)
+        if (data.data.length === 1 && data.data[0].error) {
+          // This is an error object, don't try to parse it as GeoJSON
+          const errorItem = data.data[0];
+          this.msg = errorItem.message || PROCESSING_MESSAGES.FILE_PROCESSING_FAILED_WITH_LOGS;
+          this.processing.active = false;
+          this.processing.message = PROCESSING_MESSAGES.PROCESSING_FAILED;
+          this.processing.progress = null;
+          return;
+        }
+        
         data.data.forEach((item) => {
+          // Skip error objects
+          if (item.error) {
+            return;
+          }
           this.itemsForUser.push(this.parseGeoJson(item));
         });
         this.originalItems = JSON.parse(JSON.stringify(this.itemsForUser));
@@ -992,9 +1002,9 @@ export default {
               if (errorLogs.length > 0) {
                 // Use the most recent error message from logs
                 const latestError = errorLogs[errorLogs.length - 1];
-                this.msg = latestError.msg || "File processing failed. Please check the processing logs below for details.";
+                this.msg = latestError.msg || PROCESSING_MESSAGES.FILE_PROCESSING_FAILED_WITH_LOGS;
               } else {
-                this.msg = errorItem.message || "File processing failed. Please check the processing logs below for details.";
+                this.msg = errorItem.message || PROCESSING_MESSAGES.FILE_PROCESSING_FAILED_WITH_LOGS;
               }
 
               // Keep the logs we already fetched, but add the error message if not already present

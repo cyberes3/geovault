@@ -1,6 +1,6 @@
 """
 In-memory status tracker for asynchronous file processing.
-Tracks multiple concurrent file uploads and their processing status.
+Tracks multiple concurrent file processing jobs and their status.
 """
 
 import threading
@@ -19,7 +19,7 @@ logger = get_job_logger()
 
 class ProcessingStatus(Enum):
     """Status of file processing."""
-    UPLOADED = "uploaded"  # File uploaded, waiting to start processing
+    QUEUED = "queued"  # File uploaded, waiting to start processing
     PROCESSING = "processing"  # Currently being processed
     COMPLETED = "completed"  # Processing completed successfully
     FAILED = "failed"  # Processing failed
@@ -28,7 +28,7 @@ class ProcessingStatus(Enum):
 
 class JobType(Enum):
     """Type of job being processed."""
-    UPLOAD = "upload"  # File upload job
+    PROCESS = "process"  # File processing job (converting to geojson)
     DELETE = "delete"  # Item deletion job
     BULK_IMPORT = "bulk_import"  # Bulk import job
     BULK_DELETE = "bulk_delete"  # Bulk delete job
@@ -65,14 +65,14 @@ class ProcessingStatusTracker:
         self._max_job_age = get_required_setting('MAX_JOB_AGE_SECONDS')  # 2 hours
         self._last_cleanup = time.time()
 
-    def create_job(self, filename: str, user_id: int, job_type: JobType = JobType.UPLOAD) -> str:
+    def create_job(self, filename: str, user_id: int, job_type: JobType = JobType.PROCESS) -> str:
         """Create a new processing job and return its ID."""
         job_id = str(uuid.uuid4())
         job = ProcessingJob(
             job_id=job_id,
             filename=filename,
             user_id=user_id,
-            status=ProcessingStatus.UPLOADED,
+            status=ProcessingStatus.QUEUED,
             job_type=job_type,
             created_at=time.time()
         )

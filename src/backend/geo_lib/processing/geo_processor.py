@@ -11,9 +11,9 @@ from typing import Optional
 import markdownify
 
 from geo_lib.processing.file_types import FileType
-from geo_lib.logging.console import get_import_logger
+from geo_lib.logging.console import get_job_logger
 
-logger = get_import_logger()
+logger = get_job_logger()
 
 
 def html_to_markdown(html_content) -> str:

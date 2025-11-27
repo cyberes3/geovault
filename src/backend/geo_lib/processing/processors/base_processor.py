@@ -23,12 +23,12 @@ from geo_lib.processing.elevation_service import fill_missing_elevations
 from geo_lib.processing.status_tracker import ProcessingStatusTracker, ProcessingStatus
 from geo_lib.processing.tagging import generate_auto_tags
 from geo_lib.security.file_validation import SecureFileValidator
-from geo_lib.logging.console import get_import_logger
+from geo_lib.logging.console import get_job_logger
 from website.settings_utils import get_required_setting
 from geo_lib.types.feature import PointFeature, LineStringFeature, MultiLineStringFeature, PolygonFeature
 from geo_lib.const_strings import CONST_INTERNAL_TAGS, is_protected_tag, filter_protected_tags, prepare_user_tags
 
-logger = get_import_logger()
+logger = get_job_logger()
 
 
 class BaseProcessor(ABC):

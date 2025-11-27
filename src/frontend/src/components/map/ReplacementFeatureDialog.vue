@@ -312,6 +312,7 @@
 
 <script>
 import {APIHOST} from '@/config.js'
+import {PROCESSING_MESSAGES} from '@/assets/js/constants/processing-messages.js'
 import {Map, View} from 'ol'
 import {OSM} from 'ol/source'
 import {Tile as TileLayer, Vector as VectorLayer} from 'ol/layer'
@@ -970,7 +971,7 @@ export default {
                 this.pollingInterval = null
               }
             } else if (data.job_status.status === 'failed') {
-              this.errorMessage = data.job_status.error_message || 'Processing failed'
+              this.errorMessage = data.job_status.error_message || PROCESSING_MESSAGES.PROCESSING_FAILED_DEFAULT
               this.processing = false
               clearInterval(this.pollingInterval)
               this.pollingInterval = null

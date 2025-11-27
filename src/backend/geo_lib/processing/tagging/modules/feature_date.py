@@ -8,9 +8,9 @@ from typing import List, Optional
 
 from geo_lib.types.feature import GeoFeatureSupported
 from geo_lib.processing.tagging.base import TagGenerator
-from geo_lib.logging.console import get_import_logger
+from geo_lib.logging.console import get_job_logger
 
-logger = get_import_logger()
+logger = get_job_logger()
 
 
 class FeatureDateTagGenerator(TagGenerator):

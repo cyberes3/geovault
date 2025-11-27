@@ -15,69 +15,16 @@ from website.settings_utils import get_required_setting
 from django.db import transaction
 
 from api.models import ImportQueue, FeatureStore, DatabaseLogging
-from geo_lib.feature_id import generate_feature_hash
 from geo_lib.processing.jobs.base_job import BaseJob
 from geo_lib.processing.status_tracker import ProcessingStatus, JobType
-from geo_lib.const_strings import CONST_INTERNAL_TAGS
-from geo_lib.types.feature import PointFeature, PolygonFeature, LineStringFeature, MultiLineStringFeature
 from geo_lib.logging.console import get_job_logger
+from geo_lib.processing.import_utils import (
+    delete_logs_by_log_id, 
+    broadcast_item_imported,
+    process_single_feature_for_import
+)
 
 logger = get_job_logger()
-
-
-def strip_icon_properties(feature: dict) -> dict:
-    """
-    Remove icon-related properties from a feature.
-    
-    Args:
-        feature: Feature dictionary with properties
-        
-    Returns:
-        Feature dictionary with icon properties removed
-    """
-    if not isinstance(feature, dict) or 'properties' not in feature:
-        return feature
-    
-    # Common property names that might contain icon hrefs
-    icon_property_names = [
-        'marker-symbol',
-        'icon',
-        'icon-href',
-        'iconUrl',
-        'icon_url',
-        'marker-icon',
-        'symbol',
-        'styleUrl',  # KML style URLs might reference icons
-    ]
-    
-    # Remove icon properties
-    for prop_name in icon_property_names:
-        if prop_name in feature['properties']:
-            del feature['properties'][prop_name]
-    
-    # Also check nested structures (e.g., style objects)
-    def remove_icons_from_dict(d):
-        if not isinstance(d, dict):
-            return
-        for key, value in list(d.items()):
-            if key in icon_property_names:
-                del d[key]
-            elif isinstance(value, dict):
-                remove_icons_from_dict(value)
-            elif isinstance(value, list):
-                for item in value:
-                    if isinstance(item, dict):
-                        remove_icons_from_dict(item)
-    
-    remove_icons_from_dict(feature['properties'])
-    
-    return feature
-
-
-def _delete_logs_by_log_id(log_id):
-    """Delete all logs from DatabaseLogging table by log_id"""
-    deleted_count = DatabaseLogging.objects.filter(log_id=log_id).delete()[0]
-    return deleted_count
 
 
 class BulkImportJob(BaseJob):
@@ -271,7 +218,7 @@ class BulkImportJob(BaseJob):
             def process_feature_with_index(args: Tuple[int, Dict[str, Any]]) -> Optional[FeatureStore]:
                 """Wrapper to unpack index and feature for executor.map()"""
                 feature_index, feature = args
-                return self._process_single_feature_for_import(
+                return process_single_feature_for_import(
                     feature, feature_index, import_item, user_id, import_custom_icons,
                     existing_hashes, current_batch_hashes, duplicate_check_lock
                 )
@@ -318,7 +265,7 @@ class BulkImportJob(BaseJob):
 
                 # Delete logs before clearing the log_id
                 if import_item.log_id:
-                    _delete_logs_by_log_id(str(import_item.log_id))
+                    delete_logs_by_log_id(str(import_item.log_id))
 
                 # Erase some unneeded data
                 import_item.geofeatures = []
@@ -327,7 +274,7 @@ class BulkImportJob(BaseJob):
                 import_item.save()
                 
                 # Broadcast WebSocket event for item import
-                self._broadcast_item_imported(user_id, import_item.id)
+                broadcast_item_imported(user_id, import_item.id)
 
                 return {'success': True}
             else:
@@ -338,141 +285,4 @@ class BulkImportJob(BaseJob):
             logger.error(f"Import error traceback: {traceback.format_exc()}")
             return {'success': False, 'error': str(e)}
 
-    def _process_single_feature_for_import(
-        self, feature: Dict[str, Any], feature_index: int, import_item: ImportQueue,
-        user_id: int, import_custom_icons: bool, existing_hashes: set,
-        current_batch_hashes: set, duplicate_check_lock: threading.Lock
-    ) -> Optional[FeatureStore]:
-        """
-        Process a single feature for import.
-        """
-        try:
-            c = None
-            if 'geometry' not in feature or not feature['geometry']:
-                return None
-
-            geometry_type = feature['geometry']['type'].lower()
-            match geometry_type:
-                case 'point':
-                    c = PointFeature
-                case 'multipoint':
-                    c = PointFeature
-                case 'linestring':
-                    c = LineStringFeature
-                case 'multilinestring':
-                    c = MultiLineStringFeature
-                case 'polygon':
-                    c = PolygonFeature
-                case 'multipolygon':
-                    c = PolygonFeature
-                case _:
-                    return None
-            
-            assert c is not None
-
-            # Strip icon properties if import_custom_icons is False
-            if not import_custom_icons:
-                feature = strip_icon_properties(feature.copy())
-
-            feature_instance = c(**feature)
-            # Tags are already generated during processing step, just use existing tags
-            existing_tags = feature_instance.properties.tags or []
-            feature_instance.properties.tags = existing_tags
-
-            # Create the GeoJSON data
-            geojson_data = json.loads(feature_instance.model_dump_json())
-
-            # Generate hash-based ID for the feature
-            feature_hash = generate_feature_hash(geojson_data)
-
-            # Check if this feature already exists (thread-safe)
-            with duplicate_check_lock:
-                if feature_hash in existing_hashes or feature_hash in current_batch_hashes:
-                    return None
-                current_batch_hashes.add(feature_hash)
-
-            # Update the feature's ID in the GeoJSON data
-            geojson_data['properties']['id'] = feature_hash
-
-            # Create geometry object for spatial queries
-            geometry = None
-            if 'geometry' in geojson_data and geojson_data['geometry']:
-                try:
-                    geom_data = geojson_data['geometry'].copy()
-
-                    # Handle 3D coordinates
-                    if geom_data['type'] == 'Point':
-                        coords = geom_data['coordinates']
-                        if len(coords) == 2:
-                            coords = [coords[0], coords[1], 0.0]
-                        elif len(coords) == 3:
-                            coords = [coords[0], coords[1], coords[2]]
-                        geom_data['coordinates'] = coords
-                    elif geom_data['type'] == 'LineString':
-                        coords = geom_data['coordinates']
-                        geom_data['coordinates'] = [
-                            [coord[0], coord[1], coord[2] if len(coord) > 2 else 0.0]
-                            for coord in coords
-                        ]
-                    elif geom_data['type'] == 'Polygon':
-                        coords = geom_data['coordinates']
-                        geom_data['coordinates'] = [
-                            [
-                                [coord[0], coord[1], coord[2] if len(coord) > 2 else 0.0]
-                                for coord in ring
-                            ]
-                            for ring in coords
-                        ]
-
-                    geometry = GEOSGeometry(json.dumps(geom_data))
-                except Exception as e:
-                    logger.warning(f"Error creating geometry for feature {feature_index}: {str(e)}")
-
-            # Create FeatureStore object
-            return FeatureStore(
-                geojson=geojson_data,
-                file_hash=feature_hash,
-                geometry=geometry,
-                source=import_item,
-                user_id=user_id
-            )
-        except Exception as e:
-            logger.error(f"Error processing feature {feature_index}: {str(e)}")
-            return None
-
-    def _broadcast_item_imported(self, user_id: int, item_id: int):
-        """Broadcast WebSocket event when an item is imported."""
-        from channels.layers import get_channel_layer
-        from asgiref.sync import async_to_sync
-        from api.models import ImportQueue
-        
-        channel_layer = get_channel_layer()
-        if channel_layer:
-            try:
-                item = ImportQueue.objects.get(id=item_id)
-                item_data = {
-                    'id': item_id,
-                    'original_filename': item.original_filename,
-                    'timestamp': item.timestamp.isoformat()
-                }
-            except ImportQueue.DoesNotExist:
-                item_data = {'id': item_id}
-            
-            # Broadcast to import queue module
-            async_to_sync(channel_layer.group_send)(
-                f"realtime_{user_id}",
-                {
-                    'type': 'import_queue_item_imported',
-                    'data': {'id': item_id}
-                }
-            )
-            
-            # Broadcast to import history module
-            async_to_sync(channel_layer.group_send)(
-                f"realtime_{user_id}",
-                {
-                    'type': 'import_history_item_added',
-                    'data': item_data
-                }
-            )
 

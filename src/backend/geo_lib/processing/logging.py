@@ -164,7 +164,7 @@ class RealTimeImportLog:
                 channel_layer = get_channel_layer()
                 if channel_layer:
                     async_to_sync(channel_layer.group_send)(
-                        f"upload_status_{user_id}_{item_id}",
+                        f"process_status_{user_id}_{item_id}",
                         {
                             'type': 'logs_added',
                             'data': {

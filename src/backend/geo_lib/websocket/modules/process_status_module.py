@@ -1,5 +1,5 @@
 """
-Upload status WebSocket module.
+Process status WebSocket module.
 Handles real-time status updates for a specific import item.
 """
 
@@ -8,14 +8,15 @@ from typing import Dict, Any, Optional
 
 from django.conf import settings
 from geo_lib.processing.status_tracker import status_tracker
+from geo_lib.processing.messages import PROCESSING_FAILED_WITH_LOGS, ERROR_TYPE_FILE_UNPARSABLE
 from geo_lib.websocket.base_module import BaseWebSocketModule
 from geo_lib.logging.console import get_websocket_logger
 
 logger = get_websocket_logger()
 
 
-class UploadStatusModule(BaseWebSocketModule):
-    """WebSocket module for upload status updates for a specific import item."""
+class ProcessStatusModule(BaseWebSocketModule):
+    """WebSocket module for process status updates for a specific import item."""
 
     def __init__(self, consumer, import_item):
         """Initialize with the import item."""
@@ -24,10 +25,10 @@ class UploadStatusModule(BaseWebSocketModule):
 
     @property
     def module_name(self) -> str:
-        return "upload_status"
+        return "process_status"
 
     async def handle_message(self, message_type: str, data: dict) -> None:
-        """Handle incoming messages for upload status module."""
+        """Handle incoming messages for process status module."""
         if message_type == 'refresh':
             await self.send_initial_state()
         elif message_type == 'request_logs':
@@ -38,7 +39,7 @@ class UploadStatusModule(BaseWebSocketModule):
             page_size = data.get('page_size', 50)
             await self.send_page(page, page_size)
         else:
-            logger.warning(f"Unknown message type for upload_status module: {message_type}")
+            logger.warning(f"Unknown message type for process_status module: {message_type}")
 
     async def send_initial_state(self) -> None:
         """Send initial state with item status, features, and logs."""
@@ -294,7 +295,7 @@ class UploadStatusModule(BaseWebSocketModule):
 
         if self.import_item.unparsable:
             return {
-                'data': [{'error': 'file_unparsable', 'message': 'File processing failed. Please check the processing logs below for details.'}],
+                'data': [{'error': ERROR_TYPE_FILE_UNPARSABLE, 'message': PROCESSING_FAILED_WITH_LOGS}],
                 'pagination': {
                     'page': 1,
                     'page_size': page_size,
@@ -344,7 +345,7 @@ class UploadStatusModule(BaseWebSocketModule):
         duplicate_indices = []
 
         # Import normalization function for coordinate comparison
-        from api.views.import_item import _normalize_coordinates
+        from geo_lib.processing.duplicate_detection import normalize_coordinates
         
         # Build a map of normalized coordinates to original indices
         # This allows us to mark ALL features with matching coordinates as duplicates
@@ -355,7 +356,7 @@ class UploadStatusModule(BaseWebSocketModule):
             feature_type = feature_geom.get('type', '').lower()
             
             if feature_coords:
-                normalized_coords = _normalize_coordinates(feature_coords)
+                normalized_coords = normalize_coordinates(feature_coords)
                 coords_key = (feature_type, json.dumps(normalized_coords, sort_keys=True))
                 if coords_key not in coords_to_original_indices:
                     coords_to_original_indices[coords_key] = []
@@ -372,7 +373,7 @@ class UploadStatusModule(BaseWebSocketModule):
                 
                 if dup_coords:
                     # Normalize duplicate feature coordinates for comparison
-                    normalized_dup_coords = _normalize_coordinates(dup_coords)
+                    normalized_dup_coords = normalize_coordinates(dup_coords)
                     coords_key = (dup_type, json.dumps(normalized_dup_coords, sort_keys=True))
                     
                     # Mark ALL features with matching coordinates as duplicates

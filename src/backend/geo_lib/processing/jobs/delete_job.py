@@ -157,35 +157,35 @@ class DeleteJob(BaseJob):
             # Get all user jobs
             user_jobs = self.status_tracker.get_user_jobs(user_id)
 
-            # Find active upload jobs for this item
+            # Find active process jobs for this item
             from geo_lib.processing.status_tracker import JobType
-            active_upload_jobs = [
+            active_process_jobs = [
                 job for job in user_jobs
                 if (job.import_queue_id == item_id and
                     job.status == ProcessingStatus.PROCESSING and
-                    job.job_type == JobType.UPLOAD)
+                    job.job_type == JobType.PROCESS)
             ]
 
-            if active_upload_jobs:
-                logger.info(f"Found {len(active_upload_jobs)} active upload jobs for item {item_id}, cancelling...")
+            if active_process_jobs:
+                logger.info(f"Found {len(active_process_jobs)} active process jobs for item {item_id}, cancelling...")
 
                 # Update delete job status
                 self.status_tracker.update_job_status(
                     delete_job_id, ProcessingStatus.PROCESSING,
-                    f"Cancelling {len(active_upload_jobs)} active upload job(s)...", 30.0
+                    f"Cancelling {len(active_process_jobs)} active process job(s)...", 30.0
                 )
 
-                # Cancel each active upload job
-                for upload_job in active_upload_jobs:
-                    if self.status_tracker.cancel_job(upload_job.job_id):
-                        logger.info(f"Cancelled upload job {upload_job.job_id} for item {item_id}")
+                # Cancel each active process job
+                for process_job in active_process_jobs:
+                    if self.status_tracker.cancel_job(process_job.job_id):
+                        logger.info(f"Cancelled process job {process_job.job_id} for item {item_id}")
 
                 # Wait briefly for graceful cancellation
                 time.sleep(1)
 
-                logger.info(f"Successfully cancelled {len(active_upload_jobs)} upload jobs for item {item_id}")
+                logger.info(f"Successfully cancelled {len(active_process_jobs)} process jobs for item {item_id}")
             else:
-                logger.info(f"No active upload jobs found for item {item_id}")
+                logger.info(f"No active process jobs found for item {item_id}")
 
         except Exception as e:
             logger.warning(f"Error cancelling active processing jobs for item {item_id}: {str(e)}")

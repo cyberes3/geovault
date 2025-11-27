@@ -86,8 +86,8 @@ def generate_auto_tags(
                 all_tags.extend(tags)
         except Exception as e:
             # Log error but continue with other generators
-            from geo_lib.logging.console import get_import_logger
-            logger = get_import_logger()
+            from geo_lib.logging.console import get_job_logger
+            logger = get_job_logger()
             logger.warning(f"Tag generator {generator.__class__.__name__} failed: {e}")
             if import_log:
                 from geo_lib.processing.logging import DatabaseLogLevel

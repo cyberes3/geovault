@@ -1,5 +1,5 @@
 """
-Upload status WebSocket consumer for specific import item updates.
+Process status WebSocket consumer for specific import item updates.
 """
 
 import json
@@ -7,15 +7,15 @@ import json
 from channels.generic.websocket import AsyncWebsocketConsumer
 from django.contrib.auth.models import AnonymousUser
 
-from geo_lib.websocket.modules.upload_status_module import UploadStatusModule
+from geo_lib.websocket.modules.process_status_module import ProcessStatusModule
 from geo_lib.logging.console import get_websocket_logger
 from geo_lib.utils.ip_utils import get_client_ip, get_user_identifier
 
 logger = get_websocket_logger()
 
 
-class UploadStatusConsumer(AsyncWebsocketConsumer):
-    """WebSocket consumer for upload status updates for a specific import item."""
+class ProcessStatusConsumer(AsyncWebsocketConsumer):
+    """WebSocket consumer for process status updates for a specific import item."""
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
@@ -65,7 +65,7 @@ class UploadStatusConsumer(AsyncWebsocketConsumer):
             logger.info(f"WebSocket connected: {path} - {user_identifier}@{client_ip} - Item: {self.item_id}")
 
             # Create item-specific room group
-            self.room_group_name = f"upload_status_{self.user.id}_{self.item_id}"
+            self.room_group_name = f"process_status_{self.user.id}_{self.item_id}"
 
             # Join room group
             await self.channel_layer.group_add(
@@ -73,11 +73,11 @@ class UploadStatusConsumer(AsyncWebsocketConsumer):
                 self.channel_name
             )
 
-            # Load upload status module
-            self.upload_status_module = UploadStatusModule(self, item)
+            # Load process status module
+            self.process_status_module = ProcessStatusModule(self, item)
 
             # Send initial state
-            await self.upload_status_module.send_initial_state()
+            await self.process_status_module.send_initial_state()
 
         except ImportQueue.DoesNotExist:
             # Accept connection briefly to send error message, then close
@@ -140,16 +140,16 @@ class UploadStatusConsumer(AsyncWebsocketConsumer):
                         'data': {}
                     }))
                 elif message_type == 'refresh':
-                    await self.upload_status_module.send_initial_state()
+                    await self.process_status_module.send_initial_state()
                 elif message_type == 'request_logs':
                     after_id = message_data.get('after_id')
-                    await self.upload_status_module.send_logs(after_id)
+                    await self.process_status_module.send_logs(after_id)
                 elif message_type == 'request_page':
                     page = message_data.get('page', 1)
                     page_size = message_data.get('page_size', 50)
-                    await self.upload_status_module.send_page(page, page_size)
+                    await self.process_status_module.send_page(page, page_size)
                 else:
-                    logger.warning(f"Unknown message type for upload status: {message_type}")
+                    logger.warning(f"Unknown message type for process status: {message_type}")
             except json.JSONDecodeError:
                 logger.warning(f"Invalid JSON received from user {self.user.id}")
         elif bytes_data:
@@ -162,22 +162,22 @@ class UploadStatusConsumer(AsyncWebsocketConsumer):
     # Event handlers for WebSocket events
     async def status_updated(self, event):
         """Handle status update events."""
-        await self.upload_status_module.handle_status_updated(event['data'])
+        await self.process_status_module.handle_status_updated(event['data'])
 
     async def logs_added(self, event):
         """Handle new log entries."""
-        await self.upload_status_module.handle_logs_added(event['data'])
+        await self.process_status_module.handle_logs_added(event['data'])
 
     async def item_completed(self, event):
         """Handle item completion."""
-        await self.upload_status_module.handle_item_completed(event['data'])
+        await self.process_status_module.handle_item_completed(event['data'])
 
     async def item_failed(self, event):
         """Handle item failure."""
-        await self.upload_status_module.handle_item_failed(event['data'])
+        await self.process_status_module.handle_item_failed(event['data'])
 
     async def item_deleted(self, event):
         """Handle item deletion event."""
-        await self.upload_status_module.handle_item_deleted(event['data'])
+        await self.process_status_module.handle_item_deleted(event['data'])
         # Close the connection since the item no longer exists
         await self.close()

@@ -16,10 +16,10 @@ from urllib.request import urlopen, Request
 
 from django.conf import settings
 
-from geo_lib.logging.console import get_import_logger
+from geo_lib.logging.console import get_job_logger
 from geo_lib.processing.logging import ImportLog, DatabaseLogLevel
 
-logger = get_import_logger()
+logger = get_job_logger()
 
 # Valid image file extensions
 VALID_ICON_EXTENSIONS = {'.png', '.jpg', '.jpeg', '.gif', '.bmp', '.svg', '.webp', '.ico'}

@@ -1,5 +1,6 @@
 """
-Upload job processor for asynchronous file processing.
+Process job processor for asynchronous file processing.
+Handles converting uploaded files to geojson representation.
 """
 
 import os
@@ -12,26 +13,33 @@ from django.contrib.auth.models import User
 from django.db import transaction
 
 from api.models import ImportQueue, UserSettings
+from geo_lib.logging.console import get_job_logger
 from geo_lib.processing.jobs.base_job import BaseJob
 from geo_lib.processing.logging import RealTimeImportLog, DatabaseLogLevel
+from geo_lib.processing.messages import (
+    PROCESSING_FAILED,
+    FILE_VALIDATION_FAILED,
+    ERROR_OCCURRED_DURING_PROCESSING,
+    PROCESSING_TIMEOUT,
+    ERROR_TYPE_PROCESSING_FAILED
+)
 from geo_lib.processing.processors import get_processor
 from geo_lib.processing.status_tracker import ProcessingStatus
 from geo_lib.security.file_validation import SecureFileValidator, SecurityError, FileValidationError
-from geo_lib.logging.console import get_import_logger
 
-logger = get_import_logger()
+logger = get_job_logger()
 
 
-class UploadJob(BaseJob):
+class ProcessJob(BaseJob):
     """
-    Handles asynchronous processing of uploaded files.
+    Handles asynchronous file processing (converting to geojson).
     Refactored from AsyncFileProcessor to use the new job system.
     """
 
     def get_job_type(self) -> str:
-        return "upload"
+        return "process"
 
-    def start_upload_job(self, job_id: str, file_data: bytes, filename: str, user_id: int, replacement_feature_id: Optional[int] = None) -> bool:
+    def start_process_job(self, job_id: str, file_data: bytes, filename: str, user_id: int, replacement_feature_id: Optional[int] = None) -> bool:
         """
         Start processing a file in a background thread.
         
@@ -59,9 +67,57 @@ class UploadJob(BaseJob):
         # Start the job
         return self.start_job(job_id, file_data=file_data, filename=filename, user_id=user_id)
 
+    def _mark_import_queue_as_failed(self, import_queue_id: int, error_message: str):
+        """
+        Mark an ImportQueue item as unparsable and save error information.
+        """
+        try:
+            import_queue = ImportQueue.objects.get(id=import_queue_id)
+            import_queue.unparsable = True
+            # Set geofeatures to indicate processing failure
+            import_queue.geofeatures = [{
+                'error': ERROR_TYPE_PROCESSING_FAILED,
+                'message': error_message
+            }]
+            import_queue.save()
+        except ImportQueue.DoesNotExist:
+            logger.warning(f"ImportQueue {import_queue_id} not found when marking as failed")
+        except Exception as e:
+            logger.error(f"Failed to mark ImportQueue {import_queue_id} as unparsable: {str(e)}")
+
+    def _handle_processing_error(self, job_id: str, user_id: int, error_msg: str, detailed_error: str, realtime_log: RealTimeImportLog):
+        """
+        Handle processing errors by logging, updating status, and broadcasting events.
+        """
+        realtime_log.add(error_msg, "ProcessJob", DatabaseLogLevel.ERROR)
+
+        self.status_tracker.update_job_status(
+            job_id, ProcessingStatus.FAILED,
+            error_msg, error_message=detailed_error
+        )
+
+        # Mark ImportQueue item as unparsable
+        job = self.status_tracker.get_job(job_id)
+        if job and job.import_queue_id:
+            self._mark_import_queue_as_failed(job.import_queue_id, detailed_error)
+
+            # Broadcast high-level status to realtime channel (processing failed)
+            self._broadcast_to_import_queue_module(user_id, 'status_updated', {
+                'id': job.import_queue_id,
+                'status': 'failed',
+                'progress': 0.0,
+                'message': PROCESSING_FAILED
+            })
+
+            # Broadcast detailed failure to process status channel
+            self._broadcast_to_process_status_module(user_id, job.import_queue_id, 'item_failed', {
+                'job_id': job_id,
+                'error_message': error_msg
+            })
+
     def _execute_job(self, job_id: str, kwargs: Dict[str, Any]):
         """
-        Execute the upload job processing logic.
+        Execute the process job processing logic.
         """
         file_data = kwargs['file_data']
         filename = kwargs['filename']
@@ -70,7 +126,7 @@ class UploadJob(BaseJob):
         # Get the job for user info
         job = self.status_tracker.get_job(job_id)
         if not job:
-            logger.error(f"Upload job {job_id} not found")
+            logger.error(f"Process job {job_id} not found")
             return
 
         # Get the import queue ID for logging
@@ -110,8 +166,8 @@ class UploadJob(BaseJob):
                 'message': 'Processing started'
             })
 
-            # Broadcast detailed status to upload status channel
-            self._broadcast_to_upload_status_module(user_id, import_queue_id, 'status_updated', {
+            # Broadcast detailed status to process status channel
+            self._broadcast_to_process_status_module(user_id, import_queue_id, 'status_updated', {
                 'status': 'processing',
                 'progress': 12.0,
                 'message': 'Starting file validation and processing...'
@@ -124,12 +180,12 @@ class UploadJob(BaseJob):
             )
 
             # Broadcast WebSocket event for status update
-            self._broadcast_to_upload_status_module(user_id, import_queue_id, 'status_updated', {
+            self._broadcast_to_process_status_module(user_id, import_queue_id, 'status_updated', {
                 'status': 'processing',
                 'progress': 24.0,
                 'message': 'Validating file format and security...'
             })
-            realtime_log.add("Validating file format and security", "UploadJob", DatabaseLogLevel.INFO)
+            realtime_log.add("Validating file format and security", "ProcessJob", DatabaseLogLevel.INFO)
 
             # Create a mock uploaded file for validation
             from django.core.files.uploadedfile import SimpleUploadedFile
@@ -144,11 +200,15 @@ class UploadJob(BaseJob):
             validation_start = time.time()
             is_valid, validation_message = validator.validate_file(uploaded_file)
             validation_duration = time.time() - validation_start
-            realtime_log.add_timing("File validation", validation_duration, "UploadJob")
+            realtime_log.add_timing("File validation", validation_duration, "ProcessJob")
 
             if not is_valid:
-                error_msg = f"File validation failed: {validation_message}"
-                realtime_log.add(error_msg, "UploadJob", DatabaseLogLevel.ERROR)
+                error_msg = f"{FILE_VALIDATION_FAILED}: {validation_message}"
+                realtime_log.add(error_msg, "ProcessJob", DatabaseLogLevel.ERROR)
+
+                # Mark ImportQueue item as unparsable and save error information
+                self._mark_import_queue_as_failed(import_queue_id, validation_message)
+
                 self.status_tracker.update_job_status(
                     job_id, ProcessingStatus.FAILED,
                     error_msg,
@@ -160,17 +220,17 @@ class UploadJob(BaseJob):
                     'id': import_queue_id,
                     'status': 'failed',
                     'progress': 0.0,
-                    'message': 'Processing failed'
+                    'message': PROCESSING_FAILED
                 })
 
-                # Broadcast detailed failure to upload status channel
-                self._broadcast_to_upload_status_module(user_id, import_queue_id, 'item_failed', {
+                # Broadcast detailed failure to process status channel
+                self._broadcast_to_process_status_module(user_id, import_queue_id, 'item_failed', {
                     'job_id': job_id,
                     'error_message': error_msg
                 })
                 return
 
-            realtime_log.add("File validation passed successfully", "UploadJob", DatabaseLogLevel.INFO)
+            realtime_log.add("File validation passed successfully", "ProcessJob", DatabaseLogLevel.INFO)
 
             # Check if job was cancelled after validation
             job = self.status_tracker.get_job(job_id)
@@ -193,7 +253,7 @@ class UploadJob(BaseJob):
             )
 
             # Broadcast WebSocket event for status update
-            self._broadcast_to_upload_status_module(user_id, import_queue_id, 'status_updated', {
+            self._broadcast_to_process_status_module(user_id, import_queue_id, 'status_updated', {
                 'status': 'processing',
                 'progress': validation_progress,
                 'message': 'File validation passed, starting conversion...'
@@ -206,12 +266,12 @@ class UploadJob(BaseJob):
             )
 
             # Broadcast WebSocket event for status update
-            self._broadcast_to_upload_status_module(user_id, import_queue_id, 'status_updated', {
+            self._broadcast_to_process_status_module(user_id, import_queue_id, 'status_updated', {
                 'status': 'processing',
                 'progress': conversion_progress,
                 'message': 'Converting to GeoJSON format...'
             })
-            realtime_log.add("Starting GeoJSON conversion", "UploadJob", DatabaseLogLevel.INFO)
+            realtime_log.add("Starting GeoJSON conversion", "ProcessJob", DatabaseLogLevel.INFO)
 
             # Check if job was cancelled before conversion
             job = self.status_tracker.get_job(job_id)
@@ -220,23 +280,23 @@ class UploadJob(BaseJob):
 
             # Get file size for logging
             file_size_mb = len(file_data) / (1024 * 1024)
-            realtime_log.add(f"Processing {file_size_mb:.1f}MB file", "UploadJob", DatabaseLogLevel.INFO)
+            realtime_log.add(f"Processing {file_size_mb:.1f}MB file", "ProcessJob", DatabaseLogLevel.INFO)
 
             # Convert to GeoJSON with timing using new processor API
             # Use minimal processing for replacement uploads (skip tags, geocoding)
             conversion_start = time.time()
             logger.info(f"Starting GeoJSON conversion for job {job_id}: file '{filename}' ({file_size_mb:.2f} MB), replacement={is_replacement}")
             processor = get_processor(
-                file_data, 
-                filename, 
-                job_id=job_id, 
+                file_data,
+                filename,
+                job_id=job_id,
                 status_tracker=self.status_tracker,
                 minimal_processing=is_replacement
             )
             geojson_data, processing_log = processor.process()
             logger.info(f"GeoJSON conversion completed for job {job_id} in {time.time() - conversion_start:.2f}s")
             conversion_duration = time.time() - conversion_start
-            realtime_log.add_timing("GeoJSON conversion", conversion_duration, "UploadJob")
+            realtime_log.add_timing("GeoJSON conversion", conversion_duration, "ProcessJob")
 
             # Check if job was cancelled during processing
             job = self.status_tracker.get_job(job_id)
@@ -250,7 +310,7 @@ class UploadJob(BaseJob):
                 if user_settings_obj and user_settings_obj.settings:
                     import_settings = user_settings_obj.settings.get('import', {})
                     overwrite_enabled = import_settings.get('overwrite_single_track_name_with_filename', False)
-                    
+
                     if overwrite_enabled:
                         features = geojson_data.get('features', [])
                         # Check if there's exactly one feature
@@ -259,14 +319,14 @@ class UploadJob(BaseJob):
                             geometry = feature.get('geometry', {})
                             geometry_type = geometry.get('type', '').lower() if geometry else ''
                             properties = feature.get('properties', {})
-                            
+
                             # Check if it's a track (LineString or MultiLineString)
                             is_track_geometry = geometry_type in ['linestring', 'multilinestring']
-                            
+
                             # Check if it has the is-track:yes tag
                             system_tags = properties.get('system_tags', [])
                             is_track_tagged = 'is-track:yes' in system_tags if isinstance(system_tags, list) else False
-                            
+
                             if is_track_geometry and is_track_tagged:
                                 # Extract filename without extension
                                 filename_without_ext = os.path.splitext(filename)[0]
@@ -293,12 +353,12 @@ class UploadJob(BaseJob):
             )
 
             # Broadcast WebSocket event for status update
-            self._broadcast_to_upload_status_module(user_id, import_queue_id, 'status_updated', {
+            self._broadcast_to_process_status_module(user_id, import_queue_id, 'status_updated', {
                 'status': 'processing',
                 'progress': 60.0,
                 'message': 'Processing features...'
             })
-            realtime_log.add("Processing features", "UploadJob", DatabaseLogLevel.INFO)
+            realtime_log.add("Processing features", "ProcessJob", DatabaseLogLevel.INFO)
 
             # Process features and update import queue entry
             self.status_tracker.update_job_status(
@@ -307,16 +367,16 @@ class UploadJob(BaseJob):
             )
 
             # Broadcast WebSocket event for status update
-            self._broadcast_to_upload_status_module(user_id, import_queue_id, 'status_updated', {
+            self._broadcast_to_process_status_module(user_id, import_queue_id, 'status_updated', {
                 'status': 'processing',
                 'progress': 72.0,
                 'message': 'Updating database entry...'
             })
-            realtime_log.add("Updating database entry", "UploadJob", DatabaseLogLevel.INFO)
+            realtime_log.add("Updating database entry", "ProcessJob", DatabaseLogLevel.INFO)
 
             # Count features for logging
             feature_count = len(geojson_data.get('features', []))
-            realtime_log.add(f"Found {feature_count} features to process", "UploadJob", DatabaseLogLevel.INFO)
+            realtime_log.add(f"Found {feature_count} features to process", "ProcessJob", DatabaseLogLevel.INFO)
 
             # Check if job was cancelled before database update
             job = self.status_tracker.get_job(job_id)
@@ -329,11 +389,11 @@ class UploadJob(BaseJob):
                 geojson_data, realtime_log, filename, user_id, job_id, geojson_str, geojson_size_mb, file_data
             )
             feature_processing_duration = time.time() - feature_processing_start
-            realtime_log.add_timing("Feature processing and database update", feature_processing_duration, "UploadJob")
+            realtime_log.add_timing("Feature processing and database update", feature_processing_duration, "ProcessJob")
 
             # Mark as completed
             overall_duration = time.time() - overall_start_time
-            realtime_log.add_timing("Total file processing", overall_duration, "UploadJob")
+            realtime_log.add_timing("Total file processing", overall_duration, "ProcessJob")
 
             completion_msg = f"File processing completed! Processed {feature_count} features in {overall_duration:.1f}s"
             self.status_tracker.update_job_status(
@@ -349,12 +409,12 @@ class UploadJob(BaseJob):
                 'message': 'Processing completed'
             })
 
-            # Broadcast detailed completion to upload status channel
-            self._broadcast_to_upload_status_module(user_id, import_queue_id, 'item_completed', {
+            # Broadcast detailed completion to process status channel
+            self._broadcast_to_process_status_module(user_id, import_queue_id, 'item_completed', {
                 'job_id': job_id,
                 'message': completion_msg
             })
-            realtime_log.add(completion_msg, "UploadJob", DatabaseLogLevel.INFO)
+            realtime_log.add(completion_msg, "ProcessJob", DatabaseLogLevel.INFO)
 
             # Set result data
             self.status_tracker.set_job_result(
@@ -368,85 +428,25 @@ class UploadJob(BaseJob):
 
         except (SecurityError, FileValidationError) as e:
             # Use the error message directly from the validation
-            error_msg = f"File validation failed: {str(e)}"
+            error_msg = f"{FILE_VALIDATION_FAILED}: {str(e)}"
             # Log detailed error internally for debugging
             logger.error(f"Security error in job {job_id}: {str(e)}")
-            realtime_log.add(error_msg, "UploadJob", DatabaseLogLevel.ERROR)
-            self.status_tracker.update_job_status(
-                job_id, ProcessingStatus.FAILED,
-                error_msg, error_message=str(e)
-            )
-
-            # Broadcast high-level status to realtime channel (processing failed)
-            job = self.status_tracker.get_job(job_id)
-            if job and job.import_queue_id:
-                self._broadcast_to_import_queue_module(user_id, 'status_updated', {
-                    'id': job.import_queue_id,
-                    'status': 'failed',
-                    'progress': 0.0,
-                    'message': 'Processing failed'
-                })
-
-                # Broadcast detailed failure to upload status channel
-                self._broadcast_to_upload_status_module(user_id, job.import_queue_id, 'item_failed', {
-                    'job_id': job_id,
-                    'error_message': error_msg
-                })
+            self._handle_processing_error(job_id, user_id, error_msg, str(e), realtime_log)
 
         except subprocess.TimeoutExpired:
-            error_msg = "File processing timed out: file may be too large or complex"
+            error_msg = PROCESSING_TIMEOUT
             logger.error(f"Processing timeout for job {job_id}")
-            realtime_log.add(error_msg, "UploadJob", DatabaseLogLevel.ERROR)
-            self.status_tracker.update_job_status(
-                job_id, ProcessingStatus.FAILED,
-                error_msg, error_message=error_msg
-            )
-
-            # Broadcast high-level status to realtime channel (processing failed)
-            job = self.status_tracker.get_job(job_id)
-            if job and job.import_queue_id:
-                self._broadcast_to_import_queue_module(user_id, 'status_updated', {
-                    'id': job.import_queue_id,
-                    'status': 'failed',
-                    'progress': 0.0,
-                    'message': 'Processing failed'
-                })
-
-                # Broadcast detailed failure to upload status channel
-                self._broadcast_to_upload_status_module(user_id, job.import_queue_id, 'item_failed', {
-                    'job_id': job_id,
-                    'error_message': error_msg
-                })
+            self._handle_processing_error(job_id, user_id, error_msg, error_msg, realtime_log)
 
         except Exception as e:
             # Generic error message for users, detailed logging internally
-            error_msg = "An error occurred during file processing"
+            error_msg = ERROR_OCCURRED_DURING_PROCESSING
             # Get file info for better error context
             file_size_mb = len(file_data) / (1024 * 1024) if file_data else 0
             # Log detailed error internally only (not exposed to user via RealTimeImportLog)
             logger.error(f"Processing error in job {job_id} for file '{filename}' ({file_size_mb:.2f} MB): {type(e).__name__}: {str(e)}")
             logger.error(f"Full traceback for job {job_id}: {traceback.format_exc()}")
-            realtime_log.add(error_msg, "UploadJob", DatabaseLogLevel.ERROR)
-            self.status_tracker.update_job_status(
-                job_id, ProcessingStatus.FAILED,
-                error_msg, error_message=error_msg
-            )
-
-            # Broadcast high-level status to realtime channel (processing failed)
-            job = self.status_tracker.get_job(job_id)
-            if job and job.import_queue_id:
-                self._broadcast_to_import_queue_module(user_id, 'status_updated', {
-                    'id': job.import_queue_id,
-                    'status': 'failed',
-                    'progress': 0.0,
-                    'message': 'Processing failed'
-                })
-
-                # Broadcast detailed failure to upload status channel
-                self._broadcast_to_upload_status_module(user_id, job.import_queue_id, 'item_failed', {
-                    'job_id': job_id,
-                    'error_message': error_msg
-                })
+            self._handle_processing_error(job_id, user_id, error_msg, error_msg, realtime_log)
 
     def _create_initial_import_queue_entry(self, filename: str, user_id: int, job_id: str, replacement_feature_id: Optional[int] = None) -> int:
         """Create an initial ImportQueue entry for async processing."""
@@ -502,7 +502,7 @@ class UploadJob(BaseJob):
                 # Process features using the processor's already processed features
                 features = geojson_data.get('features', [])
 
-                processing_log.add(f"Processing {len(features)} features from uploaded file", "UploadJob", DatabaseLogLevel.INFO)
+                processing_log.add(f"Processing {len(features)} features from uploaded file", "ProcessJob", DatabaseLogLevel.INFO)
                 # Features are already processed by the processor, so we use them directly
                 processed_features = features
 
@@ -513,9 +513,9 @@ class UploadJob(BaseJob):
                     feature_types[geom_type] = feature_types.get(geom_type, 0) + 1
 
                 type_summary = ', '.join([f"{count} {ftype}" for ftype, count in feature_types.items()])
-                processing_log.add(f"Feature breakdown: {type_summary}", "UploadJob", DatabaseLogLevel.INFO)
-                processing_log.add(f"Successfully processed {len(processed_features)} features", "UploadJob", DatabaseLogLevel.INFO)
-                processing_log.add("Preparing to save processed data to database", "UploadJob", DatabaseLogLevel.INFO)
+                processing_log.add(f"Feature breakdown: {type_summary}", "ProcessJob", DatabaseLogLevel.INFO)
+                processing_log.add(f"Successfully processed {len(processed_features)} features", "ProcessJob", DatabaseLogLevel.INFO)
+                processing_log.add("Preparing to save processed data to database", "ProcessJob", DatabaseLogLevel.INFO)
 
                 # Store the raw file hash for duplicate detection
                 # Note: field is named geojson_hash for historical reasons, but stores raw file hash
@@ -523,10 +523,10 @@ class UploadJob(BaseJob):
 
                 # Check if this is a replacement upload - skip duplicate detection for fast path
                 is_replacement = import_queue.replacement is not None
-                
+
                 if is_replacement:
                     # Fast path: skip duplicate detection entirely for replacement uploads
-                    processing_log.add("Skipping duplicate detection for replacement upload (fast path)", "UploadJob", DatabaseLogLevel.INFO)
+                    processing_log.add("Skipping duplicate detection for replacement upload (fast path)", "ProcessJob", DatabaseLogLevel.INFO)
                     duplicate_features = []  # No duplicates tracked for replacements
                 else:
                     # Normal path: perform duplicate detection
@@ -534,7 +534,7 @@ class UploadJob(BaseJob):
                     job = self.status_tracker.get_job(job_id)
                     if job and job.status == ProcessingStatus.CANCELLED:
                         logger.info(f"Job {job_id} was cancelled before duplicate detection")
-                        processing_log.add("Processing cancelled before duplicate detection", "UploadJob", DatabaseLogLevel.WARNING)
+                        processing_log.add("Processing cancelled before duplicate detection", "ProcessJob", DatabaseLogLevel.WARNING)
                         return import_queue.id
 
                     # Update progress for duplicate detection
@@ -544,20 +544,20 @@ class UploadJob(BaseJob):
                     )
 
                     # Broadcast WebSocket event for status update
-                    self._broadcast_to_upload_status_module(user_id, import_queue.id, 'status_updated', {
+                    self._broadcast_to_process_status_module(user_id, import_queue.id, 'status_updated', {
                         'status': 'processing',
                         'progress': 84.0,
                         'message': 'Checking for duplicate features...'
                     })
 
                     # Perform duplicate detection against existing features
-                    processing_log.add("Starting duplicate detection against existing feature store", "UploadJob", DatabaseLogLevel.INFO)
+                    processing_log.add("Starting duplicate detection against existing feature store", "ProcessJob", DatabaseLogLevel.INFO)
 
                     # Import the duplicate detection functions
-                    from api.views.import_item import find_coordinate_duplicates, strip_duplicate_features
+                    from geo_lib.processing.duplicate_detection import find_coordinate_duplicates, strip_duplicate_features
 
                     # First, check for internal duplicates within the file
-                    processing_log.add("Checking for internal duplicates within the uploaded file", "UploadJob", DatabaseLogLevel.INFO)
+                    processing_log.add("Checking for internal duplicates within the uploaded file", "ProcessJob", DatabaseLogLevel.INFO)
                     unique_internal_features, internal_duplicate_count, internal_duplicate_log = strip_duplicate_features(processed_features)
                     processing_log.extend(internal_duplicate_log)
 
@@ -565,37 +565,37 @@ class UploadJob(BaseJob):
                     job = self.status_tracker.get_job(job_id)
                     if job and job.status == ProcessingStatus.CANCELLED:
                         logger.info(f"Job {job_id} was cancelled after internal duplicate detection")
-                        processing_log.add("Processing cancelled after internal duplicate detection", "UploadJob", DatabaseLogLevel.WARNING)
+                        processing_log.add("Processing cancelled after internal duplicate detection", "ProcessJob", DatabaseLogLevel.WARNING)
                         return import_queue.id
 
                     # Then check for coordinate duplicates against existing features
-                    processing_log.add("Checking for coordinate duplicates against existing features in your library", "UploadJob", DatabaseLogLevel.INFO)
+                    processing_log.add("Checking for coordinate duplicates against existing features in your library", "ProcessJob", DatabaseLogLevel.INFO)
                     duplicate_detection_start = time.time()
                     unique_features, duplicate_features, duplicate_log = find_coordinate_duplicates(unique_internal_features, user_id)
                     duplicate_detection_duration = time.time() - duplicate_detection_start
                     processing_log.extend(duplicate_log)
-                    processing_log.add_timing("Duplicate detection", duplicate_detection_duration, "UploadJob")
+                    processing_log.add_timing("Duplicate detection", duplicate_detection_duration, "ProcessJob")
 
                     # Check for cancellation after duplicate detection
                     job = self.status_tracker.get_job(job_id)
                     if job and job.status == ProcessingStatus.CANCELLED:
                         logger.info(f"Job {job_id} was cancelled after duplicate detection")
-                        processing_log.add("Processing cancelled after duplicate detection", "UploadJob", DatabaseLogLevel.WARNING)
+                        processing_log.add("Processing cancelled after duplicate detection", "ProcessJob", DatabaseLogLevel.WARNING)
                         return import_queue.id
 
                     # Log summary of duplicate detection results
                     total_duplicates = internal_duplicate_count + len(duplicate_features)
-                    processing_log.add(f"Duplicate detection completed: {internal_duplicate_count} internal duplicates, {len(duplicate_features)} existing duplicates", "UploadJob", DatabaseLogLevel.INFO)
+                    processing_log.add(f"Duplicate detection completed: {internal_duplicate_count} internal duplicates, {len(duplicate_features)} existing duplicates", "ProcessJob", DatabaseLogLevel.INFO)
 
                     # Use the original processed_features (not unique_features) to preserve all features
                     # The duplicate_features list contains the duplicate information we need
-                    processing_log.add(f"Total duplicate features found: {total_duplicates}", "UploadJob", DatabaseLogLevel.INFO)
+                    processing_log.add(f"Total duplicate features found: {total_duplicates}", "ProcessJob", DatabaseLogLevel.INFO)
 
                 # Check for cancellation before database save
                 job = self.status_tracker.get_job(job_id)
                 if job and job.status == ProcessingStatus.CANCELLED:
                     logger.info(f"Job {job_id} was cancelled before database save")
-                    processing_log.add("Processing cancelled before database save", "UploadJob", DatabaseLogLevel.WARNING)
+                    processing_log.add("Processing cancelled before database save", "ProcessJob", DatabaseLogLevel.WARNING)
                     return import_queue.id
 
                 # Update progress for database save (different percentages for fast vs normal path)
@@ -607,21 +607,21 @@ class UploadJob(BaseJob):
                     # Normal path: 96% after duplicate detection
                     progress = 96.0
                     message = "Saving features to database..."
-                
+
                 self.status_tracker.update_job_status(
                     job_id, ProcessingStatus.PROCESSING,
                     message, progress
                 )
 
                 # Broadcast WebSocket event for status update
-                self._broadcast_to_upload_status_module(user_id, import_queue.id, 'status_updated', {
+                self._broadcast_to_process_status_module(user_id, import_queue.id, 'status_updated', {
                     'status': 'processing',
                     'progress': progress,
                     'message': message
                 })
 
                 # Save the features to the database
-                processing_log.add(f"Saving {len(processed_features)} features to database ({geojson_size_mb:.2f} MB)", "UploadJob", DatabaseLogLevel.INFO)
+                processing_log.add(f"Saving {len(processed_features)} features to database ({geojson_size_mb:.2f} MB)", "ProcessJob", DatabaseLogLevel.INFO)
 
                 # Store raw file content (convert bytes to string if needed)
                 if isinstance(raw_file_data, bytes):
@@ -634,14 +634,14 @@ class UploadJob(BaseJob):
                         raw_file_content = base64.b64encode(raw_file_data).decode('utf-8')
                 else:
                     raw_file_content = raw_file_data
-                
+
                 import_queue.raw_file = raw_file_content
                 import_queue.geojson_hash = geojson_hash
                 import_queue.geofeatures = processed_features
                 import_queue.duplicate_features = duplicate_features  # Store duplicate information
                 import_queue.save()
 
-                processing_log.add("Import queue entry updated successfully", "UploadJob", DatabaseLogLevel.INFO)
+                processing_log.add("Import queue entry updated successfully", "ProcessJob", DatabaseLogLevel.INFO)
 
                 # Broadcast status update to trigger queue refresh so duplicate status is updated
                 self._broadcast_to_import_queue_module(user_id, 'status_updated', {'id': import_queue.id})
@@ -674,15 +674,15 @@ class UploadJob(BaseJob):
         """Broadcast WebSocket event when a new item is added to import queue."""
         self._broadcast_to_import_queue_module(user_id, 'item_added', {'id': import_queue_id})
 
-    def _broadcast_to_upload_status_module(self, user_id: int, import_queue_id: int, event_type: str, data: dict):
-        """Broadcast WebSocket event to upload_status module for specific item."""
+    def _broadcast_to_process_status_module(self, user_id: int, import_queue_id: int, event_type: str, data: dict):
+        """Broadcast WebSocket event to process_status module for specific item."""
         from channels.layers import get_channel_layer
         from asgiref.sync import async_to_sync
 
         channel_layer = get_channel_layer()
         if channel_layer:
             async_to_sync(channel_layer.group_send)(
-                f"upload_status_{user_id}_{import_queue_id}",
+                f"process_status_{user_id}_{import_queue_id}",
                 {
                     'type': event_type,
                     'data': data

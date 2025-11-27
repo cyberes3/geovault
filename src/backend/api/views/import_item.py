@@ -1,538 +1,23 @@
 import copy
-import hashlib
 import json
-import threading
 import traceback
-from concurrent.futures import ThreadPoolExecutor
-from typing import List, Dict, Tuple, Any, Optional
 
 from django import forms
-from django.conf import settings
-from django.contrib.gis.geos import GEOSGeometry
-from website.settings_utils import get_required_setting
 from django.http import HttpResponse, JsonResponse
 from django.views.decorators.csrf import csrf_protect
 from django.views.decorators.http import require_http_methods
 
-from api.models import ImportQueue, FeatureStore, DatabaseLogging
-from geo_lib.const_strings import CONST_INTERNAL_TAGS, filter_protected_tags, is_protected_tag, prepare_user_tags
-from geo_lib.feature_id import generate_feature_hash
+from api.models import ImportQueue
+from geo_lib.const_strings import CONST_INTERNAL_TAGS, filter_protected_tags, prepare_user_tags
 from geo_lib.logging.console import get_access_logger
-from geo_lib.processing.jobs import upload_job, delete_job
-from geo_lib.processing.logging import ImportLog, DatabaseLogLevel
+from geo_lib.processing.jobs import process_job, delete_job, import_job
 from geo_lib.processing.status_tracker import status_tracker
-from geo_lib.security.file_validation import SecureFileValidator
-from geo_lib.types.feature import PointFeature, PolygonFeature, LineStringFeature, MultiLineStringFeature
+from geo_lib.security.file_validation import basic_file_security_check
 from geo_lib.validation.geojson_whitelist import validate_and_normalize_geojson_feature
 from geo_lib.validation.geometry_validation import GeometryValidationError
 from geo_lib.website.auth import login_required_401
 
 logger = get_access_logger()
-
-
-def strip_icon_properties(feature: dict) -> dict:
-    """
-    Remove icon-related properties from a feature.
-    
-    Args:
-        feature: Feature dictionary with properties
-        
-    Returns:
-        Feature dictionary with icon properties removed
-    """
-    if not isinstance(feature, dict) or 'properties' not in feature:
-        return feature
-
-    # Common property names that might contain icon hrefs
-    icon_property_names = [
-        'marker-symbol',
-        'icon',
-        'icon-href',
-        'iconUrl',
-        'icon_url',
-        'marker-icon',
-        'symbol',
-        'styleUrl',  # KML style URLs might reference icons
-    ]
-
-    # Remove icon properties
-    for prop_name in icon_property_names:
-        if prop_name in feature['properties']:
-            del feature['properties'][prop_name]
-
-    # Also check nested structures (e.g., style objects)
-    def remove_icons_from_dict(d):
-        if not isinstance(d, dict):
-            return
-        for key, value in list(d.items()):
-            if key in icon_property_names:
-                del d[key]
-            elif isinstance(value, dict):
-                remove_icons_from_dict(value)
-            elif isinstance(value, list):
-                for item in value:
-                    if isinstance(item, dict):
-                        remove_icons_from_dict(item)
-
-    remove_icons_from_dict(feature['properties'])
-
-    return feature
-
-
-def strip_duplicate_features(features) -> Tuple[List[Any], int, ImportLog]:
-    """Remove 100% duplicate features and log the process."""
-    import_log = ImportLog()
-
-    if not features:
-        return features, 0, import_log
-
-    import_log.add(f"Checking {len(features)} features for internal duplicates", "Duplicate Detection", DatabaseLogLevel.INFO)
-
-    # Track features by hash
-    seen_hashes = set()
-    unique_features = []
-    duplicate_feature_count = 0
-
-    for feature in features:
-        # Generate hash for this feature
-        feature_hash = generate_feature_hash(feature)
-
-        if feature_hash in seen_hashes:
-            # This is a duplicate
-            duplicate_feature_count += 1
-            feature_name = feature.get('properties', {}).get('name', 'Unnamed')
-            feature_type = feature.get('geometry', {}).get('type', 'Unknown')
-            import_log.add(f"Duplicate within file: '{feature_name}' ({feature_type})", 'Duplicate Detection', DatabaseLogLevel.INFO)
-        else:
-            # This is a unique feature
-            seen_hashes.add(feature_hash)
-            unique_features.append(feature)
-
-    if duplicate_feature_count > 0:
-        import_log.add(f"Removed {duplicate_feature_count} duplicate features within the file", "Duplicate Detection", DatabaseLogLevel.INFO)
-    else:
-        import_log.add("No duplicate features found within the file", "Duplicate Detection", DatabaseLogLevel.INFO)
-
-    return unique_features, duplicate_feature_count, import_log
-
-
-def _normalize_coordinates(coords: List, tolerance: float = 1e-6) -> List:
-    """Normalize coordinates by rounding to specified tolerance."""
-    if isinstance(coords[0], (int, float)):
-        # Single coordinate pair
-        return [round(coord, 6) for coord in coords]
-    else:
-        # Nested coordinates (LineString or Polygon)
-        return [_normalize_coordinates(coord, tolerance) for coord in coords]
-
-
-def _coordinates_match(coord1: List, coord2: List, tolerance: float = 1e-6) -> bool:
-    """Check if two coordinate sets match within tolerance."""
-    norm1 = _normalize_coordinates(coord1, tolerance)
-    norm2 = _normalize_coordinates(coord2, tolerance)
-    return norm1 == norm2
-
-
-def find_coordinate_duplicates(features: List[Dict], user_id: int) -> Tuple[List[Dict], List[Dict], ImportLog]:
-    """
-    Find features that have duplicate coordinates in the existing featurestore.
-    Returns (unique_features, duplicate_features_with_originals, log_messages)
-    """
-    import_log = ImportLog()
-
-    if not features:
-        return features, [], import_log
-
-    import_log.add(f"Checking {len(features)} features against existing features in your library", "Duplicate Detection", DatabaseLogLevel.INFO)
-
-    # For large files, use batched approach to reduce database queries
-    batch_threshold = get_required_setting('DUPLICATE_DETECTION_BATCH_THRESHOLD')
-    if len(features) > batch_threshold:
-        import_log.add("Using optimized batch processing for large file", "Duplicate Detection", DatabaseLogLevel.INFO)
-        return _find_coordinate_duplicates_batched(features, user_id, import_log)
-
-    # For smaller files, use the original approach
-    unique_features = []
-    duplicate_features = []
-
-    for feature in features:
-        geometry = feature.get('geometry', {})
-        geom_type = geometry.get('type', '').lower()
-        coordinates = geometry.get('coordinates', [])
-
-        if not coordinates:
-            # Skip features without coordinates
-            unique_features.append(feature)
-            continue
-
-        # Check for existing features with matching coordinates
-        existing_features = _find_existing_features_by_coordinates(coordinates, geom_type, user_id)
-
-        if existing_features:
-            # This is a duplicate - add original feature info
-            duplicate_info = {
-                'feature': feature,
-                'existing_features': existing_features
-            }
-            duplicate_features.append(duplicate_info)
-
-            # Create log message for the duplicate
-            feature_name = feature.get('properties', {}).get('name', 'Unnamed')
-            feature_type = feature.get('geometry', {}).get('type', 'Unknown')
-            existing_count = len(existing_features)
-            import_log.add(f"Coordinate duplicate found: '{feature_name}' ({feature_type}) matches {existing_count} existing feature(s)", 'Duplicate Detection', DatabaseLogLevel.INFO)
-        else:
-            unique_features.append(feature)
-
-    # Log summary
-    if duplicate_features:
-        import_log.add(f"Found {len(duplicate_features)} features that already exist in your library", "Duplicate Detection", DatabaseLogLevel.INFO)
-    else:
-        import_log.add("No duplicate features found in your existing library", "Duplicate Detection", DatabaseLogLevel.INFO)
-
-    return unique_features, duplicate_features, import_log
-
-
-def _find_coordinate_duplicates_batched(features: List[Dict], user_id: int, import_log: ImportLog) -> Tuple[List[Dict], List[Dict], ImportLog]:
-    """
-    Optimized duplicate detection for large files using batched database queries.
-    """
-    from django.contrib.gis.geos import GEOSGeometry
-    from api.models import FeatureStore
-    import json
-
-    unique_features = []
-    duplicate_features = []
-
-    # Group features by geometry type for more efficient queries
-    features_by_type = {'point': [], 'linestring': [], 'polygon': [], 'multilinestring': [], 'multipolygon': [], 'multipoint': [], 'geometrycollection': []}
-
-    for i, feature in enumerate(features):
-        geometry = feature.get('geometry', {})
-        geom_type = geometry.get('type', '').lower()
-        coordinates = geometry.get('coordinates', [])
-
-        if not coordinates or geom_type not in features_by_type:
-            unique_features.append(feature)
-            continue
-
-        features_by_type[geom_type].append((i, feature, coordinates))
-
-    # Process each geometry type in batches
-    for geom_type, type_features in features_by_type.items():
-        if not type_features:
-            continue
-
-        import_log.add(f"Processing {len(type_features)} {geom_type} features for duplicates", 'Find Coordinate Duplicates')
-
-        # Process in batches to avoid memory issues
-        batch_size = get_required_setting('DUPLICATE_DETECTION_BATCH_SIZE')
-        for batch_start in range(0, len(type_features), batch_size):
-            batch_end = min(batch_start + batch_size, len(type_features))
-            batch_features = type_features[batch_start:batch_end]
-
-            # Create geometries for this batch
-            # Normalize coordinates first to handle floating point precision differences
-            batch_geometries = []
-            for idx, feature, coordinates in batch_features:
-                try:
-                    # Normalize coordinates before creating geometry to ensure consistent WKT representation
-                    normalized_coords = _normalize_coordinates(coordinates)
-                    
-                    # Handle different geometry type naming conventions
-                    if geom_type == 'multilinestring':
-                        geom_type_name = 'MultiLineString'
-                    elif geom_type == 'multipolygon':
-                        geom_type_name = 'MultiPolygon'
-                    elif geom_type == 'multipoint':
-                        geom_type_name = 'MultiPoint'
-                    elif geom_type == 'geometrycollection':
-                        # GeometryCollection needs special handling - skip batching for now
-                        # and use the regular duplicate detection logic
-                        existing_features = _find_geometry_collection_duplicates(coordinates, user_id)
-                        if existing_features:
-                            duplicate_info = {
-                                'feature': feature,
-                                'existing_features': existing_features
-                            }
-                            duplicate_features.append(duplicate_info)
-                            feature_name = feature.get('properties', {}).get('name', 'Unnamed')
-                            existing_count = len(existing_features)
-                            import_log.add(f"Coordinate duplicate found: '{feature_name}' (GeometryCollection) matches {existing_count} existing feature(s)", 'Duplicate Detection', DatabaseLogLevel.INFO)
-                        else:
-                            unique_features.append(feature)
-                        continue
-                    else:
-                        geom_type_name = geom_type.title()
-
-                    geom_data = {
-                        'type': geom_type_name,
-                        'coordinates': normalized_coords
-                    }
-                    geometry = GEOSGeometry(json.dumps(geom_data))
-                    batch_geometries.append((idx, feature, geometry))
-                except Exception as e:
-                    import_log.add(f"Failed to create geometry for feature {idx}: {str(e)}", 'Find Coordinate Duplicates')
-                    logger.error(f"Failed to create geometry for feature {idx}: {traceback.format_exc()}")
-                    unique_features.append(feature)
-
-            if not batch_geometries:
-                continue
-
-            # Single database query for the entire batch
-            try:
-                geometries = [geom for _, _, geom in batch_geometries]
-                existing_features = FeatureStore.objects.filter(
-                    user_id=user_id,
-                    geometry__in=geometries
-                ).values('id', 'geojson', 'timestamp', 'geometry')
-
-                # Create a lookup map for existing features using normalized coordinates
-                # This handles floating point precision differences better than WKT comparison
-                existing_lookup = {}
-                for existing in existing_features:
-                    # Get coordinates from geojson and normalize them
-                    existing_geojson = existing['geojson'] if isinstance(existing['geojson'], dict) else json.loads(existing['geojson'])
-                    existing_coords = existing_geojson.get('geometry', {}).get('coordinates', [])
-                    if existing_coords:
-                        normalized_existing_coords = _normalize_coordinates(existing_coords)
-                        # Use normalized coordinates as key for lookup
-                        coords_key = json.dumps(normalized_existing_coords, sort_keys=True)
-                        if coords_key not in existing_lookup:
-                            existing_lookup[coords_key] = []
-                        existing_lookup[coords_key].append(existing)
-
-                # Check each feature in the batch using normalized coordinate comparison
-                for idx, feature, geometry in batch_geometries:
-                    # Get normalized coordinates from the feature (already normalized when creating geometry)
-                    feature_coords = feature.get('geometry', {}).get('coordinates', [])
-                    normalized_feature_coords = _normalize_coordinates(feature_coords)
-                    coords_key = json.dumps(normalized_feature_coords, sort_keys=True)
-                    
-                    if coords_key in existing_lookup:
-                        # This is a duplicate
-                        duplicate_info = {
-                            'feature': feature,
-                            'existing_features': existing_lookup[coords_key]
-                        }
-                        duplicate_features.append(duplicate_info)
-
-                        feature_name = feature.get('properties', {}).get('name', 'Unnamed')
-                        existing_count = len(existing_lookup[coords_key])
-                        import_log.add(f"Coordinate duplicate found: '{feature_name}' ({geom_type}) matches {existing_count} existing feature(s)", 'Duplicate Detection', DatabaseLogLevel.INFO)
-                    else:
-                        unique_features.append(feature)
-
-            except Exception as e:
-                import_log.add(f"Batch query encountered an issue, processing individually", 'Duplicate Detection', DatabaseLogLevel.WARNING)
-                # Log internal error details for debugging
-                logger.warning(f"Batch query failed for {geom_type} features: {str(e)}")
-                logger.error(f"Batch query error traceback: {traceback.format_exc()}")
-                # Fall back to individual processing for this batch
-                for idx, feature, coordinates in batch_features:
-                    unique_features.append(feature)
-
-    # Log summary
-    if duplicate_features:
-        import_log.add(f"Found {len(duplicate_features)} features that already exist in your library", "Duplicate Detection", DatabaseLogLevel.INFO)
-    else:
-        import_log.add("No duplicate features found in your existing library", "Duplicate Detection", DatabaseLogLevel.INFO)
-
-    return unique_features, duplicate_features, import_log
-
-
-def _find_existing_features_by_coordinates(coordinates: List, geom_type: str, user_id: int) -> List[Dict]:
-    """Find existing features in the database with matching coordinates."""
-    try:
-        # Normalize coordinates to handle floating point precision differences
-        normalized_coords = _normalize_coordinates(coordinates)
-        
-        # Create a GEOSGeometry object for spatial queries
-        if geom_type == 'point':
-            # For points, we need to handle floating point precision differences.
-            # Query all features for this user and filter by geometry type and compare normalized coordinates in Python
-            # This is more reliable than database-level exact matching which can fail due to precision differences
-            all_features = FeatureStore.objects.filter(
-                user_id=user_id,
-                geometry__isnull=False
-            ).values('id', 'geojson', 'timestamp')
-            
-            # Filter to only points and compare normalized coordinates
-            existing_features = []
-            for feat in all_features:
-                feat_geojson = feat['geojson'] if isinstance(feat['geojson'], dict) else json.loads(feat['geojson'])
-                feat_geom_type = feat_geojson.get('geometry', {}).get('type', '').lower()
-                if feat_geom_type == 'point':
-                    feature_coords = feat_geojson.get('geometry', {}).get('coordinates', [])
-                    if feature_coords:
-                        normalized_feature_coords = _normalize_coordinates(feature_coords)
-                        if normalized_coords == normalized_feature_coords:
-                            existing_features.append(feat)
-
-        elif geom_type == 'linestring':
-            # For linestrings, normalize coordinates and compare in Python to handle floating point precision differences
-            all_features = FeatureStore.objects.filter(
-                user_id=user_id,
-                geometry__isnull=False
-            ).values('id', 'geojson', 'timestamp')
-            
-            # Filter to only linestrings and compare normalized coordinates
-            existing_features = []
-            for feat in all_features:
-                feat_geojson = feat['geojson'] if isinstance(feat['geojson'], dict) else json.loads(feat['geojson'])
-                feat_geom_type = feat_geojson.get('geometry', {}).get('type', '').lower()
-                if feat_geom_type == 'linestring':
-                    feature_coords = feat_geojson.get('geometry', {}).get('coordinates', [])
-                    if feature_coords:
-                        normalized_feature_coords = _normalize_coordinates(feature_coords)
-                        if normalized_coords == normalized_feature_coords:
-                            existing_features.append(feat)
-
-        elif geom_type == 'polygon':
-            # For polygons, normalize coordinates and compare in Python to handle floating point precision differences
-            all_features = FeatureStore.objects.filter(
-                user_id=user_id,
-                geometry__isnull=False
-            ).values('id', 'geojson', 'timestamp')
-            
-            # Filter to only polygons and compare normalized coordinates
-            existing_features = []
-            for feat in all_features:
-                feat_geojson = feat['geojson'] if isinstance(feat['geojson'], dict) else json.loads(feat['geojson'])
-                feat_geom_type = feat_geojson.get('geometry', {}).get('type', '').lower()
-                if feat_geom_type == 'polygon':
-                    feature_coords = feat_geojson.get('geometry', {}).get('coordinates', [])
-                    if feature_coords:
-                        normalized_feature_coords = _normalize_coordinates(feature_coords)
-                        if normalized_coords == normalized_feature_coords:
-                            existing_features.append(feat)
-
-        elif geom_type == 'multilinestring':
-            # For multilinestrings, normalize coordinates and compare in Python to handle floating point precision differences
-            all_features = FeatureStore.objects.filter(
-                user_id=user_id,
-                geometry__isnull=False
-            ).values('id', 'geojson', 'timestamp')
-            
-            # Filter to only multilinestrings and compare normalized coordinates
-            existing_features = []
-            for feat in all_features:
-                feat_geojson = feat['geojson'] if isinstance(feat['geojson'], dict) else json.loads(feat['geojson'])
-                feat_geom_type = feat_geojson.get('geometry', {}).get('type', '').lower()
-                if feat_geom_type == 'multilinestring':
-                    feature_coords = feat_geojson.get('geometry', {}).get('coordinates', [])
-                    if feature_coords:
-                        normalized_feature_coords = _normalize_coordinates(feature_coords)
-                        if normalized_coords == normalized_feature_coords:
-                            existing_features.append(feat)
-
-        elif geom_type == 'multipolygon':
-            # For multipolygons, normalize coordinates and compare in Python to handle floating point precision differences
-            all_features = FeatureStore.objects.filter(
-                user_id=user_id,
-                geometry__isnull=False
-            ).values('id', 'geojson', 'timestamp')
-            
-            # Filter to only multipolygons and compare normalized coordinates
-            existing_features = []
-            for feat in all_features:
-                feat_geojson = feat['geojson'] if isinstance(feat['geojson'], dict) else json.loads(feat['geojson'])
-                feat_geom_type = feat_geojson.get('geometry', {}).get('type', '').lower()
-                if feat_geom_type == 'multipolygon':
-                    feature_coords = feat_geojson.get('geometry', {}).get('coordinates', [])
-                    if feature_coords:
-                        normalized_feature_coords = _normalize_coordinates(feature_coords)
-                        if normalized_coords == normalized_feature_coords:
-                            existing_features.append(feat)
-
-        elif geom_type == 'multipoint':
-            # For multipoints, normalize coordinates and compare in Python to handle floating point precision differences
-            all_features = FeatureStore.objects.filter(
-                user_id=user_id,
-                geometry__isnull=False
-            ).values('id', 'geojson', 'timestamp')
-            
-            # Filter to only multipoints and compare normalized coordinates
-            existing_features = []
-            for feat in all_features:
-                feat_geojson = feat['geojson'] if isinstance(feat['geojson'], dict) else json.loads(feat['geojson'])
-                feat_geom_type = feat_geojson.get('geometry', {}).get('type', '').lower()
-                if feat_geom_type == 'multipoint':
-                    feature_coords = feat_geojson.get('geometry', {}).get('coordinates', [])
-                    if feature_coords:
-                        normalized_feature_coords = _normalize_coordinates(feature_coords)
-                        if normalized_coords == normalized_feature_coords:
-                            existing_features.append(feat)
-
-        elif geom_type == 'geometrycollection':
-            # For geometry collections, we need to handle this differently
-            # since GeometryCollection uses 'geometries' not 'coordinates'
-            # and contains multiple geometries of different types
-            return _find_geometry_collection_duplicates(coordinates, user_id)
-
-        else:
-            return []
-
-        # Convert to list and add feature info
-        result = []
-        for feature in existing_features:
-            geojson_data = feature['geojson'] if isinstance(feature['geojson'], dict) else json.loads(feature['geojson'])
-            result.append({
-                'id': feature['id'],
-                'name': geojson_data.get('properties', {}).get('name', 'Unnamed'),
-                'type': geojson_data.get('geometry', {}).get('type', 'Unknown'),
-                'timestamp': feature['timestamp'].isoformat(),
-                'geojson': geojson_data
-            })
-
-        return result
-
-    except Exception as e:
-        # Log internal error details but don't expose to user
-        logger.error(f"Error finding existing features by coordinates: {type(e).__name__}: {str(e)}")
-        logger.error(f"Coordinate lookup error traceback: {traceback.format_exc()}")
-        return []
-
-
-def _find_geometry_collection_duplicates(geometries: List, user_id: int) -> List[Dict]:
-    """
-    Find existing features that match any geometry within a GeometryCollection.
-    Returns the first match found for any geometry in the collection.
-    """
-    try:
-        # Check each geometry in the collection for duplicates
-        for geometry in geometries:
-            geom_type = geometry.get('type', '').lower()
-            coordinates = geometry.get('coordinates', [])
-
-            if coordinates:
-                # Recursively check this geometry for duplicates
-                existing_features = _find_existing_features_by_coordinates(coordinates, geom_type, user_id)
-                if existing_features:
-                    # Return the first match found
-                    return existing_features
-
-        # No duplicates found in any geometry
-        return []
-
-    except Exception as e:
-        logger.error(f"Error finding geometry collection duplicates: {type(e).__name__}: {str(e)}")
-        logger.error(f"Geometry collection error traceback: {traceback.format_exc()}")
-        return []
-
-
-# TODO: allow re-import of old previously uploaded by re-uploading it
-
-def _get_logs_by_log_id(log_id):
-    """Fetch logs from DatabaseLogging table by log_id"""
-    logs = DatabaseLogging.objects.filter(log_id=log_id).order_by('id')
-    return [{'timestamp': log.timestamp.isoformat(), 'msg': log.text, 'source': log.source, 'level': log.level} for log in logs]
-
-
-def _delete_logs_by_log_id(log_id):
-    """Delete all logs from DatabaseLogging table by log_id"""
-    deleted_count = DatabaseLogging.objects.filter(log_id=log_id).delete()[0]
-    return deleted_count
 
 
 class DocumentForm(forms.Form):
@@ -551,18 +36,17 @@ def upload_item(request):
             uploaded_file = request.FILES['file']
             file_name = uploaded_file.name
 
-            # Comprehensive file validation using security module
-            validator = SecureFileValidator()
-            is_valid, validation_message = validator.validate_file(uploaded_file)
+            # Basic security checks for quick rejection (full validation happens in async processing)
+            is_valid, validation_message = basic_file_security_check(uploaded_file)
 
             if not is_valid:
-                logger.warning(f"File validation failed for {file_name}: {validation_message}")
+                logger.warning(f"Basic security check failed for {file_name}: {validation_message}")
                 return JsonResponse({
                     'msg': f'File validation failed: {validation_message}',
                     'job_id': None
                 }, status=400)
 
-            # Read file data after validation
+            # Read file data after basic security check
             file_data = uploaded_file.read()
 
             # Get optional replacement parameter (feature ID being updated)
@@ -580,7 +64,7 @@ def upload_item(request):
             job_id = status_tracker.create_job(file_name, request.user.id)
 
             # Start background processing
-            if upload_job.start_upload_job(job_id, file_data, file_name, request.user.id, replacement_feature_id=replacement_feature_id):
+            if process_job.start_process_job(job_id, file_data, file_name, request.user.id, replacement_feature_id=replacement_feature_id):
                 return JsonResponse({
                     'msg': 'File uploaded successfully, processing started',
                     'job_id': job_id
@@ -606,21 +90,21 @@ def upload_item(request):
 @login_required_401
 def get_processing_status(request, job_id):
     """
-    Get the processing status of a file upload job.
+    Get the processing status of a file processing job.
     """
     if not job_id:
-        return JsonResponse({ 'msg': 'Job ID not provided'}, status=400)
+        return JsonResponse({'msg': 'Job ID not provided'}, status=400)
 
     # Get job status
     job_status = status_tracker.get_job_status(job_id)
 
     if not job_status:
-        return JsonResponse({ 'msg': 'Job not found'}, status=404)
+        return JsonResponse({'msg': 'Job not found'}, status=404)
 
     # Check if user owns this job
     job = status_tracker.get_job(job_id)
     if not job or job.user_id != request.user.id:
-        return JsonResponse({ 'msg': 'Not authorized to view this job'}, status=403)
+        return JsonResponse({'msg': 'Not authorized to view this job'}, status=403)
 
     return JsonResponse({
         'job_status': job_status
@@ -649,7 +133,7 @@ def get_user_processing_jobs(request):
 def fetch_import_history_item(request, item_id: int):
     item = ImportQueue.objects.get(id=item_id)
     if item.user_id != request.user.id:
-        return JsonResponse({ 'msg': 'not authorized to view this item', 'code': 403}, status=400)
+        return JsonResponse({'msg': 'not authorized to view this item', 'code': 403}, status=400)
 
     response = HttpResponse(item.raw_file, content_type='application/octet-stream')
     response['Content-Disposition'] = 'attachment; filename="%s"' % item.original_filename
@@ -664,7 +148,7 @@ def get_import_queue_item_features(request, item_id: int):
     """
     try:
         item = ImportQueue.objects.get(id=item_id, user=request.user)
-        
+
         return JsonResponse({
             'geofeatures': item.geofeatures,
             'original_filename': item.original_filename,
@@ -691,11 +175,11 @@ def delete_import_item(request, id):
         try:
             queue = ImportQueue.objects.get(id=id)
         except ImportQueue.DoesNotExist:
-            return JsonResponse({ 'msg': 'ID does not exist', 'code': 404}, status=400)
+            return JsonResponse({'msg': 'ID does not exist', 'code': 404}, status=400)
 
         # Check if user owns this item
         if queue.user_id != request.user.id:
-            return JsonResponse({ 'msg': 'Not authorized to delete this item', 'code': 403}, status=400)
+            return JsonResponse({'msg': 'Not authorized to delete this item', 'code': 403}, status=400)
 
         # Start async delete job
         job_id = delete_job.start_delete_job(id, request.user.id, queue.original_filename)
@@ -719,9 +203,9 @@ def update_import_item(request, item_id):
     try:
         queue = ImportQueue.objects.get(id=item_id)
     except ImportQueue.DoesNotExist:
-        return JsonResponse({ 'msg': 'ID does not exist', 'code': 404}, status=400)
+        return JsonResponse({'msg': 'ID does not exist', 'code': 404}, status=400)
     if queue.user_id != request.user.id:
-        return JsonResponse({ 'msg': 'not authorized to edit this item', 'code': 403}, status=403)
+        return JsonResponse({'msg': 'not authorized to edit this item', 'code': 403}, status=403)
 
     # Prevent updating items that have already been imported to the feature store
     if queue.imported:
@@ -739,35 +223,35 @@ def update_import_item(request, item_id):
         if not isinstance(features_to_update, list):
             raise ValueError('features must be a list')
     except (json.JSONDecodeError, ValueError) as e:
-        return JsonResponse({ 'msg': str(e), 'code': 400}, status=400)
+        return JsonResponse({'msg': str(e), 'code': 400}, status=400)
 
     # Build a lookup map of feature ID to partial update fields
     updates_by_id = {}
     allowed_fields = {'name', 'description', 'created', 'tags'}
-    
+
     for feature in features_to_update:
         # Extract properties from the feature
         properties = feature.get('properties', {})
         if not isinstance(properties, dict):
             logger.warning(f"Skipping feature with invalid properties: {feature}")
             continue
-        
+
         feature_id = properties.get('id')
         if not feature_id:
             logger.warning(f"Skipping feature without ID: {properties.get('name', 'Unnamed')}")
             continue
-        
+
         # Extract only allowed fields (name, description, created, tags)
         update_fields = {}
         for field in allowed_fields:
             if field in properties:
                 update_fields[field] = properties[field]
-        
+
         # Validate that at least one field is being updated
         if not update_fields:
             logger.warning(f"Skipping feature {feature_id}: no updatable fields provided")
             continue
-        
+
         updates_by_id[feature_id] = update_fields
 
     # Update features in the geofeatures array by matching IDs
@@ -777,18 +261,18 @@ def update_import_item(request, item_id):
         if feature_id and feature_id in updates_by_id:
             # Create a deep copy of the original feature to merge updates into
             merged_feature = copy.deepcopy(existing_feature)
-            
+
             # Preserve existing system_tags from original feature
             original_system_tags = existing_feature.get('properties', {}).get('system_tags', [])
             if not isinstance(original_system_tags, list):
                 original_system_tags = []
-            
+
             # Get the partial update fields
             update_fields = updates_by_id[feature_id]
-            
+
             # Merge update fields into the feature properties (only update fields that are present)
             merged_feature.setdefault('properties', {})
-            
+
             for field, value in update_fields.items():
                 if field == 'tags':
                     # Handle tags specially - filter out system tags and prepare user tags
@@ -802,13 +286,13 @@ def update_import_item(request, item_id):
                 else:
                     # For name, description, created - update directly
                     merged_feature['properties'][field] = value
-            
+
             # Ensure the feature has the required structure (type, geometry, properties)
             if 'type' not in merged_feature:
                 merged_feature['type'] = 'Feature'
             if 'geometry' not in merged_feature:
                 merged_feature['geometry'] = existing_feature.get('geometry', {})
-            
+
             # Run the merged feature through validate_and_normalize_geojson_feature()
             try:
                 normalized_feature = validate_and_normalize_geojson_feature(
@@ -819,10 +303,10 @@ def update_import_item(request, item_id):
             except GeometryValidationError as e:
                 logger.warning(f"Error validating feature {feature_id} during update: {str(e)}")
                 continue
-            
+
             # Ensure system_tags are preserved after normalization
             normalized_feature['properties']['system_tags'] = original_system_tags
-            
+
             queue.geofeatures[i] = normalized_feature
             updated_count += 1
 
@@ -839,12 +323,16 @@ def update_import_item(request, item_id):
 @csrf_protect
 @require_http_methods(["POST"])
 def import_to_featurestore(request, item_id):
+    """
+    Start async import job for importing an import queue item to the feature store.
+    All processing happens in the async ImportJob.
+    """
     try:
         import_item = ImportQueue.objects.get(id=item_id)
     except ImportQueue.DoesNotExist:
-        return JsonResponse({ 'msg': 'ID does not exist', 'code': 404}, status=400)
+        return JsonResponse({'msg': 'ID does not exist', 'code': 404}, status=400)
     if import_item.user_id != request.user.id:
-        return JsonResponse({ 'msg': 'not authorized to edit this item', 'code': 403}, status=403)
+        return JsonResponse({'msg': 'not authorized to edit this item', 'code': 403}, status=403)
 
     # Prevent importing items that have already been imported to the feature store
     if import_item.imported:
@@ -855,7 +343,7 @@ def import_to_featurestore(request, item_id):
 
     # Parse request body to get import_custom_icons flag and skipped_feature_ids
     import_custom_icons = True  # Default to True for backward compatibility
-    skipped_feature_ids = set()  # Set of feature IDs to skip during import
+    skipped_feature_ids = []  # List of feature IDs to skip during import
     try:
         if request.body:
             data = json.loads(request.body)
@@ -864,7 +352,7 @@ def import_to_featurestore(request, item_id):
                 # Parse skipped_feature_ids if provided
                 skipped_ids = data.get('skipped_feature_ids', [])
                 if isinstance(skipped_ids, list):
-                    skipped_feature_ids = set(skipped_ids)
+                    skipped_feature_ids = skipped_ids
     except (json.JSONDecodeError, ValueError) as e:
         logger.warning(f"Failed to parse request body: {str(e)}, using defaults")
 
@@ -886,340 +374,15 @@ def import_to_featurestore(request, item_id):
                 'code': 409
             }, status=409)
 
-    # Prepare features for bulk import
-    features_to_create = []
-    existing_hashes = set()
-    current_batch_hashes = set()  # Track hashes in current import batch
+    # Start async import job - all processing happens there
+    job_id = import_job.start_import_job(
+        item_id=item_id,
+        user_id=request.user.id,
+        import_custom_icons=import_custom_icons,
+        skipped_feature_ids=skipped_feature_ids
+    )
 
-    # Get existing feature hashes for this user to avoid duplicates
-    existing_features = FeatureStore.objects.filter(user=request.user).values_list('file_hash', flat=True)
-    existing_hashes.update(existing_features)
-
-    # Thread-safe duplicate checking
-    duplicate_check_lock = threading.Lock()
-
-    def process_feature_with_index(args: Tuple[int, Dict[str, Any]]) -> Optional[FeatureStore]:
-        """Wrapper to unpack index and feature for executor.map()"""
-        feature_index, feature = args
-        return process_single_feature_for_import(feature, feature_index)
-
-    def process_single_feature_for_import(feature: Dict[str, Any], feature_index: int) -> Optional[FeatureStore]:
-        """
-        Process a single feature for import, including validation, tag generation, and FeatureStore creation.
-        This is a worker function designed to be called in parallel.
-        
-        Args:
-            feature: Feature dictionary from geofeatures
-            feature_index: Index of the feature (for logging)
-            
-        Returns:
-            FeatureStore object if successful, None if skipped or failed
-        """
-        try:
-            c = None
-            if 'geometry' not in feature or not feature['geometry']:
-                logger.warning(f"Skipping feature {feature_index} due to missing or empty geometry: {feature.get('properties', {}).get('name', 'Unnamed')}")
-                return None
-
-            geometry_type = feature['geometry']['type'].lower()
-            match geometry_type:
-                case 'point':
-                    c = PointFeature
-                case 'multipoint':
-                    c = PointFeature
-                case 'linestring':
-                    c = LineStringFeature
-                case 'multilinestring':
-                    c = MultiLineStringFeature
-                case 'polygon':
-                    c = PolygonFeature
-                case 'multipolygon':
-                    c = PolygonFeature
-                case _:
-                    feature_name = feature.get('properties', {}).get('name', 'Unnamed')
-                    logger.warning(f"Skipping feature {feature_index} '{feature_name}' due to unsupported geometry type: {geometry_type}")
-                    return None
-
-            assert c is not None
-
-            # Strip icon properties if import_custom_icons is False
-            if not import_custom_icons:
-                feature = strip_icon_properties(feature.copy())
-
-            feature_instance = c(**feature)
-            # Tags are already generated during processing step, just use existing tags
-            existing_tags = feature_instance.properties.tags or []
-            # Prepare tags before storing (lowercase and deduplicate)
-            existing_tags = prepare_user_tags(existing_tags)
-            feature_instance.properties.tags = existing_tags
-
-            # Create the GeoJSON data
-            geojson_data = json.loads(feature_instance.model_dump_json())
-
-            # Generate hash-based ID for the feature
-            feature_hash = generate_feature_hash(geojson_data)
-
-            # Check if this feature already exists for this user or in current batch (thread-safe)
-            with duplicate_check_lock:
-                if feature_hash in existing_hashes or feature_hash in current_batch_hashes:
-                    # Skip importing duplicate features
-                    feature_name = geojson_data.get('properties', {}).get('name', 'Unnamed')
-                    # Skipping duplicate feature (normal operation)
-                    return None
-
-                # Add to current batch hashes to prevent duplicates within the same import
-                current_batch_hashes.add(feature_hash)
-
-            # Update the feature's ID in the GeoJSON data
-            geojson_data['properties']['id'] = feature_hash
-
-            # Create geometry object for spatial queries
-            geometry = None
-            if 'geometry' in geojson_data and geojson_data['geometry']:
-                try:
-                    # Ensure coordinates are properly formatted for GEOSGeometry
-                    geom_data = geojson_data['geometry'].copy()
-
-                    # Handle 3D coordinates by ensuring they're properly structured
-                    if geom_data['type'] == 'Point':
-                        coords = geom_data['coordinates']
-                        # Ensure Point has exactly 3 coordinates (x, y, z) or 2 (x, y)
-                        if len(coords) == 2:
-                            coords = [coords[0], coords[1], 0.0]  # Add Z=0 for 2D points
-                        elif len(coords) == 3:
-                            coords = [coords[0], coords[1], coords[2]]  # Keep 3D
-                        geom_data['coordinates'] = coords
-
-                    elif geom_data['type'] == 'LineString':
-                        coords = geom_data['coordinates']
-                        # Ensure each coordinate in LineString has 3 dimensions
-                        geom_data['coordinates'] = [
-                            [coord[0], coord[1], coord[2] if len(coord) > 2 else 0.0]
-                            for coord in coords
-                        ]
-
-                    elif geom_data['type'] == 'Polygon':
-                        coords = geom_data['coordinates']
-                        # Ensure each coordinate in Polygon has 3 dimensions
-                        geom_data['coordinates'] = [
-                            [
-                                [coord[0], coord[1], coord[2] if len(coord) > 2 else 0.0]
-                                for coord in ring
-                            ]
-                            for ring in coords
-                        ]
-
-                    geometry = GEOSGeometry(json.dumps(geom_data))
-                except Exception as e:
-                    # Log internal error details for debugging - don't expose to user
-                    logger.warning(f"Error creating geometry for feature {feature_index}: {type(e).__name__}: {str(e)}")
-                    logger.error(f"Geometry creation error traceback for feature {feature_index}: {traceback.format_exc()}")
-
-            # Create FeatureStore object
-            return FeatureStore(
-                geojson=geojson_data,
-                file_hash=feature_hash,
-                geometry=geometry,
-                source=import_item,
-                user=request.user
-            )
-        except Exception as e:
-            feature_name = feature.get('properties', {}).get('name', 'Unnamed')
-            logger.error(f"Error processing feature {feature_index} '{feature_name}': {type(e).__name__}: {str(e)}")
-            logger.error(f"Feature processing error traceback: {traceback.format_exc()}")
-            return None
-
-    # Filter out skipped features before processing
-    features_to_process = []
-    skipped_count = 0
-    for feature in import_item.geofeatures:
-        feature_id = feature.get('properties', {}).get('id')
-        if feature_id and feature_id in skipped_feature_ids:
-            skipped_count += 1
-            continue
-        features_to_process.append(feature)
-
-    # Get number of threads from settings
-    num_threads = get_required_setting('IMPORT_PROCESSING_THREADS')
-
-    # Process features in parallel using ThreadPoolExecutor
-    if len(features_to_process) > 0:
-        with ThreadPoolExecutor(max_workers=num_threads) as executor:
-            # Process all features in parallel and collect results
-            results = executor.map(
-                process_feature_with_index,
-                enumerate(features_to_process)
-            )
-
-            # Collect results from all workers
-            for feature_store in results:
-                if feature_store is not None:
-                    features_to_create.append(feature_store)
-
-    # Track successful feature creation
-    successful_imports = 0
-
-    # Bulk create all features at once for better performance
-    if features_to_create:
-        try:
-            # Importing features to database
-
-            bulk_batch_size = get_required_setting('BULK_CREATE_BATCH_SIZE')
-            FeatureStore.objects.bulk_create(features_to_create, batch_size=bulk_batch_size)
-            successful_imports = len(features_to_create)
-            # Features imported successfully
-        except Exception as e:
-            logger.warning(f"Bulk import failed for user {request.user.id}, falling back to individual imports: {str(e)}")
-            logger.error(f"Bulk import error traceback: {traceback.format_exc()}")
-            # Fallback to individual creation if bulk fails
-            for feature in features_to_create:
-                try:
-                    feature.save()
-                    successful_imports += 1
-                except Exception as individual_error:
-                    logger.error(f"Error creating individual feature for user {request.user.id}: {individual_error}")
-                    logger.error(f"Individual feature creation error traceback: {traceback.format_exc()}")
-                    # If it's a duplicate key error, that's expected and we can continue
-                    if "duplicate key" not in str(individual_error).lower():
-                        logger.error(f"Unexpected error creating feature for user {request.user.id}: {individual_error}")
-
-            # Fallback import completed
-
-    # Log final summary
-    total_processed = len(import_item.geofeatures)
-    total_imported = successful_imports
-    total_skipped_duplicates = total_processed - skipped_count - len(features_to_create)  # Features skipped due to duplicates or errors
-    
-    # Build success message
-    msg_parts = [f'Successfully imported {total_imported} features']
-    if skipped_count > 0:
-        msg_parts.append(f'{skipped_count} skipped by user')
-    if total_skipped_duplicates > 0:
-        msg_parts.append(f'{total_skipped_duplicates} already existed')
-    success_msg = ' (' + ', '.join(msg_parts[1:]) + ')' if len(msg_parts) > 1 else ''
-    success_msg = msg_parts[0] + success_msg
-
-    # Only mark as imported and proceed with cleanup if at least one feature was successfully created
-    if successful_imports > 0:
-        # Import completed
-
-        # Mark as imported only after successful feature creation
-        import_item.imported = True
-
-        # Delete logs before clearing the log_id
-        if import_item.log_id:
-            _delete_logs_by_log_id(str(import_item.log_id))
-
-        # Erase some unneeded data since it's not needed anymore now that it's in the feature store.
-        import_item.geofeatures = []
-        import_item.log_id = None
-
-        import_item.save()
-
-        # Broadcast WebSocket event for item import
-        _broadcast_item_imported(request.user.id, item_id)
-
-        return JsonResponse({ 'msg': success_msg})
-    else:
-        # No features were successfully imported
-        logger.warning(f"Import failed for user {request.user.id}: No features were imported from '{import_item.original_filename}'")
-
-        # Determine reason for failure
-        if len(features_to_create) == 0:
-            if total_processed == 0:
-                reason = "No features found in the file"
-            else:
-                reason = f"All {total_processed} features were skipped (duplicates, missing geometry, or unsupported types)"
-        else:
-            reason = f"Failed to create {len(features_to_create)} features in the database"
-
-        return JsonResponse({
-            'msg': f'No features were imported. {reason}.',
-            'code': 400
-        }, status=400)
-
-
-def _hash_kml(b: str):
-    if not isinstance(b, bytes):
-        b = b.encode()
-    return hashlib.sha256(b).hexdigest()
-
-
-def _broadcast_item_deleted(user_id: int, item_id: int):
-    """Broadcast WebSocket event when an item is deleted."""
-    from channels.layers import get_channel_layer
-    from asgiref.sync import async_to_sync
-
-    channel_layer = get_channel_layer()
-    if channel_layer:
-        # Broadcast to general realtime channel
-        async_to_sync(channel_layer.group_send)(
-            f"realtime_{user_id}",
-            {
-                'type': 'import_queue_item_deleted',
-                'data': {'id': item_id}
-            }
-        )
-
-        # Also broadcast to upload status channel for this specific item
-        async_to_sync(channel_layer.group_send)(
-            f"upload_status_{user_id}_{item_id}",
-            {
-                'type': 'item_deleted',
-                'data': {'id': item_id}
-            }
-        )
-
-
-def _broadcast_items_deleted(user_id: int, item_ids: list):
-    """Broadcast WebSocket event when multiple items are deleted."""
-    from channels.layers import get_channel_layer
-    from asgiref.sync import async_to_sync
-
-    channel_layer = get_channel_layer()
-    if channel_layer:
-        async_to_sync(channel_layer.group_send)(
-            f"realtime_{user_id}",
-            {
-                'type': 'import_queue_items_deleted',
-                'data': {'ids': item_ids}
-            }
-        )
-
-
-def _broadcast_item_imported(user_id: int, item_id: int):
-    """Broadcast WebSocket event when an item is imported."""
-    from channels.layers import get_channel_layer
-    from asgiref.sync import async_to_sync
-    from api.models import ImportQueue
-
-    channel_layer = get_channel_layer()
-    if channel_layer:
-        # Get item details for history broadcast
-        try:
-            item = ImportQueue.objects.get(id=item_id)
-            item_data = {
-                'id': item_id,
-                'original_filename': item.original_filename,
-                'timestamp': item.timestamp.isoformat()
-            }
-        except ImportQueue.DoesNotExist:
-            item_data = {'id': item_id}
-
-        # Broadcast to import queue module
-        async_to_sync(channel_layer.group_send)(
-            f"realtime_{user_id}",
-            {
-                'type': 'import_queue_item_imported',
-                'data': {'id': item_id}
-            }
-        )
-
-        # Broadcast to import history module
-        async_to_sync(channel_layer.group_send)(
-            f"realtime_{user_id}",
-            {
-                'type': 'import_history_item_added',
-                'data': item_data
-            }
-        )
+    return JsonResponse({
+        'msg': 'Import job started',
+        'job_id': job_id
+    }, status=200)

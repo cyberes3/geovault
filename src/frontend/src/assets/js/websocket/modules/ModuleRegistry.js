@@ -5,7 +5,7 @@
 
 import { ImportQueueModule } from './ImportQueueModule.js';
 import { ImportHistoryModule } from './ImportHistoryModule.js';
-import { UploadJobModule } from './UploadJobModule.js';
+import { ProcessJobModule } from './ProcessJobModule.js';
 import { DeleteJobModule } from './DeleteJobModule.js';
 // Import other modules here as they are created
 // import { NotificationsModule } from './NotificationsModule.js';
@@ -18,7 +18,7 @@ import { DeleteJobModule } from './DeleteJobModule.js';
 export const MODULE_REGISTRY = [
     ImportQueueModule,
     ImportHistoryModule,
-    UploadJobModule,
+    ProcessJobModule,
     DeleteJobModule,
     // Add other modules here:
     // NotificationsModule,
