@@ -50,7 +50,7 @@ MaxMind's GeoIP2 database is used to determine user location based on their IP a
    sudo geoipupdate
    ```
 
-5. Make sure the database is located at `/var/lib/GeoIP/GeoLite2-Country.mmdb`. If not, you will need to update `maxmind.database_path` in your `config.yaml`
+5. Make sure the database is located at `/var/lib/GeoIP/GeoLite2-City.mmdb`. If not, you will need to update `maxmind.database_path` in your `config.yaml`
 
 
 

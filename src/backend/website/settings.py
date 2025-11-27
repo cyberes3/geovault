@@ -531,4 +531,5 @@ LOGGING = {
 }
 
 # MaxMind IP Geolocation Configuration
-MAXMIND_DATABASE_PATH = config.get_str('maxmind.database_path', '/var/lib/GeoIP/GeoLite2-Country.mmdb')
+# Default to GeoLite2-City database; can be overridden in config.yaml
+MAXMIND_DATABASE_PATH = config.get_str('maxmind.database_path', '/var/lib/GeoIP/GeoLite2-City.mmdb')

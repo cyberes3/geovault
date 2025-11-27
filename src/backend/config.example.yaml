@@ -140,7 +140,7 @@ validation:
 
 maxmind:
   # Path to MaxMind GeoIP2 database file
-  database_path: /var/lib/GeoIP/GeoLite2-Country.mmdb
+  database_path: /var/lib/GeoIP/GeoLite2-City.mmdb
 
 
 email:
