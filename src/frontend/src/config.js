@@ -15,3 +15,10 @@ export const SECURITY_CONFIG = {
   // Set to false to disable frontend file validation (for testing backend validation)
   ENABLE_FRONTEND_VALIDATION: true,
 }
+
+// Map configuration
+export const MAP_CONFIG = {
+  // Threshold for feature count above which the map will be destroyed when navigating away
+  // to release memory. Set to 200 as requested.
+  DESTROY_MAP_THRESHOLD: 200,
+}

@@ -5,7 +5,7 @@
         :class="['transition-opacity duration-300', (publicShareError || loadError) ? 'opacity-50 pointer-events-none' : 'opacity-100']"
         :features="featuresInExtent"
         :available-tags="availableTags"
-        :is-loading="isLoading && isInitialLoad"
+        :is-loading="isLoading && (isInitialLoad || isRestoring)"
         @feature-click="zoomToFeature"
         @tag-filter-change="handleTagFilterChange"
     />
@@ -158,7 +158,7 @@ import {Point} from 'ol/geom'
 import {Style, Circle, Fill, Stroke} from 'ol/style'
 import {Feature} from 'ol'
 import {MapUtils} from '@/utils/map/MapUtils'
-import {APIHOST} from '@/config.js'
+import {APIHOST, MAP_CONFIG} from '@/config.js'
 import FeatureListSidebar from './FeatureListSidebar.vue'
 import MapControlsSidebar from './MapControlsSidebar.vue'
 import FeatureInfoBox from './FeatureInfoBox.vue'
@@ -261,7 +261,8 @@ export default {
       collectionName: null, // Name of the collection being viewed
       isCollectionMode: false, // Track if collection filtering is active
       // Available tags for autocomplete and filtering
-      availableTags: [] // Tags fetched once and shared with child components
+      availableTags: [], // Tags fetched once and shared with child components
+      isRestoring: false // Track if map is being restored
     }
   },
   methods: {
@@ -1594,7 +1595,88 @@ export default {
       })
     },
 
-    // Cache functionality removed
+    // Destroy map and resources to free up memory
+    destroyMapResources() {
+      // Check if we need to destroy the map to free up memory
+      if (this.featureCount > MAP_CONFIG.DESTROY_MAP_THRESHOLD) {
+        console.log(`Feature count (${this.featureCount}) exceeds threshold (${MAP_CONFIG.DESTROY_MAP_THRESHOLD}). Destroying map to release memory.`)
+        
+        // Clear vector source to release feature geometries immediately
+        if (this.vectorSource) {
+          this.vectorSource.clear()
+          this.vectorSource = null
+        }
+
+        // Clear layer references
+        this.vectorLayer = null
+        this.textLayer = null
+        this.tileLayer = null
+
+        // Clear data caches
+        this.loadedBounds.clear()
+        this.featuresInExtent = []
+
+        // Destroy map
+        if (this.map) {
+          this.map.setTarget(null)
+          this.map = null
+        }
+      }
+    },
+
+    // Restore map after being destroyed
+    async restoreMap() {
+      if (this.map) return
+
+      console.log('Restoring map after destruction...')
+      this.isLoading = true
+      this.isRestoring = true
+
+      // Ensure map container is available
+      await this.$nextTick()
+      if (!this.$refs.mapContainer) {
+        console.error('Map container not available for restore')
+        this.isLoading = false
+        this.isRestoring = false
+        return
+      }
+
+      try {
+        // Re-initialize map
+        await this.initializeMap()
+        console.log('Map restored successfully')
+
+        // Restore layer selection
+        if (this.selectedLayer && this.tileSources.length > 0) {
+          this.updateMapLayer(this.selectedLayer)
+        }
+
+        // Reload data
+        if (this.collectionId) {
+          await this.handleCollectionFilter(this.collectionId)
+        } else {
+          await this.loadDataForCurrentView()
+        }
+        
+        // Update map size
+        await this.$nextTick()
+        if (this.map) {
+          setTimeout(() => {
+            this.map.updateSize()
+          }, 100)
+        }
+
+        // Initial feature list update
+        this.updateFeaturesInExtent()
+
+      } catch (error) {
+        console.error('Error restoring map:', error)
+        this.loadError = error.message || 'Failed to restore map'
+      } finally {
+        this.isLoading = false
+        this.isRestoring = false
+      }
+    }
   },
 
   watch: {
@@ -1756,7 +1838,22 @@ export default {
     }
   },
 
+  activated() {
+    // Restore map if it was destroyed
+    if (!this.map && this.featureCount > MAP_CONFIG.DESTROY_MAP_THRESHOLD) {
+      this.restoreMap()
+    }
+  },
+
+  deactivated() {
+    // Destroy map resources if threshold exceeded
+    this.destroyMapResources()
+  },
+
   beforeUnmount() {
+    // Check if we need to destroy the map to free up memory
+    this.destroyMapResources()
+
     // Clean up
     if (this.loadTimeout) {
       clearTimeout(this.loadTimeout)
