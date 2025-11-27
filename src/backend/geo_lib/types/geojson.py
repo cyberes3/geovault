@@ -47,6 +47,30 @@ class GeojsonRawProperty(BaseModel):
             return "Unnamed Feature"
         return v
     
+    @field_validator('description', mode='before')
+    @classmethod
+    def parse_description_field(cls, v):
+        """
+        Parse description field, handling dictionary format from togeojson.
+        KML descriptions with HTML content come through as {'@type': 'html', 'value': '...'}
+        """
+        if v is None:
+            return None
+        
+        # Handle dictionary format from togeojson (KML HTML descriptions)
+        if isinstance(v, dict):
+            if '@type' in v and v['@type'] == 'html' and 'value' in v:
+                return v['value']
+            else:
+                # If it's a dict but not the expected format, convert to string
+                return str(v)
+        
+        # Ensure we have a string
+        if not isinstance(v, str):
+            return str(v)
+        
+        return v
+    
     @field_validator('created', mode='before')
     @classmethod
     def parse_created_field(cls, v):

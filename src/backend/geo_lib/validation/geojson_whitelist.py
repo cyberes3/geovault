@@ -94,6 +94,30 @@ class PropertiesModel(BaseModel):
             return "Unnamed Feature"
         return str(v)
     
+    @field_validator('description', mode='before')
+    @classmethod
+    def validate_description(cls, v: Any) -> Optional[str]:
+        """
+        Parse description field, handling dictionary format from togeojson.
+        KML descriptions with HTML content come through as {'@type': 'html', 'value': '...'}
+        """
+        if v is None:
+            return None
+        
+        # Handle dictionary format from togeojson (KML HTML descriptions)
+        if isinstance(v, dict):
+            if '@type' in v and v['@type'] == 'html' and 'value' in v:
+                return v['value']
+            else:
+                # If it's a dict but not the expected format, convert to string
+                return str(v)
+        
+        # Ensure we have a string
+        if not isinstance(v, str):
+            return str(v)
+        
+        return v
+    
     @field_validator('tags', mode='before')
     @classmethod
     def validate_tags(cls, v: Any) -> List[str]:

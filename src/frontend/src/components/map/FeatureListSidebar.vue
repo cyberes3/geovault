@@ -1,5 +1,5 @@
 <template>
-  <div class="w-80 bg-white border-r border-gray-200 p-1.5 flex flex-col">
+  <div class="w-80 bg-white border-r border-gray-200 p-1.5 flex flex-col h-full overflow-hidden">
     <!-- Tabs -->
     <div class="flex border-b border-gray-200 mb-2">
       <button
@@ -43,7 +43,7 @@
     </div>
 
     <!-- Features in Vicinity Tab Content -->
-    <div v-if="activeTab === 'features-in-vicinity'" class="flex flex-col flex-1">
+    <div v-if="activeTab === 'features-in-vicinity'" class="flex flex-col flex-1 min-h-0">
       <!-- Search Bar -->
       <div class="mb-2 px-1">
         <div class="relative">
@@ -84,7 +84,7 @@
       </div>
 
       <!-- Feature List -->
-      <div v-else class="flex-1 overflow-y-auto select-none">
+      <div v-else class="flex-1 overflow-y-auto select-none min-h-0">
         <div v-if="displayFeatures.length === 0" class="text-xs text-gray-500 text-center py-3">
           {{ isSearchMode ? 'No results found' : 'No features' }}
         </div>
@@ -110,7 +110,7 @@
     </div>
 
     <!-- Tag Filter Tab Content -->
-    <div v-if="activeTab === 'tag-filter'" class="flex flex-col flex-1">
+    <div v-if="activeTab === 'tag-filter'" class="flex flex-col flex-1 min-h-0">
       <!-- Tag Search Input -->
       <div class="mb-2 px-1">
         <div class="relative">
@@ -167,7 +167,7 @@
       </div>
 
       <!-- Available Tags List -->
-      <div class="flex-1 overflow-y-auto">
+      <div class="flex-1 overflow-y-auto min-h-0">
         <!-- Initial Loading Indicator -->
         <div v-if="isLoading && availableTags.length === 0" class="flex items-center justify-center h-full">
           <Loader size="md" layout="centered" message="Loading tags..." />

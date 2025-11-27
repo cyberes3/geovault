@@ -80,8 +80,9 @@
     <!-- Tags List -->
     <div v-else-if="!loading && Object.keys(filteredTagsData).length > 0" class="space-y-4">
       <div
-          v-for="(features, tag) in filteredTagsData"
+          v-for="(features, tag) in paginatedTagsData"
           :key="tag"
+          :data-tag="tag"
           class="bg-white rounded-lg shadow-sm border border-gray-200 overflow-hidden"
       >
         <!-- Tag Header -->
@@ -181,10 +182,38 @@
           </div>
         </div>
 
+        <!-- Tag Search Box (shown when tag has more than 10 features) -->
+        <div v-if="getTagFeatureCount(tag) > 10" class="px-6 py-3 border-b border-gray-200 bg-gray-50">
+          <div class="relative">
+            <div class="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+              <svg class="h-4 w-4 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" stroke-linecap="round" stroke-linejoin="round" stroke-width="2"></path>
+              </svg>
+            </div>
+            <input
+                :value="getTagSearchQuery(tag)"
+                class="block w-full pl-9 pr-8 py-2 border border-gray-300 rounded-md leading-5 bg-white placeholder-gray-500 focus:outline-none focus:placeholder-gray-400 focus:ring-1 focus:ring-blue-500 focus:border-blue-500 text-sm"
+                placeholder="Search features in this tag..."
+                type="text"
+                @input="updateTagSearchQuery(tag, $event.target.value)"
+            />
+            <button
+                v-if="getTagSearchQuery(tag)"
+                class="absolute inset-y-0 right-0 pr-3 flex items-center"
+                @click="updateTagSearchQuery(tag, '')"
+                title="Clear search"
+            >
+              <svg class="h-4 w-4 text-gray-400 hover:text-gray-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path d="M6 18L18 6M6 6l12 12" stroke-linecap="round" stroke-linejoin="round" stroke-width="2"></path>
+              </svg>
+            </button>
+          </div>
+        </div>
+
         <!-- Features List -->
         <div class="divide-y divide-gray-200">
           <div
-              v-for="(feature, index) in features"
+              v-for="(feature, index) in getPaginatedFeaturesForTag(tag)"
               :key="feature.properties._id || index"
               class="px-6 py-4 hover:bg-gray-50 transition-colors"
           >
@@ -228,6 +257,94 @@
             </div>
           </div>
         </div>
+
+        <!-- Tag Feature Pagination Controls -->
+        <div v-if="getTagFeatureCount(tag) > 10 && getTagTotalPages(tag) > 1" class="px-6 py-3 border-t border-gray-200 bg-gray-50">
+          <div class="flex items-center justify-between flex-wrap gap-2">
+            <div class="text-xs text-gray-600">
+              Showing features {{ (getTagCurrentPage(tag) - 1) * tagFeaturePageSize + 1 }} - {{ Math.min(getTagCurrentPage(tag) * tagFeaturePageSize, getTagFilteredFeatureCount(tag)) }} of {{ getTagFilteredFeatureCount(tag) }}
+            </div>
+            <div class="flex items-center space-x-2">
+              <button
+                  :disabled="!getTagHasPreviousPage(tag)"
+                  class="inline-flex items-center px-2 py-1 border border-gray-300 shadow-sm text-xs font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-1 focus:ring-blue-500 disabled:opacity-50 disabled:cursor-not-allowed"
+                  @click="tagPreviousPage(tag)"
+                  title="Previous page"
+              >
+                <svg class="w-3 h-3 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path d="M15 19l-7-7 7-7" stroke-linecap="round" stroke-linejoin="round" stroke-width="2"></path>
+                </svg>
+                Prev
+              </button>
+              <span class="text-xs text-gray-700">Page {{ getTagCurrentPage(tag) }} of {{ getTagTotalPages(tag) }}</span>
+              <button
+                  :disabled="!getTagHasNextPage(tag)"
+                  class="inline-flex items-center px-2 py-1 border border-gray-300 shadow-sm text-xs font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-1 focus:ring-blue-500 disabled:opacity-50 disabled:cursor-not-allowed"
+                  @click="tagNextPage(tag)"
+                  title="Next page"
+              >
+                Next
+                <svg class="w-3 h-3 ml-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path d="M9 5l7 7-7 7" stroke-linecap="round" stroke-linejoin="round" stroke-width="2"></path>
+                </svg>
+              </button>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Pagination Controls -->
+    <div v-if="!loading && Object.keys(filteredTagsData).length > 0 && totalPages > 1" class="bg-white rounded-lg shadow-sm border border-gray-200 p-4">
+      <div class="flex items-center justify-between flex-wrap gap-4">
+        <div class="text-sm text-gray-700">
+          Showing tags {{ (currentPage - 1) * pageSize + 1 }} - {{ Math.min(currentPage * pageSize, totalTags) }} of {{ totalTags }}
+        </div>
+        <div class="flex items-center space-x-2">
+          <button
+              :disabled="!hasPreviousPage || totalPages <= 1"
+              class="inline-flex items-center px-3 py-2 border border-gray-300 shadow-sm text-sm font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 disabled:opacity-50 disabled:cursor-not-allowed"
+              @click="previousPage"
+              title="Go to previous page"
+          >
+            <svg class="w-4 h-4 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path d="M15 19l-7-7 7-7" stroke-linecap="round" stroke-linejoin="round" stroke-width="2"></path>
+            </svg>
+            Previous
+          </button>
+          <span class="text-sm text-gray-700">Page {{ currentPage }} of {{ totalPages }}</span>
+          <button
+              :disabled="!hasNextPage || totalPages <= 1"
+              class="inline-flex items-center px-3 py-2 border border-gray-300 shadow-sm text-sm font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 disabled:opacity-50 disabled:cursor-not-allowed"
+              @click="nextPage"
+              title="Go to next page"
+          >
+            Next
+            <svg class="w-4 h-4 ml-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path d="M9 5l7 7-7 7" stroke-linecap="round" stroke-linejoin="round" stroke-width="2"></path>
+            </svg>
+          </button>
+          <div class="flex items-center space-x-2 ml-4 pl-4 border-l border-gray-300">
+            <label class="text-sm text-gray-700" for="goto-page">Go to:</label>
+            <input
+                id="goto-page"
+                v-model.number="gotoPageInput"
+                :max="totalPages"
+                class="w-16 px-2 py-1 border border-gray-300 rounded-md text-sm focus:ring-blue-500 focus:border-blue-500 disabled:opacity-50 disabled:cursor-not-allowed"
+                min="1"
+                type="number"
+                @keyup.enter="jumpToPage"
+            />
+            <button
+                :disabled="!isValidPageNumber || totalPages <= 1"
+                class="inline-flex items-center px-3 py-2 border border-gray-300 shadow-sm text-sm font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 disabled:opacity-50 disabled:cursor-not-allowed"
+                @click="jumpToPage"
+                title="Jump to page"
+            >
+              Go
+            </button>
+          </div>
+        </div>
       </div>
     </div>
 
@@ -261,28 +378,160 @@ export default {
       editingTag: null, // Tag currently being edited
       editingTagValue: '', // Value of tag being edited
       shareDialogOpen: false, // Whether share dialog is open
-      selectedTagForShare: '' // Tag selected for sharing
+      selectedTagForShare: '', // Tag selected for sharing
+      currentPage: 1, // Current page number
+      pageSize: 10, // Number of tags per page
+      gotoPageInput: null, // Input value for jumping to a page
+      tagFeaturePageSize: 10, // Number of features per page within a tag
+      tagCurrentPages: {}, // Current page number for each tag { tagName: pageNumber }
+      tagSearchQueries: {}, // Search query for each tag { tagName: query }
+      paginationInfo: null, // Server-side pagination info
+      searchDebounceTimer: null // Timer for debouncing search input
     }
   },
   computed: {
+    // Use server-side filtered data (no client-side filtering needed)
     filteredTagsData() {
-      if (!this.searchQuery.trim()) {
-        return this.tagsData;
+      return this.tagsData;
+    },
+    sortedTagKeys() {
+      // Get sorted array of tag keys from filteredTagsData
+      return Object.keys(this.filteredTagsData).sort();
+    },
+    totalTags() {
+      // Use server-side pagination info if available, otherwise fall back to client-side count
+      if (this.paginationInfo) {
+        return this.paginationInfo.total_tags;
       }
-
-      const query = this.searchQuery.toLowerCase().trim();
-      const filtered = {};
-
-      for (const [tag, features] of Object.entries(this.tagsData)) {
-        if (tag.toLowerCase().includes(query)) {
-          filtered[tag] = features;
-        }
+      return this.sortedTagKeys.length;
+    },
+    totalPages() {
+      // Use server-side pagination info if available
+      if (this.paginationInfo) {
+        return this.paginationInfo.total_pages;
       }
-
-      return filtered;
+      return Math.ceil(this.totalTags / this.pageSize);
+    },
+    hasNextPage() {
+      // Use server-side pagination info if available
+      if (this.paginationInfo) {
+        return this.paginationInfo.has_next;
+      }
+      return this.currentPage < this.totalPages;
+    },
+    hasPreviousPage() {
+      // Use server-side pagination info if available
+      if (this.paginationInfo) {
+        return this.paginationInfo.has_previous;
+      }
+      return this.currentPage > 1;
+    },
+    paginatedTagsData() {
+      // Server already returns paginated data, so just return tagsData
+      return this.tagsData;
+    },
+    isValidPageNumber() {
+      return this.gotoPageInput &&
+          this.gotoPageInput >= 1 &&
+          this.gotoPageInput <= this.totalPages &&
+          this.gotoPageInput !== this.currentPage;
     }
   },
   methods: {
+    // Tag feature pagination methods
+    getTagSearchQuery(tag) {
+      return this.tagSearchQueries[tag] || '';
+    },
+    updateTagSearchQuery(tag, query) {
+      this.tagSearchQueries[tag] = query;
+      // Reset to page 1 when search changes
+      this.tagCurrentPages[tag] = 1;
+    },
+    getTagCurrentPage(tag) {
+      return this.tagCurrentPages[tag] || 1;
+    },
+    getTagFeatureCount(tag) {
+      const features = this.filteredTagsData[tag] || [];
+      return features.length;
+    },
+    getTagFilteredFeatures(tag) {
+      const features = this.filteredTagsData[tag] || [];
+      const searchQuery = this.getTagSearchQuery(tag);
+      
+      if (!searchQuery.trim()) {
+        return features;
+      }
+      
+      const query = searchQuery.toLowerCase().trim();
+      return features.filter(feature => {
+        const name = (feature.properties?.name || '').toLowerCase();
+        const description = (feature.properties?.description || '').toLowerCase();
+        const geometryType = (feature.geometry?.type || '').toLowerCase();
+        return name.includes(query) || description.includes(query) || geometryType.includes(query);
+      });
+    },
+    getTagFilteredFeatureCount(tag) {
+      return this.getTagFilteredFeatures(tag).length;
+    },
+    getTagTotalPages(tag) {
+      return Math.ceil(this.getTagFilteredFeatureCount(tag) / this.tagFeaturePageSize);
+    },
+    getTagHasNextPage(tag) {
+      return this.getTagCurrentPage(tag) < this.getTagTotalPages(tag);
+    },
+    getTagHasPreviousPage(tag) {
+      return this.getTagCurrentPage(tag) > 1;
+    },
+    getPaginatedFeaturesForTag(tag) {
+      const filteredFeatures = this.getTagFilteredFeatures(tag);
+      let currentPage = this.getTagCurrentPage(tag);
+      const totalPages = Math.ceil(filteredFeatures.length / this.tagFeaturePageSize);
+      
+      // Ensure page is valid (not beyond total pages)
+      if (totalPages > 0 && currentPage > totalPages) {
+        currentPage = totalPages;
+        this.tagCurrentPages[tag] = currentPage;
+      } else if (currentPage < 1) {
+        currentPage = 1;
+        this.tagCurrentPages[tag] = currentPage;
+      }
+      
+      const startIndex = (currentPage - 1) * this.tagFeaturePageSize;
+      const endIndex = startIndex + this.tagFeaturePageSize;
+      return filteredFeatures.slice(startIndex, endIndex);
+    },
+    tagNextPage(tag) {
+      if (this.getTagHasNextPage(tag)) {
+        const currentPage = this.getTagCurrentPage(tag);
+        this.tagCurrentPages[tag] = currentPage + 1;
+        // Scroll to top of features list for this tag
+        this.$nextTick(() => {
+          const tagContainer = this.$el.querySelector(`[data-tag="${tag}"]`);
+          if (tagContainer) {
+            const featuresList = tagContainer.querySelector('.divide-y');
+            if (featuresList) {
+              featuresList.scrollIntoView({ behavior: 'smooth', block: 'start' });
+            }
+          }
+        });
+      }
+    },
+    tagPreviousPage(tag) {
+      if (this.getTagHasPreviousPage(tag)) {
+        const currentPage = this.getTagCurrentPage(tag);
+        this.tagCurrentPages[tag] = currentPage - 1;
+        // Scroll to top of features list for this tag
+        this.$nextTick(() => {
+          const tagContainer = this.$el.querySelector(`[data-tag="${tag}"]`);
+          if (tagContainer) {
+            const featuresList = tagContainer.querySelector('.divide-y');
+            if (featuresList) {
+              featuresList.scrollIntoView({ behavior: 'smooth', block: 'start' });
+            }
+          }
+        });
+      }
+    },
     isSystemTag(tag) {
       // Check if tag exists in systemTagsData
       return tag in this.systemTagsData;
@@ -292,7 +541,17 @@ export default {
       this.error = null;
 
       try {
-        const response = await fetch('/api/features/by-tag/');
+        // Build query parameters
+        const params = new URLSearchParams({
+          page: this.currentPage.toString()
+        });
+        
+        // Add search query if provided
+        if (this.searchQuery.trim()) {
+          params.append('search', this.searchQuery.trim());
+        }
+        
+        const response = await fetch(`/api/features/by-tag/?${params.toString()}`);
 
         if (!response.ok) {
           throw new Error(`HTTP error! status: ${response.status}`);
@@ -310,6 +569,13 @@ export default {
             ...this.userTagsData,
             ...this.systemTagsData
           };
+          
+          // Store pagination info from server
+          if (data.pagination) {
+            this.paginationInfo = data.pagination;
+          } else {
+            this.paginationInfo = null;
+          }
         } else {
           throw new Error(data.error || 'Failed to load tags');
         }
@@ -639,10 +905,75 @@ export default {
     downloadTagKmz(tag) {
       const url = `/api/export-kmz?tag=${encodeURIComponent(tag)}`;
       window.open(url, '_blank');
+    },
+    nextPage() {
+      if (this.hasNextPage) {
+        this.currentPage++;
+        this.gotoPageInput = null;
+        this.fetchTagsData();
+        // Scroll to top of tags list
+        this.$nextTick(() => {
+          const tagsList = this.$el.querySelector('.space-y-4');
+          if (tagsList) {
+            tagsList.scrollIntoView({ behavior: 'smooth', block: 'start' });
+          }
+        });
+      }
+    },
+    previousPage() {
+      if (this.hasPreviousPage) {
+        this.currentPage--;
+        this.gotoPageInput = null;
+        this.fetchTagsData();
+        // Scroll to top of tags list
+        this.$nextTick(() => {
+          const tagsList = this.$el.querySelector('.space-y-4');
+          if (tagsList) {
+            tagsList.scrollIntoView({ behavior: 'smooth', block: 'start' });
+          }
+        });
+      }
+    },
+    jumpToPage() {
+      if (this.isValidPageNumber) {
+        this.currentPage = this.gotoPageInput;
+        this.gotoPageInput = null;
+        this.fetchTagsData();
+        // Scroll to top of tags list
+        this.$nextTick(() => {
+          const tagsList = this.$el.querySelector('.space-y-4');
+          if (tagsList) {
+            tagsList.scrollIntoView({ behavior: 'smooth', block: 'start' });
+          }
+        });
+      }
+    }
+  },
+  watch: {
+    searchQuery() {
+      // Clear existing timer
+      if (this.searchDebounceTimer) {
+        clearTimeout(this.searchDebounceTimer);
+      }
+      
+      // Reset to first page immediately (for UI responsiveness)
+      this.currentPage = 1;
+      this.gotoPageInput = null;
+      
+      // Debounce the API call - wait 400ms after user stops typing
+      this.searchDebounceTimer = setTimeout(() => {
+        this.fetchTagsData();
+      }, 400);
     }
   },
   async mounted() {
     await this.fetchTagsData();
+  },
+  beforeUnmount() {
+    // Clear debounce timer when component is destroyed
+    if (this.searchDebounceTimer) {
+      clearTimeout(this.searchDebounceTimer);
+    }
   }
 }
 </script>
