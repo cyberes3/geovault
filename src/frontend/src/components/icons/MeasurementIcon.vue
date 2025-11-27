@@ -1,6 +1,7 @@
 <template>
   <svg
     :class="['w-4 h-4 flex-shrink-0 text-gray-600 transition-transform duration-200', rotationClass]"
+    :style="rotationStyle"
     fill="none"
     viewBox="0 0 24 24"
     stroke-width="2"
@@ -35,8 +36,20 @@ export default {
       if (deg === 90) return 'rotate-90'
       if (deg === 180) return 'rotate-180'
       if (deg === 270 || deg === -90) return '-rotate-90'
-      if (deg !== 0) return `rotate-[${deg}deg]` // Tailwind arbitrary value support might vary, but class binding works
+      // For non-standard angles, fall back to inline styles instead of dynamic Tailwind classes
       return ''
+    },
+    rotationStyle() {
+      const deg = Number(this.rotation)
+      if (!deg) return {}
+
+      // Use Tailwind classes for the common right-angle rotations
+      if (deg === 90 || deg === 180 || deg === 270 || deg === -90) {
+        return {}
+      }
+
+      // For arbitrary angles, rely on a plain CSS transform to avoid invalid Tailwind class generation
+      return { transform: `rotate(${deg}deg)` }
     }
   }
 }
