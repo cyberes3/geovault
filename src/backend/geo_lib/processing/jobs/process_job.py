@@ -294,6 +294,10 @@ class ProcessJob(BaseJob):
                 minimal_processing=is_replacement
             )
             geojson_data, processing_log = processor.process()
+
+            if not geojson_data or 'features' not in geojson_data:
+                raise FileValidationError("Processor returned invalid GeoJSON data")
+
             logger.info(f"GeoJSON conversion completed for job {job_id} in {time.time() - conversion_start:.2f}s")
             conversion_duration = time.time() - conversion_start
             realtime_log.add_timing("GeoJSON conversion", conversion_duration, "ProcessJob")

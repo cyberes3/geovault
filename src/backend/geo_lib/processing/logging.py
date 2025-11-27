@@ -131,10 +131,50 @@ class RealTimeImportLog:
             # Don't raise the exception - we still want processing to continue
     
     def extend(self, msgs: 'ImportLog'):
-        """Extend with messages from another ImportLog and write them to DB."""
-        for msg in msgs.get():
-            self.add(msg.msg, msg.source, msg.level)
-    
+        """Extend with messages from another ImportLog and write them to DB efficiently."""
+        messages_to_add = msgs.get()
+        if not messages_to_add:
+            return
+
+        from api.models import DatabaseLogging
+        timestamp = timezone.now()
+        db_logs = []
+        
+        # 1. Prepare DB objects
+        for msg in messages_to_add:
+            # Set timestamp if missing
+            if not msg.timestamp:
+                msg.timestamp = timestamp
+                
+            db_logs.append(DatabaseLogging(
+                user_id=self.user_id,
+                log_id=self.log_id,
+                level=msg.level.value,
+                text=msg.msg,
+                source=msg.source,
+                attributes={},
+                timestamp=msg.timestamp,
+            ))
+            self._messages.append(msg)
+
+        # 2. Bulk Create
+        try:
+            created_logs = DatabaseLogging.objects.bulk_create(db_logs)
+            
+            # Update IDs for broadcast
+            for i, log in enumerate(created_logs):
+                messages_to_add[i].id = log.id
+                
+            self._db_logger.debug(f"Real-time log extended with {len(db_logs)} messages")
+            
+            # 3. Batch Broadcast
+            if self.log_id and len(messages_to_add) > 0:
+                 self._broadcast_logs_batch_to_websocket(messages_to_add)
+
+        except Exception as e:
+            self._db_logger.error(f"Failed to write real-time logs to database: {str(e)}")
+            self._db_logger.error(f"Real-time log database write error traceback: {traceback.format_exc()}")
+
     def get(self) -> List[DatabaseLogMsg]:
         """Get all messages (for compatibility with ImportLog)."""
         return self._messages.copy()
@@ -182,3 +222,41 @@ class RealTimeImportLog:
         except Exception as e:
             self._db_logger.error(f"Failed to broadcast log to WebSocket: {str(e)}")
             # Don't raise the exception - we still want processing to continue
+
+    def _broadcast_logs_batch_to_websocket(self, log_msgs: List[DatabaseLogMsg]):
+        """Broadcast batch of log messages to WebSocket channels."""
+        try:
+            from channels.layers import get_channel_layer
+            from asgiref.sync import async_to_sync
+            
+            # Find the import item associated with this log_id
+            from api.models import ImportQueue
+            try:
+                import_item = ImportQueue.objects.get(log_id=self.log_id)
+                user_id = import_item.user_id
+                item_id = import_item.id
+                
+                channel_layer = get_channel_layer()
+                if channel_layer:
+                    # Send as a single batch event
+                    async_to_sync(channel_layer.group_send)(
+                        f"process_status_{user_id}_{item_id}",
+                        {
+                            'type': 'logs_batch_added',
+                            'data': {
+                                'logs': [
+                                    {
+                                        'id': msg.id,
+                                        'timestamp': msg.timestamp.isoformat() if msg.timestamp else None,
+                                        'msg': msg.msg,
+                                        'source': msg.source,
+                                        'level': msg.level.value
+                                    } for msg in log_msgs
+                                ]
+                            }
+                        }
+                    )
+            except ImportQueue.DoesNotExist:
+                pass
+        except Exception as e:
+            self._db_logger.error(f"Failed to broadcast log batch to WebSocket: {str(e)}")

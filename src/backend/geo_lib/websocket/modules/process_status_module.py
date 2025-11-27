@@ -172,6 +172,13 @@ class ProcessStatusModule(BaseWebSocketModule):
         """Handle new log entries."""
         await self.send_to_client('log_added', data)
 
+    async def handle_logs_batch_added(self, data: Dict[str, Any]) -> None:
+        """Handle new log batch entries."""
+        # Iterate and send individual updates to client (for now)
+        logs = data.get('logs', [])
+        for log in logs:
+            await self.send_to_client('log_added', log)
+
     async def handle_item_completed(self, data: Dict[str, Any]) -> None:
         """Handle item completion."""
         await self.send_to_client('item_completed', data)

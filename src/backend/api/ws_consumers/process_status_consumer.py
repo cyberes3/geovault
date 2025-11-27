@@ -168,6 +168,10 @@ class ProcessStatusConsumer(AsyncWebsocketConsumer):
         """Handle new log entries."""
         await self.process_status_module.handle_logs_added(event['data'])
 
+    async def logs_batch_added(self, event):
+        """Handle new log batch entries."""
+        await self.process_status_module.handle_logs_batch_added(event['data'])
+
     async def item_completed(self, event):
         """Handle item completion."""
         await self.process_status_module.handle_item_completed(event['data'])
