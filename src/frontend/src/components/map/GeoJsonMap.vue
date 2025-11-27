@@ -125,6 +125,19 @@
             @close="showFeaturePopup = false"
             @select="handleFeatureSelect"
         />
+
+        <!-- Center to User Location Button -->
+        <button
+            v-if="userLocation && !isPublicShareMode"
+            @click="centerToUserLocation"
+            class="absolute bottom-4 left-4 bg-white hover:bg-gray-50 text-gray-700 p-2 rounded-md shadow-md border border-gray-200 z-10 transition-colors focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2"
+            title="Center map to your location"
+        >
+          <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z"></path>
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 11a3 3 0 11-6 0 3 3 0 016 0z"></path>
+          </svg>
+        </button>
       </div>
     </div>
 
@@ -505,6 +518,43 @@ export default {
       this.handleHoverClear() // Clear hover marker when feature changes
     },
 
+    // Center map to user's IP location
+    centerToUserLocation() {
+      if (!this.map || !this.userLocation) return
+
+      const latitude = this.userLocation.latitude
+      const longitude = this.userLocation.longitude
+
+      if (latitude == null || longitude == null) {
+        console.warn('User location coordinates are not available')
+        return
+      }
+
+      const view = this.map.getView()
+      const center = fromLonLat([longitude, latitude])
+      const currentZoom = view.getZoom()
+
+      // If zoomed in too far, zoom out to a reasonable level
+      // Otherwise, just pan to the location without changing zoom
+      const maxReasonableZoom = 12
+      const reasonableZoom = 10
+
+      if (currentZoom > maxReasonableZoom) {
+        // Zoom out and pan
+        view.animate({
+          center: center,
+          zoom: reasonableZoom,
+          duration: 500
+        })
+      } else {
+        // Just pan, preserve current zoom
+        view.animate({
+          center: center,
+          duration: 500
+        })
+      }
+    },
+
     // Handle feature selection from popup
     handleFeatureSelect(feature) {
       this.selectedFeature = feature
@@ -525,7 +575,7 @@ export default {
       }
 
       let url = `${APIHOST}/api/export-kmz?feature=${encodeURIComponent(featureId)}`
-      
+
       // If in public share mode, include share_id parameter
       if (this.isPublicShareMode && this.shareId) {
         url += `&share=${encodeURIComponent(this.shareId)}`
@@ -1110,6 +1160,25 @@ export default {
 
         if (response.ok && data.location) {
           this.userLocation = data.location
+
+          // Log location information
+          const location = data.location
+          const locationString = [
+            location.city,
+            location.state || location.state_code,
+            location.country || location.country_code
+          ].filter(Boolean).join(', ') || 'Unknown location'
+
+          const coordinates = location.latitude && location.longitude
+            ? `${location.latitude.toFixed(4)}, ${location.longitude.toFixed(4)}`
+            : 'No coordinates'
+
+          console.log('📍 User Location:', {
+            location: locationString,
+            coordinates: coordinates,
+            usingFallback: location.is_default === true,
+            maxmindAvailable: data.maxmind_available !== false
+          })
         } else {
           console.warn('Failed to get user location:', data.error || 'Unknown error')
           this.userLocation = null
@@ -1573,7 +1642,7 @@ export default {
     destroyMapResources() {
       // Check if we need to destroy the map to free up memory
       if (this.featureCount > MAP_CONFIG.DESTROY_MAP_THRESHOLD) {
-        
+
         // Clear vector source to release feature geometries immediately
         if (this.vectorSource) {
           this.vectorSource.clear()
@@ -1628,7 +1697,7 @@ export default {
         } else {
           await this.loadDataForCurrentView()
         }
-        
+
         // Update map size
         await this.$nextTick()
         if (this.map) {

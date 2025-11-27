@@ -35,6 +35,9 @@ def get_user_location(request):
         # Get location data
         location_data = geo_service.get_location_from_ip(client_ip)
 
+        # Check if MaxMind database is available
+        maxmind_available = geo_service.reader is not None
+
         if location_data is None:
             return JsonResponse({
                 'error': 'Unable to determine location from IP address',
@@ -42,7 +45,8 @@ def get_user_location(request):
                 'ip_info': {
                     'ip': client_ip,
                     'accuracy_radius': None
-                }
+                },
+                'maxmind_available': maxmind_available
             }, status=404)
 
         # Prepare response data
@@ -62,7 +66,8 @@ def get_user_location(request):
             'ip_info': {
                 'ip': location_data.get('ip'),
                 'accuracy_radius': location_data.get('accuracy_radius')
-            }
+            },
+            'maxmind_available': maxmind_available
         }
 
         return JsonResponse(response_data)
