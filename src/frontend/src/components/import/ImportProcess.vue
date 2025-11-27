@@ -1452,7 +1452,7 @@ export default {
         // Convert skippedFeatureIds Set to array for JSON serialization
         // Filter out index-based IDs (temp IDs) - only send actual feature IDs to backend
         const skippedFeatureIdsArray = Array.from(this.skippedFeatureIds).filter(id => !id.startsWith('index_'));
-        const response = await axios.post('/api/item/import/perform/' + this.currentId, {
+        const response = await axios.post('/api/item/import/perform/' + this.currentId + '?blocking=true', {
           import_custom_icons: this.importCustomIcons,
           skipped_feature_ids: skippedFeatureIdsArray
         }, {

@@ -6,6 +6,7 @@ from django import forms
 from django.http import HttpResponse, JsonResponse
 from django.views.decorators.csrf import csrf_protect
 from django.views.decorators.http import require_http_methods
+import time
 
 from api.models import ImportQueue
 from geo_lib.const_strings import CONST_INTERNAL_TAGS, filter_protected_tags, prepare_user_tags
@@ -382,7 +383,62 @@ def import_to_featurestore(request, item_id):
         skipped_feature_ids=skipped_feature_ids
     )
 
-    return JsonResponse({
-        'msg': 'Import job started',
-        'job_id': job_id
-    }, status=200)
+    # Check if the caller requested blocking behavior
+    blocking = request.GET.get('blocking', 'false').lower() == 'true'
+
+    if not blocking:
+        # Default behavior: return immediately and let the job run in background
+        return JsonResponse({
+            'msg': 'Import job started',
+            'job_id': job_id
+        }, status=200)
+
+    # Blocking behavior: wait for the job to finish before returning a response
+    timeout_seconds = 300  # 5 minutes
+    poll_interval = 0.1
+    start_time = time.time()
+
+    while True:
+        # Check for timeout
+        if time.time() - start_time > timeout_seconds:
+            return JsonResponse({
+                'msg': 'Import job timed out while waiting for completion',
+                'job_id': job_id,
+                'code': 504
+            }, status=504)
+
+        job_status = status_tracker.get_job_status(job_id)
+
+        # If job no longer exists, return an error
+        if not job_status:
+            return JsonResponse({
+                'msg': 'Import job not found',
+                'job_id': job_id,
+                'code': 404
+            }, status=404)
+
+        status = job_status.get('status')
+
+        # Terminal states: completed, failed, or cancelled
+        if status in ('completed', 'failed', 'cancelled'):
+            # Refresh import item to get latest state
+            import_item.refresh_from_db()
+
+            response_payload = {
+                'msg': job_status.get('message', ''),
+                'job_id': job_id,
+                'job_status': job_status,
+                'imported': import_item.imported
+            }
+
+            if status == 'completed':
+                return JsonResponse(response_payload, status=200)
+            elif status == 'failed':
+                response_payload['code'] = 500
+                return JsonResponse(response_payload, status=500)
+            else:  # cancelled
+                response_payload['code'] = 499  # client closed request / cancelled
+                return JsonResponse(response_payload, status=499)
+
+        # Not finished yet, wait a bit before polling again
+        time.sleep(poll_interval)
