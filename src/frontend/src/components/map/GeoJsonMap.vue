@@ -21,9 +21,7 @@
           <div v-if="publicShareError" class="absolute inset-0 z-50 flex items-center justify-center bg-gray-900 bg-opacity-50">
             <div class="bg-white rounded-lg shadow-xl p-6 max-w-md mx-4 select-none">
               <div class="flex items-center space-x-3 mb-4">
-                <svg class="w-8 h-8 text-red-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" stroke-linecap="round" stroke-linejoin="round" stroke-width="2"></path>
-                </svg>
+                <ExclamationCircleIcon class="w-8 h-8 text-red-600" />
                 <h3 class="text-lg font-semibold text-gray-900">Invalid Share Link</h3>
               </div>
               <p class="text-gray-700 mb-4">{{ publicShareError }}</p>
@@ -37,9 +35,7 @@
           <div v-if="loadError" class="absolute inset-0 z-50 flex items-center justify-center bg-gray-900 bg-opacity-50">
             <div class="bg-white rounded-lg shadow-xl p-6 max-w-md mx-4 select-none">
               <div class="flex items-center space-x-3 mb-4">
-                <svg class="w-8 h-8 text-red-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" stroke-linecap="round" stroke-linejoin="round" stroke-width="2"></path>
-                </svg>
+                <ExclamationCircleIcon class="w-8 h-8 text-red-600" />
                 <h3 class="text-lg font-semibold text-gray-900">Error Loading Map</h3>
               </div>
               <p class="text-gray-700 mb-4">{{ loadError }}</p>
@@ -51,10 +47,7 @@
         <!-- Public Share Title (shown when viewing a public share) -->
         <div v-if="isPublicShareMode" class="absolute top-4 right-4 bg-white bg-opacity-90 px-4 py-2 rounded-lg shadow-md z-10">
           <div class="flex items-center space-x-2">
-            <svg class="w-5 h-5 text-blue-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path d="M8.684 13.342C8.885 12.938 9 12.482 9 12c0-.482-.115-.938-.316-1.342m0 2.684a3 3 0 110-2.684m0 2.684l6.632 3.316m-6.632-6l6.632-3.316m0 0a3 3 0 105.367-2.684 3 3 0 00-5.367 2.684zm0 9.316a3 3 0 105.368 2.684 3 3 0 00-5.368-2.684z" stroke-linecap="round" stroke-linejoin="round"
-                    stroke-width="2"></path>
-            </svg>
+            <ShareIcon class="w-5 h-5 text-blue-500" />
             <span v-if="(publicShareTag || publicShareCollectionName) && !publicShareError" class="text-sm font-medium text-gray-900">
               <template v-if="publicShareTag">Shared Tag: {{ publicShareTag }}</template>
               <template v-else-if="publicShareCollectionName">Shared Collection: {{ publicShareCollectionName }}</template>
@@ -65,9 +58,7 @@
         <!-- Collection Title (shown when viewing a collection) -->
         <div v-if="collectionName && !isPublicShareMode" class="absolute top-4 right-4 bg-white bg-opacity-90 px-4 py-2 rounded-lg shadow-md z-10">
           <div class="flex items-center space-x-2">
-            <svg class="w-5 h-5 text-blue-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10" stroke-linecap="round" stroke-linejoin="round" stroke-width="2"></path>
-            </svg>
+            <FolderIcon class="w-5 h-5 text-blue-500" />
             <span class="text-sm font-medium text-gray-900">Collection: {{ collectionName }}</span>
           </div>
         </div>
@@ -133,10 +124,7 @@
             class="absolute bottom-4 left-4 bg-white hover:bg-gray-50 text-gray-700 p-2 rounded-md shadow-md border border-gray-200 z-10 transition-colors focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2"
             title="Center map to your location"
         >
-          <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z"></path>
-            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 11a3 3 0 11-6 0 3 3 0 016 0z"></path>
-          </svg>
+          <HomeIcon class="w-4 h-4" />
         </button>
       </div>
     </div>
@@ -182,6 +170,7 @@ import FeatureEditBox from './FeatureEditBox.vue'
 import FeatureSelectionPopup from './FeatureSelectionPopup.vue'
 import ElevationProfileDialog from './ElevationProfileDialog.vue'
 import Loader from '@/components/parts/Loader.vue'
+import { HomeIcon, ExclamationCircleIcon, ShareIcon, FolderIcon } from '@heroicons/vue/24/outline'
 
 export default {
   name: 'GeoJsonMap',
@@ -192,7 +181,11 @@ export default {
     FeatureEditBox,
     Loader,
     FeatureSelectionPopup,
-    ElevationProfileDialog
+    ElevationProfileDialog,
+    HomeIcon,
+    ExclamationCircleIcon,
+    ShareIcon,
+    FolderIcon
   },
   mixins: [],
   computed: {

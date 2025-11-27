@@ -19,9 +19,7 @@
               class="text-gray-400 hover:text-gray-600 focus:outline-none focus:text-gray-600 transition ease-in-out duration-150"
               title="Close dialog"
             >
-              <svg class="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
-              </svg>
+              <XMarkIcon class="h-6 w-6" />
             </button>
           </div>
         </div>
@@ -73,11 +71,13 @@ import {Style, Fill, Stroke, Circle, Text} from 'ol/style'
 import {GeoJSON} from 'ol/format'
 import {fromLonLat} from 'ol/proj'
 import Loader from '@/components/parts/Loader.vue'
+import { XMarkIcon } from '@heroicons/vue/24/outline'
 
 export default {
   name: 'FeatureMapDialog',
   components: {
-    Loader
+    Loader,
+    XMarkIcon
   },
   props: {
     isOpen: {

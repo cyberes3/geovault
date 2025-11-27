@@ -11,9 +11,7 @@
             class="text-gray-400 hover:text-blue-500 transition-colors"
             title="Show elevation profile"
           >
-            <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z"></path>
-            </svg>
+            <ChartBarIcon class="w-5 h-5" />
           </button>
           <button
               v-if="showDownloadButton"
@@ -21,14 +19,7 @@
               class="text-gray-400 hover:text-blue-500 transition-colors"
               title="Download KMZ"
           >
-            <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">t
-              <path
-                  stroke-linecap="round"
-                  stroke-linejoin="round"
-                  stroke-width="2"
-                  d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1M12 4v10m0 0l-4-4m4 4l4-4"
-              ></path>
-            </svg>
+            <ArrowDownTrayIcon class="w-5 h-5" />
           </button>
           <button
             v-if="showEditButton"
@@ -36,28 +27,21 @@
             class="text-gray-400 hover:text-blue-500 transition-colors"
             title="Edit feature"
           >
-            <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"></path>
-            </svg>
+            <PencilIcon class="w-5 h-5" />
           </button>
           <button
             @click="$emit('zoom')"
             class="text-gray-400 hover:text-blue-500 transition-colors"
             title="Zoom to feature"
           >
-            <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z"></path>
-              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 11a3 3 0 11-6 0 3 3 0 016 0z"></path>
-            </svg>
+            <MapPinIcon class="w-5 h-5" />
           </button>
           <button
             @click="$emit('close')"
             class="text-gray-400 hover:text-gray-600 transition-colors"
             title="Close"
           >
-            <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path>
-            </svg>
+            <XMarkIcon class="w-5 h-5" />
           </button>
         </div>
       </div>
@@ -120,9 +104,17 @@
 <script>
 import { marked } from 'marked'
 import { GeoJSON } from 'ol/format'
+import { ChartBarIcon, ArrowDownTrayIcon, PencilIcon, MapPinIcon, XMarkIcon } from '@heroicons/vue/24/outline'
 
 export default {
   name: 'FeatureInfoBox',
+  components: {
+    ChartBarIcon,
+    ArrowDownTrayIcon,
+    PencilIcon,
+    MapPinIcon,
+    XMarkIcon
+  },
   props: {
     feature: {
       type: Object,

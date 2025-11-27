@@ -17,9 +17,7 @@
       <!-- Search Input -->
       <div class="relative">
         <div class="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
-          <svg class="h-5 w-5 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" stroke-linecap="round" stroke-linejoin="round" stroke-width="2"></path>
-          </svg>
+          <MagnifyingGlassIcon class="h-5 w-5 text-gray-400" />
         </div>
         <input
             v-model="searchQuery"
@@ -33,9 +31,7 @@
             @click="searchQuery = ''"
             title="Clear search"
         >
-          <svg class="h-5 w-5 text-gray-400 hover:text-gray-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path d="M6 18L18 6M6 6l12 12" stroke-linecap="round" stroke-linejoin="round" stroke-width="2"></path>
-          </svg>
+          <XMarkIcon class="h-5 w-5 text-gray-400 hover:text-gray-600" />
         </button>
       </div>
     </div>
@@ -48,9 +44,7 @@
     <!-- Error State -->
     <div v-else-if="error" class="bg-red-50 border border-red-200 rounded-lg p-6">
       <div class="flex items-center">
-        <svg class="w-5 h-5 text-red-600 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-          <path d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" stroke-linecap="round" stroke-linejoin="round" stroke-width="2"></path>
-        </svg>
+        <ExclamationCircleIcon class="w-5 h-5 text-red-600 mr-2" />
         <p class="text-red-800">{{ error }}</p>
       </div>
     </div>
@@ -58,9 +52,7 @@
     <!-- Empty State -->
     <div v-else-if="!loading && Object.keys(tagsData).length === 0" class="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
       <div class="text-center py-12">
-        <svg class="mx-auto h-12 w-12 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-          <path d="M7 7h.01M7 3h5c.512 0 1.024.195 1.414.586l7 7a2 2 0 010 2.828l-7 7a2 2 0 01-2.828 0l-7-7A1.994 1.994 0 013 12V7a4 4 0 014-4z" stroke-linecap="round" stroke-linejoin="round" stroke-width="2"></path>
-        </svg>
+        <TagIcon class="mx-auto h-12 w-12 text-gray-400" />
         <h3 class="mt-2 text-sm font-medium text-gray-900">No tags found</h3>
         <p class="mt-1 text-sm text-gray-500">Tags will appear here once you import features with tags.</p>
       </div>
@@ -69,9 +61,7 @@
     <!-- No Search Results -->
     <div v-else-if="!loading && Object.keys(filteredTagsData).length === 0 && searchQuery" class="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
       <div class="text-center py-12">
-        <svg class="mx-auto h-12 w-12 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-          <path d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" stroke-linecap="round" stroke-linejoin="round" stroke-width="2"></path>
-        </svg>
+        <MagnifyingGlassIcon class="mx-auto h-12 w-12 text-gray-400" />
         <h3 class="mt-2 text-sm font-medium text-gray-900">No tags match your search</h3>
         <p class="mt-1 text-sm text-gray-500">Try adjusting your search query.</p>
       </div>
@@ -118,10 +108,7 @@
                   @click.stop.prevent="openShareDialog(tag)"
                   @mousedown.stop.prevent
               >
-                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path d="M8.684 13.342C8.885 12.938 9 12.482 9 12c0-.482-.115-.938-.316-1.342m0 2.684a3 3 0 110-2.684m0 2.684l6.632 3.316m-6.632-6l6.632-3.316m0 0a3 3 0 105.367-2.684 3 3 0 00-5.367 2.684zm0 9.316a3 3 0 105.368 2.684 3 3 0 00-5.368-2.684z" stroke-linecap="round" stroke-linejoin="round"
-                        stroke-width="2"></path>
-                </svg>
+                <ShareIcon class="w-4 h-4" />
               </button>
               <button
                   class="p-1.5 text-gray-400 hover:text-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-1 rounded"
@@ -130,9 +117,7 @@
                   @click.stop.prevent="downloadTagKmz(tag)"
                   @mousedown.stop.prevent
               >
-                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1M12 4v10m0 0l-4-4m4 4l4-4"></path>
-                </svg>
+                <ArrowDownTrayIcon class="w-4 h-4" />
               </button>
               <button
                   :class="[
@@ -147,9 +132,7 @@
                   @click.stop.prevent="!isSystemTag(tag) && startTagEdit(tag)"
                   @mousedown.stop.prevent
               >
-                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" stroke-linecap="round" stroke-linejoin="round" stroke-width="2"></path>
-                </svg>
+                <PencilIcon class="w-4 h-4" />
               </button>
               <button
                   :class="[
@@ -164,9 +147,7 @@
                   @click.stop.prevent="!isSystemTag(tag) && deleteTag(tag)"
                   @mousedown.stop.prevent
               >
-                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" stroke-linecap="round" stroke-linejoin="round" stroke-width="2"></path>
-                </svg>
+                <TrashIcon class="w-4 h-4" />
               </button>
             </div>
             <button
@@ -175,9 +156,7 @@
                 title="Save tag name"
                 @click.stop="saveTagEdit(tag)"
             >
-              <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path d="M5 13l4 4L19 7" stroke-linecap="round" stroke-linejoin="round" stroke-width="2"></path>
-              </svg>
+              <CheckIcon class="w-4 h-4" />
             </button>
           </div>
         </div>
@@ -186,9 +165,7 @@
         <div v-if="getTagFeatureCount(tag) > 10" class="px-6 py-3 border-b border-gray-200 bg-gray-50">
           <div class="relative">
             <div class="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
-              <svg class="h-4 w-4 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" stroke-linecap="round" stroke-linejoin="round" stroke-width="2"></path>
-              </svg>
+              <MagnifyingGlassIcon class="h-4 w-4 text-gray-400" />
             </div>
             <input
                 :value="getTagSearchQuery(tag)"
@@ -203,9 +180,7 @@
                 @click="updateTagSearchQuery(tag, '')"
                 title="Clear search"
             >
-              <svg class="h-4 w-4 text-gray-400 hover:text-gray-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path d="M6 18L18 6M6 6l12 12" stroke-linecap="round" stroke-linejoin="round" stroke-width="2"></path>
-              </svg>
+              <XMarkIcon class="h-4 w-4 text-gray-400 hover:text-gray-600" />
             </button>
           </div>
         </div>
@@ -238,9 +213,7 @@
                     type="button"
                     @click.stop.prevent="removeTagFromFeature(tag, feature)"
                 >
-                  <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path d="M6 18L18 6M6 6l12 12" stroke-linecap="round" stroke-linejoin="round" stroke-width="2"></path>
-                  </svg>
+                  <XMarkIcon class="w-4 h-4" />
                 </button>
                 <router-link
                     v-if="feature.properties._id"
@@ -249,9 +222,7 @@
                     @click.stop
                 >
                   View on Map
-                  <svg class="w-3 h-3 ml-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path d="M9 20l-5.447-2.724A1 1 0 013 16.382V5.618a1 1 0 011.447-.894L9 7m0 13l6-3m-6 3V7m6 10l4.553 2.276A1 1 0 0021 18.382V7.618a1 1 0 00-.553-.894L15 4m0 13V4m0 0L9 7" stroke-linecap="round" stroke-linejoin="round" stroke-width="2"></path>
-                  </svg>
+                  <MapIcon class="w-3 h-3 ml-1" />
                 </router-link>
               </div>
             </div>
@@ -271,9 +242,7 @@
                   @click="tagPreviousPage(tag)"
                   title="Previous page"
               >
-                <svg class="w-3 h-3 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path d="M15 19l-7-7 7-7" stroke-linecap="round" stroke-linejoin="round" stroke-width="2"></path>
-                </svg>
+                <ArrowLeftIcon class="w-3 h-3 mr-1" />
                 Prev
               </button>
               <span class="text-xs text-gray-700">Page {{ getTagCurrentPage(tag) }} of {{ getTagTotalPages(tag) }}</span>
@@ -284,9 +253,7 @@
                   title="Next page"
               >
                 Next
-                <svg class="w-3 h-3 ml-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path d="M9 5l7 7-7 7" stroke-linecap="round" stroke-linejoin="round" stroke-width="2"></path>
-                </svg>
+                <ArrowRightIcon class="w-3 h-3 ml-1" />
               </button>
             </div>
           </div>
@@ -307,9 +274,7 @@
               @click="previousPage"
               title="Go to previous page"
           >
-            <svg class="w-4 h-4 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path d="M15 19l-7-7 7-7" stroke-linecap="round" stroke-linejoin="round" stroke-width="2"></path>
-            </svg>
+            <ArrowLeftIcon class="w-4 h-4 mr-1" />
             Previous
           </button>
           <span class="text-sm text-gray-700">Page {{ currentPage }} of {{ totalPages }}</span>
@@ -320,9 +285,7 @@
               title="Go to next page"
           >
             Next
-            <svg class="w-4 h-4 ml-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path d="M9 5l7 7-7 7" stroke-linecap="round" stroke-linejoin="round" stroke-width="2"></path>
-            </svg>
+            <ArrowRightIcon class="w-4 h-4 ml-1" />
           </button>
           <div class="flex items-center space-x-2 ml-4 pl-4 border-l border-gray-300">
             <label class="text-sm text-gray-700" for="goto-page">Go to:</label>
@@ -360,12 +323,25 @@
 <script>
 import TagShareDialog from "./TagShareDialog.vue";
 import Loader from "./parts/Loader.vue";
+import { MagnifyingGlassIcon, ExclamationCircleIcon, TagIcon, ShareIcon, ArrowDownTrayIcon, PencilIcon, TrashIcon, CheckIcon, MapIcon, ArrowLeftIcon, ArrowRightIcon, XMarkIcon } from '@heroicons/vue/24/outline';
 
 export default {
   name: 'TagsPage',
   components: {
     TagShareDialog,
-    Loader
+    Loader,
+    MagnifyingGlassIcon,
+    ExclamationCircleIcon,
+    TagIcon,
+    ShareIcon,
+    ArrowDownTrayIcon,
+    PencilIcon,
+    TrashIcon,
+    CheckIcon,
+    MapIcon,
+    ArrowLeftIcon,
+    ArrowRightIcon,
+    XMarkIcon
   },
   data() {
     return {

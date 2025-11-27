@@ -57,9 +57,7 @@
                   @click="toggleUserMenu"
               >
                 {{ userInfo?.email }}
-                <svg class="ml-2 h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path d="M19 9l-7 7-7-7" stroke-linecap="round" stroke-linejoin="round" stroke-width="2"></path>
-                </svg>
+                <ChevronDownIcon class="ml-2 h-4 w-4" />
               </button>
 
               <!-- Login Link (shown when user is not logged in and auth check is complete) -->
@@ -128,11 +126,13 @@ import {realtimeSocket} from "@/assets/js/websocket/realtimeSocket.js";
 import {getCookie} from "@/assets/js/auth.js";
 import axios from "axios";
 import Loader from "@/components/parts/Loader.vue";
+import { ChevronDownIcon } from '@heroicons/vue/24/outline';
 
 export default {
   name: 'App',
   components: {
-    Loader
+    Loader,
+    ChevronDownIcon
   },
   data() {
     return {

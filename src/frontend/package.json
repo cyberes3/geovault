@@ -13,6 +13,7 @@
     "type-check:watch": "vue-tsc --noEmit --watch"
   },
   "dependencies": {
+    "@heroicons/vue": "^2.2.0",
     "@types/geojson": "^7946.0.14",
     "axios": "^1.7.2",
     "chart.js": "^4.4.0",

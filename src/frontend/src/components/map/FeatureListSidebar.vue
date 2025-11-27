@@ -25,20 +25,10 @@
         title="Filter features by tags"
       >
         Tag Filter
-        <svg
+        <FunnelIcon
           v-if="selectedTags.length > 0"
           class="w-3 h-3 text-blue-500"
-          fill="none"
-          stroke="currentColor"
-          viewBox="0 0 24 24"
-        >
-          <path
-            stroke-linecap="round"
-            stroke-linejoin="round"
-            stroke-width="2"
-            d="M3 4a1 1 0 011-1h16a1 1 0 011 1v2.586a1 1 0 01-.293.707l-6.414 6.414a1 1 0 00-.293.707V17l-4 4v-6.586a1 1 0 00-.293-.707L3.293 7.293A1 1 0 013 6.586V4z"
-          />
-        </svg>
+        />
       </button>
     </div>
 
@@ -61,9 +51,7 @@
             type="button"
             title="Clear search"
           >
-            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path>
-            </svg>
+            <XMarkIcon class="w-4 h-4" />
           </button>
         </div>
       </div>
@@ -128,9 +116,7 @@
             type="button"
             title="Clear tag search"
           >
-            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path>
-            </svg>
+            <XMarkIcon class="w-4 h-4" />
           </button>
         </div>
       </div>
@@ -197,13 +183,16 @@
 <script>
 import {GeoJSON} from 'ol/format'
 import {APIHOST} from '@/config.js'
+import { FunnelIcon, XMarkIcon } from '@heroicons/vue/24/outline'
 import Loader from '@/components/parts/Loader.vue'
 import {fetchConfig} from '@/utils/configService.js'
 
 export default {
   name: 'FeatureListSidebar',
   components: {
-    Loader
+    Loader,
+    FunnelIcon,
+    XMarkIcon
   },
   props: {
     features: {

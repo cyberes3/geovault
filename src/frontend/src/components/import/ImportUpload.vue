@@ -10,9 +10,7 @@
     <div class="bg-blue-50 border border-blue-200 rounded-lg p-6">
       <div class="flex">
         <div class="flex-shrink-0">
-          <svg class="h-5 w-5 text-blue-600" fill="currentColor" viewBox="0 0 20 20">
-            <path clip-rule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7-4a1 1 0 11-2 0 1 1 0 012 0zM9 9a1 1 0 000 2v3a1 1 0 001 1h1a1 1 0 100-2v-3a1 1 0 00-1-1H9z" fill-rule="evenodd"></path>
-          </svg>
+          <InformationCircleIcon class="h-5 w-5 text-blue-600" />
         </div>
         <div class="ml-3 flex-1">
           <h3 class="text-sm font-medium text-blue-700">How to Upload and Import</h3>
@@ -46,9 +44,7 @@
               @click="upload"
               title="Upload selected files"
           >
-            <svg class="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12" stroke-linecap="round" stroke-linejoin="round" stroke-width="2"></path>
-            </svg>
+            <ArrowUpTrayIcon class="w-4 h-4 mr-2" />
             Upload {{ files.length > 0 ? `(${files.length} files)` : '' }}
           </button>
         </div>
@@ -84,9 +80,7 @@
             @dragenter.prevent="dragEnter"
         >
           <div v-if="files.length === 0" class="text-center" @dragleave="dragLeave" @dragenter.prevent="dragEnter">
-            <svg class="mx-auto h-12 w-12 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 48 48">
-              <path d="M28 8H12a4 4 0 00-4 4v20m32-12v8m0 0v8a4 4 0 01-4 4H12a4 4 0 01-4-4v-4m32-4l-3.172-3.172a4 4 0 00-5.656 0L28 28M8 32l9.172-9.172a4 4 0 015.656 0L28 28m0 0l4 4m4-24h8m-4-4v8m-12 4h.02" stroke-linecap="round" stroke-linejoin="round" stroke-width="2"/>
-            </svg>
+            <ArrowUpTrayIcon class="mx-auto h-12 w-12 text-gray-400" />
             <div class="mt-4">
               <p class="text-sm text-gray-600">
                 <span class="font-medium text-blue-500 hover:text-blue-500 cursor-pointer" @click="$refs.fileInput.click()">Click to upload</span>
@@ -121,16 +115,12 @@
                     class="absolute -right-2 w-6 h-6 bg-red-500 text-white rounded-full flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity duration-150 hover:bg-red-600 shadow-sm z-10"
                     @click="removeFile(index)"
                 >
-                  <svg class="h-3 w-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path d="M6 18L18 6M6 6l12 12" stroke-linecap="round" stroke-linejoin="round" stroke-width="2"></path>
-                  </svg>
+                  <XMarkIcon class="h-3 w-3" />
                 </button>
 
                 <!-- File icon -->
                 <div class="flex justify-center mb-2">
-                  <svg class="h-8 w-8 text-blue-500" fill="currentColor" viewBox="0 0 20 20">
-                    <path clip-rule="evenodd" d="M4 4a2 2 0 012-2h4.586A2 2 0 0112 2.586L15.414 6A2 2 0 0116 7.414V16a2 2 0 01-2 2H6a2 2 0 01-2-2V4zm2 6a1 1 0 011-1h6a1 1 0 110 2H7a1 1 0 01-1-1zm1 3a1 1 0 100 2h6a1 1 0 100-2H7z" fill-rule="evenodd"></path>
-                  </svg>
+                  <DocumentIcon class="h-8 w-8 text-blue-500" />
                 </div>
 
                 <!-- File info -->
@@ -158,13 +148,9 @@
           <div class="flex">
             <div class="flex-shrink-0">
               <!-- Success icon -->
-              <svg v-if="uploadMsg.toLowerCase().includes('success')" :class="messageIconClass" class="h-5 w-5" fill="currentColor" viewBox="0 0 20 20">
-                <path clip-rule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" fill-rule="evenodd"></path>
-              </svg>
+              <CheckIcon v-if="uploadMsg.toLowerCase().includes('success')" :class="messageIconClass" class="h-5 w-5" />
               <!-- Error/info icon -->
-              <svg v-else :class="messageIconClass" class="h-5 w-5" fill="currentColor" viewBox="0 0 20 20">
-                <path clip-rule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7-4a1 1 0 11-2 0 1 1 0 012 0zM9 9a1 1 0 000 2v3a1 1 0 001 1h1a1 1 0 100-2v-3a1 1 0 00-1-1H9z" fill-rule="evenodd"></path>
-              </svg>
+              <InformationCircleIcon v-else :class="messageIconClass" class="h-5 w-5" />
             </div>
             <div class="ml-3 flex-1">
               <p :class="messageTextClass" class="text-sm">{{ uploadMsg }}</p>
@@ -238,6 +224,7 @@ import ImportQueue from "@/components/import/parts/ImportQueue.vue";
 import ImportHelpModal from "@/components/import/parts/ImportHelpModal.vue";
 import {getCookie} from "@/assets/js/auth.js";
 import {SECURITY_CONFIG} from "@/config.js";
+import { InformationCircleIcon, ArrowUpTrayIcon, XMarkIcon, DocumentIcon, CheckIcon } from '@heroicons/vue/24/outline';
 import {
   getFileTypeByExtension,
   validateFileExtension,
@@ -365,7 +352,15 @@ export default {
       }
     }
   },
-  components: {Importqueue: ImportQueue, ImportHelpModal},
+  components: {
+    Importqueue: ImportQueue,
+    ImportHelpModal,
+    InformationCircleIcon,
+    ArrowUpTrayIcon,
+    XMarkIcon,
+    DocumentIcon,
+    CheckIcon
+  },
   data() {
     return {
       files: [],

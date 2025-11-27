@@ -16,9 +16,7 @@
           title="Import all selected items"
         >
           <Loader v-if="isBulkImporting" size="sm" layout="inline" :showMessage="false" />
-          <svg v-else class="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12"></path>
-          </svg>
+          <ArrowUpTrayIcon v-else class="w-4 h-4 mr-2" />
           {{ isBulkImporting ? 'Importing...' : `Import ${validImportableCount} Item${validImportableCount === 1 ? '' : 's'}` }}
         </button>
         <button
@@ -28,9 +26,7 @@
           title="Delete all selected items"
         >
           <Loader v-if="isBulkDeleting" size="sm" layout="inline" :showMessage="false" color="white" />
-          <svg v-else class="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"></path>
-          </svg>
+          <TrashIcon v-else class="w-4 h-4 mr-2" />
           {{ isBulkDeleting ? 'Deleting...' : `Delete ${selectedItems.size} Item${selectedItems.size === 1 ? '' : 's'}` }}
         </button>
       </div>
@@ -113,9 +109,7 @@
             <div class="flex items-center">
               <div class="flex-shrink-0">
                 <div class="w-8 h-8 bg-blue-100 rounded-lg flex items-center justify-center">
-                  <svg class="w-4 h-4 text-blue-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"></path>
-                  </svg>
+                  <DocumentIcon class="w-4 h-4 text-blue-500" />
                 </div>
               </div>
               <div class="ml-4">
@@ -149,15 +143,11 @@
               <span class="ml-1">Importing</span>
             </span>
             <span v-else-if="item.imported" class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-800">
-              <svg class="w-3 h-3 mr-1" fill="currentColor" viewBox="0 0 20 20">
-                <path fill-rule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clip-rule="evenodd"></path>
-              </svg>
+              <CheckIcon class="w-3 h-3 mr-1" />
               Imported
             </span>
             <span v-else-if="item.processing_failed" class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-red-100 text-red-800">
-              <svg class="w-3 h-3 mr-1" fill="currentColor" viewBox="0 0 20 20">
-                <path fill-rule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7 4a1 1 0 11-2 0 1 1 0 012 0zm-1-9a1 1 0 00-1 1v4a1 1 0 102 0V6a1 1 0 00-1-1z" clip-rule="evenodd"></path>
-              </svg>
+              <ExclamationCircleIcon class="w-3 h-3 mr-1" />
               Processing Failed
             </span>
             <span v-else-if="item.processing === true || (item.processing === false && item.feature_count === -1)" class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-yellow-100 text-yellow-800">
@@ -169,10 +159,7 @@
               <span class="ml-1">Deleting</span>
             </span>
             <span v-else-if="item.duplicate_status === 'duplicate_in_queue' || item.duplicate_status === 'duplicate_imported'" class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-purple-100 text-purple-800">
-              <svg class="w-3 h-3 mr-1" fill="currentColor" viewBox="0 0 20 20">
-                <path d="M7 9a2 2 0 012-2h6a2 2 0 012 2v6a2 2 0 01-2 2H9a2 2 0 01-2-2V9z"></path>
-                <path d="M5 3a2 2 0 00-2 2v6a2 2 0 002 2V5h8a2 2 0 00-2-2H5z"></path>
-              </svg>
+              <DocumentDuplicateIcon class="w-3 h-3 mr-1" />
               Duplicate
             </span>
             <span v-else class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-blue-100 text-blue-700">
@@ -191,9 +178,7 @@
                 @click="importItem(item, index)"
                 title="Import this item"
               >
-                <svg class="w-3 h-3 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12"></path>
-                </svg>
+              <ArrowUpTrayIcon class="w-3 h-3 mr-1" />
                 Import
               </button>
               <button
@@ -202,9 +187,7 @@
                 @click="deleteItem(item, index)"
                 title="Delete this item"
               >
-                <svg class="w-3 h-3 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"></path>
-                </svg>
+                <TrashIcon class="w-3 h-3 mr-1" />
                 Delete
               </button>
             </div>
@@ -223,6 +206,7 @@ import {getCookie} from "@/assets/js/auth.js";
 import {realtimeSocket} from "@/assets/js/websocket/realtimeSocket.js";
 import { toggleSetItem } from "@/assets/js/toggle-utils.js";
 import Loader from "@/components/parts/Loader.vue";
+import { ArrowUpTrayIcon, TrashIcon, DocumentIcon, CheckIcon, ExclamationCircleIcon, DocumentDuplicateIcon } from '@heroicons/vue/24/outline';
 
 export default {
   props: {
@@ -267,7 +251,13 @@ export default {
     }
   },
   components: {
-    Loader
+    Loader,
+    ArrowUpTrayIcon,
+    TrashIcon,
+    DocumentIcon,
+    CheckIcon,
+    ExclamationCircleIcon,
+    DocumentDuplicateIcon
   },
   data() {
     return {

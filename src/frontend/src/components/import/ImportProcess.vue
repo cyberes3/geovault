@@ -10,9 +10,7 @@
         </div>
         <div class="flex items-center space-x-2">
           <span v-if="isImported" class="inline-flex items-center px-3 py-1 rounded-full text-sm font-medium bg-green-100 text-green-800">
-            <svg class="w-4 h-4 mr-1" fill="currentColor" viewBox="0 0 20 20">
-              <path clip-rule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" fill-rule="evenodd"></path>
-            </svg>
+            <CheckIcon class="w-4 h-4 mr-1" />
             Imported
           </span>
         </div>
@@ -23,9 +21,7 @@
     <div v-if="msg !== '' && msg != null" class="bg-red-50 border border-red-200 rounded-lg p-4">
       <div class="flex">
         <div class="flex-shrink-0">
-          <svg class="h-5 w-5 text-red-400" fill="currentColor" viewBox="0 0 20 20">
-            <path clip-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z" fill-rule="evenodd"></path>
-          </svg>
+          <ExclamationCircleIcon class="h-5 w-5 text-red-400" />
         </div>
         <div class="ml-3">
           <h3 class="text-sm font-medium text-red-800">Processing Failed</h3>
@@ -45,9 +41,7 @@
             title="Open full log view"
             @click="dialogs.logs = true"
         >
-          <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" stroke-linecap="round" stroke-linejoin="round" stroke-width="2"></path>
-          </svg>
+          <ArrowTopRightOnSquareIcon class="w-4 h-4" />
         </button>
       </div>
       <div class="bg-gray-50 rounded-lg p-4">
@@ -85,9 +79,7 @@
         <div class="bg-blue-50 border border-blue-200 rounded-lg p-4">
           <div class="flex items-center">
             <div class="flex-shrink-0">
-              <svg class="h-8 w-8 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" stroke-linecap="round" stroke-linejoin="round" stroke-width="2"></path>
-              </svg>
+              <DocumentIcon class="h-8 w-8 text-blue-600" />
             </div>
             <div class="ml-3">
               <p class="text-sm font-medium text-blue-700">Total Features</p>
@@ -99,9 +91,7 @@
         <div class="bg-green-50 border border-green-200 rounded-lg p-4">
           <div class="flex items-center">
             <div class="flex-shrink-0">
-              <svg class="h-8 w-8 text-green-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path d="M5 13l4 4L19 7" stroke-linecap="round" stroke-linejoin="round" stroke-width="2"></path>
-              </svg>
+              <CheckIcon class="h-8 w-8 text-green-400" />
             </div>
             <div class="ml-3">
               <p class="text-sm font-medium text-green-800">Ready to Import</p>
@@ -113,9 +103,7 @@
         <div class="bg-yellow-50 border border-yellow-200 rounded-lg p-4">
           <div class="flex items-center">
             <div class="flex-shrink-0">
-              <svg class="h-8 w-8 text-yellow-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-2.5L13.732 4c-.77-.833-1.964-.833-2.732 0L3.732 16.5c-.77.833.192 2.5 1.732 2.5z" stroke-linecap="round" stroke-linejoin="round" stroke-width="2"></path>
-              </svg>
+              <ExclamationTriangleIcon class="h-8 w-8 text-yellow-400" />
             </div>
             <div class="ml-3">
               <p class="text-sm font-medium text-yellow-800">Exact Duplicates</p>
@@ -185,9 +173,7 @@
             title="Save all changes"
         >
           <Loader v-if="loading.saving" size="sm" layout="inline" :showMessage="false" color="white" />
-          <svg v-else class="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path d="M8 7H5a2 2 0 00-2 2v9a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-3m-1 4l-3 3m0 0l-3-3m3 3V4" stroke-linecap="round" stroke-linejoin="round" stroke-width="2"></path>
-          </svg>
+          <ArrowDownTrayIcon v-else class="w-4 h-4 mr-2" />
           {{ loading.saving ? 'Saving...' : 'Save Changes' }}
         </button>
         <button
@@ -197,9 +183,7 @@
             title="Import all features"
         >
           <Loader v-if="loading.importing" size="sm" layout="inline" :showMessage="false" color="white" />
-          <svg v-else class="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12" stroke-linecap="round" stroke-linejoin="round" stroke-width="2"></path>
-          </svg>
+          <ArrowUpTrayIcon v-else class="w-4 h-4 mr-2" />
           {{ loading.importing ? 'Importing...' : `Import ${importableCount} Features` }}
         </button>
       </div>
@@ -320,12 +304,8 @@
                 type="button"
                 style="opacity: 1 !important;"
             >
-              <svg v-if="isItemSkipped(item, index)" class="w-3 h-3 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"></path>
-              </svg>
-              <svg v-else class="w-3 h-3 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path>
-              </svg>
+              <CheckIcon v-if="isItemSkipped(item, index)" class="w-3 h-3 mr-1" />
+              <XMarkIcon v-else class="w-3 h-3 mr-1" />
               {{ isItemSkipped(item, index) ? 'Restore' : 'Skip' }}
             </button>
             <button
@@ -334,9 +314,7 @@
                 @click="showFeatureMap(index)"
                 title="View feature on map"
             >
-              <svg class="w-3 h-3 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path d="M9 20l-5.447-2.724A1 1 0 013 16.382V5.618a1 1 0 011.447-.894L9 7m0 13l6-3m-6 3V7m6 10l4.553 2.276A1 1 0 0021 18.382V7.618a1 1 0 00-.553-.894L15 4m0 13V4m0 0L9 7" stroke-linecap="round" stroke-linejoin="round" stroke-width="2"></path>
-              </svg>
+              <MapIcon class="w-3 h-3 mr-1" />
               View on Map
             </button>
             <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-blue-100 text-blue-700">
@@ -351,9 +329,7 @@
         <div v-if="item.isDuplicate" class="mb-4 p-4 bg-yellow-50 border border-yellow-200 rounded-md">
           <div class="flex items-start">
             <div class="flex-shrink-0">
-              <svg class="h-5 w-5 text-yellow-400" fill="currentColor" viewBox="0 0 20 20">
-                <path clip-rule="evenodd" d="M8.257 3.099c.765-1.36 2.722-1.36 3.486 0l5.58 9.92c.75 1.334-.213 2.98-1.742 2.98H4.42c-1.53 0-2.493-1.646-1.743-2.98l5.58-9.92zM11 13a1 1 0 11-2 0 1 1 0 012 0zm-1-8a1 1 0 00-1 1v3a1 1 0 002 0V6a1 1 0 00-1-1z" fill-rule="evenodd"></path>
-              </svg>
+              <ExclamationTriangleIcon class="h-5 w-5 text-yellow-400" />
             </div>
             <div class="ml-3 flex-1">
               <h3 class="text-sm font-medium text-yellow-800">Duplicate Feature Detected</h3>
@@ -392,9 +368,7 @@
                   @click="resetNestedField(index, 'properties', 'name')"
                   title="Reset to original name"
               >
-                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" stroke-linecap="round" stroke-linejoin="round" stroke-width="2"></path>
-                </svg>
+                <ArrowPathIcon class="w-4 h-4" />
               </button>
             </div>
           </div>
@@ -417,9 +391,7 @@
                   @click="resetNestedField(index, 'properties', 'description')"
                   title="Reset to original description"
               >
-                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" stroke-linecap="round" stroke-linejoin="round" stroke-width="2"></path>
-                </svg>
+                <ArrowPathIcon class="w-4 h-4" />
               </button>
             </div>
           </div>
@@ -441,9 +413,7 @@
                   @click="resetNestedField(index, 'properties', 'created')"
                   title="Reset to original date"
               >
-                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" stroke-linecap="round" stroke-linejoin="round" stroke-width="2"></path>
-                </svg>
+                <ArrowPathIcon class="w-4 h-4" />
               </button>
             </div>
           </div>
@@ -554,6 +524,7 @@ import FeatureMapDialog from "@/components/import/parts/FeatureMapDialog.vue";
 import LogViewModal from "@/components/import/parts/LogViewModal.vue";
 import ImportControls from "@/components/import/parts/ImportControls.vue";
 import TagPicker from "@/components/TagPicker.vue";
+import { CheckIcon, ExclamationCircleIcon, ArrowTopRightOnSquareIcon, DocumentIcon, ExclamationTriangleIcon, ArrowDownTrayIcon, ArrowUpTrayIcon, XMarkIcon, MapIcon, ArrowPathIcon } from '@heroicons/vue/24/outline';
 
 // TODO: for each feature, query the DB and check if there is a duplicate. For points that's duplicate coords, for linestrings and polygons that's duplicate points
 // TODO: redo the entire log feature to include local timestamps
@@ -591,7 +562,26 @@ export default {
     },
 
   },
-  components: {Loader, ToggleButton, Importqueue: ImportQueue, MapPreviewDialog, FeatureMapDialog, LogViewModal, ImportControls, TagPicker},
+  components: {
+    Loader,
+    ToggleButton,
+    Importqueue: ImportQueue,
+    MapPreviewDialog,
+    FeatureMapDialog,
+    LogViewModal,
+    ImportControls,
+    TagPicker,
+    CheckIcon,
+    ExclamationCircleIcon,
+    ArrowTopRightOnSquareIcon,
+    DocumentIcon,
+    ExclamationTriangleIcon,
+    ArrowDownTrayIcon,
+    ArrowUpTrayIcon,
+    XMarkIcon,
+    MapIcon,
+    ArrowPathIcon
+  },
   data() {
     return {
       // Core data
