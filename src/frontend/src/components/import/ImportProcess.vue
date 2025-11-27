@@ -33,18 +33,22 @@
         <div ref="logsContainer" class="h-32 overflow-auto">
           <ul class="space-y-2">
             <li v-for="(item, index) in filteredWorkerLog" :key="`logitem-${index}`"
-                :class="{'bg-red-50 border-l-4 border-red-400 pl-2 py-1': item.level >= 40}"
-                class="flex items-start space-x-2">
+                class="grid grid-cols-[140px_120px_70px_1fr] gap-2 items-start py-1 border-l-4 pl-2"
+                :class="item.level >= 40 ? 'bg-red-50 border-red-400' : 'border-transparent'">
               <span class="text-sm text-gray-500">{{ formatTimestamp(item.timestamp) }}</span>
-              <span v-if="item.source" class="text-xs text-gray-400 bg-gray-100 px-2 py-1 rounded">{{ item.source }}</span>
-              <span
-                  v-if="item.level !== undefined"
-                  :class="getLevelClass(item.level)"
-                  class="text-xs px-2 py-1 rounded font-medium"
-              >
-                {{ getLevelName(item.level) }}
-              </span>
-              <span :class="item.level >= 40 ? 'text-red-800 font-medium' : 'text-gray-700'" class="text-sm">{{ item.msg }}</span>
+              <div class="flex">
+                <span v-if="item.source" class="text-xs text-gray-400 bg-gray-100 px-2 py-1 rounded truncate max-w-full" :title="item.source">{{ item.source }}</span>
+              </div>
+              <div class="flex">
+                <span
+                    v-if="item.level !== undefined"
+                    :class="getLevelClass(item.level)"
+                    class="text-xs px-2 py-1 rounded font-medium"
+                >
+                  {{ getLevelName(item.level) }}
+                </span>
+              </div>
+              <span :class="item.level >= 40 ? 'text-red-800 font-medium' : 'text-gray-700'" class="text-sm break-words">{{ item.msg }}</span>
             </li>
             <li v-if="filteredWorkerLog.length === 0" class="text-sm text-gray-500 italic">
               {{ loading.logs ? 'Fetching logs...' : 'No logs available yet...' }}

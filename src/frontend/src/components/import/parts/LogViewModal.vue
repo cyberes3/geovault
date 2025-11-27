@@ -37,18 +37,22 @@
             <div
                 v-for="(item, index) in logs"
                 :key="`logitem-${index}`"
-                class="flex items-start space-x-3 p-3 rounded-lg hover:bg-gray-50 border-l-2 border-transparent hover:border-gray-200 transition-colors"
+                class="grid grid-cols-[150px_140px_80px_1fr] gap-3 items-start p-2 rounded-lg hover:bg-gray-50 border-l-4 border-transparent hover:border-gray-200 transition-colors"
             >
-              <span class="text-xs text-gray-500 font-mono whitespace-nowrap bg-gray-100 px-2 py-1 rounded">{{ formatTimestamp(item.timestamp) }}</span>
-              <span v-if="item.source" class="text-xs text-gray-400 bg-gray-100 px-2 py-1 rounded">{{ item.source }}</span>
-              <span
-                  v-if="item.level !== undefined"
-                  :class="getLevelClass(item.level)"
-                  class="text-xs px-2 py-1 rounded font-medium"
-              >
-                {{ getLevelName(item.level) }}
-              </span>
-              <span class="text-sm text-gray-700 flex-1 leading-relaxed">{{ item.msg }}</span>
+              <span class="text-xs text-gray-500 font-mono whitespace-nowrap bg-gray-100 px-2 py-1 rounded w-fit">{{ formatTimestamp(item.timestamp) }}</span>
+              <div class="flex">
+                <span v-if="item.source" class="text-xs text-gray-400 bg-gray-100 px-2 py-1 rounded truncate max-w-full" :title="item.source">{{ item.source }}</span>
+              </div>
+              <div class="flex">
+                <span
+                    v-if="item.level !== undefined"
+                    :class="getLevelClass(item.level)"
+                    class="text-xs px-2 py-1 rounded font-medium"
+                >
+                  {{ getLevelName(item.level) }}
+                </span>
+              </div>
+              <span class="text-sm text-gray-700 leading-relaxed break-words">{{ item.msg }}</span>
             </div>
             <div v-if="logs.length === 0" class="text-center py-8">
               <svg class="mx-auto h-12 w-12 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
