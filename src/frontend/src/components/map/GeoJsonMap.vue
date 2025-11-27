@@ -157,7 +157,10 @@ import {fromLonLat, toLonLat} from 'ol/proj'
 import {Point} from 'ol/geom'
 import {Style, Circle, Fill, Stroke} from 'ol/style'
 import {Feature} from 'ol'
-import {MapUtils} from '@/utils/map/MapUtils'
+import {getFeatureIconStyle} from '@/utils/map/utils/styleUtils'
+import {getFeatureTextStyle} from '@/utils/map/utils/textUtils'
+import {getInitialMapConfig, getLocationDisplayName} from '@/utils/map/utils/mapConfigUtils'
+import {getBoundingBoxKey, getBoundingBoxString} from '@/utils/map/utils/coordinateUtils'
 import {APIHOST, MAP_CONFIG} from '@/config.js'
 import FeatureListSidebar from './FeatureListSidebar.vue'
 import MapControlsSidebar from './MapControlsSidebar.vue'
@@ -882,7 +885,7 @@ export default {
       // Layer for icons/images - no declutter, so icons can overlap
       this.vectorLayer = markRaw(new VectorLayer({
         source: this.vectorSource,
-        style: (feature, resolution) => MapUtils.getFeatureIconStyle(feature, resolution),
+        style: (feature, resolution) => getFeatureIconStyle(feature, resolution),
         // Performance optimizations for complex polygon rendering
         renderBuffer: 100,  // Only render features within 100px of viewport
         updateWhileAnimating: true,  // Continue updating during animations
@@ -896,7 +899,7 @@ export default {
       // Layer for text labels - with declutter, so overlapping labels are hidden
       this.textLayer = markRaw(new VectorLayer({
         source: this.vectorSource,
-        style: (feature, resolution) => MapUtils.getFeatureTextStyle(feature, resolution),
+        style: (feature, resolution) => getFeatureTextStyle(feature, resolution),
         // Performance optimizations
         renderBuffer: 100,
         updateWhileAnimating: true,
@@ -1118,20 +1121,20 @@ export default {
     },
 
     getInitialMapConfig() {
-      return MapUtils.getInitialMapConfig(this.userLocation)
+      return getInitialMapConfig(this.userLocation)
     },
 
 
     getLocationDisplayName() {
-      return MapUtils.getLocationDisplayName(this.userLocation)
+      return getLocationDisplayName(this.userLocation)
     },
 
     getBoundingBoxKey(extent, zoom) {
-      return MapUtils.getBoundingBoxKey(extent, zoom)
+      return getBoundingBoxKey(extent, zoom)
     },
 
     getBoundingBoxString(extent) {
-      return MapUtils.getBoundingBoxString(extent, toLonLat)
+      return getBoundingBoxString(extent, toLonLat)
     },
 
     // Handle public share errors by setting error message and disabling map interactions
