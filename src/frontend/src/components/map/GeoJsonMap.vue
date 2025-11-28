@@ -546,9 +546,23 @@ export default {
         maxZoom = 14 // Limit zoom for points to show surrounding area
       }
 
+      // Adjust padding for mobile to position feature in upper half (avoiding info box)
+      // On mobile, the info box is at the bottom and can take up to 60vh
+      const isMobile = window.innerWidth < 640 // Match Tailwind's 'sm' breakpoint
+      let padding
+      if (isMobile) {
+        // Position feature in upper half: small top padding, large bottom padding
+        const viewportHeight = window.innerHeight
+        const bottomPadding = Math.floor(viewportHeight * 0.5) // 50% of viewport height
+        padding = [50, 50, bottomPadding, 50] // [top, right, bottom, left]
+      } else {
+        // Desktop: equal padding on all sides
+        padding = [50, 50, 50, 50]
+      }
+
       // Fit the view to the feature's extent with padding
       view.fit(extent, {
-        padding: [50, 50, 50, 50], // Add padding around the feature
+        padding: padding,
         duration: 500, // Animation duration in milliseconds
         maxZoom: maxZoom // Limit maximum zoom level
       })

@@ -333,6 +333,10 @@ export default {
     },
     handleFeatureClick(feature) {
       this.$emit('feature-click', feature)
+      // Close modal on mobile when a feature is selected
+      if (this.isMobileOpen) {
+        this.$emit('close')
+      }
     },
     handleSearchInput() {
       // Clear existing timeout
