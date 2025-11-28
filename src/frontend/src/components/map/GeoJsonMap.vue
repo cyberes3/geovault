@@ -347,8 +347,15 @@ export default {
         if (data.sources && Array.isArray(data.sources)) {
           this.tileSources = data.sources
 
-          // Set default layer if not already set or if current selection is invalid
-          if (!this.selectedLayer || !this.tileSources.find(s => s.id === this.selectedLayer)) {
+          // Get user's default basemap preference from settings
+          const userSettings = this.$store.state.userSettings || {}
+          const defaultBasemap = userSettings.map?.default_basemap
+
+          // Always check user settings first - if user has a preferred default basemap, use it
+          if (defaultBasemap && this.tileSources.find(s => s.id === defaultBasemap)) {
+            this.selectedLayer = defaultBasemap
+          } else if (!this.selectedLayer || !this.tileSources.find(s => s.id === this.selectedLayer)) {
+            // If no user preference or current selection is invalid, fallback to first available tile source
             if (this.tileSources.length > 0) {
               this.selectedLayer = this.tileSources[0].id
             }
@@ -366,6 +373,10 @@ export default {
           requires_proxy: false,
           client_config: {type: 'osm'}
         }]
+        // Set selectedLayer to osm if not already set
+        if (!this.selectedLayer) {
+          this.selectedLayer = 'osm'
+        }
       }
     },
     async fetchAvailableTags() {
@@ -1796,6 +1807,19 @@ export default {
     '$store.state.userSettings.account.units': {
       handler(newUnits) {
         // Controls removed - no action needed
+      }
+    },
+    // Watch for default basemap setting changes
+    '$store.state.userSettings.map.default_basemap': {
+      handler(newBasemap) {
+        // If map is already initialized and tile sources are loaded, update the basemap
+        if (this.map && this.tileSources.length > 0 && newBasemap) {
+          // Check if the new basemap is valid
+          const isValidBasemap = this.tileSources.find(s => s.id === newBasemap)
+          if (isValidBasemap && this.selectedLayer !== newBasemap) {
+            this.updateMapLayer(newBasemap)
+          }
+        }
       }
     },
     // Watch for user info changes (handle late login/auth check)

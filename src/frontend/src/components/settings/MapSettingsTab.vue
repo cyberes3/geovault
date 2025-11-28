@@ -36,12 +36,55 @@ export default {
   data() {
     return {
       // Settings configuration - loaded from external JSON file
-      settingsConfig: settingsConfig
+      settingsConfig: settingsConfig,
+      tileSources: []
     }
   },
-  created() {
+  async created() {
     // Load settings from store using mixin method
     this.loadSettingsFromStore();
+    
+    // Fetch tile sources to populate default_basemap options
+    await this.fetchTileSources();
+    this.populateBasemapOptions();
+  },
+  methods: {
+    async fetchTileSources() {
+      try {
+        const response = await fetch('/api/tiles/sources/');
+        if (!response.ok) {
+          throw new Error(`HTTP error! status: ${response.status}`);
+        }
+        const data = await response.json();
+        if (data.sources && Array.isArray(data.sources)) {
+          this.tileSources = data.sources;
+        }
+      } catch (error) {
+        console.error('Error fetching tile sources:', error);
+        // Fallback to default OSM if API fails
+        this.tileSources = [{
+          id: 'osm',
+          name: 'OpenStreetMap',
+          type: 'osm',
+          requires_proxy: false,
+          client_config: {type: 'osm'}
+        }];
+      }
+    },
+    populateBasemapOptions() {
+      // Find the default_basemap setting and populate its options
+      const basemapSetting = this.settingsConfig.find(
+        setting => setting.key === 'map.default_basemap'
+      );
+      
+      if (basemapSetting && this.tileSources.length > 0) {
+        // Populate options from tile sources
+        basemapSetting.options = this.tileSources.map(source => ({
+          value: source.id,
+          label: source.name
+        }));
+      }
+    }
   },
   watch: {
     // Watch for changes in the store and reload settings

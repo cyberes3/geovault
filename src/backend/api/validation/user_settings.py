@@ -8,7 +8,7 @@ Settings are structured as nested JSON objects.
 from enum import Enum
 from typing import Any, Dict, Optional
 
-from pydantic import BaseModel, Field, ValidationError, ConfigDict
+from pydantic import BaseModel, Field, ValidationError, ConfigDict, field_validator
 
 
 class ElevationProfileSource(str, Enum):
@@ -31,6 +31,37 @@ class MapSettings(BaseModel):
         default='gps',
         description="Elevation profile data source: 'gps' or 'api'"
     )
+    
+    default_basemap: Optional[str] = Field(
+        default='osm',
+        description="Default basemap tile source ID"
+    )
+    
+    @field_validator('default_basemap')
+    @classmethod
+    def validate_default_basemap(cls, v):
+        """Validate that default_basemap is a valid tile source ID."""
+        if v is None:
+            return 'osm'  # Default fallback
+        
+        # Import here to avoid circular dependencies
+        from geo_lib.tile_sources import get_all_tile_sources
+        
+        # Get all available tile source IDs
+        all_sources = get_all_tile_sources()
+        available_ids = set(all_sources.keys())
+        
+        # If the provided value is not in available sources, default to 'osm'
+        if v not in available_ids:
+            # If 'osm' is available, use it; otherwise use the first available source
+            if 'osm' in available_ids:
+                return 'osm'
+            elif available_ids:
+                return list(available_ids)[0]
+            else:
+                return 'osm'  # Ultimate fallback
+        
+        return v
 
 
 class ImportSettings(BaseModel):

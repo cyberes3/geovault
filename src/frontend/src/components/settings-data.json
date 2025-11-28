@@ -19,6 +19,15 @@
     ]
   },
   {
+    "key": "map.default_basemap",
+    "title": "Default Basemap",
+    "type": "select",
+    "section": "map",
+    "defaultValue": "osm",
+    "description": "Choose your preferred default basemap for the map view.",
+    "options": []
+  },
+  {
     "key": "import.overwrite_single_track_name_with_filename",
     "title": "Overwrite Single Track Name with Filename",
     "type": "checkbox",
