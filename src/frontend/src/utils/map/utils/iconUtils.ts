@@ -139,35 +139,52 @@ export function createIconStyle(iconUrl: string, feature: any, properties: any, 
         iconSrc = resolveIconUrl(iconUrl);
     }
 
-    // Preload image to detect loading failures and get dimensions
-    const img = new Image();
+    // Check if we're already loading this icon to prevent duplicate network requests
+    const existingIconSrc = feature.get('_iconSrc');
+    const iconSrcChanged = existingIconSrc !== iconSrc;
     
-    img.onload = () => {
-        const naturalSize = Math.max(img.naturalWidth, img.naturalHeight);
-        if (naturalSize > 0) {
-            // Calculate scale needed to reach minimum size
-            const scale = Math.max(minSize / naturalSize, 0.4);
-            feature.set('_iconScale', scale);
-            // Trigger style update to apply new scale
-            feature.changed();
+    // Only create new Image if icon source changed or hasn't been loaded yet
+    if (iconSrcChanged || !existingIconSrc) {
+        // Store the icon source URL on the feature to track what we're loading
+        feature.set('_iconSrc', iconSrc);
+        
+        // Clear previous failure state if icon source changed
+        if (iconSrcChanged) {
+            feature.set('_iconFailed', false);
+            // Reset scale so it can be recalculated for new icon
+            calculatedScale = undefined;
         }
-    };
-    
-    img.onerror = () => {
-        // Mark feature as having failed icon load
-        feature.set('_iconFailed', true);
-        // Trigger style update by changing a property
-        feature.changed();
-    };
-    
-    img.src = iconSrc;
+        
+        // Preload image to detect loading failures and get dimensions
+        const img = new Image();
+        
+        img.onload = () => {
+            const naturalSize = Math.max(img.naturalWidth, img.naturalHeight);
+            if (naturalSize > 0) {
+                // Calculate scale needed to reach minimum size
+                const scale = Math.max(minSize / naturalSize, 0.4);
+                feature.set('_iconScale', scale);
+                // Trigger style update to apply new scale
+                feature.changed();
+            }
+        };
+        
+        img.onerror = () => {
+            // Mark feature as having failed icon load
+            feature.set('_iconFailed', true);
+            // Trigger style update by changing a property
+            feature.changed();
+        };
+        
+        img.src = iconSrc;
 
-    // If image is already loaded (cached), calculate scale immediately
-    if (img.complete && img.naturalWidth > 0) {
-        const naturalSize = Math.max(img.naturalWidth, img.naturalHeight);
-        if (naturalSize > 0) {
-            calculatedScale = Math.max(minSize / naturalSize, 0.4);
-            feature.set('_iconScale', calculatedScale);
+        // If image is already loaded (cached), calculate scale immediately
+        if (img.complete && img.naturalWidth > 0) {
+            const naturalSize = Math.max(img.naturalWidth, img.naturalHeight);
+            if (naturalSize > 0) {
+                calculatedScale = Math.max(minSize / naturalSize, 0.4);
+                feature.set('_iconScale', calculatedScale);
+            }
         }
     }
 
