@@ -13,11 +13,11 @@
     <!-- Modal Container -->
     <div class="absolute inset-0 flex items-stretch justify-stretch sm:items-center sm:justify-center">
       <div
-          class="bg-white flex flex-col w-full h-full sm:h-[90vh] sm:max-w-3xl sm:rounded-lg shadow-xl"
+          class="bg-white flex flex-col w-full h-full sm:h-[90vh] sm:max-w-3xl sm:rounded-lg shadow-xl overflow-hidden"
           @click.stop
       >
         <!-- Modal Header (sticky) -->
-        <div class="sticky top-0 z-10 flex items-center justify-between px-6 py-4 border-b border-gray-200 bg-gray-50">
+        <div class="sticky top-0 z-10 flex items-center justify-between px-6 py-4 border-b border-gray-200 bg-gray-50 sm:rounded-t-lg">
           <h3 class="text-xl font-semibold text-gray-900" id="modal-title">Import Process Guide</h3>
           <button
               @click="close"
