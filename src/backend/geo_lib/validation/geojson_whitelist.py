@@ -200,7 +200,8 @@ def _normalize_properties(feature: Dict[str, Any]) -> Dict[str, Any]:
     
     # Validate with Pydantic - this automatically filters out extra fields
     validated_properties = PropertiesModel(**properties)
-    normalized = validated_properties.model_dump(exclude_none=True, by_alias=True)
+    # Use mode='json' to ensure datetime objects are serialized to ISO strings
+    normalized = validated_properties.model_dump(mode='json', exclude_none=True, by_alias=True)
     
     # Apply style normalization based on geometry type
     geom_type = geometry.get('type', '').lower()

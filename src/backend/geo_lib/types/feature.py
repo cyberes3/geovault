@@ -30,28 +30,9 @@ class Properties(BaseModel):
     @field_validator('created', mode='before')
     @classmethod
     def parse_created_field(cls, v: Any) -> Optional[datetime]:
-        """Parse created field from string or datetime."""
-        if v is None:
-            return None
-        
-        if isinstance(v, datetime):
-            return v
-        
-        if isinstance(v, str):
-            try:
-                # Try parsing ISO format with Z suffix (UTC)
-                if v.endswith('Z'):
-                    return datetime.fromisoformat(v[:-1] + '+00:00')
-                # Try parsing ISO format with timezone
-                elif '+' in v or v.endswith('00:00'):
-                    return datetime.fromisoformat(v)
-                # Try parsing basic ISO format and assume UTC
-                else:
-                    return datetime.fromisoformat(v).replace(tzinfo=timezone.utc)
-            except ValueError:
-                return None
-        
-        return None
+        """Parse created field from string or datetime using dateparser for flexible format support."""
+        from geo_lib.utils.date_parser import parse_date_field
+        return parse_date_field(v)
 
 
 class PointFeatureGeometry(BaseModel):

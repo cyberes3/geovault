@@ -9,6 +9,7 @@ from typing import List, Optional
 from geo_lib.types.feature import GeoFeatureSupported
 from geo_lib.processing.tagging.base import TagGenerator
 from geo_lib.logging.console import get_job_logger
+from geo_lib.utils.date_parser import parse_date_field
 
 logger = get_job_logger()
 
@@ -40,12 +41,9 @@ class FeatureDateTagGenerator(TagGenerator):
         if feature.properties.created:
             try:
                 created_date = feature.properties.created
-                if isinstance(created_date, datetime):
-                    tags.append(f'feature-year:{created_date.year}')
-                    tags.append(f'feature-month:{created_date.strftime("%B")}')
-                elif isinstance(created_date, str):
-                    # Parse ISO format string
-                    parsed_date = datetime.fromisoformat(created_date.replace('Z', '+00:00'))
+                # Parse using dateparser utility (handles both datetime and string)
+                parsed_date = parse_date_field(created_date)
+                if parsed_date:
                     tags.append(f'feature-year:{parsed_date.year}')
                     tags.append(f'feature-month:{parsed_date.strftime("%B")}')
             except (ValueError, AttributeError) as e:
@@ -75,14 +73,11 @@ def update_feature_date_tags(system_tags: List[str], created_date: Optional[str]
     # Add new feature-year and feature-month tags if created_date exists
     if created_date:
         try:
-            # Parse ISO format string
-            if isinstance(created_date, str):
-                parsed_date = datetime.fromisoformat(created_date.replace('Z', '+00:00'))
+            # Parse using dateparser utility (handles both datetime and string)
+            parsed_date = parse_date_field(created_date)
+            if parsed_date:
                 updated_tags.append(f'feature-year:{parsed_date.year}')
                 updated_tags.append(f'feature-month:{parsed_date.strftime("%B")}')
-            elif isinstance(created_date, datetime):
-                updated_tags.append(f'feature-year:{created_date.year}')
-                updated_tags.append(f'feature-month:{created_date.strftime("%B")}')
         except (ValueError, AttributeError) as e:
             logger.warning(f"Failed to parse created date for feature-year/feature-month tags: {e}")
     
