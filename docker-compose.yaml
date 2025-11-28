@@ -1,0 +1,76 @@
+version: '3.8'
+
+services:
+  postgres:
+    image: postgis/postgis:18-3.4
+    container_name: geovault-postgres
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-postgres}
+      POSTGRES_DB: postgres
+    volumes:
+      - /srv/docker-data/geovault-postgres:/var/lib/postgresql/data
+    ports:
+      - "5432:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    restart: unless-stopped
+
+  redis:
+    image: redis:7-alpine
+    container_name: geovault-redis
+    volumes:
+      - /srv/docker-data/geovault-redis:/data
+    ports:
+      - "6379:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    restart: unless-stopped
+    command: redis-server --appendonly yes
+
+  geovault:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: geovault-app
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    environment:
+      # Database connection
+      POSTGRES_HOST: postgres
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-postgres}
+      DB_PASSWORD: ${DB_PASSWORD:-geovault}
+      
+      # Redis connection
+      REDIS_HOST: redis
+      REDIS_PORT: 6379
+      
+      # Django settings (can be overridden)
+      SECRET_KEY: ${SECRET_KEY:-}
+      SITE_DOMAIN: ${SITE_DOMAIN:-geovault.example.com}
+      
+      # Config path (point to mounted volume)
+      GEOVAULT_CONFIG_PATH: /srv/docker-data/geovault/src/backend/config.yaml
+    volumes:
+      - /srv/docker-data/geovault:/srv/docker-data/geovault
+    ports:
+      - "8000:8000"
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/api/health/"]
+      interval: 30s
+      timeout: 10s
+      start_period: 40s
+      retries: 3
+    restart: unless-stopped
+    working_dir: /app/src/backend
+

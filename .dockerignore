@@ -1,0 +1,55 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+build/
+develop-eggs/
+dist/
+*.egg-info/
+*.egg
+venv/
+env/
+.venv/
+
+# Node
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# IDE
+.idea/
+.vscode/
+
+# Git
+.git/
+.gitignore
+
+# Docker
+Dockerfile
+docker-compose.yaml
+.dockerignore
+
+# Data directories (will be mounted as volumes)
+src/backend/data/
+src/backend/config.yaml
+
+# Frontend dist (will be built in Docker)
+src/frontend/dist/
+
+# Test files
+src/tests/
+*_tests/
+test_*.py
+
+# Documentation
+*.md
+!README.md
+
+# Other
+*.log
+.env
+.env.local
+

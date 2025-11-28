@@ -2,6 +2,7 @@ from django.urls import path
 
 from api.views.bbox_query import get_geojson_data
 from api.views.config import get_config
+from api.views.health import health_check
 from api.views.feature_delete import delete_feature
 from api.views.feature_retrieval import get_feature, get_feature_elevations
 from api.views.feature_search import get_features_by_tag, search_features, filter_features_by_tags, get_all_features
@@ -42,6 +43,8 @@ urlpatterns = [
     path('export-kmz', export_feature_kmz, name='export_feature_kmz'),
     # Config endpoint
     path('config/', get_config),
+    # Health check endpoint
+    path('health/', health_check),
     # Icon endpoints
     path('icons/upload/', upload_icon),
     path('icons/recolor/', recolor_icon, name='recolor_icon'),

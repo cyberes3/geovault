@@ -1,0 +1,64 @@
+# GeoVault Dockerfile
+FROM python:3.12-slim as base
+
+# Install system dependencies
+RUN apt-get update && apt-get install -y \
+    gcc \
+    g++ \
+    make \
+    libgdal-dev \
+    gdal-bin \
+    libpq-dev \
+    postgresql-client \
+    redis-tools \
+    curl \
+    && rm -rf /var/lib/apt/lists/*
+
+# Install Node.js 22.x
+RUN curl -fsSL https://deb.nodesource.com/setup_22.x | bash - \
+    && apt-get install -y nodejs \
+    && rm -rf /var/lib/apt/lists/*
+
+# Set working directory
+WORKDIR /app
+
+# Copy backend requirements and install Python dependencies
+COPY src/backend/requirements.txt /app/src/backend/requirements.txt
+RUN pip install --no-cache-dir -r /app/src/backend/requirements.txt
+
+# Copy togeojson package.json first for better caching
+COPY src/backend/geo_lib/processing/togeojson/package.json /app/src/backend/geo_lib/processing/togeojson/
+WORKDIR /app/src/backend/geo_lib/processing/togeojson
+RUN npm install
+
+# Copy frontend package.json first for better caching
+COPY src/frontend/package.json /app/src/frontend/
+WORKDIR /app/src/frontend
+RUN npm install
+
+# Copy the rest of the application (source files)
+WORKDIR /app
+COPY src/ /app/src/
+
+# Build frontend now that all source files are in place
+WORKDIR /app/src/frontend
+RUN npm run build
+
+# Copy entrypoint script
+COPY docker-entrypoint.sh /app/docker-entrypoint.sh
+RUN chmod +x /app/docker-entrypoint.sh
+
+# Set working directory to backend
+WORKDIR /app/src/backend
+
+# Expose port
+EXPOSE 8000
+
+# Healthcheck
+HEALTHCHECK --interval=30s --timeout=10s --start-period=40s --retries=3 \
+    CMD curl -f http://localhost:8000/api/health/ || exit 1
+
+# Use entrypoint script
+ENTRYPOINT ["/app/docker-entrypoint.sh"]
+CMD ["daphne", "--bind", "0.0.0.0", "--port", "8000", "--access-log", "/dev/null", "website.asgi:application"]
+
