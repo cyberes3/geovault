@@ -369,8 +369,8 @@ export default {
       }
     },
     async fetchAvailableTags() {
-      // Only fetch tags for authenticated users (not public share mode)
-      if (this.isPublicShareMode) {
+      // Only fetch tags for authenticated users
+      if (!this.$store.state.userInfo) {
         return
       }
       try {
@@ -1787,6 +1787,14 @@ export default {
         // Controls removed - no action needed
       }
     },
+    // Watch for user info changes (handle late login/auth check)
+    '$store.state.userInfo': {
+      handler(newUserInfo) {
+        if (newUserInfo) {
+          this.fetchAvailableTags()
+        }
+      }
+    },
     '$route'(to, from) {
       // Watch for route changes, especially share ID and collection changes
 
@@ -1885,13 +1893,15 @@ export default {
       return
     }
 
-    // Fetch tile sources configuration first
-    await this.fetchTileSources()
+    // Fetch tile sources and available tags in parallel
+    const initPromises = [this.fetchTileSources()]
 
     // Fetch available tags for child components (only for authenticated users)
-    if (!this.isPublicShareMode) {
-      await this.fetchAvailableTags()
+    if (this.$store.state.userInfo) {
+      initPromises.push(this.fetchAvailableTags())
     }
+
+    await Promise.all(initPromises)
 
     // Wait for map to be fully initialized before loading data
     try {
