@@ -25,9 +25,7 @@
             class="text-gray-400 hover:text-gray-600 focus:outline-none focus:text-gray-600 transition ease-in-out duration-150"
             title="Close dialog"
           >
-            <svg class="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
-            </svg>
+            <XMarkIcon class="h-6 w-6" />
           </button>
         </div>
 
@@ -75,9 +73,7 @@
                   <!-- Tag Search -->
                   <div class="relative mb-3">
                     <div class="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
-                      <svg class="h-5 w-5 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" stroke-linecap="round" stroke-linejoin="round" stroke-width="2"></path>
-                      </svg>
+                      <MagnifyingGlassIcon class="h-5 w-5 text-gray-400" />
                     </div>
                     <input
                       v-model="tagSearchQuery"
@@ -135,9 +131,7 @@
                           class="ml-1 text-blue-500 hover:text-blue-700"
                           title="Remove tag"
                         >
-                          <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path>
-                          </svg>
+                          <XMarkIcon class="w-3 h-3" />
                         </button>
                       </span>
                     </div>
@@ -154,9 +148,7 @@
                   <!-- Feature Search -->
                   <div class="relative mb-3">
                     <div class="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
-                      <svg class="h-5 w-5 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" stroke-linecap="round" stroke-linejoin="round" stroke-width="2"></path>
-                      </svg>
+                      <MagnifyingGlassIcon class="h-5 w-5 text-gray-400" />
                     </div>
                     <input
                       v-model="featureSearchQuery"
@@ -240,11 +232,14 @@
 <script>
 import { getCookie } from "@/assets/js/auth.js";
 import Loader from "@/components/parts/Loader.vue";
+import { XMarkIcon, MagnifyingGlassIcon } from '@heroicons/vue/24/outline';
 
 export default {
   name: 'CollectionDialog',
   components: {
-    Loader
+    Loader,
+    XMarkIcon,
+    MagnifyingGlassIcon
   },
   props: {
     collection: {

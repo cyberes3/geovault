@@ -42,9 +42,7 @@
               class="ml-1.5 inline-flex items-center justify-center w-4 h-4 rounded-full text-blue-600 hover:border-blue-200 hover:text-blue-500 focus:outline-none focus:border-blue-200 focus:text-blue-500 disabled:opacity-50 disabled:cursor-not-allowed"
               title="Remove tag"
             >
-              <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path>
-              </svg>
+              <XMarkIcon class="w-3 h-3" />
             </button>
           </span>
         </div>
@@ -79,9 +77,7 @@
         class="absolute right-2 top-1/2 -translate-y-1/2 inline-flex items-center justify-center w-6 h-6 rounded bg-blue-600 text-white hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-1 disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:bg-blue-600"
         title="Add tag"
       >
-        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"></path>
-        </svg>
+        <CheckIcon class="w-4 h-4" />
       </button>
 
       <!-- Autocomplete Suggestions -->
@@ -110,9 +106,14 @@
 
 <script>
 import { isSystemTag } from '@/utils/tagUtils'
+import { XMarkIcon, CheckIcon } from '@heroicons/vue/24/outline'
 
 export default {
   name: 'TagPicker',
+  components: {
+    XMarkIcon,
+    CheckIcon
+  },
   props: {
     tags: {
       type: Array,

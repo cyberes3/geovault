@@ -15,9 +15,7 @@
           class="text-gray-400 hover:text-gray-600 transition-colors p-1"
           title="Close elevation profile"
         >
-          <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path>
-          </svg>
+          <XMarkIcon class="w-5 h-5" />
         </button>
       </div>
 
@@ -116,9 +114,7 @@
         <!-- No Data Warning -->
         <div v-else-if="!hasElevationData && feature" class="absolute inset-0 flex items-center justify-center bg-white z-10">
           <div class="text-center p-2">
-            <svg class="w-8 h-8 md:w-12 md:h-12 text-yellow-500 mx-auto mb-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"></path>
-            </svg>
+            <ExclamationTriangleIcon class="w-8 h-8 md:w-12 md:h-12 text-yellow-500 mx-auto mb-2" />
             <p class="text-gray-700 font-medium text-xs md:text-base">No elevation data</p>
           </div>
         </div>
@@ -132,6 +128,7 @@ import axios from 'axios'
 import { Chart, registerables } from 'chart.js'
 import { getCookie } from '@/assets/js/auth.js'
 import Loader from '@/components/parts/Loader.vue'
+import { XMarkIcon, ExclamationTriangleIcon } from '@heroicons/vue/24/outline'
 import { 
   getElevationMultiplier, 
   getDistanceMultiplier, 
@@ -165,7 +162,9 @@ export default {
   },
           emits: ['close', 'hover-point', 'hover-clear', 'click-point'],
   components: {
-    Loader
+    Loader,
+    XMarkIcon,
+    ExclamationTriangleIcon
   },
   data() {
     return {

@@ -20,20 +20,22 @@
       >
         <!-- Header -->
         <div class="flex items-center justify-between px-6 py-4 border-b border-gray-200 bg-gray-50 sm:rounded-t-lg">
-          <h3 class="text-lg font-medium text-gray-900">Share Collection: {{ collectionName }}</h3>
+          <h3 class="text-lg font-medium text-gray-900">Share Collection</h3>
           <button
             @click="closeDialog"
             class="text-gray-400 hover:text-gray-600 focus:outline-none focus:text-gray-600 transition ease-in-out duration-150"
             title="Close dialog"
           >
-            <svg class="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
-            </svg>
+            <XMarkIcon class="h-6 w-6" />
           </button>
         </div>
 
         <!-- Content -->
         <div class="flex-1 overflow-y-auto bg-white p-6 flex flex-col">
+          <!-- Collection Name Display -->
+          <div class="mb-4">
+            <h4 class="text-xl font-bold text-gray-900">{{ collectionName }}</h4>
+          </div>
           <!-- Create New Share Section -->
           <div class="mb-6 flex-shrink-0">
             <h4 class="text-sm font-semibold text-gray-900 mb-4">Create New Share Link</h4>
@@ -135,12 +137,8 @@
                           class="inline-flex items-center px-3 py-2 border border-gray-300 rounded-md text-sm font-medium text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500"
                           :title="copiedShareId === share.share_id ? 'Copied!' : 'Copy link'"
                         >
-                          <svg v-if="copiedShareId !== share.share_id" class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z"></path>
-                          </svg>
-                          <svg v-else class="w-4 h-4 text-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"></path>
-                          </svg>
+                          <ClipboardDocumentIcon v-if="copiedShareId !== share.share_id" class="w-4 h-4" />
+                          <CheckIcon v-else class="w-4 h-4 text-green-600" />
                         </button>
                       </div>
                     </div>
@@ -173,9 +171,7 @@
                     class="ml-4 p-2 text-red-600 hover:text-red-800 hover:bg-red-50 rounded-md focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-red-500 disabled:opacity-50"
                     title="Delete share"
                   >
-                    <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"></path>
-                    </svg>
+                    <TrashIcon class="w-5 h-5" />
                   </button>
                 </div>
               </div>
@@ -192,6 +188,7 @@
 import { getCookie } from "@/assets/js/auth.js";
 import Loader from "@/components/parts/Loader.vue";
 import ToggleButton from "@/components/parts/ToggleButton.vue";
+import { XMarkIcon, ClipboardDocumentIcon, CheckIcon, TrashIcon } from '@heroicons/vue/24/outline';
 
 export default {
   name: 'CollectionShareDialog',
@@ -209,7 +206,11 @@ export default {
   emits: ['close'],
   components: {
     Loader,
-    ToggleButton
+    ToggleButton,
+    XMarkIcon,
+    ClipboardDocumentIcon,
+    CheckIcon,
+    TrashIcon
   },
   computed: {
     collectionId() {

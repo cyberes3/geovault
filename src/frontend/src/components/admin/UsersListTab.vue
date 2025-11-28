@@ -4,9 +4,7 @@
     <div class="mb-6 pb-6 border-b border-gray-200">
       <div class="flex items-start space-x-4">
         <div class="flex-shrink-0">
-          <svg class="h-8 w-8 text-blue-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1zm0 0h6v-1a6 6 0 00-9-5.197M13 7a4 4 0 11-8 0 4 4 0 018 0z"></path>
-          </svg>
+          <UserIcon class="h-8 w-8 text-blue-500" />
         </div>
         <div class="flex-1">
           <h2 class="text-lg font-medium text-gray-900 mb-2">Django User Admin</h2>
@@ -20,9 +18,7 @@
             class="inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md text-white bg-blue-500 hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500"
           >
             Open Django Admin
-            <svg class="ml-2 -mr-1 w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14"></path>
-            </svg>
+            <ArrowTopRightOnSquareIcon class="ml-2 -mr-1 w-4 h-4" />
           </a>
         </div>
       </div>
@@ -44,9 +40,7 @@
       <div v-else-if="error" class="bg-red-50 border border-red-200 rounded-md p-4">
         <div class="flex">
           <div class="flex-shrink-0">
-            <svg class="h-5 w-5 text-red-400" fill="currentColor" viewBox="0 0 20 20">
-              <path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z" clip-rule="evenodd"></path>
-            </svg>
+            <ExclamationCircleIcon class="h-5 w-5 text-red-400" />
           </div>
           <div class="ml-3">
             <h3 class="text-sm font-medium text-red-800">Error loading users</h3>
@@ -102,8 +96,15 @@
 </template>
 
 <script>
+import { UserIcon, ArrowTopRightOnSquareIcon, ExclamationCircleIcon } from '@heroicons/vue/24/outline';
+
 export default {
   name: 'UsersListTab',
+  components: {
+    UserIcon,
+    ArrowTopRightOnSquareIcon,
+    ExclamationCircleIcon
+  },
   data() {
     return {
       users: [],

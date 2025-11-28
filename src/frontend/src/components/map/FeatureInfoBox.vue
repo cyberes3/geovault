@@ -64,9 +64,7 @@
 
         <!-- Area (for Polygon/MultiPolygon features) -->
         <div v-if="featureArea !== null" class="flex items-center space-x-1 bg-gray-100 border border-gray-300 rounded px-1.5 py-0.5 md:px-2 md:py-1.5">
-          <svg class="w-3 h-3 md:w-4 md:h-4 flex-shrink-0 text-gray-600" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor">
-            <path stroke-linecap="round" stroke-linejoin="round" d="M12 2l8 4v12l-6 4-3-5-7 2V6l8-4z" />
-          </svg>
+          <AreaIcon />
           <span class="text-xs text-gray-700">{{ formatArea(featureArea) }}</span>
         </div>
       </div>
@@ -104,6 +102,7 @@ import { getLength, getArea } from 'ol/sphere'
 import { ChartBarIcon, ArrowDownTrayIcon, PencilSquareIcon, MapPinIcon, XMarkIcon } from '@heroicons/vue/24/outline'
 import { formatElevation, formatDistance, formatArea } from '@/utils/units'
 import MeasurementIcon from '@/components/icons/MeasurementIcon.vue'
+import AreaIcon from '@/components/icons/AreaIcon.vue'
 
 export default {
   name: 'FeatureInfoBox',
@@ -113,7 +112,8 @@ export default {
     PencilSquareIcon,
     MapPinIcon,
     XMarkIcon,
-    MeasurementIcon
+    MeasurementIcon,
+    AreaIcon
   },
   props: {
     feature: {

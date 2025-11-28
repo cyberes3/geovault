@@ -5,9 +5,7 @@
       <div class="p-4 bg-yellow-50 border border-yellow-200 rounded-md">
         <div class="flex">
           <div class="flex-shrink-0">
-            <svg class="h-5 w-5 text-yellow-400" fill="currentColor" viewBox="0 0 20 20">
-              <path clip-rule="evenodd" d="M8.257 3.099c.765-1.36 2.722-1.36 3.486 0l5.58 9.92c.75 1.334-.213 2.98-1.742 2.98H4.42c-1.53 0-2.493-1.646-1.743-2.98l5.58-9.92zM11 13a1 1 0 11-2 0 1 1 0 012 0zm-1-8a1 1 0 00-1 1v3a1 1 0 002 0V6a1 1 0 00-1-1z" fill-rule="evenodd"></path>
-            </svg>
+            <ExclamationTriangleIcon class="h-5 w-5 text-yellow-400" />
           </div>
           <div class="ml-3">
             <h3 class="text-sm font-medium text-yellow-800">Already Imported</h3>
@@ -21,9 +19,7 @@
     <div v-else-if="duplicateStatus === 'duplicate_in_queue' && !isLoadingPage && showDuplicateMessage" class="bg-white rounded-lg shadow-sm border border-gray-200 p-4">
       <div class="text-center py-4">
         <div class="text-purple-500 mb-4">
-          <svg class="mx-auto h-12 w-12 text-purple-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z" stroke-linecap="round" stroke-linejoin="round" stroke-width="2"></path>
-          </svg>
+          <ClipboardDocumentIcon class="mx-auto h-12 w-12 text-purple-400" />
         </div>
         <h3 class="text-lg font-medium text-gray-900 mb-2">Duplicate File in Queue</h3>
         <p class="text-gray-600">This file is a duplicate of <span class="font-medium text-purple-700">{{ duplicateOriginalFilename }}</span>, which is already waiting in the import queue.</p>
@@ -34,10 +30,7 @@
       <div class="p-4 bg-purple-50 border border-purple-200 rounded-md">
         <div class="flex">
           <div class="flex-shrink-0">
-            <svg class="h-5 w-5 text-purple-400" fill="currentColor" viewBox="0 0 20 20">
-              <path d="M7 9a2 2 0 012-2h6a2 2 0 012 2v6a2 2 0 01-2 2H9a2 2 0 01-2-2V9z"></path>
-              <path d="M5 3a2 2 0 00-2 2v6a2 2 0 002 2V5h8a2 2 0 00-2-2H5z"></path>
-            </svg>
+            <ClipboardDocumentIcon class="h-5 w-5 text-purple-400" />
           </div>
           <div class="ml-3">
             <h3 class="text-sm font-medium text-purple-800">Duplicate of Imported File</h3>
@@ -53,9 +46,7 @@
       <div class="p-4 bg-red-50 border border-red-200 rounded-md">
         <div class="flex">
           <div class="flex-shrink-0">
-            <svg class="h-5 w-5 text-red-400" fill="currentColor" viewBox="0 0 20 20">
-              <path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z" clip-rule="evenodd"></path>
-            </svg>
+            <ExclamationCircleIcon class="h-5 w-5 text-red-400" />
           </div>
           <div class="ml-3">
             <h3 class="text-sm font-medium text-red-800">{{ processingFailedTitle }}</h3>
@@ -69,9 +60,7 @@
     <div v-else-if="showNoFeaturesMessage && !isLoadingPage && importableCount === 0" class="bg-white rounded-lg shadow-sm border border-gray-200 p-4">
       <div class="text-center py-4">
         <div class="text-gray-500 mb-4">
-          <svg class="mx-auto h-12 w-12 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" stroke-linecap="round" stroke-linejoin="round" stroke-width="2"></path>
-          </svg>
+          <DocumentIcon class="mx-auto h-12 w-12 text-gray-400" />
         </div>
         <h3 class="text-lg font-medium text-gray-900 mb-2">No Features to Import</h3>
         <p class="text-gray-600">This file has been processed but contains no importable features.</p>
@@ -94,9 +83,7 @@
               @click="$emit('previous-page')"
               title="Go to previous page"
           >
-            <svg class="w-4 h-4 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path d="M15 19l-7-7 7-7" stroke-linecap="round" stroke-linejoin="round" stroke-width="2"></path>
-            </svg>
+            <ChevronLeftIcon class="w-4 h-4 mr-1" />
             Previous
           </button>
           <span class="text-sm text-gray-700">Page {{ currentPage }} of {{ totalPages }}</span>
@@ -107,9 +94,7 @@
               title="Go to next page"
           >
             Next
-            <svg class="w-4 h-4 ml-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path d="M9 5l7 7-7 7" stroke-linecap="round" stroke-linejoin="round" stroke-width="2"></path>
-            </svg>
+            <ChevronRightIcon class="w-4 h-4 ml-1" />
           </button>
           <div class="flex items-center space-x-2 md:ml-4 md:pl-4 md:border-l border-gray-300">
             <label class="text-sm text-gray-700" for="goto-page">Go to:</label>
@@ -138,9 +123,7 @@
               @click="$emit('show-map-preview')"
               title="Preview all features on current page"
           >
-            <svg class="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path d="M9 20l-5.447-2.724A1 1 0 013 16.382V5.618a1 1 0 011.447-.894L9 7m0 13l6-3m-6 3V7m6 10l4.553 2.276A1 1 0 0021 18.382V7.618a1 1 0 00-.553-.894L15 4m0 13V4m0 0L9 7" stroke-linecap="round" stroke-linejoin="round" stroke-width="2"></path>
-            </svg>
+            <MapIcon class="w-4 h-4 mr-2" />
             Map Preview (Current Page)
           </button>
         </div>
@@ -160,9 +143,7 @@
               title="Save all changes"
           >
           <Loader v-if="isSaving" size="sm" layout="inline" :showMessage="false" color="white" />
-          <svg v-else class="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path d="M8 7H5a2 2 0 00-2 2v9a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-3m-1 4l-3 3m0 0l-3-3m3 3V4" stroke-linecap="round" stroke-linejoin="round" stroke-width="2"></path>
-          </svg>
+          <ArrowDownTrayIcon v-else class="w-4 h-4 mr-2" />
           {{ isSaving ? 'Saving...' : 'Save Changes' }}
         </button>
         <button
@@ -172,9 +153,7 @@
             title="Import selected features"
         >
           <Loader v-if="isImporting" size="sm" layout="inline" :showMessage="false" color="white" />
-          <svg v-else class="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12" stroke-linecap="round" stroke-linejoin="round" stroke-width="2"></path>
-          </svg>
+          <ArrowUpTrayIcon v-else class="w-4 h-4 mr-2" />
           {{ isImporting ? 'Importing...' : `Import ${importableCount} Features` }}
         </button>
       </div>
@@ -185,11 +164,21 @@
 <script>
 import Loader from "@/components/parts/Loader.vue";
 import {PROCESSING_MESSAGES} from "@/assets/js/constants/processing-messages.js";
+import { ExclamationTriangleIcon, ClipboardDocumentIcon, ExclamationCircleIcon, DocumentIcon, ChevronLeftIcon, ChevronRightIcon, MapIcon, ArrowDownTrayIcon, ArrowUpTrayIcon } from '@heroicons/vue/24/outline';
 
 export default {
   name: 'ImportControls',
   components: {
-    Loader
+    Loader,
+    ExclamationTriangleIcon,
+    ClipboardDocumentIcon,
+    ExclamationCircleIcon,
+    DocumentIcon,
+    ChevronLeftIcon,
+    ChevronRightIcon,
+    MapIcon,
+    ArrowDownTrayIcon,
+    ArrowUpTrayIcon
   },
   props: {
     hasFeatures: {

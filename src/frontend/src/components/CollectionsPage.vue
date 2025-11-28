@@ -11,9 +11,7 @@
             class="w-full sm:w-auto inline-flex items-center justify-center px-4 py-2 border border-transparent text-sm font-medium rounded-md shadow-sm text-white bg-blue-600 hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500"
             title="Create a new collection"
         >
-          <svg class="w-5 h-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"></path>
-          </svg>
+          <PlusIcon class="w-5 h-5 mr-2" />
           Create New Collection
         </button>
       </div>
@@ -35,9 +33,7 @@
     <!-- Error State -->
     <div v-else-if="error" class="bg-red-50 border border-red-200 rounded-lg p-6">
       <div class="flex items-center">
-        <svg class="w-5 h-5 text-red-600 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-          <path d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" stroke-linecap="round" stroke-linejoin="round" stroke-width="2"></path>
-        </svg>
+        <ExclamationCircleIcon class="w-5 h-5 text-red-600 mr-2" />
         <p class="text-red-800">{{ error }}</p>
       </div>
     </div>
@@ -45,9 +41,7 @@
     <!-- Empty State -->
     <div v-else-if="!loading && collections.length === 0" class="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
       <div class="text-center py-12">
-        <svg class="mx-auto h-12 w-12 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-          <path d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10" stroke-linecap="round" stroke-linejoin="round" stroke-width="2"></path>
-        </svg>
+        <FolderIcon class="mx-auto h-12 w-12 text-gray-400" />
         <h3 class="mt-2 text-sm font-medium text-gray-900">No collections found</h3>
         <p class="mt-1 text-sm text-gray-500">Create your first collection to organize your features.</p>
         <div class="mt-6">
@@ -79,9 +73,7 @@
                   @click.stop.prevent="openShareDialog(collection)"
                   @mousedown.stop.prevent
               >
-                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8.684 13.342C8.885 12.938 9 12.482 9 12c0-.482-.115-.938-.316-1.342m0 2.684a3 3 0 110-2.684m0 2.684l6.632 3.316m-6.632-6l6.632-3.316m0 0a3 3 0 105.367-2.684 3 3 0 00-5.367 2.684zm0 9.316a3 3 0 105.368 2.684 3 3 0 00-5.368-2.684z"></path>
-                </svg>
+                <ShareIcon class="w-4 h-4" />
               </button>
               <button
                   class="p-1.5 text-gray-400 hover:text-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-1 rounded"
@@ -90,9 +82,7 @@
                   @click.stop.prevent="downloadCollectionKmz(collection)"
                   @mousedown.stop.prevent
               >
-                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1M12 4v10m0 0l-4-4m4 4l4-4"></path>
-                </svg>
+                <ArrowDownTrayIcon class="w-4 h-4" />
               </button>
               <button
                   class="p-1.5 text-gray-400 hover:text-gray-600 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-1 rounded"
@@ -101,9 +91,7 @@
                   @click.stop.prevent="openEditDialog(collection)"
                   @mousedown.stop.prevent
               >
-                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" stroke-linecap="round" stroke-linejoin="round" stroke-width="2"></path>
-                </svg>
+                <PencilIcon class="w-4 h-4" />
               </button>
               <button
                   class="p-1.5 text-gray-400 hover:text-red-600 focus:outline-none focus:ring-2 focus:ring-red-500 focus:ring-offset-1 rounded"
@@ -112,9 +100,7 @@
                   @click.stop.prevent="deleteCollection(collection)"
                   @mousedown.stop.prevent
               >
-                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" stroke-linecap="round" stroke-linejoin="round" stroke-width="2"></path>
-                </svg>
+                <TrashIcon class="w-4 h-4" />
               </button>
             </div>
           </div>
@@ -125,9 +111,7 @@
 
           <div class="flex items-center justify-between text-sm text-gray-500 mb-4">
             <span class="flex items-center">
-              <svg class="w-4 h-4 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 7h.01M7 3h5c.512 0 1.024.195 1.414.586l7 7a2 2 0 010 2.828l-7 7a2 2 0 01-2.828 0l-7-7A1.994 1.994 0 013 12V7a4 4 0 014-4z"></path>
-              </svg>
+              <TagIcon class="w-4 h-4 mr-1" />
               {{ collection.feature_count }} {{ collection.feature_count === 1 ? 'feature' : 'features' }}
             </span>
           </div>
@@ -138,9 +122,7 @@
                 class="flex-1 inline-flex items-center justify-center px-3 py-2 border border-gray-300 shadow-sm text-sm font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500"
                 title="View collection on map"
             >
-              <svg class="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 20l-5.447-2.724A1 1 0 013 16.382V5.618a1 1 0 011.447-.894L9 7m0 13l6-3m-6 3V7m6 10l4.553 2.276A1 1 0 0021 18.382V7.618a1 1 0 00-.553-.894L15 4m0 13V4m0 0L9 7"></path>
-              </svg>
+              <MapIcon class="w-4 h-4 mr-2" />
               View on Map
             </button>
           </div>
@@ -171,13 +153,23 @@ import { getCookie } from "@/assets/js/auth.js";
 import CollectionDialog from "./CollectionDialog.vue";
 import CollectionShareDialog from "./CollectionShareDialog.vue";
 import Loader from "./parts/Loader.vue";
+import { PlusIcon, ExclamationCircleIcon, FolderIcon, ShareIcon, ArrowDownTrayIcon, PencilIcon, TrashIcon, TagIcon, MapIcon } from '@heroicons/vue/24/outline';
 
 export default {
   name: 'CollectionsPage',
   components: {
     CollectionDialog,
     CollectionShareDialog,
-    Loader
+    Loader,
+    PlusIcon,
+    ExclamationCircleIcon,
+    FolderIcon,
+    ShareIcon,
+    ArrowDownTrayIcon,
+    PencilIcon,
+    TrashIcon,
+    TagIcon,
+    MapIcon
   },
   data() {
     return {

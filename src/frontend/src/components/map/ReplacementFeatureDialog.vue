@@ -16,9 +16,7 @@
               class="text-gray-400 hover:text-gray-600 focus:outline-none focus:text-gray-600 transition ease-in-out duration-150"
               title="Close dialog"
             >
-              <svg class="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
-              </svg>
+              <XMarkIcon class="h-6 w-6" />
             </button>
           </div>
         </div>
@@ -30,9 +28,7 @@
             <!-- Help Text -->
             <div class="p-4 bg-blue-50 border border-blue-200 rounded-lg">
               <div class="flex">
-                <svg class="h-5 w-5 text-blue-400 mr-3 flex-shrink-0 mt-0.5" fill="currentColor" viewBox="0 0 20 20">
-                  <path fill-rule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7-4a1 1 0 11-2 0 1 1 0 012 0zM9 9a1 1 0 000 2v3a1 1 0 001 1h1a1 1 0 100-2v-3a1 1 0 00-1-1H9z" clip-rule="evenodd" />
-                </svg>
+                <InformationCircleIcon class="h-5 w-5 text-blue-400 mr-3 flex-shrink-0 mt-0.5" />
                 <div class="flex-1">
                   <p class="text-xs text-blue-800">
                     Upload a KMZ, KML, or GPX file to replace the spatial geometry of this feature.
@@ -66,9 +62,7 @@
                     @dragleave="dragLeave"
                   >
                     <div class="text-center">
-                      <svg class="mx-auto h-12 w-12 text-gray-400" stroke="currentColor" fill="none" viewBox="0 0 48 48">
-                        <path d="M28 8H12a4 4 0 00-4 4v20m32-12v8m0 0v8a4 4 0 01-4 4H12a4 4 0 01-4-4v-4m32-4l-3.172-3.172a4 4 0 00-5.656 0L28 28M8 32l9.172-9.172a4 4 0 015.656 0L28 28m0 0l4 4m4-4h-12m-2-5h9.172M17 13h-2a2 2 0 00-2 2v2a2 2 0 002 2h2v-6z" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" />
-                      </svg>
+                      <DocumentIcon class="mx-auto h-12 w-12 text-gray-400" />
                       <p class="mt-2 text-sm text-gray-600">
                         <span class="font-medium text-blue-500 hover:text-blue-700">Click to browse</span> or drag and drop
                       </p>
@@ -83,9 +77,7 @@
             <div v-if="selectedFile" class="p-4 bg-blue-50 border border-blue-200 rounded-lg">
               <div class="flex items-center justify-between">
                 <div class="flex items-center space-x-3 flex-1 min-w-0">
-                  <svg class="h-5 w-5 text-blue-500 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
-                  </svg>
+                  <DocumentIcon class="h-5 w-5 text-blue-500 flex-shrink-0" />
                   <div class="flex-1 min-w-0">
                     <p class="text-sm font-medium text-gray-900 truncate">{{ selectedFile.name }}</p>
                     <p class="text-xs text-gray-500">{{ formatFileSize(selectedFile.size) }}</p>
@@ -96,9 +88,7 @@
                   class="ml-3 text-gray-400 hover:text-gray-600 focus:outline-none"
                   title="Remove file"
                 >
-                  <svg class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
-                  </svg>
+                  <XMarkIcon class="h-5 w-5" />
                 </button>
               </div>
             </div>
@@ -106,9 +96,7 @@
             <!-- Error Message -->
             <div v-if="errorMessage" class="p-3 bg-red-50 border border-red-200 rounded-md">
               <div class="flex">
-                <svg class="h-5 w-5 text-red-400 mr-2" fill="currentColor" viewBox="0 0 20 20">
-                  <path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z" clip-rule="evenodd" />
-                </svg>
+                <ExclamationCircleIcon class="h-5 w-5 text-red-400 mr-2" />
                 <p class="text-sm text-red-800">{{ errorMessage }}</p>
               </div>
             </div>
@@ -137,9 +125,7 @@
             <!-- No matching features message -->
             <div v-if="sortedFeatures.length === 0" class="p-4 bg-yellow-50 border border-yellow-200 rounded-lg">
               <div class="flex">
-                <svg class="h-5 w-5 text-yellow-400 mr-2 flex-shrink-0" fill="currentColor" viewBox="0 0 20 20">
-                  <path fill-rule="evenodd" d="M8.257 3.099c.765-1.36 2.722-1.36 3.486 0l5.58 9.92c.75 1.334-.213 2.98-1.742 2.98H4.42c-1.53 0-2.493-1.646-1.743-2.98l5.58-9.92zM11 13a1 1 0 11-2 0 1 1 0 012 0zm-1-8a1 1 0 00-1 1v3a1 1 0 002 0V6a1 1 0 00-1-1z" clip-rule="evenodd" />
-                </svg>
+                <ExclamationTriangleIcon class="h-5 w-5 text-yellow-400 mr-2 flex-shrink-0" />
                 <div>
                   <p class="text-sm font-medium text-yellow-800">No matching geometry types found</p>
                   <p class="text-xs text-yellow-700 mt-1">
@@ -195,9 +181,7 @@
                         class="absolute top-1 right-1 bg-white bg-opacity-90 hover:bg-opacity-100 rounded p-1 shadow-sm border border-gray-300 transition-all"
                         title="Expand map preview"
                       >
-                        <svg class="w-4 h-4 text-gray-700" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 8V4m0 0h4M4 4l5 5m11-1V4m0 0h-4m4 0l-5 5M4 16v4m0 0h4m-4 0l5-5m11 5l-5-5m5 5v-4m0 4h-4" />
-                        </svg>
+                        <ArrowsPointingOutIcon class="w-4 h-4 text-gray-700" />
                       </button>
                     </div>
 
@@ -213,9 +197,7 @@
                           </p>
                         </div>
                         <div v-if="selectedFeatureIndex === index" class="ml-4 flex-shrink-0">
-                          <svg class="h-5 w-5 text-blue-500" fill="currentColor" viewBox="0 0 20 20">
-                            <path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clip-rule="evenodd" />
-                          </svg>
+                          <CheckIcon class="h-5 w-5 text-blue-500" />
                         </div>
                       </div>
                     </div>
@@ -232,9 +214,7 @@
             <!-- Success Message -->
             <div v-if="successMessage" class="p-3 bg-green-50 border border-green-200 rounded-md">
               <div class="flex">
-                <svg class="h-5 w-5 text-green-400 mr-2" fill="currentColor" viewBox="0 0 20 20">
-                  <path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clip-rule="evenodd" />
-                </svg>
+                <CheckIcon class="h-5 w-5 text-green-400 mr-2" />
                 <p class="text-sm text-green-800">{{ successMessage }}</p>
               </div>
             </div>
@@ -250,9 +230,7 @@
             class="px-4 py-2 text-sm font-medium text-white bg-blue-500 border border-transparent rounded-md hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 flex items-center"
             title="Upload and process file"
           >
-            <svg class="h-4 w-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12" />
-            </svg>
+            <ArrowUpTrayIcon class="h-4 w-4 mr-2" />
             Upload & Process
           </button>
 
@@ -274,9 +252,7 @@
             class="px-4 py-2 text-sm font-medium text-white bg-blue-500 border border-transparent rounded-md hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 disabled:opacity-50 disabled:cursor-not-allowed disabled:bg-gray-400 disabled:hover:bg-gray-400 flex items-center"
             title="Apply selected feature's spatial data"
           >
-            <svg v-if="!applying" class="h-4 w-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7" />
-            </svg>
+            <CheckIcon v-if="!applying" class="h-4 w-4 mr-2" />
             <Loader v-if="applying" size="sm" layout="inline" :showMessage="false" color="white" />
             {{ applying ? 'Applying...' : 'Apply Spatial Data' }}
           </button>
@@ -307,9 +283,7 @@
             class="text-gray-400 hover:text-gray-600 focus:outline-none focus:text-gray-600 transition ease-in-out duration-150"
             title="Close expanded map"
           >
-            <svg class="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
-            </svg>
+            <XMarkIcon class="h-6 w-6" />
           </button>
         </div>
 
@@ -341,6 +315,7 @@ import {DragPan, MouseWheelZoom} from 'ol/interaction'
 import {markRaw} from 'vue'
 import Loader from '@/components/parts/Loader.vue'
 import ToggleButton from '@/components/parts/ToggleButton.vue'
+import { XMarkIcon, InformationCircleIcon, DocumentIcon, ExclamationCircleIcon, ExclamationTriangleIcon, CheckIcon, ArrowUpTrayIcon, ArrowsPointingOutIcon } from '@heroicons/vue/24/outline'
 
 export default {
   name: 'ReplacementFeatureDialog',
@@ -357,7 +332,15 @@ export default {
   emits: ['close', 'applied'],
   components: {
     Loader,
-    ToggleButton
+    ToggleButton,
+    XMarkIcon,
+    InformationCircleIcon,
+    DocumentIcon,
+    ExclamationCircleIcon,
+    ExclamationTriangleIcon,
+    CheckIcon,
+    ArrowUpTrayIcon,
+    ArrowsPointingOutIcon
   },
   data() {
     return {

@@ -9,9 +9,7 @@
         class="ml-2 text-gray-400 hover:text-gray-600 disabled:opacity-50 disabled:cursor-not-allowed"
         title="Close edit dialog"
       >
-        <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path>
-        </svg>
+        <XMarkIcon class="w-5 h-5" />
       </button>
     </div>
 
@@ -177,9 +175,7 @@
               class="text-xs text-blue-600 hover:text-blue-800 hover:underline disabled:opacity-50 disabled:cursor-not-allowed inline-flex items-center font-medium focus:outline-none"
               title="Edit coordinates manually"
             >
-              <svg class="w-3 h-3 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 20l-5.447-2.724A1 1 0 013 16.382V5.618a1 1 0 011.447-.894L9 7m0 13l6-3m-6 3V7m6 10l4.553 2.276A1 1 0 0021 18.382V7.618a1 1 0 00-.553-.894L15 4m0 13V4m0 0L9 7"></path>
-              </svg>
+              <MapIcon class="w-3 h-3 mr-1" />
               Edit Coords
             </button>
             <button
@@ -189,9 +185,7 @@
               class="text-xs text-blue-600 hover:text-blue-800 hover:underline disabled:opacity-50 disabled:cursor-not-allowed inline-flex items-center font-medium focus:outline-none"
               title="Update spatial data from file"
             >
-              <svg class="w-3 h-3 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12"></path>
-              </svg>
+              <ArrowUpTrayIcon class="w-3 h-3 mr-1" />
               Update Geo
             </button>
           </div>
@@ -265,9 +259,7 @@
             class="text-gray-400 hover:text-gray-600"
             title="Close coordinates editor"
           >
-            <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path>
-            </svg>
+            <XMarkIcon class="w-5 h-5" />
           </button>
         </div>
         <div class="p-4 overflow-y-auto flex-1">
@@ -308,6 +300,7 @@ import {GeoJSON} from 'ol/format'
 import IconPickerDialog from './IconPickerDialog.vue'
 import ReplacementFeatureDialog from './ReplacementFeatureDialog.vue'
 import TagPicker from '@/components/TagPicker.vue'
+import { XMarkIcon, MapIcon, ArrowUpTrayIcon } from '@heroicons/vue/24/outline'
 
 // Helper functions for icon type checking
 function isSystemIcon(iconUrl) {
@@ -323,7 +316,10 @@ export default {
   components: {
     IconPickerDialog,
     ReplacementFeatureDialog,
-    TagPicker
+    TagPicker,
+    XMarkIcon,
+    MapIcon,
+    ArrowUpTrayIcon
   },
   props: {
     feature: {

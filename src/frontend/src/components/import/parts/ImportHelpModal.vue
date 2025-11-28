@@ -24,9 +24,7 @@
               class="text-gray-400 hover:text-gray-500 focus:outline-none focus:ring-2 focus:ring-blue-500 rounded-md p-1"
               aria-label="Close modal"
           >
-            <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path>
-            </svg>
+            <XMarkIcon class="w-6 h-6" />
           </button>
         </div>
 
@@ -230,8 +228,13 @@
 </template>
 
 <script>
+import { XMarkIcon } from '@heroicons/vue/24/outline';
+
 export default {
   name: 'ImportHelpModal',
+  components: {
+    XMarkIcon
+  },
   props: {
     show: {
       type: Boolean,
