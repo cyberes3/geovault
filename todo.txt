@@ -1,4 +1,0 @@
-insane linework test isn't showing up on the map
-
-Later:
-See how https://trails.colorado.gov loads their data in the map
