@@ -1,66 +1,33 @@
 <template>
   <div :class="isMapRoute ? 'h-screen bg-gray-50 overflow-hidden' : 'min-h-screen bg-gray-50'">
     <!-- Navigation Header -->
-    <nav class="bg-white shadow-sm border-b border-gray-200">
+    <nav class="bg-white shadow-sm border-b border-gray-200 relative z-50">
       <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
         <div class="flex justify-between h-16">
-          <div class="flex items-center">
-            <div class="flex-shrink-0">
+          
+          <!-- Logo & Hamburger Container -->
+          <div class="flex items-center justify-between w-full md:w-auto">
+            <!-- Logo -->
+            <div class="flex-shrink-0 flex items-center">
               <router-link class="flex items-center space-x-2 hover:opacity-80 transition-opacity" to="/">
                 <img alt="GeoVault Logo" class="h-8 w-auto" src="/images/logo.svg"/>
                 <h1 class="text-xl font-bold text-gray-900">GeoVault</h1>
               </router-link>
             </div>
-            <div v-if="!userInfoLoading && userInfo" class="hidden sm:ml-6 sm:flex sm:space-x-8">
-              <router-link
-                  :class="{ 'text-gray-900 border-gray-500': $route.path === '/dashboard' || $route.path === '/' }"
-                  class="inline-flex items-center px-1 pt-1 text-sm font-medium text-gray-500 hover:text-gray-700 hover:border-gray-300 border-b-2 border-transparent transition-colors duration-200"
-                  to="/dashboard"
-              >
-                Dashboard
-              </router-link>
-              <router-link
-                  :class="{ 'text-gray-900 border-gray-500': $route.path.startsWith('/import') }"
-                  class="inline-flex items-center px-1 pt-1 text-sm font-medium text-gray-500 hover:text-gray-700 hover:border-gray-300 border-b-2 border-transparent transition-colors duration-200"
-                  to="/import"
-              >
-                Import
-              </router-link>
-              <router-link
-                  :class="{ 'text-gray-900 border-gray-500': $route.path === '/tags' }"
-                  class="inline-flex items-center px-1 pt-1 text-sm font-medium text-gray-500 hover:text-gray-700 hover:border-gray-300 border-b-2 border-transparent transition-colors duration-200"
-                  to="/tags"
-              >
-                Tags
-              </router-link>
-              <router-link
-                  :class="{ 'text-gray-900 border-gray-500': $route.path === '/collections' }"
-                  class="inline-flex items-center px-1 pt-1 text-sm font-medium text-gray-500 hover:text-gray-700 hover:border-gray-300 border-b-2 border-transparent transition-colors duration-200"
-                  to="/collections"
-              >
-                Collections
-              </router-link>
-              <router-link
-                  :class="{ 'text-gray-900 border-gray-500': $route.path === '/map' }"
-                  class="inline-flex items-center px-1 pt-1 text-sm font-medium text-gray-500 hover:text-gray-700 hover:border-gray-300 border-b-2 border-transparent transition-colors duration-200"
-                  to="/map"
-              >
-                Map
-              </router-link>
-            </div>
-          </div>
-          <div class="flex items-center">
-            <div ref="userMenuRef" class="relative">
+            
+            <!-- Hamburger (Mobile Only) -->
+            <div class="flex items-center md:hidden">
               <button
-                  v-if="!userInfoLoading && userInfo?.email"
-                  class="flex items-center text-sm font-medium text-gray-900 hover:text-gray-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 rounded-md px-3 py-2"
-                  @click="toggleUserMenu"
+                  v-if="!userInfoLoading && userInfo"
+                  class="inline-flex items-center justify-center p-2 rounded-md text-gray-700 hover:text-gray-900 hover:bg-gray-100 focus:outline-none focus:ring-2 focus:ring-inset focus:ring-blue-500"
+                  @click="toggleMobileMenu"
+                  aria-label="Toggle menu"
               >
-                {{ userInfo?.email }}
-                <ChevronDownIcon class="ml-2 h-4 w-4" />
+                <Bars3Icon v-if="!mobileMenuOpen" class="h-6 w-6" />
+                <XMarkIcon v-else class="h-6 w-6" />
               </button>
-
-              <!-- Login Link (shown when user is not logged in and auth check is complete) -->
+              
+              <!-- Mobile Login Link (Only if not logged in) -->
               <a
                   v-if="!userInfoLoading && !userInfo"
                   class="text-sm font-medium text-gray-500 hover:text-gray-700 px-3 py-2"
@@ -68,39 +35,164 @@
               >
                 Sign In
               </a>
-
-              <!-- Dropdown Menu -->
-              <div
-                  v-if="userMenuOpen"
-                  class="absolute right-0 mt-2 w-48 bg-white rounded-md shadow-lg py-1 z-50 border border-gray-200"
-              >
-                <router-link
-                    class="block px-4 py-2 text-sm text-gray-700 hover:bg-gray-100"
-                    to="/settings"
-                    @click="closeUserMenu"
-                >
-                  Settings
-                </router-link>
-                <router-link
-                    v-if="userInfo?.isSuperuser"
-                    class="block px-4 py-2 text-sm text-gray-700 hover:bg-gray-100"
-                    to="/admin"
-                    @click="closeUserMenu"
-                >
-                  Admin Panel
-                </router-link>
-                <div class="border-t border-gray-200 my-1"></div>
-                <button
-                    class="block w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-gray-100"
-                    @click="performLogout"
-                >
-                  Sign Out
-                </button>
-              </div>
             </div>
+          </div>
+
+          <!-- Unified Menu Container -->
+          <div 
+            v-if="!userInfoLoading"
+            :class="[
+              'md:flex md:items-center md:ml-6 md:space-x-8',
+              mobileMenuOpen && userInfo ? 'fixed inset-x-0 top-16 z-50 flex flex-col bg-white shadow-lg p-4 space-y-4 rounded-b-lg overflow-y-auto border-b border-gray-200' : 'hidden'
+            ]"
+          >
+            
+            <!-- Navigation Links -->
+            <div v-if="userInfo" class="flex flex-col md:flex-row md:space-x-8 space-y-2 md:space-y-0">
+              <router-link
+                  :class="[
+                    $route.path === '/dashboard' || $route.path === '/' 
+                      ? 'text-gray-900 border-gray-500 bg-gray-50 md:bg-transparent' 
+                      : 'text-gray-500 border-transparent hover:text-gray-700 hover:border-gray-300 hover:bg-gray-50 md:hover:bg-transparent',
+                    'block md:inline-flex items-center px-3 md:px-1 py-2 md:pt-1 text-base md:text-sm font-medium border-l-4 md:border-l-0 md:border-b-2 transition-colors duration-200 rounded-r-md md:rounded-none'
+                  ]"
+                  to="/dashboard"
+                  @click="closeMobileMenu"
+              >
+                Dashboard
+              </router-link>
+              <router-link
+                  :class="[
+                    $route.path.startsWith('/import')
+                      ? 'text-gray-900 border-gray-500 bg-gray-50 md:bg-transparent' 
+                      : 'text-gray-500 border-transparent hover:text-gray-700 hover:border-gray-300 hover:bg-gray-50 md:hover:bg-transparent',
+                    'block md:inline-flex items-center px-3 md:px-1 py-2 md:pt-1 text-base md:text-sm font-medium border-l-4 md:border-l-0 md:border-b-2 transition-colors duration-200 rounded-r-md md:rounded-none'
+                  ]"
+                  to="/import"
+                  @click="closeMobileMenu"
+              >
+                Import
+              </router-link>
+              <router-link
+                  :class="[
+                    $route.path === '/tags'
+                      ? 'text-gray-900 border-gray-500 bg-gray-50 md:bg-transparent' 
+                      : 'text-gray-500 border-transparent hover:text-gray-700 hover:border-gray-300 hover:bg-gray-50 md:hover:bg-transparent',
+                    'block md:inline-flex items-center px-3 md:px-1 py-2 md:pt-1 text-base md:text-sm font-medium border-l-4 md:border-l-0 md:border-b-2 transition-colors duration-200 rounded-r-md md:rounded-none'
+                  ]"
+                  to="/tags"
+                  @click="closeMobileMenu"
+              >
+                Tags
+              </router-link>
+              <router-link
+                  :class="[
+                    $route.path === '/collections'
+                      ? 'text-gray-900 border-gray-500 bg-gray-50 md:bg-transparent' 
+                      : 'text-gray-500 border-transparent hover:text-gray-700 hover:border-gray-300 hover:bg-gray-50 md:hover:bg-transparent',
+                    'block md:inline-flex items-center px-3 md:px-1 py-2 md:pt-1 text-base md:text-sm font-medium border-l-4 md:border-l-0 md:border-b-2 transition-colors duration-200 rounded-r-md md:rounded-none'
+                  ]"
+                  to="/collections"
+                  @click="closeMobileMenu"
+              >
+                Collections
+              </router-link>
+              <router-link
+                  :class="[
+                    $route.path === '/map'
+                      ? 'text-gray-900 border-gray-500 bg-gray-50 md:bg-transparent' 
+                      : 'text-gray-500 border-transparent hover:text-gray-700 hover:border-gray-300 hover:bg-gray-50 md:hover:bg-transparent',
+                    'block md:inline-flex items-center px-3 md:px-1 py-2 md:pt-1 text-base md:text-sm font-medium border-l-4 md:border-l-0 md:border-b-2 transition-colors duration-200 rounded-r-md md:rounded-none'
+                  ]"
+                  to="/map"
+                  @click="closeMobileMenu"
+              >
+                Map
+              </router-link>
+            </div>
+
+            <!-- Account Section -->
+            <div class="flex items-center md:ml-auto">
+              <!-- Logged In -->
+              <div v-if="userInfo" class="w-full md:w-auto relative md:ml-3" ref="userMenuRef">
+                
+                <!-- Desktop Trigger -->
+                <button
+                    class="hidden md:flex items-center text-sm font-medium text-gray-900 hover:text-gray-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 rounded-md px-3 py-2"
+                    @click="toggleUserMenu"
+                >
+                  {{ userInfo.email }}
+                  <ChevronDownIcon class="ml-2 h-4 w-4" />
+                </button>
+
+                <!-- Mobile Header -->
+                <div class="md:hidden px-3 py-2 border-t border-gray-200 mt-2 pt-4">
+                  <div class="text-base font-medium text-gray-900">{{ userInfo.email }}</div>
+                </div>
+
+                <!-- Menu Items (Dropdown on Desktop, Static on Mobile) -->
+                <div
+                    :class="[
+                      'md:absolute md:right-0 md:mt-2 md:w-48 md:bg-white md:rounded-md md:shadow-lg md:py-1 md:border md:border-gray-200 z-50',
+                      (!userMenuOpen) ? 'md:hidden' : '',
+                      'block'
+                    ]"
+                >
+                  <router-link
+                      :class="[
+                        $route.path === '/settings'
+                          ? 'text-gray-900 border-gray-500 bg-gray-50 md:bg-gray-100 md:border-transparent'
+                          : 'text-gray-700 border-transparent hover:text-gray-900 md:hover:bg-gray-100 hover:bg-gray-50',
+                        'block px-3 md:px-4 py-2 text-base md:text-sm font-normal border-l-4 md:border-l-0 rounded-r-md md:rounded-none'
+                      ]"
+                      to="/settings"
+                      @click="() => { closeUserMenu(); closeMobileMenu(); }"
+                  >
+                    Settings
+                  </router-link>
+                  <router-link
+                      v-if="userInfo.isSuperuser"
+                      :class="[
+                        $route.path === '/admin'
+                          ? 'text-gray-900 border-gray-500 bg-gray-50 md:bg-gray-100 md:border-transparent'
+                          : 'text-gray-700 border-transparent hover:text-gray-900 md:hover:bg-gray-100 hover:bg-gray-50',
+                        'block px-3 md:px-4 py-2 text-base md:text-sm font-normal border-l-4 md:border-l-0 rounded-r-md md:rounded-none'
+                      ]"
+                      to="/admin"
+                      @click="() => { closeUserMenu(); closeMobileMenu(); }"
+                  >
+                    Admin Panel
+                  </router-link>
+                  <div class="hidden md:block border-t border-gray-200 my-1"></div>
+                  <button
+                      class="block w-full text-left px-3 md:px-4 py-2 text-base md:text-sm font-normal text-gray-700 hover:text-gray-900 md:hover:bg-gray-100 hover:bg-gray-50 rounded-md md:rounded-none"
+                      @click="performLogout"
+                  >
+                    Sign Out
+                  </button>
+                </div>
+              </div>
+
+              <!-- Guest (Desktop Only - Mobile handled in hamburger section) -->
+              <a
+                  v-else
+                  class="hidden md:block text-sm font-medium text-gray-500 hover:text-gray-700 px-3 py-2"
+                  href="/accounts/login/"
+              >
+                Sign In
+              </a>
+            </div>
+
           </div>
         </div>
       </div>
+
+      <!-- Mobile Menu Backdrop -->
+      <div
+          v-if="mobileMenuOpen && userInfo"
+          class="md:hidden fixed inset-x-0 top-16 bottom-0 bg-gray-600 bg-opacity-75 z-40"
+          @click="closeMobileMenu"
+      ></div>
     </nav>
 
     <!-- Main Content -->
@@ -126,18 +218,21 @@ import {realtimeSocket} from "@/assets/js/websocket/realtimeSocket.js";
 import {getCookie} from "@/assets/js/auth.js";
 import axios from "axios";
 import Loader from "@/components/parts/Loader.vue";
-import { ChevronDownIcon } from '@heroicons/vue/24/outline';
+import { ChevronDownIcon, Bars3Icon, XMarkIcon } from '@heroicons/vue/24/outline';
 
 export default {
   name: 'App',
   components: {
     Loader,
-    ChevronDownIcon
+    ChevronDownIcon,
+    Bars3Icon,
+    XMarkIcon
   },
   data() {
     return {
       realtimeListenersAdded: false,
       userMenuOpen: false,
+      mobileMenuOpen: false,
       userInfoLoading: true
     }
   },
@@ -174,6 +269,9 @@ export default {
     },
     $route: {
       handler(to, from) {
+        // Close mobile menu on route change
+        this.closeMobileMenu();
+
         // Don't check auth during initial load - that's handled by checkAuth() in created()
         // Only check on route changes after initial auth check is complete
         if (this.userInfoLoading) {
@@ -336,6 +434,23 @@ export default {
     closeUserMenu() {
       this.userMenuOpen = false;
     },
+    toggleMobileMenu() {
+      this.mobileMenuOpen = !this.mobileMenuOpen;
+      // Close user menu when opening mobile menu
+      if (this.mobileMenuOpen) {
+        this.userMenuOpen = false;
+        // Prevent body scroll when menu is open
+        document.body.style.overflow = 'hidden';
+      } else {
+        // Restore body scroll when menu is closed
+        document.body.style.overflow = '';
+      }
+    },
+    closeMobileMenu() {
+      this.mobileMenuOpen = false;
+      // Restore body scroll when menu is closed
+      document.body.style.overflow = '';
+    },
     handleClickOutside(event) {
       if (this.$refs.userMenuRef && !this.$refs.userMenuRef.contains(event.target)) {
         this.userMenuOpen = false;
@@ -356,6 +471,8 @@ export default {
     // Don't disconnect WebSocket here - let it stay connected across the app lifecycle
     // Remove click outside listener
     document.removeEventListener('click', this.handleClickOutside);
+    // Restore body scroll in case menu was open
+    document.body.style.overflow = '';
   }
 };
 </script>
