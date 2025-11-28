@@ -1,17 +1,24 @@
-Visibility: private, public, restricted (only logged in users)
 Bulk tagging and styling on import page
-
-## Stretch Goals
-Geotagged photo support (set path to scan)
-Group support and share to group
-Some way to record and push to server from an app. Use GPSLogger with %ALL
-A very simple Android app to Make it easy to push data to the server. For example, export from back country navigator, share to this app, import to server using app
-Plugin to automatically pull saved locations from Google maps. Support multiple accounts with the option to automatically apply set tags on imported features per account
-Search box to call novatium/overpass to search for locations and zoom the map to them
-Upload and attach photos to features, add full screen photo gallery viewer
 Auto tag based on time, uploaded file name, and region from osm (natl forest, state, town if one in 10 miles)
+Search box to call novatium/overpass to search for locations and zoom the map to them
+
+Sharing between users:
+- Visibility: private, public, restricted (only logged in users)
+- Group support and share to group
+- Different share levels: view only or allow edit
+
+Upload and attach photos to features, add full screen photo gallery viewer
+
+Geotagged photo support (set path to scan)
+
+Some way to record and push to server from an app. Use GPSLogger with %ALL
+
+A very simple Android app to Make it easy to push data to the server. For example, export from back country navigator, share to this app, import to server using app
+
+Plugin to automatically pull saved locations from Google maps. Support multiple accounts with the option to automatically apply set tags on imported features per account
+
 Auto scrape inreach tracks and present the user with a dialog to import them (also tag them as inreach)
-Show track direction when clicked
+
 If a track was updated within the last 10 minutes, it is a live track and should have a direction arrow on it
+
 Stretch goal should be implementing some sort of live tracking platform like hawk does
-Ability to quickly export all non-track data to import to gps. Also the ability to export all data. Also the ability to only export tracks
