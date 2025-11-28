@@ -38,8 +38,8 @@
             textarea:focus,
             select:focus {
                 outline: none;
-                border-color: #3b82f6;
-                box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.1);
+                border-color: #163D8A;
+                box-shadow: 0 0 0 3px rgba(22, 61, 138, 0.1);
             }
             
             input:disabled,
@@ -96,7 +96,7 @@
             <!-- Navigation Header -->
             <nav class="bg-white shadow-sm border-b border-gray-200">
                 <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-                    <div class="flex justify-between h-16">
+                    <div class="flex justify-between items-center h-16">
                         <div class="flex items-center">
                             <div class="flex-shrink-0">
                                 <a href="/" class="flex items-center space-x-2 hover:opacity-80 transition-opacity">
@@ -105,18 +105,18 @@
                                 </a>
                             </div>
                         </div>
-                        <div class="flex items-center space-x-4">
+                        <div class="flex items-center space-x-2 sm:space-x-4">
                             {% if user.is_authenticated %}
-                                <span class="text-sm font-medium text-gray-900">{{ user.email }}</span>
-                                <a href="/" class="text-sm font-medium text-gray-500 hover:text-gray-700">Home</a>
+                                <span class="hidden sm:inline text-sm font-medium text-gray-900 truncate max-w-[150px]">{{ user.email }}</span>
+                                <a href="/" class="text-sm font-medium text-gray-500 hover:text-gray-700 px-2 sm:px-0">Home</a>
                                 {% url 'account_logout' as logout_url_ %}
                                 {% if logout_url_ %}
-                                    <a href="{{ logout_url_ }}" class="text-sm font-medium text-gray-500 hover:text-gray-700">{% trans "Sign Out" %}</a>
+                                    <a href="{{ logout_url_ }}" class="text-sm font-medium text-gray-500 hover:text-gray-700 px-2 sm:px-0">{% trans "Sign Out" %}</a>
                                 {% endif %}
                             {% else %}
                                 {% url 'account_login' as login_url_ %}
                                 {% if login_url_ %}
-                                    <a href="{{ login_url_ }}" class="text-sm font-medium text-gray-500 hover:text-gray-700">{% trans "Sign In" %}</a>
+                                    <a href="{{ login_url_ }}" class="text-sm font-medium text-gray-500 hover:text-gray-700 px-2 sm:px-0">{% trans "Sign In" %}</a>
                                 {% endif %}
                                 {% url 'account_signup' as signup_url_ %}
                             {% endif %}
@@ -127,9 +127,9 @@
 
             <!-- Messages -->
             {% if messages %}
-                <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 mt-4">
+                <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 mt-2 sm:mt-4">
                     {% for message in messages %}
-                        <div class="mb-4 p-4 rounded-md {% if message.tags == 'error' or message.tags == 'danger' %}bg-red-50 text-red-800{% elif message.tags == 'success' %}bg-green-50 text-green-800{% elif message.tags == 'warning' %}bg-yellow-50 text-yellow-800{% else %}bg-blue-50 text-blue-800{% endif %}">
+                        <div class="mb-2 sm:mb-4 p-3 sm:p-4 rounded-md text-sm sm:text-base {% if message.tags == 'error' or message.tags == 'danger' %}bg-red-50 text-red-800{% elif message.tags == 'success' %}bg-green-50 text-green-800{% elif message.tags == 'warning' %}bg-yellow-50 text-yellow-800{% else %}bg-blue-50 text-blue-800{% endif %}">
                             {{ message }}
                         </div>
                     {% endfor %}
@@ -137,7 +137,7 @@
             {% endif %}
 
             <!-- Main Content -->
-            <main class="max-w-7xl mx-auto py-6 px-4 sm:px-6 lg:px-8">
+            <main class="max-w-7xl mx-auto py-4 sm:py-6 px-4 sm:px-6 lg:px-8">
                 {% block content %}
                 {% endblock content %}
             </main>
