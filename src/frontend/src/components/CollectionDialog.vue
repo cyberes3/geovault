@@ -16,7 +16,7 @@
         @click.stop
       >
         <!-- Header -->
-        <div class="flex items-center justify-between px-6 lg:px-8 py-4 border-b border-gray-200 bg-gray-50">
+        <div class="flex items-center justify-between px-6 lg:px-8 py-4 border-b border-gray-200 bg-gray-50 sm:rounded-t-lg">
           <h3 class="text-lg font-medium text-gray-900">
             {{ collection ? 'Edit Collection' : 'Create New Collection' }}
           </h3>
@@ -32,183 +32,186 @@
         </div>
 
         <!-- Content -->
-        <div class="flex-1 overflow-y-auto bg-white p-6 lg:p-8">
-          <form @submit.prevent="saveCollection">
-            <!-- Name Input -->
-            <div class="mb-4">
-              <label class="block text-sm font-medium text-gray-700 mb-1">
-                Name <span class="text-red-500">*</span>
-              </label>
-              <input
-                v-model="formData.name"
-                type="text"
-                required
-                class="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500"
-                placeholder="Enter collection name"
-              />
-            </div>
-
-            <!-- Description Input -->
-            <div class="mb-6">
-              <label class="block text-sm font-medium text-gray-700 mb-1">
-                Description
-              </label>
-              <textarea
-                v-model="formData.description"
-                rows="3"
-                class="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500"
-                placeholder="Enter collection description (optional)"
-              ></textarea>
-            </div>
-
-            <!-- Tags and Features Section - Two Column Layout -->
-            <div class="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-6">
-              <!-- Tags Section -->
-              <div>
-                <label class="block text-sm font-medium text-gray-700 mb-2">
-                  Tags
+        <div class="flex-1 bg-white min-h-0 flex flex-col overflow-hidden">
+          <form @submit.prevent="saveCollection" class="flex flex-col flex-1 min-h-0">
+            <!-- Scrollable Content -->
+            <div class="flex-1 overflow-y-auto p-6 lg:p-8 min-h-0">
+              <!-- Name Input -->
+              <div class="mb-4">
+                <label class="block text-sm font-medium text-gray-700 mb-1">
+                  Name <span class="text-red-500">*</span>
                 </label>
-                <p class="text-xs text-gray-500 mb-3">Select tags to include all features with those tags</p>
-                
-                <!-- Tag Search -->
-                <div class="relative mb-3">
-                  <div class="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
-                    <svg class="h-5 w-5 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" stroke-linecap="round" stroke-linejoin="round" stroke-width="2"></path>
-                    </svg>
-                  </div>
-                  <input
-                    v-model="tagSearchQuery"
-                    type="text"
-                    class="block w-full pl-10 pr-3 py-2 border border-gray-300 rounded-md leading-5 bg-white placeholder-gray-500 focus:outline-none focus:placeholder-gray-400 focus:ring-1 focus:ring-blue-500 focus:border-blue-500 sm:text-sm"
-                    placeholder="Search tags..."
-                  />
-                </div>
+                <input
+                  v-model="formData.name"
+                  type="text"
+                  required
+                  class="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500"
+                  placeholder="Enter collection name"
+                />
+              </div>
 
-                <!-- Tags List -->
-                <div v-if="loadingTags" class="text-center py-4">
-                  <Loader size="sm" layout="centered" message="Loading tags..." />
-                </div>
+              <!-- Description Input -->
+              <div class="mb-6">
+                <label class="block text-sm font-medium text-gray-700 mb-1">
+                  Description
+                </label>
+                <textarea
+                  v-model="formData.description"
+                  rows="3"
+                  class="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500"
+                  placeholder="Enter collection description (optional)"
+                ></textarea>
+              </div>
 
-                <div v-else-if="filteredTags.length === 0" class="text-center py-4 text-gray-500 text-sm">
-                  <p>No tags available</p>
-                </div>
-
-                <div v-else class="max-h-48 overflow-y-auto border border-gray-200 rounded-md p-2">
-                  <div
-                    v-for="tag in filteredTags"
-                    :key="tag"
-                    class="flex items-center px-3 py-2 hover:bg-gray-50 rounded space-x-3"
-                  >
+              <!-- Tags and Features Section - Two Column Layout -->
+              <div class="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-6">
+                <!-- Tags Section -->
+                <div>
+                  <label class="block text-sm font-medium text-gray-700 mb-2">
+                    Tags
+                  </label>
+                  <p class="text-xs text-gray-500 mb-3">Select tags to include all features with those tags</p>
+                  
+                  <!-- Tag Search -->
+                  <div class="relative mb-3">
+                    <div class="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+                      <svg class="h-5 w-5 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" stroke-linecap="round" stroke-linejoin="round" stroke-width="2"></path>
+                      </svg>
+                    </div>
                     <input
-                      type="checkbox"
-                      :id="`tag-${tag}`"
-                      class="checkbox-custom"
-                      :checked="formData.tags.includes(tag)"
-                      @change="onTagCheckboxChange(tag, $event.target.checked)"
+                      v-model="tagSearchQuery"
+                      type="text"
+                      class="block w-full pl-10 pr-3 py-2 border border-gray-300 rounded-md leading-5 bg-white placeholder-gray-500 focus:outline-none focus:placeholder-gray-400 focus:ring-1 focus:ring-blue-500 focus:border-blue-500 sm:text-sm"
+                      placeholder="Search tags..."
                     />
-                    <label
-                      :for="`tag-${tag}`"
-                      class="text-sm text-gray-700 truncate"
-                    >
-                      {{ tag }}
-                    </label>
                   </div>
-                </div>
 
-                <!-- Selected Tags -->
-                <div v-if="formData.tags.length > 0" class="mt-3">
-                  <p class="text-xs text-gray-500 mb-2">Selected tags:</p>
-                  <div class="flex flex-wrap gap-2">
-                    <span
-                      v-for="tag in formData.tags"
+                  <!-- Tags List -->
+                  <div v-if="loadingTags" class="text-center py-4">
+                    <Loader size="sm" layout="centered" message="Loading tags..." />
+                  </div>
+
+                  <div v-else-if="filteredTags.length === 0" class="text-center py-4 text-gray-500 text-sm">
+                    <p>No tags available</p>
+                  </div>
+
+                  <div v-else class="max-h-48 overflow-y-auto border border-gray-200 rounded-md p-2">
+                    <div
+                      v-for="tag in filteredTags"
                       :key="tag"
-                      @click="removeTag(tag)"
-                      class="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium bg-blue-100 text-blue-700 cursor-pointer hover:bg-blue-200"
+                      class="flex items-center px-3 py-2 hover:bg-gray-50 rounded space-x-3"
                     >
-                      {{ tag }}
-                      <button
-                        type="button"
-                        @click.stop="removeTag(tag)"
-                        class="ml-1 text-blue-500 hover:text-blue-700"
-                        title="Remove tag"
+                      <input
+                        type="checkbox"
+                        :id="`tag-${tag}`"
+                        class="checkbox-custom"
+                        :checked="formData.tags.includes(tag)"
+                        @change="onTagCheckboxChange(tag, $event.target.checked)"
+                      />
+                      <label
+                        :for="`tag-${tag}`"
+                        class="text-sm text-gray-700 truncate"
                       >
-                        <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path>
-                        </svg>
-                      </button>
-                    </span>
+                        {{ tag }}
+                      </label>
+                    </div>
+                  </div>
+
+                  <!-- Selected Tags -->
+                  <div v-if="formData.tags.length > 0" class="mt-3">
+                    <p class="text-xs text-gray-500 mb-2">Selected tags:</p>
+                    <div class="flex flex-wrap gap-2">
+                      <span
+                        v-for="tag in formData.tags"
+                        :key="tag"
+                        @click="removeTag(tag)"
+                        class="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium bg-blue-100 text-blue-700 cursor-pointer hover:bg-blue-200"
+                      >
+                        {{ tag }}
+                        <button
+                          type="button"
+                          @click.stop="removeTag(tag)"
+                          class="ml-1 text-blue-500 hover:text-blue-700"
+                          title="Remove tag"
+                        >
+                          <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path>
+                          </svg>
+                        </button>
+                      </span>
+                    </div>
                   </div>
                 </div>
-              </div>
 
-              <!-- Features Section -->
-              <div>
-                <label class="block text-sm font-medium text-gray-700 mb-2">
-                  Features
-                </label>
-                <p class="text-xs text-gray-500 mb-3">Select individual features to include</p>
-                
-                <!-- Feature Search -->
-                <div class="relative mb-3">
-                  <div class="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
-                    <svg class="h-5 w-5 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" stroke-linecap="round" stroke-linejoin="round" stroke-width="2"></path>
-                    </svg>
-                  </div>
-                  <input
-                    v-model="featureSearchQuery"
-                    type="text"
-                    class="block w-full pl-10 pr-3 py-2 border border-gray-300 rounded-md leading-5 bg-white placeholder-gray-500 focus:outline-none focus:placeholder-gray-400 focus:ring-1 focus:ring-blue-500 focus:border-blue-500 sm:text-sm"
-                    placeholder="Search features..."
-                  />
-                </div>
-
-                <!-- Features List -->
-                <div v-if="loadingFeatures" class="text-center py-4">
-                  <Loader size="sm" layout="centered" message="Loading features..." />
-                </div>
-
-                <div v-else-if="filteredFeatures.length === 0" class="text-center py-4 text-gray-500 text-sm">
-                  <p>No features available</p>
-                </div>
-
-                <div v-else class="max-h-48 overflow-y-auto border border-gray-200 rounded-md p-2">
-                  <div
-                    v-for="feature in filteredFeatures"
-                    :key="feature.properties._id"
-                    class="flex items-center px-3 py-2 hover:bg-gray-50 rounded space-x-3"
-                  >
+                <!-- Features Section -->
+                <div>
+                  <label class="block text-sm font-medium text-gray-700 mb-2">
+                    Features
+                  </label>
+                  <p class="text-xs text-gray-500 mb-3">Select individual features to include</p>
+                  
+                  <!-- Feature Search -->
+                  <div class="relative mb-3">
+                    <div class="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+                      <svg class="h-5 w-5 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" stroke-linecap="round" stroke-linejoin="round" stroke-width="2"></path>
+                      </svg>
+                    </div>
                     <input
-                      type="checkbox"
-                      :id="`feature-${feature.properties._id}`"
-                      class="checkbox-custom"
-                      :checked="isFeatureSelected(feature)"
-                      @change="onFeatureCheckboxChange(feature, $event.target.checked)"
+                      v-model="featureSearchQuery"
+                      type="text"
+                      class="block w-full pl-10 pr-3 py-2 border border-gray-300 rounded-md leading-5 bg-white placeholder-gray-500 focus:outline-none focus:placeholder-gray-400 focus:ring-1 focus:ring-blue-500 focus:border-blue-500 sm:text-sm"
+                      placeholder="Search features..."
                     />
-                    <label
-                      :for="`feature-${feature.properties._id}`"
-                      class="text-sm text-gray-700 truncate"
+                  </div>
+
+                  <!-- Features List -->
+                  <div v-if="loadingFeatures" class="text-center py-4">
+                    <Loader size="sm" layout="centered" message="Loading features..." />
+                  </div>
+
+                  <div v-else-if="filteredFeatures.length === 0" class="text-center py-4 text-gray-500 text-sm">
+                    <p>No features available</p>
+                  </div>
+
+                  <div v-else class="max-h-48 overflow-y-auto border border-gray-200 rounded-md p-2">
+                    <div
+                      v-for="feature in filteredFeatures"
+                      :key="feature.properties._id"
+                      class="flex items-center px-3 py-2 hover:bg-gray-50 rounded space-x-3"
                     >
-                      {{ feature.properties.name || 'Unnamed Feature' }}
-                    </label>
+                      <input
+                        type="checkbox"
+                        :id="`feature-${feature.properties._id}`"
+                        class="checkbox-custom"
+                        :checked="isFeatureSelected(feature)"
+                        @change="onFeatureCheckboxChange(feature, $event.target.checked)"
+                      />
+                      <label
+                        :for="`feature-${feature.properties._id}`"
+                        class="text-sm text-gray-700 truncate"
+                      >
+                        {{ feature.properties.name || 'Unnamed Feature' }}
+                      </label>
+                    </div>
+                  </div>
+
+                  <!-- Selected Features -->
+                  <div class="mt-3">
+                    <p class="text-xs text-gray-500 mb-2">Selected features: {{ formData.feature_ids.length }}</p>
                   </div>
                 </div>
+              </div>
 
-                <!-- Selected Features -->
-                <div class="mt-3">
-                  <p class="text-xs text-gray-500 mb-2">Selected features: {{ formData.feature_ids.length }}</p>
-                </div>
+              <!-- Error Message -->
+              <div v-if="error" class="mb-4 p-3 bg-red-50 border border-red-200 rounded-md">
+                <p class="text-sm text-red-800">{{ error }}</p>
               </div>
             </div>
 
-            <!-- Error Message -->
-            <div v-if="error" class="mb-4 p-3 bg-red-50 border border-red-200 rounded-md">
-              <p class="text-sm text-red-800">{{ error }}</p>
-            </div>
-
-            <!-- Actions -->
-            <div class="flex justify-end space-x-3 pt-4 border-t border-gray-200">
+            <!-- Actions - Sticky Footer -->
+            <div class="flex justify-end space-x-3 px-6 lg:px-8 py-4 border-t border-gray-200 bg-white flex-shrink-0 sm:rounded-b-lg">
               <button
                 type="button"
                 @click="closeDialog"

@@ -8,7 +8,7 @@
       <!-- Modal panel -->
       <div class="inline-block align-bottom bg-white rounded-lg text-left overflow-hidden shadow-xl transform transition-all sm:my-8 sm:align-middle sm:max-w-6xl sm:w-full" @click.stop @mousedown.stop>
         <!-- Header -->
-        <div class="bg-white px-6 py-4 border-b border-gray-200">
+        <div class="bg-white px-6 py-4 border-b border-gray-200 rounded-t-lg">
           <div class="flex items-center justify-between">
             <div>
               <h3 class="text-lg font-medium text-gray-900">Feature Map View</h3>
@@ -46,7 +46,7 @@
         </div>
 
         <!-- Footer -->
-        <div class="bg-gray-50 px-6 py-3 border-t border-gray-200">
+        <div class="bg-gray-50 px-6 py-3 border-t border-gray-200 rounded-b-lg">
           <div class="flex justify-end">
             <button
               @click="closeDialog"

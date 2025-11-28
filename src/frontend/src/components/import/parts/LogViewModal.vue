@@ -12,11 +12,11 @@
     <div class="absolute inset-0 flex items-stretch justify-stretch sm:items-center sm:justify-center">
       <div
           ref="modalContainer"
-          class="bg-white flex flex-col w-full h-full sm:h-[80vh] sm:max-w-4xl sm:rounded-lg shadow-xl transform transition-all duration-300 ease-out"
+          class="bg-white flex flex-col w-full h-full sm:h-[80vh] sm:max-w-4xl sm:rounded-lg shadow-xl transform transition-all duration-300 ease-out overflow-hidden"
           @click.stop
       >
       <!-- Header -->
-      <div class="flex items-center justify-between p-4 border-b border-gray-200 bg-gray-50 rounded-t-lg">
+      <div class="flex items-center justify-between p-4 border-b border-gray-200 bg-gray-50 sm:rounded-t-lg">
         <h3 class="text-lg font-semibold text-gray-900">Processing Logs</h3>
         <button
             class="inline-flex items-center p-2 border border-gray-300 shadow-sm text-sm font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500"

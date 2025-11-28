@@ -1,5 +1,5 @@
 <template>
-  <div class="space-y-6">
+  <div class="space-y-6 min-w-0 max-w-full overflow-x-hidden">
     <!-- Page Header -->
     <div class="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
       <div class="mb-4">
@@ -77,16 +77,16 @@
       >
         <!-- Tag Header -->
         <div class="bg-gray-50 px-6 py-4 border-b border-gray-200">
-          <div class="flex items-center justify-between">
-            <div class="flex items-center space-x-3 flex-1">
+          <div class="flex items-center justify-between gap-4">
+            <div class="flex items-center space-x-3 flex-1 min-w-0">
               <span v-if="editingTag !== tag" :class="[
-                'inline-flex items-center px-3 py-1 rounded-full text-sm font-medium border',
+                'inline-flex items-center px-3 py-1 rounded-full text-sm font-medium border truncate max-w-full',
                 isSystemTag(tag) 
                   ? 'bg-purple-100 text-purple-800 border-purple-200' 
                   : 'bg-blue-100 text-blue-700 border-blue-200'
               ]">
-                {{ tag }}
-                <span v-if="isSystemTag(tag)" class="ml-1.5 text-xs opacity-75" title="System tag">🔒</span>
+                <span class="truncate">{{ tag }}</span>
+                <span v-if="isSystemTag(tag)" class="ml-1.5 text-xs opacity-75 flex-shrink-0" title="System tag">🔒</span>
               </span>
               <input
                   v-else
@@ -182,9 +182,9 @@
               :key="feature.properties._id || index"
               class="px-6 py-4 hover:bg-gray-50 transition-colors"
           >
-            <div class="flex items-start justify-between">
-              <div class="flex-1">
-                <h4 class="text-sm font-medium text-gray-900">
+            <div class="flex items-start justify-between gap-4">
+              <div class="flex-1 min-w-0">
+                <h4 class="text-sm font-medium text-gray-900 truncate">
                   {{ feature.properties.name || 'Unnamed Feature' }}
                 </h4>
                 <p v-if="feature.properties.description" class="mt-1 text-sm text-gray-500 line-clamp-2">
@@ -196,7 +196,7 @@
                   </span>
                 </div>
               </div>
-              <div class="ml-4 flex-shrink-0 relative z-10 flex items-center space-x-2">
+              <div class="flex-shrink-0 relative z-10 flex items-center space-x-2">
                 <button
                     v-if="!isSystemTag(tag)"
                     class="p-1.5 text-gray-400 hover:text-red-600 focus:outline-none focus:ring-2 focus:ring-red-500 focus:ring-offset-1 rounded"

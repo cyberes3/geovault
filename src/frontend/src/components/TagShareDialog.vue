@@ -12,12 +12,12 @@
     <!-- Modal panel -->
     <div class="absolute inset-0 flex items-stretch justify-stretch sm:items-center sm:justify-center">
       <div
-        class="bg-white flex flex-col w-full h-full sm:h-[90vh] sm:max-w-3xl sm:rounded-lg shadow-xl"
+        class="bg-white flex flex-col w-full h-full sm:h-[90vh] sm:max-w-3xl sm:rounded-lg shadow-xl overflow-hidden"
         @mousedown.stop
         @click.stop
       >
       <!-- Header (sticky) -->
-      <header class="sticky top-0 z-10 flex items-center justify-between px-6 py-4 border-b border-gray-200 bg-gray-50">
+      <header class="sticky top-0 z-10 flex items-center justify-between px-6 py-4 border-b border-gray-200 bg-gray-50 sm:rounded-t-lg">
         <h3 class="text-lg sm:text-xl font-semibold text-gray-900">
           Share Tag: <span class="font-bold">{{ tag }}</span>
         </h3>
@@ -33,8 +33,8 @@
       </header>
 
       <!-- Content -->
-      <main class="flex-1 overflow-y-auto px-4 sm:px-6 py-4 bg-gray-50">
-        <div class="max-w-3xl mx-auto space-y-6">
+      <main class="flex-1 overflow-y-auto bg-white min-h-0">
+        <div class="p-6 space-y-6">
           <!-- Create New Share Section -->
           <section class="bg-white rounded-lg shadow-sm border border-gray-200 p-4 sm:p-6">
             <h4 class="text-base font-semibold text-gray-900 mb-4">Create New Share Link</h4>
@@ -93,7 +93,7 @@
           <section class="bg-white rounded-lg shadow-sm border border-gray-200 flex-1 min-h-0 flex flex-col">
             <h4 class="text-base font-semibold text-gray-900 px-4 sm:px-6 pt-4 mb-3 flex-shrink-0">Existing Share Links</h4>
 
-            <div class="overflow-y-auto flex-1 min-h-[100px] px-4 sm:px-6 pb-4 -mr-2 pr-2">
+            <div class="overflow-y-auto flex-1 min-h-[100px] px-4 sm:px-6 pb-4">
               <div v-if="loading" class="text-center py-4">
                 <Loader size="sm" layout="centered" message="Loading shares..." />
               </div>
@@ -117,7 +117,7 @@
                           <input
                             :value="share.url"
                             readonly
-                            class="flex-1 px-3 py-2 text-sm border border-gray-300 rounded-md bg-gray-50 text-gray-700 font-mono"
+                            class="flex-1 min-w-0 px-3 py-2 text-sm border border-gray-300 rounded-md bg-gray-50 text-gray-700 font-mono overflow-hidden"
                           />
                           <button
                             @click="copyToClipboard(share.url)"

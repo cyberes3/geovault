@@ -8,7 +8,7 @@
       <!-- Modal panel -->
       <div class="inline-block align-bottom bg-white rounded-lg text-left overflow-hidden shadow-xl transform transition-all sm:my-8 sm:align-middle sm:max-w-4xl sm:w-full" @click.stop @mousedown.stop>
         <!-- Header -->
-        <div class="bg-white px-6 py-4 border-b border-gray-200">
+        <div class="bg-white px-6 py-4 border-b border-gray-200 rounded-t-lg">
           <div class="flex items-center justify-between">
             <h3 class="text-lg font-medium text-gray-900">Update Spatial Data</h3>
             <button
@@ -242,7 +242,7 @@
         </div>
 
         <!-- Footer -->
-        <div class="bg-gray-50 px-6 py-4 border-t border-gray-200 flex justify-end space-x-3">
+        <div class="bg-gray-50 px-6 py-4 border-t border-gray-200 rounded-b-lg flex justify-end space-x-3">
           <!-- Upload Button (shown when file is selected but not yet uploaded) -->
           <button
             v-if="selectedFile && !importQueueId && !processing"
@@ -296,9 +296,9 @@
 
     <!-- Expanded Map Modal -->
     <div v-if="expandedMapIndex !== null" class="fixed inset-0 z-50 bg-black bg-opacity-75 flex items-center justify-center" @click="closeExpandedMap">
-      <div class="bg-white rounded-lg shadow-xl w-full h-full md:w-4/5 md:h-4/5 m-4 relative" @click.stop>
+      <div class="bg-white rounded-lg shadow-xl w-full h-full md:w-4/5 md:h-4/5 m-4 relative overflow-hidden" @click.stop>
         <!-- Header -->
-        <div class="bg-white px-6 py-4 border-b border-gray-200 flex items-center justify-between">
+        <div class="bg-white px-6 py-4 border-b border-gray-200 rounded-t-lg flex items-center justify-between">
           <h3 class="text-lg font-medium text-gray-900">
             {{ sortedFeatures[expandedMapIndex]?.properties?.name || `Feature ${expandedMapIndex + 1}` }} - Map Preview
           </h3>

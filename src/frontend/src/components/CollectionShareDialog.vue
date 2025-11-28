@@ -19,7 +19,7 @@
         @mousedown.stop
       >
         <!-- Header -->
-        <div class="flex items-center justify-between px-6 py-4 border-b border-gray-200 bg-gray-50">
+        <div class="flex items-center justify-between px-6 py-4 border-b border-gray-200 bg-gray-50 sm:rounded-t-lg">
           <h3 class="text-lg font-medium text-gray-900">Share Collection: {{ collectionName }}</h3>
           <button
             @click="closeDialog"
