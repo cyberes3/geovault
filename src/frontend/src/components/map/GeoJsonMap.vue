@@ -6,12 +6,50 @@
         :features="featuresInExtent"
         :available-tags="availableTags"
         :is-loading="isLoading && (isInitialLoad || isRestoring)"
+        :is-mobile-open="activeMobileSidebar === 'features'"
+        @close="activeMobileSidebar = null"
         @feature-click="zoomToFeature"
         @tag-filter-change="handleTagFilterChange"
     />
 
     <!-- Center - Map -->
-    <div class="flex-1 bg-gray-50 relative">
+    <div class="flex-1 w-full bg-gray-50 relative overflow-hidden">
+      <!-- Mobile Controls Bar (placeholder) -->
+      <div class="sm:hidden bg-white border-b border-gray-200 px-4 py-3 flex justify-between items-center">
+        <button
+          @click="activeMobileSidebar = 'features'"
+          class="p-2 text-gray-600 hover:text-gray-900 rounded-md hover:bg-gray-100 focus:outline-none"
+          title="Features"
+        >
+          <ListBulletIcon class="w-6 h-6" />
+        </button>
+        <div class="text-sm font-medium text-gray-900 max-w-[50%] text-center leading-tight flex flex-col items-center justify-center">
+          <template v-if="isPublicShareMode">
+            <div v-if="publicShareTag" class="flex items-center justify-center gap-1 w-full">
+              <ShareIcon class="w-4 h-4 text-blue-500 flex-shrink-0" />
+              <span class="line-clamp-2">Tag: {{ publicShareTag }}</span>
+            </div>
+            <div v-else-if="publicShareCollectionName" class="flex items-center justify-center gap-1 w-full">
+              <ShareIcon class="w-4 h-4 text-blue-500 flex-shrink-0" />
+              <span class="line-clamp-2">Collection: {{ publicShareCollectionName }}</span>
+            </div>
+            <div v-else class="flex items-center justify-center gap-1 w-full">
+              <ShareIcon class="w-4 h-4 text-blue-500 flex-shrink-0" />
+              <span>Shared Map</span>
+            </div>
+          </template>
+          <template v-else>
+            <span class="line-clamp-2">{{ collectionName || 'Map' }}</span>
+          </template>
+        </div>
+        <button
+          @click="activeMobileSidebar = 'controls'"
+          class="p-2 text-gray-600 hover:text-gray-900 rounded-md hover:bg-gray-100 focus:outline-none"
+          title="Map Controls"
+        >
+          <Cog6ToothIcon class="w-6 h-6" />
+        </button>
+      </div>
       <div class="relative w-full h-full">
         <!-- Map -->
         <div ref="mapContainer" :class="['w-full h-full transition-opacity duration-300', (publicShareError || loadError) ? 'opacity-50 pointer-events-none' : 'opacity-100']"></div>
@@ -45,7 +83,7 @@
         </transition>
 
         <!-- Public Share Title (shown when viewing a public share) -->
-        <div v-if="isPublicShareMode" class="absolute top-4 right-4 bg-white bg-opacity-90 px-4 py-2 rounded-lg shadow-md z-10">
+        <div v-if="isPublicShareMode" class="hidden sm:block absolute top-4 right-4 bg-white bg-opacity-90 px-4 py-2 rounded-lg shadow-md z-10">
           <div class="flex items-center space-x-2">
             <ShareIcon class="w-5 h-5 text-blue-500" />
             <span v-if="(publicShareTag || publicShareCollectionName) && !publicShareError" class="text-sm font-medium text-gray-900">
@@ -56,7 +94,7 @@
         </div>
 
         <!-- Collection Title (shown when viewing a collection) -->
-        <div v-if="collectionName && !isPublicShareMode" class="absolute top-4 right-4 bg-white bg-opacity-90 px-4 py-2 rounded-lg shadow-md z-10">
+        <div v-if="collectionName && !isPublicShareMode" class="hidden sm:block absolute top-4 right-4 bg-white bg-opacity-90 px-4 py-2 rounded-lg shadow-md z-10">
           <div class="flex items-center space-x-2">
             <FolderIcon class="w-5 h-5 text-blue-500" />
             <span class="text-sm font-medium text-gray-900">Collection: {{ collectionName }}</span>
@@ -117,16 +155,17 @@
             @select="handleFeatureSelect"
         />
 
-        <!-- Center to User Location Button -->
-        <button
-            v-if="userLocation && !isPublicShareMode"
-            @click="centerToUserLocation"
-            class="absolute bottom-4 left-4 bg-white hover:bg-gray-50 text-gray-700 p-2 rounded-md shadow-md border border-gray-200 z-10 transition-colors focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2"
-            title="Center map to your location"
-        >
-          <HomeIcon class="w-4 h-4" />
-        </button>
       </div>
+      
+      <!-- Center to User Location Button -->
+      <button
+          v-if="userLocation && !isPublicShareMode"
+          @click="centerToUserLocation"
+          class="absolute z-10 bottom-4 left-4 p-2 bg-white border border-gray-200 rounded shadow-md hover:bg-gray-50 text-gray-700 transition-colors"
+          title="Center map to your location"
+      >
+        <HomeIcon class="w-5 h-5" />
+      </button>
     </div>
 
     <!-- Right Sidebar - Map Controls -->
@@ -142,6 +181,8 @@
         :is-public-share-mode="isPublicShareMode"
         :share-id="shareId"
         :allow-downloads="publicShareInfo && publicShareInfo.allow_downloads"
+        :is-mobile-open="activeMobileSidebar === 'controls'"
+        @close="activeMobileSidebar = null"
         @layer-change="updateMapLayer"
     />
   </div>
@@ -150,7 +191,6 @@
 <script>
 import {markRaw} from 'vue'
 import {Map, View} from 'ol'
-import {defaults as defaultControls, ScaleLine} from 'ol/control'
 import {OSM, XYZ} from 'ol/source'
 import {Tile as TileLayer, Vector as VectorLayer} from 'ol/layer'
 import {Vector as VectorSource} from 'ol/source'
@@ -175,7 +215,7 @@ import FeatureEditBox from './FeatureEditBox.vue'
 import FeatureSelectionPopup from './FeatureSelectionPopup.vue'
 import ElevationProfileDialog from './ElevationProfileDialog.vue'
 import Loader from '@/components/parts/Loader.vue'
-import { HomeIcon, ExclamationCircleIcon, ShareIcon, FolderIcon } from '@heroicons/vue/24/outline'
+import { HomeIcon, ExclamationCircleIcon, ShareIcon, FolderIcon, ListBulletIcon, Cog6ToothIcon } from '@heroicons/vue/24/outline'
 
 export default {
   name: 'GeoJsonMap',
@@ -190,7 +230,9 @@ export default {
     HomeIcon,
     ExclamationCircleIcon,
     ShareIcon,
-    FolderIcon
+    FolderIcon,
+    ListBulletIcon,
+    Cog6ToothIcon
   },
   mixins: [],
   computed: {
@@ -276,7 +318,8 @@ export default {
       isCollectionMode: false, // Track if collection filtering is active
       // Available tags for autocomplete and filtering
       availableTags: [], // Tags fetched once and shared with child components
-      isRestoring: false // Track if map is being restored
+      isRestoring: false, // Track if map is being restored
+      activeMobileSidebar: null // 'features', 'controls', or null
     }
   },
   methods: {
@@ -967,19 +1010,9 @@ export default {
 
       // Create map
       // Use markRaw to prevent Vue from making the map object reactive
-      const scaleLineControl = new ScaleLine({
-        units: getUnitPreference(),
-        bar: false,
-        steps: 4,
-        text: true,
-        minWidth: 100
-      })
-
       this.map = markRaw(new Map({
         target: this.$refs.mapContainer,
-        controls: defaultControls().extend([
-          scaleLineControl
-        ]),
+        controls: [],
         layers: [
           this.tileLayer,
           this.vectorLayer,  // Icons layer (rendered first, below text)
@@ -1276,6 +1309,11 @@ export default {
         let url, response, data
 
         if (this.isPublicShareMode) {
+          // Prevent API calls if shareId is null or invalid
+          if (!this.shareId) {
+            return
+          }
+
           // Get share info (cached after first call)
           if (!this.publicShareInfo || this.publicShareInfo.share_id !== this.shareId) {
             const infoUrl = `/api/sharing/public/info/${this.shareId}/`
@@ -1729,17 +1767,10 @@ export default {
   },
 
   watch: {
-    // Watch for unit preference changes
+    // Watch for unit preference changes (no controls to update)
     '$store.state.userSettings.account.units': {
       handler(newUnits) {
-        if (this.map) {
-          // Find the ScaleLine control and update its units
-          this.map.getControls().forEach(control => {
-            if (control instanceof ScaleLine) {
-              control.setUnits(newUnits || 'imperial')
-            }
-          })
-        }
+        // Controls removed - no action needed
       }
     },
     '$route'(to, from) {

@@ -1,15 +1,18 @@
 <template>
-  <div v-if="feature" class="absolute bottom-0 left-0 right-0 bg-white border-t border-gray-200 z-20" style="height: 25%;">
-    <div class="h-full flex flex-col">
+  <div v-if="feature" class="fixed bottom-0 left-0 right-0 w-full bg-white z-30 rounded-t-xl shadow-[0_-4px_6px_-1px_rgba(0,0,0,0.1)] border-t border-gray-200 flex flex-col md:absolute md:bottom-0 md:left-0 md:right-0 md:h-1/4 md:rounded-none md:shadow-none md:z-20">
+    <div class="flex flex-col h-full">
       <!-- Header -->
-      <div class="relative flex items-center justify-between px-4 py-3 border-b border-gray-200">
-        <h3 class="text-lg font-semibold text-gray-900">Elevation Profile</h3>
-        <div class="absolute left-1/2 transform -translate-x-1/2">
+      <div class="relative flex items-center justify-between px-3 py-2 md:px-4 md:py-3 border-b border-gray-200 bg-gray-50 md:bg-white rounded-t-xl md:rounded-none flex-none">
+        <h3 class="text-sm md:text-lg font-semibold text-gray-900">
+          <span class="md:hidden">{{ getFeatureName(feature) }}</span>
+          <span class="hidden md:inline">Elevation Profile</span>
+        </h3>
+        <div class="hidden md:block absolute left-1/2 transform -translate-x-1/2">
           <span class="text-lg text-gray-900">{{ getFeatureName(feature) }}</span>
         </div>
         <button
           @click="$emit('close')"
-          class="text-gray-400 hover:text-gray-600 transition-colors"
+          class="text-gray-400 hover:text-gray-600 transition-colors p-1"
           title="Close elevation profile"
         >
           <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -19,59 +22,91 @@
       </div>
 
       <!-- Stats -->
-      <div v-if="hasElevationData && stats" class="px-4 py-2 border-b border-gray-200 bg-gray-50">
-        <div class="flex flex-wrap gap-x-6 gap-y-1 text-xs">
-          <div>
-            <span class="text-gray-600">Distance:</span>
-            <span class="font-medium text-gray-900 ml-1">{{ stats.totalDistance }}</span>
+      <div class="px-3 py-1.5 md:px-4 md:py-2 border-b border-gray-200 bg-gray-50 flex-none min-h-[28px] flex items-center">
+        <div v-if="hasElevationData && stats" class="flex flex-wrap gap-x-3 gap-y-1 text-[10px] md:text-xs justify-between md:justify-start w-full">
+          <div class="flex items-center">
+            <span class="text-gray-600 mr-1">Dist:</span>
+            <span class="font-medium text-gray-900">{{ stats.totalDistance }}</span>
           </div>
-          <div>
-            <span class="text-gray-600">Elevation Change:</span>
-            <span class="font-medium text-gray-900 ml-1">{{ stats.totalElevationChange }}</span>
+          <div class="flex items-center">
+            <span class="text-gray-600 mr-1">Change:</span>
+            <span class="font-medium text-gray-900">{{ stats.totalElevationChange }}</span>
           </div>
-          <div>
-            <span class="text-gray-600">Elevation Range:</span>
-            <span class="font-medium text-gray-900 ml-1">{{ stats.elevationRange }}</span>
+          <div class="flex items-center">
+             <span class="text-gray-600 mr-1">Asc:</span>
+             <span class="font-medium text-gray-900">{{ stats.grossAscent }}</span>
           </div>
-          <div>
-            <span class="text-gray-600">Ascent:</span>
-            <span class="font-medium text-gray-900 ml-1">{{ stats.grossAscent }}</span>
-            <span class="text-gray-600 ml-2">Descent:</span>
-            <span class="font-medium text-gray-900 ml-1">{{ stats.grossDescent }}</span>
+           <div class="flex items-center">
+             <span class="text-gray-600 mr-1">Des:</span>
+             <span class="font-medium text-gray-900">{{ stats.grossDescent }}</span>
           </div>
-          <div>
-            <span class="text-gray-600">Min Elevation:</span>
-            <span class="font-medium text-gray-900 ml-1">{{ stats.minElevation }}</span>
+          <div class="hidden sm:flex items-center">
+            <span class="text-gray-600 mr-1">Min:</span>
+            <span class="font-medium text-gray-900">{{ stats.minElevation }}</span>
           </div>
-          <div>
-            <span class="text-gray-600">Max Elevation:</span>
-            <span class="font-medium text-gray-900 ml-1">{{ stats.maxElevation }}</span>
+          <div class="hidden sm:flex items-center">
+            <span class="text-gray-600 mr-1">Max:</span>
+            <span class="font-medium text-gray-900">{{ stats.maxElevation }}</span>
           </div>
+        </div>
+        <div v-else-if="isUpdatingChart" class="flex flex-wrap gap-x-3 gap-y-1 text-[10px] md:text-xs justify-between md:justify-start w-full animate-pulse">
+          <!-- Dist -->
+          <div class="flex items-center">
+            <div class="h-2.5 bg-gray-200 rounded w-6 mr-1"></div>
+            <div class="h-2.5 bg-gray-300 rounded w-10"></div>
+          </div>
+          <!-- Change -->
+          <div class="flex items-center">
+            <div class="h-2.5 bg-gray-200 rounded w-10 mr-1"></div>
+            <div class="h-2.5 bg-gray-300 rounded w-8"></div>
+          </div>
+          <!-- Asc -->
+          <div class="flex items-center">
+            <div class="h-2.5 bg-gray-200 rounded w-6 mr-1"></div>
+            <div class="h-2.5 bg-gray-300 rounded w-8"></div>
+          </div>
+          <!-- Des -->
+          <div class="flex items-center">
+            <div class="h-2.5 bg-gray-200 rounded w-6 mr-1"></div>
+            <div class="h-2.5 bg-gray-300 rounded w-8"></div>
+          </div>
+          <!-- Min (Hidden on mobile) -->
+          <div class="hidden sm:flex items-center">
+            <div class="h-2.5 bg-gray-200 rounded w-6 mr-1"></div>
+            <div class="h-2.5 bg-gray-300 rounded w-8"></div>
+          </div>
+          <!-- Max (Hidden on mobile) -->
+          <div class="hidden sm:flex items-center">
+            <div class="h-2.5 bg-gray-200 rounded w-6 mr-1"></div>
+            <div class="h-2.5 bg-gray-300 rounded w-8"></div>
+          </div>
+        </div>
+        <div v-else class="text-[10px] md:text-xs text-gray-400 italic">
+          No stats available
         </div>
       </div>
 
       <!-- Chart Container, Loading Spinner, or Warning -->
-      <div class="flex-1 overflow-hidden relative">
+      <div class="h-32 md:h-auto md:flex-1 overflow-hidden relative bg-white">
         <!-- Chart Container -->
         <div v-if="hasElevationData" ref="chartContainer" class="h-full w-full relative">
           <canvas ref="chartCanvas"></canvas>
           <!-- Loading Spinner Overlay -->
           <div v-if="isUpdatingChart" class="absolute inset-0 flex items-center justify-center z-10 pointer-events-none">
-            <Loader size="md" layout="centered" :showMessage="false" />
+            <Loader size="sm" layout="centered" :showMessage="false" />
           </div>
         </div>
         <!-- Loading Spinner -->
         <div v-if="isUpdatingChart && feature" class="absolute inset-0 flex items-center justify-center bg-white z-20">
-          <Loader size="md" layout="centered" message="Loading chart..." />
+          <Loader size="sm" layout="centered" message="Loading..." />
         </div>
         <!-- No Data Warning -->
         <div v-else-if="!hasElevationData && feature" class="absolute inset-0 flex items-center justify-center bg-white z-10">
-          <div class="text-center">
-            <svg class="w-12 h-12 text-yellow-500 mx-auto mb-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <div class="text-center p-2">
+            <svg class="w-8 h-8 md:w-12 md:h-12 text-yellow-500 mx-auto mb-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"></path>
             </svg>
-            <p class="text-gray-700 font-medium">No elevation data available</p>
-            <p class="text-sm text-gray-500 mt-1">This feature does not contain elevation information.</p>
+            <p class="text-gray-700 font-medium text-xs md:text-base">No elevation data</p>
           </div>
         </div>
       </div>

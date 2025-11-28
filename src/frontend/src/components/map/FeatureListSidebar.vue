@@ -1,7 +1,26 @@
 <template>
-  <div class="w-80 bg-white border-r border-gray-200 p-1.5 flex flex-col h-full overflow-hidden">
+  <div 
+    :class="[
+      'bg-white flex flex-col h-full overflow-hidden',
+      // Desktop styles (always visible as sidebar)
+      'md:flex md:static md:w-80 md:border-r md:border-gray-200',
+      // Mobile styles (modal behavior)
+      isMobileOpen ? 'fixed inset-0 z-50 w-full' : 'hidden'
+    ]"
+  >
+    <!-- Mobile Header -->
+    <div class="md:hidden flex items-center justify-between px-4 py-3 border-b border-gray-200">
+      <h2 class="text-lg font-semibold text-gray-900">Features</h2>
+      <button 
+        @click="$emit('close')" 
+        class="text-gray-500 hover:text-gray-700 p-1 rounded-md hover:bg-gray-100"
+      >
+        <XMarkIcon class="w-6 h-6" />
+      </button>
+    </div>
+
     <!-- Tabs -->
-    <div class="flex border-b border-gray-200 mb-2">
+    <div class="flex border-b border-gray-200 mb-2 px-1.5 pt-1.5 md:px-1.5 md:pt-1.5">
       <button
         @click="activeTab = 'features-in-vicinity'"
         :class="[
@@ -209,9 +228,13 @@ export default {
       type: Boolean,
       required: false,
       default: false
+    },
+    isMobileOpen: {
+      type: Boolean,
+      default: false
     }
   },
-  emits: ['feature-click', 'tag-filter-change'],
+  emits: ['feature-click', 'tag-filter-change', 'close'],
   data() {
     return {
       activeTab: 'features-in-vicinity',

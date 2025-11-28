@@ -1,78 +1,86 @@
 <template>
-  <div v-if="feature" class="absolute bottom-4 right-4 bg-white rounded-lg shadow-lg border border-gray-200 z-10 max-w-md w-96 max-h-[90vh]">
-    <div class="p-4">
-      <div class="flex items-start justify-between mb-4">
-        <h3 class="text-lg font-semibold text-gray-900">Edit Feature</h3>
-        <button
-          @click="$emit('cancel')"
-          :disabled="isSaving"
-          class="ml-2 text-gray-400 hover:text-gray-600 disabled:opacity-50 disabled:cursor-not-allowed"
-          title="Close edit dialog"
-        >
-          <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path>
-          </svg>
-        </button>
-      </div>
+  <div v-if="feature" class="fixed inset-0 z-50 bg-white flex flex-col w-full h-full md:absolute md:inset-auto md:bottom-4 md:right-4 md:w-96 md:max-w-md md:h-auto md:max-h-[calc(100%-2rem)] md:rounded-lg md:shadow-lg md:border md:border-gray-200">
+    <!-- Header (Sticky) -->
+    <div class="flex-none flex items-center justify-between px-4 py-3 border-b border-gray-200 bg-gray-50 md:bg-white md:rounded-t-lg">
+      <h3 class="text-base md:text-lg font-semibold text-gray-900 truncate">Edit Feature</h3>
+      <button
+        @click="$emit('cancel')"
+        :disabled="isSaving"
+        class="ml-2 text-gray-400 hover:text-gray-600 disabled:opacity-50 disabled:cursor-not-allowed"
+        title="Close edit dialog"
+      >
+        <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path>
+        </svg>
+      </button>
+    </div>
 
-      <form @submit.prevent="handleSubmit" class="space-y-4">
+    <!-- Scrollable Content -->
+    <div class="flex-1 overflow-y-auto p-3 md:p-4">
+      <form @submit.prevent="handleSubmit" class="space-y-3 md:space-y-4">
         <!-- Name Field -->
         <div>
-          <label class="block text-sm font-medium text-gray-700 mb-1">Name</label>
+          <label class="block text-xs font-bold text-gray-500 uppercase mb-1">Name</label>
           <input
             v-model="formData.name"
             type="text"
             :disabled="isSaving"
-            class="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500 disabled:bg-gray-100 disabled:cursor-not-allowed"
+            class="w-full px-2 py-1.5 text-sm border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500 disabled:bg-gray-100 disabled:cursor-not-allowed"
             required
           />
         </div>
 
         <!-- Tags Field -->
-        <TagPicker
-          v-model:tags="formData.tags"
-          :available-tags="availableTags"
-          :system-tags="systemTags"
-          :disabled="isSaving"
-        />
+        <div>
+           <label class="block text-xs font-bold text-gray-500 uppercase mb-1">Tags</label>
+           <TagPicker
+             v-model:tags="formData.tags"
+             :available-tags="availableTags"
+             :system-tags="systemTags"
+             :disabled="isSaving"
+           />
+        </div>
 
         <!-- Description Field -->
         <div>
-          <label class="block text-sm font-medium text-gray-700 mb-1">Description</label>
+          <label class="block text-xs font-bold text-gray-500 uppercase mb-1">Description</label>
           <textarea
             v-model="formData.description"
             rows="3"
             :disabled="isSaving"
-            class="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500 disabled:bg-gray-100 disabled:cursor-not-allowed"
+            class="w-full px-2 py-1.5 text-sm border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500 disabled:bg-gray-100 disabled:cursor-not-allowed"
           ></textarea>
         </div>
 
         <!-- Created Date Field -->
         <div>
-          <label class="block text-sm font-medium text-gray-700 mb-1">Created Date</label>
+          <label class="block text-xs font-bold text-gray-500 uppercase mb-1">Created Date</label>
           <input
             type="datetime-local"
             :disabled="isSaving"
             :value="formatDateForInput(formData.created)"
             @change="updateDate"
-            class="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500 disabled:bg-gray-100 disabled:cursor-not-allowed"
+            class="w-full px-2 py-1.5 text-sm border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500 disabled:bg-gray-100 disabled:cursor-not-allowed"
           />
         </div>
 
         <!-- Icon Section (for points) -->
         <div v-if="isPoint">
-          <label class="block text-sm font-medium text-gray-700 mb-1">Icon</label>
+          <label class="block text-xs font-bold text-gray-500 uppercase mb-1">Icon</label>
 
           <!-- Icon Display with Choose Button Inline -->
-          <div class="flex items-center justify-between">
+          <div class="flex items-center justify-between p-2 bg-gray-50 rounded-md border border-gray-200">
             <!-- Current Icon Preview (Left) -->
-            <div v-if="hasPngIcon && currentIconUrl" class="flex items-center">
-              <img
-                :src="resolveIconUrl(currentIconUrl)"
-                alt="Current icon"
-                class="w-8 h-8 object-contain border border-gray-300 rounded"
-                @error="handleIconError"
-              />
+            <div class="flex items-center">
+              <div v-if="hasPngIcon && currentIconUrl" class="mr-2">
+                <img
+                  :src="resolveIconUrl(currentIconUrl)"
+                  alt="Current icon"
+                  class="w-8 h-8 object-contain border border-gray-300 rounded bg-white"
+                  @error="handleIconError"
+                />
+              </div>
+              <span v-else class="text-xs text-gray-500 italic">Default Marker</span>
             </div>
 
             <!-- Buttons (Right) -->
@@ -82,7 +90,7 @@
                 type="button"
                 @click="handleRemoveIcon"
                 :disabled="isSaving"
-                class="text-sm text-red-600 hover:text-red-800 disabled:opacity-50 disabled:cursor-not-allowed"
+                class="text-xs text-red-600 hover:text-red-800 disabled:opacity-50 disabled:cursor-not-allowed font-medium"
                 title="Remove icon"
               >
                 Remove
@@ -91,45 +99,45 @@
                 type="button"
                 @click="openIconPicker"
                 :disabled="isSaving"
-                class="text-sm px-3 py-1.5 text-blue-500 hover:text-blue-700 hover:bg-blue-50 rounded-md focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 disabled:opacity-50 disabled:cursor-not-allowed"
+                class="text-xs px-2 py-1 text-blue-600 hover:text-blue-800 bg-blue-50 hover:bg-blue-100 rounded border border-blue-200 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 disabled:opacity-50 disabled:cursor-not-allowed font-medium"
                 title="Choose icon"
               >
-                Choose Icon
+                Choose
               </button>
             </div>
           </div>
 
           <!-- Icon Preview (for newly selected file) -->
-          <div v-if="iconPreviewUrl" class="mt-2 flex items-start">
+          <div v-if="iconPreviewUrl" class="mt-2 flex items-center p-2 bg-blue-50 border border-blue-100 rounded-md">
             <img
               :src="iconPreviewUrl"
               alt="Icon preview"
-              class="w-8 h-8 object-contain border border-gray-300 rounded"
+              class="w-6 h-6 object-contain border border-gray-300 rounded bg-white"
             />
-            <p class="text-xs text-gray-600 mt-1 ml-2">Preview</p>
+            <p class="text-xs text-blue-800 ml-2">New Selection Preview</p>
           </div>
 
           <!-- Icon Upload Error -->
-          <div v-if="iconUploadError" class="mt-2 p-2 bg-red-50 border border-red-200 rounded-md">
+          <div v-if="iconUploadError" class="mt-1 p-1.5 bg-red-50 border border-red-200 rounded-md">
             <p class="text-xs text-red-800">{{ iconUploadError }}</p>
           </div>
         </div>
 
         <!-- Icon Color Field (for points) -->
         <div v-if="isPoint && !isCustomIcon">
-          <label class="block text-sm font-medium text-gray-700 mb-1">Icon Color</label>
+          <label class="block text-xs font-bold text-gray-500 uppercase mb-1">Icon Color</label>
           <div class="flex items-center space-x-2">
             <input
               v-model="formData.markerColor"
               type="color"
               :disabled="isSaving"
-              class="h-10 w-20 border border-gray-300 rounded cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
+              class="h-8 w-12 border border-gray-300 rounded cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed p-0.5"
             />
             <input
               v-model="formData.markerColor"
               type="text"
               :disabled="isSaving"
-              class="flex-1 px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500 disabled:bg-gray-100 disabled:cursor-not-allowed"
+              class="flex-1 px-2 py-1.5 text-sm border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500 disabled:bg-gray-100 disabled:cursor-not-allowed"
               placeholder="#ff0000"
               pattern="^#[0-9A-Fa-f]{6}$"
             />
@@ -138,20 +146,20 @@
 
         <!-- Line/Polygon Color Field -->
         <div v-if="isLine || isPolygon">
-          <label class="block text-sm font-medium text-gray-700 mb-1">Border Color</label>
+          <label class="block text-xs font-bold text-gray-500 uppercase mb-1">Border Color</label>
           <div class="flex items-center space-x-2">
             <input
               v-model="formData.strokeColor"
               type="color"
               :disabled="isSaving"
-              class="h-10 w-20 border border-gray-300 rounded cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
+              class="h-8 w-12 border border-gray-300 rounded cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed p-0.5"
               @input="onStrokeColorChange"
             />
             <input
               v-model="formData.strokeColor"
               type="text"
               :disabled="isSaving"
-              class="flex-1 px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500 disabled:bg-gray-100 disabled:cursor-not-allowed"
+              class="flex-1 px-2 py-1.5 text-sm border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500 disabled:bg-gray-100 disabled:cursor-not-allowed"
               placeholder="#ff0000"
               pattern="^#[0-9A-Fa-f]{6}$"
               @input="onStrokeColorChange"
@@ -160,68 +168,70 @@
         </div>
 
         <!-- Coordinates Section -->
-        <div>
-          <div class="flex items-center justify-center space-x-2">
+        <div class="pt-2">
+          <div class="flex items-center justify-center gap-4">
             <button
               type="button"
               @click="openCoordinatesDialog"
               :disabled="isSaving"
-              class="text-sm px-3 py-1.5 text-blue-500 hover:text-blue-700 hover:bg-blue-50 rounded-md focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 disabled:opacity-50 disabled:cursor-not-allowed inline-flex items-center"
+              class="text-xs text-blue-600 hover:text-blue-800 hover:underline disabled:opacity-50 disabled:cursor-not-allowed inline-flex items-center font-medium focus:outline-none"
               title="Edit coordinates manually"
             >
-              <svg class="w-4 h-4 mr-1.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <svg class="w-3 h-3 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 20l-5.447-2.724A1 1 0 013 16.382V5.618a1 1 0 011.447-.894L9 7m0 13l6-3m-6 3V7m6 10l4.553 2.276A1 1 0 0021 18.382V7.618a1 1 0 00-.553-.894L15 4m0 13V4m0 0L9 7"></path>
               </svg>
-              Edit Coordinates
+              Edit Coords
             </button>
             <button
               type="button"
               @click="openReplacementDialog"
               :disabled="isSaving"
-              class="text-xs px-2 py-1 text-blue-500 hover:text-blue-700 hover:bg-blue-50 rounded-md focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 disabled:opacity-50 disabled:cursor-not-allowed inline-flex items-center"
-              title="Update spatial data from KMZ/KML/GPX file"
+              class="text-xs text-blue-600 hover:text-blue-800 hover:underline disabled:opacity-50 disabled:cursor-not-allowed inline-flex items-center font-medium focus:outline-none"
+              title="Update spatial data from file"
             >
-              <svg class="w-4 h-4 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <svg class="w-3 h-3 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12"></path>
               </svg>
-              Update Spatial Data
+              Update Geo
             </button>
           </div>
         </div>
 
         <!-- Error Message -->
-        <div v-if="errorMessage" class="p-3 bg-red-50 border border-red-200 rounded-md">
-          <p class="text-sm text-red-800">{{ errorMessage }}</p>
+        <div v-if="errorMessage" class="p-2 bg-red-50 border border-red-200 rounded-md">
+          <p class="text-xs text-red-800">{{ errorMessage }}</p>
         </div>
 
         <!-- Action Buttons -->
-        <div class="flex justify-end space-x-2 pt-2">
-          <button
-            type="button"
-            @click="$emit('cancel')"
-            :disabled="isSaving"
-            class="px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-md hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 disabled:opacity-50 disabled:cursor-not-allowed"
-            title="Cancel editing"
-          >
-            Cancel
-          </button>
-          <button
+        <div class="flex justify-between pt-4 md:pt-2 gap-3">
+           <button
             type="button"
             @click="handleDelete"
             :disabled="isSaving"
-            class="px-4 py-2 text-sm font-medium text-white bg-red-600 border border-transparent rounded-md hover:bg-red-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-red-500 disabled:opacity-50 disabled:cursor-not-allowed"
+            class="px-3 py-2 text-sm font-medium text-white bg-red-600 border border-transparent rounded-md hover:bg-red-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-red-500 disabled:opacity-50 disabled:cursor-not-allowed flex-1 md:flex-none"
             title="Delete feature"
           >
             Delete
           </button>
-          <button
-            type="submit"
-            :disabled="isSaving"
-            class="px-4 py-2 text-sm font-medium text-white bg-blue-500 border border-transparent rounded-md hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 disabled:opacity-50 disabled:cursor-not-allowed"
-            title="Save changes"
-          >
-            {{ isSaving ? 'Saving...' : 'Save' }}
-          </button>
+          <div class="flex space-x-2 flex-1 md:flex-none justify-end">
+            <button
+                type="button"
+                @click="$emit('cancel')"
+                :disabled="isSaving"
+                class="px-3 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-md hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 disabled:opacity-50 disabled:cursor-not-allowed flex-1 md:flex-none"
+                title="Cancel editing"
+            >
+                Cancel
+            </button>
+            <button
+                type="submit"
+                :disabled="isSaving"
+                class="px-3 py-2 text-sm font-medium text-white bg-blue-600 border border-transparent rounded-md hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 disabled:opacity-50 disabled:cursor-not-allowed flex-1 md:flex-none"
+                title="Save changes"
+            >
+                {{ isSaving ? 'Saving...' : 'Save' }}
+            </button>
+          </div>
         </div>
       </form>
     </div>

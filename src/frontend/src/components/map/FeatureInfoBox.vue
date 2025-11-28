@@ -1,14 +1,14 @@
 <template>
-  <div v-if="feature" class="absolute bottom-4 right-4 bg-white rounded-lg shadow-xl border border-gray-200 z-10 max-w-md w-80">
-    <div class="p-4">
+  <div v-if="feature" class="fixed bottom-0 left-0 right-0 w-full bg-white z-20 rounded-t-xl shadow-[0_-4px_6px_-1px_rgba(0,0,0,0.1)] border-t border-gray-200 md:absolute md:bottom-4 md:right-4 md:left-auto md:max-w-md md:w-80 md:rounded-lg md:border md:shadow-xl max-h-[60vh] flex flex-col">
+    <div class="p-3 md:p-4 overflow-y-auto">
       <!-- Header -->
-      <div class="flex items-start justify-between">
-        <h3 class="text-lg font-bold text-gray-900 pr-2">{{ getFeatureName(feature) }}</h3>
-        <div class="flex items-center space-x-2 flex-shrink-0">
+      <div class="flex items-start justify-between mb-2 md:mb-4">
+        <h3 class="text-base md:text-lg font-bold text-gray-900 pr-2 truncate">{{ getFeatureName(feature) }}</h3>
+        <div class="flex items-center space-x-1 md:space-x-2 flex-shrink-0">
           <button
             v-if="showEditButton"
             @click="$emit('edit')"
-            class="text-gray-400 hover:text-blue-500 transition-colors"
+            class="p-1 text-gray-400 hover:text-blue-500 transition-colors"
             title="Edit feature"
           >
             <PencilSquareIcon class="w-5 h-5" />
@@ -16,7 +16,7 @@
           <button
             v-if="isLineOrTrack"
             @click="$emit('show-profile')"
-            class="text-gray-400 hover:text-blue-500 transition-colors"
+            class="p-1 text-gray-400 hover:text-blue-500 transition-colors"
             title="Show elevation profile"
           >
             <ChartBarIcon class="w-5 h-5" />
@@ -24,21 +24,21 @@
           <button
               v-if="showDownloadButton"
               @click="$emit('download')"
-              class="text-gray-400 hover:text-blue-500 transition-colors"
+              class="p-1 text-gray-400 hover:text-blue-500 transition-colors"
               title="Download KMZ"
           >
             <ArrowDownTrayIcon class="w-5 h-5" />
           </button>
           <button
             @click="$emit('zoom')"
-            class="text-gray-400 hover:text-blue-500 transition-colors"
+            class="p-1 text-gray-400 hover:text-blue-500 transition-colors"
             title="Zoom to feature"
           >
             <MapPinIcon class="w-5 h-5" />
           </button>
           <button
             @click="$emit('close')"
-            class="text-gray-400 hover:text-gray-600 transition-colors"
+            class="p-1 text-gray-400 hover:text-gray-600 transition-colors"
             title="Close"
           >
             <XMarkIcon class="w-5 h-5" />
@@ -46,62 +46,52 @@
         </div>
       </div>
 
-      <!-- Feature Type -->
-      <div class="mb-4 text-sm text-gray-600 italic">
-        {{ getFeatureGeometryType(feature) }}
-      </div>
+      <!-- Feature Type & Stats Row (Mobile) / Stacked (Desktop) -->
+      <div class="flex flex-wrap items-center gap-2 text-sm text-gray-600 italic mb-2 md:mb-4">
+        <span>{{ getFeatureGeometryType(feature) }}</span>
+        
+        <!-- Elevation (for Point/MultiPoint features) -->
+        <div v-if="getFeatureElevation(feature) !== null" class="flex items-center space-x-1 bg-gray-100 border border-gray-300 rounded px-1.5 py-0.5 md:px-2 md:py-1.5">
+          <MeasurementIcon class="w-3 h-3 md:w-4 md:h-4" />
+          <span class="text-xs text-gray-700">{{ formatElevation(getFeatureElevation(feature)) }}</span>
+        </div>
 
-      <!-- Elevation (for Point/MultiPoint features) -->
-      <div v-if="getFeatureElevation(feature) !== null" class="mb-4 bg-gray-100 border border-gray-300 rounded px-2 py-1.5 flex items-center space-x-2">
-        <MeasurementIcon />
-        <span class="text-xs font-semibold text-gray-900 uppercase tracking-wide">Elevation:</span>
-        <span class="ml-1.5 text-sm text-gray-700">{{ formatElevation(getFeatureElevation(feature)) }}</span>
-      </div>
+        <!-- Length (for LineString/MultiLineString features) -->
+        <div v-if="featureLength !== null" class="flex items-center space-x-1 bg-gray-100 border border-gray-300 rounded px-1.5 py-0.5 md:px-2 md:py-1.5">
+          <MeasurementIcon :rotation="90" class="w-3 h-3 md:w-4 md:h-4" />
+          <span class="text-xs text-gray-700">{{ formatDistance(featureLength) }}</span>
+        </div>
 
-      <!-- Length (for LineString/MultiLineString features) -->
-      <div v-if="featureLength !== null" class="mb-4 bg-gray-100 border border-gray-300 rounded px-2 py-1.5 flex items-center space-x-2">
-        <MeasurementIcon :rotation="90" />
-        <span class="text-xs font-semibold text-gray-900 uppercase tracking-wide">Length:</span>
-        <span class="ml-1.5 text-sm text-gray-700">{{ formatDistance(featureLength) }}</span>
-      </div>
-
-      <!-- Area (for Polygon/MultiPolygon features) -->
-      <div v-if="featureArea !== null" class="mb-4 bg-gray-100 border border-gray-300 rounded px-2 py-1.5 flex items-center space-x-2">
-        <!-- Area Icon (Custom Polygon) -->
-        <svg class="w-4 h-4 flex-shrink-0 text-gray-600" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor">
-          <path stroke-linecap="round" stroke-linejoin="round" d="M12 2l8 4v12l-6 4-3-5-7 2V6l8-4z" />
-        </svg>
-        <span class="text-xs font-semibold text-gray-900 uppercase tracking-wide">Area:</span>
-        <span class="ml-1.5 text-sm text-gray-700">{{ formatArea(featureArea) }}</span>
+        <!-- Area (for Polygon/MultiPolygon features) -->
+        <div v-if="featureArea !== null" class="flex items-center space-x-1 bg-gray-100 border border-gray-300 rounded px-1.5 py-0.5 md:px-2 md:py-1.5">
+          <svg class="w-3 h-3 md:w-4 md:h-4 flex-shrink-0 text-gray-600" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor">
+            <path stroke-linecap="round" stroke-linejoin="round" d="M12 2l8 4v12l-6 4-3-5-7 2V6l8-4z" />
+          </svg>
+          <span class="text-xs text-gray-700">{{ formatArea(featureArea) }}</span>
+        </div>
       </div>
 
       <!-- Description -->
-      <div v-if="getFeatureDescription(feature)" class="mb-4">
-        <div class="text-sm text-gray-700 prose prose-sm max-w-none prose-headings:text-gray-900 prose-p:text-gray-700 prose-a:text-blue-500 prose-strong:text-gray-900 prose-ul:text-gray-700 prose-ol:text-gray-700" v-html="renderMarkdown(getFeatureDescription(feature))"></div>
+      <div v-if="getFeatureDescription(feature)" class="mb-3 md:mb-4 max-h-20 md:max-h-none overflow-y-auto">
+        <div class="text-xs md:text-sm text-gray-700 prose prose-sm max-w-none prose-headings:text-gray-900 prose-p:text-gray-700 prose-a:text-blue-500 prose-strong:text-gray-900 prose-ul:text-gray-700 prose-ol:text-gray-700" v-html="renderMarkdown(getFeatureDescription(feature))"></div>
       </div>
 
       <!-- Tags -->
-      <div v-if="getFeatureTags(feature).userTags.length > 0 || getFeatureTags(feature).systemTags.length > 0" class="space-y-2">
-        <!-- User Tags (Blue) -->
-        <div v-if="getFeatureTags(feature).userTags.length > 0" class="flex flex-wrap gap-2">
-          <span
-            v-for="tag in getFeatureTags(feature).userTags"
-            :key="`user-${tag}`"
-            class="inline-flex items-center px-2 py-1 rounded-md text-xs font-medium bg-blue-100 text-blue-700"
-          >
-            {{ tag }}
-          </span>
-        </div>
-        <!-- System Tags (Grey) -->
-        <div v-if="getFeatureTags(feature).systemTags.length > 0" class="flex flex-wrap gap-2">
-          <span
-            v-for="tag in getFeatureTags(feature).systemTags"
-            :key="`system-${tag}`"
-            class="inline-flex items-center px-2 py-1 rounded-md text-xs font-medium bg-gray-200 text-gray-600"
-          >
-            {{ tag }}
-          </span>
-        </div>
+      <div v-if="getFeatureTags(feature).userTags.length > 0 || getFeatureTags(feature).systemTags.length > 0" class="flex flex-wrap gap-1.5 md:gap-2">
+        <span
+          v-for="tag in getFeatureTags(feature).userTags"
+          :key="`user-${tag}`"
+          class="inline-flex items-center px-1.5 py-0.5 md:px-2 md:py-1 rounded-md text-[10px] md:text-xs font-medium bg-blue-100 text-blue-700"
+        >
+          {{ tag }}
+        </span>
+        <span
+          v-for="tag in getFeatureTags(feature).systemTags"
+          :key="`system-${tag}`"
+          class="inline-flex items-center px-1.5 py-0.5 md:px-2 md:py-1 rounded-md text-[10px] md:text-xs font-medium bg-gray-200 text-gray-600"
+        >
+          {{ tag }}
+        </span>
       </div>
     </div>
   </div>
