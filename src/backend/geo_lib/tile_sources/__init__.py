@@ -68,4 +68,5 @@ def get_tile_sources_for_client():
 from . import osm
 from . import mb_topo
 from . import global_imagery
+from . import opentopomap
 

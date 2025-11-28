@@ -422,9 +422,20 @@ export default {
       } else if (clientConfig.type === 'xyz' || tileSource.type === 'xyz') {
         // XYZ tile source (may use proxy URL from client_config)
         const url = clientConfig.url || '/api/tiles/{id}/{z}/{x}/{y}'.replace('{id}', layerValue)
-        const xyzSource = new XYZ({
-          url: url
-        })
+        
+        // Handle tile subdomains if provided (e.g., for OpenTopoMap)
+        const xyzConfig = {}
+        if (clientConfig.tileSubdomains && Array.isArray(clientConfig.tileSubdomains)) {
+          // Create array of URLs with each subdomain
+          xyzConfig.urls = clientConfig.tileSubdomains.map(subdomain => 
+            url.replace('{s}', subdomain)
+          )
+        } else {
+          // Single URL (replace {s} placeholder if present with first subdomain or 'a')
+          xyzConfig.url = url.replace('{s}', clientConfig.tileSubdomains?.[0] || 'a')
+        }
+        
+        const xyzSource = new XYZ(xyzConfig)
         this.tileLayer = markRaw(new TileLayer({
           source: xyzSource
         }))

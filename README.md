@@ -29,6 +29,6 @@ Installation instructions are in the [installation/](https://git.evulid.cc/cyber
 
 ## Development
 
-Test files are in the [geovault-tests](https://git.evulid.cc/cyberes/geovault-tests) repository. Please submit issues on git.evulid.cc](https://git.evulid.cc/cyberes/geovault).
+Test files are in the [geovault-tests](https://git.evulid.cc/cyberes/geovault-tests) repository. Please submit issues on [git.evulid.cc](https://git.evulid.cc/cyberes/geovault).
 
 If you are having issues uploading or importing files, please provide the problem file. You can email it to me if you'd like.
