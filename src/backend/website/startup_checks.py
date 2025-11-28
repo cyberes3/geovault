@@ -189,8 +189,9 @@ def check_redis_connection():
             except (ConnectionError, OSError, TimeoutError):
                 # These indicate Redis connection issues
                 raise
-            except Exception:
+            except Exception as e:
                 # Other exceptions (like channel errors) are fine - Redis is reachable
+                logger.debug(f"Redis channel layer test raised non-connection exception (expected): {type(e).__name__}: {str(e)}")
                 return True
         
         try:

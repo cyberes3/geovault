@@ -107,8 +107,9 @@ class ProcessStatusConsumer(AsyncWebsocketConsumer):
                 else:
                     # Connection was accepted, close it properly
                     await self.close(code=1011)  # 1011 = Internal Server Error
-            except Exception:
-                pass  # Ignore errors when closing
+            except Exception as close_error:
+                # Log error when closing connection after initial error
+                logger.warning(f"Error closing WebSocket connection after error: {path} - {user_identifier}@{client_ip} - Item: {self.item_id}: {str(close_error)}")
 
     async def disconnect(self, close_code):
         """Handle WebSocket disconnection."""

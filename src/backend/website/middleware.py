@@ -69,9 +69,9 @@ class LoggingMiddleware:
                         content_length = header_val[1]
                     elif isinstance(header_val, str):
                         content_length = header_val
-            except Exception:
+            except Exception as e:
                 # If we can't get content length, just log without it
-                pass
+                access_logger.debug(f"Could not get Content-Length header for static file {request.path}: {str(e)}")
             
             # Build log message
             if content_length:
@@ -91,19 +91,19 @@ class LoggingMiddleware:
             content_length = ''
             try:
                 content_length = response.get('Content-Length', '')
-            except (AttributeError, KeyError):
-                pass
+            except (AttributeError, KeyError) as e:
+                access_logger.debug(f"Could not get Content-Length header for favicon (method 1): {str(e)}")
             if not content_length:
                 try:
                     content_length = response.headers.get('Content-Length', '')
-                except (AttributeError, KeyError):
-                    pass
+                except (AttributeError, KeyError) as e:
+                    access_logger.debug(f"Could not get Content-Length header for favicon (method 2): {str(e)}")
             if not content_length:
                 try:
                     if hasattr(response, '_headers'):
                         content_length = response._headers.get('content-length', ('', ''))[1]
-                except (AttributeError, KeyError, IndexError):
-                    pass
+                except (AttributeError, KeyError, IndexError) as e:
+                    access_logger.debug(f"Could not get Content-Length header for favicon (method 3): {str(e)}")
             
             if content_length:
                 log_msg = f"{request.method} {request.path} - {client_ip} - {content_length} bytes"
@@ -149,9 +149,10 @@ class ActivityTrackingMiddleware:
                 from users.models import UserProfile
                 profile = UserProfile.get_or_create_profile(request.user)
                 profile.update_activity()
-            except Exception:
-                # Silently fail - don't break the request if activity tracking fails
-                pass
+            except Exception as e:
+                # Log but don't break the request if activity tracking fails
+                user_identifier = get_user_identifier(request)
+                access_logger.warning(f"Failed to update activity for user {user_identifier} on {request.path}: {str(e)}")
         
         return response
 
