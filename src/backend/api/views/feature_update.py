@@ -65,6 +65,13 @@ def _validate_tags(tags):
         if not isinstance(tag, str):
             return False, _error_response('all tags must be strings', 400)
         
+        # Check if tag is a system tag (protected tag)
+        if is_protected_tag(tag, CONST_INTERNAL_TAGS):
+            return False, _error_response(
+                'System tags (type, import-year, import-month, feature-year, feature-month, source-file, is-track, elevation, geocoding) cannot be added as user tags',
+                400
+            )
+        
         # Validate tag length
         tag_max_length = get_required_setting('TAG_MAX_LENGTH')
         if len(tag) > tag_max_length:

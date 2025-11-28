@@ -100,10 +100,17 @@
         </button>
       </div>
     </div>
+
+    <!-- Error Message for System Tags -->
+    <div v-if="systemTagError" class="mt-2 p-2 bg-red-50 border border-red-200 rounded-md">
+      <p class="text-xs text-red-800">{{ systemTagError }}</p>
+    </div>
   </div>
 </template>
 
 <script>
+import { isSystemTag } from '@/utils/tagUtils'
+
 export default {
   name: 'TagPicker',
   props: {
@@ -138,7 +145,9 @@ export default {
       tagInput: '',
       showTagSuggestions: false,
       hasTagsOverflow: false,
-      hasSystemTagsOverflow: false
+      hasSystemTagsOverflow: false,
+      systemTagError: '',
+      systemTagErrorNoSystemTagsStr: 'System tags cannot be added as user tags.'
     }
   },
   computed: {
@@ -151,12 +160,15 @@ export default {
       }
     },
     filteredTagSuggestions() {
+      // Filter out system tags from suggestions
+      const userTags = this.availableTags.filter(tag => !isSystemTag(tag))
+
       if (!this.tagInput.trim()) {
-        return this.availableTags.filter(tag => !this.localTags.includes(tag)).slice(0, 10)
+        return userTags.filter(tag => !this.localTags.includes(tag)).slice(0, 10)
       }
 
       const query = this.tagInput.toLowerCase().trim()
-      return this.availableTags
+      return userTags
         .filter(tag =>
           tag.toLowerCase().includes(query) &&
           !this.localTags.includes(tag)
@@ -204,6 +216,8 @@ export default {
   },
   methods: {
     onTagInput() {
+      // Clear error when user starts typing
+      this.systemTagError = ''
       // Convert to lowercase as user types
       this.tagInput = this.tagInput.toLowerCase()
       if (this.tagInput.trim()) {
@@ -235,33 +249,52 @@ export default {
         }
       }, 200)
     },
-    selectTagSuggestion(tag) {
-      if (tag && !this.localTags.includes(tag.toLowerCase())) {
-        const newTags = [...this.localTags, tag.toLowerCase()]
-        this.localTags = newTags
-        this.checkTagsOverflow()
+    validateAndAddTag(tag) {
+      // Clear any previous error
+      this.systemTagError = ''
+
+      if (!tag) {
+        return false
       }
-      this.tagInput = ''
-      this.showTagSuggestions = false
-      // Refocus the input after a short delay to allow the blur event to complete
-      setTimeout(() => {
-        if (this.$refs.tagInputContainer) {
-          const input = this.$refs.tagInputContainer.querySelector('input')
-          if (input) {
-            input.focus()
-          }
-        }
-      }, 100)
-    },
-    addTagFromInput() {
-      const trimmedInput = this.tagInput.trim().toLowerCase()
-      if (trimmedInput && !this.localTags.includes(trimmedInput)) {
-        const newTags = [...this.localTags, trimmedInput]
+
+      const lowerTag = tag.toLowerCase()
+
+      // Check if it's a system tag
+      if (isSystemTag(lowerTag)) {
+        this.systemTagError = this.systemTagErrorNoSystemTagsStr
+        this.tagInput = ''
+        this.showTagSuggestions = false
+        return false
+      }
+
+      // Add tag if not already present
+      if (!this.localTags.includes(lowerTag)) {
+        const newTags = [...this.localTags, lowerTag]
         this.localTags = newTags
         this.tagInput = ''
         this.showTagSuggestions = false
         this.checkTagsOverflow()
+        return true
       }
+
+      return false
+    },
+    selectTagSuggestion(tag) {
+      if (this.validateAndAddTag(tag)) {
+        // Refocus the input after a short delay to allow the blur event to complete
+        setTimeout(() => {
+          if (this.$refs.tagInputContainer) {
+            const input = this.$refs.tagInputContainer.querySelector('input')
+            if (input) {
+              input.focus()
+            }
+          }
+        }, 100)
+      }
+    },
+    addTagFromInput() {
+      const trimmedInput = this.tagInput.trim().toLowerCase()
+      this.validateAndAddTag(trimmedInput)
     },
     removeTag(index) {
       const newTags = [...this.localTags]
