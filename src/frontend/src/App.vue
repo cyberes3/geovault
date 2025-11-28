@@ -42,8 +42,8 @@
           <div 
             v-if="!userInfoLoading"
             :class="[
-              'md:flex md:items-center md:ml-6 md:space-x-8',
-              mobileMenuOpen && userInfo ? 'fixed inset-x-0 top-16 z-50 flex flex-col bg-white shadow-lg p-4 space-y-4 rounded-b-lg overflow-y-auto border-b border-gray-200' : 'hidden'
+              'md:flex md:items-center md:ml-6 md:flex-1',
+              mobileMenuOpen && userInfo ? 'fixed inset-x-0 top-16 z-50 flex flex-col bg-white shadow-lg p-4 sm:p-6 space-y-4 rounded-b-lg overflow-y-auto border-b border-gray-200' : 'hidden'
             ]"
           >
             
@@ -52,7 +52,7 @@
               <router-link
                   :class="[
                     $route.path === '/dashboard' || $route.path === '/' 
-                      ? 'text-gray-900 border-gray-500 bg-gray-50 md:bg-transparent' 
+                      ? 'text-blue-600 border-blue-500 bg-blue-50 md:bg-transparent' 
                       : 'text-gray-500 border-transparent hover:text-gray-700 hover:border-gray-300 hover:bg-gray-50 md:hover:bg-transparent',
                     'block md:inline-flex items-center px-3 md:px-1 py-2 md:pt-1 text-base md:text-sm font-medium border-l-4 md:border-l-0 md:border-b-2 transition-colors duration-200 rounded-r-md md:rounded-none'
                   ]"
@@ -64,7 +64,7 @@
               <router-link
                   :class="[
                     $route.path.startsWith('/import')
-                      ? 'text-gray-900 border-gray-500 bg-gray-50 md:bg-transparent' 
+                      ? 'text-blue-600 border-blue-500 bg-blue-50 md:bg-transparent' 
                       : 'text-gray-500 border-transparent hover:text-gray-700 hover:border-gray-300 hover:bg-gray-50 md:hover:bg-transparent',
                     'block md:inline-flex items-center px-3 md:px-1 py-2 md:pt-1 text-base md:text-sm font-medium border-l-4 md:border-l-0 md:border-b-2 transition-colors duration-200 rounded-r-md md:rounded-none'
                   ]"
@@ -76,7 +76,7 @@
               <router-link
                   :class="[
                     $route.path === '/tags'
-                      ? 'text-gray-900 border-gray-500 bg-gray-50 md:bg-transparent' 
+                      ? 'text-blue-600 border-blue-500 bg-blue-50 md:bg-transparent' 
                       : 'text-gray-500 border-transparent hover:text-gray-700 hover:border-gray-300 hover:bg-gray-50 md:hover:bg-transparent',
                     'block md:inline-flex items-center px-3 md:px-1 py-2 md:pt-1 text-base md:text-sm font-medium border-l-4 md:border-l-0 md:border-b-2 transition-colors duration-200 rounded-r-md md:rounded-none'
                   ]"
@@ -88,7 +88,7 @@
               <router-link
                   :class="[
                     $route.path === '/collections'
-                      ? 'text-gray-900 border-gray-500 bg-gray-50 md:bg-transparent' 
+                      ? 'text-blue-600 border-blue-500 bg-blue-50 md:bg-transparent' 
                       : 'text-gray-500 border-transparent hover:text-gray-700 hover:border-gray-300 hover:bg-gray-50 md:hover:bg-transparent',
                     'block md:inline-flex items-center px-3 md:px-1 py-2 md:pt-1 text-base md:text-sm font-medium border-l-4 md:border-l-0 md:border-b-2 transition-colors duration-200 rounded-r-md md:rounded-none'
                   ]"
@@ -100,7 +100,7 @@
               <router-link
                   :class="[
                     $route.path === '/map'
-                      ? 'text-gray-900 border-gray-500 bg-gray-50 md:bg-transparent' 
+                      ? 'text-blue-600 border-blue-500 bg-blue-50 md:bg-transparent' 
                       : 'text-gray-500 border-transparent hover:text-gray-700 hover:border-gray-300 hover:bg-gray-50 md:hover:bg-transparent',
                     'block md:inline-flex items-center px-3 md:px-1 py-2 md:pt-1 text-base md:text-sm font-medium border-l-4 md:border-l-0 md:border-b-2 transition-colors duration-200 rounded-r-md md:rounded-none'
                   ]"
@@ -126,7 +126,7 @@
                 </button>
 
                 <!-- Mobile Header -->
-                <div class="md:hidden px-3 py-2 border-t border-gray-200 mt-2 pt-4">
+                <div class="md:hidden px-4 sm:px-6 py-2 border-t border-gray-200 mt-2 pt-4">
                   <div class="text-base font-medium text-gray-900">{{ userInfo.email }}</div>
                 </div>
 
@@ -141,9 +141,9 @@
                   <router-link
                       :class="[
                         $route.path === '/settings'
-                          ? 'text-gray-900 border-gray-500 bg-gray-50 md:bg-gray-100 md:border-transparent'
+                          ? 'text-blue-600 border-blue-500 bg-blue-50 md:bg-gray-100 md:border-transparent'
                           : 'text-gray-700 border-transparent hover:text-gray-900 md:hover:bg-gray-100 hover:bg-gray-50',
-                        'block px-3 md:px-4 py-2 text-base md:text-sm font-normal border-l-4 md:border-l-0 rounded-r-md md:rounded-none'
+                        'block px-4 sm:px-6 md:px-4 py-2 text-base md:text-sm font-normal border-l-4 md:border-l-0 rounded-r-md md:rounded-none'
                       ]"
                       to="/settings"
                       @click="() => { closeUserMenu(); closeMobileMenu(); }"
@@ -154,9 +154,9 @@
                       v-if="userInfo.isSuperuser"
                       :class="[
                         $route.path === '/admin'
-                          ? 'text-gray-900 border-gray-500 bg-gray-50 md:bg-gray-100 md:border-transparent'
+                          ? 'text-blue-600 border-blue-500 bg-blue-50 md:bg-gray-100 md:border-transparent'
                           : 'text-gray-700 border-transparent hover:text-gray-900 md:hover:bg-gray-100 hover:bg-gray-50',
-                        'block px-3 md:px-4 py-2 text-base md:text-sm font-normal border-l-4 md:border-l-0 rounded-r-md md:rounded-none'
+                        'block px-4 sm:px-6 md:px-4 py-2 text-base md:text-sm font-normal border-l-4 md:border-l-0 rounded-r-md md:rounded-none'
                       ]"
                       to="/admin"
                       @click="() => { closeUserMenu(); closeMobileMenu(); }"
@@ -165,7 +165,7 @@
                   </router-link>
                   <div class="hidden md:block border-t border-gray-200 my-1"></div>
                   <button
-                      class="block w-full text-left px-3 md:px-4 py-2 text-base md:text-sm font-normal text-gray-700 hover:text-gray-900 md:hover:bg-gray-100 hover:bg-gray-50 rounded-md md:rounded-none"
+                      class="block w-full text-left px-4 sm:px-6 md:px-4 py-2 text-base md:text-sm font-normal text-gray-700 hover:text-gray-900 md:hover:bg-gray-100 hover:bg-gray-50 rounded-md md:rounded-none"
                       @click="performLogout"
                   >
                     Sign Out

@@ -79,15 +79,15 @@
     </div>
 
     <!-- Pagination Controls -->
-    <div v-if="(hasFeatures || isLoadingPage)" class="bg-white rounded-lg shadow-sm border border-gray-200 p-4">
-      <div class="flex items-center justify-between flex-wrap gap-4">
+    <div v-if="(hasFeatures || isLoadingPage)" class="bg-white rounded-lg shadow-sm border border-gray-200 p-4 sm:p-6">
+      <div class="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
         <div class="text-sm text-gray-700">
           <span v-if="!isLoadingPage">
             Showing features {{ (currentPage - 1) * pageSize + 1 }} - {{ Math.min(currentPage * pageSize, totalFeatures) }} of {{ totalFeatures }}
           </span>
           <span v-else class="text-blue-500 font-medium">Loading...</span>
         </div>
-        <div class="flex items-center space-x-2">
+        <div class="flex flex-wrap items-center justify-center md:justify-start gap-2 md:gap-3">
           <button
               :disabled="!hasPreviousPage || isLoadingPage || totalPages <= 1"
               class="inline-flex items-center px-3 py-2 border border-gray-300 shadow-sm text-sm font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 disabled:opacity-50 disabled:cursor-not-allowed"
@@ -111,7 +111,7 @@
               <path d="M9 5l7 7-7 7" stroke-linecap="round" stroke-linejoin="round" stroke-width="2"></path>
             </svg>
           </button>
-          <div class="flex items-center space-x-2 ml-4 pl-4 border-l border-gray-300">
+          <div class="flex items-center space-x-2 md:ml-4 md:pl-4 md:border-l border-gray-300">
             <label class="text-sm text-gray-700" for="goto-page">Go to:</label>
             <input
                 id="goto-page"
@@ -134,7 +134,7 @@
           </div>
           <button
               :disabled="isLoadingPage || !hasFeatures"
-              class="inline-flex items-center px-3 py-2 border border-gray-300 shadow-sm text-sm font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 disabled:opacity-50 disabled:cursor-not-allowed ml-4 pl-4 border-l"
+              class="inline-flex items-center px-3 py-2 border border-gray-300 shadow-sm text-sm font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 disabled:opacity-50 disabled:cursor-not-allowed w-full md:w-auto md:ml-4 md:pl-4 md:border-l"
               @click="$emit('show-map-preview')"
               title="Preview all features on current page"
           >

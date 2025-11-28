@@ -1,14 +1,14 @@
 <template>
   <div class="space-y-6">
     <!-- Page Header -->
-    <div class="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
-      <div class="flex items-center justify-between mb-4">
+    <div class="bg-white rounded-lg shadow-sm border border-gray-200 p-4 sm:p-6">
+      <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 mb-4">
         <div>
-          <h1 class="text-2xl font-bold text-gray-900 mb-2">Collections</h1>
+          <h1 class="text-xl sm:text-2xl font-bold text-gray-900 mb-1 sm:mb-2">Collections</h1>
         </div>
         <button
             @click="openCreateDialog"
-            class="inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md shadow-sm text-white bg-blue-500 hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500"
+            class="w-full sm:w-auto inline-flex items-center justify-center px-4 py-2 border border-transparent text-sm font-medium rounded-md shadow-sm text-white bg-blue-600 hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500"
             title="Create a new collection"
         >
           <svg class="w-5 h-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -19,7 +19,7 @@
       </div>
 
       <!-- Explanatory Text -->
-      <div class="m-4 p-4 bg-blue-50 border border-blue-200 rounded-lg">
+      <div class="mt-2 sm:mt-4 p-4 bg-blue-50 border border-blue-200 rounded-lg">
         <p class="text-sm text-gray-700">
           Collections are custom groupings of features that allow you to organize and view related geographic data together.
           You can create collections by matching tags (features with ANY of the specified tags) or by individually selecting features, then view them all together on the map, edit them, and share them with others.
@@ -68,9 +68,9 @@
           :key="collection.id"
           class="bg-white rounded-lg shadow-sm border border-gray-200 overflow-hidden hover:shadow-md transition-shadow"
       >
-        <div class="p-6">
+        <div class="p-4 sm:p-6 h-full flex flex-col">
           <div class="flex items-start justify-between mb-3">
-            <h3 class="text-lg font-semibold text-gray-900 truncate flex-1">{{ collection.name }}</h3>
+            <h3 class="text-base sm:text-lg font-semibold text-gray-900 truncate flex-1">{{ collection.name }}</h3>
             <div class="flex items-center space-x-1 ml-2">
               <button
                   class="p-1.5 text-gray-400 hover:text-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-1 rounded"
@@ -132,7 +132,7 @@
             </span>
           </div>
 
-          <div class="flex space-x-2">
+          <div class="mt-auto flex flex-col sm:flex-row gap-2">
             <button
                 @click="viewOnMap(collection.id)"
                 class="flex-1 inline-flex items-center justify-center px-3 py-2 border border-gray-300 shadow-sm text-sm font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500"

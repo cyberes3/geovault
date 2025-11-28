@@ -1,15 +1,15 @@
 <template>
   <div class="space-y-6">
     <!-- Page Header -->
-    <div class="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
-      <div class="flex items-center justify-between">
+    <div class="bg-white rounded-lg shadow-sm border border-gray-200 p-4 sm:p-6">
+      <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
         <div>
-          <h1 class="text-2xl font-bold text-gray-900 mb-2">Process Import</h1>
-          <h2 v-if="originalFilename != null" class="text-lg text-gray-600">{{ originalFilename }}</h2>
+          <h1 class="text-xl sm:text-2xl font-bold text-gray-900 mb-1 sm:mb-2">Process Import</h1>
+          <h2 v-if="originalFilename != null" class="text-sm sm:text-lg text-gray-600 break-words">{{ originalFilename }}</h2>
           <div v-else class="h-6 w-48 bg-gray-200 rounded animate-pulse"></div>
         </div>
-        <div class="flex items-center space-x-2">
-          <span v-if="isImported" class="inline-flex items-center px-3 py-1 rounded-full text-sm font-medium bg-green-100 text-green-800">
+        <div class="flex items-center sm:justify-end">
+          <span v-if="isImported" class="inline-flex items-center px-3 py-1 rounded-full text-xs sm:text-sm font-medium bg-green-100 text-green-800">
             <CheckIcon class="w-4 h-4 mr-1" />
             Imported
           </span>
@@ -18,37 +18,59 @@
     </div>
 
     <!-- Import Logs -->
-    <div class="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
+    <div class="bg-white rounded-lg shadow-sm border border-gray-200 p-4 sm:p-6">
       <div class="flex items-center justify-between mb-4">
-        <h2 class="text-lg font-semibold text-gray-900">Processing Logs</h2>
+        <h2 class="text-base sm:text-lg font-semibold text-gray-900">Processing Logs</h2>
         <button
-            class="inline-flex items-center p-2 border border-gray-300 shadow-sm text-sm font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500"
+            class="inline-flex items-center p-2 border border-gray-300 shadow-sm text-xs sm:text-sm font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500"
             title="Open full log view"
             @click="dialogs.logs = true"
         >
           <ArrowTopRightOnSquareIcon class="w-4 h-4" />
         </button>
       </div>
-      <div class="bg-gray-50 rounded-lg p-4">
+      <div class="bg-gray-50 rounded-lg p-3 sm:p-4">
         <div ref="logsContainer" class="h-32 overflow-auto">
-          <ul class="space-y-2">
-            <li v-for="(item, index) in filteredWorkerLog" :key="`logitem-${index}`"
-                class="grid grid-cols-[140px_120px_70px_1fr] gap-2 items-start py-1 border-l-4 pl-2"
-                :class="item.level >= 40 ? 'bg-red-50 border-red-400' : 'border-transparent'">
-              <span class="text-sm text-gray-500">{{ formatTimestamp(item.timestamp) }}</span>
-              <div class="flex">
-                <span v-if="item.source" class="text-xs text-gray-400 bg-gray-100 px-2 py-1 rounded truncate max-w-full" :title="item.source">{{ item.source }}</span>
-              </div>
-              <div class="flex">
-                <span
+          <ul class="space-y-1 sm:space-y-0">
+            <li
+              v-for="(item, index) in filteredWorkerLog"
+              :key="`logitem-${index}`"
+              class="border-l-4 pl-2 pb-2 sm:py-1"
+              :class="item.level >= 40 ? 'bg-red-50 border-red-400' : 'border-transparent'"
+            >
+              <div class="flex flex-col gap-1 sm:grid sm:grid-cols-[190px_140px_80px_minmax(0,1fr)] sm:gap-x-4 sm:gap-y-1 sm:items-start">
+                <!-- Level + Source (first row on mobile, cols 2–3 on desktop) -->
+                <div class="flex flex-wrap sm:flex-nowrap items-center gap-2 sm:col-start-2 sm:row-start-1">
+                  <span
                     v-if="item.level !== undefined"
                     :class="getLevelClass(item.level)"
-                    class="text-xs px-2 py-1 rounded font-medium"
+                    class="text-[11px] sm:text-xs px-2 py-0.5 rounded font-medium"
+                  >
+                    {{ getLevelName(item.level) }}
+                  </span>
+                  <span
+                    v-if="item.source"
+                    class="text-xs text-gray-400 bg-gray-100 px-2 py-1 rounded whitespace-normal sm:whitespace-nowrap break-words"
+                    :title="item.source"
+                  >{{ item.source }}</span>
+                </div>
+
+                <!-- Timestamp (second row on mobile, col 1 on desktop) -->
+                <span
+                  class="text-[11px] sm:text-sm text-gray-500 font-mono bg-gray-100 px-2 py-0.5 rounded sm:bg-transparent sm:px-0 sm:py-0 sm:w-fit sm:whitespace-nowrap sm:col-start-1 sm:row-start-1"
+                >{{ formatTimestamp(item.timestamp) }}</span>
+
+                <!-- Message (third row on mobile, last column on desktop) -->
+                <p
+                  :class="item.level >= 40 ? 'text-red-800 font-medium' : 'text-gray-700'"
+                  class="text-xs sm:text-sm leading-relaxed break-words sm:col-start-4 sm:row-start-1 sm:row-span-2"
                 >
-                  {{ getLevelName(item.level) }}
-                </span>
+                  {{ item.msg }}
+                </p>
               </div>
-              <span :class="item.level >= 40 ? 'text-red-800 font-medium' : 'text-gray-700'" class="text-sm break-words">{{ item.msg }}</span>
+
+              <!-- Divider for mobile -->
+              <hr v-if="index < filteredWorkerLog.length - 1" class="sm:hidden mt-2 border-gray-200" />
             </li>
             <li v-if="filteredWorkerLog.length === 0" class="text-sm text-gray-500 italic">
               {{ loading.logs ? 'Fetching logs...' : 'No logs available yet...' }}
@@ -59,8 +81,8 @@
     </div>
 
     <!-- Import Summary -->
-    <div class="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
-      <h3 class="text-lg font-semibold text-gray-900 mb-4">Import Summary</h3>
+    <div class="bg-white rounded-lg shadow-sm border border-gray-200 p-4 sm:p-6">
+      <h3 class="text-base sm:text-lg font-semibold text-gray-900 mb-4">Import Summary</h3>
       <div v-if="loading.page" class="text-center py-8">
         <span class="text-blue-500 font-medium">Loading...</span>
       </div>
@@ -138,9 +160,9 @@
     />
 
     <!-- Global Options -->
-    <div v-if="itemsForUser.length > 0 && !loading.page && !processing.active" class="bg-white rounded-lg shadow-sm border border-gray-200 p-4">
+    <div v-if="itemsForUser.length > 0 && !loading.page && !processing.active" class="bg-white rounded-lg shadow-sm border border-gray-200 p-4 sm:p-6">
       <h3 class="text-sm font-semibold text-gray-900 mb-3">Global Options</h3>
-      <div class="flex items-center space-x-3">
+      <div class="flex flex-col sm:flex-row sm:items-center sm:space-x-3 space-y-2 sm:space-y-0">
         <ToggleButton
             v-model="importCustomIcons"
             label="Import custom icons for all features"
@@ -154,11 +176,11 @@
     </div>
 
     <!-- Action Buttons (Top) -->
-    <div v-if="itemsForUser.length > 0 && !loading.page && !processing.active && !isImported" class="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
-      <div class="flex items-center space-x-4">
+    <div v-if="itemsForUser.length > 0 && !loading.page && !processing.active && !isImported" class="bg-white rounded-lg shadow-sm border border-gray-200 p-4 sm:p-6">
+      <div class="flex flex-col sm:flex-row sm:items-center space-y-3 sm:space-y-0 sm:space-x-4">
         <button
             :disabled="lockButtons || loading.saving"
-            class="inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md text-white bg-green-600 hover:bg-green-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-green-500 disabled:bg-gray-400 disabled:cursor-not-allowed transition-colors duration-200"
+            class="w-full sm:w-auto inline-flex items-center justify-center px-4 py-2 border border-transparent text-sm font-medium rounded-md text-white bg-green-600 hover:bg-green-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-green-500 disabled:bg-gray-400 disabled:cursor-not-allowed transition-colors duration-200"
             @click="saveChanges"
             title="Save all changes"
         >
@@ -168,7 +190,7 @@
         </button>
         <button
             :disabled="lockButtons || loading.importing || importableCount === 0"
-            class="inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md text-white bg-blue-500 hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 disabled:bg-gray-400 disabled:cursor-not-allowed transition-colors duration-200"
+            class="w-full sm:w-auto inline-flex items-center justify-center px-4 py-2 border border-transparent text-sm font-medium rounded-md text-white bg-blue-500 hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 disabled:bg-gray-400 disabled:cursor-not-allowed transition-colors duration-200"
             @click="performImport"
             title="Import all features"
         >
@@ -273,9 +295,11 @@
       <div v-for="(item, index) in itemsForUser" :key="`item-${index}`"
            :class="getItemClasses(item, index)">
         <!-- Button row - always fully visible -->
-        <div class="flex items-center justify-between mb-6 relative z-20">
-          <h3 class="text-lg font-semibold text-gray-900" :class="isItemSkipped(item, index) && !item.isDuplicate ? 'opacity-50' : ''">Feature {{ (pagination.currentPage - 1) * pagination.pageSize + index + 1 }} (of {{ pagination.totalFeatures }})</h3>
-          <div class="flex items-center space-x-2">
+        <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 mb-4 sm:mb-6 relative z-20">
+          <h3 class="text-base sm:text-lg font-semibold text-gray-900" :class="isItemSkipped(item, index) && !item.isDuplicate ? 'opacity-50' : ''">
+            Feature {{ (pagination.currentPage - 1) * pagination.pageSize + index + 1 }} (of {{ pagination.totalFeatures }})
+          </h3>
+          <div class="flex flex-wrap items-center gap-2 sm:space-x-2">
             <!-- Icon Preview -->
             <div v-if="getFeatureIconUrl(item)" class="flex items-center justify-center w-8 h-8 p-1 border border-gray-300 rounded bg-white shadow-sm">
               <img

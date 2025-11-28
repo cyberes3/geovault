@@ -1,8 +1,7 @@
 <template>
   <div
       v-if="isOpen"
-      class="fixed z-50 overflow-hidden"
-      style="position: fixed !important; top: 0 !important; left: 0 !important; right: 0 !important; bottom: 0 !important; width: 100vw !important; height: 100vh !important; margin: 0 !important; padding: 0 !important;"
+      class="fixed inset-0 z-50"
       @click="handleBackdropClick"
   >
     <!-- Backdrop -->
@@ -10,12 +9,12 @@
          style="position: absolute !important; top: 0 !important; left: 0 !important; right: 0 !important; bottom: 0 !important; width: 100% !important; height: 100% !important; margin: 0 !important; padding: 0 !important;"></div>
 
     <!-- Modal Container -->
-    <div
-        ref="modalContainer"
-        :style="modalStyle"
-        class="absolute inset-4 bg-white rounded-lg shadow-xl flex flex-col transform transition-all duration-300 ease-out"
-        @click.stop
-    >
+    <div class="absolute inset-0 flex items-stretch justify-stretch sm:items-center sm:justify-center">
+      <div
+          ref="modalContainer"
+          class="bg-white flex flex-col w-full h-full sm:h-[80vh] sm:max-w-4xl sm:rounded-lg shadow-xl transform transition-all duration-300 ease-out"
+          @click.stop
+      >
       <!-- Header -->
       <div class="flex items-center justify-between p-4 border-b border-gray-200 bg-gray-50 rounded-t-lg">
         <h3 class="text-lg font-semibold text-gray-900">Processing Logs</h3>
@@ -33,26 +32,44 @@
       <!-- Log Content -->
       <div class="flex-1 overflow-hidden">
         <div class="h-full overflow-auto p-4">
-          <div class="space-y-1">
+          <div class="space-y-1 sm:space-y-0">
             <div
                 v-for="(item, index) in logs"
                 :key="`logitem-${index}`"
-                class="grid grid-cols-[150px_140px_80px_1fr] gap-3 items-start p-2 rounded-lg hover:bg-gray-50 border-l-4 border-transparent hover:border-gray-200 transition-colors"
+                class="border-l-4 pl-2 pb-2 sm:py-1"
             >
-              <span class="text-xs text-gray-500 font-mono whitespace-nowrap bg-gray-100 px-2 py-1 rounded w-fit">{{ formatTimestamp(item.timestamp) }}</span>
-              <div class="flex">
-                <span v-if="item.source" class="text-xs text-gray-400 bg-gray-100 px-2 py-1 rounded truncate max-w-full" :title="item.source">{{ item.source }}</span>
-              </div>
-              <div class="flex">
+              <div class="flex flex-col gap-1 sm:grid sm:grid-cols-[190px_140px_80px_minmax(0,1fr)] sm:gap-x-4 sm:gap-y-1 sm:items-start">
+                <!-- Level + Source (first row on mobile, cols 2–3 on desktop) -->
+                <div class="flex flex-wrap sm:flex-nowrap items-center gap-2 sm:col-start-2 sm:row-start-1">
+                  <span
+                      v-if="item.level !== undefined"
+                      :class="getLevelClass(item.level)"
+                      class="text-[11px] sm:text-xs px-2 py-0.5 rounded font-medium"
+                  >
+                    {{ getLevelName(item.level) }}
+                  </span>
+                  <span
+                      v-if="item.source"
+                      class="text-xs text-gray-400 bg-gray-100 px-2 py-1 rounded whitespace-normal sm:whitespace-nowrap break-words"
+                      :title="item.source"
+                  >{{ item.source }}</span>
+                </div>
+
+                <!-- Timestamp (second row on mobile, col 1 on desktop) -->
                 <span
-                    v-if="item.level !== undefined"
-                    :class="getLevelClass(item.level)"
-                    class="text-xs px-2 py-1 rounded font-medium"
+                    class="text-[11px] sm:text-xs text-gray-500 font-mono bg-gray-100 px-2 py-0.5 rounded sm:bg-transparent sm:px-0 sm:py-0 sm:w-fit sm:whitespace-nowrap sm:col-start-1 sm:row-start-1"
+                >{{ formatTimestamp(item.timestamp) }}</span>
+
+                <!-- Message (third row on mobile, last column on desktop) -->
+                <p
+                    class="text-xs sm:text-sm text-gray-700 leading-relaxed break-words sm:col-start-4 sm:row-start-1 sm:row-span-2"
                 >
-                  {{ getLevelName(item.level) }}
-                </span>
+                  {{ item.msg }}
+                </p>
               </div>
-              <span class="text-sm text-gray-700 leading-relaxed break-words">{{ item.msg }}</span>
+
+              <!-- Divider for mobile -->
+              <hr v-if="index < logs.length - 1" class="sm:hidden mt-2 border-gray-200" />
             </div>
             <div v-if="logs.length === 0" class="text-center py-8">
               <svg class="mx-auto h-12 w-12 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -65,6 +82,7 @@
         </div>
       </div>
 
+      </div>
     </div>
   </div>
 </template>
@@ -87,10 +105,10 @@ export default {
   data() {
     return {
       modalStyle: {
-        width: '90vw',
-        height: '90vh',
-        left: '5vw',
-        top: '5vh'
+        width: '100vw',
+        height: '100vh',
+        left: '0',
+        top: '0'
       }
     }
   },

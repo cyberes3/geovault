@@ -7,12 +7,12 @@
       </p>
     </div>
     <!-- Bulk Import Controls -->
-    <div v-if="filteredImportQueue.length > 0 && !combinedLoading" class="mb-4 flex items-center justify-between">
-      <div class="flex items-center space-x-3">
+    <div v-if="filteredImportQueue.length > 0 && !combinedLoading" class="mb-4">
+      <div class="flex flex-col sm:flex-row sm:items-center space-y-2 sm:space-y-0 sm:space-x-3">
         <button
           @click="bulkImport"
           :disabled="validImportableCount === 0 || isBulkImporting || isBulkDeleting"
-          class="inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md text-white bg-green-600 hover:bg-green-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-green-500 transition-colors duration-200 disabled:opacity-50 disabled:cursor-not-allowed"
+          class="w-full sm:w-auto inline-flex items-center justify-center px-4 py-2 border border-transparent text-sm font-medium rounded-md text-white bg-green-600 hover:bg-green-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-green-500 transition-colors duration-200 disabled:opacity-50 disabled:cursor-not-allowed"
           title="Import all selected items"
         >
           <Loader v-if="isBulkImporting" size="sm" layout="inline" :showMessage="false" />
@@ -22,7 +22,7 @@
         <button
           @click="bulkDelete"
           :disabled="selectedItems.size === 0 || isBulkDeleting || isBulkImporting"
-          class="inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md text-white bg-red-600 hover:bg-red-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-red-500 transition-colors duration-200 disabled:opacity-50 disabled:cursor-not-allowed"
+          class="w-full sm:w-auto inline-flex items-center justify-center px-4 py-2 border border-transparent text-sm font-medium rounded-md text-white bg-red-600 hover:bg-red-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-red-500 transition-colors duration-200 disabled:opacity-50 disabled:cursor-not-allowed"
           title="Delete all selected items"
         >
           <Loader v-if="isBulkDeleting" size="sm" layout="inline" :showMessage="false" color="white" />
@@ -32,8 +32,8 @@
       </div>
     </div>
 
-    <table class="min-w-full divide-y divide-gray-200">
-      <thead class="bg-gray-50">
+    <table class="min-w-full sm:divide-y sm:divide-gray-200">
+      <thead class="hidden sm:table-header-group bg-gray-50">
         <tr>
           <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
             <input
@@ -50,32 +50,46 @@
           <th class="px-6 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">Actions</th>
         </tr>
       </thead>
-      <tbody class="bg-white divide-y divide-gray-200">
+      <tbody class="bg-white sm:divide-y sm:divide-gray-200">
         <!-- Loading placeholders -->
-        <tr v-for="n in 3" v-if="combinedLoading" :key="`loading-${n}`" class="animate-pulse">
-          <td class="px-6 py-4 whitespace-nowrap">
-            <div class="w-4 h-4 bg-gray-200 rounded"></div>
+        <tr 
+          v-for="n in 3" 
+          v-if="combinedLoading" 
+          :key="`loading-${n}`" 
+          class="block sm:table-row mb-4 sm:mb-0 border border-gray-200 sm:border-0 rounded-lg sm:rounded-none shadow-sm sm:shadow-none bg-white animate-pulse"
+        >
+          <td class="block sm:table-cell px-4 py-3 sm:px-6 sm:py-4 sm:whitespace-nowrap border-b border-gray-100 sm:border-0 bg-gray-50 sm:bg-transparent">
+            <div class="flex items-center justify-between sm:justify-start">
+              <div class="w-4 h-4 bg-gray-200 rounded"></div>
+              <div class="sm:hidden w-16 h-5 bg-gray-200 rounded-full"></div>
+            </div>
           </td>
-          <td class="px-6 py-4 whitespace-nowrap">
+          <td class="block sm:table-cell px-4 py-2 sm:px-6 sm:py-4 sm:whitespace-nowrap">
             <div class="flex items-center">
               <div class="w-8 h-8 bg-gray-200 rounded-lg"></div>
               <div class="ml-4 w-32 h-4 bg-gray-200 rounded"></div>
             </div>
           </td>
-          <td class="px-6 py-4 whitespace-nowrap text-center">
-            <div class="w-16 h-4 bg-gray-200 rounded mx-auto"></div>
+          <td class="block sm:table-cell px-4 py-2 sm:px-6 sm:py-4 sm:whitespace-nowrap sm:text-center">
+            <div class="flex items-center sm:justify-center">
+              <div class="sm:hidden w-16 h-4 bg-gray-200 rounded mr-2"></div>
+              <div class="w-8 h-4 bg-gray-200 rounded sm:mx-auto"></div>
+            </div>
           </td>
-          <td class="px-6 py-4 whitespace-nowrap text-center">
+          <td class="hidden sm:table-cell px-6 py-4 whitespace-nowrap text-center">
             <div class="w-20 h-6 bg-gray-200 rounded mx-auto"></div>
           </td>
-          <td class="px-6 py-4 whitespace-nowrap text-center">
-            <div class="w-16 h-6 bg-gray-200 rounded mx-auto"></div>
+          <td class="block sm:table-cell px-4 py-3 sm:px-6 sm:py-4 sm:whitespace-nowrap sm:text-center border-t border-gray-100 sm:border-0">
+            <div class="flex items-center justify-start sm:justify-center space-x-2">
+              <div class="w-16 h-7 bg-gray-200 rounded"></div>
+              <div class="w-16 h-7 bg-gray-200 rounded"></div>
+            </div>
           </td>
         </tr>
 
         <!-- Empty state when no files are uploaded -->
-        <tr v-if="!combinedLoading && filteredImportQueue.length === 0 && hasInitiallyLoaded">
-          <td colspan="5" class="px-6 py-12 text-center">
+        <tr v-if="!combinedLoading && filteredImportQueue.length === 0 && hasInitiallyLoaded" class="block sm:table-row">
+          <td colspan="5" class="block sm:table-cell px-4 sm:px-6 py-12 text-center">
             <div class="flex flex-col items-center">
               <h3 class="text-lg font-medium text-gray-900 mb-2">No files uploaded yet</h3>
               <p class="text-gray-500 mb-6 max-w-sm">
@@ -95,25 +109,69 @@
         </tr>
 
         <!-- Actual data rows -->
-        <tr v-for="(item, index) in filteredImportQueue" :key="`item-${index}`" :class="(item.deleting || item.importing) ? 'opacity-50 bg-gray-100' : 'hover:bg-gray-50'">
-          <td class="px-6 py-4 whitespace-nowrap">
-            <input
-              type="checkbox"
-              :checked="selectedItems.has(item.id)"
-              @change="handleItemToggle(item.id, $event.target.checked)"
-              :disabled="item.imported || item.processing === true || (item.processing === false && item.feature_count === -1) || item.deleting || item.importing"
-              class="checkbox-custom"
-            />
+        <tr 
+          v-for="(item, index) in filteredImportQueue" 
+          :key="`item-${index}`" 
+          :class="[
+            'block sm:table-row mb-4 sm:mb-0 border border-gray-200 sm:border-0 rounded-xl sm:rounded-none shadow-sm sm:shadow-none transition-shadow duration-200',
+            (item.deleting || item.importing) ? 'opacity-60 bg-gray-50' : 'bg-white sm:hover:bg-gray-50 sm:hover:shadow-md'
+          ]"
+        >
+          <!-- Checkbox cell -->
+          <td class="block sm:table-cell px-4 py-3 sm:px-6 sm:py-4 sm:whitespace-nowrap border-b border-gray-100 sm:border-0 bg-gray-50 sm:bg-transparent">
+            <div class="flex items-center justify-between sm:justify-start">
+              <input
+                type="checkbox"
+                :checked="selectedItems.has(item.id)"
+                @change="handleItemToggle(item.id, $event.target.checked)"
+                :disabled="item.imported || item.processing === true || (item.processing === false && item.feature_count === -1) || item.deleting || item.importing"
+                class="checkbox-custom"
+              />
+              <!-- Mobile-only status badge next to checkbox -->
+              <div class="sm:hidden">
+                <span v-if="item.deleting" class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-orange-100 text-orange-800">
+                  <Loader size="sm" layout="inline" :showMessage="false" />
+                  <span class="ml-1">Deleting</span>
+                </span>
+                <span v-else-if="item.importing" class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-blue-100 text-blue-700">
+                  <Loader size="sm" layout="inline" :showMessage="false" />
+                  <span class="ml-1">Importing</span>
+                </span>
+                <span v-else-if="item.imported" class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-800">
+                  <CheckIcon class="w-3 h-3 mr-1" />
+                  Imported
+                </span>
+                <span v-else-if="item.processing_failed" class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-red-100 text-red-800">
+                  <ExclamationCircleIcon class="w-3 h-3 mr-1" />
+                  Failed
+                </span>
+                <span v-else-if="item.processing === true || (item.processing === false && item.feature_count === -1)" class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-yellow-100 text-yellow-800">
+                  <Loader size="sm" layout="inline" :showMessage="false" />
+                  <span class="ml-1">Processing</span>
+                </span>
+                <span v-else-if="item.duplicate_status === 'duplicate_in_queue' || item.duplicate_status === 'duplicate_imported'" class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-purple-100 text-purple-800">
+                  <DocumentDuplicateIcon class="w-3 h-3 mr-1" />
+                  Duplicate
+                </span>
+                <span v-else class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-blue-100 text-blue-700">
+                  <svg class="w-3 h-3 mr-1" fill="currentColor" viewBox="0 0 20 20">
+                    <path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clip-rule="evenodd"></path>
+                  </svg>
+                  Ready
+                </span>
+              </div>
+            </div>
           </td>
-          <td class="px-6 py-4 whitespace-nowrap">
+          <!-- Filename cell -->
+          <td class="block sm:table-cell px-4 py-2 sm:px-6 sm:py-4 sm:whitespace-nowrap">
             <div class="flex items-center">
               <div class="flex-shrink-0">
                 <div class="w-8 h-8 bg-blue-100 rounded-lg flex items-center justify-center">
                   <DocumentIcon class="w-4 h-4 text-blue-500" />
                 </div>
               </div>
-              <div class="ml-4">
-                <div class="text-sm font-medium text-gray-900">
+              <div class="ml-4 min-w-0 flex-1">
+                <div class="text-sm font-medium text-gray-900 break-words">
                   <!-- Disable link for duplicates in queue or when this specific item is being imported/deleted -->
                   <router-link v-if="item.duplicate_status !== 'duplicate_in_queue' && !item.deleting && !item.importing" 
                      :to="`/import/process/${item.id}`" 
@@ -127,13 +185,18 @@
               </div>
             </div>
           </td>
-          <td class="px-6 py-4 whitespace-nowrap text-center text-sm text-gray-900">
-            <span v-if="item.processing === true || (item.processing === false && item.feature_count === -1)" class="text-gray-400">
-              -
-            </span>
-            <span v-else class="font-medium">{{ item.feature_count }}</span>
+          <!-- Features cell -->
+          <td class="block sm:table-cell px-4 py-2 sm:px-6 sm:py-4 sm:whitespace-nowrap sm:text-center text-sm text-gray-900">
+            <div class="flex items-center sm:justify-center">
+              <span class="sm:hidden text-xs font-semibold tracking-wide text-gray-500 mr-2 uppercase">Features</span>
+              <span v-if="item.processing === true || (item.processing === false && item.feature_count === -1)" class="text-gray-400">
+                -
+              </span>
+              <span v-else class="font-medium">{{ item.feature_count }}</span>
+            </div>
           </td>
-          <td class="px-6 py-4 whitespace-nowrap text-center">
+          <!-- Status cell (desktop only - mobile shown in checkbox row) -->
+          <td class="hidden sm:table-cell px-6 py-4 whitespace-nowrap text-center">
             <span v-if="item.deleting" class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-orange-100 text-orange-800">
               <Loader size="sm" layout="inline" :showMessage="false" />
               <span class="ml-1">Deleting</span>
@@ -169,25 +232,26 @@
               Ready
             </span>
           </td>
-          <td class="px-6 py-4 whitespace-nowrap text-center text-sm font-medium">
-            <div class="flex items-center justify-center space-x-2">
+          <!-- Actions cell -->
+          <td class="block sm:table-cell px-4 py-3 sm:px-6 sm:py-4 sm:whitespace-nowrap sm:text-center text-sm font-medium border-t border-gray-100 sm:border-0">
+            <div class="flex flex-col sm:flex-row items-stretch sm:items-center justify-stretch sm:justify-center space-y-2 sm:space-y-0 sm:space-x-2">
               <button
                 v-if="!item.imported && !item.processing_failed && !(item.processing === true || (item.processing === false && item.feature_count === -1)) && item.duplicate_status !== 'duplicate_in_queue'"
                 :disabled="item.deleting || item.importing"
-                class="inline-flex items-center px-3 py-1.5 border border-transparent text-xs font-medium rounded-md text-white bg-green-600 hover:bg-green-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-green-500 transition-colors duration-200 disabled:opacity-50 disabled:cursor-not-allowed disabled:bg-gray-400 disabled:hover:bg-gray-400"
+                class="w-full sm:w-auto inline-flex items-center justify-center px-4 py-2 border border-transparent text-sm font-medium rounded-md text-white bg-green-600 hover:bg-green-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-green-500 transition-colors duration-200 disabled:opacity-50 disabled:cursor-not-allowed disabled:bg-gray-400 disabled:hover:bg-gray-400"
                 @click="importItem(item, index)"
                 title="Import this item"
               >
-              <ArrowUpTrayIcon class="w-3 h-3 mr-1" />
+              <ArrowUpTrayIcon class="w-4 h-4 mr-2" />
                 Import
               </button>
               <button
                 :disabled="item.deleting || item.importing"
-                class="inline-flex items-center px-3 py-1.5 border border-transparent text-xs font-medium rounded-md text-white bg-red-600 hover:bg-red-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-red-500 transition-colors duration-200 disabled:opacity-50 disabled:cursor-not-allowed disabled:bg-gray-400 disabled:hover:bg-gray-400"
+                class="w-full sm:w-auto inline-flex items-center justify-center px-4 py-2 border border-transparent text-sm font-medium rounded-md text-white bg-red-600 hover:bg-red-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-red-500 transition-colors duration-200 disabled:opacity-50 disabled:cursor-not-allowed disabled:bg-gray-400 disabled:hover:bg-gray-400"
                 @click="deleteItem(item, index)"
                 title="Delete this item"
               >
-                <TrashIcon class="w-3 h-3 mr-1" />
+                <TrashIcon class="w-4 h-4 mr-2" />
                 Delete
               </button>
             </div>

@@ -1,32 +1,38 @@
 <template>
-  <!-- Modal Backdrop -->
-  <div v-if="true" class="fixed inset-0 z-50 overflow-y-auto" @mousedown="handleBackdropMouseDown">
-    <div class="flex items-center justify-center min-h-screen pt-4 px-4 pb-20 text-center sm:block sm:p-0">
-      <!-- Background overlay -->
-      <div class="fixed inset-0 bg-gray-500 bg-opacity-75 transition-opacity"></div>
+  <div
+    class="fixed inset-0 z-50"
+    role="dialog"
+    aria-modal="true"
+    @mousedown="handleBackdropMouseDown"
+  >
+    <!-- Backdrop -->
+    <div class="absolute inset-0 bg-black/50"></div>
 
-      <!-- Modal panel -->
-      <div class="inline-block align-bottom bg-white rounded-lg text-left overflow-hidden shadow-xl transform transition-all sm:my-8 sm:align-middle sm:max-w-6xl sm:w-full" @click.stop @mousedown.stop>
+    <!-- Modal panel -->
+    <div class="absolute inset-0 flex items-stretch justify-stretch sm:items-center sm:justify-center">
+      <div
+        class="bg-white flex flex-col w-full h-full sm:h-[90vh] sm:max-w-6xl sm:rounded-lg shadow-xl overflow-hidden"
+        @mousedown.stop
+        @click.stop
+      >
         <!-- Header -->
-        <div class="bg-white px-6 lg:px-8 py-4 border-b border-gray-200">
-          <div class="flex items-center justify-between">
-            <h3 class="text-lg font-medium text-gray-900">
-              {{ collection ? 'Edit Collection' : 'Create New Collection' }}
-            </h3>
-            <button
-              @click="closeDialog"
-              class="text-gray-400 hover:text-gray-600 focus:outline-none focus:text-gray-600 transition ease-in-out duration-150"
-              title="Close dialog"
-            >
-              <svg class="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
-              </svg>
-            </button>
-          </div>
+        <div class="flex items-center justify-between px-6 lg:px-8 py-4 border-b border-gray-200 bg-gray-50">
+          <h3 class="text-lg font-medium text-gray-900">
+            {{ collection ? 'Edit Collection' : 'Create New Collection' }}
+          </h3>
+          <button
+            @click="closeDialog"
+            class="text-gray-400 hover:text-gray-600 focus:outline-none focus:text-gray-600 transition ease-in-out duration-150"
+            title="Close dialog"
+          >
+            <svg class="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
+            </svg>
+          </button>
         </div>
 
         <!-- Content -->
-        <div class="bg-white p-6 lg:p-8">
+        <div class="flex-1 overflow-y-auto bg-white p-6 lg:p-8">
           <form @submit.prevent="saveCollection">
             <!-- Name Input -->
             <div class="mb-4">
@@ -92,14 +98,21 @@
                   <div
                     v-for="tag in filteredTags"
                     :key="tag"
-                    class="flex items-center px-3 py-2 hover:bg-gray-50 rounded"
+                    class="flex items-center px-3 py-2 hover:bg-gray-50 rounded space-x-3"
                   >
-                    <ToggleButton
-                      :model-value="formData.tags.includes(tag)"
-                      @update:model-value="(value) => toggleTag(tag, value)"
-                      :label="tag"
-                      size="sm"
+                    <input
+                      type="checkbox"
+                      :id="`tag-${tag}`"
+                      class="checkbox-custom"
+                      :checked="formData.tags.includes(tag)"
+                      @change="onTagCheckboxChange(tag, $event.target.checked)"
                     />
+                    <label
+                      :for="`tag-${tag}`"
+                      class="text-sm text-gray-700 truncate"
+                    >
+                      {{ tag }}
+                    </label>
                   </div>
                 </div>
 
@@ -164,14 +177,21 @@
                   <div
                     v-for="feature in filteredFeatures"
                     :key="feature.properties._id"
-                    class="flex items-center px-3 py-2 hover:bg-gray-50 rounded"
+                    class="flex items-center px-3 py-2 hover:bg-gray-50 rounded space-x-3"
                   >
-                    <ToggleButton
-                      :model-value="formData.feature_ids.includes(String(feature.properties._id)) || formData.feature_ids.includes(Number(feature.properties._id))"
-                      @update:model-value="(value) => toggleFeature(feature.properties._id, value)"
-                      :label="feature.properties.name || 'Unnamed Feature'"
-                      size="sm"
+                    <input
+                      type="checkbox"
+                      :id="`feature-${feature.properties._id}`"
+                      class="checkbox-custom"
+                      :checked="isFeatureSelected(feature)"
+                      @change="onFeatureCheckboxChange(feature, $event.target.checked)"
                     />
+                    <label
+                      :for="`feature-${feature.properties._id}`"
+                      class="text-sm text-gray-700 truncate"
+                    >
+                      {{ feature.properties.name || 'Unnamed Feature' }}
+                    </label>
                   </div>
                 </div>
 
@@ -216,15 +236,12 @@
 
 <script>
 import { getCookie } from "@/assets/js/auth.js";
-import { createToggleHandler } from "@/assets/js/toggle-utils.js";
 import Loader from "@/components/parts/Loader.vue";
-import ToggleButton from "@/components/parts/ToggleButton.vue";
 
 export default {
   name: 'CollectionDialog',
   components: {
-    Loader,
-    ToggleButton
+    Loader
   },
   props: {
     collection: {
@@ -274,13 +291,26 @@ export default {
     }
   },
   methods: {
-    toggleTag(tag, value) {
-      const handler = createToggleHandler(this.formData.tags);
-      return handler(tag, value);
+    onTagCheckboxChange(tag, checked) {
+      const index = this.formData.tags.indexOf(tag);
+      if (checked && index === -1) {
+        this.formData.tags.push(tag);
+      } else if (!checked && index > -1) {
+        this.formData.tags.splice(index, 1);
+      }
     },
-    toggleFeature(featureId, value) {
-      const handler = createToggleHandler(this.formData.feature_ids, { normalizeTypes: true });
-      return handler(featureId, value);
+    isFeatureSelected(feature) {
+      const featureId = String(feature.properties._id);
+      return this.formData.feature_ids.includes(featureId);
+    },
+    onFeatureCheckboxChange(feature, checked) {
+      const featureId = String(feature.properties._id);
+      const index = this.formData.feature_ids.indexOf(featureId);
+      if (checked && index === -1) {
+        this.formData.feature_ids.push(featureId);
+      } else if (!checked && index > -1) {
+        this.formData.feature_ids.splice(index, 1);
+      }
     },
     async fetchTags() {
       this.loadingTags = true;
@@ -328,12 +358,6 @@ export default {
       if (index > -1) {
         this.formData.tags.splice(index, 1);
       }
-    },
-    toggleTag(tag, value) {
-      return this.toggleTagHandler(tag, value);
-    },
-    toggleFeature(featureId, value) {
-      return this.toggleFeatureHandler(featureId, value);
     },
     async saveCollection() {
       if (!this.formData.name.trim()) {
@@ -386,6 +410,11 @@ export default {
       if (event.target === event.currentTarget) {
         this.closeDialog();
       }
+    },
+    handleEscapeKey(event) {
+      if (event.key === 'Escape') {
+        this.closeDialog();
+      }
     }
   },
   mounted() {
@@ -394,12 +423,27 @@ export default {
       this.formData.name = this.collection.name || '';
       this.formData.description = this.collection.description || '';
       this.formData.tags = this.collection.tags ? [...this.collection.tags] : [];
-      this.formData.feature_ids = this.collection.feature_ids ? [...this.collection.feature_ids] : [];
+      this.formData.feature_ids = this.collection.feature_ids
+        ? this.collection.feature_ids.map(id => String(id))
+        : [];
     }
     
     // Fetch available tags and features
     this.fetchTags();
     this.fetchFeatures();
+
+    // Prevent background scroll and move modal to body to avoid layout offsets
+    document.body.classList.add('overflow-hidden');
+    this.$nextTick(() => {
+      if (this.$el && this.$el.parentNode !== document.body) {
+        document.body.appendChild(this.$el);
+      }
+    });
+    document.addEventListener('keydown', this.handleEscapeKey);
+  },
+  beforeUnmount() {
+    document.body.classList.remove('overflow-hidden');
+    document.removeEventListener('keydown', this.handleEscapeKey);
   }
 };
 </script>

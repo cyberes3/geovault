@@ -1,11 +1,11 @@
 <template>
   <div class="space-y-6">
     <!-- Page Header -->
-    <div class="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
-      <div class="flex items-center justify-between">
+    <div class="bg-white rounded-lg shadow-sm border border-gray-200 p-4 sm:p-6">
+      <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between">
         <div>
           <div class="flex items-center">
-            <h1 class="text-2xl font-bold text-gray-900 mb-2">Import Data</h1>
+            <h1 class="text-xl sm:text-2xl font-bold text-gray-900 mb-2">Import Data</h1>
             <div v-if="isRefreshing" class="ml-3 flex items-center text-sm text-gray-500">
               <Loader size="sm" layout="inline" :showMessage="false" />
               <span class="ml-2">Updating...</span>
@@ -13,11 +13,11 @@
           </div>
           <p class="text-gray-600">Manage your geospatial data imports and view processing history.</p>
         </div>
-        <div class="flex items-center space-x-3">
+        <div class="flex flex-col sm:flex-row space-y-2 sm:space-y-0 sm:space-x-3 mt-4 sm:mt-0">
           <button
             @click="refreshTables"
             :disabled="isRefreshing"
-            class="inline-flex items-center px-3 py-2 border border-gray-300 text-sm font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 transition-colors duration-200 disabled:opacity-50 disabled:cursor-not-allowed"
+            class="w-full sm:w-auto inline-flex items-center justify-center px-3 py-2 border border-gray-300 text-sm font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 transition-colors duration-200 disabled:opacity-50 disabled:cursor-not-allowed"
             title="Refresh import queue and history"
           >
             <Loader v-if="isRefreshing" size="sm" layout="inline" :showMessage="false" />
@@ -28,7 +28,7 @@
           </button>
           <router-link
             to="/import/upload"
-            class="inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md text-white bg-blue-500 hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 transition-colors duration-200"
+            class="w-full sm:w-auto inline-flex items-center justify-center px-4 py-2 border border-transparent text-sm font-medium rounded-md text-white bg-blue-500 hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 transition-colors duration-200"
           >
             <svg class="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6v6m0 0v6m0-6h6m-6 0H6"></path>
@@ -40,50 +40,50 @@
     </div>
 
     <!-- Ready to Import Section -->
-    <div class="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
-      <h2 class="text-lg font-semibold text-gray-900 mb-4">Ready to Import</h2>
+    <div class="bg-white rounded-lg shadow-sm border border-gray-200 p-4 sm:p-6">
+      <h2 class="text-base sm:text-lg font-semibold text-gray-900 mb-4">Ready to Import</h2>
 
       <!-- Import queue component -->
       <ImportQueue :is-loading="importQueueIsLoading"/>
     </div>
 
     <!-- Import History Section -->
-    <div class="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
-      <h2 class="text-lg font-semibold text-gray-900 mb-4">Import History</h2>
+    <div class="bg-white rounded-lg shadow-sm border border-gray-200 p-4 sm:p-6">
+      <h2 class="text-base sm:text-lg font-semibold text-gray-900 mb-4">Import History</h2>
       <p class="text-sm text-gray-600 mb-4">Click to download your previously imported files.</p>
 
-      <div class="overflow-hidden">
+      <div class="overflow-x-auto">
         <table class="min-w-full divide-y divide-gray-200">
           <thead class="bg-gray-50">
             <tr>
-              <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">File Name</th>
-              <th class="px-6 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">Date/Time Imported</th>
+              <th class="px-3 py-3 sm:px-6 sm:py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">File Name</th>
+              <th class="px-3 py-3 sm:px-6 sm:py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">Date/Time Imported</th>
             </tr>
           </thead>
           <tbody class="bg-white divide-y divide-gray-200">
             <tr v-for="(item, index) in importHistory" :key="`history-${index}`" class="hover:bg-gray-50">
-              <td class="px-6 py-4 whitespace-nowrap">
-                <a :href="`${IMPORT_HISTORY_URL()}/${item.id}`" class="text-sm font-medium text-blue-500 hover:text-blue-700">
+              <td class="px-3 py-3 sm:px-6 sm:py-4 whitespace-nowrap">
+                <a :href="`${IMPORT_HISTORY_URL()}/${item.id}`" class="text-xs sm:text-sm font-medium text-blue-500 hover:text-blue-700">
                   {{ item.original_filename }}
                 </a>
               </td>
-              <td class="px-6 py-4 whitespace-nowrap text-center text-sm text-gray-900">
+              <td class="px-3 py-3 sm:px-6 sm:py-4 whitespace-nowrap text-center text-xs sm:text-sm text-gray-900">
                 {{ item.timestamp }}
               </td>
             </tr>
             <tr v-for="n in 3" v-if="combinedHistoryLoading" :key="`history-loading-${n}`" class="animate-pulse">
-              <td class="px-6 py-4 whitespace-nowrap">
+              <td class="px-3 py-3 sm:px-6 sm:py-4 whitespace-nowrap">
                 <div class="flex items-center">
                   <div class="w-8 h-8 bg-gray-200 rounded-lg"></div>
                   <div class="ml-4 w-32 h-4 bg-gray-200 rounded"></div>
                 </div>
               </td>
-              <td class="px-6 py-4 whitespace-nowrap text-center">
+              <td class="px-3 py-3 sm:px-6 sm:py-4 whitespace-nowrap text-center">
                 <div class="w-24 h-4 bg-gray-200 rounded mx-auto"></div>
               </td>
             </tr>
             <tr v-if="!combinedHistoryLoading && importHistory.length === 0">
-              <td colspan="3" class="px-6 py-12 text-center">
+              <td colspan="3" class="px-3 py-12 sm:px-6 text-center">
                 <div class="flex flex-col items-center">
                   <div class="w-12 h-12 bg-gray-100 rounded-full flex items-center justify-center mb-3">
                     <svg class="w-6 h-6 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">

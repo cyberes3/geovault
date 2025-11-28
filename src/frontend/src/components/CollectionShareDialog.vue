@@ -1,30 +1,39 @@
 <template>
-  <!-- Modal Backdrop -->
-  <div v-if="isOpen" ref="dialogBackdrop" class="fixed inset-0 z-50 overflow-y-auto" @mousedown="handleBackdropMouseDown" tabindex="-1" @keydown.esc="closeDialog">
-    <div class="flex items-center justify-center min-h-screen pt-4 px-4 pb-20 text-center sm:block sm:p-0">
-      <!-- Background overlay -->
-      <div class="fixed inset-0 bg-gray-500 bg-opacity-75 transition-opacity"></div>
+  <div
+    v-if="isOpen"
+    ref="dialogBackdrop"
+    class="fixed inset-0 z-50"
+    role="dialog"
+    aria-modal="true"
+    @mousedown="handleBackdropMouseDown"
+    tabindex="-1"
+  >
+    <!-- Background overlay -->
+    <div class="absolute inset-0 bg-black/50 transition-opacity"></div>
 
-      <!-- Modal panel -->
-      <div class="inline-block align-bottom bg-white rounded-lg text-left overflow-hidden shadow-xl transform transition-all sm:my-8 sm:align-middle sm:max-w-2xl sm:w-full" @click.stop @mousedown.stop>
+    <!-- Modal panel -->
+    <div class="absolute inset-0 flex items-stretch justify-stretch sm:items-center sm:justify-center">
+      <div
+        class="bg-white flex flex-col w-full h-full sm:h-[80vh] sm:max-w-2xl sm:rounded-lg shadow-xl overflow-hidden"
+        @click.stop
+        @mousedown.stop
+      >
         <!-- Header -->
-        <div class="bg-white px-6 py-4 border-b border-gray-200">
-          <div class="flex items-center justify-between">
-            <h3 class="text-lg font-medium text-gray-900">Share Collection: {{ collectionName }}</h3>
-            <button
-              @click="closeDialog"
-              class="text-gray-400 hover:text-gray-600 focus:outline-none focus:text-gray-600 transition ease-in-out duration-150"
-              title="Close dialog"
-            >
-              <svg class="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
-              </svg>
-            </button>
-          </div>
+        <div class="flex items-center justify-between px-6 py-4 border-b border-gray-200 bg-gray-50">
+          <h3 class="text-lg font-medium text-gray-900">Share Collection: {{ collectionName }}</h3>
+          <button
+            @click="closeDialog"
+            class="text-gray-400 hover:text-gray-600 focus:outline-none focus:text-gray-600 transition ease-in-out duration-150"
+            title="Close dialog"
+          >
+            <svg class="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
+            </svg>
+          </button>
         </div>
 
         <!-- Content -->
-        <div class="bg-white p-6 max-h-[80vh] flex flex-col">
+        <div class="flex-1 overflow-y-auto bg-white p-6 flex flex-col">
           <!-- Create New Share Section -->
           <div class="mb-6 flex-shrink-0">
             <h4 class="text-sm font-semibold text-gray-900 mb-4">Create New Share Link</h4>
@@ -223,26 +232,19 @@ export default {
       allowDownloads: false
     }
   },
-  mounted() {
-    // Add escape key listener on mount - it will check isOpen before acting
-    document.addEventListener('keydown', this.handleEscapeKey);
-    // If dialog is already open when component mounts (v-if case), load shares
-    if (this.isOpen) {
-      document.body.classList.add('overflow-hidden');
-      this.loadShares();
-      this.resetForm();
-    }
-  },
   watch: {
     isOpen(newVal) {
       if (newVal) {
         document.body.classList.add('overflow-hidden');
         this.loadShares();
         this.resetForm();
-        // Focus the dialog so it can receive keyboard events
+        // Focus the dialog so it can receive keyboard events and move to body to avoid layout offsets
         this.$nextTick(() => {
           if (this.$refs.dialogBackdrop) {
             this.$refs.dialogBackdrop.focus();
+          }
+          if (this.$el && this.$el.parentNode !== document.body) {
+            document.body.appendChild(this.$el);
           }
         });
       } else {
@@ -414,6 +416,21 @@ export default {
     formatDate(dateString) {
       const date = new Date(dateString);
       return date.toLocaleDateString() + ' ' + date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+    }
+  },
+  mounted() {
+    // Add escape key listener on mount - it will check isOpen before acting
+    document.addEventListener('keydown', this.handleEscapeKey);
+    // If dialog is already open when component mounts (v-if case), load shares
+    if (this.isOpen) {
+      document.body.classList.add('overflow-hidden');
+      this.loadShares();
+      this.resetForm();
+      this.$nextTick(() => {
+        if (this.$el && this.$el.parentNode !== document.body) {
+          document.body.appendChild(this.$el);
+        }
+      });
     }
   },
   beforeUnmount() {

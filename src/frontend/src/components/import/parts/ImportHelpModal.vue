@@ -1,13 +1,23 @@
 <template>
-  <div v-if="show" class="fixed inset-0 z-50 overflow-y-auto" aria-labelledby="modal-title" role="dialog" aria-modal="true">
+  <div
+      v-if="show"
+      class="fixed inset-0 z-50"
+      aria-labelledby="modal-title"
+      role="dialog"
+      aria-modal="true"
+      @click="close"
+  >
     <!-- Backdrop -->
-    <div class="fixed inset-0 bg-gray-500 bg-opacity-75 transition-opacity" @click="close"></div>
+    <div class="absolute inset-0 bg-black/50"></div>
 
     <!-- Modal Container -->
-    <div class="flex min-h-full items-center justify-center p-4">
-      <div class="relative bg-white rounded-lg shadow-xl w-full max-w-[80vw] max-h-[90vh] overflow-hidden flex flex-col">
-        <!-- Modal Header -->
-        <div class="flex items-center justify-between px-6 py-4 border-b border-gray-200">
+    <div class="absolute inset-0 flex items-stretch justify-stretch sm:items-center sm:justify-center">
+      <div
+          class="bg-white flex flex-col w-full h-full sm:h-[90vh] sm:max-w-3xl sm:rounded-lg shadow-xl"
+          @click.stop
+      >
+        <!-- Modal Header (sticky) -->
+        <div class="sticky top-0 z-10 flex items-center justify-between px-6 py-4 border-b border-gray-200 bg-gray-50">
           <h3 class="text-xl font-semibold text-gray-900" id="modal-title">Import Process Guide</h3>
           <button
               @click="close"
@@ -97,7 +107,10 @@
 
                   <div>
                     <h5 class="text-base font-semibold text-gray-900 mb-2">7. Storage in Import Queue</h5>
-                    <p class="text-sm">Processed features are stored in your import queue, ready for review and final import. You can see all uploaded files in the "Ready to Import" section below.</p>
+                    <p class="text-sm">
+                      Processed features are stored in your import queue, ready for review and final import. You can
+                      see all uploaded files in the \"Ready to Import\" section below.
+                    </p>
                   </div>
                 </div>
               </div>
@@ -211,16 +224,6 @@
             </section>
           </div>
         </div>
-
-        <!-- Modal Footer -->
-        <div class="px-6 py-4 border-t border-gray-200 flex justify-end">
-          <button
-              @click="close"
-              class="inline-flex items-center px-4 py-2 border border-gray-300 text-sm font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 transition-colors duration-200"
-          >
-            Close
-          </button>
-        </div>
       </div>
     </div>
   </div>
@@ -259,6 +262,12 @@ export default {
       // Prevent body scroll when modal is open
       if (newVal) {
         document.body.style.overflow = 'hidden'
+        // Move modal to body to avoid parent container offsets
+        this.$nextTick(() => {
+          if (this.$el && this.$el.parentNode !== document.body) {
+            document.body.appendChild(this.$el)
+          }
+        })
       } else {
         document.body.style.overflow = ''
       }

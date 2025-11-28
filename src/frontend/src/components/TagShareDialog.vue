@@ -1,33 +1,43 @@
 <template>
-  <!-- Modal Backdrop -->
-  <div v-if="isOpen" class="fixed inset-0 z-50 overflow-y-auto" @mousedown="handleBackdropMouseDown">
-    <div class="flex items-center justify-center min-h-screen pt-4 px-4 pb-20 text-center sm:block sm:p-0">
-      <!-- Background overlay -->
-      <div class="fixed inset-0 bg-gray-500 bg-opacity-75 transition-opacity"></div>
+  <div
+    v-if="isOpen"
+    class="fixed inset-0 z-50"
+    role="dialog"
+    aria-modal="true"
+    @mousedown="handleBackdropMouseDown"
+  >
+    <!-- Backdrop -->
+    <div class="absolute inset-0 bg-black/50"></div>
 
-      <!-- Modal panel -->
-      <div class="inline-block align-bottom bg-white rounded-lg text-left overflow-hidden shadow-xl transform transition-all sm:my-8 sm:align-middle sm:max-w-2xl sm:w-full" @click.stop @mousedown.stop>
-        <!-- Header -->
-        <div class="bg-white px-6 py-4 border-b border-gray-200">
-          <div class="flex items-center justify-between">
-            <h3 class="text-lg font-medium text-gray-900">Share Tag: {{ tag }}</h3>
-            <button
-              @click="closeDialog"
-              class="text-gray-400 hover:text-gray-600 focus:outline-none focus:text-gray-600 transition ease-in-out duration-150"
-              title="Close dialog"
-            >
-              <svg class="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
-              </svg>
-            </button>
-          </div>
-        </div>
+    <!-- Modal panel -->
+    <div class="absolute inset-0 flex items-stretch justify-stretch sm:items-center sm:justify-center">
+      <div
+        class="bg-white flex flex-col w-full h-full sm:h-[90vh] sm:max-w-3xl sm:rounded-lg shadow-xl"
+        @mousedown.stop
+        @click.stop
+      >
+      <!-- Header (sticky) -->
+      <header class="sticky top-0 z-10 flex items-center justify-between px-6 py-4 border-b border-gray-200 bg-gray-50">
+        <h3 class="text-lg sm:text-xl font-semibold text-gray-900">
+          Share Tag: <span class="font-bold">{{ tag }}</span>
+        </h3>
+        <button
+          @click="closeDialog"
+          class="text-gray-400 hover:text-gray-600 focus:outline-none focus:text-gray-600 transition ease-in-out duration-150"
+          title="Close dialog"
+        >
+          <svg class="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
+          </svg>
+        </button>
+      </header>
 
-        <!-- Content -->
-        <div class="bg-white p-6 max-h-[80vh] flex flex-col">
+      <!-- Content -->
+      <main class="flex-1 overflow-y-auto px-4 sm:px-6 py-4 bg-gray-50">
+        <div class="max-w-3xl mx-auto space-y-6">
           <!-- Create New Share Section -->
-          <div class="mb-6 flex-shrink-0">
-            <h4 class="text-sm font-semibold text-gray-900 mb-4">Create New Share Link</h4>
+          <section class="bg-white rounded-lg shadow-sm border border-gray-200 p-4 sm:p-6">
+            <h4 class="text-base font-semibold text-gray-900 mb-4">Create New Share Link</h4>
 
             <div class="space-y-4">
               <!-- Tag Name (read-only) -->
@@ -41,7 +51,7 @@
               </div>
 
               <!-- Allow Downloads Toggle -->
-              <div class="flex items-center gap-3">
+              <div class="flex items-center gap-3 mt-4">
                 <div class="flex-shrink-0">
                   <ToggleButton
                     v-model="allowDownloads"
@@ -55,15 +65,17 @@
               </div>
 
               <!-- Create Button -->
-              <button
-                @click="createShare"
-                :disabled="creating"
-                class="inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md text-white bg-blue-500 hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 disabled:opacity-50 disabled:cursor-not-allowed"
-                title="Create new share link"
-              >
-                <span v-if="creating">Creating...</span>
-                <span v-else>Create Share Link</span>
-              </button>
+              <div class="mt-4">
+                <button
+                  @click="createShare"
+                  :disabled="creating"
+                  class="inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md text-white bg-blue-600 hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 disabled:opacity-50 disabled:cursor-not-allowed"
+                  title="Create new share link"
+                >
+                  <span v-if="creating">Creating...</span>
+                  <span v-else>Create Share Link</span>
+                </button>
+              </div>
 
               <!-- Error Message -->
               <div v-if="error" class="p-3 bg-red-50 border border-red-200 rounded-md">
@@ -75,13 +87,13 @@
                 <p class="text-sm text-green-800">{{ successMessage }}</p>
               </div>
             </div>
-          </div>
+          </section>
 
           <!-- Existing Shares Section -->
-          <div class="flex-1 min-h-0 flex flex-col">
-            <h4 class="text-sm font-semibold text-gray-900 mb-4 flex-shrink-0">Existing Share Links</h4>
+          <section class="bg-white rounded-lg shadow-sm border border-gray-200 flex-1 min-h-0 flex flex-col">
+            <h4 class="text-base font-semibold text-gray-900 px-4 sm:px-6 pt-4 mb-3 flex-shrink-0">Existing Share Links</h4>
 
-            <div class="overflow-y-auto flex-1 min-h-[100px] -mr-2 pr-2">
+            <div class="overflow-y-auto flex-1 min-h-[100px] px-4 sm:px-6 pb-4 -mr-2 pr-2">
               <div v-if="loading" class="text-center py-4">
                 <Loader size="sm" layout="centered" message="Loading shares..." />
               </div>
@@ -93,71 +105,75 @@
               <div v-else class="space-y-3">
                 <div
                   v-for="share in tagShares"
-                :key="share.share_id"
-                class="border border-gray-200 rounded-lg p-4 hover:bg-gray-50 transition-colors"
-              >
-                <div class="flex items-start justify-between">
-                  <div class="flex-1 min-w-0">
-                    <!-- Share Link -->
-                    <div class="mb-2">
-                      <label class="block text-xs font-medium text-gray-700 mb-1">Share Link</label>
-                      <div class="flex items-center space-x-2">
-                        <input
-                          :value="share.url"
-                          readonly
-                          class="flex-1 px-3 py-2 text-sm border border-gray-300 rounded-md bg-gray-50 text-gray-700 font-mono"
-                        />
-                        <button
-                          @click="copyToClipboard(share.url)"
-                          class="inline-flex items-center px-3 py-2 border border-gray-300 rounded-md text-sm font-medium text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500"
-                          :title="copiedShareId === share.share_id ? 'Copied!' : 'Copy link'"
+                  :key="share.share_id"
+                  class="border border-gray-200 rounded-lg p-4 bg-gray-50 hover:bg-white transition-colors"
+                >
+                  <div class="flex items-start justify-between">
+                    <div class="flex-1 min-w-0">
+                      <!-- Share Link -->
+                      <div class="mb-2">
+                        <label class="block text-xs font-medium text-gray-700 mb-1">Share Link</label>
+                        <div class="flex items-center space-x-2">
+                          <input
+                            :value="share.url"
+                            readonly
+                            class="flex-1 px-3 py-2 text-sm border border-gray-300 rounded-md bg-gray-50 text-gray-700 font-mono"
+                          />
+                          <button
+                            @click="copyToClipboard(share.url)"
+                            class="inline-flex items-center px-3 py-2 border border-gray-300 rounded-md text-sm font-medium text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500"
+                            :title="copiedShareId === share.share_id ? 'Copied!' : 'Copy link'"
+                          >
+                            <svg v-if="copiedShareId !== share.share_id" class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z" />
+                            </svg>
+                            <svg v-else class="w-4 h-4 text-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7" />
+                            </svg>
+                          </button>
+                        </div>
+                      </div>
+
+                      <!-- Share Info -->
+                      <div class="mt-3 flex flex-wrap gap-x-6 gap-y-1 text-xs text-gray-600">
+                        <div class="flex items-center gap-1">
+                          <span class="font-medium">Created:</span>
+                          <span>{{ formatDate(share.created_at) }}</span>
+                        </div>
+                        <div class="flex items-center gap-1">
+                          <span class="font-medium">Access Count:</span>
+                          <span>{{ share.access_count }}</span>
+                        </div>
+                        <div
+                          v-if="share.allow_downloads !== undefined"
+                          class="flex items-center gap-1"
                         >
-                          <svg v-if="copiedShareId !== share.share_id" class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z"></path>
-                          </svg>
-                          <svg v-else class="w-4 h-4 text-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"></path>
-                          </svg>
-                        </button>
+                          <span class="font-medium">Download:</span>
+                          <span>{{ share.allow_downloads ? 'Yes' : 'No' }}</span>
+                        </div>
                       </div>
                     </div>
 
-                    <!-- Share Info -->
-                    <div class="grid grid-cols-3 gap-4 text-xs text-gray-600">
-                      <div>
-                        <span class="font-medium">Created:</span>
-                        <span class="ml-1">{{ formatDate(share.created_at) }}</span>
-                      </div>
-                      <div>
-                        <span class="font-medium">Access Count:</span>
-                        <span class="ml-1">{{ share.access_count }}</span>
-                      </div>
-                      <div v-if="share.allow_downloads !== undefined">
-                        <span class="font-medium">Download:</span>
-                        <span class="ml-1">{{ share.allow_downloads ? 'Yes' : 'No' }}</span>
-                      </div>
-                    </div>
+                    <!-- Delete Button -->
+                    <button
+                      @click="deleteShare(share.share_id)"
+                      :disabled="deletingShareId === share.share_id"
+                      class="ml-4 p-2 text-red-600 hover:text-red-800 hover:bg-red-50 rounded-md focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-red-500 disabled:opacity-50"
+                      title="Delete share"
+                    >
+                      <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                      </svg>
+                    </button>
                   </div>
-
-                  <!-- Delete Button -->
-                  <button
-                    @click="deleteShare(share.share_id)"
-                    :disabled="deletingShareId === share.share_id"
-                    class="ml-4 p-2 text-red-600 hover:text-red-800 hover:bg-red-50 rounded-md focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-red-500 disabled:opacity-50"
-                    title="Delete share"
-                  >
-                    <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"></path>
-                    </svg>
-                  </button>
                 </div>
               </div>
             </div>
-          </div>
+          </section>
         </div>
+      </main>
       </div>
     </div>
-  </div>
   </div>
 </template>
 
@@ -203,6 +219,12 @@ export default {
         this.resetForm();
         // Add escape key listener when dialog opens
         document.addEventListener('keydown', this.handleEscapeKey);
+        // Move modal to body to avoid parent container offsets
+        this.$nextTick(() => {
+          if (this.$el && this.$el.parentNode !== document.body) {
+            document.body.appendChild(this.$el);
+          }
+        });
       } else {
         document.body.classList.remove('overflow-hidden');
         // Remove escape key listener when dialog closes
