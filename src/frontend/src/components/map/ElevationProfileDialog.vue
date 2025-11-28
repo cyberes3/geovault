@@ -48,6 +48,19 @@
             <span class="text-gray-600 mr-1">Max:</span>
             <span class="font-medium text-gray-900">{{ stats.maxElevation }}</span>
           </div>
+          <!-- Speed stats (only show if available) -->
+          <div v-if="stats.movingAverageSpeed" class="flex items-center">
+            <span class="text-gray-600 mr-1">Mov Avg:</span>
+            <span class="font-medium text-gray-900">{{ stats.movingAverageSpeed }}</span>
+          </div>
+          <div v-if="stats.totalMovingTime" class="flex items-center">
+            <span class="text-gray-600 mr-1">Moving:</span>
+            <span class="font-medium text-gray-900">{{ stats.totalMovingTime }}</span>
+          </div>
+          <div v-if="stats.totalTrackTime" class="flex items-center">
+            <span class="text-gray-600 mr-1">Total:</span>
+            <span class="font-medium text-gray-900">{{ stats.totalTrackTime }}</span>
+          </div>
         </div>
         <div v-else-if="isUpdatingChart" class="flex flex-wrap gap-x-3 gap-y-1 text-[10px] md:text-xs justify-between md:justify-start w-full animate-pulse">
           <!-- Dist -->
@@ -117,8 +130,6 @@
 <script>
 import axios from 'axios'
 import { Chart, registerables } from 'chart.js'
-import { GeoJSON } from 'ol/format'
-import { toLonLat } from 'ol/proj'
 import { getCookie } from '@/assets/js/auth.js'
 import Loader from '@/components/parts/Loader.vue'
 import { 
@@ -127,8 +138,20 @@ import {
   getElevationUnitLabel, 
   getDistanceUnitLabel,
   formatDistance,
-  formatElevation 
+  formatElevation,
+  formatSpeed,
+  getSpeedUnitLabel
 } from '@/utils/units'
+import {
+  haversineDistance,
+  extractCoordinates,
+  extractTimestamps,
+  processElevationData,
+  mapDistanceToCoordinate,
+  smoothElevationData,
+  calculateSpeeds,
+  calculateSpeedStats
+} from '@/utils/map/utils/elevationProfileUtils'
 
 Chart.register(...registerables)
 
@@ -277,190 +300,16 @@ export default {
       return `rgb(${r}, ${g}, ${b})`
     },
 
-    /**
-     * Calculate distance between two coordinates using Haversine formula
-     * Returns distance in meters
-     */
-    haversineDistance(lat1, lon1, lat2, lon2) {
-      const R = 6371000 // Earth radius in meters
-      const phi1 = (lat1 * Math.PI) / 180
-      const phi2 = (lat2 * Math.PI) / 180
-      const deltaPhi = ((lat2 - lat1) * Math.PI) / 180
-      const deltaLambda = ((lon2 - lon1) * Math.PI) / 180
-
-      const a =
-        Math.sin(deltaPhi / 2) * Math.sin(deltaPhi / 2) +
-        Math.cos(phi1) * Math.cos(phi2) * Math.sin(deltaLambda / 2) * Math.sin(deltaLambda / 2)
-      const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a))
-
-      return R * c
-    },
-
-    /**
-     * Extract coordinates from OpenLayers geometry
-     * Returns array of [lon, lat, elevation] coordinates
-     */
-    extractCoordinates(geometry) {
-      if (!geometry) return []
-
-      const format = new GeoJSON()
-      const geometryJson = format.writeGeometryObject(geometry, {
-        featureProjection: 'EPSG:3857',
-        dataProjection: 'EPSG:4326'
-      })
-
-      const geomType = geometryJson.type
-      const coords = geometryJson.coordinates
-
-      if (geomType === 'LineString') {
-        // LineString: [[lon, lat, ele], ...]
-        return coords || []
-      } else if (geomType === 'MultiLineString') {
-        // MultiLineString: [[[lon, lat, ele], ...], [[lon, lat, ele], ...], ...]
-        // Merge all lines into one continuous array
-        const merged = []
-        if (Array.isArray(coords)) {
-          for (const line of coords) {
-            if (Array.isArray(line)) {
-              merged.push(...line)
-            }
-          }
-        }
-        return merged
-      }
-
-      return []
-    },
-
-    /**
-     * Process elevation data and calculate cumulative distances
-     * Returns { distances: [], elevations: [], coordinateMapping: [] } where distances and elevations are in user preferred units
-     * coordinateMapping maps chart data indices to original coordinates [lon, lat]
-     */
-    processElevationData(coordinates) {
-      const distances = [0] // Start at 0
-      const elevations = []
-      const coordinateMapping = [] // Maps chart index to [lon, lat]
-      let cumulativeDistance = 0 // in meters
-
-      // Get conversion factors
-      const elevationMultiplier = getElevationMultiplier()
-      const distanceMultiplier = getDistanceMultiplier()
-
-      // Filter out points without elevation data and process
-      const validPoints = []
-      for (const coord of coordinates) {
-        if (Array.isArray(coord) && coord.length >= 3) {
-          const elevation = coord[2]
-          // Check if elevation exists and is not 0 (0 might be a placeholder)
-          if (elevation !== null && elevation !== undefined && elevation !== 0) {
-            validPoints.push(coord)
-          }
-        }
-      }
-
-      if (validPoints.length === 0) {
-        return { distances: [], elevations: [], coordinateMapping: [] }
-      }
-
-      // Add first point - convert elevation from meters to user unit
-      elevations.push(validPoints[0][2] * elevationMultiplier)
-      coordinateMapping.push([validPoints[0][0], validPoints[0][1]]) // [lon, lat]
-
-      // Process remaining points
-      for (let i = 1; i < validPoints.length; i++) {
-        const prevCoord = validPoints[i - 1]
-        const currCoord = validPoints[i]
-
-        // Calculate distance between consecutive points
-        const distanceMeters = this.haversineDistance(
-          prevCoord[1], // lat1
-          prevCoord[0], // lon1
-          currCoord[1], // lat2
-          currCoord[0]  // lon2
-        )
-
-        // Add to cumulative distance
-        cumulativeDistance += distanceMeters
-
-        // Convert to user distance unit (miles or km)
-        const distanceUserUnit = cumulativeDistance * distanceMultiplier
-
-        distances.push(distanceUserUnit)
-        // Convert elevation from meters to user unit (feet or meters)
-        elevations.push(currCoord[2] * elevationMultiplier)
-        // Store coordinate mapping
-        coordinateMapping.push([currCoord[0], currCoord[1]]) // [lon, lat]
-      }
-
-      return { distances, elevations, coordinateMapping }
-    },
-
-    /**
-     * Map chart distance (in user units) to corresponding coordinate on the line
-     * Returns [lon, lat] or null if not found
-     */
-    mapDistanceToCoordinate(targetDistance) {
-      if (!this.distances || !this.coordinateMapping || this.distances.length === 0) {
-        return null
-      }
-
-      // Find the segment that contains this distance
-      for (let i = 0; i < this.distances.length - 1; i++) {
-        const dist1 = this.distances[i]
-        const dist2 = this.distances[i + 1]
-
-        if (targetDistance >= dist1 && targetDistance <= dist2) {
-          // Interpolate between the two points
-          const ratio = (targetDistance - dist1) / (dist2 - dist1)
-          const coord1 = this.coordinateMapping[i]
-          const coord2 = this.coordinateMapping[i + 1]
-
-          // Linear interpolation
-          const lon = coord1[0] + (coord2[0] - coord1[0]) * ratio
-          const lat = coord1[1] + (coord2[1] - coord1[1]) * ratio
-
-          return [lon, lat]
-        }
-      }
-
-      // If beyond the last point, return the last coordinate
-      if (targetDistance >= this.distances[this.distances.length - 1]) {
-        return this.coordinateMapping[this.coordinateMapping.length - 1]
-      }
-
-      // If before the first point, return the first coordinate
-      if (targetDistance <= this.distances[0]) {
-        return this.coordinateMapping[0]
-      }
-
-      return null
-    },
-
-    /**
-     * Smooth elevation data using a moving average to reduce GPS noise
-     * This is commonly used in GPS software to get more accurate elevation gain/loss
-     */
-    smoothElevationData(elevations, windowSize = 10) {
-      if (elevations.length === 0) return []
-      if (elevations.length <= windowSize) return elevations
-
-      const smoothed = []
-      for (let i = 0; i < elevations.length; i++) {
-        const start = Math.max(0, i - Math.floor(windowSize / 2))
-        const end = Math.min(elevations.length, i + Math.ceil(windowSize / 2))
-        const window = elevations.slice(start, end)
-        const avg = window.reduce((a, b) => a + b, 0) / window.length
-        smoothed.push(avg)
-      }
-      return smoothed
-    },
 
     /**
      * Calculate statistics from elevation data
      * Returns stats object with formatted values
+     * @param {Array} distances - Array of cumulative distances in user units
+     * @param {Array} elevations - Array of elevations in user units
+     * @param {Array} distancesMeters - Array of cumulative distances in meters (for speed calculations)
+     * @param {Array} timestamps - Array of ISO timestamp strings (optional, for speed calculations)
      */
-    calculateStats(distances, elevations) {
+    calculateStats(distances, elevations, distancesMeters = null, timestamps = null) {
       if (distances.length === 0 || elevations.length === 0) {
         return null
       }
@@ -486,7 +335,7 @@ export default {
 
       // Gross elevation change (sum of all positive and negative changes)
       // Use smoothed elevation data to filter out GPS noise
-      const smoothedElevations = this.smoothElevationData(elevations)
+      const smoothedElevations = smoothElevationData(elevations)
       let grossAscent = 0
       let grossDescent = 0
 
@@ -505,7 +354,7 @@ export default {
         }
       }
 
-      return {
+      const stats = {
         totalDistance,
         totalElevationChange: totalElevationChangeFormatted,
         elevationRange,
@@ -514,6 +363,21 @@ export default {
         minElevation: `${minElevation.toFixed(0)} ${elevUnit}`,
         maxElevation: `${maxElevation.toFixed(0)} ${elevUnit}`
       }
+
+      // Calculate speed stats if timestamps and distances in meters are available
+      // Note: Timestamps are only available for GPX tracks/routes with time data.
+      // Manually drawn features or features without time data won't have speed stats.
+      if (timestamps && timestamps.length >= 2 && distancesMeters && distancesMeters.length >= 2) {
+        const speeds = calculateSpeeds(distancesMeters, timestamps)
+        const speedStats = calculateSpeedStats(speeds, distancesMeters, timestamps)
+        if (speedStats) {
+          stats.movingAverageSpeed = speedStats.movingAverageSpeed
+          stats.totalMovingTime = speedStats.totalMovingTime
+          stats.totalTrackTime = speedStats.totalTrackTime
+        }
+      }
+
+      return stats
     },
 
     /**
@@ -573,7 +437,7 @@ export default {
       }
 
       // Extract coordinates
-      let coordinates = this.extractCoordinates(geometry)
+      let coordinates = extractCoordinates(geometry)
       if (coordinates.length === 0) {
         this.hasElevationData = false
         this.stats = null
@@ -601,8 +465,11 @@ export default {
       }
       // If using GPS elevations, coordinates already contain them from extractCoordinates
 
+      // Extract timestamps from coordinateProperties
+      const timestamps = extractTimestamps(this.feature)
+
       // Process elevation data
-      const { distances, elevations, coordinateMapping } = this.processElevationData(coordinates)
+      const { distances, distancesMeters, elevations, coordinateMapping, timestamps: validTimestamps } = processElevationData(coordinates, timestamps)
 
       if (distances.length === 0 || elevations.length === 0) {
         this.hasElevationData = false
@@ -617,8 +484,8 @@ export default {
       this.coordinateMapping = coordinateMapping
       this.distances = distances
 
-      // Calculate statistics
-      this.stats = this.calculateStats(distances, elevations)
+      // Calculate statistics (include speed stats if timestamps available)
+      this.stats = this.calculateStats(distances, elevations, distancesMeters, validTimestamps)
       this.hasElevationData = true
 
       // Wait for next tick to ensure canvas is rendered
@@ -821,7 +688,7 @@ export default {
             }
 
             // Map distance to coordinate
-            const coordinate = component.mapDistanceToCoordinate(distanceMiles)
+            const coordinate = mapDistanceToCoordinate(distanceMiles, component.distances, component.coordinateMapping)
             if (coordinate && Array.isArray(coordinate) && coordinate.length >= 2) {
               // Only emit if coordinate changed (avoid unnecessary emissions)
               const coordKey = `${coordinate[0].toFixed(6)},${coordinate[1].toFixed(6)}`

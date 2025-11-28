@@ -7,6 +7,8 @@ const SQ_METERS_TO_SQ_FEET = 10.7639;
 const SQ_METERS_TO_SQ_MILES = 3.861e-7;
 const SQ_METERS_TO_SQ_KM = 1e-6;
 const SQ_METERS_TO_ACRES = 0.000247105;
+const MPS_TO_MPH = 2.23694;
+const MPS_TO_KMH = 3.6;
 
 /**
  * Get current unit preference from store
@@ -144,5 +146,62 @@ export function getElevationUnitLabel() {
  */
 export function getDistanceUnitLabel() {
   return getUnitPreference() === 'imperial' ? 'mi' : 'km';
+}
+
+/**
+ * Get raw multiplier for converting m/s to user's preferred speed unit
+ * Useful for charts/graphs where we need uniform units
+ * @returns {number} Multiplier
+ */
+export function getSpeedMultiplier() {
+  return getUnitPreference() === 'imperial' ? MPS_TO_MPH : MPS_TO_KMH;
+}
+
+/**
+ * Get the label for the speed unit
+ * @returns {string} 'mph' or 'km/h'
+ */
+export function getSpeedUnitLabel() {
+  return getUnitPreference() === 'imperial' ? 'mph' : 'km/h';
+}
+
+/**
+ * Format speed string based on user preference
+ * @param {number} metersPerSecond - Speed in meters per second
+ * @param {number} decimals - Number of decimal places
+ * @returns {string} Formatted string (e.g. "12.5 mph" or "20.1 km/h")
+ */
+export function formatSpeed(metersPerSecond, decimals = 1) {
+  if (metersPerSecond === null || metersPerSecond === undefined || isNaN(metersPerSecond)) return 'N/A';
+  const multiplier = getSpeedMultiplier();
+  const unit = getSpeedUnitLabel();
+  const value = metersPerSecond * multiplier;
+  return `${value.toFixed(decimals)} ${unit}`;
+}
+
+/**
+ * Format time duration in a human-readable format
+ * @param {number} seconds - Duration in seconds
+ * @returns {string} Formatted string (e.g. "1h 23m 45s" or "45m 30s" or "30s")
+ */
+export function formatDuration(seconds) {
+  if (seconds === null || seconds === undefined || isNaN(seconds) || seconds < 0) return 'N/A';
+  
+  const hours = Math.floor(seconds / 3600);
+  const minutes = Math.floor((seconds % 3600) / 60);
+  const secs = Math.floor(seconds % 60);
+  
+  const parts = [];
+  if (hours > 0) {
+    parts.push(`${hours}h`);
+  }
+  if (minutes > 0) {
+    parts.push(`${minutes}m`);
+  }
+  if (secs > 0 || parts.length === 0) {
+    parts.push(`${secs}s`);
+  }
+  
+  return parts.join(' ');
 }
 

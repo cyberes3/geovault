@@ -1,4 +1,3 @@
-Spatial statistics
 Visibility: private, public, restricted (only logged in users)
 Bulk tagging and styling on import page
 
@@ -11,11 +10,6 @@ Plugin to automatically pull saved locations from Google maps. Support multiple 
 Search box to call novatium/overpass to search for locations and zoom the map to them
 Upload and attach photos to features, add full screen photo gallery viewer
 Auto tag based on time, uploaded file name, and region from osm (natl forest, state, town if one in 10 miles)
-Use Elastic search
-Store data as geo JSON
-Only import KML/kmz not gpx due to only one dev
-Detect duplicate file uploads based on their file hash
-Modify existing features based on imported file name (features are linked to the file name that imported them)
 Auto scrape inreach tracks and present the user with a dialog to import them (also tag them as inreach)
 When importing, detect speed of track and add a driving tag if fast
 Show track direction when clicked
