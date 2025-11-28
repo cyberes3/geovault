@@ -3,6 +3,7 @@ Import queue WebSocket module.
 """
 
 import json
+import traceback
 
 from channels.db import database_sync_to_async
 from django.core.serializers.json import DjangoJSONEncoder
@@ -38,7 +39,7 @@ class ImportQueueModule(BaseWebSocketModule):
             # Send initial state
             await self.send_to_client('initial_state', queue_data)
         except Exception as e:
-            logger.error(f"Error sending initial state to user {self.user.id}: {str(e)}")
+            logger.error(f"Error sending initial state to user {self.user.id}: {traceback.format_exc()}")
             await self.send_to_client('error', {'message': 'Failed to load import queue data'})
 
     @database_sync_to_async

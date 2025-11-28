@@ -19,6 +19,44 @@ from geo_lib.logging.console import get_job_logger
 logger = get_job_logger()
 
 
+COORDINATE_TOLERANCE = 1e-6
+
+GEOM_TYPE_MAPPING = {
+    'point': 'Point',
+    'multipoint': 'MultiPoint',
+    'linestring': 'LineString',
+    'multilinestring': 'MultiLineString',
+    'polygon': 'Polygon',
+    'multipolygon': 'MultiPolygon',
+}
+
+
+def _format_existing_feature(existing: Dict[str, Any]) -> Dict[str, Any]:
+    """
+    Format an existing feature from the database for consistent use.
+    Ensures timestamps are serialized and GeoJSON structure is standardized.
+    """
+    # Get GeoJSON data (parse if string)
+    geojson_data = existing['geojson']
+    if isinstance(geojson_data, str):
+        geojson_data = json.loads(geojson_data)
+
+    # Handle timestamp serialization
+    timestamp = existing['timestamp']
+    if hasattr(timestamp, 'isoformat'):
+        timestamp_str = timestamp.isoformat()
+    else:
+        timestamp_str = str(timestamp)
+
+    return {
+        'id': existing['id'],
+        'name': geojson_data.get('properties', {}).get('name', 'Unnamed'),
+        'type': geojson_data.get('geometry', {}).get('type', 'Unknown'),
+        'timestamp': timestamp_str,
+        'geojson': geojson_data
+    }
+
+
 def strip_duplicate_features(features) -> Tuple[List[Any], int, ImportLog]:
     """Remove 100% duplicate features and log the process."""
     import_log = ImportLog()
@@ -56,7 +94,7 @@ def strip_duplicate_features(features) -> Tuple[List[Any], int, ImportLog]:
     return unique_features, duplicate_feature_count, import_log
 
 
-def normalize_coordinates(coords: List, tolerance: float = 1e-6) -> List:
+def normalize_coordinates(coords: List, tolerance: float = COORDINATE_TOLERANCE) -> List:
     """Normalize coordinates by rounding to specified tolerance."""
     if not coords:
         return []
@@ -69,7 +107,7 @@ def normalize_coordinates(coords: List, tolerance: float = 1e-6) -> List:
         return [normalize_coordinates(coord, tolerance) for coord in coords]
 
 
-def coordinates_match(coord1: List, coord2: List, tolerance: float = 1e-6) -> bool:
+def coordinates_match(coord1: List, coord2: List, tolerance: float = COORDINATE_TOLERANCE) -> bool:
     """Check if two coordinate sets match within tolerance."""
     norm1 = normalize_coordinates(coord1, tolerance)
     norm2 = normalize_coordinates(coord2, tolerance)
@@ -204,12 +242,13 @@ def _find_coordinate_duplicates_batched(features: List[Dict], user_id: int, impo
                     else:
                         geom_type_name = geom_type.title()
 
+                    # Create GEOS object temporarily for spatial query (not stored in feature dict)
                     geom_data = {
                         'type': geom_type_name,
                         'coordinates': normalized_coords
                     }
                     geometry = GEOSGeometry(json.dumps(geom_data))
-                    batch_geometries.append((idx, feature, geometry))
+                    batch_geometries.append((idx, feature, normalized_coords, geometry))
                 except Exception as e:
                     import_log.add(f"Failed to create geometry for feature {idx}: {str(e)}", 'Find Coordinate Duplicates')
                     logger.error(f"Failed to create geometry for feature {idx}: {traceback.format_exc()}")
@@ -218,35 +257,38 @@ def _find_coordinate_duplicates_batched(features: List[Dict], user_id: int, impo
             if not batch_geometries:
                 continue
 
-            # Single database query for the entire batch
+            # Single database query for the entire batch using spatial index
             try:
-                geometries = [geom for _, _, geom in batch_geometries]
+                # Extract GEOS objects for spatial query (temporary, not stored in feature dicts)
+                geometries = [geom for _, _, _, geom in batch_geometries]
                 existing_features = FeatureStore.objects.filter(
                     user_id=user_id,
                     geometry__in=geometries
-                ).values('id', 'geojson', 'timestamp', 'geometry')
+                ).values('id', 'geojson', 'timestamp')
 
                 # Create a lookup map for existing features using normalized coordinates
                 # This handles floating point precision differences better than WKT comparison
                 existing_lookup = {}
                 for existing in existing_features:
-                    # Get coordinates from geojson and normalize them
-                    existing_geojson = existing['geojson'] if isinstance(existing['geojson'], dict) else json.loads(existing['geojson'])
+                    # Format the feature using the helper
+                    formatted_existing = _format_existing_feature(existing)
+                    existing_geojson = formatted_existing['geojson']
+                    
+                    # Get coordinates from formatted geojson and normalize them
                     existing_coords = existing_geojson.get('geometry', {}).get('coordinates', [])
                     if existing_coords:
                         normalized_existing_coords = normalize_coordinates(existing_coords)
+                        
                         # Use normalized coordinates as key for lookup
                         coords_key = json.dumps(normalized_existing_coords, sort_keys=True)
                         if coords_key not in existing_lookup:
                             existing_lookup[coords_key] = []
-                        existing_lookup[coords_key].append(existing)
+                        existing_lookup[coords_key].append(formatted_existing)
 
                 # Check each feature in the batch using normalized coordinate comparison
-                for idx, feature, geometry in batch_geometries:
-                    # Get normalized coordinates from the feature (already normalized when creating geometry)
-                    feature_coords = feature.get('geometry', {}).get('coordinates', [])
-                    normalized_feature_coords = normalize_coordinates(feature_coords)
-                    coords_key = json.dumps(normalized_feature_coords, sort_keys=True)
+                for idx, feature, normalized_coords, _ in batch_geometries:
+                    # Use the already normalized coordinates
+                    coords_key = json.dumps(normalized_coords, sort_keys=True)
                     
                     if coords_key in existing_lookup:
                         # This is a duplicate
@@ -288,23 +330,12 @@ def _find_existing_features_by_coordinates(coordinates: List, geom_type: str, us
         if not normalized_coords:
             return []
         
-        # Map geometry types to GeoJSON types
-        geom_mapping = {
-            'point': 'Point',
-            'multipoint': 'MultiPoint',
-            'linestring': 'LineString',
-            'multilinestring': 'MultiLineString',
-            'polygon': 'Polygon',
-            'multipolygon': 'MultiPolygon',
-        }
-        
-        if geom_type not in geom_mapping:
+        if geom_type not in GEOM_TYPE_MAPPING:
             return []
             
-        # Create GEOSGeometry for spatial filter
-        # We use the normalized coordinates to ensure consistency
+        # Create GEOSGeometry temporarily for spatial filter (not stored in data structures)
         geojson_geom = {
-            "type": geom_mapping[geom_type],
+            "type": GEOM_TYPE_MAPPING[geom_type],
             "coordinates": normalized_coords
         }
         
@@ -317,10 +348,9 @@ def _find_existing_features_by_coordinates(coordinates: List, geom_type: str, us
 
         # Use spatial index to find candidates within small tolerance
         # 1e-6 degrees is roughly 10cm
-        # fetching only needed fields
         candidates = FeatureStore.objects.filter(
             user_id=user_id,
-            geometry__dwithin=(target_geometry, 1e-6)
+            geometry__dwithin=(target_geometry, COORDINATE_TOLERANCE)
         ).values('id', 'geojson', 'timestamp')
 
         # Filter candidates using exact normalized coordinate comparison
@@ -343,14 +373,7 @@ def _find_existing_features_by_coordinates(coordinates: List, geom_type: str, us
         # Convert to result format
         result = []
         for feature in existing_features:
-            geojson_data = feature['geojson'] if isinstance(feature['geojson'], dict) else json.loads(feature['geojson'])
-            result.append({
-                'id': feature['id'],
-                'name': geojson_data.get('properties', {}).get('name', 'Unnamed'),
-                'type': geojson_data.get('geometry', {}).get('type', 'Unknown'),
-                'timestamp': feature['timestamp'].isoformat(),
-                'geojson': geojson_data
-            })
+            result.append(_format_existing_feature(feature))
 
         return result
 

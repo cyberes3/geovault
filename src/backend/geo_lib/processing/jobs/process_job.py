@@ -26,6 +26,7 @@ from geo_lib.processing.messages import (
 from geo_lib.processing.processors import get_processor
 from geo_lib.processing.status_tracker import ProcessingStatus
 from geo_lib.security.file_validation import SecureFileValidator, SecurityError, FileValidationError
+from geo_lib.utils.pydantic_serialization import convert_features_to_pydantic
 
 logger = get_job_logger()
 
@@ -639,10 +640,13 @@ class ProcessJob(BaseJob):
                 else:
                     raw_file_content = raw_file_data
 
+                # Convert features through Pydantic models for validation and serialization
+                # This ensures datetime objects are serialized to ISO strings via model_dump(mode='json')
+                # and geometry objects are converted to GeoJSON dicts
                 import_queue.raw_file = raw_file_content
                 import_queue.geojson_hash = geojson_hash
-                import_queue.geofeatures = processed_features
-                import_queue.duplicate_features = duplicate_features  # Store duplicate information
+                import_queue.geofeatures = convert_features_to_pydantic(processed_features)
+                import_queue.duplicate_features = convert_features_to_pydantic(duplicate_features)
                 import_queue.save()
 
                 processing_log.add("Import queue entry updated successfully", "ProcessJob", DatabaseLogLevel.INFO)
@@ -656,7 +660,6 @@ class ProcessJob(BaseJob):
 
         except Exception as e:
             logger.error(f"Failed to update import queue entry for job {job_id}: {str(e)}")
-            logger.error(f"Import queue update error traceback: {traceback.format_exc()}")
             raise
 
     def _broadcast_to_import_queue_module(self, user_id: int, event_type: str, data: dict):

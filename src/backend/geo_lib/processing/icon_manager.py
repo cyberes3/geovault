@@ -110,16 +110,34 @@ def extract_icon_from_kmz(kmz_data: bytes, icon_path: str) -> Optional[bytes]:
 
         # Open KMZ as ZIP archive
         with zipfile.ZipFile(io.BytesIO(kmz_data), 'r') as zip_file:
-            # Try exact match first
-            if normalized_path in zip_file.namelist():
-                return zip_file.read(normalized_path)
+            # Build list of paths to try (original, normalized, and variations)
+            paths_to_try = []
+            
+            # 1. Try original path first (as-is)
+            if icon_path:
+                paths_to_try.append(icon_path)
+            
+            # 2. Try normalized path (without files/ or :/)
+            if normalized_path and normalized_path != icon_path:
+                paths_to_try.append(normalized_path)
+            
+            # 3. Try with files/ prefix if not already present
+            if not icon_path.startswith('files/') and not icon_path.startswith(':/'):
+                paths_to_try.append(f'files/{icon_path}')
+            
+            # Try exact matches first
+            for path in paths_to_try:
+                if path in zip_file.namelist():
+                    return zip_file.read(path)
 
-            # Try case-insensitive search
-            for entry_name in zip_file.namelist():
-                if entry_name.lower() == normalized_path.lower():
-                    return zip_file.read(entry_name)
+            # Try case-insensitive search on all paths
+            for path in paths_to_try:
+                path_lower = path.lower()
+                for entry_name in zip_file.namelist():
+                    if entry_name.lower() == path_lower:
+                        return zip_file.read(entry_name)
 
-            logger.warning(f"Icon not found in KMZ archive: {icon_path}")
+            logger.warning(f"Icon not found in KMZ archive: {icon_path} (tried: {', '.join(paths_to_try)})")
             return None
 
     except zipfile.BadZipFile:
@@ -215,9 +233,7 @@ def store_icon(icon_data: bytes, original_path: str) -> Optional[str]:
         storage_path = _get_storage_path(icon_hash, extension)
 
         # Check if already exists
-        if storage_path.exists():
-            logger.debug(f"Icon already exists: {icon_hash}")
-        else:
+        if not storage_path.exists():
             # Write icon to storage
             storage_path.write_bytes(icon_data)
             logger.debug(f"Stored icon: {storage_path}")

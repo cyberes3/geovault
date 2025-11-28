@@ -4,6 +4,7 @@ Handles real-time status updates for a specific import item.
 """
 
 import json
+import traceback
 from typing import Dict, Any, Optional
 
 from django.conf import settings
@@ -143,7 +144,7 @@ class ProcessStatusModule(BaseWebSocketModule):
             await self.send_to_client('initial_state', initial_state)
 
         except Exception as e:
-            logger.error(f"Error sending initial state: {str(e)}")
+            logger.error(f"Error sending initial state: {traceback.format_exc()}")
             await self.send_to_client('error', {'message': 'Failed to load initial state'})
 
     async def send_logs(self, after_id: Optional[int] = None) -> None:
