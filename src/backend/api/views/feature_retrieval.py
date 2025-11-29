@@ -9,7 +9,7 @@ from django.views.decorators.http import require_http_methods
 
 from api.models import FeatureStore
 from geo_lib.logging.console import get_access_logger
-from geo_lib.website.auth import login_required_401
+from geo_lib.website.auth import api_or_login_required_401
 
 logger = get_access_logger()
 
@@ -17,7 +17,7 @@ logger = get_access_logger()
 MAX_POINTS_PER_REQUEST = 10000
 
 
-@login_required_401
+@api_or_login_required_401()
 @require_http_methods(["GET"])
 def get_feature(request, feature_id):
     """
@@ -152,7 +152,7 @@ def _fetch_elevations_from_api(coordinates: List[Tuple[float, float]]) -> List[O
     return elevations
 
 
-@login_required_401
+@api_or_login_required_401()
 @require_http_methods(["GET"])
 def get_feature_elevations(request, feature_id):
     """

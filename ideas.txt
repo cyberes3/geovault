@@ -1,4 +1,3 @@
-Bulk tagging and styling on import page
 Auto tag based on time, uploaded file name, and region from osm (natl forest, state, town if one in 10 miles)
 Search box to call novatium/overpass to search for locations and zoom the map to them
 

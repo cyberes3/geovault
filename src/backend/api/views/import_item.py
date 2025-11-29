@@ -4,7 +4,6 @@ import traceback
 
 from django import forms
 from django.http import HttpResponse, JsonResponse
-from django.views.decorators.csrf import csrf_protect
 from django.views.decorators.http import require_http_methods
 import time
 
@@ -17,7 +16,7 @@ from geo_lib.processing.status_tracker import status_tracker
 from geo_lib.security.file_validation import basic_file_security_check
 from geo_lib.validation.geojson_whitelist import validate_and_normalize_geojson_feature
 from geo_lib.validation.geometry_validation import GeometryValidationError
-from geo_lib.website.auth import login_required_401
+from geo_lib.website.auth import api_or_login_required_401
 
 logger = get_access_logger()
 
@@ -26,8 +25,7 @@ class DocumentForm(forms.Form):
     file = forms.FileField()
 
 
-@login_required_401
-@csrf_protect
+@api_or_login_required_401()
 def upload_item(request):
     """
     Main upload endpoint - now uses async processing by default.
@@ -89,7 +87,7 @@ def upload_item(request):
         return HttpResponse(status=405)
 
 
-@login_required_401
+@api_or_login_required_401()
 def get_processing_status(request, job_id):
     """
     Get the processing status of a file processing job.
@@ -113,7 +111,7 @@ def get_processing_status(request, job_id):
     }, status=200)
 
 
-@login_required_401
+@api_or_login_required_401()
 def get_user_processing_jobs(request):
     """
     Get all processing jobs for the current user.
@@ -131,7 +129,7 @@ def get_user_processing_jobs(request):
     }, status=200)
 
 
-@login_required_401
+@api_or_login_required_401()
 def fetch_import_history_item(request, item_id: int):
     item = ImportQueue.objects.get(id=item_id)
     if item.user_id != request.user.id:
@@ -142,7 +140,7 @@ def fetch_import_history_item(request, item_id: int):
     return response
 
 
-@login_required_401
+@api_or_login_required_401()
 def get_import_queue_item_features(request, item_id: int):
     """
     Get the processed features (geofeatures) from an import queue item.
@@ -170,7 +168,7 @@ def get_import_queue_item_features(request, item_id: int):
         }, status=500)
 
 
-@login_required_401
+@api_or_login_required_401()
 @require_http_methods(["GET"])
 def search_import_item_features(request, item_id: int):
     """
@@ -249,8 +247,7 @@ def search_import_item_features(request, item_id: int):
         }, status=500)
 
 
-@login_required_401
-@csrf_protect
+@api_or_login_required_401()
 def delete_import_item(request, id):
     if request.method == 'DELETE':
         try:
@@ -277,8 +274,7 @@ def delete_import_item(request, id):
     return HttpResponse(status=405)
 
 
-@login_required_401
-@csrf_protect
+@api_or_login_required_401()
 @require_http_methods(["PUT", "PATCH"])
 def update_import_item(request, item_id):
     try:
@@ -399,8 +395,7 @@ def update_import_item(request, item_id):
     })
 
 
-@login_required_401
-@csrf_protect
+@api_or_login_required_401()
 @require_http_methods(["POST"])
 def import_to_featurestore(request, item_id):
     """
@@ -523,8 +518,7 @@ def import_to_featurestore(request, item_id):
         time.sleep(poll_interval)
 
 
-@login_required_401
-@csrf_protect
+@api_or_login_required_401()
 @require_http_methods(["PUT", "PATCH"])
 def save_bulk_operations(request, item_id):
     """
@@ -578,7 +572,7 @@ def save_bulk_operations(request, item_id):
         }, status=500)
 
 
-@login_required_401
+@api_or_login_required_401()
 @require_http_methods(["GET"])
 def get_bulk_operations(request, item_id):
     """

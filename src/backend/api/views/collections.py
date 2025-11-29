@@ -4,7 +4,6 @@ from typing import Set
 
 from django.db.models import Q
 from django.http import JsonResponse
-from django.views.decorators.csrf import csrf_protect
 from django.views.decorators.http import require_http_methods
 
 from api.models import Collection, FeatureStore
@@ -14,12 +13,12 @@ from geo_lib.processing.import_utils import (
     apply_bulk_operations as apply_bulk_operations_to_features,
     validate_bulk_operations_payload,
 )
-from geo_lib.website.auth import login_required_401
+from geo_lib.website.auth import api_or_login_required_401
 
 logger = get_access_logger()
 
 
-@login_required_401
+@api_or_login_required_401()
 @require_http_methods(["GET"])
 def list_collections(request):
     """
@@ -56,7 +55,7 @@ def list_collections(request):
         }, status=500)
 
 
-@login_required_401
+@api_or_login_required_401()
 @require_http_methods(["POST"])
 def create_collection(request):
     """
@@ -144,7 +143,7 @@ def create_collection(request):
         }, status=500)
 
 
-@login_required_401
+@api_or_login_required_401()
 @require_http_methods(["GET"])
 def get_collection(request, collection_id):
     """
@@ -181,7 +180,7 @@ def get_collection(request, collection_id):
         }, status=500)
 
 
-@login_required_401
+@api_or_login_required_401()
 @require_http_methods(["PUT", "PATCH"])
 def update_collection(request, collection_id):
     """
@@ -283,7 +282,7 @@ def update_collection(request, collection_id):
         }, status=500)
 
 
-@login_required_401
+@api_or_login_required_401()
 @require_http_methods(["DELETE"])
 def delete_collection(request, collection_id):
     """
@@ -310,7 +309,7 @@ def delete_collection(request, collection_id):
         }, status=500)
 
 
-@login_required_401
+@api_or_login_required_401()
 @require_http_methods(["GET"])
 def get_collection_features(request, collection_id):
     """
@@ -398,8 +397,7 @@ def get_collection_features(request, collection_id):
         }, status=500)
 
 
-@login_required_401
-@csrf_protect
+@api_or_login_required_401()
 @require_http_methods(["POST"])
 def apply_bulk_operations_to_collection(request, collection_id):
     """

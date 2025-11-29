@@ -5,7 +5,7 @@ python manage.py makemigrations api --no-input
 python manage.py makemigrations users --no-input
 python manage.py migrate --no-input
 
-./manage.py runserver
+python manage.py runserver 0.0.0.0:8000
 
 # Heplful Reminders
 # https://172.0.2.105:9191/pgadmin4

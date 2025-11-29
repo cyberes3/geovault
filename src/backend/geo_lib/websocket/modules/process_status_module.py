@@ -131,6 +131,7 @@ class ProcessStatusModule(BaseWebSocketModule):
                 'imported': self.import_item.imported,
                 'unparsable': self.import_item.unparsable,
                 'original_filename': self.import_item.original_filename,
+                'timestamp': self.import_item.timestamp.isoformat() if self.import_item.timestamp else None,
                 'processing': is_processing,
                 'job_details': job_details,
                 'features': features_data,

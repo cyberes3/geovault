@@ -1,11 +1,11 @@
 from django.http import JsonResponse
 
-from geo_lib.website.auth import login_required_401
+from geo_lib.website.auth import api_or_login_required_401
 from api.models import FeatureStore
 from allauth.account.models import EmailAddress
 
 
-@login_required_401
+@api_or_login_required_401()
 def dashboard(request):
     # Count the number of features for this user
     feature_count = FeatureStore.objects.filter(user=request.user).count()

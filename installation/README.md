@@ -238,3 +238,7 @@ If you want advanced tagging of your features you will have to set up two very h
 ## Done!
 
 Everything should be running now and the server will be accessible on `0.0.0.0:8000`. Go ahead and register on the site, the first user will be automatically set as the admin and given the appropriate permissions.
+
+## Android App
+
+See README in `src/android`

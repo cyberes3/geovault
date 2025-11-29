@@ -13,7 +13,7 @@ from django.db.models import QuerySet, Q
 
 from api.models import FeatureStore, Collection
 from geo_lib.logging.console import get_access_logger
-from geo_lib.website.auth import login_required_401
+from geo_lib.website.auth import api_or_login_required_401
 
 logger = get_access_logger()
 
@@ -380,7 +380,7 @@ def _get_features_in_bbox(bbox: Tuple[float, float, float, float], user_id: int,
     return BboxQueryResult(features=geojson_features, total_count=total_count, fallback_used=fallback_used)
 
 
-@login_required_401
+@api_or_login_required_401()
 @require_http_methods(["GET"])
 def get_geojson_data(request):
     """

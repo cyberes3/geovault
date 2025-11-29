@@ -5,12 +5,12 @@ from django.views.decorators.http import require_http_methods
 
 from api.models import FeatureStore
 from geo_lib.logging.console import get_access_logger
-from geo_lib.website.auth import login_required_401
+from geo_lib.website.auth import api_or_login_required_401
 
 logger = get_access_logger()
 
 
-@login_required_401
+@api_or_login_required_401()
 @require_http_methods(["DELETE"])
 def delete_feature(request, feature_id):
     """

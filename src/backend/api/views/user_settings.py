@@ -8,7 +8,7 @@ from django.views.decorators.http import require_http_methods
 from api.models import UserSettings, FeatureStore
 from api.validation.user_settings import validate_settings
 from geo_lib.logging.console import get_access_logger
-from geo_lib.website.auth import login_required_401
+from geo_lib.website.auth import api_or_login_required_401
 
 logger = get_access_logger()
 
@@ -35,7 +35,7 @@ def deep_merge(base: dict, update: dict) -> dict:
     return result
 
 
-@login_required_401
+@api_or_login_required_401()
 @require_http_methods(["GET"])
 def get_user_settings(request):
     """
@@ -79,7 +79,7 @@ def get_user_settings(request):
         }, status=500)
 
 
-@login_required_401
+@api_or_login_required_401()
 @require_http_methods(["PUT", "PATCH"])
 def update_user_setting(request):
     """
@@ -204,7 +204,7 @@ def _get_hidden_features_with_names(user, hidden_feature_ids):
     return hidden_features_with_names
 
 
-@login_required_401
+@api_or_login_required_401()
 @require_http_methods(["POST"])
 def clear_hidden_features(request):
     """
@@ -227,7 +227,7 @@ def clear_hidden_features(request):
         }, status=500)
 
 
-@login_required_401
+@api_or_login_required_401()
 @require_http_methods(["POST"])
 def bulk_update_hidden_features(request):
     """

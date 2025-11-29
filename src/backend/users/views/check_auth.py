@@ -5,7 +5,7 @@ from django.db import connection
 from django.http import JsonResponse
 
 from api.models import FeatureStore, ImportQueue
-from geo_lib.website.auth import login_required_401
+from geo_lib.website.auth import api_or_login_required_401
 
 
 def check_auth(request):
@@ -46,7 +46,7 @@ def check_auth(request):
     return JsonResponse(data)
 
 
-@login_required_401
+@api_or_login_required_401()
 def get_user_storage(request):
     """
     Calculate total storage usage for a user's FeatureStore and ImportQueue data.

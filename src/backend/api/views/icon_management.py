@@ -8,13 +8,12 @@ from urllib.parse import urlparse
 from django import forms
 from django.conf import settings
 from django.http import HttpResponse, Http404, JsonResponse
-from django.views.decorators.csrf import csrf_protect
 from django.views.decorators.http import require_http_methods
 from PIL import Image
 
 from geo_lib.logging.console import get_access_logger
 from geo_lib.processing.icon_manager import store_icon
-from geo_lib.website.auth import login_required_401
+from geo_lib.website.auth import api_or_login_required_401
 
 logger = get_access_logger()
 
@@ -112,8 +111,7 @@ class IconUploadForm(forms.Form):
     file = forms.FileField()
 
 
-@login_required_401
-@csrf_protect
+@api_or_login_required_401()
 @require_http_methods(["POST"])
 def upload_icon(request):
     """

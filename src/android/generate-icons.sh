@@ -1,0 +1,131 @@
+#!/bin/bash
+# Generate Android launcher icons from the website logo
+
+set -e
+
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+PROJECT_ROOT="$(cd "$SCRIPT_DIR/../.." && pwd)"
+LOGO_PATH="$PROJECT_ROOT/src/frontend/public/images/logo.png"
+RES_DIR="$SCRIPT_DIR/app/src/main/res"
+
+# Primary blue color from colors.xml
+BG_COLOR="#163D8A"
+
+if [ ! -f "$LOGO_PATH" ]; then
+    echo "Error: Logo not found at $LOGO_PATH"
+    exit 1
+fi
+
+if ! command -v convert &> /dev/null; then
+    echo "Error: ImageMagick 'convert' command not found. Please install ImageMagick."
+    exit 1
+fi
+
+echo "Generating Android launcher icons from logo..."
+
+# Remove old .webp icons if they exist
+echo "Removing old .webp icons..."
+find "$RES_DIR/mipmap-"* -name "*.webp" -type f -delete 2>/dev/null || true
+
+# Generate standard launcher icons for different densities
+echo "Generating standard launcher icons..."
+# mdpi: 48x48
+convert "$LOGO_PATH" -resize 48x48 -background "$BG_COLOR" -gravity center -extent 48x48 "$RES_DIR/mipmap-mdpi/ic_launcher.png"
+convert "$LOGO_PATH" -resize 48x48 -background "$BG_COLOR" -gravity center -extent 48x48 "$RES_DIR/mipmap-mdpi/ic_launcher_round.png"
+
+# hdpi: 72x72
+convert "$LOGO_PATH" -resize 72x72 -background "$BG_COLOR" -gravity center -extent 72x72 "$RES_DIR/mipmap-hdpi/ic_launcher.png"
+convert "$LOGO_PATH" -resize 72x72 -background "$BG_COLOR" -gravity center -extent 72x72 "$RES_DIR/mipmap-hdpi/ic_launcher_round.png"
+
+# xhdpi: 96x96
+convert "$LOGO_PATH" -resize 96x96 -background "$BG_COLOR" -gravity center -extent 96x96 "$RES_DIR/mipmap-xhdpi/ic_launcher.png"
+convert "$LOGO_PATH" -resize 96x96 -background "$BG_COLOR" -gravity center -extent 96x96 "$RES_DIR/mipmap-xhdpi/ic_launcher_round.png"
+
+# xxhdpi: 144x144
+convert "$LOGO_PATH" -resize 144x144 -background "$BG_COLOR" -gravity center -extent 144x144 "$RES_DIR/mipmap-xxhdpi/ic_launcher.png"
+convert "$LOGO_PATH" -resize 144x144 -background "$BG_COLOR" -gravity center -extent 144x144 "$RES_DIR/mipmap-xxhdpi/ic_launcher_round.png"
+
+# xxxhdpi: 192x192
+convert "$LOGO_PATH" -resize 192x192 -background "$BG_COLOR" -gravity center -extent 192x192 "$RES_DIR/mipmap-xxxhdpi/ic_launcher.png"
+convert "$LOGO_PATH" -resize 192x192 -background "$BG_COLOR" -gravity center -extent 192x192 "$RES_DIR/mipmap-xxxhdpi/ic_launcher_round.png"
+
+# Generate adaptive icon foreground (108x108 dp = 432x432 px for xxxhdpi)
+# The foreground should be smaller than the full icon to allow for safe zone
+echo "Generating adaptive icon foreground..."
+convert "$LOGO_PATH" -resize 432x432 -background transparent -gravity center -extent 432x432 "$RES_DIR/drawable/ic_launcher_foreground.png"
+
+# Ensure drawable directory exists
+mkdir -p "$RES_DIR/drawable"
+
+# Generate adaptive icon background XML (vector drawable for solid color)
+echo "Generating adaptive icon background..."
+cat > "$RES_DIR/drawable/ic_launcher_background.xml" << 'EOF'
+<?xml version="1.0" encoding="utf-8"?>
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="108"
+    android:viewportHeight="108">
+    <path
+        android:fillColor="#3B82F6"
+        android:pathData="M0,0h108v108h-108z" />
+</vector>
+EOF
+
+# Verify adaptive icon XML files exist and reference correct drawables
+echo "Verifying adaptive icon XML files..."
+ADAPTIVE_ICON_DIR="$RES_DIR/mipmap-anydpi-v26"
+mkdir -p "$ADAPTIVE_ICON_DIR"
+
+# Update or create ic_launcher.xml
+if [ -f "$ADAPTIVE_ICON_DIR/ic_launcher.xml" ]; then
+    # Update existing file to use correct drawable references
+    sed -i 's|android:drawable="@drawable/ic_launcher_foreground"|android:drawable="@drawable/ic_launcher_foreground"|g' "$ADAPTIVE_ICON_DIR/ic_launcher.xml"
+    sed -i 's|android:drawable="@drawable/ic_launcher_foreground_png"|android:drawable="@drawable/ic_launcher_foreground"|g' "$ADAPTIVE_ICON_DIR/ic_launcher.xml"
+    sed -i 's|android:drawable="@mipmap/ic_launcher_foreground"|android:drawable="@drawable/ic_launcher_foreground"|g' "$ADAPTIVE_ICON_DIR/ic_launcher.xml"
+else
+    # Create new file
+    cat > "$ADAPTIVE_ICON_DIR/ic_launcher.xml" << 'EOF'
+<?xml version="1.0" encoding="utf-8"?>
+<adaptive-icon xmlns:android="http://schemas.android.com/apk/res/android">
+    <background android:drawable="@drawable/ic_launcher_background" />
+    <foreground android:drawable="@drawable/ic_launcher_foreground" />
+    <monochrome android:drawable="@drawable/ic_launcher_foreground" />
+</adaptive-icon>
+EOF
+fi
+
+# Update or create ic_launcher_round.xml
+if [ -f "$ADAPTIVE_ICON_DIR/ic_launcher_round.xml" ]; then
+    # Update existing file to use correct drawable references
+    sed -i 's|android:drawable="@drawable/ic_launcher_foreground"|android:drawable="@drawable/ic_launcher_foreground"|g' "$ADAPTIVE_ICON_DIR/ic_launcher_round.xml"
+    sed -i 's|android:drawable="@drawable/ic_launcher_foreground_png"|android:drawable="@drawable/ic_launcher_foreground"|g' "$ADAPTIVE_ICON_DIR/ic_launcher_round.xml"
+    sed -i 's|android:drawable="@mipmap/ic_launcher_foreground"|android:drawable="@drawable/ic_launcher_foreground"|g' "$ADAPTIVE_ICON_DIR/ic_launcher_round.xml"
+else
+    # Create new file
+    cat > "$ADAPTIVE_ICON_DIR/ic_launcher_round.xml" << 'EOF'
+<?xml version="1.0" encoding="utf-8"?>
+<adaptive-icon xmlns:android="http://schemas.android.com/apk/res/android">
+    <background android:drawable="@drawable/ic_launcher_background" />
+    <foreground android:drawable="@drawable/ic_launcher_foreground" />
+    <monochrome android:drawable="@drawable/ic_launcher_foreground" />
+</adaptive-icon>
+EOF
+fi
+
+# Clean up any temporary files and duplicates
+echo "Cleaning up temporary files and duplicates..."
+# Remove XML file if it exists (we use PNG directly)
+rm -f "$RES_DIR/drawable/ic_launcher_foreground.xml" 2>/dev/null || true
+# Remove any temporary files
+rm -f "$RES_DIR/drawable/ic_launcher_foreground_png.png" \
+      "$RES_DIR/drawable/ic_launcher_background_png.png" \
+      "$RES_DIR/mipmap-xxxhdpi/ic_launcher_foreground.png" 2>/dev/null || true
+
+echo ""
+echo "Icons generated successfully!"
+echo "  - Standard icons: mipmap-*/ic_launcher.png and ic_launcher_round.png"
+echo "  - Adaptive icon foreground: drawable/ic_launcher_foreground.png"
+echo "  - Adaptive icon background: drawable/ic_launcher_background.xml"
+echo "  - Adaptive icon configs: mipmap-anydpi-v26/ic_launcher.xml and ic_launcher_round.xml"
+

@@ -1,0 +1,32 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">GeoVault Uploader</string>
+    <string name="filename_label">Filename</string>
+    <string name="upload_button">Upload</string>
+    <string name="cancel_button">Cancel</string>
+    <string name="uploading">Uploading…</string>
+    <string name="upload_success">Upload successful!</string>
+    <string name="upload_error">Upload failed: %1$s</string>
+    <string name="no_file">No file provided</string>
+    <string name="server_url_hint">Server URL</string>
+    <string name="api_key_hint">API Key</string>
+    <string name="save_settings">Save Settings</string>
+    <string name="settings_title">Settings</string>
+    
+    <!-- Messages -->
+    <string name="enter_filename">Please enter a filename</string>
+    <string name="error_read_file">Could not read file</string>
+    <string name="settings_required">Server URL and API key are required</string>
+    <string name="settings_saved">Settings saved</string>
+    <string name="config_required">Configuration Required</string>
+    <string name="config_settings_first">Please configure settings first</string>
+    <string name="validating_key">Validating API Key…</string>
+    <string name="connecting_server">Connecting to server…</string>
+    <string name="validation_failed">Validation Failed</string>
+    <string name="api_key_valid">API Key Valid</string>
+    <string name="api_key_valid_msg">✓ API key \'%1$s\' is valid!\n\nShare a file to upload it.</string>
+    <string name="connection_failed_msg">✗ Connection failed: %1$s\n\nAttempted URL: %2$s\n\nPlease check:\n• Server URL format (should be like \'https://example.com\' or \'http://172.0.1.1:8000\')\n• Port number is correct\n• Server is running and accessible</string>
+    <string name="validation_failed_msg">✗ %1$s\n\nPlease check:\n• API key is correct\n• Server URL is correct\n• Server is running\n\nResponse preview: %2$s</string>
+    <string name="error_processing_response">✗ Error processing response: %1$s\n\nStatus: %2$d\n\nPlease check your server URL and API key in settings.</string>
+</resources>
+

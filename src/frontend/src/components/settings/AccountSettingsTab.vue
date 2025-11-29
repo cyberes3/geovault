@@ -177,6 +177,112 @@
         />
       </div>
     </div>
+
+    <!-- API Keys Section -->
+    <div class="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
+      <h2 class="text-lg font-semibold text-gray-900 mb-4">API Keys</h2>
+      <p class="text-sm text-gray-600 mb-4">
+        Create API keys to allow programmatic access to your account. Keys can be used to upload files and access your data via the API.
+      </p>
+
+      <!-- Create New API Key Form -->
+      <div class="mb-6 pb-6 border-b border-gray-200">
+        <h3 class="text-md font-medium text-gray-900 mb-3">Create New API Key</h3>
+        <form @submit.prevent="handleCreateApiKey" class="space-y-4">
+          <div>
+            <label class="block text-sm font-medium text-gray-700 mb-1">Key Name (optional)</label>
+            <input
+              v-model="newKeyName"
+              type="text"
+              :disabled="createKeyLoading"
+              placeholder="e.g., My Phone, Desktop App (optional)"
+              class="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500 disabled:bg-gray-100 disabled:cursor-not-allowed"
+            />
+          </div>
+          <div v-if="apiKeyMessage" :class="[
+            'p-3 rounded-md text-sm',
+            apiKeyMessageType === 'success' ? 'bg-green-50 text-green-800' : 'bg-red-50 text-red-800'
+          ]">
+            {{ apiKeyMessage }}
+          </div>
+          <button
+            type="submit"
+            :disabled="createKeyLoading"
+            class="inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md text-white bg-blue-500 hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 disabled:opacity-50 disabled:cursor-not-allowed"
+            title="Create new API key"
+          >
+            <span v-if="createKeyLoading">Creating...</span>
+            <span v-else>Create API Key</span>
+          </button>
+        </form>
+
+        <!-- Display raw key after creation (shown only once) -->
+        <div v-if="newKeyRawValue" class="mt-4 p-4 bg-gray-50 border border-gray-200 rounded-md shadow-sm">
+          <p class="text-sm font-medium text-gray-900 mb-2">
+            ⚠️ Important: Copy this key now. It will not be shown again.
+          </p>
+          <div class="flex items-center gap-2">
+            <input
+              :value="newKeyRawValue"
+              type="text"
+              readonly
+              class="flex-1 px-3 py-2 bg-white border border-gray-300 rounded-md text-sm font-mono text-gray-700"
+              ref="newKeyInput"
+              @focus="$event.target.select()"
+            />
+            <button
+              @click="copyApiKey"
+              class="px-3 py-2 text-sm font-medium text-white bg-blue-500 hover:bg-blue-700 rounded-md border border-transparent focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500"
+            >
+              Copy
+            </button>
+          </div>
+        </div>
+      </div>
+
+      <!-- Existing API Keys List -->
+      <div>
+        <h3 class="text-md font-medium text-gray-900 mb-3">Your API Keys</h3>
+        <div v-if="apiKeysLoading" class="text-sm text-gray-600">
+          Loading...
+        </div>
+        <div v-else-if="apiKeys.length === 0" class="text-sm text-gray-600">
+          No API keys created yet.
+        </div>
+        <div v-else class="space-y-3">
+          <div
+            v-for="key in apiKeys"
+            :key="key.id"
+            class="p-4 bg-gray-50 border border-gray-200 rounded-md hover:bg-gray-100"
+          >
+            <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+              <div class="flex-1 min-w-0">
+                <div class="flex items-center gap-2 mb-1">
+                  <span class="text-sm font-medium text-gray-900">{{ key.name }}</span>
+                </div>
+                <div class="text-xs text-gray-500 space-y-1">
+                  <div>Key: <span class="font-mono">{{ key.key_prefix }}...</span></div>
+                  <div>Created: {{ formatDate(key.created_at) }}</div>
+                  <div v-if="key.last_used_at">
+                    Last used: {{ formatDate(key.last_used_at) }}
+                  </div>
+                  <div v-else class="text-gray-400">Never used</div>
+                </div>
+              </div>
+              <button
+                @click="handleDeleteApiKey(key.id)"
+                :disabled="deleteKeyLoading === key.id"
+                class="px-3 py-1.5 text-sm font-medium text-red-700 bg-red-50 hover:bg-red-100 rounded-md border border-red-200 disabled:opacity-50 disabled:cursor-not-allowed"
+                title="Delete this API key"
+              >
+                <span v-if="deleteKeyLoading === key.id">Deleting...</span>
+                <span v-else>Delete</span>
+              </button>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
   </div>
 </template>
 
@@ -226,7 +332,16 @@ export default {
       emailMessage: '',
       emailMessageType: '',
       downloadMessage: '',
-      downloadMessageType: ''
+      downloadMessageType: '',
+      // API Keys state
+      apiKeys: [],
+      apiKeysLoading: false,
+      newKeyName: '',
+      newKeyRawValue: '',
+      createKeyLoading: false,
+      deleteKeyLoading: null,
+      apiKeyMessage: '',
+      apiKeyMessageType: ''
     }
   },
   methods: {
@@ -497,6 +612,170 @@ export default {
       } finally {
         this.downloadLoading = false;
       }
+    },
+    async loadApiKeys() {
+      this.apiKeysLoading = true;
+      try {
+        const response = await axios.get('/api/user/api-keys/', {
+          headers: {
+            'X-CSRFToken': getCookie('csrftoken')
+          }
+        });
+        if (response.status === 200) {
+          this.apiKeys = response.data.api_keys || [];
+        }
+      } catch (error) {
+        console.error('Error loading API keys:', error);
+        this.apiKeys = [];
+      } finally {
+        this.apiKeysLoading = false;
+      }
+    },
+    async handleCreateApiKey() {
+      this.createKeyLoading = true;
+      this.apiKeyMessage = '';
+      this.apiKeyMessageType = '';
+      this.newKeyRawValue = '';
+
+      try {
+        const response = await axios.post('/api/user/api-keys/create/', {
+          name: this.newKeyName.trim()
+        }, {
+          headers: {
+            'X-CSRFToken': getCookie('csrftoken'),
+            'Content-Type': 'application/json'
+          }
+        });
+
+        if (response.status === 201) {
+          this.apiKeyMessage = 'API key created successfully';
+          this.apiKeyMessageType = 'success';
+          this.newKeyRawValue = response.data.raw_key;
+          this.newKeyName = '';
+          // Reload the list
+          await this.loadApiKeys();
+          // Scroll to the new key display
+          this.$nextTick(() => {
+            if (this.$refs.newKeyInput) {
+              this.$refs.newKeyInput.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+            }
+          });
+        } else {
+          this.apiKeyMessage = response.data.error || 'Failed to create API key';
+          this.apiKeyMessageType = 'error';
+        }
+      } catch (error) {
+        if (error.response && error.response.data) {
+          this.apiKeyMessage = error.response.data.error || 'An error occurred while creating the API key';
+        } else {
+          this.apiKeyMessage = 'An error occurred while creating the API key';
+        }
+        this.apiKeyMessageType = 'error';
+      } finally {
+        this.createKeyLoading = false;
+      }
+    },
+    async handleDeleteApiKey(keyId) {
+      if (!confirm('Are you sure you want to delete this API key? This action cannot be undone.')) {
+        return;
+      }
+
+      this.deleteKeyLoading = keyId;
+      try {
+        const response = await axios.delete(`/api/user/api-keys/${keyId}/`, {
+          headers: {
+            'X-CSRFToken': getCookie('csrftoken')
+          }
+        });
+
+        if (response.status === 200) {
+          // Reload the list
+          await this.loadApiKeys();
+          this.apiKeyMessage = 'API key deleted successfully';
+          this.apiKeyMessageType = 'success';
+          // Clear message after a few seconds
+          setTimeout(() => {
+            this.apiKeyMessage = '';
+            this.apiKeyMessageType = '';
+          }, 3000);
+        } else {
+          this.apiKeyMessage = response.data.error || 'Failed to delete API key';
+          this.apiKeyMessageType = 'error';
+        }
+      } catch (error) {
+        if (error.response && error.response.data) {
+          this.apiKeyMessage = error.response.data.error || 'An error occurred while deleting the API key';
+        } else {
+          this.apiKeyMessage = 'An error occurred while deleting the API key';
+        }
+        this.apiKeyMessageType = 'error';
+      } finally {
+        this.deleteKeyLoading = null;
+      }
+    },
+    async copyApiKey() {
+      if (!this.newKeyRawValue) return;
+      
+      // Try modern clipboard API first
+      if (navigator.clipboard && navigator.clipboard.writeText) {
+        try {
+          await navigator.clipboard.writeText(this.newKeyRawValue);
+          this.showCopySuccess();
+          return;
+        } catch (err) {
+          console.warn('Clipboard API failed, trying fallback:', err);
+        }
+      }
+      
+      // Fallback for mobile and older browsers
+      const input = this.$refs.newKeyInput;
+      if (input) {
+        try {
+          // Select the text
+          input.select();
+          input.setSelectionRange(0, 99999); // For mobile devices
+          
+          // Try execCommand as fallback
+          const successful = document.execCommand('copy');
+          if (successful) {
+            this.showCopySuccess();
+          } else {
+            // If execCommand fails, at least the text is selected so user can manually copy
+            this.apiKeyMessage = 'Text selected - please copy manually (Ctrl+C or Cmd+C)';
+            this.apiKeyMessageType = 'error';
+            setTimeout(() => {
+              this.apiKeyMessage = '';
+              this.apiKeyMessageType = '';
+            }, 3000);
+          }
+        } catch (err) {
+          console.error('Failed to copy:', err);
+          this.apiKeyMessage = 'Failed to copy. Please select and copy manually.';
+          this.apiKeyMessageType = 'error';
+          setTimeout(() => {
+            this.apiKeyMessage = '';
+            this.apiKeyMessageType = '';
+          }, 3000);
+        }
+      }
+    },
+    showCopySuccess() {
+      const originalText = this.apiKeyMessage;
+      this.apiKeyMessage = 'API key copied to clipboard!';
+      this.apiKeyMessageType = 'success';
+      setTimeout(() => {
+        this.apiKeyMessage = originalText;
+        this.apiKeyMessageType = originalText ? 'success' : '';
+      }, 2000);
+    },
+    formatDate(dateString) {
+      if (!dateString) return 'N/A';
+      try {
+        const date = new Date(dateString);
+        return date.toLocaleString();
+      } catch (e) {
+        return dateString;
+      }
     }
   },
   async created() {
@@ -506,6 +785,8 @@ export default {
     }
     // Load settings from store using mixin method
     this.loadSettingsFromStore();
+    // Load API keys
+    await this.loadApiKeys();
   },
   watch: {
     // Watch for changes in the store and reload settings

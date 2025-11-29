@@ -7,6 +7,7 @@
           <h1 class="text-xl sm:text-2xl font-bold text-gray-900 mb-1 sm:mb-2">Process Import</h1>
           <h2 v-if="originalFilename != null" class="text-sm sm:text-lg text-gray-600 break-words">{{ originalFilename }}</h2>
           <div v-else class="h-6 w-48 bg-gray-200 rounded animate-pulse"></div>
+          <p v-if="uploadTimestamp != null" class="text-xs sm:text-sm text-gray-500 mt-1">{{ formatUploadDate(uploadTimestamp) }}</p>
         </div>
         <div class="flex items-center sm:justify-end">
           <span v-if="isImported" class="inline-flex items-center px-3 py-1 rounded-full text-xs sm:text-sm font-medium bg-green-100 text-green-800">
@@ -698,6 +699,7 @@ export default {
       msg: "",
       currentId: null,
       originalFilename: null,
+      uploadTimestamp: null,
       itemsForUser: [],
       originalItems: [],
       workerLog: [],
@@ -892,6 +894,7 @@ export default {
     handleInitialState(data) {
       // Set all component data from initial state
       this.originalFilename = data.original_filename;
+      this.uploadTimestamp = data.timestamp || null;
       this.isImported = data.imported;
       this.processing.active = data.processing;
       this.duplicateStatus = data.duplicate_status || null;
@@ -1117,6 +1120,7 @@ export default {
 
           if (Object.keys(itemsResponse.data).length > 0) {
             this.originalFilename = itemsResponse.data.original_filename
+            this.uploadTimestamp = itemsResponse.data.timestamp || null
             this.isImported = itemsResponse.data.imported || false
 
             // Load bulk operations once when refreshing import item
@@ -1205,6 +1209,12 @@ export default {
     formatTimestamp(timestamp) {
       if (!timestamp) return '';
       return moment(timestamp).format('YYYY-MM-DD HH:mm:ss');
+    },
+    formatUploadDate(timestamp) {
+      if (!timestamp) return '';
+      // Use moment.js for localized date formatting
+      // moment.js will automatically use the browser's locale if available
+      return moment(timestamp).format('LLL'); // e.g., "January 15, 2024 2:30 PM" (localized)
     },
     getFeatureIconUrl(feature) {
       /**
@@ -1877,6 +1887,7 @@ export default {
       this.msg = "";
       this.currentId = null;
       this.originalFilename = null;
+      this.uploadTimestamp = null;
       this.itemsForUser = [];
       this.originalItems = [];
       this.workerLog = [];
@@ -2235,6 +2246,7 @@ export default {
         vm.msg = ""
         vm.currentId = null
         vm.originalFilename = null
+        vm.uploadTimestamp = null
         vm.itemsForUser = []
         vm.originalItems = []
         vm.workerLog = []

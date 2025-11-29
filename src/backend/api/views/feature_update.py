@@ -7,7 +7,6 @@ from django.contrib.gis.geos import GEOSGeometry
 from website.settings_utils import get_required_setting
 from django.db import transaction
 from django.http import JsonResponse
-from django.views.decorators.csrf import csrf_protect
 from django.views.decorators.http import require_http_methods
 
 from api.models import FeatureStore, ImportQueue
@@ -30,7 +29,7 @@ from geo_lib.validation.geojson_whitelist import (
 from geo_lib.validation.styling_validation import (
     is_valid_icon_url,
 )
-from geo_lib.website.auth import login_required_401
+from geo_lib.website.auth import api_or_login_required_401
 
 logger = get_access_logger()
 
@@ -206,8 +205,7 @@ def _validate_and_preserve_system_tags(properties_dict, original_system_tags):
     return True, None, original_system_tags
 
 
-@login_required_401
-@csrf_protect
+@api_or_login_required_401()
 @require_http_methods(["PUT"])
 def update_feature_metadata(request, feature_id):
     """
@@ -343,8 +341,7 @@ def update_feature_metadata(request, feature_id):
         return _error_response('Failed to update feature metadata', 500)
 
 
-@login_required_401
-@csrf_protect
+@api_or_login_required_401()
 @require_http_methods(["POST"])
 def bulk_update_features_metadata(request):
     """
@@ -571,8 +568,7 @@ def bulk_update_features_metadata(request):
         return _error_response('Failed to process bulk update request', 500)
 
 
-@login_required_401
-@csrf_protect
+@api_or_login_required_401()
 @require_http_methods(["POST"])
 def apply_bulk_operations_to_tag(request, tag_name: str):
     """
@@ -639,8 +635,7 @@ def apply_bulk_operations_to_tag(request, tag_name: str):
         return _error_response('Failed to apply bulk operations to tag', 500)
 
 
-@login_required_401
-@csrf_protect
+@api_or_login_required_401()
 @require_http_methods(["PUT"])
 def update_feature(request, feature_id):
     """
@@ -877,8 +872,7 @@ def update_feature(request, feature_id):
         return _error_response('Failed to update feature', 500)
 
 
-@login_required_401
-@csrf_protect
+@api_or_login_required_401()
 @require_http_methods(["POST"])
 def apply_replacement_geometry(request, feature_id):
     """
@@ -1153,8 +1147,7 @@ def apply_replacement_geometry(request, feature_id):
         return _error_response('Failed to apply replacement geometry', 500)
 
 
-@login_required_401
-@csrf_protect
+@api_or_login_required_401()
 @require_http_methods(["POST"])
 def regenerate_feature_tags(request, feature_id):
     """

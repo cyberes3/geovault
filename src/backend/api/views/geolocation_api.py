@@ -8,12 +8,12 @@ from django.views.decorators.http import require_http_methods
 
 from geo_lib.geolocation.ip_service import get_geolocation_service
 from geo_lib.logging.console import get_access_logger
-from geo_lib.website.auth import login_required_401
+from geo_lib.website.auth import api_or_login_required_401
 
 logger = get_access_logger()
 
 
-@login_required_401
+@api_or_login_required_401()
 @require_http_methods(["GET"])
 def get_user_location(request):
     """
@@ -80,7 +80,7 @@ def get_user_location(request):
         }, status=500)
 
 
-@login_required_401
+@api_or_login_required_401()
 @require_http_methods(["GET"])
 def get_location_by_ip(request):
     """

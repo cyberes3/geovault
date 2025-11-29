@@ -4,11 +4,11 @@ from django.core.cache import cache
 from django.utils import timezone
 from allauth.account.forms import ChangePasswordForm, AddEmailForm
 from allauth.account.models import EmailAddress
-from geo_lib.website.auth import login_required_401
+from geo_lib.website.auth import api_or_login_required_401
 import json
 
 
-@login_required_401
+@api_or_login_required_401(allow_api_keys=False)  # Password changes should only be via session
 @require_http_methods(["POST"])
 def change_password_api(request):
     """API endpoint for changing user password using allauth's ChangePasswordForm."""
@@ -41,7 +41,7 @@ def change_password_api(request):
         }, status=500)
 
 
-@login_required_401
+@api_or_login_required_401(allow_api_keys=False)  # Email changes should only be via session
 @require_http_methods(["POST"])
 def email_management_api(request):
     """API endpoint for changing email address. Replaces existing email with new one."""
@@ -106,7 +106,7 @@ def email_management_api(request):
         }, status=500)
 
 
-@login_required_401
+@api_or_login_required_401(allow_api_keys=False)  # Email status should only be via session
 @require_http_methods(["GET"])
 def get_email_status_api(request):
     """API endpoint to get current user's email addresses and verification status."""
@@ -162,7 +162,7 @@ def get_email_status_api(request):
         }, status=500)
 
 
-@login_required_401
+@api_or_login_required_401(allow_api_keys=False)  # Email verification should only be via session
 @require_http_methods(["POST"])
 def resend_verification_api(request):
     """API endpoint to resend verification email for an email address with 1-minute cooldown."""

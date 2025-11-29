@@ -7,13 +7,13 @@ from django.db.models import Count, Q
 from django.http import JsonResponse
 
 from api.models import FeatureStore, ImportQueue, TagShare, CollectionShare
-from geo_lib.website.auth import login_required_401
+from geo_lib.website.auth import api_or_login_required_401
 from users.models import UserProfile
 
 User = get_user_model()
 
 
-@login_required_401
+@api_or_login_required_401(allow_api_keys=False)  # Admin routes should only be accessible via session
 def list_all_users(request):
     """
     List all users with their statistics (admin only).

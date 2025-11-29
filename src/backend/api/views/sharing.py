@@ -5,13 +5,12 @@ from typing import Tuple
 
 from django.db.models import F, Q
 from django.http import JsonResponse
-from django.views.decorators.csrf import csrf_protect
 from django.views.decorators.http import require_http_methods
 
 from api.models import TagShare, CollectionShare, Collection, FeatureStore
 from api.views.bbox_query import BboxQueryResult, _build_bbox_response, _get_features_in_bbox, _validate_bbox_params
 from geo_lib.logging.console import get_access_logger
-from geo_lib.website.auth import login_required_401
+from geo_lib.website.auth import api_or_login_required_401
 
 logger = get_access_logger()
 
@@ -40,8 +39,7 @@ def _validate_share_id(share_id: str) -> bool:
     return bool(re.match(uuid_pattern, share_id.lower()))
 
 
-@login_required_401
-@csrf_protect
+@api_or_login_required_401()
 @require_http_methods(["POST"])
 def create_share(request):
     """
@@ -126,7 +124,7 @@ def create_share(request):
         }, status=500)
 
 
-@login_required_401
+@api_or_login_required_401()
 @require_http_methods(["GET"])
 def list_shares(request):
     """
@@ -183,8 +181,7 @@ def list_shares(request):
         }, status=500)
 
 
-@login_required_401
-@csrf_protect
+@api_or_login_required_401()
 @require_http_methods(["DELETE"])
 def delete_share(request, share_id):
     """
@@ -342,8 +339,7 @@ def get_public_share(request, share_id):
         }, status=500)
 
 
-@login_required_401
-@csrf_protect
+@api_or_login_required_401()
 @require_http_methods(["POST"])
 def create_collection_share(request):
     """
