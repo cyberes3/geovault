@@ -232,16 +232,29 @@
     <!-- Global Options -->
     <div v-if="itemsForUser.length > 0 && !loading.page && !processing.active" class="bg-white rounded-lg shadow-sm border border-gray-200 p-4 sm:p-6">
       <h3 class="text-sm font-semibold text-gray-900 mb-3">Global Options</h3>
-      <div class="flex flex-col sm:flex-row sm:items-center sm:space-x-3 space-y-2 sm:space-y-0">
-        <ToggleButton
-            v-model="importCustomIcons"
-            label="Import custom icons for all features"
-            :disabled="lockButtons || loading.importing || loading.saving || isImported"
-            size="md"
-        />
-        <label class="text-sm font-medium text-gray-700 cursor-pointer" @click="!lockButtons && !loading.importing && !loading.saving && !isImported && (importCustomIcons = !importCustomIcons)">
-          Import custom icons for all features
-        </label>
+      <div class="flex flex-col space-y-3">
+        <div class="flex flex-col sm:flex-row sm:items-center sm:space-x-3 space-y-2 sm:space-y-0">
+          <ToggleButton
+              v-model="importCustomIcons"
+              label="Import custom icons for all features"
+              :disabled="lockButtons || loading.importing || loading.saving || isImported"
+              size="md"
+          />
+          <label class="text-sm font-medium text-gray-700 cursor-pointer" @click="!lockButtons && !loading.importing && !loading.saving && !isImported && (importCustomIcons = !importCustomIcons)">
+            Import custom icons for all features
+          </label>
+        </div>
+        <div class="flex items-center space-x-2">
+          <button
+              :disabled="lockButtons || loading.importing || loading.saving || isImported"
+              class="w-full sm:w-[20%] inline-flex items-center justify-center px-4 py-2 border border-transparent text-sm font-medium rounded-md text-white bg-blue-500 hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 disabled:bg-gray-400 disabled:cursor-not-allowed transition-colors duration-200"
+              @click="openBulkOperationsModal"
+              title="Bulk Operations"
+          >
+            Bulk Operations
+          </button>
+          <RectangleStackIcon v-if="hasBulkOperationsConfigured" class="w-5 h-5 text-blue-500 flex-shrink-0" />
+        </div>
       </div>
     </div>
 
@@ -585,6 +598,15 @@
         :logs="filteredWorkerLog"
         @close="closeLogModal"
     />
+
+    <!-- Bulk Operations Modal -->
+    <BulkStylingModal
+        :is-open="dialogs.bulkOperations"
+        :available-tags="availableUserTags"
+        :current-bulk-ops="bulkOperations"
+        @close="closeBulkOperationsModal"
+        @apply="updateBulkOperations"
+    />
   </div>
 </template>
 
@@ -606,8 +628,18 @@ import MapPreviewDialog from "@/components/import/parts/MapPreviewDialog.vue";
 import FeatureMapDialog from "@/components/import/parts/FeatureMapDialog.vue";
 import LogViewModal from "@/components/import/parts/LogViewModal.vue";
 import ImportControls from "@/components/import/parts/ImportControls.vue";
+import BulkStylingModal from "@/components/import/parts/BulkStylingModal.vue";
 import TagPicker from "@/components/TagPicker.vue";
-import { CheckIcon, ExclamationCircleIcon, ArrowTopRightOnSquareIcon, DocumentIcon, ExclamationTriangleIcon, ArrowDownTrayIcon, ArrowUpTrayIcon, XMarkIcon, MapIcon, ArrowPathIcon, MagnifyingGlassIcon } from '@heroicons/vue/24/outline';
+
+// Default bulk operations structure
+const DEFAULT_BULK_OPERATIONS = {
+  tags: [],
+  pointColor: null,
+  pointIcon: null,
+  lineColor: null,
+  polyColor: null
+};
+import { CheckIcon, ExclamationCircleIcon, ArrowTopRightOnSquareIcon, DocumentIcon, ExclamationTriangleIcon, ArrowDownTrayIcon, ArrowUpTrayIcon, XMarkIcon, MapIcon, ArrowPathIcon, MagnifyingGlassIcon, RectangleStackIcon } from '@heroicons/vue/24/outline';
 
 // TODO: for each feature, query the DB and check if there is a duplicate. For points that's duplicate coords, for linestrings and polygons that's duplicate points
 // TODO: redo the entire log feature to include local timestamps
@@ -615,6 +647,23 @@ import { CheckIcon, ExclamationCircleIcon, ArrowTopRightOnSquareIcon, DocumentIc
 export default {
   computed: {
     ...mapState(["userInfo", "userSettings"]),
+    hasBulkOperationsConfigured() {
+      // Check if any bulk operations are configured (not all null/empty)
+      const ops = this.bulkOperations;
+      
+      // Check tags
+      if (ops.tags && ops.tags.length > 0) {
+        return true;
+      }
+      
+      // Check other fields (not null)
+      if (ops.pointColor !== null && ops.pointColor !== undefined) return true;
+      if (ops.pointIcon !== null && ops.pointIcon !== undefined) return true;
+      if (ops.lineColor !== null && ops.lineColor !== undefined) return true;
+      if (ops.polyColor !== null && ops.polyColor !== undefined) return true;
+      
+      return false;
+    },
     isValidPageNumber() {
       return this.pagination.gotoInput &&
           this.pagination.gotoInput >= 1 &&
@@ -653,6 +702,7 @@ export default {
     FeatureMapDialog,
     LogViewModal,
     ImportControls,
+    BulkStylingModal,
     TagPicker,
     CheckIcon,
     ExclamationCircleIcon,
@@ -664,7 +714,8 @@ export default {
     XMarkIcon,
     MapIcon,
     ArrowPathIcon,
-    MagnifyingGlassIcon
+    MagnifyingGlassIcon,
+    RectangleStackIcon
   },
   data() {
     return {
@@ -680,7 +731,8 @@ export default {
       dialogs: {
         mapPreview: false,
         featureMap: {isOpen: false, selectedIndex: 0},
-        logs: false
+        logs: false,
+        bulkOperations: false
       },
 
       // Consolidated: Loading states
@@ -745,6 +797,10 @@ export default {
 
       // Tag autocomplete state
       availableUserTags: [],
+
+      // Bulk operations state
+      bulkOperations: { ...DEFAULT_BULK_OPERATIONS },
+      originalBulkOperations: { ...DEFAULT_BULK_OPERATIONS },
 
       // Search state
       searchQuery: '',
@@ -1043,6 +1099,9 @@ export default {
         return;
       }
 
+      // Load bulk operations once when loading the page
+      this.loadBulkOperations();
+
       try {
         const response = await axios.get(`/api/item/import/get/${this.currentId}?page=1&page_size=${this.pagination.pageSize}`)
         if (response.status === 200) {
@@ -1084,6 +1143,9 @@ export default {
           if (Object.keys(itemsResponse.data).length > 0) {
             this.originalFilename = itemsResponse.data.original_filename
             this.isImported = itemsResponse.data.imported || false
+
+            // Load bulk operations once when refreshing import item
+            this.loadBulkOperations();
 
             // Update pagination info
             if (itemsResponse.data.pagination) {
@@ -1452,7 +1514,32 @@ export default {
     },
     hasUnsavedChanges() {
       // Check if there are any unsaved changes on current page or cached pages
-      return this._getChangedFeatures().length > 0;
+      const hasFeatureChanges = this._getChangedFeatures().length > 0;
+      
+      // Check if bulk operations have changed
+      const hasBulkOpsChanges = this._hasBulkOperationsChanged();
+      
+      return hasFeatureChanges || hasBulkOpsChanges;
+    },
+    _hasBulkOperationsChanged() {
+      // Compare current bulk operations with original using deep equality
+      const current = this.bulkOperations;
+      const original = this.originalBulkOperations;
+      
+      // Compare tags (arrays) - sort and stringify for comparison
+      const currentTagsStr = JSON.stringify((current.tags || []).sort());
+      const originalTagsStr = JSON.stringify((original.tags || []).sort());
+      if (currentTagsStr !== originalTagsStr) {
+        return true;
+      }
+      
+      // Compare other fields
+      if (current.pointColor !== original.pointColor) return true;
+      if (current.pointIcon !== original.pointIcon) return true;
+      if (current.lineColor !== original.lineColor) return true;
+      if (current.polyColor !== original.polyColor) return true;
+      
+      return false;
     },
     async _saveChangesInternal() {
       // Internal save function that doesn't manage locks
@@ -1463,8 +1550,16 @@ export default {
 
       // Collect only changed features from current page and cached pages
       const changedFeatures = this._getChangedFeatures();
+      
+      // Check if bulk operations have changed
+      const hasBulkOpsChanges = this._hasBulkOperationsChanged();
 
-      if (changedFeatures.length === 0) {
+      // Save bulk operations if they've changed
+      if (hasBulkOpsChanges) {
+        await this.saveBulkOperations(this.bulkOperations);
+      }
+
+      if (changedFeatures.length === 0 && !hasBulkOpsChanges) {
         // No changes to save
         return {success: true, changedCount: 0};
       }
@@ -1510,10 +1605,6 @@ export default {
       } else {
         throw new Error(response.data.msg);
       }
-    },
-    hasUnsavedChanges() {
-      // Check if there are any unsaved changes on current page or cached pages
-      return this._getChangedFeatures().length > 0;
     },
     async saveChanges() {
       // User-facing save function that manages locks and error handling
@@ -1615,6 +1706,209 @@ export default {
     },
     closeLogModal() {
       this.dialogs.logs = false;
+    },
+    openBulkOperationsModal() {
+      // Bulk operations are already loaded on component mount
+      this.dialogs.bulkOperations = true;
+    },
+    closeBulkOperationsModal() {
+      this.dialogs.bulkOperations = false;
+    },
+    async loadBulkOperations() {
+      if (!this.currentId) return;
+
+      try {
+        const csrftoken = getCookie('csrftoken');
+        const response = await axios.get(`/api/item/import/bulk-operations/${this.currentId}/get`, {
+          headers: {
+            'X-CSRFToken': csrftoken
+          }
+        });
+
+        if (response.status === 200 && response.data.bulk_operations) {
+          const ops = response.data.bulk_operations;
+          this.bulkOperations = {
+            tags: ops.tags || [],
+            pointColor: ops.pointColor || null,
+            pointIcon: ops.pointIcon || null,
+            lineColor: ops.lineColor || null,
+            polyColor: ops.polyColor || null
+          };
+        } else {
+          // No bulk operations found, use defaults
+          this.bulkOperations = { ...DEFAULT_BULK_OPERATIONS };
+        }
+        
+        // Store as original state
+        this.originalBulkOperations = JSON.parse(JSON.stringify(this.bulkOperations));
+      } catch (error) {
+        // Log error and use defaults
+        console.error('Error loading bulk operations:', error);
+        this.bulkOperations = { ...DEFAULT_BULK_OPERATIONS };
+        // Store as original state
+        this.originalBulkOperations = JSON.parse(JSON.stringify(this.bulkOperations));
+      }
+    },
+    updateBulkOperations(bulkData) {
+      // Update local state only (don't save to database yet)
+      // Saving will happen when user clicks "Save Changes"
+      this.bulkOperations = { ...bulkData };
+    },
+    async saveBulkOperations(bulkData) {
+      if (!this.currentId) return;
+
+      try {
+        const csrftoken = getCookie('csrftoken');
+        const response = await axios.put(`/api/item/import/bulk-operations/${this.currentId}`, {
+          bulk_operations: bulkData
+        }, {
+          headers: {
+            'X-CSRFToken': csrftoken
+          }
+        });
+
+        if (response.status === 200) {
+          // Update local state with the data we sent (request data)
+          this.bulkOperations = { ...bulkData };
+          // Update original state to reflect saved state
+          this.originalBulkOperations = JSON.parse(JSON.stringify(bulkData));
+        }
+      } catch (error) {
+        this.msg = 'Error saving bulk operations: ' + (error.response?.data?.msg || error.message);
+        window.alert(this.msg);
+        throw error; // Re-throw so _saveChangesInternal can handle it
+      }
+    },
+    // Removed applyBulkStyling - bulk operations are now stored and applied during import
+    // Old method kept for reference but not used
+    _old_applyBulkStyling(bulkData) {
+      // Apply bulk styling to all items in the current page
+      // Also need to apply to all cached pages
+
+      // Apply to current page items
+      this.itemsForUser.forEach((item, index) => {
+        // Skip duplicates and skipped items
+        if (item.isDuplicate || this.isItemSkipped(item, index)) {
+          return;
+        }
+
+        // Apply tags (merge with existing tags, avoiding duplicates)
+        if (bulkData.tags && bulkData.tags.length > 0) {
+          if (!item.properties.tags) {
+            item.properties.tags = [];
+          }
+          // Merge tags, avoiding duplicates
+          const existingTags = new Set(item.properties.tags.map(t => t.toLowerCase()));
+          bulkData.tags.forEach(tag => {
+            const lowerTag = tag.toLowerCase();
+            if (!existingTags.has(lowerTag)) {
+              item.properties.tags.push(lowerTag);
+            }
+          });
+        }
+
+        const geometryType = item.geometry?.type;
+
+        // Apply point styling
+        if (geometryType === 'Point') {
+          if (bulkData.pointColor) {
+            item.properties['marker-color'] = bulkData.pointColor;
+          }
+          if (bulkData.pointIcon !== null) {
+            // Set icon_url property (the backend uses icon_url)
+            item.properties.icon_url = bulkData.pointIcon;
+            // Also set other icon properties for compatibility
+            item.properties.iconUrl = bulkData.pointIcon;
+            item.properties['icon-href'] = bulkData.pointIcon;
+          }
+        }
+
+        // Apply line styling
+        if (geometryType === 'LineString') {
+          if (bulkData.lineColor) {
+            item.properties.stroke = bulkData.lineColor;
+          }
+        }
+
+        // Apply polygon styling
+        if (geometryType === 'Polygon' || geometryType === 'MultiPolygon') {
+          if (bulkData.polyColor) {
+            item.properties.fill = bulkData.polyColor;
+          }
+        }
+      });
+
+      // Apply to all cached pages
+      Object.keys(this.editCache.pages).forEach(pageKey => {
+        const pageNum = parseInt(pageKey);
+        const cachedItems = this.editCache.pages[pageNum];
+
+        if (cachedItems && Array.isArray(cachedItems)) {
+          cachedItems.forEach((item, index) => {
+            // Skip duplicates and skipped items
+            // Calculate feature ID manually for cached pages (getFeatureId uses currentPage which won't be correct)
+            let featureId;
+            if (item && item.properties && item.properties.id) {
+              featureId = item.properties.id;
+            } else {
+              const globalIndex = (pageNum - 1) * this.pagination.pageSize + index;
+              featureId = `index_${globalIndex}`;
+            }
+            if (item.isDuplicate || this.skippedFeatureIds.has(featureId)) {
+              return;
+            }
+
+            // Apply tags (merge with existing tags, avoiding duplicates)
+            if (bulkData.tags && bulkData.tags.length > 0) {
+              if (!item.properties.tags) {
+                item.properties.tags = [];
+              }
+              // Merge tags, avoiding duplicates
+              const existingTags = new Set(item.properties.tags.map(t => t.toLowerCase()));
+              bulkData.tags.forEach(tag => {
+                const lowerTag = tag.toLowerCase();
+                if (!existingTags.has(lowerTag)) {
+                  item.properties.tags.push(lowerTag);
+                }
+              });
+            }
+
+            const geometryType = item.geometry?.type;
+
+            // Apply point styling
+            if (geometryType === 'Point') {
+              if (bulkData.pointColor) {
+                item.properties['marker-color'] = bulkData.pointColor;
+              }
+              if (bulkData.pointIcon !== null) {
+                item.properties.icon_url = bulkData.pointIcon;
+                item.properties.iconUrl = bulkData.pointIcon;
+                item.properties['icon-href'] = bulkData.pointIcon;
+              }
+            }
+
+            // Apply line styling
+            if (geometryType === 'LineString') {
+              if (bulkData.lineColor) {
+                item.properties.stroke = bulkData.lineColor;
+              }
+            }
+
+            // Apply polygon styling
+            if (geometryType === 'Polygon' || geometryType === 'MultiPolygon') {
+              if (bulkData.polyColor) {
+                item.properties.fill = bulkData.polyColor;
+              }
+            }
+          });
+        }
+      });
+
+      // Cache current page changes
+      this.cacheCurrentPageChanges();
+
+      // Force Vue to detect the changes
+      this.$forceUpdate();
     },
     clearComponentState() {
       // Stop polling first to prevent API calls with null currentId
@@ -1976,6 +2270,8 @@ export default {
     this.clearComponentState();
     this.currentId = to.params.id;
     this.connectWebSocket();
+    // Load bulk operations once when route updates
+    this.loadBulkOperations();
 
     next();
   },
@@ -2007,6 +2303,8 @@ export default {
         // Set currentId and connect WebSocket
         vm.currentId = vm.id
         vm.connectWebSocket()
+        // Load bulk operations once when route is entered
+        vm.loadBulkOperations()
       }
     })
   }

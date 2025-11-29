@@ -21,7 +21,8 @@ from geo_lib.logging.console import get_job_logger
 from geo_lib.processing.import_utils import (
     delete_logs_by_log_id, 
     broadcast_item_imported,
-    process_single_feature_for_import
+    process_single_feature_for_import,
+    apply_bulk_operations
 )
 
 logger = get_job_logger()
@@ -226,6 +227,11 @@ class BulkImportJob(BaseJob):
             # Get number of threads from settings
             num_threads = get_required_setting('IMPORT_PROCESSING_THREADS')
             
+            # Apply bulk operations to features before processing
+            bulk_ops = import_item.bulk_operations or {}
+            if bulk_ops:
+                import_item.geofeatures = apply_bulk_operations(import_item.geofeatures, bulk_ops)
+
             # Process features in parallel using ThreadPoolExecutor
             if len(import_item.geofeatures) > 0:
                 with ThreadPoolExecutor(max_workers=num_threads) as executor:
@@ -282,7 +288,5 @@ class BulkImportJob(BaseJob):
 
         except Exception as e:
             logger.error(f"Error importing item {import_item.id}: {str(e)}")
-            logger.error(f"Import error traceback: {traceback.format_exc()}")
             return {'success': False, 'error': str(e)}
-
 

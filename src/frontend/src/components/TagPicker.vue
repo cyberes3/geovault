@@ -26,7 +26,7 @@
     </div>
 
     <!-- Selected Tags Display -->
-    <div v-if="localTags.length > 0" class="relative mb-2 border border-gray-200 rounded-md bg-gray-50 overflow-hidden">
+    <div class="relative mb-2 border border-gray-200 rounded-md bg-gray-50 overflow-hidden min-h-[2.5rem]">
       <div class="max-h-24 overflow-y-auto p-2 pb-10" ref="tagsContainer">
         <div class="flex flex-wrap gap-2">
           <span

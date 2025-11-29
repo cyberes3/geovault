@@ -3,6 +3,7 @@ Import job processor for asynchronous import operations.
 Handles importing a single import queue item to the feature store.
 """
 
+import json
 import threading
 import traceback
 from concurrent.futures import ThreadPoolExecutor
@@ -14,6 +15,7 @@ from geo_lib.processing.import_utils import (
     delete_logs_by_log_id,
     broadcast_item_imported,
     process_single_feature_for_import,
+    apply_bulk_operations,
 )
 from geo_lib.processing.jobs.base_job import BaseJob
 from geo_lib.processing.status_tracker import ProcessingStatus
@@ -118,6 +120,11 @@ class ImportJob(BaseJob):
                 current_batch_hashes=current_batch_hashes,
                 duplicate_check_lock=duplicate_check_lock,
             )
+
+        # Apply bulk operations to features before processing
+        bulk_ops = import_item.bulk_operations or {}
+        if bulk_ops:
+            import_item.geofeatures = apply_bulk_operations(import_item.geofeatures, bulk_ops)
 
         # Filter out skipped features before processing
         features_to_process = []

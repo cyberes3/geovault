@@ -3,9 +3,10 @@ Shared utilities for import operations.
 Contains helper functions used by both single and bulk import jobs.
 """
 
+import copy
 import json
 import threading
-from typing import Dict, Any, Optional, Tuple
+from typing import Dict, Any, Optional, Tuple, List
 
 from django.contrib.gis.geos import GEOSGeometry
 from asgiref.sync import async_to_sync
@@ -282,4 +283,79 @@ def process_single_feature_for_import(
         import traceback
         logger.error(f"Feature processing error traceback: {traceback.format_exc()}")
         return None
+
+
+def apply_bulk_operations(features: List[Dict[str, Any]], bulk_ops: Dict[str, Any]) -> List[Dict[str, Any]]:
+    """
+    Apply bulk operations (tags, styling) to a list of features.
+    Shared utility function used by both single and bulk import jobs.
+    
+    Args:
+        features: List of GeoJSON features
+        bulk_ops: Dictionary containing bulk operations (tags, pointColor, pointIcon, lineColor, polyColor)
+        
+    Returns:
+        List of features with bulk operations applied
+    """
+    if not bulk_ops:
+        return features
+
+    result = []
+    for feature in features:
+        # Skip duplicates
+        if feature.get('properties', {}).get('isDuplicate', False):
+            result.append(feature)
+            continue
+
+        # Create a copy to avoid mutating the original
+        modified_feature = copy.deepcopy(feature)
+
+        # Initialize properties if not present
+        if 'properties' not in modified_feature:
+            modified_feature['properties'] = {}
+
+        # Apply tags (merge with existing tags, avoiding duplicates)
+        if bulk_ops.get('tags') and len(bulk_ops['tags']) > 0:
+            if 'tags' not in modified_feature['properties']:
+                modified_feature['properties']['tags'] = []
+            
+            # Merge tags, avoiding duplicates
+            existing_tags = set(tag.lower() for tag in modified_feature['properties']['tags'])
+            for tag in bulk_ops['tags']:
+                lower_tag = tag.lower()
+                if lower_tag not in existing_tags:
+                    modified_feature['properties']['tags'].append(lower_tag)
+                    existing_tags.add(lower_tag)
+
+        geometry_type = modified_feature.get('geometry', {}).get('type')
+
+        # Apply point styling (only if value is not None)
+        # Applies to both Point and MultiPoint
+        if geometry_type in ('Point', 'MultiPoint'):
+            if bulk_ops.get('pointColor') is not None:
+                modified_feature['properties']['marker-color'] = bulk_ops['pointColor']
+            
+            if bulk_ops.get('pointIcon') is not None:
+                modified_feature['properties']['icon_url'] = bulk_ops['pointIcon']
+                modified_feature['properties']['iconUrl'] = bulk_ops['pointIcon']
+                modified_feature['properties']['icon-href'] = bulk_ops['pointIcon']
+
+        # Apply line styling (only if value is not None)
+        # Applies to both LineString and MultiLineString
+        if geometry_type in ('LineString', 'MultiLineString'):
+            if bulk_ops.get('lineColor') is not None:
+                modified_feature['properties']['stroke'] = bulk_ops['lineColor']
+
+        # Apply polygon styling (only if value is not None)
+        if geometry_type in ('Polygon', 'MultiPolygon'):
+            if bulk_ops.get('polyColor') is not None:
+                # Set both stroke (border) and fill to the same color
+                # Fill should have 10% opacity
+                modified_feature['properties']['stroke'] = bulk_ops['polyColor']
+                modified_feature['properties']['fill'] = bulk_ops['polyColor']
+                modified_feature['properties']['fill-opacity'] = 0.1
+
+        result.append(modified_feature)
+
+    return result
 

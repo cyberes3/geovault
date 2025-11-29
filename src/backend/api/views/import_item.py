@@ -521,3 +521,73 @@ def import_to_featurestore(request, item_id):
 
         # Not finished yet, wait a bit before polling again
         time.sleep(poll_interval)
+
+
+@login_required_401
+@csrf_protect
+@require_http_methods(["PUT", "PATCH"])
+def save_bulk_operations(request, item_id):
+    """
+    Save bulk operations (tags, styling) for an import queue item.
+    These operations will be applied during import.
+    """
+    try:
+        import_item = ImportQueue.objects.get(id=item_id)
+    except ImportQueue.DoesNotExist:
+        return JsonResponse({'msg': 'ID does not exist', 'code': 404}, status=400)
+    if import_item.user_id != request.user.id:
+        return JsonResponse({'msg': 'not authorized to edit this item', 'code': 403}, status=403)
+
+    # Prevent updating items that have already been imported
+    if import_item.imported:
+        return JsonResponse({
+            'msg': 'Cannot update bulk operations for items that have already been imported',
+            'code': 400
+        }, status=400)
+
+    try:
+        data = json.loads(request.body)
+        if not isinstance(data, dict):
+            raise ValueError('Invalid data format. Expected a JSON object.')
+
+        # Validate bulk operations structure
+        bulk_ops = data.get('bulk_operations', {})
+        if not isinstance(bulk_ops, dict):
+            raise ValueError('bulk_operations must be a JSON object')
+
+        # Save bulk operations to the import queue item
+        import_item.bulk_operations = bulk_ops
+        import_item.save(update_fields=['bulk_operations'])
+
+        return JsonResponse({
+            'msg': 'Bulk operations saved successfully'
+        }, status=200)
+
+    except (json.JSONDecodeError, ValueError) as e:
+        return JsonResponse({'msg': str(e), 'code': 400}, status=400)
+    except Exception as e:
+        logger.error(f"Error saving bulk operations: {str(e)}")
+        return JsonResponse({
+            'msg': 'Failed to save bulk operations',
+            'code': 500
+        }, status=500)
+
+
+@login_required_401
+@require_http_methods(["GET"])
+def get_bulk_operations(request, item_id):
+    """
+    Get bulk operations for an import queue item.
+    """
+    try:
+        import_item = ImportQueue.objects.get(id=item_id)
+    except ImportQueue.DoesNotExist:
+        return JsonResponse({'msg': 'ID does not exist', 'code': 404}, status=400)
+    if import_item.user_id != request.user.id:
+        return JsonResponse({'msg': 'not authorized to view this item', 'code': 403}, status=403)
+
+    # Return bulk operations (default to empty dict if None)
+    bulk_ops = import_item.bulk_operations or {}
+    return JsonResponse({
+        'bulk_operations': bulk_ops
+    }, status=200)
