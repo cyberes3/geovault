@@ -319,7 +319,8 @@ export default {
       // Available tags for autocomplete and filtering
       availableTags: [], // Tags fetched once and shared with child components
       isRestoring: false, // Track if map is being restored
-      activeMobileSidebar: null // 'features', 'controls', or null
+      activeMobileSidebar: null, // 'features', 'controls', or null
+      mapWasDestroyed: false // Track if map was fully destroyed for memory reasons
     }
   },
   methods: {
@@ -1721,16 +1722,56 @@ export default {
       })
     },
 
-    // Destroy map and resources to free up memory
-    destroyMapResources() {
-      // Check if we need to destroy the map to free up memory
-      if (this.featureCount > MAP_CONFIG.DESTROY_MAP_THRESHOLD) {
+    // Lightweight cleanup that should always run when navigating away
+    cleanupOnNavigateAway() {
+      const previousFeatureCount = this.featureCount
 
-        // Clear vector source to release feature geometries immediately
-        if (this.vectorSource) {
-          this.vectorSource.clear()
-          this.vectorSource = null
-        }
+      // Clear all features but keep tile layer and map instance unless heavy cleanup is needed
+      if (this.vectorSource) {
+        this.vectorSource.clear()
+      }
+
+      // Reset feature-related state
+      this.featuresInExtent = []
+      this.featureTimestamps = {}
+      this.loadedBounds.clear()
+      this.selectedFeature = null
+      this.isEditingFeature = false
+      this.showElevationProfile = false
+
+      // Clean up any pending timeouts
+      if (this.loadTimeout) {
+        clearTimeout(this.loadTimeout)
+        this.loadTimeout = null
+      }
+      if (this.featureListUpdateTimeout) {
+        clearTimeout(this.featureListUpdateTimeout)
+        this.featureListUpdateTimeout = null
+      }
+
+      // Cancel any pending API request
+      if (this.currentAbortController) {
+        this.currentAbortController.abort()
+        this.currentAbortController = null
+      }
+
+      // Clear hover marker and related transient state
+      this.handleHoverClear()
+
+      // For very large maps, also destroy heavy map resources to free memory
+      this.destroyMapResources(previousFeatureCount)
+
+      // After cleanup, reset feature counters
+      this.featureCount = 0
+      this.featureCountUpdatePending = false
+    },
+
+    // Destroy map and resources to free up memory
+    destroyMapResources(featureCountOverride = null) {
+      const effectiveFeatureCount = featureCountOverride !== null ? featureCountOverride : this.featureCount
+
+      // Check if we need to destroy the map to free up memory
+      if (effectiveFeatureCount > MAP_CONFIG.DESTROY_MAP_THRESHOLD) {
 
         // Clear layer references
         this.vectorLayer = null
@@ -1746,6 +1787,9 @@ export default {
           this.map.setTarget(null)
           this.map = null
         }
+
+        // Remember that the map was fully destroyed so we can restore it on re-activation
+        this.mapWasDestroyed = true
       }
     },
 
@@ -1985,41 +2029,34 @@ export default {
   },
 
   activated() {
-    // Restore map if it was destroyed
-    if (!this.map && this.featureCount > MAP_CONFIG.DESTROY_MAP_THRESHOLD) {
+    // If the map was fully destroyed for memory reasons, restore it
+    if (this.mapWasDestroyed) {
+      // Show loading indicators immediately while restoring
+      this.isLoading = true
+      this.isRestoring = true
       this.restoreMap()
+      this.mapWasDestroyed = false
+      return
+    }
+
+    // If the map is still present but has no features loaded, reload data for current view
+    if (this.map && this.vectorSource && this.vectorSource.getFeatures().length === 0) {
+      // Show loading indicators immediately while reloading data
+      this.isLoading = true
+      this.isInitialLoad = true
+      // Start data fetch immediately (no debounce) when navigating back
+      this.loadDataForCurrentView()
     }
   },
 
   deactivated() {
-    // Destroy map resources if threshold exceeded
-    this.destroyMapResources()
+    // Always run lightweight cleanup when navigating away
+    this.cleanupOnNavigateAway()
   },
 
   beforeUnmount() {
-    // Check if we need to destroy the map to free up memory
-    this.destroyMapResources()
-
-    // Clean up
-    if (this.loadTimeout) {
-      clearTimeout(this.loadTimeout)
-    }
-
-    // Clean up feature list update timeout
-    if (this.featureListUpdateTimeout) {
-      clearTimeout(this.featureListUpdateTimeout)
-    }
-
-    // Cancel any pending API request
-    if (this.currentAbortController) {
-      this.currentAbortController.abort()
-    }
-
-    // Clear hover marker
-    this.handleHoverClear()
-
-    // Clear feature timestamps
-    this.featureTimestamps = {}
+    // Always run lightweight cleanup before component is destroyed
+    this.cleanupOnNavigateAway()
   }
 }
 </script>
