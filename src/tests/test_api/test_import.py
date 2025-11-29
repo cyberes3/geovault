@@ -433,3 +433,111 @@ class TestImportAPI(TestCase):
         response = self.client.post('/api/item/import/upload', {'file': file})
         self.assertEqual(response.status_code, 401)
 
+    @patch('geo_lib.processing.duplicate_detection.find_coordinate_duplicates')
+    @patch('geo_lib.processing.logging.RealTimeImportLog')
+    def test_recheck_duplicates(self, mock_realtime_log_class, mock_find_duplicates):
+        """Test rechecking duplicates for an import queue item."""
+        # Create import queue item with features
+        import_queue = ImportQueue.objects.create(
+            user=self.user,
+            original_filename='test.kml',
+            raw_file='<kml></kml>',
+            geofeatures=[{
+                'type': 'Feature',
+                'geometry': {'type': 'Point', 'coordinates': [-122.4194, 37.7749]},
+                'properties': {'name': 'Test Feature 1'}
+            }, {
+                'type': 'Feature',
+                'geometry': {'type': 'Point', 'coordinates': [-122.4195, 37.7750]},
+                'properties': {'name': 'Test Feature 2'}
+            }],
+            imported=False
+        )
+
+        # Mock the RealTimeImportLog instance
+        mock_import_log = MagicMock()
+        mock_import_log.add = MagicMock()
+        mock_import_log.extend = MagicMock()
+        mock_import_log.add_timing = MagicMock()
+        mock_realtime_log_class.return_value = mock_import_log
+        
+        # Mock ImportLog returned by find_coordinate_duplicates
+        mock_duplicate_log = MagicMock()
+        
+        duplicate_feature = {
+            'feature': import_queue.geofeatures[0],
+            'existing_features': [{
+                'id': 123,
+                'name': 'Existing Feature',
+                'type': 'Point',
+                'timestamp': '2024-01-01T00:00:00Z'
+            }]
+        }
+        mock_find_duplicates.return_value = (
+            [import_queue.geofeatures[1]],  # unique_features
+            [duplicate_feature],  # duplicate_features
+            mock_duplicate_log  # import_log
+        )
+
+        response = self.client.post(f'/api/item/import/recheck-duplicates/{import_queue.id}')
+        self.assertEqual(response.status_code, 200)
+        data = json.loads(response.content)
+        self.assertEqual(data['duplicate_count'], 1)
+        self.assertIn('Duplicates rechecked successfully', data['msg'])
+
+        # Verify RealTimeImportLog was initialized with correct parameters
+        mock_realtime_log_class.assert_called_once_with(user_id=self.user.id, log_id=import_queue.log_id)
+        
+        # Verify duplicate detection was called
+        mock_find_duplicates.assert_called_once()
+        
+        # Verify logging methods were called
+        self.assertGreater(mock_import_log.add.call_count, 0, "RealTimeImportLog.add should be called")
+        self.assertEqual(mock_import_log.extend.call_count, 1, "RealTimeImportLog.extend should be called once")
+        self.assertEqual(mock_import_log.add_timing.call_count, 1, "RealTimeImportLog.add_timing should be called once")
+        
+        # Verify import queue was updated
+        import_queue.refresh_from_db()
+        self.assertEqual(len(import_queue.duplicate_features), 1)
+
+    def test_recheck_duplicates_not_found(self):
+        """Test rechecking duplicates for non-existent item."""
+        response = self.client.post('/api/item/import/recheck-duplicates/99999')
+        self.assertEqual(response.status_code, 404)
+
+    def test_recheck_duplicates_unauthorized(self):
+        """Test rechecking duplicates for another user's item."""
+        from django.contrib.auth import get_user_model
+        User = get_user_model()
+        other_user = User.objects.create_user(
+            email='other@example.com',
+            password='pass',
+            username='other'
+        )
+        
+        import_queue = ImportQueue.objects.create(
+            user=other_user,
+            original_filename='test.kml',
+            raw_file='<kml></kml>',
+            geofeatures=[],
+            imported=False
+        )
+
+        response = self.client.post(f'/api/item/import/recheck-duplicates/{import_queue.id}')
+        self.assertEqual(response.status_code, 403)
+
+    def test_recheck_duplicates_already_imported(self):
+        """Test rechecking duplicates for already imported item."""
+        import_queue = ImportQueue.objects.create(
+            user=self.user,
+            original_filename='test.kml',
+            raw_file='<kml></kml>',
+            geofeatures=[],
+            imported=True  # Already imported
+        )
+
+        response = self.client.post(f'/api/item/import/recheck-duplicates/{import_queue.id}')
+        self.assertEqual(response.status_code, 400)
+        data = json.loads(response.content)
+        self.assertIn('already been imported', data['msg'])
+

@@ -233,22 +233,37 @@
     <!-- Global Options -->
     <div v-if="itemsForUser.length > 0 && !loading.page && !processing.active" class="bg-white rounded-lg shadow-sm border border-gray-200 p-4 sm:p-6">
       <h3 class="text-sm font-semibold text-gray-900 mb-3">Global Options</h3>
-      <div class="flex flex-col space-y-3">
-        <div class="flex flex-col sm:flex-row sm:items-center sm:space-x-3 space-y-2 sm:space-y-0">
+      <div class="flex flex-col sm:flex-row sm:items-center gap-4">
+        <!-- Import Custom Icons Toggle -->
+        <div class="flex items-center space-x-3">
           <ToggleButton
               v-model="importCustomIcons"
               label="Import custom icons for all features"
               :disabled="lockButtons || loading.importing || loading.saving || isImported"
               size="md"
           />
-          <label class="text-sm font-medium text-gray-700 cursor-pointer" @click="!lockButtons && !loading.importing && !loading.saving && !isImported && (importCustomIcons = !importCustomIcons)">
+          <label class="text-sm font-medium text-gray-700 cursor-pointer whitespace-nowrap" @click="!lockButtons && !loading.importing && !loading.saving && !isImported && (importCustomIcons = !importCustomIcons)">
             Import custom icons for all features
           </label>
         </div>
-        <div class="flex items-center space-x-2">
+
+        <!-- Buttons Section -->
+        <div class="flex items-center gap-2 sm:ml-auto">
+          <!-- Recheck Duplicates Button -->
+          <button
+              :disabled="lockButtons || loading.importing || loading.saving || isImported || loading.recheckingDuplicates"
+              class="inline-flex items-center justify-center px-4 py-2 border border-transparent text-sm font-medium rounded-md text-white bg-blue-500 hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 disabled:bg-gray-400 disabled:cursor-not-allowed transition-colors duration-200 whitespace-nowrap"
+              @click="recheckDuplicates"
+              title="Recheck for duplicate features"
+          >
+            <Loader v-if="loading.recheckingDuplicates" size="sm" layout="inline" :showMessage="false" color="white" />
+            {{ loading.recheckingDuplicates ? 'Rechecking...' : 'Recheck Duplicates' }}
+          </button>
+
+          <!-- Bulk Operations Button -->
           <button
               :disabled="lockButtons || loading.importing || loading.saving || isImported"
-              class="w-full sm:w-[20%] inline-flex items-center justify-center px-4 py-2 border border-transparent text-sm font-medium rounded-md text-white bg-blue-500 hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 disabled:bg-gray-400 disabled:cursor-not-allowed transition-colors duration-200"
+              class="inline-flex items-center justify-center px-4 py-2 border border-transparent text-sm font-medium rounded-md text-white bg-blue-500 hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 disabled:bg-gray-400 disabled:cursor-not-allowed transition-colors duration-200 whitespace-nowrap"
               @click="openBulkOperationsModal"
               title="Bulk Operations"
           >
@@ -718,7 +733,8 @@ export default {
         page: false,
         saving: false,
         importing: false,
-        redirecting: false
+        redirecting: false,
+        recheckingDuplicates: false
       },
 
       // Consolidated: Processing state
@@ -1500,10 +1516,10 @@ export default {
     hasUnsavedChanges() {
       // Check if there are any unsaved changes on current page or cached pages
       const hasFeatureChanges = this._getChangedFeatures().length > 0;
-      
+
       // Check if bulk operations have changed
       const hasBulkOpsChanges = this._hasBulkOperationsChanged();
-      
+
       return hasFeatureChanges || hasBulkOpsChanges;
     },
     _hasBulkOperationsChanged() {
@@ -1519,7 +1535,7 @@ export default {
 
       // Collect only changed features from current page and cached pages
       const changedFeatures = this._getChangedFeatures();
-      
+
       // Check if bulk operations have changed
       const hasBulkOpsChanges = this._hasBulkOperationsChanged();
 
@@ -1643,6 +1659,37 @@ export default {
         this.loading.importing = false;
       }
     },
+    async recheckDuplicates() {
+      this.lockButtons = true;
+      this.loading.recheckingDuplicates = true;
+      const csrftoken = getCookie('csrftoken');
+
+      try {
+        // Call the recheck duplicates endpoint
+        const response = await axios.post('/api/item/import/recheck-duplicates/' + this.currentId, {}, {
+          headers: {
+            'X-CSRFToken': csrftoken
+          }
+        });
+
+        if (response.status === 200) {
+          // Show success message
+          this.$toast.success(`Duplicate recheck completed. Found ${response.data.duplicate_count} duplicate(s).`);
+
+          // Refresh the page data via WebSocket to get updated duplicates and logs
+          this.sendWebSocketMessage('refresh', {});
+        } else {
+          this.msg = 'Error rechecking duplicates: ' + response.data.msg;
+          this.$toast.error(this.msg);
+        }
+      } catch (error) {
+        this.msg = 'Error rechecking duplicates: ' + (error.response?.data?.msg || error.message);
+        this.$toast.error(this.msg);
+      } finally {
+        this.lockButtons = false;
+        this.loading.recheckingDuplicates = false;
+      }
+    },
     showMapPreview() {
       this.dialogs.mapPreview = true;
     },
@@ -1701,7 +1748,7 @@ export default {
           // No bulk operations found, use defaults
           this.bulkOperations = cloneBulkOperations(DEFAULT_BULK_OPERATIONS);
         }
-        
+
         // Store as original state
         this.originalBulkOperations = cloneBulkOperations(this.bulkOperations);
       } catch (error) {

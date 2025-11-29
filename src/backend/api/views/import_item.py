@@ -590,3 +590,89 @@ def get_bulk_operations(request, item_id):
     return JsonResponse({
         'bulk_operations': bulk_ops
     }, status=200)
+
+
+@api_or_login_required_401()
+@require_http_methods(["POST"])
+def recheck_duplicates(request, item_id):
+    """
+    Re-run coordinate duplicate detection for an import queue item.
+    This is useful when other features may have been imported after the file was initially uploaded.
+    """
+    try:
+        import_item = ImportQueue.objects.get(id=item_id)
+    except ImportQueue.DoesNotExist:
+        return JsonResponse({'msg': 'ID does not exist', 'code': 404}, status=404)
+    if import_item.user_id != request.user.id:
+        return JsonResponse({'msg': 'not authorized to edit this item', 'code': 403}, status=403)
+
+    # Prevent rechecking duplicates for items that have already been imported
+    if import_item.imported:
+        return JsonResponse({
+            'msg': 'Cannot recheck duplicates for items that have already been imported',
+            'code': 400
+        }, status=400)
+
+    try:
+        from geo_lib.processing.duplicate_detection import find_coordinate_duplicates
+        from geo_lib.processing.logging import RealTimeImportLog, DatabaseLogLevel
+        import time
+
+        # Get the features from the import item
+        features = import_item.geofeatures
+        if not features:
+            return JsonResponse({
+                'msg': 'No features to check',
+                'duplicate_count': 0
+            }, status=200)
+
+        # Create a real-time log for this operation
+        realtime_log = RealTimeImportLog(user_id=request.user.id, log_id=import_item.log_id)
+        
+        # Log the start of the manual recheck operation
+        realtime_log.add(
+            "Manual duplicate re-check requested by user",
+            "Duplicate Recheck",
+            DatabaseLogLevel.INFO
+        )
+        realtime_log.add(
+            "Starting duplicate re-check against existing features in your library",
+            "Duplicate Recheck",
+            DatabaseLogLevel.INFO
+        )
+
+        # Perform duplicate detection
+        start_time = time.time()
+        unique_features, duplicate_features, duplicate_log = find_coordinate_duplicates(
+            features,
+            request.user.id
+        )
+        duration = time.time() - start_time
+
+        # Extend the real-time log with duplicate detection results
+        realtime_log.extend(duplicate_log)
+        realtime_log.add_timing("Duplicate re-check", duration, "Duplicate Recheck")
+
+        # Update the import queue item with new duplicate information
+        import_item.duplicate_features = duplicate_features
+        import_item.save(update_fields=['duplicate_features'])
+
+        # Log completion
+        duplicate_count = len(duplicate_features)
+        realtime_log.add(
+            f"Duplicate re-check completed. Found {duplicate_count} duplicate(s)",
+            "Duplicate Recheck",
+            DatabaseLogLevel.INFO
+        )
+
+        return JsonResponse({
+            'msg': 'Duplicates rechecked successfully',
+            'duplicate_count': duplicate_count
+        }, status=200)
+
+    except Exception as e:
+        logger.error(f"Error rechecking duplicates for item {item_id}: {str(e)}")
+        return JsonResponse({
+            'msg': 'Failed to recheck duplicates',
+            'code': 500
+        }, status=500)

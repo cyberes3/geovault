@@ -2,7 +2,13 @@
 Process status WebSocket module.
 Handles real-time status updates for a specific import item.
 """
-
+from api.models import ImportQueue
+from geo_lib.processing.duplicate_detection import find_coordinate_duplicates
+from geo_lib.processing.logging import RealTimeImportLog, DatabaseLogLevel
+from geo_lib.utils.pydantic_serialization import convert_features_to_pydantic
+from asgiref.sync import sync_to_async
+import time
+import asyncio
 import json
 import traceback
 from typing import Dict, Any, Optional
@@ -83,6 +89,23 @@ class ProcessStatusModule(BaseWebSocketModule):
                     if duplicate_imported:
                         duplicate_status = 'duplicate_imported'
                         duplicate_original_filename = duplicate_imported.original_filename
+                        
+                        # If this file is a duplicate_imported but has no duplicate_features,
+                        # it means the original file was imported AFTER this one was uploaded.
+                        # Automatically recheck duplicates to mark the features properly.
+                        if not self.import_item.duplicate_features or len(self.import_item.duplicate_features) == 0:
+                            # Log to processing log for user visibility
+                            if self.import_item.log_id:
+                                from geo_lib.processing.logging import RealTimeImportLog, DatabaseLogLevel
+                                
+                                realtime_log = RealTimeImportLog(user_id=self.user.id, log_id=self.import_item.log_id)
+                                await realtime_log.add_async(
+                                    f"File is a duplicate of imported file, but features were not checked. Automatically rechecking duplicates now.",
+                                    "Duplicate Detection",
+                                    DatabaseLogLevel.INFO
+                                )
+                            
+                            await self._auto_recheck_duplicates()
 
             # Only block if it's a duplicate in the queue
             # Allow duplicates of already-imported files to proceed (they'll be marked as duplicates)
@@ -123,9 +146,6 @@ class ProcessStatusModule(BaseWebSocketModule):
             # Get recent logs
             logs_data = await self._get_logs()
 
-            # Get duplicate information (feature-level duplicates for pagination UI)
-            duplicates_data = await self._get_duplicates()
-
             initial_state = {
                 'item_id': self.import_item.id,
                 'imported': self.import_item.imported,
@@ -136,7 +156,7 @@ class ProcessStatusModule(BaseWebSocketModule):
                 'job_details': job_details,
                 'features': features_data,
                 'logs': logs_data,
-                'duplicates': duplicates_data,
+                'duplicates': features_data.get('duplicates', []),  # Get duplicates from features_data
                 # Include duplicate status for informational purposes (duplicate_imported allows import)
                 'duplicate_status': duplicate_status,
                 'duplicate_original_filename': duplicate_original_filename
@@ -373,7 +393,9 @@ class ProcessStatusModule(BaseWebSocketModule):
         
         # Now process each duplicate_info and mark all features with matching coordinates as duplicates
         # Convert original indices to new sorted indices
-        for dup_info in (self.import_item.duplicate_features if self.import_item.duplicate_features else []):
+        duplicate_features_list = self.import_item.duplicate_features if self.import_item.duplicate_features else []
+        
+        for dup_info in duplicate_features_list:
             dup_feature = dup_info.get('feature')
             if dup_feature:
                 dup_geom = dup_feature.get('geometry', {})
@@ -453,7 +475,67 @@ class ProcessStatusModule(BaseWebSocketModule):
             logger.error(f"Error fetching logs: {str(e)}")
             return []
 
-    async def _get_duplicates(self) -> list:
-        """Get duplicate information for the current page."""
-        # This is handled in _get_paginated_features for efficiency
-        return []
+    async def _auto_recheck_duplicates(self) -> None:
+        """
+        Automatically recheck duplicates for this import item.
+        This is called when a file has duplicate_imported status but no duplicate_features,
+        which happens when the original file was imported after this one was uploaded.
+        """
+        try:
+            # Get the features from the import item
+            features = self.import_item.geofeatures
+            if not features:
+                logger.info(f"No features to check for item {self.import_item.id}")
+                return
+            
+            # Create a real-time log for this operation
+            realtime_log = RealTimeImportLog(user_id=self.user.id, log_id=self.import_item.log_id)
+            
+            # Log the start of the auto-recheck
+            await realtime_log.add_async(
+                "Automatically rechecking duplicates (file was imported after this upload)",
+                "Auto Duplicate Recheck",
+                DatabaseLogLevel.INFO
+            )
+
+            def run_duplicate_detection():
+                rd_start_time = time.time()
+                rd_unique_features, rd_duplicate_features, rd_duplicate_log = find_coordinate_duplicates(
+                    features,
+                    self.user.id
+                )
+                rd_duration = time.time() - rd_start_time
+                return rd_unique_features, rd_duplicate_features, rd_duplicate_log, rd_duration
+            
+            # Run in executor to avoid blocking the event loop
+            loop = asyncio.get_event_loop()
+            unique_features, duplicate_features, duplicate_log, duration = await loop.run_in_executor(
+                None, run_duplicate_detection
+            )
+            
+            # Extend the real-time log with duplicate detection results
+            await realtime_log.extend_async(duplicate_log)
+            await realtime_log.add_timing_async("Auto duplicate recheck", duration, "Auto Duplicate Recheck")
+            
+            # Update the import queue item with new duplicate information
+            def save_duplicates():
+                item = ImportQueue.objects.get(id=self.import_item.id)
+                item.duplicate_features = convert_features_to_pydantic(duplicate_features)
+                item.save(update_fields=['duplicate_features'])
+                return len(duplicate_features)
+            
+            duplicate_count = await sync_to_async(save_duplicates)()
+            
+            # Refresh our local copy
+            get_item = sync_to_async(ImportQueue.objects.get)
+            self.import_item = await get_item(id=self.import_item.id)
+            
+            # Log completion
+            await realtime_log.add_async(
+                f"Auto duplicate recheck completed. Found {duplicate_count} duplicate(s)",
+                "Auto Duplicate Recheck",
+                DatabaseLogLevel.INFO
+            )
+        except Exception:
+            logger.error(f"Error auto-rechecking duplicates for item {self.import_item.id}: {traceback.format_exc()}")
+            # Don't raise - we don't want to break the initial state send

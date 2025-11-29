@@ -130,6 +130,11 @@ class RealTimeImportLog:
             self._db_logger.error(f"Real-time log database write error traceback: {traceback.format_exc()}")
             # Don't raise the exception - we still want processing to continue
     
+    async def add_async(self, msg: str, source: str, level=DatabaseLogLevel.INFO, duration: float = None):
+        """Async version of add() for use in async contexts."""
+        from asgiref.sync import sync_to_async
+        await sync_to_async(self.add)(msg, source, level, duration)
+    
     def extend(self, msgs: 'ImportLog'):
         """Extend with messages from another ImportLog and write them to DB efficiently."""
         messages_to_add = msgs.get()
@@ -175,6 +180,11 @@ class RealTimeImportLog:
             self._db_logger.error(f"Failed to write real-time logs to database: {str(e)}")
             self._db_logger.error(f"Real-time log database write error traceback: {traceback.format_exc()}")
 
+    async def extend_async(self, msgs: 'ImportLog'):
+        """Async version of extend() for use in async contexts."""
+        from asgiref.sync import sync_to_async
+        await sync_to_async(self.extend)(msgs)
+
     def get(self) -> List[DatabaseLogMsg]:
         """Get all messages (for compatibility with ImportLog)."""
         return self._messages.copy()
@@ -186,6 +196,10 @@ class RealTimeImportLog:
     def add_timing(self, step_name: str, duration: float, source: str = "Processing", level=DatabaseLogLevel.INFO):
         """Add a timing log message for a completed step."""
         self.add(f"{step_name} completed", source, level, duration)
+    
+    async def add_timing_async(self, step_name: str, duration: float, source: str = "Processing", level=DatabaseLogLevel.INFO):
+        """Async version of add_timing() for use in async contexts."""
+        await self.add_async(f"{step_name} completed", source, level, duration)
     
     def _broadcast_log_to_websocket(self, log_msg: DatabaseLogMsg):
         """Broadcast log message to WebSocket channels."""
