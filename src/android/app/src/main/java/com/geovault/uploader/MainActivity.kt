@@ -25,9 +25,6 @@ import okhttp3.Response
 import java.io.File
 import java.io.FileOutputStream
 import java.io.InputStream
-import java.text.SimpleDateFormat
-import java.util.Date
-import java.util.Locale
 import java.util.concurrent.TimeUnit
 
 class MainActivity : AppCompatActivity() {
@@ -47,7 +44,6 @@ class MainActivity : AppCompatActivity() {
     
     private var fileUri: Uri? = null
     private var originalFilename: String? = null
-    private var timestamp: String = ""
     
     private val prefs: SharedPreferences by lazy {
         getSharedPreferences("geovault_prefs", Context.MODE_PRIVATE)
@@ -163,11 +159,6 @@ class MainActivity : AppCompatActivity() {
             originalFilename = getFilenameFromUri(fileUri!!)
         }
         
-        // Generate ISO timestamp for suffix (local time)
-        val dateFormat = SimpleDateFormat("yyyy-MM-dd'T'HH-mm-ss", Locale.getDefault())
-        timestamp = dateFormat.format(Date())
-        val suffix = "_android_upload_$timestamp"
-        
         // Use the full original filename (with extension) as the base
         val baseFilename = originalFilename ?: "uploaded_file"
         
@@ -175,6 +166,7 @@ class MainActivity : AppCompatActivity() {
         
         // Show preview with postfix inserted before extension
         val (nameWithoutExt, extension) = splitFilename(baseFilename)
+        val suffix = "_android_upload"
         val previewFilename = if (extension.isNotEmpty()) {
             "${nameWithoutExt}${suffix}.$extension"
         } else {
@@ -248,7 +240,7 @@ class MainActivity : AppCompatActivity() {
         
         // Split filename into base name and extension, then insert postfix before extension
         val (nameWithoutExt, extension) = splitFilename(userFilename)
-        val suffix = "_android_upload_$timestamp"
+        val suffix = "_android_upload"
         val finalFilename = if (extension.isNotEmpty()) {
             "${nameWithoutExt}${suffix}.$extension"
         } else {
