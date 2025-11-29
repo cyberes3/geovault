@@ -209,7 +209,7 @@
                 Hide this feature on the main map
               </span>
               <span class="block text-[11px] text-gray-500">
-                Only affects your /map view. Collections, tag views, and public shares are unaffected.
+                Only affects your main map view. Collections, tag views, and public shares are unaffected.
               </span>
             </div>
           </label>
@@ -918,38 +918,38 @@ export default {
           const fetchResponse = await fetch(`${APIHOST}/api/feature/${featureId}/`, {
             credentials: 'include'
           })
-          
+
           if (fetchResponse.ok) {
             const fetchData = await fetchResponse.json()
             if (fetchResponse.ok && fetchData.feature) {
               // Update the feature with fresh data from the server
               const format = new GeoJSON()
               const geojsonData = fetchData.feature.geojson
-              
+
               // Read the updated feature from GeoJSON
               const updatedFeature = format.readFeature(geojsonData, {
                 featureProjection: 'EPSG:3857',
                 dataProjection: 'EPSG:4326'
               })
-              
+
               // Preserve properties from the GeoJSON data
               const properties = geojsonData && geojsonData.properties
                   ? {...geojsonData.properties}
                   : {}
-              
+
               // Add the _id to properties
               properties._id = featureId
               updatedFeature.set('properties', properties)
-              
+
               // Preserve geojson_hash if available
               if (fetchData.feature.geojson_hash) {
                 updatedFeature.set('geojson_hash', fetchData.feature.geojson_hash)
               }
-              
+
               // Update the feature's geometry and properties
               this.feature.setGeometry(updatedFeature.getGeometry())
               this.feature.set('properties', properties)
-              
+
               // Update icon state if icon was uploaded or removed
               if (this.isPoint) {
                 if (uploadedIconUrl) {
@@ -965,7 +965,7 @@ export default {
                   this.iconRemoved = false
                 }
               }
-              
+
               // Trigger feature change to update any listeners
               this.feature.changed()
             }

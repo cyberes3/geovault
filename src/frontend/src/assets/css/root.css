@@ -8,6 +8,19 @@
     --main-green: #5B8A3C;
     --main-yellow: #F4AC45;
     --main-purple: #CB48B7;
+
+    /*
+    Feature Type Color Variables
+    Used for visual identification of different geometry types
+    Also see getGeometryTypeColor()
+    */
+    --feature-color-point: #93c5fd;           /* Light blue */
+    --feature-color-multipoint: #93c5fd;      /* Light blue */
+    --feature-color-linestring: #86efac;      /* Light green */
+    --feature-color-multilinestring: #86efac; /* Light green */
+    --feature-color-polygon: #fbbf24;         /* Amber/yellow */
+    --feature-color-multipolygon: #fbbf24;    /* Amber/yellow */
+    --feature-color-default: #d1d5db;         /* Light gray */
 }
 
 

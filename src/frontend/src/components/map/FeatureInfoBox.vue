@@ -1,5 +1,5 @@
 <template>
-  <div v-if="feature" class="fixed bottom-0 left-0 right-0 w-full bg-white z-20 rounded-t-xl shadow-[0_-4px_6px_-1px_rgba(0,0,0,0.1)] border-t border-gray-200 md:absolute md:bottom-4 md:right-4 md:left-auto md:max-w-md md:w-80 md:rounded-lg md:border md:shadow-xl max-h-[60vh] flex flex-col">
+  <div v-if="feature" class="fixed bottom-0 left-0 right-0 w-full bg-white z-20 rounded-t-xl shadow-[0_-4px_6px_-1px_rgba(0,0,0,0.1)] md:absolute md:bottom-4 md:right-4 md:left-auto md:max-w-md md:w-80 md:rounded-lg md:border-r md:border-b md:border-l md:border-gray-200 md:shadow-xl max-h-[60vh] flex flex-col" :style="{ borderTopWidth: '4px', borderTopColor: getFeatureColor(), borderTopStyle: 'solid' }">
     <div class="p-3 md:p-4 overflow-y-auto">
       <!-- Header -->
       <div class="flex items-start justify-between mb-2 md:mb-4">
@@ -46,10 +46,8 @@
         </div>
       </div>
 
-      <!-- Feature Type & Stats Row (Mobile) / Stacked (Desktop) -->
+      <!-- Stats Row (Mobile) / Stacked (Desktop) -->
       <div class="flex flex-wrap items-center gap-2 text-sm text-gray-600 italic mb-2 md:mb-4">
-        <span>{{ getFeatureGeometryType(feature) }}</span>
-        
         <!-- Elevation (for Point/MultiPoint features) -->
         <div v-if="getFeatureElevation(feature) !== null" class="flex items-center space-x-1 bg-gray-100 border border-gray-300 rounded px-1.5 py-0.5 md:px-2 md:py-1.5">
           <MeasurementIcon class="w-3 h-3 md:w-4 md:h-4" />
@@ -103,6 +101,7 @@ import { ChartBarIcon, ArrowDownTrayIcon, PencilSquareIcon, MapPinIcon, XMarkIco
 import { formatElevation, formatDistance, formatArea } from '@/utils/units'
 import MeasurementIcon from '@/components/icons/MeasurementIcon.vue'
 import AreaIcon from '@/components/icons/AreaIcon.vue'
+import { getGeometryTypeColor } from '@/utils/geometryColors.js'
 
 export default {
   name: 'FeatureInfoBox',
@@ -252,6 +251,13 @@ export default {
     },
     formatArea(areaSqMeters) {
       return formatArea(areaSqMeters)
+    },
+    getFeatureColor() {
+      if (!this.feature) return '#d1d5db'
+      const geometry = this.feature.getGeometry()
+      if (!geometry) return '#d1d5db'
+      const geometryType = geometry.getType()
+      return getGeometryTypeColor(geometryType)
     }
   }
 }

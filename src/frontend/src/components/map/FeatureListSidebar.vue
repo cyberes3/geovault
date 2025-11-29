@@ -103,7 +103,7 @@
             :key="getFeatureId(feature)"
             @click="handleFeatureClick(feature)"
             @contextmenu.prevent="handleFeatureContextMenu(feature)"
-            class="px-1.5 py-1 bg-gray-50 hover:bg-gray-100 transition-colors flex items-center cursor-pointer lg:px-1 lg:py-0.5 xl:px-1.5 xl:py-1"
+            class="px-1.5 py-2.5 bg-gray-50 hover:bg-gray-100 transition-colors flex items-center cursor-pointer lg:px-1 lg:py-2 xl:px-1.5 xl:py-1"
             :style="{ borderLeft: `3px solid ${getGeometryTypeColor(feature)}` }"
           >
             <div class="flex-1 min-w-0">
@@ -111,11 +111,11 @@
                 {{ getFeatureName(feature) }}
               </div>
             </div>
-            <!-- Mobile hide icon -->
+            <!-- Mobile/Tablet hide icon -->
             <button
-              v-if="canHideFeatures && isMobileOpen"
+              v-if="canHideFeatures"
               type="button"
-              class="ml-1 text-gray-400 hover:text-gray-600 p-1"
+              class="ml-1 text-gray-400 hover:text-gray-600 p-1 xl:hidden"
               title="Hide this feature from the main map"
               @click.stop.prevent="emitHideFeature(feature)"
             >
