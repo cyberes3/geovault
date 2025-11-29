@@ -27,6 +27,7 @@ from geo_lib.processing.processors import get_processor
 from geo_lib.processing.status_tracker import ProcessingStatus
 from geo_lib.security.file_validation import SecureFileValidator, SecurityError, FileValidationError
 from geo_lib.utils.pydantic_serialization import convert_features_to_pydantic
+from geo_lib.utils.advisory_locks import advisory_lock
 
 logger = get_job_logger()
 
@@ -494,40 +495,40 @@ class ProcessJob(BaseJob):
             return job.import_queue_id  # Return the ID even though we can't update it
 
         try:
+            # Hash the raw file content for duplicate detection OUTSIDE the transaction
+            # This ensures files with the same source content get the same hash,
+            # regardless of processing differences or file format (KML vs KMZ)
+            import hashlib
+            if isinstance(raw_file_data, str):
+                raw_file_data = raw_file_data.encode('utf-8')
+            file_hash = hashlib.sha256(raw_file_data).hexdigest()
+
+            # Process features using the processor's already processed features
+            features = geojson_data.get('features', [])
+
+            processing_log.add(f"Processing {len(features)} features from uploaded file", "ProcessJob", DatabaseLogLevel.INFO)
+            # Features are already processed by the processor, so we use them directly
+            processed_features = features
+
+            # Log feature type breakdown
+            feature_types = {}
+            for feature in processed_features:
+                geom_type = feature.get('geometry', {}).get('type', 'Unknown')
+                feature_types[geom_type] = feature_types.get(geom_type, 0) + 1
+
+            type_summary = ', '.join([f"{count} {ftype}" for ftype, count in feature_types.items()])
+            processing_log.add(f"Feature breakdown: {type_summary}", "ProcessJob", DatabaseLogLevel.INFO)
+            processing_log.add(f"Successfully processed {len(processed_features)} features", "ProcessJob", DatabaseLogLevel.INFO)
+            processing_log.add("Preparing to save processed data to database", "ProcessJob", DatabaseLogLevel.INFO)
+
+            # Store the raw file hash for duplicate detection
+            # Note: field is named geojson_hash for historical reasons, but stores raw file hash
+            geojson_hash = file_hash
+
+            # Check if this is a replacement upload - skip duplicate detection for fast path
+            is_replacement = import_queue.replacement is not None
+
             with transaction.atomic():
-
-                # Hash the raw file content for duplicate detection
-                # This ensures files with the same source content get the same hash,
-                # regardless of processing differences or file format (KML vs KMZ)
-                import hashlib
-                if isinstance(raw_file_data, str):
-                    raw_file_data = raw_file_data.encode('utf-8')
-                file_hash = hashlib.sha256(raw_file_data).hexdigest()
-
-                # Process features using the processor's already processed features
-                features = geojson_data.get('features', [])
-
-                processing_log.add(f"Processing {len(features)} features from uploaded file", "ProcessJob", DatabaseLogLevel.INFO)
-                # Features are already processed by the processor, so we use them directly
-                processed_features = features
-
-                # Log feature type breakdown
-                feature_types = {}
-                for feature in processed_features:
-                    geom_type = feature.get('geometry', {}).get('type', 'Unknown')
-                    feature_types[geom_type] = feature_types.get(geom_type, 0) + 1
-
-                type_summary = ', '.join([f"{count} {ftype}" for ftype, count in feature_types.items()])
-                processing_log.add(f"Feature breakdown: {type_summary}", "ProcessJob", DatabaseLogLevel.INFO)
-                processing_log.add(f"Successfully processed {len(processed_features)} features", "ProcessJob", DatabaseLogLevel.INFO)
-                processing_log.add("Preparing to save processed data to database", "ProcessJob", DatabaseLogLevel.INFO)
-
-                # Store the raw file hash for duplicate detection
-                # Note: field is named geojson_hash for historical reasons, but stores raw file hash
-                geojson_hash = file_hash
-
-                # Check if this is a replacement upload - skip duplicate detection for fast path
-                is_replacement = import_queue.replacement is not None
 
                 if is_replacement:
                     # Fast path: skip duplicate detection entirely for replacement uploads
@@ -644,10 +645,35 @@ class ProcessJob(BaseJob):
                 # This ensures datetime objects are serialized to ISO strings via model_dump(mode='json')
                 # and geometry objects are converted to GeoJSON dicts
                 import_queue.raw_file = raw_file_content
-                import_queue.geojson_hash = geojson_hash
-                import_queue.geofeatures = convert_features_to_pydantic(processed_features)
-                import_queue.duplicate_features = convert_features_to_pydantic(duplicate_features)
-                import_queue.save()
+                
+                # CRITICAL SECTION: Use advisory lock to prevent race conditions when saving file hash
+                # This ensures that if two identical files are uploaded simultaneously, one will
+                # be properly marked as a duplicate of the other
+                with advisory_lock(file_hash):
+                    # Check for file-level duplicates AFTER acquiring lock
+                    # This ensures the hash from the first file is saved before the second file checks
+                    duplicate_imported_file = ImportQueue.objects.filter(
+                        user_id=user_id,
+                        geojson_hash=file_hash,
+                        imported=True
+                    ).exclude(id=import_queue.id).first()
+                    
+                    if duplicate_imported_file and not is_replacement:
+                        # This file is a duplicate of an already-imported file
+                        processing_log.add(
+                            f"File is a duplicate of already imported file: {duplicate_imported_file.original_filename}",
+                            "File Duplicate Detection",
+                            DatabaseLogLevel.WARNING
+                        )
+                        # Note: We still save the file but don't set any special status here
+                        # The WebSocket module will detect this and auto-recheck duplicates
+                    
+                    # Save the hash and all other data
+                    import_queue.geojson_hash = geojson_hash
+                    import_queue.geofeatures = convert_features_to_pydantic(processed_features)
+                    import_queue.duplicate_features = convert_features_to_pydantic(duplicate_features)
+                    import_queue.save()
+                # Advisory lock released here
 
                 processing_log.add("Import queue entry updated successfully", "ProcessJob", DatabaseLogLevel.INFO)
 

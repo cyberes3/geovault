@@ -94,6 +94,12 @@ class ProcessStatusModule(BaseWebSocketModule):
                         # it means the original file was imported AFTER this one was uploaded.
                         # Automatically recheck duplicates to mark the features properly.
                         if not self.import_item.duplicate_features or len(self.import_item.duplicate_features) == 0:
+                            # Send a status message to the frontend before starting the recheck
+                            await self.send_to_client('status', {
+                                'message': 'Rechecking duplicates...',
+                                'detail': 'File is a duplicate of an imported file. Checking individual features for duplicates.'
+                            })
+                            
                             # Log to processing log for user visibility
                             if self.import_item.log_id:
                                 from geo_lib.processing.logging import RealTimeImportLog, DatabaseLogLevel

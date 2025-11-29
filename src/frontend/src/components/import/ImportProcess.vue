@@ -127,7 +127,10 @@
     </div>
 
     <!-- Loading State for Initial Page Load and Post-Processing -->
-    <Loader v-if="(originalFilename == null && !loading.page) || (processing.active && processing.progress === null)"/>
+    <Loader 
+      v-if="(originalFilename == null && !loading.page) || (processing.active && processing.progress === null)"
+      :message="loadingMessage"
+    />
 
     <!-- Search Box -->
     <div v-if="itemsForUser.length > 0 && !loading.page && !processing.active" class="bg-white rounded-lg shadow-sm border border-gray-200 p-4 sm:p-6">
@@ -684,6 +687,14 @@ export default {
       return this.workerLog;
     },
 
+    loadingMessage() {
+      if (this.statusMessage) {
+        return this.statusDetail 
+          ? `${this.statusMessage} ${this.statusDetail}`
+          : this.statusMessage;
+      }
+      return 'Loading...';
+    }
   },
   components: {
     Loader,
@@ -781,6 +792,8 @@ export default {
       duplicateStatus: null,
       duplicateOriginalFilename: null,
       importCustomIcons: true,
+      statusMessage: null,
+      statusDetail: null,
 
       // WebSocket connection
       ws: null,
@@ -853,6 +866,9 @@ export default {
         case 'initial_state':
           this.handleInitialState(message.data);
           break;
+        case 'status':
+          this.handleStatusMessage(message.data);
+          break;
         case 'status_updated':
           this.handleStatusUpdate(message.data);
           break;
@@ -916,6 +932,10 @@ export default {
       this.duplicateStatus = data.duplicate_status || null;
       this.duplicateOriginalFilename = data.duplicate_original_filename || null;
 
+      // Clear status message now that initial state is loaded
+      this.statusMessage = null;
+      this.statusDetail = null;
+
       if (data.job_details) {
         this.processing.message = data.job_details.message || 'Processing file...';
         this.processing.progress = data.job_details.progress || 0;
@@ -957,6 +977,14 @@ export default {
     handleStatusUpdate(data) {
       this.processing.message = data.message || 'Processing file...';
       this.processing.progress = data.progress || 0;
+    },
+
+    handleStatusMessage(data) {
+      // Handle status messages from the backend (e.g., during auto-recheck)
+      if (data.message) {
+        this.statusMessage = data.message;
+        this.statusDetail = data.detail || null;
+      }
     },
 
     handleLogAdded(data) {
