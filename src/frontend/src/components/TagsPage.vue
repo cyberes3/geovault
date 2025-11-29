@@ -199,7 +199,7 @@
           <div
               v-for="(feature, index) in getPaginatedFeaturesForTag(tag)"
               :key="feature.properties._id || index"
-              class="px-6 py-4 hover:bg-gray-50 transition-colors"
+              class="px-6 py-4 hover:bg-gray-50 transition-colors feature-row"
           >
             <div class="flex items-start justify-between gap-4">
               <div class="flex-1 min-w-0">
@@ -236,6 +236,14 @@
                 </router-link>
               </div>
             </div>
+          </div>
+          <!-- Placeholder rows to keep list height consistent across pages -->
+          <div
+              v-for="n in getTagPlaceholderCount(tag)"
+              :key="`placeholder-${tag}-${n}`"
+              class="feature-row-placeholder border-t border-gray-200"
+              aria-hidden="true"
+          >
           </div>
         </div>
 
@@ -510,33 +518,21 @@ export default {
       if (this.getTagHasNextPage(tag)) {
         const currentPage = this.getTagCurrentPage(tag);
         this.tagCurrentPages[tag] = currentPage + 1;
-        // Scroll to top of features list for this tag
-        this.$nextTick(() => {
-          const tagContainer = this.$el.querySelector(`[data-tag="${tag}"]`);
-          if (tagContainer) {
-            const featuresList = tagContainer.querySelector('.divide-y');
-            if (featuresList) {
-              featuresList.scrollIntoView({ behavior: 'smooth', block: 'start' });
-            }
-          }
-        });
       }
     },
     tagPreviousPage(tag) {
       if (this.getTagHasPreviousPage(tag)) {
         const currentPage = this.getTagCurrentPage(tag);
         this.tagCurrentPages[tag] = currentPage - 1;
-        // Scroll to top of features list for this tag
-        this.$nextTick(() => {
-          const tagContainer = this.$el.querySelector(`[data-tag="${tag}"]`);
-          if (tagContainer) {
-            const featuresList = tagContainer.querySelector('.divide-y');
-            if (featuresList) {
-              featuresList.scrollIntoView({ behavior: 'smooth', block: 'start' });
-            }
-          }
-        });
       }
+    },
+    getTagPlaceholderCount(tag) {
+      // Only lock height when this tag has multiple feature pages
+      if (this.getTagTotalPages(tag) <= 1) {
+        return 0;
+      }
+      const currentPageFeatures = this.getPaginatedFeaturesForTag(tag);
+      return Math.max(0, this.tagFeaturePageSize - currentPageFeatures.length);
     },
     isSystemTag(tag) {
       // Check if tag exists in systemTagsData
@@ -1070,6 +1066,14 @@ export default {
   line-clamp: 2;
   -webkit-box-orient: vertical;
   overflow: hidden;
+}
+
+.feature-row {
+  min-height: 96px; /* Ensures consistent height for all feature rows */
+}
+
+.feature-row-placeholder {
+  height: 97px; /* 96px + 1px for the border to match feature rows with dividers */
 }
 </style>
 
