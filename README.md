@@ -2,6 +2,14 @@
 
 *Self-hosted platform to organize your personal spatial data in a unified database.*
 
+<br>
+
+<p align="center">
+  <img src="other/deviceframes.png" alt="deviceframes.com" style="height:300px">
+</p>
+
+<br>
+
 An outdoorsman tends to collect all sorts of spatial data: tracks of hikes, points of interest, and so on. This data
 tends to be scattered across numerous files stored in your documents and it isn't easy to see where you've been.
 *GeoVault* is a self-hosted web platform that stores this data and presents *all* of it on one map.

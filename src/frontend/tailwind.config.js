@@ -2,6 +2,13 @@
 export default {
     content: ['./index.html', './src/**/*.{vue,js,ts,jsx,tsx}'],
     theme: {
+        screens: {
+            'sm': '640px',
+            'md': '768px',
+            'lg': '1024px',  // Tablets in landscape and small desktops
+            'xl': '1280px',
+            '2xl': '1536px',
+        },
         extend: {
             colors: {
                 blue: {

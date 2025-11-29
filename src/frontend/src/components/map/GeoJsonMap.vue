@@ -20,7 +20,7 @@
     <!-- Center - Map -->
     <div class="flex-1 w-full bg-gray-50 relative overflow-hidden">
       <!-- Mobile Controls Bar (placeholder) -->
-      <div class="sm:hidden bg-white border-b border-gray-200 px-4 py-3 flex justify-between items-center">
+      <div class="lg:hidden bg-white border-b border-gray-200 px-4 py-3 flex justify-between items-center">
         <button
             class="p-2 text-gray-600 hover:text-gray-900 rounded-md hover:bg-gray-100 focus:outline-none"
             title="Features"
@@ -758,9 +758,9 @@ export default {
         maxZoom = 14 // Limit zoom for points to show surrounding area
       }
 
-      // Adjust padding for mobile to position feature in upper half (avoiding info box)
-      // On mobile, the info box is at the bottom and can take up to 60vh
-      const isMobile = window.innerWidth < 640 // Match Tailwind's 'sm' breakpoint
+      // Adjust padding for mobile/tablet to position feature in upper half (avoiding info box)
+      // On mobile/tablet, the info box is at the bottom and can take up to 60vh
+      const isMobile = window.innerWidth < 1024 // Match Tailwind's 'lg' breakpoint for tablets
       let padding
       if (isMobile) {
         // Position feature in upper half: small top padding, large bottom padding

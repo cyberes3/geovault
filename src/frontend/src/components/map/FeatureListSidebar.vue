@@ -2,14 +2,16 @@
   <div 
     :class="[
       'bg-white flex flex-col h-full overflow-hidden',
-      // Desktop styles (always visible as sidebar)
-      'md:flex md:static md:w-80 md:border-r md:border-gray-200',
-      // Mobile styles (modal behavior)
+      // Tablet landscape styles (compact) - show at lg (1024px)
+      'lg:flex lg:static lg:w-64 lg:border-r lg:border-gray-200',
+      // Desktop styles (full width) - show at xl (1280px) and above
+      'xl:w-80',
+      // Mobile/Tablet portrait styles (modal behavior) - up to lg (1024px)
       isMobileOpen ? 'fixed inset-0 z-50 w-full' : 'hidden'
     ]"
   >
     <!-- Mobile Header -->
-    <div class="md:hidden flex items-center justify-between px-4 py-3 border-b border-gray-200">
+    <div class="lg:hidden flex items-center justify-between px-4 py-3 border-b border-gray-200">
       <h2 class="text-lg font-semibold text-gray-900">Features</h2>
       <button 
         @click="$emit('close')" 
@@ -20,7 +22,7 @@
     </div>
 
     <!-- Tabs -->
-    <div class="flex border-b border-gray-200 mb-2 px-1.5 pt-1.5 md:px-1.5 md:pt-1.5">
+    <div class="flex border-b border-gray-200 mb-2 px-1.5 pt-1.5 lg:px-1 xl:px-1.5">
       <button
         @click="activeTab = 'features-in-vicinity'"
         :class="[
@@ -54,14 +56,14 @@
     <!-- Features in Vicinity Tab Content -->
     <div v-if="activeTab === 'features-in-vicinity'" class="flex flex-col flex-1 min-h-0">
       <!-- Search Bar -->
-      <div class="mb-2 px-1">
+      <div class="mb-2 px-1 lg:px-0.5 xl:px-1">
         <div class="relative">
           <input
             v-model="searchQuery"
             @input="handleSearchInput"
             type="text"
             placeholder="Search features..."
-            class="w-full px-2 py-1.5 pr-7 text-xs border border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+            class="w-full px-2 py-1.5 pr-7 text-xs border border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent lg:px-1.5 lg:py-1 xl:px-2 xl:py-1.5"
           />
           <button
             v-if="searchQuery"
@@ -101,7 +103,7 @@
             :key="getFeatureId(feature)"
             @click="handleFeatureClick(feature)"
             @contextmenu.prevent="handleFeatureContextMenu(feature)"
-            class="px-1.5 py-1 bg-gray-50 hover:bg-gray-100 transition-colors flex items-center cursor-pointer"
+            class="px-1.5 py-1 bg-gray-50 hover:bg-gray-100 transition-colors flex items-center cursor-pointer lg:px-1 lg:py-0.5 xl:px-1.5 xl:py-1"
             :style="{ borderLeft: `3px solid ${getGeometryTypeColor(feature)}` }"
           >
             <div class="flex-1 min-w-0">
