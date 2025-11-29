@@ -5,7 +5,7 @@
 <br>
 
 <p align="center">
-  <img src="other/deviceframes.png" alt="deviceframes.com" style="height:200px">
+  <img src="other/deviceframes.png" alt="deviceframes.com" height="200px">
 </p>
 
 <br>
