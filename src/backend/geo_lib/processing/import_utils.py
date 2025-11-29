@@ -71,6 +71,52 @@ def strip_icon_properties(feature: dict) -> dict:
     return feature
 
 
+def validate_bulk_operations_payload(bulk_ops: Dict[str, Any]) -> Tuple[bool, Optional[str]]:
+    """
+    Validate a bulk_operations payload used for styling/tagging.
+
+    Enforces that only tags, colors, and icon fields can be changed and that
+    values have the expected types.
+
+    Args:
+        bulk_ops: Dictionary from the request's bulk_operations field
+
+    Returns:
+        (is_valid, error_message). error_message is None when is_valid is True.
+    """
+    if not isinstance(bulk_ops, dict):
+        return False, "bulk_operations must be a JSON object"
+
+    allowed_keys = {"tags", "pointColor", "pointIcon", "lineColor", "polyColor"}
+
+    invalid_keys = [k for k in bulk_ops.keys() if k not in allowed_keys]
+    if invalid_keys:
+        invalid_keys_str = ", ".join(sorted(str(k) for k in invalid_keys))
+        return (
+            False,
+            (
+                f"Unsupported bulk operation key(s): {invalid_keys_str}. "
+                "Allowed keys are: tags, pointColor, pointIcon, lineColor, polyColor"
+            ),
+        )
+
+    # Validate tags: must be an array of strings if provided
+    if "tags" in bulk_ops:
+        tags_value = bulk_ops["tags"]
+        if (not isinstance(tags_value, list) or
+                any(not isinstance(t, str) for t in tags_value)):
+            return False, "bulk_operations.tags must be an array of strings"
+
+    # Validate colors and icon: string or null
+    for field_name in ("pointColor", "lineColor", "polyColor", "pointIcon"):
+        if field_name in bulk_ops:
+            value = bulk_ops[field_name]
+            if value is not None and not isinstance(value, str):
+                return False, f"bulk_operations.{field_name} must be a string or null"
+
+    return True, None
+
+
 def delete_logs_by_log_id(log_id):
     """Delete all logs from DatabaseLogging table by log_id"""
     deleted_count = DatabaseLogging.objects.filter(log_id=log_id).delete()[0]

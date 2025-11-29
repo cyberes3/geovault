@@ -10,7 +10,10 @@ from django.views.decorators.http import require_http_methods
 from api.models import Collection, FeatureStore
 from geo_lib.feature_id import generate_feature_hash
 from geo_lib.logging.console import get_access_logger
-from geo_lib.processing.import_utils import apply_bulk_operations as apply_bulk_operations_to_features
+from geo_lib.processing.import_utils import (
+    apply_bulk_operations as apply_bulk_operations_to_features,
+    validate_bulk_operations_payload,
+)
 from geo_lib.website.auth import login_required_401
 
 logger = get_access_logger()
@@ -429,9 +432,10 @@ def apply_bulk_operations_to_collection(request, collection_id):
             }, status=400)
 
         bulk_ops = data.get("bulk_operations", {})
-        if not isinstance(bulk_ops, dict):
+        is_valid, error_message = validate_bulk_operations_payload(bulk_ops)
+        if not is_valid:
             return JsonResponse({
-                "error": "bulk_operations must be a JSON object",
+                "error": error_message,
                 "code": 400
             }, status=400)
 
