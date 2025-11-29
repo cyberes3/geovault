@@ -51,7 +51,7 @@ like.
 A simple Android app is included that allows you to quickly upload KML/KMZ/GPX files to your GeoVault server via
 Android's share intent. More info in `src/android`.
 
-DOWNLOAD LINK TODO
+Compiled APKs available here: <https://git.evulid.cc/cyberes/geovault-app-release/releases>
 
 ## Screenshots
 
