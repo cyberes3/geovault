@@ -157,7 +157,7 @@ class TestImportAPI(TestCase):
         mock_status_tracker.get_job_status.return_value = {'status': 'processing'}
 
         response = self.client.get('/api/item/import/status/test-job-id')
-        self.assertEqual(response.status_code, 403)
+        self.assertEqual(response.status_code, 404)  # Security: don't reveal job existence
 
     @patch('api.views.import_item.status_tracker')
     def test_get_user_processing_jobs(self, mock_status_tracker):

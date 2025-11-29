@@ -112,7 +112,7 @@ def get_processing_status(request, job_id):
     # Check if user owns this job
     job = status_tracker.get_job(job_id)
     if not job or job.user_id != request.user.id:
-        return forbidden_response('Not authorized to view this job')
+        return not_found_response('Job not found')  # Don't reveal existence
 
     return success_response({'job_status': job_status})
 
