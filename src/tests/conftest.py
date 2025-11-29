@@ -33,15 +33,34 @@ from django.contrib.auth import get_user_model
 from django.test import Client
 from django.contrib.gis.geos import Point
 
-# Force use of test database settings
-# This ensures pytest-django uses the correct database even with --reuse-db
-if 'TEST' in settings.DATABASES['default']:
-    settings.DATABASES['default'].update(settings.DATABASES['default']['TEST'])
-
 from api.models import FeatureStore, ImportQueue, Collection, TagShare, CollectionShare, UserSettings
 from users.models import ApiKey, UserProfile
 
 User = get_user_model()
+
+
+def pytest_configure():
+    """
+    Pytest hook that runs before test collection.
+    Ensures test database settings are merged before any Django test framework initialization.
+    """
+    from django.db import connections
+    
+    # Force merge TEST database settings into default before any connection
+    if 'TEST' in settings.DATABASES.get('default', {}):
+        test_config = settings.DATABASES['default']['TEST'].copy()
+        # Merge TEST settings into default database config
+        # This ensures Django connects as the test user for all test operations
+        settings.DATABASES['default'].update({
+            'NAME': test_config.get('NAME', settings.DATABASES['default']['NAME']),
+            'USER': test_config.get('USER', settings.DATABASES['default']['USER']),
+            'PASSWORD': test_config.get('PASSWORD', settings.DATABASES['default'].get('PASSWORD', '')),
+            'HOST': test_config.get('HOST', settings.DATABASES['default']['HOST']),
+            'PORT': test_config.get('PORT', settings.DATABASES['default']['PORT']),
+        })
+        
+        # Close any existing connections to force reconnection with new settings
+        connections.close_all()
 
 
 @pytest.fixture
@@ -87,7 +106,7 @@ def sample_point_feature():
         'type': 'Feature',
         'geometry': {
             'type': 'Point',
-            'coordinates': [-122.4194, 37.7749]  # San Francisco
+            'coordinates': [-122.4194, 37.7749, 0.0]  # San Francisco, 3D with Z=0.0
         },
         'properties': {
             'name': 'Test Point',
@@ -105,9 +124,9 @@ def sample_linestring_feature():
         'geometry': {
             'type': 'LineString',
             'coordinates': [
-                [-122.4194, 37.7749],
-                [-122.4094, 37.7849],
-                [-122.3994, 37.7949]
+                [-122.4194, 37.7749, 0.0],  # 3D coordinates
+                [-122.4094, 37.7849, 0.0],
+                [-122.3994, 37.7949, 0.0]
             ]
         },
         'properties': {
@@ -128,11 +147,11 @@ def sample_polygon_feature():
         'geometry': {
             'type': 'Polygon',
             'coordinates': [[
-                [-122.4194, 37.7749],
-                [-122.4094, 37.7749],
-                [-122.4094, 37.7849],
-                [-122.4194, 37.7849],
-                [-122.4194, 37.7749]
+                [-122.4194, 37.7749, 0.0],  # 3D coordinates
+                [-122.4094, 37.7749, 0.0],
+                [-122.4094, 37.7849, 0.0],
+                [-122.4194, 37.7849, 0.0],
+                [-122.4194, 37.7749, 0.0]
             ]]
         },
         'properties': {
@@ -187,8 +206,12 @@ def sample_gpx_content():
 @pytest.fixture
 def feature_store(db, user, sample_point_feature):
     """Create a FeatureStore instance."""
-    geometry = Point(sample_point_feature['geometry']['coordinates'][0],
-                     sample_point_feature['geometry']['coordinates'][1])
+    coords = sample_point_feature['geometry']['coordinates']
+    # Ensure 3D Point (add Z=0.0 if only 2D coordinates)
+    if len(coords) == 2:
+        geometry = Point(coords[0], coords[1], 0.0)
+    else:
+        geometry = Point(coords[0], coords[1], coords[2])
     return FeatureStore.objects.create(
         user=user,
         geojson=sample_point_feature,

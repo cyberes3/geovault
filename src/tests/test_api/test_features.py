@@ -30,7 +30,7 @@ class TestFeatureAPI(TestCase):
             'type': 'Feature',
             'geometry': {
                 'type': 'Point',
-                'coordinates': [-122.4194, 37.7749]
+                'coordinates': [-122.4194, 37.7749, 0.0]  # 3D coordinates with Z=0.0
             },
             'properties': {
                 'name': 'Test Point',
@@ -41,7 +41,7 @@ class TestFeatureAPI(TestCase):
         self.point_feature = FeatureStore.objects.create(
             user=self.user,
             geojson=self.point_feature_data,
-            geometry=Point(-122.4194, 37.7749),
+            geometry=Point(-122.4194, 37.7749, 0.0),  # 3D Point with Z=0.0
             file_hash=generate_feature_hash(self.point_feature_data)
         )
 
@@ -49,7 +49,7 @@ class TestFeatureAPI(TestCase):
             'type': 'Feature',
             'geometry': {
                 'type': 'LineString',
-                'coordinates': [[-122.4194, 37.7749], [-122.4094, 37.7849]]
+                'coordinates': [[-122.4194, 37.7749, 0.0], [-122.4094, 37.7849, 0.0]]  # 3D coordinates
             },
             'properties': {
                 'name': 'Test Line',
@@ -60,7 +60,7 @@ class TestFeatureAPI(TestCase):
         self.linestring_feature = FeatureStore.objects.create(
             user=self.user,
             geojson=self.linestring_feature_data,
-            geometry=Point(-122.4194, 37.7749),  # Simplified for test
+            geometry=Point(-122.4194, 37.7749, 0.0),  # 3D Point with Z=0.0  # Simplified for test
             file_hash=generate_feature_hash(self.linestring_feature_data)
         )
 

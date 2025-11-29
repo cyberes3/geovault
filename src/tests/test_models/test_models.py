@@ -43,7 +43,7 @@ class TestFeatureStore(TestCase):
         feature = FeatureStore.objects.create(
             user=self.user,
             geojson=feature_data,
-            geometry=Point(-122.4194, 37.7749),
+            geometry=Point(-122.4194, 37.7749, 0.0),  # 3D Point with Z=0.0
             file_hash=generate_feature_hash(feature_data)
         )
         self.assertIsNotNone(feature.id)
@@ -54,13 +54,13 @@ class TestFeatureStore(TestCase):
         """Test that file_hash is generated correctly."""
         feature_data = {
             'type': 'Feature',
-            'geometry': {'type': 'Point', 'coordinates': [-122.4194, 37.7749]},
+            'geometry': {'type': 'Point', 'coordinates': [-122.4194, 37.7749, 0.0]},  # 3D coordinates
             'properties': {'name': 'Test'}
         }
         feature = FeatureStore.objects.create(
             user=self.user,
             geojson=feature_data,
-            geometry=Point(-122.4194, 37.7749),
+            geometry=Point(-122.4194, 37.7749, 0.0),  # 3D Point with Z=0.0
             file_hash=generate_feature_hash(feature_data)
         )
         self.assertIsNotNone(feature.file_hash)
@@ -70,13 +70,13 @@ class TestFeatureStore(TestCase):
         """Test that geometry is stored correctly."""
         feature_data = {
             'type': 'Feature',
-            'geometry': {'type': 'Point', 'coordinates': [-122.4194, 37.7749]},
+            'geometry': {'type': 'Point', 'coordinates': [-122.4194, 37.7749, 0.0]},  # 3D coordinates
             'properties': {'name': 'Test'}
         }
         feature = FeatureStore.objects.create(
             user=self.user,
             geojson=feature_data,
-            geometry=Point(-122.4194, 37.7749),
+            geometry=Point(-122.4194, 37.7749, 0.0),  # 3D Point with Z=0.0
             file_hash=generate_feature_hash(feature_data)
         )
         self.assertIsNotNone(feature.geometry)
@@ -87,13 +87,13 @@ class TestFeatureStore(TestCase):
         """Test that timestamp is set automatically."""
         feature_data = {
             'type': 'Feature',
-            'geometry': {'type': 'Point', 'coordinates': [-122.4194, 37.7749]},
+            'geometry': {'type': 'Point', 'coordinates': [-122.4194, 37.7749, 0.0]},  # 3D coordinates
             'properties': {'name': 'Test'}
         }
         feature = FeatureStore.objects.create(
             user=self.user,
             geojson=feature_data,
-            geometry=Point(-122.4194, 37.7749),
+            geometry=Point(-122.4194, 37.7749, 0.0),  # 3D Point with Z=0.0
             file_hash=generate_feature_hash(feature_data)
         )
         self.assertIsNotNone(feature.timestamp)

@@ -28,7 +28,7 @@ class TestUserSettingsAPI(TestCase):
             'type': 'Feature',
             'geometry': {
                 'type': 'Point',
-                'coordinates': [-122.4194, 37.7749]
+                'coordinates': [-122.4194, 37.7749, 0.0]  # 3D coordinates with Z=0.0
             },
             'properties': {
                 'name': 'Test Feature'
@@ -37,7 +37,7 @@ class TestUserSettingsAPI(TestCase):
         self.feature = FeatureStore.objects.create(
             user=self.user,
             geojson=self.feature_data,
-            geometry=Point(-122.4194, 37.7749),
+            geometry=Point(-122.4194, 37.7749, 0.0),  # 3D Point with Z=0.0
             file_hash=generate_feature_hash(self.feature_data)
         )
 

@@ -23,13 +23,23 @@ django.setup()
 
 from django.conf import settings
 from django.core.management import call_command
-from django.db import connection
+from django.db import connection, connections
 
 def drop_all_tables():
     """Drop all tables in the test database."""
+    # Close all existing database connections first
+    connections.close_all()
+    
     # Force use of test database settings
     if 'TEST' in settings.DATABASES['default']:
-        settings.DATABASES['default'].update(settings.DATABASES['default']['TEST'])
+        test_config = settings.DATABASES['default']['TEST'].copy()
+        settings.DATABASES['default'].update({
+            'NAME': test_config['NAME'],
+            'USER': test_config['USER'],
+            'PASSWORD': test_config['PASSWORD'],
+            'HOST': test_config['HOST'],
+            'PORT': test_config['PORT'],
+        })
     
     db_config = settings.DATABASES['default']
     
@@ -71,13 +81,24 @@ def drop_all_tables():
         return False
 
 def run_migrations():
-    """Run migrations to recreate tables."""
-    # Force use of test database settings
+    """Run migrations to recreate tables as the test user."""
+    # Close all existing database connections
+    connections.close_all()
+    
+    # Force use of test database settings - update before any connection
     if 'TEST' in settings.DATABASES['default']:
-        settings.DATABASES['default'].update(settings.DATABASES['default']['TEST'])
+        test_config = settings.DATABASES['default']['TEST'].copy()
+        # Update the default database config to use test credentials
+        settings.DATABASES['default'].update({
+            'NAME': test_config['NAME'],
+            'USER': test_config['USER'],
+            'PASSWORD': test_config['PASSWORD'],
+            'HOST': test_config['HOST'],
+            'PORT': test_config['PORT'],
+        })
     
     try:
-        print("Running migrations...")
+        print(f"Running migrations as user: {settings.DATABASES['default']['USER']}")
         call_command('migrate', '--noinput', verbosity=0)
         print("✓ Migrations applied")
         return True
