@@ -148,7 +148,7 @@ import {
   smoothElevationData,
   calculateSpeeds,
   calculateSpeedStats
-} from '@/utils/map/utils/elevationProfileUtils'
+} from '@/utils/map/elevationProfileUtils'
 
 Chart.register(...registerables)
 

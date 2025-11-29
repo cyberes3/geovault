@@ -3,12 +3,12 @@
     <!-- Left Sidebar - Feature List -->
     <FeatureListSidebar
         :key="sidebarKey"
+        :available-tags="availableTags"
         :class="['transition-opacity duration-300', (publicShareError || loadError) ? 'opacity-50 pointer-events-none' : 'opacity-100']"
         :features="featuresInExtent"
-        :available-tags="availableTags"
+        :initial-selected-tags="initialSelectedTags"
         :is-initial-load="isMapInitializing || (isDataLoading && isInitialLoad)"
         :is-mobile-open="activeMobileSidebar === 'features'"
-        :initial-selected-tags="initialSelectedTags"
         @close="activeMobileSidebar = null"
         @feature-click="zoomToFeature"
         @tag-filter-change="handleTagFilterChange"
@@ -20,24 +20,24 @@
       <!-- Mobile Controls Bar (placeholder) -->
       <div class="sm:hidden bg-white border-b border-gray-200 px-4 py-3 flex justify-between items-center">
         <button
-          @click="activeMobileSidebar = 'features'"
-          class="p-2 text-gray-600 hover:text-gray-900 rounded-md hover:bg-gray-100 focus:outline-none"
-          title="Features"
+            class="p-2 text-gray-600 hover:text-gray-900 rounded-md hover:bg-gray-100 focus:outline-none"
+            title="Features"
+            @click="activeMobileSidebar = 'features'"
         >
-          <ListBulletIcon class="w-6 h-6" />
+          <ListBulletIcon class="w-6 h-6"/>
         </button>
         <div class="text-sm font-medium text-gray-900 max-w-[50%] text-center leading-tight flex flex-col items-center justify-center">
           <template v-if="isPublicShareMode">
             <div v-if="publicShareTag" class="flex items-center justify-center gap-1 w-full">
-              <ShareIcon class="w-4 h-4 text-blue-500 flex-shrink-0" />
+              <ShareIcon class="w-4 h-4 text-blue-500 flex-shrink-0"/>
               <span class="line-clamp-2">Tag: {{ publicShareTag }}</span>
             </div>
             <div v-else-if="publicShareCollectionName" class="flex items-center justify-center gap-1 w-full">
-              <ShareIcon class="w-4 h-4 text-blue-500 flex-shrink-0" />
+              <ShareIcon class="w-4 h-4 text-blue-500 flex-shrink-0"/>
               <span class="line-clamp-2">Collection: {{ publicShareCollectionName }}</span>
             </div>
             <div v-else class="flex items-center justify-center gap-1 w-full">
-              <ShareIcon class="w-4 h-4 text-blue-500 flex-shrink-0" />
+              <ShareIcon class="w-4 h-4 text-blue-500 flex-shrink-0"/>
               <span>Shared Map</span>
             </div>
           </template>
@@ -46,49 +46,43 @@
           </template>
         </div>
         <button
-          @click="activeMobileSidebar = 'controls'"
-          class="p-2 text-gray-600 hover:text-gray-900 rounded-md hover:bg-gray-100 focus:outline-none"
-          title="Map Controls"
+            class="p-2 text-gray-600 hover:text-gray-900 rounded-md hover:bg-gray-100 focus:outline-none"
+            title="Map Controls"
+            @click="activeMobileSidebar = 'controls'"
         >
-          <Cog6ToothIcon class="w-6 h-6" />
+          <Cog6ToothIcon class="w-6 h-6"/>
         </button>
       </div>
       <div class="relative w-full h-full">
         <!-- Map -->
-        <div ref="mapContainer" :class="['w-full h-full transition-opacity duration-300', (publicShareError || loadError) ? 'opacity-50 pointer-events-none' : 'opacity-100']"></div>
+        <div
+            ref="mapContainer"
+            :class="[
+            'w-full h-full transition-opacity duration-300',
+            (publicShareError || loadError) ? 'opacity-50 pointer-events-none' : 'opacity-100'
+          ]"
+        ></div>
 
         <!-- Error Overlay for Invalid Share -->
-        <transition name="fade">
-          <div v-if="publicShareError" class="absolute inset-0 z-50 flex items-center justify-center bg-gray-900 bg-opacity-50">
-            <div class="bg-white rounded-lg shadow-xl p-6 max-w-md mx-4 select-none">
-              <div class="flex items-center space-x-3 mb-4">
-                <ExclamationCircleIcon class="w-8 h-8 text-red-600" />
-                <h3 class="text-lg font-semibold text-gray-900">Invalid Share Link</h3>
-              </div>
-              <p class="text-gray-700 mb-4">{{ publicShareError }}</p>
-              <p class="text-sm text-gray-500">The share link may have been deleted or expired.</p>
-            </div>
-          </div>
-        </transition>
+        <MapErrorOverlay
+            :message="publicShareError"
+            :visible="!!publicShareError"
+            subtext="The share link may have been deleted or expired."
+            title="Invalid Share Link"
+        />
 
         <!-- Error Overlay for Loading Failures -->
-        <transition name="fade">
-          <div v-if="loadError" class="absolute inset-0 z-50 flex items-center justify-center bg-gray-900 bg-opacity-50">
-            <div class="bg-white rounded-lg shadow-xl p-6 max-w-md mx-4 select-none">
-              <div class="flex items-center space-x-3 mb-4">
-                <ExclamationCircleIcon class="w-8 h-8 text-red-600" />
-                <h3 class="text-lg font-semibold text-gray-900">Error Loading Map</h3>
-              </div>
-              <p class="text-gray-700 mb-4">{{ loadError }}</p>
-              <p class="text-sm text-gray-500">Please try refreshing the page or check your connection.</p>
-            </div>
-          </div>
-        </transition>
+        <MapErrorOverlay
+            :message="loadError"
+            :visible="!!loadError"
+            subtext="Please try refreshing the page or check your connection."
+            title="Error Loading Map"
+        />
 
         <!-- Public Share Title (shown when viewing a public share) -->
         <div v-if="isPublicShareMode" class="hidden sm:block absolute top-4 right-4 bg-white bg-opacity-90 px-4 py-2 rounded-lg shadow-md z-10">
           <div class="flex items-center space-x-2">
-            <ShareIcon class="w-5 h-5 text-blue-500" />
+            <ShareIcon class="w-5 h-5 text-blue-500"/>
             <span v-if="(publicShareTag || publicShareCollectionName) && !publicShareError" class="text-sm font-medium text-gray-900">
               <template v-if="publicShareTag">Shared Tag: {{ publicShareTag }}</template>
               <template v-else-if="publicShareCollectionName">Shared Collection: {{ publicShareCollectionName }}</template>
@@ -99,44 +93,42 @@
         <!-- Collection Title (shown when viewing a collection) -->
         <div v-if="collectionName && !isPublicShareMode" class="hidden sm:block absolute top-4 right-4 bg-white bg-opacity-90 px-4 py-2 rounded-lg shadow-md z-10">
           <div class="flex items-center space-x-2">
-            <FolderIcon class="w-5 h-5 text-blue-500" />
+            <FolderIcon class="w-5 h-5 text-blue-500"/>
             <span class="text-sm font-medium text-gray-900">Collection: {{ collectionName }}</span>
           </div>
         </div>
 
         <!-- Loading Indicator -->
-        <div
-          v-show="isMapInitializing || isDataLoading || isRestoring || isTagFilterLoading"
-          :class="['absolute', 'right-4', 'bg-white', 'bg-opacity-90', 'px-4', 'py-2', 'rounded-lg', 'shadow-md', 'z-10', 'flex', 'items-center', isPublicShareMode ? 'top-20' : 'top-4']"
-        >
-          <Loader size="sm" layout="inline" message="Loading data..." :showMessage="true" :bold="false" />
-        </div>
+        <MapLoadingIndicator
+            :is-loading="isMapInitializing || isDataLoading || isRestoring || isTagFilterLoading"
+            :is-public-share-mode="isPublicShareMode"
+        />
 
         <!-- Feature Info Box or Edit Box -->
         <FeatureInfoBox
             v-if="!isEditingFeature && !isPublicShareMode && !showElevationProfile"
             :feature="selectedFeature"
             @close="selectedFeature = null"
+            @download="handleDownloadFeatureKmz"
             @edit="handleEditFeature"
             @zoom="zoomToFeature(selectedFeature)"
             @show-profile="showElevationProfile = true"
-            @download="handleDownloadFeatureKmz"
         />
         <FeatureInfoBox
             v-if="!isEditingFeature && isPublicShareMode && !showElevationProfile"
             :feature="selectedFeature"
-            :show-edit-button="false"
-            :show-download-button="publicShareInfo && publicShareInfo.allow_downloads"
             :share-id="shareId"
+            :show-download-button="publicShareInfo && publicShareInfo.allow_downloads"
+            :show-edit-button="false"
             @close="selectedFeature = null"
+            @download="handleDownloadFeatureKmz"
             @zoom="zoomToFeature(selectedFeature)"
             @show-profile="showElevationProfile = true"
-            @download="handleDownloadFeatureKmz"
         />
         <FeatureEditBox
             v-if="isEditingFeature && !isPublicShareMode"
-            :feature="selectedFeature"
             :available-tags="availableTags"
+            :feature="selectedFeature"
             @cancel="handleCancelEdit"
             @deleted="handleFeatureDeleted"
             @saved="handleFeatureSaved"
@@ -150,7 +142,7 @@
             @hover-point="handleHoverPoint"
             @hover-clear="handleHoverClear"
             @click-point="handleClickPoint"
-          />
+        />
 
         <!-- Feature Selection Popup (for overlapping features) -->
         <FeatureSelectionPopup
@@ -162,32 +154,32 @@
         />
 
       </div>
-      
+
       <!-- Center to User Location Button -->
       <button
           v-if="userLocation && !isPublicShareMode"
-          @click="centerToUserLocation"
           class="absolute z-10 bottom-4 left-4 p-2 bg-white border border-gray-200 rounded shadow-md hover:bg-gray-50 text-gray-700 transition-colors"
           title="Center map to your location"
+          @click="centerToUserLocation"
       >
-        <HomeIcon class="w-5 h-5" />
+        <HomeIcon class="w-5 h-5"/>
       </button>
     </div>
 
     <!-- Right Sidebar - Map Controls -->
     <MapControlsSidebar
+        :allow-downloads="publicShareInfo && publicShareInfo.allow_downloads"
         :allowed-options="publicShareAllowedOptions"
         :class="['transition-opacity duration-300', (publicShareError || loadError) ? 'opacity-50 pointer-events-none' : 'opacity-100']"
         :feature-count="featureCount"
+        :is-mobile-open="activeMobileSidebar === 'controls'"
+        :is-public-share-mode="isPublicShareMode"
         :location-display-name="getLocationDisplayName()"
         :max-features="MAX_FEATURES"
         :selected-layer="selectedLayer"
+        :share-id="shareId"
         :tile-sources="tileSources"
         :user-location="userLocation"
-        :is-public-share-mode="isPublicShareMode"
-        :share-id="shareId"
-        :allow-downloads="publicShareInfo && publicShareInfo.allow_downloads"
-        :is-mobile-open="activeMobileSidebar === 'controls'"
         @close="activeMobileSidebar = null"
         @layer-change="updateMapLayer"
     />
@@ -205,10 +197,12 @@ import {fromLonLat, toLonLat} from 'ol/proj'
 import {Point} from 'ol/geom'
 import {Style, Circle, Fill, Stroke} from 'ol/style'
 import {Feature} from 'ol'
-import {getFeatureIconStyle} from '@/utils/map/utils/styleUtils'
-import {getFeatureTextStyle} from '@/utils/map/utils/textUtils'
-import {getInitialMapConfig, getLocationDisplayName} from '@/utils/map/utils/mapConfigUtils'
-import {getBoundingBoxKey, getBoundingBoxString} from '@/utils/map/utils/coordinateUtils'
+import {getFeatureIconStyle} from '@/utils/map/styleUtils'
+import {getFeatureTextStyle} from '@/utils/map/textUtils'
+import {getInitialMapConfig, getLocationDisplayName} from '@/utils/map/mapConfigUtils'
+import {getBoundingBoxKey, getBoundingBoxString} from '@/utils/map/coordinateUtils'
+import {getInverseColor} from '@/utils/map/colorUtils'
+import {useGeoData} from './useGeoData'
 import {getCookie} from '@/assets/js/auth.js'
 import {getUnitPreference} from '@/utils/units'
 import {APIHOST, MAP_CONFIG} from '@/config.js'
@@ -220,8 +214,9 @@ import FeatureInfoBox from './FeatureInfoBox.vue'
 import FeatureEditBox from './FeatureEditBox.vue'
 import FeatureSelectionPopup from './FeatureSelectionPopup.vue'
 import ElevationProfileDialog from './ElevationProfileDialog.vue'
-import Loader from '@/components/parts/Loader.vue'
-import { HomeIcon, ExclamationCircleIcon, ShareIcon, FolderIcon, ListBulletIcon, Cog6ToothIcon } from '@heroicons/vue/24/outline'
+import MapErrorOverlay from './MapErrorOverlay.vue'
+import MapLoadingIndicator from './MapLoadingIndicator.vue'
+import {HomeIcon, ExclamationCircleIcon, ShareIcon, FolderIcon, ListBulletIcon, Cog6ToothIcon} from '@heroicons/vue/24/outline'
 
 export default {
   name: 'GeoJsonMap',
@@ -230,9 +225,10 @@ export default {
     MapControlsSidebar,
     FeatureInfoBox,
     FeatureEditBox,
-    Loader,
     FeatureSelectionPopup,
     ElevationProfileDialog,
+    MapErrorOverlay,
+    MapLoadingIndicator,
     HomeIcon,
     ExclamationCircleIcon,
     ShareIcon,
@@ -342,6 +338,8 @@ export default {
     }
   },
   methods: {
+    // Attach geo-data helpers (data loading, feature bookkeeping)
+    ...useGeoData(),
     async withLoading(flagKey, fn) {
       if (!flagKey || typeof fn !== 'function') {
         return
@@ -463,19 +461,19 @@ export default {
       } else if (clientConfig.type === 'xyz' || tileSource.type === 'xyz') {
         // XYZ tile source (may use proxy URL from client_config)
         const url = clientConfig.url || '/api/tiles/{id}/{z}/{x}/{y}'.replace('{id}', layerValue)
-        
+
         // Handle tile subdomains if provided (e.g., for OpenTopoMap)
         const xyzConfig = {}
         if (clientConfig.tileSubdomains && Array.isArray(clientConfig.tileSubdomains)) {
           // Create array of URLs with each subdomain
-          xyzConfig.urls = clientConfig.tileSubdomains.map(subdomain => 
-            url.replace('{s}', subdomain)
+          xyzConfig.urls = clientConfig.tileSubdomains.map(subdomain =>
+              url.replace('{s}', subdomain)
           )
         } else {
           // Single URL (replace {s} placeholder if present with first subdomain or 'a')
           xyzConfig.url = url.replace('{s}', clientConfig.tileSubdomains?.[0] || 'a')
         }
-        
+
         const xyzSource = new XYZ(xyzConfig)
         this.tileLayer = markRaw(new TileLayer({
           source: xyzSource
@@ -778,7 +776,7 @@ export default {
           this.vectorSource.clear()
           this.loadedBounds.clear()
           this.featureTimestamps = {}
-          this.loadDataForCurrentView()
+          await this.loadDataForCurrentView()
         }
       }
     },
@@ -797,34 +795,6 @@ export default {
       this.isEditingFeature = false
     },
 
-    /**
-     * Convert hex color to RGB array [r, g, b]
-     */
-    hexToRgb(hex) {
-      const shorthandRegex = /^#?([a-f\d])([a-f\d])([a-f\d])$/i
-      hex = hex.replace(shorthandRegex, (m, r, g, b) => r + r + g + g + b + b)
-      const result = /^#?([a-f\d]{2})([a-f\d]{2})([a-f\d]{2})$/i.exec(hex)
-      return result
-        ? [parseInt(result[1], 16), parseInt(result[2], 16), parseInt(result[3], 16)]
-        : null
-    },
-
-    /**
-     * Get the inverse/opposite color of a hex color
-     */
-    getInverseColor(hex) {
-      const rgb = this.hexToRgb(hex)
-      if (!rgb) {
-        return '#000000' // Default to black if conversion fails
-      }
-      // Invert each RGB component
-      const inverted = rgb.map(c => 255 - c)
-      // Convert back to hex
-      return '#' + inverted.map(c => {
-        const hex = c.toString(16)
-        return hex.length === 1 ? '0' + hex : hex
-      }).join('')
-    },
 
     // Handle hover point from elevation profile chart
     handleHoverPoint(coordinate) {
@@ -847,7 +817,7 @@ export default {
       }
 
       // Calculate inverse color for border
-      const borderColor = this.getInverseColor(markerColor)
+      const borderColor = getInverseColor(markerColor)
 
       // Create new Point feature at the coordinate
       const point = new Point(fromLonLat([coordinate[0], coordinate[1]]))
@@ -1278,8 +1248,8 @@ export default {
           ].filter(Boolean).join(', ') || 'Unknown location'
 
           const coordinates = location.latitude && location.longitude
-            ? `${location.latitude.toFixed(4)}, ${location.longitude.toFixed(4)}`
-            : 'No coordinates'
+              ? `${location.latitude.toFixed(4)}, ${location.longitude.toFixed(4)}`
+              : 'No coordinates'
 
           console.log('📍 User Location:', {
             location: locationString,
@@ -1325,346 +1295,6 @@ export default {
       }
     },
 
-    async loadDataForCurrentView() {
-      // Skip loading if tag filter is active (tag filter manages its own features)
-      if (this.isTagFilterActive) {
-        return
-      }
-
-      // Note: Collection mode now uses bbox loading, so we don't skip it here
-
-      // Cancel any existing request
-      if (this.currentAbortController) {
-        this.currentAbortController.abort()
-      }
-
-      const view = this.map.getView()
-      const extent = view.calculateExtent()
-      const zoom = view.getZoom()
-
-      // Check if we already loaded data for this area
-      const bboxKey = this.getBoundingBoxKey(extent, zoom)
-
-      // Check if this is a world-wide extent by calculating the geographic extent
-      const [minX, minY, maxX, maxY] = extent
-      const minLonLat = toLonLat([minX, minY])
-      const maxLonLat = toLonLat([maxX, maxY])
-      const lonSpan = maxLonLat[0] - minLonLat[0]
-      const latSpan = maxLonLat[1] - minLonLat[1]
-
-      // Consider it world-wide if longitude span > 300 degrees or latitude span > 150 degrees
-      const isWorldWide = lonSpan > 300 || latSpan > 150 || zoom <= 2
-
-      if (isWorldWide) {
-        this.loadedBounds.clear()
-        // Don't return here - continue to load data
-      } else if (this.loadedBounds.has(bboxKey)) {
-        // For normal extents, use normal caching
-        return
-      }
-
-      // Create new AbortController for this request
-      this.currentAbortController = new AbortController()
-      this.isDataLoading = true
-      this.loadError = null // Clear any previous load errors
-
-      try {
-        const bboxString = this.getBoundingBoxString(extent)
-        const roundedZoom = Math.round(zoom) // Round to integer for API compatibility
-
-        let url, response, data
-
-        if (this.isPublicShareMode) {
-          // Prevent API calls if shareId is null or invalid
-          if (!this.shareId) {
-            return
-          }
-
-          // Get share info (cached after first call)
-          if (!this.publicShareInfo || this.publicShareInfo.share_id !== this.shareId) {
-            const infoUrl = `/api/sharing/public/info/${this.shareId}/`
-            const infoResponse = await fetch(infoUrl, {
-              signal: this.currentAbortController.signal
-            })
-
-            if (!infoResponse.ok) {
-              const errorData = await infoResponse.json()
-              this.handlePublicShareError(errorData.error || 'Invalid share link')
-              return
-            }
-
-            const infoData = await infoResponse.json()
-            // Response is successful if we got here (infoResponse.ok is true)
-
-            // Cache the share info
-            this.publicShareInfo = {
-              share_id: this.shareId,
-              share_type: infoData.share_type,
-              tag: infoData.tag || null,
-              collection_name: infoData.collection_name || null,
-              collection_id: infoData.collection_id || null,
-              include_tags: infoData.include_tags || false,
-              allow_downloads: infoData.allow_downloads || false
-            }
-
-            // Store tag/collection name for display
-            if (infoData.share_type === 'tag') {
-              this.publicShareTag = infoData.tag
-              this.publicShareCollectionName = null
-            } else if (infoData.share_type === 'collection') {
-              this.publicShareCollectionName = infoData.collection_name
-              this.publicShareTag = null
-            }
-          }
-
-          // Use appropriate endpoint based on share_type
-          if (this.publicShareInfo.share_type === 'tag') {
-            url = `${this.SHARE_API_BASE_URL}${this.shareId}/?bbox=${bboxString}&zoom=${roundedZoom}`
-          } else if (this.publicShareInfo.share_type === 'collection') {
-            url = `/api/sharing/public/collection/${this.shareId}/?bbox=${bboxString}&zoom=${roundedZoom}`
-          } else {
-            this.publicShareError = 'Unknown share type'
-            return
-          }
-
-          response = await fetch(url, {
-            signal: this.currentAbortController.signal
-          })
-
-          data = await response.json()
-        } else {
-          // Use regular endpoint
-          url = this.API_BASE_URL
-          // Build URL with optional collection parameter
-          url = `${url}?bbox=${bboxString}&zoom=${roundedZoom}`
-          if (this.isCollectionMode && this.collectionId) {
-            // collectionId is a computed property from route query
-            url += `&collection=${this.collectionId}`
-          }
-
-          response = await fetch(url, {
-            signal: this.currentAbortController.signal
-          })
-          data = await response.json()
-        }
-
-        // Store the tag or collection name for display (from public share response)
-        if (this.isPublicShareMode) {
-          if (data.tag) {
-            this.publicShareTag = data.tag
-            this.publicShareCollectionName = null
-          } else if (data.collection_name) {
-            this.publicShareCollectionName = data.collection_name
-            this.publicShareTag = null
-          }
-        }
-
-        // Check if the response indicates an error
-        if (!response.ok) {
-          if (this.isPublicShareMode) {
-            this.handlePublicShareError(data.error || 'Failed to load shared features.')
-          } else {
-            this.loadError = data.error || 'Failed to load map data.'
-          }
-          console.error('Error loading data:', data.error)
-          return
-        }
-
-        if (response.ok && data.data && data.data.features) {
-          // Log error if fallback mechanism was used
-          if (data.fallback_used) {
-            console.error(
-                'ERROR: Spatial query returned suspiciously few results for large extent. ' +
-                'Fell back to world-wide query. This may indicate a problem with the spatial query or extent calculation.'
-            )
-          }
-
-          // Show warning if features were limited by configuration
-          if (data.warning) {
-            console.warn(data.warning)
-          }
-
-          // Use original data without simplification
-          const processedData = data.data
-
-          // Add new features to the vector source
-          const features = new GeoJSON().readFeatures(processedData, {
-            featureProjection: 'EPSG:3857',
-            dataProjection: 'EPSG:4326'
-          })
-
-          // Manually preserve properties from the original GeoJSON data
-          features.forEach((feature, index) => {
-            const originalFeature = data.data.features[index]
-
-            if (originalFeature && originalFeature.properties) {
-              // Set the properties explicitly
-              // Note: Individual properties are accessible via feature.get('properties')
-              // Setting them individually is redundant and adds overhead
-              feature.set('properties', originalFeature.properties)
-            }
-
-            // Set the geojson_hash for efficient duplicate detection
-            if (originalFeature && originalFeature.geojson_hash) {
-              feature.set('geojson_hash', originalFeature.geojson_hash)
-            }
-
-          })
-
-          // Filter out features that already exist in the vector source using hash-based detection
-          const existingFeatures = this.vectorSource ? this.vectorSource.getFeatures() : []
-
-          // Create a Set of existing feature hashes for O(1) lookup
-          const existingFeatureHashes = new Set()
-          existingFeatures.forEach(feature => {
-            const hash = feature.get('geojson_hash')
-            if (hash) {
-              existingFeatureHashes.add(hash)
-            }
-          })
-
-          // Filter new features using hash-based duplicate detection (O(n) instead of O(n²))
-          const newFeatures = features.filter(newFeature => {
-            const newHash = newFeature.get('geojson_hash')
-            if (!newHash) {
-              // If no hash is available, keep the feature (shouldn't happen with backend fix)
-              console.warn('Feature missing geojson_hash, keeping feature')
-              return true
-            }
-
-            // O(1) hash lookup instead of O(n) geometry comparison
-            return !existingFeatureHashes.has(newHash)
-          })
-
-          if (newFeatures.length > 0) {
-            // Add timestamps to new features before adding them to the map
-            newFeatures.forEach(feature => {
-              this.addFeatureTimestamp(feature)
-            })
-
-            if (this.vectorSource) {
-              this.vectorSource.addFeatures(newFeatures)
-            }
-
-            // Enforce feature limit after adding new features
-            this.enforceFeatureLimit()
-          } else {
-          }
-
-          this.loadedBounds.add(bboxKey)
-
-          // Batch feature count update to avoid reactivity overhead
-          this.scheduleFeatureCountUpdate()
-          this.updateLastUpdateTime()
-
-          // Update current zoom
-          this.currentZoom = roundedZoom
-
-          // Update features in extent list after loading new features
-          this.debouncedUpdateFeaturesInExtent()
-
-
-          // Mark initial load as complete after first successful load
-          if (this.isInitialLoad) {
-            this.isInitialLoad = false
-          }
-        } else {
-          console.error('Error loading data:', data.error)
-        }
-      } catch (error) {
-        // Don't log errors for aborted requests
-        if (error.name !== 'AbortError') {
-          console.error('Error fetching data:', error)
-          this.loadError = error.message || 'Failed to load map data. Please try again.'
-          // Mark initial load as complete even on error so spinner doesn't stay forever
-          if (this.isInitialLoad) {
-            this.isInitialLoad = false
-          }
-        }
-      } finally {
-        this.isDataLoading = false
-        this.currentAbortController = null
-      }
-    },
-
-    debouncedLoadData() {
-      // Cancel any pending request when starting a new debounced request
-      if (this.currentAbortController) {
-        this.currentAbortController.abort()
-      }
-
-      clearTimeout(this.loadTimeout)
-      this.loadTimeout = setTimeout(this.loadDataForCurrentView, 500)
-    },
-
-    updateFeatureCount() {
-      this.featureCount = this.vectorSource ? this.vectorSource.getFeatures().length : 0
-    },
-
-    scheduleFeatureCountUpdate() {
-      // Batch feature count updates using nextTick to avoid triggering reactivity on every feature
-      if (!this.featureCountUpdatePending) {
-        this.featureCountUpdatePending = true
-        this.$nextTick(() => {
-          this.updateFeatureCount()
-          this.featureCountUpdatePending = false
-        })
-      }
-    },
-
-    updateLastUpdateTime() {
-      this.lastUpdateTime = new Date().toLocaleTimeString()
-    },
-
-    enforceFeatureLimit() {
-      if (!this.vectorSource) {
-        return
-      }
-
-      const features = this.vectorSource.getFeatures()
-      if (features.length <= this.MAX_FEATURES) {
-        return
-      }
-
-      // Sort features by timestamp (oldest first) using plain object
-      const featuresWithTimestamps = features.map(feature => {
-        const featureId = this.getFeatureId(feature)
-        return {
-          feature,
-          featureId,
-          timestamp: this.featureTimestamps[featureId] || 0
-        }
-      }).sort((a, b) => a.timestamp - b.timestamp)
-
-      // Calculate how many features to remove
-      const featuresToRemove = features.length - this.MAX_FEATURES
-
-      // Remove oldest features
-      for (let i = 0; i < featuresToRemove; i++) {
-        const {feature, featureId} = featuresWithTimestamps[i]
-        this.vectorSource.removeFeature(feature)
-        delete this.featureTimestamps[featureId]
-      }
-
-      this.scheduleFeatureCountUpdate()
-      // Update feature list after removing features
-      this.debouncedUpdateFeaturesInExtent()
-    },
-
-    addFeatureTimestamp(feature) {
-      const featureId = this.getFeatureId(feature)
-      this.featureTimestamps[featureId] = Date.now()
-    },
-
-    clearAllFeatures() {
-      // Clear all features and their timestamps
-      if (this.vectorSource) {
-        this.vectorSource.clear()
-      }
-      this.featureTimestamps = {}
-      this.loadedBounds.clear()
-      this.scheduleFeatureCountUpdate()
-    },
 
     // Handle featureId from URL parameter
     async handleUrlFeatureId() {
@@ -1826,17 +1456,17 @@ export default {
     async restoreMap() {
       if (this.map) return
 
-    this.isMapInitializing = true
+      this.isMapInitializing = true
       this.isRestoring = true
 
       // Ensure map container is available
-    await this.$nextTick()
-    if (!this.$refs.mapContainer) {
-      console.error('Map container not available for restore')
-      this.isMapInitializing = false
-      this.isRestoring = false
-      return
-    }
+      await this.$nextTick()
+      if (!this.$refs.mapContainer) {
+        console.error('Map container not available for restore')
+        this.isMapInitializing = false
+        this.isRestoring = false
+        return
+      }
 
       try {
         // Re-initialize map
