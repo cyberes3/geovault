@@ -1,21 +1,21 @@
 <template>
-  <div v-if="feature" class="fixed inset-0 z-50 bg-white flex flex-col w-full h-full md:absolute md:inset-auto md:bottom-4 md:right-4 md:w-96 md:max-w-md md:h-auto md:max-h-[calc(100%-2rem)] md:rounded-lg md:shadow-lg md:border md:border-gray-200">
+  <div v-if="feature" class="fixed inset-0 z-50 bg-white flex flex-col w-full h-full md:absolute md:inset-auto md:bottom-4 md:right-4 md:w-96 md:max-w-md md:h-auto md:max-h-[calc(100%-2rem)] rounded-t-xl md:rounded-lg shadow-[0_-4px_6px_-1px_rgba(0,0,0,0.1)] md:shadow-xl md:border md:border-gray-200">
     <!-- Header (Sticky) -->
-    <div class="flex-none flex items-center justify-between px-4 py-3 border-b border-gray-200 bg-gray-50 md:bg-white md:rounded-t-lg">
-      <h3 class="text-base md:text-lg font-semibold text-gray-900 truncate">Edit Feature</h3>
+    <div class="sticky top-0 z-10 flex-none flex items-center justify-between px-6 py-4 border-b border-gray-200 bg-gray-50 sm:rounded-t-lg">
+      <h3 class="text-lg font-medium text-gray-900 truncate">Edit Feature</h3>
       <button
         @click="$emit('cancel')"
         :disabled="isSaving"
-        class="ml-2 text-gray-400 hover:text-gray-600 disabled:opacity-50 disabled:cursor-not-allowed"
+        class="text-gray-400 hover:text-gray-600 focus:outline-none focus:text-gray-600 transition ease-in-out duration-150 disabled:opacity-50 disabled:cursor-not-allowed"
         title="Close edit dialog"
       >
-        <XMarkIcon class="w-5 h-5" />
+        <XMarkIcon class="h-6 w-6" />
       </button>
     </div>
 
     <!-- Scrollable Content -->
-    <div class="flex-1 overflow-y-auto p-3 md:p-4">
-      <form @submit.prevent="handleSubmit" class="space-y-3 md:space-y-4">
+    <div class="flex-1 overflow-y-auto p-6">
+      <form @submit.prevent="handleSubmit" class="space-y-4">
         <!-- Name Field -->
         <div>
           <label class="block text-xs font-bold text-gray-500 uppercase mb-1">Name</label>
@@ -219,39 +219,40 @@
         <div v-if="errorMessage" class="p-2 bg-red-50 border border-red-200 rounded-md">
           <p class="text-xs text-red-800">{{ errorMessage }}</p>
         </div>
-
-        <!-- Action Buttons -->
-        <div class="flex justify-between pt-4 md:pt-2 gap-3">
-           <button
-            type="button"
-            @click="handleDelete"
-            :disabled="isSaving"
-            class="px-3 py-2 text-sm font-medium text-white bg-red-600 border border-transparent rounded-md hover:bg-red-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-red-500 disabled:opacity-50 disabled:cursor-not-allowed flex-1 md:flex-none"
-            title="Delete feature"
-          >
-            Delete
-          </button>
-          <div class="flex space-x-2 flex-1 md:flex-none justify-end">
-            <button
-                type="button"
-                @click="$emit('cancel')"
-                :disabled="isSaving"
-                class="px-3 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-md hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 disabled:opacity-50 disabled:cursor-not-allowed flex-1 md:flex-none"
-                title="Cancel editing"
-            >
-                Cancel
-            </button>
-            <button
-                type="submit"
-                :disabled="isSaving"
-                class="px-3 py-2 text-sm font-medium text-white bg-blue-600 border border-transparent rounded-md hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 disabled:opacity-50 disabled:cursor-not-allowed flex-1 md:flex-none"
-                title="Save changes"
-            >
-                {{ isSaving ? 'Saving...' : 'Save' }}
-            </button>
-          </div>
-        </div>
       </form>
+    </div>
+
+    <!-- Footer with Action Buttons (Sticky) -->
+    <div class="sticky bottom-0 z-10 flex-none flex justify-between px-6 py-4 gap-3 border-t border-gray-200 bg-gray-50 sm:rounded-b-lg">
+      <button
+        type="button"
+        @click="handleDelete"
+        :disabled="isSaving"
+        class="px-3 py-2 text-sm font-medium text-white bg-red-600 border border-transparent rounded-md hover:bg-red-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-red-500 disabled:opacity-50 disabled:cursor-not-allowed flex-1 md:flex-none"
+        title="Delete feature"
+      >
+        Delete
+      </button>
+      <div class="flex space-x-2 flex-1 md:flex-none justify-end">
+        <button
+          type="button"
+          @click="$emit('cancel')"
+          :disabled="isSaving"
+          class="px-3 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-md hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 disabled:opacity-50 disabled:cursor-not-allowed flex-1 md:flex-none"
+          title="Cancel editing"
+        >
+          Cancel
+        </button>
+        <button
+          type="button"
+          @click="handleSubmit"
+          :disabled="isSaving"
+          class="px-3 py-2 text-sm font-medium text-white bg-blue-600 border border-transparent rounded-md hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 disabled:opacity-50 disabled:cursor-not-allowed flex-1 md:flex-none"
+          title="Save changes"
+        >
+          {{ isSaving ? 'Saving...' : 'Save' }}
+        </button>
+      </div>
     </div>
 
     <!-- Icon Picker Dialog -->
