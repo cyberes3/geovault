@@ -489,7 +489,7 @@ def bulk_update_features_metadata(request):
 @require_http_methods(["POST"])
 def apply_bulk_operations_to_tag(request, tag_name: str):
     """
-    Apply bulk styling operations to all features that have the specified tag.
+    Apply bulk operations to all features that have the specified tag.
 
     This endpoint is used from the Tags page to style all features in a tag
     (point color, point icon, line color, polygon color, and additional tags).
@@ -551,7 +551,7 @@ def apply_bulk_operations_to_tag(request, tag_name: str):
                 updated_geojson = updated_features[0]
 
                 # Update the feature's GeoJSON and hash.
-                # Geometry is not modified by bulk styling, so we keep the existing geometry field.
+                # Geometry is not modified by bulk operations, so we keep the existing geometry field.
                 feature.geojson = updated_geojson
                 feature.file_hash = generate_feature_hash(updated_geojson)
                 feature.save(update_fields=['geojson', 'file_hash'])

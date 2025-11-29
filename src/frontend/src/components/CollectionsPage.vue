@@ -94,6 +94,15 @@
                 <PencilIcon class="w-4 h-4" />
               </button>
               <button
+                  class="p-1.5 text-gray-400 hover:text-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-1 rounded"
+                  title="Bulk style features in this collection"
+                  type="button"
+                  @click.stop.prevent="openBulkOperationsModal(collection)"
+                  @mousedown.stop.prevent
+              >
+                <RectangleStackIcon class="w-4 h-4" />
+              </button>
+              <button
                   class="p-1.5 text-gray-400 hover:text-red-600 focus:outline-none focus:ring-2 focus:ring-red-500 focus:ring-offset-1 rounded"
                   title="Delete collection"
                   type="button"
@@ -145,6 +154,16 @@
         :collection="selectedCollectionForShare"
         @close="closeShareDialog"
     />
+
+    <!-- Bulk Operations Modal -->
+    <BulkStylingModal
+        :isOpen="bulkOperationsModalOpen"
+        :currentBulkOps="currentBulkOperationsForSelectedCollection"
+        :saving="bulkOperationsSaving"
+        :autoCloseOnApply="false"
+        @close="closeBulkOperationsModal"
+        @apply="handleApplyBulkOperations"
+    />
   </div>
 </template>
 
@@ -153,7 +172,9 @@ import { getCookie } from "@/assets/js/auth.js";
 import CollectionDialog from "./CollectionDialog.vue";
 import CollectionShareDialog from "./CollectionShareDialog.vue";
 import Loader from "./parts/Loader.vue";
-import { PlusIcon, ExclamationCircleIcon, FolderIcon, ShareIcon, ArrowDownTrayIcon, PencilIcon, TrashIcon, TagIcon, MapIcon } from '@heroicons/vue/24/outline';
+import BulkStylingModal from "@/components/import/parts/BulkStylingModal.vue";
+import { createEmptyBulkOperations, cloneBulkOperations } from "@/utils/bulkOperations.js";
+import { PlusIcon, ExclamationCircleIcon, FolderIcon, ShareIcon, ArrowDownTrayIcon, PencilIcon, TrashIcon, TagIcon, MapIcon, RectangleStackIcon } from '@heroicons/vue/24/outline';
 
 export default {
   name: 'CollectionsPage',
@@ -169,7 +190,9 @@ export default {
     PencilIcon,
     TrashIcon,
     TagIcon,
-    MapIcon
+    MapIcon,
+    RectangleStackIcon,
+    BulkStylingModal
   },
   data() {
     return {
@@ -179,7 +202,13 @@ export default {
       dialogOpen: false,
       editingCollection: null,
       shareDialogOpen: false,
-      selectedCollectionForShare: null
+      selectedCollectionForShare: null,
+
+      // Bulk operations state for collections page
+      bulkOperationsModalOpen: false,
+      bulkOperationsSelectedCollectionId: null,
+      bulkOperationsByCollection: {}, // { collectionId: bulkOps }
+      bulkOperationsSaving: false
     }
   },
   methods: {
@@ -267,6 +296,69 @@ export default {
     downloadCollectionKmz(collection) {
       const url = `/api/export-kmz?collection=${collection.id}`;
       window.open(url, '_blank');
+    },
+    openBulkOperationsModal(collection) {
+      this.bulkOperationsSelectedCollectionId = collection.id;
+      this.bulkOperationsModalOpen = true;
+    },
+    closeBulkOperationsModal() {
+      this.bulkOperationsModalOpen = false;
+    },
+    async handleApplyBulkOperations(bulkData) {
+      if (!this.bulkOperationsSelectedCollectionId) {
+        this.bulkOperationsModalOpen = false;
+        return;
+      }
+      const collectionId = this.bulkOperationsSelectedCollectionId;
+
+      // Cache last-used bulk operations per collection
+      this.bulkOperationsByCollection = {
+        ...this.bulkOperationsByCollection,
+        [collectionId]: cloneBulkOperations(bulkData)
+      };
+
+      this.bulkOperationsSaving = true;
+      try {
+        await this.applyBulkOperationsToCollection(collectionId, bulkData);
+        this.bulkOperationsModalOpen = false;
+      } finally {
+        this.bulkOperationsSaving = false;
+      }
+    },
+    async applyBulkOperationsToCollection(collectionId, bulkData) {
+      try {
+        const csrfToken = getCookie('csrftoken');
+        const response = await fetch(`/api/collections/${collectionId}/bulk-operations/`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'X-CSRFToken': csrfToken || ''
+          },
+          body: JSON.stringify({
+            bulk_operations: bulkData
+          })
+        });
+
+        if (!response.ok) {
+          const errorData = await response.json().catch(() => ({}));
+          throw new Error(errorData.error || `Failed to apply bulk operations: ${response.status}`);
+        }
+
+        // Refresh collections list to ensure counts/metadata stay in sync
+        await this.fetchCollections();
+      } catch (error) {
+        console.error('Error applying bulk operations to collection:', error);
+        alert(`Failed to apply bulk operations: ${error.message}`);
+      }
+    },
+    currentBulkOperationsForCollection(collectionId) {
+      return this.bulkOperationsByCollection[collectionId] || createEmptyBulkOperations();
+    },
+    currentBulkOperationsForSelectedCollection() {
+      if (!this.bulkOperationsSelectedCollectionId) {
+        return createEmptyBulkOperations();
+      }
+      return this.currentBulkOperationsForCollection(this.bulkOperationsSelectedCollectionId);
     }
   },
   mounted() {

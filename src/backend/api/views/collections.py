@@ -4,10 +4,13 @@ from typing import Set
 
 from django.db.models import Q
 from django.http import JsonResponse
+from django.views.decorators.csrf import csrf_protect
 from django.views.decorators.http import require_http_methods
 
 from api.models import Collection, FeatureStore
+from geo_lib.feature_id import generate_feature_hash
 from geo_lib.logging.console import get_access_logger
+from geo_lib.processing.import_utils import apply_bulk_operations as apply_bulk_operations_to_features
 from geo_lib.website.auth import login_required_401
 
 logger = get_access_logger()
@@ -389,6 +392,123 @@ def get_collection_features(request, collection_id):
         return JsonResponse({
             'error': 'Failed to get collection features',
             'code': 500
+        }, status=500)
+
+
+@login_required_401
+@csrf_protect
+@require_http_methods(["POST"])
+def apply_bulk_operations_to_collection(request, collection_id):
+    """
+    Apply bulk operations to all features in a collection.
+
+    This reuses the same bulk operations structure as the import process:
+    {
+      "bulk_operations": {
+        "tags": [...],
+        "pointColor": "#rrggbb" | null,
+        "pointIcon": "url" | null,
+        "lineColor": "#rrggbb" | null,
+        "polyColor": "#rrggbb" | null
+      }
+    }
+    """
+    try:
+        try:
+            data = json.loads(request.body)
+        except json.JSONDecodeError:
+            return JsonResponse({
+                "error": "Invalid JSON in request body",
+                "code": 400
+            }, status=400)
+
+        if not isinstance(data, dict):
+            return JsonResponse({
+                "error": "Request body must be a valid JSON object",
+                "code": 400
+            }, status=400)
+
+        bulk_ops = data.get("bulk_operations", {})
+        if not isinstance(bulk_ops, dict):
+            return JsonResponse({
+                "error": "bulk_operations must be a JSON object",
+                "code": 400
+            }, status=400)
+
+        try:
+            collection = Collection.objects.get(id=collection_id, user=request.user)
+        except Collection.DoesNotExist:
+            return JsonResponse({
+                "error": "Collection not found",
+                "code": 404
+            }, status=404)
+
+        # Build the same feature ID set used by get_collection_features/_count_collection_features
+        feature_ids_set: Set[int] = set()
+
+        # 1. Features matching ANY of the collection's tags (OR logic)
+        if collection.tags:
+            base_query = FeatureStore.objects.filter(user=request.user).exclude(geometry__isnull=True)
+
+            tag_query = Q()
+            for tag in collection.tags:
+                if tag:
+                    tag_query |= Q(geojson__properties__tags__contains=[tag]) | Q(
+                        geojson__properties__system_tags__contains=[tag]
+                    )
+
+            if tag_query:
+                tag_features = base_query.filter(tag_query).values_list("id", flat=True)
+                feature_ids_set.update(tag_features)
+
+        # 2. Individually selected features
+        if collection.feature_ids:
+            user_feature_ids = set(
+                FeatureStore.objects.filter(user=request.user, id__in=collection.feature_ids)
+                .values_list("id", flat=True)
+            )
+            feature_ids_set.update(user_feature_ids)
+
+        if not feature_ids_set:
+            return JsonResponse({
+                "success": True,
+                "updated_count": 0,
+                "msg": "No features found for this collection"
+            })
+
+        updated_count = 0
+
+        # Iterate through all features and apply bulk operations using shared helper
+        features_qs = FeatureStore.objects.filter(id__in=feature_ids_set).only("id", "geojson")
+
+        for feature in features_qs.iterator(chunk_size=200):
+            original_geojson = feature.geojson
+            if not isinstance(original_geojson, dict):
+                # Skip invalid geojson entries defensively
+                continue
+
+            updated_features = apply_bulk_operations_to_features([original_geojson], bulk_ops)
+            if not updated_features:
+                continue
+
+            updated_geojson = updated_features[0]
+
+            # Update feature geojson and hash (geometry is unchanged by styling)
+            feature.geojson = updated_geojson
+            feature.file_hash = generate_feature_hash(updated_geojson)
+            feature.save(update_fields=["geojson", "file_hash"])
+            updated_count += 1
+
+        return JsonResponse({
+            "success": True,
+            "updated_count": updated_count
+        })
+
+    except Exception:
+        logger.error(f"Error applying bulk operations to collection {collection_id}: {traceback.format_exc()}")
+        return JsonResponse({
+            "error": "Failed to apply bulk operations to collection",
+            "code": 500
         }, status=500)
 
 

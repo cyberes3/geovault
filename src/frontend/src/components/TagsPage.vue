@@ -323,6 +323,8 @@
     <BulkStylingModal
         :isOpen="bulkOperationsModalOpen"
         :currentBulkOps="currentBulkOperationsForSelectedTag"
+        :saving="bulkOperationsSaving"
+        :autoCloseOnApply="false"
         @close="closeBulkOperationsModal"
         @apply="handleApplyBulkOperations"
     />
@@ -333,6 +335,7 @@
 import TagShareDialog from "./TagShareDialog.vue";
 import Loader from "./parts/Loader.vue";
 import BulkStylingModal from "@/components/import/parts/BulkStylingModal.vue";
+import { createEmptyBulkOperations, cloneBulkOperations } from "@/utils/bulkOperations.js";
 import { MagnifyingGlassIcon, ExclamationCircleIcon, TagIcon, ShareIcon, ArrowDownTrayIcon, PencilIcon, TrashIcon, CheckIcon, MapIcon, ArrowLeftIcon, ArrowRightIcon, XMarkIcon, RectangleStackIcon } from '@heroicons/vue/24/outline';
 
 export default {
@@ -379,7 +382,8 @@ export default {
       // Bulk operations state for tags page
       bulkOperationsModalOpen: false,
       bulkOperationsSelectedTag: '',
-      bulkOperationsByTag: {} // { tagName: bulkOps }
+      bulkOperationsByTag: {}, // { tagName: bulkOps }
+      bulkOperationsSaving: false
     }
   },
   computed: {
@@ -885,7 +889,7 @@ export default {
     },
     openBulkOperationsModal(tag) {
       if (this.isSystemTag(tag)) {
-        alert('Bulk styling is not available for system tags.');
+         alert('Bulk operations are not available for system tags.');
         return;
       }
       this.bulkOperationsSelectedTag = tag;
@@ -903,11 +907,16 @@ export default {
       // Persist last used bulk operations per tag in local state
       this.bulkOperationsByTag = {
         ...this.bulkOperationsByTag,
-        [tag]: { ...bulkData }
+        [tag]: cloneBulkOperations(bulkData)
       };
 
-      await this.applyBulkOperationsToTag(tag, bulkData);
-      this.bulkOperationsModalOpen = false;
+      this.bulkOperationsSaving = true;
+      try {
+        await this.applyBulkOperationsToTag(tag, bulkData);
+        this.bulkOperationsModalOpen = false;
+      } finally {
+        this.bulkOperationsSaving = false;
+      }
     },
     async applyBulkOperationsToTag(tag, bulkData) {
       try {
@@ -936,23 +945,11 @@ export default {
       }
     },
     currentBulkOperationsForTag(tag) {
-      return this.bulkOperationsByTag[tag] || {
-        tags: [],
-        pointColor: null,
-        pointIcon: null,
-        lineColor: null,
-        polyColor: null
-      };
+      return this.bulkOperationsByTag[tag] || createEmptyBulkOperations();
     },
     currentBulkOperationsForSelectedTag() {
       if (!this.bulkOperationsSelectedTag) {
-        return {
-          tags: [],
-          pointColor: null,
-          pointIcon: null,
-          lineColor: null,
-          polyColor: null
-        };
+        return createEmptyBulkOperations();
       }
       return this.currentBulkOperationsForTag(this.bulkOperationsSelectedTag);
     },

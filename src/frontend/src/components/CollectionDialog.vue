@@ -43,6 +43,7 @@
                   v-model="formData.name"
                   type="text"
                   required
+                  @keydown.enter.prevent
                   class="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500"
                   placeholder="Enter collection name"
                 />
@@ -78,6 +79,7 @@
                     <input
                       v-model="tagSearchQuery"
                       type="text"
+                      @keydown.enter.prevent
                       class="block w-full pl-10 pr-3 py-2 border border-gray-300 rounded-md leading-5 bg-white placeholder-gray-500 focus:outline-none focus:placeholder-gray-400 focus:ring-1 focus:ring-blue-500 focus:border-blue-500 sm:text-sm"
                       placeholder="Search tags..."
                     />
@@ -153,6 +155,7 @@
                     <input
                       v-model="featureSearchQuery"
                       type="text"
+                      @keydown.enter.prevent
                       class="block w-full pl-10 pr-3 py-2 border border-gray-300 rounded-md leading-5 bg-white placeholder-gray-500 focus:outline-none focus:placeholder-gray-400 focus:ring-1 focus:ring-blue-500 focus:border-blue-500 sm:text-sm"
                       placeholder="Search features..."
                     />
@@ -408,11 +411,6 @@ export default {
       if (event.target === event.currentTarget) {
         this.closeDialog();
       }
-    },
-    handleEscapeKey(event) {
-      if (event.key === 'Escape') {
-        this.closeDialog();
-      }
     }
   },
   mounted() {
@@ -437,11 +435,9 @@ export default {
         document.body.appendChild(this.$el);
       }
     });
-    document.addEventListener('keydown', this.handleEscapeKey);
   },
   beforeUnmount() {
     document.body.classList.remove('overflow-hidden');
-    document.removeEventListener('keydown', this.handleEscapeKey);
   }
 };
 </script>

@@ -630,15 +630,7 @@ import LogViewModal from "@/components/import/parts/LogViewModal.vue";
 import ImportControls from "@/components/import/parts/ImportControls.vue";
 import BulkStylingModal from "@/components/import/parts/BulkStylingModal.vue";
 import TagPicker from "@/components/TagPicker.vue";
-
-// Default bulk operations structure
-const DEFAULT_BULK_OPERATIONS = {
-  tags: [],
-  pointColor: null,
-  pointIcon: null,
-  lineColor: null,
-  polyColor: null
-};
+import { DEFAULT_BULK_OPERATIONS, hasBulkOperationsConfigured, areBulkOperationsEqual, cloneBulkOperations } from "@/utils/bulkOperations.js";
 import { CheckIcon, ExclamationCircleIcon, ArrowTopRightOnSquareIcon, DocumentIcon, ExclamationTriangleIcon, ArrowDownTrayIcon, ArrowUpTrayIcon, XMarkIcon, MapIcon, ArrowPathIcon, MagnifyingGlassIcon, RectangleStackIcon } from '@heroicons/vue/24/outline';
 
 // TODO: for each feature, query the DB and check if there is a duplicate. For points that's duplicate coords, for linestrings and polygons that's duplicate points
@@ -648,21 +640,7 @@ export default {
   computed: {
     ...mapState(["userInfo", "userSettings"]),
     hasBulkOperationsConfigured() {
-      // Check if any bulk operations are configured (not all null/empty)
-      const ops = this.bulkOperations;
-      
-      // Check tags
-      if (ops.tags && ops.tags.length > 0) {
-        return true;
-      }
-      
-      // Check other fields (not null)
-      if (ops.pointColor !== null && ops.pointColor !== undefined) return true;
-      if (ops.pointIcon !== null && ops.pointIcon !== undefined) return true;
-      if (ops.lineColor !== null && ops.lineColor !== undefined) return true;
-      if (ops.polyColor !== null && ops.polyColor !== undefined) return true;
-      
-      return false;
+      return hasBulkOperationsConfigured(this.bulkOperations);
     },
     isValidPageNumber() {
       return this.pagination.gotoInput &&
@@ -799,8 +777,8 @@ export default {
       availableUserTags: [],
 
       // Bulk operations state
-      bulkOperations: { ...DEFAULT_BULK_OPERATIONS },
-      originalBulkOperations: { ...DEFAULT_BULK_OPERATIONS },
+      bulkOperations: cloneBulkOperations(DEFAULT_BULK_OPERATIONS),
+      originalBulkOperations: cloneBulkOperations(DEFAULT_BULK_OPERATIONS),
 
       // Search state
       searchQuery: '',
@@ -1522,24 +1500,8 @@ export default {
       return hasFeatureChanges || hasBulkOpsChanges;
     },
     _hasBulkOperationsChanged() {
-      // Compare current bulk operations with original using deep equality
-      const current = this.bulkOperations;
-      const original = this.originalBulkOperations;
-      
-      // Compare tags (arrays) - sort and stringify for comparison
-      const currentTagsStr = JSON.stringify((current.tags || []).sort());
-      const originalTagsStr = JSON.stringify((original.tags || []).sort());
-      if (currentTagsStr !== originalTagsStr) {
-        return true;
-      }
-      
-      // Compare other fields
-      if (current.pointColor !== original.pointColor) return true;
-      if (current.pointIcon !== original.pointIcon) return true;
-      if (current.lineColor !== original.lineColor) return true;
-      if (current.polyColor !== original.polyColor) return true;
-      
-      return false;
+      // Compare current bulk operations with original using shared helper
+      return !areBulkOperationsEqual(this.bulkOperations, this.originalBulkOperations);
     },
     async _saveChangesInternal() {
       // Internal save function that doesn't manage locks
@@ -1727,32 +1689,26 @@ export default {
 
         if (response.status === 200 && response.data.bulk_operations) {
           const ops = response.data.bulk_operations;
-          this.bulkOperations = {
-            tags: ops.tags || [],
-            pointColor: ops.pointColor || null,
-            pointIcon: ops.pointIcon || null,
-            lineColor: ops.lineColor || null,
-            polyColor: ops.polyColor || null
-          };
+          this.bulkOperations = cloneBulkOperations(ops);
         } else {
           // No bulk operations found, use defaults
-          this.bulkOperations = { ...DEFAULT_BULK_OPERATIONS };
+          this.bulkOperations = cloneBulkOperations(DEFAULT_BULK_OPERATIONS);
         }
         
         // Store as original state
-        this.originalBulkOperations = JSON.parse(JSON.stringify(this.bulkOperations));
+        this.originalBulkOperations = cloneBulkOperations(this.bulkOperations);
       } catch (error) {
         // Log error and use defaults
         console.error('Error loading bulk operations:', error);
-        this.bulkOperations = { ...DEFAULT_BULK_OPERATIONS };
+        this.bulkOperations = cloneBulkOperations(DEFAULT_BULK_OPERATIONS);
         // Store as original state
-        this.originalBulkOperations = JSON.parse(JSON.stringify(this.bulkOperations));
+        this.originalBulkOperations = cloneBulkOperations(this.bulkOperations);
       }
     },
     updateBulkOperations(bulkData) {
       // Update local state only (don't save to database yet)
       // Saving will happen when user clicks "Save Changes"
-      this.bulkOperations = { ...bulkData };
+      this.bulkOperations = cloneBulkOperations(bulkData);
     },
     async saveBulkOperations(bulkData) {
       if (!this.currentId) return;
@@ -1769,9 +1725,9 @@ export default {
 
         if (response.status === 200) {
           // Update local state with the data we sent (request data)
-          this.bulkOperations = { ...bulkData };
+          this.bulkOperations = cloneBulkOperations(bulkData);
           // Update original state to reflect saved state
-          this.originalBulkOperations = JSON.parse(JSON.stringify(bulkData));
+          this.originalBulkOperations = cloneBulkOperations(bulkData);
         }
       } catch (error) {
         this.msg = 'Error saving bulk operations: ' + (error.response?.data?.msg || error.message);
@@ -1781,8 +1737,8 @@ export default {
     },
     // Removed applyBulkStyling - bulk operations are now stored and applied during import
     // Old method kept for reference but not used
-    _old_applyBulkStyling(bulkData) {
-      // Apply bulk styling to all items in the current page
+      _old_applyBulkStyling(bulkData) {
+       // Apply bulk operations to all items in the current page
       // Also need to apply to all cached pages
 
       // Apply to current page items

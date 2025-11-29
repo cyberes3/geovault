@@ -194,9 +194,24 @@
             </button>
             <button
               @click="handleApply"
-              class="w-full sm:w-auto inline-flex items-center justify-center px-4 py-2 border border-transparent shadow-sm text-sm font-medium rounded-md text-white bg-blue-500 hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500"
+              :disabled="saving"
+              class="w-full sm:w-auto inline-flex items-center justify-center px-4 py-2 border border-transparent shadow-sm text-sm font-medium rounded-md text-white bg-blue-500 hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 disabled:opacity-70 disabled:cursor-not-allowed"
             >
-              OK
+              <svg
+                v-if="saving"
+                class="animate-spin -ml-1 mr-2 h-4 w-4 text-white"
+                xmlns="http://www.w3.org/2000/svg"
+                fill="none"
+                viewBox="0 0 24 24"
+              >
+                <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+                <path
+                  class="opacity-75"
+                  fill="currentColor"
+                  d="M4 12a8 8 0 018-8v4a4 4 0 00-4 4H4z"
+                ></path>
+              </svg>
+              <span>{{ saving ? 'Saving…' : 'OK' }}</span>
             </button>
           </div>
         </div>
@@ -246,6 +261,17 @@ export default {
         lineColor: null,
         polyColor: null
       })
+    },
+    // When true, show loading state on OK button and disable it
+    saving: {
+      type: Boolean,
+      default: false
+    },
+    // When true (default), modal will close itself after apply.
+    // When false, parent is responsible for closing after save completes.
+    autoCloseOnApply: {
+      type: Boolean,
+      default: true
     }
   },
   emits: ['close', 'apply'],
@@ -402,13 +428,10 @@ export default {
         polyColor: this.enabled.polyColor ? this.bulkData.polyColor : null
       }
       this.$emit('apply', dataToEmit)
-      this.closeModal()
+      if (this.autoCloseOnApply && !this.saving) {
+        this.closeModal()
+      }
     }
-  },
-  beforeUnmount() {
-    // Ensure scrolling is restored if component is destroyed while open
-    document.documentElement.classList.remove('overflow-hidden')
-    document.body.classList.remove('overflow-hidden')
   }
 }
 </script>
