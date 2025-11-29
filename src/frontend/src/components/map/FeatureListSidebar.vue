@@ -81,7 +81,7 @@
       </h2>
 
       <!-- Initial Loading Indicator -->
-      <div v-if="isLoading && features.length === 0 && !isSearching" class="flex-1 flex items-center justify-center">
+      <div v-if="showInitialFeaturesLoader" class="flex-1 flex items-center justify-center">
         <Loader size="md" layout="centered" message="Loading features..." />
       </div>
 
@@ -172,7 +172,7 @@
       <!-- Available Tags List -->
       <div class="flex-1 overflow-y-auto min-h-0">
         <!-- Initial Loading Indicator -->
-        <div v-if="isLoading && availableTags.length === 0" class="flex items-center justify-center h-full">
+        <div v-if="showInitialTagsLoader" class="flex items-center justify-center h-full">
           <Loader size="md" layout="centered" message="Loading tags..." />
         </div>
         <div v-else-if="filteredAvailableTags.length === 0 && availableTags.length === 0" class="text-xs text-gray-500 text-center py-3">
@@ -222,7 +222,12 @@ export default {
       required: false,
       default: () => []
     },
-    isLoading: {
+    initialSelectedTags: {
+      type: Array,
+      required: false,
+      default: () => []
+    },
+    isInitialLoad: {
       type: Boolean,
       required: false,
       default: false
@@ -232,7 +237,7 @@ export default {
       default: false
     }
   },
-  emits: ['feature-click', 'tag-filter-change', 'close'],
+  emits: ['feature-click', 'tag-filter-change', 'tag-filter-loading-change', 'close'],
   data() {
     return {
       activeTab: 'features-in-vicinity',
@@ -257,6 +262,12 @@ export default {
     },
     displayFeatures() {
       return this.isSearchMode ? this.searchResults : this.features
+    },
+    showInitialFeaturesLoader() {
+      return this.isInitialLoad && this.features.length === 0 && !this.isSearching
+    },
+    showInitialTagsLoader() {
+      return this.isInitialLoad && this.availableTags.length === 0 && !this.isFiltering
     },
     filteredAvailableTags() {
       // Filter out already selected tags
@@ -297,6 +308,17 @@ export default {
     },
     activeTab(newTab) {
       // Tags are now provided via prop, no need to fetch
+    },
+    // When initialSelectedTags changes (e.g., route query changes), update local selection
+    initialSelectedTags: {
+      immediate: true,
+      handler(newTags) {
+        const tagsArray = Array.isArray(newTags) ? newTags : []
+        if (tagsArray.length > 0) {
+          this.selectedTags = [...tagsArray]
+          this.activeTab = 'tag-filter'
+        }
+      }
     }
   },
   methods: {
@@ -472,10 +494,12 @@ export default {
         this.tagFilteredFeatures = []
         // Emit null to clear map filter and restore normal behavior
         this.$emit('tag-filter-change', null)
+        this.$emit('tag-filter-loading-change', false)
         return
       }
 
       this.isFiltering = true
+      this.$emit('tag-filter-loading-change', true)
       this.filterTimeout = setTimeout(() => {
         this.filterByTags()
       }, 300)
@@ -484,6 +508,7 @@ export default {
       if (this.selectedTags.length === 0) {
         this.tagFilteredFeatures = []
         this.isFiltering = false
+        this.$emit('tag-filter-loading-change', false)
         return
       }
 
@@ -539,6 +564,7 @@ export default {
         this.$emit('tag-filter-change', [])
       } finally {
         this.isFiltering = false
+        this.$emit('tag-filter-loading-change', false)
       }
     }
   },

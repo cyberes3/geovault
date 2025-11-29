@@ -2,14 +2,17 @@
   <div class="w-full h-full flex">
     <!-- Left Sidebar - Feature List -->
     <FeatureListSidebar
+        :key="sidebarKey"
         :class="['transition-opacity duration-300', (publicShareError || loadError) ? 'opacity-50 pointer-events-none' : 'opacity-100']"
         :features="featuresInExtent"
         :available-tags="availableTags"
-        :is-loading="isLoading && (isInitialLoad || isRestoring)"
+        :is-initial-load="isMapInitializing || (isDataLoading && isInitialLoad)"
         :is-mobile-open="activeMobileSidebar === 'features'"
+        :initial-selected-tags="initialSelectedTags"
         @close="activeMobileSidebar = null"
         @feature-click="zoomToFeature"
         @tag-filter-change="handleTagFilterChange"
+        @tag-filter-loading-change="isTagFilterLoading = $event"
     />
 
     <!-- Center - Map -->
@@ -102,7 +105,10 @@
         </div>
 
         <!-- Loading Indicator -->
-        <div v-show="isLoading" :class="['absolute', 'right-4', 'bg-white', 'bg-opacity-90', 'px-4', 'py-2', 'rounded-lg', 'shadow-md', 'z-10', 'flex', 'items-center', isPublicShareMode ? 'top-20' : 'top-4']">
+        <div
+          v-show="isMapInitializing || isDataLoading || isRestoring || isTagFilterLoading"
+          :class="['absolute', 'right-4', 'bg-white', 'bg-opacity-90', 'px-4', 'py-2', 'rounded-lg', 'shadow-md', 'z-10', 'flex', 'items-center', isPublicShareMode ? 'top-20' : 'top-4']"
+        >
           <Loader size="sm" layout="inline" message="Loading data..." :showMessage="true" :bold="false" />
         </div>
 
@@ -245,6 +251,14 @@ export default {
     collectionId() {
       return this.$route.query.collection || null
     },
+    initialSelectedTags() {
+      const tag = this.$route.query.tag
+      if (!tag) {
+        return []
+      }
+      // Vue Router may return a single string or an array for repeated query params
+      return Array.isArray(tag) ? tag : [tag]
+    },
     // Get allowed options based on mode (public share or authenticated)
     publicShareAllowedOptions() {
       if (this.isPublicShareMode) {
@@ -269,8 +283,10 @@ export default {
       vectorLayer: null, // Layer for icons/images (no declutter)
       textLayer: null, // Layer for text labels (with declutter)
       tileLayer: null, // Reference to the tile layer for updates
-      isLoading: false,
-      isInitialLoad: true, // Track if this is the first network call
+      // Loading state
+      isMapInitializing: false, // Initial mount/restore work before first data load
+      isDataLoading: false, // Any network-backed data load for the map
+      isInitialLoad: true, // Track if this is the first successful/attempted data load
       loadedBounds: new Set(),
       lastUpdateTime: null,
       featureCount: 0,
@@ -319,11 +335,24 @@ export default {
       // Available tags for autocomplete and filtering
       availableTags: [], // Tags fetched once and shared with child components
       isRestoring: false, // Track if map is being restored
+      isTagFilterLoading: false, // Track loading for tag-based filtering in sidebar
+      sidebarKey: 0, // Force sidebar remount when tag share state changes
       activeMobileSidebar: null, // 'features', 'controls', or null
       mapWasDestroyed: false // Track if map was fully destroyed for memory reasons
     }
   },
   methods: {
+    async withLoading(flagKey, fn) {
+      if (!flagKey || typeof fn !== 'function') {
+        return
+      }
+      this[flagKey] = true
+      try {
+        return await fn()
+      } finally {
+        this[flagKey] = false
+      }
+    },
     // Generate a unique ID for a feature
     getFeatureId(feature) {
       // Try to get existing ID or create a new one
@@ -1336,7 +1365,7 @@ export default {
 
       // Create new AbortController for this request
       this.currentAbortController = new AbortController()
-      this.isLoading = true
+      this.isDataLoading = true
       this.loadError = null // Clear any previous load errors
 
       try {
@@ -1553,7 +1582,7 @@ export default {
           }
         }
       } finally {
-        this.isLoading = false
+        this.isDataLoading = false
         this.currentAbortController = null
       }
     },
@@ -1797,17 +1826,17 @@ export default {
     async restoreMap() {
       if (this.map) return
 
-      this.isLoading = true
+    this.isMapInitializing = true
       this.isRestoring = true
 
       // Ensure map container is available
-      await this.$nextTick()
-      if (!this.$refs.mapContainer) {
-        console.error('Map container not available for restore')
-        this.isLoading = false
-        this.isRestoring = false
-        return
-      }
+    await this.$nextTick()
+    if (!this.$refs.mapContainer) {
+      console.error('Map container not available for restore')
+      this.isMapInitializing = false
+      this.isRestoring = false
+      return
+    }
 
       try {
         // Re-initialize map
@@ -1840,7 +1869,7 @@ export default {
         console.error('Error restoring map:', error)
         this.loadError = error.message || 'Failed to restore map'
       } finally {
-        this.isLoading = false
+        this.isMapInitializing = false
         this.isRestoring = false
       }
     }
@@ -1960,7 +1989,7 @@ export default {
     // For authenticated routes, App.vue ensures user is logged in before components are created
   },
   async mounted() {
-    this.isLoading = true
+    this.isMapInitializing = true
 
     // Initialize featureTimestamps as empty object
     this.featureTimestamps = {}
@@ -1969,6 +1998,7 @@ export default {
     await this.$nextTick()
     if (!this.$refs.mapContainer) {
       console.error('Map container not available')
+      this.isMapInitializing = false
       return
     }
 
@@ -1988,6 +2018,7 @@ export default {
     } catch (error) {
       console.error('Error initializing map:', error)
       this.loadError = error.message || 'Failed to initialize map. Please refresh the page.'
+      this.isMapInitializing = false
       return
     }
 
@@ -2026,14 +2057,15 @@ export default {
         this.handleUrlFeatureId()
       }, 200)
     }
+
+    // Mounted flow completed successfully; clear initializing flag
+    this.isMapInitializing = false
   },
 
   activated() {
     // If the map was fully destroyed for memory reasons, restore it
     if (this.mapWasDestroyed) {
-      // Show loading indicators immediately while restoring
-      this.isLoading = true
-      this.isRestoring = true
+      // Let restoreMap manage loading flags
       this.restoreMap()
       this.mapWasDestroyed = false
       return
@@ -2041,11 +2073,22 @@ export default {
 
     // If the map is still present but has no features loaded, reload data for current view
     if (this.map && this.vectorSource && this.vectorSource.getFeatures().length === 0) {
-      // Show loading indicators immediately while reloading data
-      this.isLoading = true
+      const hasTagQuery = !!this.$route.query.tag
+
+      // Treat this as an initial load for the current session
       this.isInitialLoad = true
-      // Start data fetch immediately (no debounce) when navigating back
-      this.loadDataForCurrentView()
+
+      if (hasTagQuery) {
+        // For tag-based views, force the sidebar to remount so it re-applies the tag filter.
+        // The sidebar will fetch filtered features and emit them back via handleTagFilterChange.
+        this.sidebarKey += 1
+      } else {
+        // For normal views, reload data for current bbox
+        this.withLoading('isMapInitializing', async () => {
+          // Start data fetch immediately (no debounce) when navigating back
+          await this.loadDataForCurrentView()
+        })
+      }
     }
   },
 

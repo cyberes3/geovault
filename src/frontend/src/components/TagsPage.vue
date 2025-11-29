@@ -120,6 +120,15 @@
                 <ArrowDownTrayIcon class="w-4 h-4" />
               </button>
               <button
+                  class="p-1.5 text-gray-400 hover:text-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-1 rounded"
+                  title="View tag on map"
+                  type="button"
+                  @click.stop.prevent="viewTagOnMap(tag)"
+                  @mousedown.stop.prevent
+              >
+                <MapIcon class="w-4 h-4" />
+              </button>
+              <button
                   v-if="!isSystemTag(tag)"
                   class="p-1.5 text-gray-400 hover:text-gray-600 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-1 rounded"
                   title="Edit tag name"
@@ -974,6 +983,17 @@ export default {
     downloadTagKmz(tag) {
       const url = `/api/export-kmz?tag=${encodeURIComponent(tag)}`;
       window.open(url, '_blank');
+    },
+    viewTagOnMap(tag) {
+      if (!tag) {
+        return;
+      }
+      this.$router.push({
+        path: '/map',
+        query: {
+          tag
+        }
+      });
     },
     nextPage() {
       if (this.hasNextPage) {
