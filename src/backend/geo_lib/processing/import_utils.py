@@ -6,9 +6,12 @@ Contains helper functions used by both single and bulk import jobs.
 import copy
 import json
 import threading
+import traceback
+from concurrent.futures import ThreadPoolExecutor
 from typing import Dict, Any, Optional, Tuple, List
 
 from django.contrib.gis.geos import GEOSGeometry
+from django.db import IntegrityError
 from asgiref.sync import async_to_sync
 from channels.layers import get_channel_layer
 
@@ -18,6 +21,7 @@ from geo_lib.feature_id import generate_feature_hash
 from geo_lib.types.feature import PointFeature, PolygonFeature, LineStringFeature, MultiLineStringFeature
 from geo_lib.logging.console import get_job_logger
 from geo_lib.processing.duplicate_detection import normalize_coordinates
+from website.settings_utils import get_required_setting
 from geo_lib.validation.styling_validation import (
     is_valid_hex_color,
     is_valid_icon_url,
@@ -27,6 +31,45 @@ from geo_lib.validation.styling_validation import (
 )
 
 logger = get_job_logger()
+
+
+# ============================================================================
+# Internal Job Result Helpers
+# ============================================================================
+
+def job_success_result(imported: int = 0, duplicates_skipped: int = 0, **kwargs) -> Dict[str, Any]:
+    """
+    Create a standardized success result for job operations.
+    
+    Args:
+        imported: Number of features successfully imported
+        duplicates_skipped: Number of duplicate features skipped
+        **kwargs: Additional fields to include in the result
+        
+    Returns:
+        Dictionary with success=True and result data
+    """
+    result = {'success': True, 'imported': imported}
+    if duplicates_skipped > 0:
+        result['duplicates_skipped'] = duplicates_skipped
+    result.update(kwargs)
+    return result
+
+
+def job_error_result(error_message: str, **kwargs) -> Dict[str, Any]:
+    """
+    Create a standardized error result for job operations.
+    
+    Args:
+        error_message: Human-readable error message
+        **kwargs: Additional fields to include in the result
+        
+    Returns:
+        Dictionary with success=False and error message
+    """
+    result = {'success': False, 'error': error_message}
+    result.update(kwargs)
+    return result
 
 
 def strip_icon_properties(feature: dict) -> dict:
@@ -450,4 +493,137 @@ def apply_bulk_operations(features: List[Dict[str, Any]], bulk_ops: Dict[str, An
         result.append(modified_feature)
 
     return result
+
+
+def process_features_for_import(
+    import_item: ImportQueue,
+    user_id: int,
+    import_custom_icons: bool,
+    features_to_process: Optional[List[Dict[str, Any]]] = None
+) -> List[FeatureStore]:
+    """
+    Process features from an import item and return FeatureStore objects ready for creation.
+    Shared utility used by both single and bulk import jobs.
+    
+    Args:
+        import_item: The ImportQueue item being imported
+        user_id: ID of the user importing
+        import_custom_icons: Whether to import custom icons
+        features_to_process: Optional list of features to process (defaults to import_item.geofeatures)
+        
+    Returns:
+        List of FeatureStore objects ready for bulk_create
+    """
+    if features_to_process is None:
+        features_to_process = import_item.geofeatures
+    
+    # Setup duplicate detection
+    features_to_create = []
+    existing_hashes = set()
+    current_batch_hashes = set()
+    
+    # Get existing feature hashes for this user to avoid duplicates
+    existing_features = FeatureStore.objects.filter(user_id=user_id).values_list('geojson_hash', flat=True)
+    existing_hashes.update(existing_features)
+    
+    # Thread-safe duplicate checking
+    duplicate_check_lock = threading.Lock()
+    
+    def process_feature_with_index(args: Tuple[int, Dict[str, Any]]) -> Optional[FeatureStore]:
+        """Wrapper to unpack index and feature for executor.map()"""
+        feature_index, feature = args
+        return process_single_feature_for_import(
+            feature, feature_index, import_item, user_id, import_custom_icons,
+            existing_hashes, current_batch_hashes, duplicate_check_lock
+        )
+    
+    # Apply bulk operations
+    bulk_ops = import_item.bulk_operations or {}
+    if bulk_ops:
+        features_to_process = apply_bulk_operations(features_to_process, bulk_ops)
+    
+    # Process features in parallel
+    num_threads = get_required_setting('IMPORT_PROCESSING_THREADS')
+    
+    if len(features_to_process) > 0:
+        with ThreadPoolExecutor(max_workers=num_threads) as executor:
+            results = executor.map(process_feature_with_index, enumerate(features_to_process))
+            for feature_store in results:
+                if feature_store is not None:
+                    features_to_create.append(feature_store)
+    
+    return features_to_create
+
+
+def bulk_create_features_with_fallback(
+    features_to_create: List[FeatureStore],
+    user_id: int
+) -> Tuple[int, int]:
+    """
+    Attempt to bulk create features, falling back to individual saves on failure.
+    Shared utility used by both single and bulk import jobs.
+    
+    Args:
+        features_to_create: List of FeatureStore objects to create
+        user_id: User ID for logging purposes
+        
+    Returns:
+        Tuple of (successful_imports, duplicates_skipped)
+    """
+    successful_imports = 0
+    duplicates_skipped = 0
+    
+    if not features_to_create:
+        return 0, 0
+    
+    try:
+        bulk_batch_size = get_required_setting('BULK_CREATE_BATCH_SIZE')
+        FeatureStore.objects.bulk_create(features_to_create, batch_size=bulk_batch_size)
+        successful_imports = len(features_to_create)
+    except Exception as e:
+        logger.warning(f"Bulk import failed for user {user_id}, falling back to individual imports: {str(e)}")
+        logger.error(f"Bulk import error traceback: {traceback.format_exc()}")
+        
+        # Fallback to individual creation if bulk fails
+        for feature in features_to_create:
+            try:
+                feature.save()
+                successful_imports += 1
+            except IntegrityError as e:
+                # Hash collision - feature already exists for this user
+                if 'unique_user_geojson_hash' in str(e).lower():
+                    duplicates_skipped += 1
+                    # Skip silently - this is expected behavior
+                else:
+                    # Unexpected integrity error
+                    logger.error(f"Unexpected integrity error for user {user_id}: {traceback.format_exc()}")
+            except Exception:
+                logger.error(f"Error creating individual feature for user {user_id}: {traceback.format_exc()}")
+    
+    return successful_imports, duplicates_skipped
+
+
+def finalize_import_item(import_item: ImportQueue, user_id: int) -> None:
+    """
+    Mark import item as imported and clean up temporary data.
+    Shared utility used by both single and bulk import jobs.
+    
+    Args:
+        import_item: The ImportQueue item to finalize
+        user_id: User ID for broadcasting
+    """
+    import_item.imported = True
+    
+    # Delete logs before clearing the log_id
+    if import_item.log_id:
+        delete_logs_by_log_id(str(import_item.log_id))
+    
+    # Erase unneeded data
+    import_item.geofeatures = []
+    import_item.log_id = None
+    
+    import_item.save()
+    
+    # Broadcast WebSocket event
+    broadcast_item_imported(user_id, import_item.id)
 

@@ -4,22 +4,19 @@ Handles importing a single import queue item to the feature store.
 """
 
 import json
-import threading
-import traceback
-from concurrent.futures import ThreadPoolExecutor
-from typing import Dict, Any, List, Tuple, Optional
+from typing import Dict, Any, List
 
 from api.models import ImportQueue, FeatureStore
 from geo_lib.logging.console import get_job_logger
 from geo_lib.processing.import_utils import (
     delete_logs_by_log_id,
     broadcast_item_imported,
-    process_single_feature_for_import,
-    apply_bulk_operations,
+    process_features_for_import,
+    bulk_create_features_with_fallback,
+    finalize_import_item,
 )
 from geo_lib.processing.jobs.base_job import BaseJob
 from geo_lib.processing.status_tracker import ProcessingStatus
-from website.settings_utils import get_required_setting
 
 logger = get_job_logger()
 
@@ -91,41 +88,6 @@ class ImportJob(BaseJob):
             "Starting feature import...", 10.0
         )
 
-        # Prepare features for bulk import
-        features_to_create = []
-        existing_hashes = set()
-        current_batch_hashes = set()  # Track hashes in current import batch
-
-        # Get existing feature hashes for this user to avoid duplicates
-        existing_features = FeatureStore.objects.filter(user_id=user_id).values_list('geojson_hash', flat=True)
-        existing_hashes.update(existing_features)
-
-        # Thread-safe duplicate checking
-        duplicate_check_lock = threading.Lock()
-
-        def process_feature_with_index(args: Tuple[int, Dict[str, Any]]) -> Optional[FeatureStore]:
-            """
-            Wrapper to unpack index and feature for executor.map() that delegates
-            to the shared process_single_feature_for_import helper so that
-            single-item imports and bulk imports use identical duplicate logic.
-            """
-            feature_index, feature = args
-            return process_single_feature_for_import(
-                feature=feature,
-                feature_index=feature_index,
-                import_item=import_item,
-                user_id=user_id,
-                import_custom_icons=import_custom_icons,
-                existing_hashes=existing_hashes,
-                current_batch_hashes=current_batch_hashes,
-                duplicate_check_lock=duplicate_check_lock,
-            )
-
-        # Apply bulk operations to features before processing
-        bulk_ops = import_item.bulk_operations or {}
-        if bulk_ops:
-            import_item.geofeatures = apply_bulk_operations(import_item.geofeatures, bulk_ops)
-
         # Filter out skipped features before processing
         features_to_process = []
         skipped_count = 0
@@ -142,22 +104,10 @@ class ImportJob(BaseJob):
             f"Processing {len(features_to_process)} features...", 30.0
         )
 
-        # Get number of threads from settings
-        num_threads = get_required_setting('IMPORT_PROCESSING_THREADS')
-
-        # Process features in parallel using ThreadPoolExecutor
-        if len(features_to_process) > 0:
-            with ThreadPoolExecutor(max_workers=num_threads) as executor:
-                # Process all features in parallel and collect results
-                results = executor.map(
-                    process_feature_with_index,
-                    enumerate(features_to_process)
-                )
-
-                # Collect results from all workers
-                for feature_store in results:
-                    if feature_store is not None:
-                        features_to_create.append(feature_store)
+        # Process features using shared utility
+        features_to_create = process_features_for_import(
+            import_item, user_id, import_custom_icons, features_to_process
+        )
 
         # Update progress
         self.status_tracker.update_job_status(
@@ -165,33 +115,10 @@ class ImportJob(BaseJob):
             f"Importing {len(features_to_create)} features to database...", 70.0
         )
 
-        # Track successful feature creation
-        successful_imports = 0
-
-        # Bulk create all features at once for better performance
-        if features_to_create:
-            try:
-                # Importing features to database
-                bulk_batch_size = get_required_setting('BULK_CREATE_BATCH_SIZE')
-                FeatureStore.objects.bulk_create(features_to_create, batch_size=bulk_batch_size)
-                successful_imports = len(features_to_create)
-                # Features imported successfully
-            except Exception as e:
-                logger.warning(f"Bulk import failed for user {user_id}, falling back to individual imports: {str(e)}")
-                logger.error(f"Bulk import error traceback: {traceback.format_exc()}")
-                # Fallback to individual creation if bulk fails
-                for feature in features_to_create:
-                    try:
-                        feature.save()
-                        successful_imports += 1
-                    except Exception as individual_error:
-                        logger.error(f"Error creating individual feature for user {user_id}: {individual_error}")
-                        logger.error(f"Individual feature creation error traceback: {traceback.format_exc()}")
-                        # If it's a duplicate key error, that's expected and we can continue
-                        if "duplicate key" not in str(individual_error).lower():
-                            logger.error(f"Unexpected error creating feature for user {user_id}: {individual_error}")
-
-                # Fallback import completed
+        # Import to database using shared utility
+        successful_imports, duplicates_skipped = bulk_create_features_with_fallback(
+            features_to_create, user_id
+        )
 
         # Log final summary
         total_processed = len(import_item.geofeatures)
@@ -200,6 +127,8 @@ class ImportJob(BaseJob):
 
         # Build success message
         msg_parts = [f'Successfully imported {total_imported} features']
+        if duplicates_skipped > 0:
+            msg_parts.append(f'{duplicates_skipped} duplicates skipped')
         if skipped_count > 0:
             msg_parts.append(f'{skipped_count} skipped by user')
         if total_skipped_duplicates > 0:
@@ -209,21 +138,8 @@ class ImportJob(BaseJob):
 
         # Only mark as imported and proceed with cleanup if at least one feature was successfully created
         if successful_imports > 0:
-            # Mark as imported only after successful feature creation
-            import_item.imported = True
-
-            # Delete logs before clearing the log_id
-            if import_item.log_id:
-                delete_logs_by_log_id(str(import_item.log_id))
-
-            # Erase some unneeded data since it's not needed anymore now that it's in the feature store.
-            import_item.geofeatures = []
-            import_item.log_id = None
-
-            import_item.save()
-
-            # Broadcast WebSocket event for item import
-            broadcast_item_imported(user_id, item_id)
+            # Finalize import using shared utility
+            finalize_import_item(import_item, user_id)
 
             # Mark job as completed
             self.status_tracker.update_job_status(

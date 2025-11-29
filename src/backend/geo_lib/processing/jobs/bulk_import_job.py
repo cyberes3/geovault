@@ -5,8 +5,6 @@ Handles importing multiple import queue items to the feature store.
 
 import json
 import traceback
-import threading
-from concurrent.futures import ThreadPoolExecutor
 from typing import Dict, Any, List, Tuple, Optional
 
 from django.conf import settings
@@ -21,8 +19,11 @@ from geo_lib.logging.console import get_job_logger
 from geo_lib.processing.import_utils import (
     delete_logs_by_log_id, 
     broadcast_item_imported,
-    process_single_feature_for_import,
-    apply_bulk_operations
+    process_features_for_import,
+    bulk_create_features_with_fallback,
+    finalize_import_item,
+    job_success_result,
+    job_error_result,
 )
 
 logger = get_job_logger()
@@ -190,7 +191,7 @@ class BulkImportJob(BaseJob):
         try:
             # Prevent importing items that have already been imported
             if import_item.imported:
-                return {'success': False, 'error': 'Item already imported'}
+                return job_error_result('Item already imported')
 
             # Check for file-level duplicates before importing
             if import_item.geojson_hash:
@@ -202,91 +203,37 @@ class BulkImportJob(BaseJob):
                 ).order_by('timestamp').first()
                 
                 if earlier_duplicates:
-                    return {'success': False, 'error': f'Duplicate of "{earlier_duplicates.original_filename}"'}
+                    return job_error_result(f'Duplicate of "{earlier_duplicates.original_filename}"')
 
-            # Prepare features for bulk import
-            features_to_create = []
-            existing_hashes = set()
-            current_batch_hashes = set()
+            # Process features using shared utility
+            features_to_create = process_features_for_import(
+                import_item, user_id, import_custom_icons
+            )
 
-            # Get existing feature hashes for this user to avoid duplicates
-            existing_features = FeatureStore.objects.filter(user_id=user_id).values_list('geojson_hash', flat=True)
-            existing_hashes.update(existing_features)
-
-            # Thread-safe duplicate checking
-            duplicate_check_lock = threading.Lock()
-            
-            def process_feature_with_index(args: Tuple[int, Dict[str, Any]]) -> Optional[FeatureStore]:
-                """Wrapper to unpack index and feature for executor.map()"""
-                feature_index, feature = args
-                return process_single_feature_for_import(
-                    feature, feature_index, import_item, user_id, import_custom_icons,
-                    existing_hashes, current_batch_hashes, duplicate_check_lock
-                )
-
-            # Get number of threads from settings
-            num_threads = get_required_setting('IMPORT_PROCESSING_THREADS')
-            
-            # Apply bulk operations to features before processing
-            bulk_ops = import_item.bulk_operations or {}
-            if bulk_ops:
-                import_item.geofeatures = apply_bulk_operations(import_item.geofeatures, bulk_ops)
-
-            # Process features in parallel using ThreadPoolExecutor
-            if len(import_item.geofeatures) > 0:
-                with ThreadPoolExecutor(max_workers=num_threads) as executor:
-                    results = executor.map(
-                        process_feature_with_index,
-                        enumerate(import_item.geofeatures)
-                    )
-                    
-                    for feature_store in results:
-                        if feature_store is not None:
-                            features_to_create.append(feature_store)
-
-            # Track successful feature creation
-            successful_imports = 0
-
-            # Bulk create all features at once for better performance
-            if features_to_create:
-                try:
-                    bulk_batch_size = get_required_setting('BULK_CREATE_BATCH_SIZE')
-                    FeatureStore.objects.bulk_create(features_to_create, batch_size=bulk_batch_size)
-                    successful_imports = len(features_to_create)
-                except Exception as e:
-                    logger.warning(f"Bulk import failed for user {user_id}, falling back to individual imports: {str(e)}")
-                    # Fallback to individual creation if bulk fails
-                    for feature in features_to_create:
-                        try:
-                            feature.save()
-                            successful_imports += 1
-                        except Exception as individual_error:
-                            if "duplicate key" not in str(individual_error).lower():
-                                logger.error(f"Error creating individual feature for user {user_id}: {individual_error}")
+            # Import to database using shared utility
+            successful_imports, duplicates_skipped = bulk_create_features_with_fallback(
+                features_to_create, user_id
+            )
 
             # Only mark as imported if at least one feature was successfully created
             if successful_imports > 0:
-                # Mark as imported only after successful feature creation
-                import_item.imported = True
+                # Finalize import using shared utility
+                finalize_import_item(import_item, user_id)
 
-                # Delete logs before clearing the log_id
-                if import_item.log_id:
-                    delete_logs_by_log_id(str(import_item.log_id))
-
-                # Erase some unneeded data
-                import_item.geofeatures = []
-                import_item.log_id = None
-
-                import_item.save()
+                # Build result message and log
+                if duplicates_skipped > 0:
+                    logger.info(f"Imported {successful_imports} features for user {user_id}, skipped {duplicates_skipped} duplicates")
+                else:
+                    logger.info(f"Imported {successful_imports} features for user {user_id}")
                 
-                # Broadcast WebSocket event for item import
-                broadcast_item_imported(user_id, import_item.id)
-
-                return {'success': True}
+                return job_success_result(
+                    imported=successful_imports,
+                    duplicates_skipped=duplicates_skipped
+                )
             else:
-                return {'success': False, 'error': 'No features were imported'}
+                return job_error_result('No features were imported')
 
         except Exception as e:
             logger.error(f"Error importing item {import_item.id}: {str(e)}")
-            return {'success': False, 'error': str(e)}
+            return job_error_result(str(e))
 
