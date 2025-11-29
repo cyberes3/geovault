@@ -12,7 +12,7 @@
     <div class="absolute inset-0 flex items-stretch justify-stretch sm:items-center sm:justify-center">
       <div
           ref="modalContainer"
-          class="bg-white flex flex-col w-full h-full sm:h-[80vh] sm:max-w-4xl sm:rounded-lg shadow-xl transform transition-all duration-300 ease-out overflow-hidden"
+          class="bg-white flex flex-col w-full h-full sm:h-[80vh] sm:w-[75%] sm:rounded-lg shadow-xl transform transition-all duration-300 ease-out overflow-hidden"
           @click.stop
       >
       <!-- Header -->

@@ -170,6 +170,85 @@ def get_import_queue_item_features(request, item_id: int):
 
 
 @login_required_401
+@require_http_methods(["GET"])
+def search_import_item_features(request, item_id: int):
+    """
+    Search through all features in an import queue item by name or description.
+    Returns matching features with their global index and page number.
+    """
+    try:
+        # Validate query parameter
+        query = request.GET.get('query', '').strip()
+        if not query:
+            return JsonResponse({
+                'error': 'query parameter is required',
+                'code': 400
+            }, status=400)
+
+        # Get import queue item
+        try:
+            item = ImportQueue.objects.get(id=item_id, user=request.user)
+        except ImportQueue.DoesNotExist:
+            return JsonResponse({
+                'error': 'Import queue item not found or access denied',
+                'code': 404
+            }, status=404)
+
+        # Validate geofeatures
+        geofeatures = item.geofeatures
+        if not isinstance(geofeatures, list):
+            return JsonResponse({
+                'matches': [],
+                'total_matches': 0
+            })
+
+        # Search configuration
+        PAGE_SIZE = 50
+        MAX_RESULTS = 150
+        query_lower = query.lower()
+
+        # Search through all features
+        matches = []
+        total_matches = 0
+
+        for feature_index, feature in enumerate(geofeatures):
+            if not isinstance(feature, dict):
+                continue
+
+            properties = feature.get('properties', {})
+            if not isinstance(properties, dict):
+                continue
+
+            # Check if feature matches query
+            name = (properties.get('name') or '').lower()
+            description = (properties.get('description') or '').lower()
+
+            if query_lower in name or query_lower in description:
+                total_matches += 1
+
+                # Only include in results if under limit
+                if len(matches) < MAX_RESULTS:
+                    page = (feature_index // PAGE_SIZE) + 1
+                    matches.append({
+                        'feature_index': feature_index,
+                        'page': page,
+                        'feature': feature
+                    })
+
+        return JsonResponse({
+            'matches': matches,
+            'total_matches': total_matches
+        })
+
+    except Exception as e:
+        logger.error(f"Error searching import item features: {traceback.format_exc()}")
+        return JsonResponse({
+            'error': 'Failed to search features',
+            'code': 500
+        }, status=500)
+
+
+@login_required_401
 @csrf_protect
 def delete_import_item(request, id):
     if request.method == 'DELETE':

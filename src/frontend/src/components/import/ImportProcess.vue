@@ -128,6 +128,76 @@
     <!-- Loading State for Initial Page Load and Post-Processing -->
     <Loader v-if="(originalFilename == null && !loading.page) || (processing.active && processing.progress === null)"/>
 
+    <!-- Search Box -->
+    <div v-if="itemsForUser.length > 0 && !loading.page && !processing.active" class="bg-white rounded-lg shadow-sm border border-gray-200 p-4 sm:p-6">
+      <div class="flex flex-col gap-4">
+        <div class="flex items-center gap-3">
+          <div class="flex-1 relative">
+            <input
+                v-model="searchQuery"
+                :disabled="loading.page || isSearching"
+                type="text"
+                placeholder="Search features..."
+                class="block w-full px-4 py-2 pl-10 border border-gray-300 rounded-md focus:ring-blue-500 focus:border-blue-500 disabled:opacity-50 disabled:cursor-not-allowed"
+                @input="handleSearchInput"
+            />
+            <MagnifyingGlassIcon class="absolute left-3 top-1/2 transform -translate-y-1/2 h-5 w-5 text-gray-400" />
+          </div>
+          <button
+              v-if="searchQuery"
+              @click="clearSearch"
+              class="inline-flex items-center px-3 py-2 border border-gray-300 shadow-sm text-sm font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500"
+              title="Clear search"
+          >
+            <XMarkIcon class="w-4 h-4" />
+          </button>
+        </div>
+
+        <!-- Search Results -->
+        <div v-if="searchQuery && (isSearching || searchResults.length > 0 || (searchQuery && !isSearching && searchResults.length === 0))" class="border-t border-gray-200 pt-4">
+          <div v-if="isSearching" class="text-sm text-gray-500 text-center py-4">
+            Searching...
+          </div>
+          <div v-else-if="searchResults.length > 0" class="space-y-2">
+            <div class="text-sm font-medium text-gray-700 mb-3">
+              Found {{ totalSearchMatches }} result{{ totalSearchMatches !== 1 ? 's' : '' }}
+            </div>
+            <div class="space-y-2 max-h-96 overflow-y-auto">
+              <div
+                  v-for="(result, index) in searchResults"
+                  :key="index"
+                  class="p-3 bg-gray-50 rounded-md border border-gray-200 hover:bg-gray-100 transition-colors"
+              >
+                <div class="flex items-start justify-between gap-3">
+                  <div class="flex-1 min-w-0">
+                    <div class="text-sm font-medium text-gray-900 mb-1">
+                      {{ result.feature.properties?.name || 'Unnamed Feature' }}
+                    </div>
+                    <div v-if="result.feature.properties?.description" class="text-xs text-gray-600 mb-2 line-clamp-2">
+                      {{ truncateDescription(result.feature.properties.description) }}
+                    </div>
+                    <div class="text-xs text-gray-500">
+                      Page {{ result.page }}, Feature {{ result.feature_index + 1 }}
+                    </div>
+                  </div>
+                  <button
+                      @click="goToSearchResult(result)"
+                      class="inline-flex items-center px-3 py-1.5 border border-gray-300 shadow-sm text-xs font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 whitespace-nowrap"
+                      title="Jump to Feature"
+                  >
+                    Jump to Feature
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
+          <div v-else-if="searchQuery && !isSearching" class="text-sm text-gray-500 text-center py-4">
+            No results found
+          </div>
+        </div>
+      </div>
+    </div>
+
     <!-- Import Controls (Top) -->
     <ImportControls
         :current-page="pagination.currentPage"
@@ -293,6 +363,7 @@
     <!-- Feature Items -->
     <div v-else-if="itemsForUser.length > 0 && !loading.page" class="space-y-6">
       <div v-for="(item, index) in itemsForUser" :key="`item-${index}`"
+           :data-feature-index="(pagination.currentPage - 1) * pagination.pageSize + index"
            :class="getItemClasses(item, index)">
         <!-- Button row - always fully visible -->
         <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 mb-4 sm:mb-6 relative z-20">
@@ -536,7 +607,7 @@ import FeatureMapDialog from "@/components/import/parts/FeatureMapDialog.vue";
 import LogViewModal from "@/components/import/parts/LogViewModal.vue";
 import ImportControls from "@/components/import/parts/ImportControls.vue";
 import TagPicker from "@/components/TagPicker.vue";
-import { CheckIcon, ExclamationCircleIcon, ArrowTopRightOnSquareIcon, DocumentIcon, ExclamationTriangleIcon, ArrowDownTrayIcon, ArrowUpTrayIcon, XMarkIcon, MapIcon, ArrowPathIcon } from '@heroicons/vue/24/outline';
+import { CheckIcon, ExclamationCircleIcon, ArrowTopRightOnSquareIcon, DocumentIcon, ExclamationTriangleIcon, ArrowDownTrayIcon, ArrowUpTrayIcon, XMarkIcon, MapIcon, ArrowPathIcon, MagnifyingGlassIcon } from '@heroicons/vue/24/outline';
 
 // TODO: for each feature, query the DB and check if there is a duplicate. For points that's duplicate coords, for linestrings and polygons that's duplicate points
 // TODO: redo the entire log feature to include local timestamps
@@ -592,7 +663,8 @@ export default {
     ArrowUpTrayIcon,
     XMarkIcon,
     MapIcon,
-    ArrowPathIcon
+    ArrowPathIcon,
+    MagnifyingGlassIcon
   },
   data() {
     return {
@@ -672,7 +744,14 @@ export default {
       maxReconnectAttempts: 5,
 
       // Tag autocomplete state
-      availableUserTags: []
+      availableUserTags: [],
+
+      // Search state
+      searchQuery: '',
+      searchResults: [],
+      totalSearchMatches: 0,
+      isSearching: false,
+      searchTimeout: null
     }
   },
   watch: {
@@ -877,7 +956,7 @@ export default {
           this.processing.progress = null;
           return;
         }
-        
+
         data.data.forEach((item) => {
           // Skip error objects
           if (item.error) {
@@ -1250,7 +1329,7 @@ export default {
     },
     getSystemTags(item) {
       if (!item || !item.properties) return [];
-      return Array.isArray(item.properties.system_tags) 
+      return Array.isArray(item.properties.system_tags)
         ? item.properties.system_tags.filter(tag => tag && tag.trim() !== '')
         : [];
     },
@@ -1258,7 +1337,7 @@ export default {
       try {
         const response = await fetch('/api/features/by-tag/');
         const data = await response.json();
-        
+
         if (response.ok && data.user_tags) {
           // Extract unique tags from the user_tags object keys
           this.availableUserTags = Object.keys(data.user_tags).sort();
@@ -1614,6 +1693,16 @@ export default {
       this.lockButtons = false;
       this.isImported = false;
       this.importCustomIcons = true;
+
+      // Reset search state
+      this.searchQuery = '';
+      this.searchResults = [];
+      this.totalSearchMatches = 0;
+      this.isSearching = false;
+      if (this.searchTimeout) {
+        clearTimeout(this.searchTimeout);
+        this.searchTimeout = null;
+      }
     },
     async loadPage(page) {
       // Cache current page changes before loading a new page
@@ -1692,6 +1781,125 @@ export default {
         await this.goToPage(this.pagination.gotoInput);
         this.pagination.gotoInput = null; // Clear the input after jumping
       }
+    },
+    handleSearchInput() {
+      // Clear existing timeout
+      if (this.searchTimeout) {
+        clearTimeout(this.searchTimeout);
+      }
+
+      // Debounce search - wait 300ms after user stops typing
+      this.searchTimeout = setTimeout(() => {
+        this.performSearch();
+      }, 300);
+    },
+    async performSearch() {
+      if (!this.searchQuery || !this.searchQuery.trim()) {
+        this.searchResults = [];
+        this.totalSearchMatches = 0;
+        this.isSearching = false;
+        return;
+      }
+
+      if (!this.currentId) {
+        return;
+      }
+
+      this.isSearching = true;
+
+      try {
+        const query = encodeURIComponent(this.searchQuery.trim());
+        const response = await axios.get(`/api/item/import/search/${this.currentId}?query=${query}`);
+
+        if (response.status === 200 && response.data) {
+          this.searchResults = response.data.matches || [];
+          this.totalSearchMatches = response.data.total_matches || 0;
+        } else {
+          console.error('Search failed:', response.data?.error || 'Unknown error');
+          this.searchResults = [];
+          this.totalSearchMatches = 0;
+        }
+      } catch (error) {
+        console.error('Error searching features:', error);
+        this.searchResults = [];
+        this.totalSearchMatches = 0;
+      } finally {
+        this.isSearching = false;
+      }
+    },
+    clearSearch() {
+      this.searchQuery = '';
+      this.searchResults = [];
+      this.totalSearchMatches = 0;
+      this.isSearching = false;
+      if (this.searchTimeout) {
+        clearTimeout(this.searchTimeout);
+        this.searchTimeout = null;
+      }
+    },
+    async goToSearchResult(result) {
+      // Navigate to the page containing the search result
+      if (result.page && result.page >= 1 && result.page <= this.pagination.totalPages) {
+        await this.goToPage(result.page);
+
+        // Wait for the page to finish loading
+        await this.waitForPageLoad();
+
+        // Scroll to the feature using its global index
+        this.$nextTick(() => {
+          setTimeout(() => {
+            this.scrollToFeature(result.feature_index);
+          }, 100);
+        });
+
+        // Clear search after navigating
+        this.clearSearch();
+      }
+    },
+    waitForPageLoad() {
+      return new Promise((resolve) => {
+        if (!this.loading.page) {
+          resolve();
+          return;
+        }
+
+        const checkInterval = setInterval(() => {
+          if (!this.loading.page) {
+            clearInterval(checkInterval);
+            resolve();
+          }
+        }, 50);
+
+        // Timeout after 5 seconds
+        setTimeout(() => {
+          clearInterval(checkInterval);
+          resolve();
+        }, 5000);
+      });
+    },
+    scrollToFeature(globalIndex) {
+      // Find the feature element by its data-feature-index attribute
+      const featureElement = document.querySelector(`[data-feature-index="${globalIndex}"]`);
+
+      if (featureElement) {
+        // Scroll to the feature with smooth behavior
+        featureElement.scrollIntoView({
+          behavior: 'smooth',
+          block: 'center'
+        });
+
+        // Briefly highlight the feature
+        featureElement.classList.add('ring-2', 'ring-blue-500', 'ring-offset-2');
+        setTimeout(() => {
+          featureElement.classList.remove('ring-2', 'ring-blue-500', 'ring-offset-2');
+        }, 2000);
+      }
+    },
+    truncateDescription(description) {
+      if (!description) return '';
+      const maxLength = 100;
+      if (description.length <= maxLength) return description;
+      return description.substring(0, maxLength) + '...';
     }
   },
   async mounted() {
@@ -1705,7 +1913,7 @@ export default {
       }
     };
     window.addEventListener('beforeunload', this.beforeUnloadHandler);
-    
+
     // Fetch available user tags for autocomplete
     await this.fetchUserTags();
   },
