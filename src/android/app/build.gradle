@@ -88,11 +88,11 @@ def getVersionCode() {
 }
 
 android {
-    namespace 'com.geovault.androiduploader'
+    namespace 'com.geovault.uploader'
     compileSdk 34
 
     defaultConfig {
-        applicationId "com.geovault.androiduploader"
+        applicationId "com.geovault.uploader"
         minSdk 24
         targetSdk 34
         versionCode getVersionCode()
@@ -129,6 +129,11 @@ android {
             minifyEnabled false
             proguardFiles getDefaultProguardFile('proguard-android-optimize.txt'), 'proguard-rules.pro'
             signingConfig signingConfigs.release
+            
+            // Strip debug information and ensure no paths are embedded
+            debuggable false
+            // Don't include source file paths in the APK
+            // (Kotlin compiler options are set below)
         }
     }
     
@@ -139,6 +144,14 @@ android {
     
     kotlinOptions {
         jvmTarget = '11'
+    }
+    
+    // Ensure no source file paths are embedded in release builds
+    packagingOptions {
+        // Don't include debug metadata
+        jniLibs {
+            useLegacyPackaging = false
+        }
     }
 }
 

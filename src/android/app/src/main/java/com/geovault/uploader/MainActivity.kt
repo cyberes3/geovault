@@ -1,4 +1,4 @@
-package com.geovault.androiduploader
+package com.geovault.uploader
 
 import android.content.Context
 import android.content.Intent
