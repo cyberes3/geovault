@@ -47,3 +47,36 @@ The APK will be generated at:
 - Release: `app/build/outputs/apk/release/app-release.apk`
 
 **Note:** Debug builds are faster and don't require signing, making them ideal for development and testing. Release builds are optimized and signed for distribution.
+
+## Setting Up Release Signing
+
+To build a signed release APK, you need to set up a keystore file and configure signing credentials:
+
+1. **Generate a keystore file** (one-time setup):
+   ```bash
+   keytool -genkey -v -keystore app/keystore.jks -keyalg RSA -keysize 2048 -validity 10000 -alias upload
+   ```
+   
+   This will prompt you for:
+   - A password for the keystore (remember this - you'll need it when building)
+   - Your name, organizational unit, organization, city, state, and country code
+   - A password for the key alias (remember this - you'll need it when building)
+
+2. **Build the signed release APK**:
+   ```bash
+   ./build-android.sh release
+   # or directly:
+   ./gradlew assembleRelease
+   ```
+   
+   When building, you'll be prompted to enter:
+   - Your keystore password
+   - Your key password
+   
+   The keystore path and alias are configured in `gradle.properties` (no passwords are stored there for security).
+
+**Important Security Notes:**
+- The keystore file (`keystore.jks`) is automatically excluded from version control via `.gitignore`
+- Never commit your keystore file or passwords to version control
+- Keep your keystore file and passwords secure - if you lose the keystore, you won't be able to update your app on Google Play Store
+- Consider backing up your keystore file securely (e.g., encrypted backup)

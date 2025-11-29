@@ -67,9 +67,29 @@ if [ "$BUILD_TYPE" != "debug" ] && [ "$BUILD_TYPE" != "release" ]; then
     exit 1
 fi
 
+# For release builds, prompt for signing passwords
+GRADLE_ARGS=()
+if [ "$BUILD_TYPE" = "release" ]; then
+    # Check if passwords are already set as environment variables
+    if [ -z "$RELEASE_STORE_PASSWORD" ]; then
+        echo -n "Enter keystore password (used for both keystore and key): "
+        read -s RELEASE_STORE_PASSWORD
+        echo
+        GRADLE_ARGS+=("-PRELEASE_STORE_PASSWORD=$RELEASE_STORE_PASSWORD")
+    else
+        GRADLE_ARGS+=("-PRELEASE_STORE_PASSWORD=$RELEASE_STORE_PASSWORD")
+    fi
+    
+    # Use the same password for key password (unless explicitly set differently)
+    if [ -z "$RELEASE_KEY_PASSWORD" ]; then
+        RELEASE_KEY_PASSWORD="$RELEASE_STORE_PASSWORD"
+    fi
+    GRADLE_ARGS+=("-PRELEASE_KEY_PASSWORD=$RELEASE_KEY_PASSWORD")
+fi
+
 # Build the APK
 echo "Building Android app ($BUILD_TYPE)..."
-./gradlew assemble"${BUILD_TYPE^}"  # Capitalize first letter: debug -> Debug, release -> Release
+./gradlew assemble"${BUILD_TYPE^}" "${GRADLE_ARGS[@]}"  # Capitalize first letter: debug -> Debug, release -> Release
 
 # Find the APK
 APK_PATH=$(find app/build/outputs/apk/$BUILD_TYPE -name "*.apk" | head -n 1)

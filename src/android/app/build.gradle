@@ -3,6 +3,90 @@ plugins {
     id 'org.jetbrains.kotlin.android'
 }
 
+
+// Helper function to get git commit hash (non-blocking)
+def getGitCommitHash() {
+    // Use a cached value or compute it lazily to avoid blocking configuration
+    if (!project.hasProperty('gitCommitHash')) {
+        try {
+            def rootDir = project.rootProject.projectDir.parentFile
+            def process = ['git', 'rev-parse', '--short', 'HEAD'].execute(null, rootDir)
+            def output = new ByteArrayOutputStream()
+            def error = new ByteArrayOutputStream()
+            process.consumeProcessOutput(output, error)
+            
+            // Non-blocking wait with timeout
+            def completed = false
+            Thread.start {
+                process.waitFor()
+                completed = true
+            }
+            
+            // Wait max 1 second
+            for (int i = 0; i < 10 && !completed; i++) {
+                Thread.sleep(100)
+            }
+            
+            if (completed && process.exitValue() == 0) {
+                project.ext.gitCommitHash = output.toString().trim()
+            } else {
+                if (!completed) process.destroy()
+                project.ext.gitCommitHash = 'unknown'
+            }
+        } catch (Exception e) {
+            project.ext.gitCommitHash = 'unknown'
+        }
+    }
+    return project.ext.gitCommitHash ?: 'unknown'
+}
+
+// Helper function to get git commit date (non-blocking)
+def getGitCommitDate() {
+    // Use a cached value or compute it lazily to avoid blocking configuration
+    if (!project.hasProperty('gitCommitDate')) {
+        try {
+            def rootDir = project.rootProject.projectDir.parentFile
+            def process = ['git', 'log', '-1', '--format=%cd', '--date=short'].execute(null, rootDir)
+            def output = new ByteArrayOutputStream()
+            def error = new ByteArrayOutputStream()
+            process.consumeProcessOutput(output, error)
+            
+            // Non-blocking wait with timeout
+            def completed = false
+            Thread.start {
+                process.waitFor()
+                completed = true
+            }
+            
+            // Wait max 1 second
+            for (int i = 0; i < 10 && !completed; i++) {
+                Thread.sleep(100)
+            }
+            
+            if (completed && process.exitValue() == 0) {
+                project.ext.gitCommitDate = output.toString().trim()
+            } else {
+                if (!completed) process.destroy()
+                project.ext.gitCommitDate = new Date().format('yyyy-MM-dd')
+            }
+        } catch (Exception e) {
+            project.ext.gitCommitDate = new Date().format('yyyy-MM-dd')
+        }
+    }
+    return project.ext.gitCommitDate ?: new Date().format('yyyy-MM-dd')
+}
+
+// Helper function to get version code based on timestamp (increases automatically)
+def getVersionCode() {
+    try {
+        // Use timestamp as version code (seconds since epoch / 100)
+        // This ensures it always increases and fits in an int (max ~2.1 billion)
+        return (System.currentTimeMillis() / 100).toInteger()
+    } catch (Exception e) {
+        return 1
+    }
+}
+
 android {
     namespace 'com.geovault.androiduploader'
     compileSdk 34
@@ -11,14 +95,40 @@ android {
         applicationId "com.geovault.androiduploader"
         minSdk 24
         targetSdk 34
-        versionCode 1
-        versionName "1.0.0"
+        versionCode getVersionCode()
+        versionName "${getGitCommitDate()}-${getGitCommitHash()}"
+    }
+
+    signingConfigs {
+        release {
+            def storeFileProp = project.findProperty('RELEASE_STORE_FILE') ?: 'keystore.jks'
+            def keyAliasProp = project.findProperty('RELEASE_KEY_ALIAS') ?: 'upload'
+            
+            storeFile file(storeFileProp)
+            keyAlias keyAliasProp
+            
+            // Read passwords from properties (passed from build script or environment)
+            // If not provided, build will fail with a clear error
+            def storePwd = project.findProperty('RELEASE_STORE_PASSWORD')
+            def keyPwd = project.findProperty('RELEASE_KEY_PASSWORD')
+            
+            if (!storePwd) {
+                throw new GradleException('RELEASE_STORE_PASSWORD not provided. Set it as a property or environment variable.')
+            }
+            if (!keyPwd) {
+                throw new GradleException('RELEASE_KEY_PASSWORD not provided. Set it as a property or environment variable.')
+            }
+            
+            storePassword storePwd
+            keyPassword keyPwd
+        }
     }
 
     buildTypes {
         release {
             minifyEnabled false
             proguardFiles getDefaultProguardFile('proguard-android-optimize.txt'), 'proguard-rules.pro'
+            signingConfig signingConfigs.release
         }
     }
     
@@ -31,6 +141,7 @@ android {
         jvmTarget = '11'
     }
 }
+
 
 dependencies {
     implementation 'androidx.core:core-ktx:1.12.0'
