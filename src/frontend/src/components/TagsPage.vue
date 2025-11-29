@@ -131,6 +131,16 @@
               </button>
               <button
                   v-if="!isSystemTag(tag)"
+                  class="p-1.5 text-gray-400 hover:text-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-1 rounded"
+                  title="Bulk style features in this tag"
+                  type="button"
+                  @click.stop.prevent="openBulkOperationsModal(tag)"
+                  @mousedown.stop.prevent
+              >
+                <RectangleStackIcon class="w-4 h-4" />
+              </button>
+              <button
+                  v-if="!isSystemTag(tag)"
                   class="p-1.5 text-gray-400 hover:text-red-600 focus:outline-none focus:ring-2 focus:ring-red-500 focus:ring-offset-1 rounded"
                   title="Delete tag"
                   type="button"
@@ -308,13 +318,22 @@
         :tag="selectedTagForShare"
         @close="shareDialogOpen = false"
     />
+
+    <!-- Bulk Operations Modal -->
+    <BulkStylingModal
+        :isOpen="bulkOperationsModalOpen"
+        :currentBulkOps="currentBulkOperationsForSelectedTag"
+        @close="closeBulkOperationsModal"
+        @apply="handleApplyBulkOperations"
+    />
   </div>
 </template>
 
 <script>
 import TagShareDialog from "./TagShareDialog.vue";
 import Loader from "./parts/Loader.vue";
-import { MagnifyingGlassIcon, ExclamationCircleIcon, TagIcon, ShareIcon, ArrowDownTrayIcon, PencilIcon, TrashIcon, CheckIcon, MapIcon, ArrowLeftIcon, ArrowRightIcon, XMarkIcon } from '@heroicons/vue/24/outline';
+import BulkStylingModal from "@/components/import/parts/BulkStylingModal.vue";
+import { MagnifyingGlassIcon, ExclamationCircleIcon, TagIcon, ShareIcon, ArrowDownTrayIcon, PencilIcon, TrashIcon, CheckIcon, MapIcon, ArrowLeftIcon, ArrowRightIcon, XMarkIcon, RectangleStackIcon } from '@heroicons/vue/24/outline';
 
 export default {
   name: 'TagsPage',
@@ -332,7 +351,9 @@ export default {
     MapIcon,
     ArrowLeftIcon,
     ArrowRightIcon,
-    XMarkIcon
+    XMarkIcon,
+    RectangleStackIcon,
+    BulkStylingModal
   },
   data() {
     return {
@@ -353,7 +374,12 @@ export default {
       tagCurrentPages: {}, // Current page number for each tag { tagName: pageNumber }
       tagSearchQueries: {}, // Search query for each tag { tagName: query }
       paginationInfo: null, // Server-side pagination info
-      searchDebounceTimer: null // Timer for debouncing search input
+      searchDebounceTimer: null, // Timer for debouncing search input
+
+      // Bulk operations state for tags page
+      bulkOperationsModalOpen: false,
+      bulkOperationsSelectedTag: '',
+      bulkOperationsByTag: {} // { tagName: bulkOps }
     }
   },
   computed: {
@@ -856,6 +882,79 @@ export default {
         console.error('Error removing tag from feature:', error);
         alert(`Failed to remove tag from feature: ${error.message}`);
       }
+    },
+    openBulkOperationsModal(tag) {
+      if (this.isSystemTag(tag)) {
+        alert('Bulk styling is not available for system tags.');
+        return;
+      }
+      this.bulkOperationsSelectedTag = tag;
+      this.bulkOperationsModalOpen = true;
+    },
+    closeBulkOperationsModal() {
+      this.bulkOperationsModalOpen = false;
+    },
+    async handleApplyBulkOperations(bulkData) {
+      if (!this.bulkOperationsSelectedTag) {
+        this.bulkOperationsModalOpen = false;
+        return;
+      }
+      const tag = this.bulkOperationsSelectedTag;
+      // Persist last used bulk operations per tag in local state
+      this.bulkOperationsByTag = {
+        ...this.bulkOperationsByTag,
+        [tag]: { ...bulkData }
+      };
+
+      await this.applyBulkOperationsToTag(tag, bulkData);
+      this.bulkOperationsModalOpen = false;
+    },
+    async applyBulkOperationsToTag(tag, bulkData) {
+      try {
+        const csrfToken = this.getCookie('csrftoken');
+        const response = await fetch(`/api/features/bulk-operations/by-tag/${encodeURIComponent(tag)}/`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'X-CSRFToken': csrfToken || ''
+          },
+          body: JSON.stringify({
+            bulk_operations: bulkData
+          })
+        });
+
+        if (!response.ok) {
+          const errorData = await response.json().catch(() => ({}));
+          throw new Error(errorData.error || `Failed to apply bulk operations: ${response.status}`);
+        }
+
+        // Refresh tags data to reflect styling/tag changes
+        await this.fetchTagsData();
+      } catch (error) {
+        console.error('Error applying bulk operations to tag:', error);
+        alert(`Failed to apply bulk operations: ${error.message}`);
+      }
+    },
+    currentBulkOperationsForTag(tag) {
+      return this.bulkOperationsByTag[tag] || {
+        tags: [],
+        pointColor: null,
+        pointIcon: null,
+        lineColor: null,
+        polyColor: null
+      };
+    },
+    currentBulkOperationsForSelectedTag() {
+      if (!this.bulkOperationsSelectedTag) {
+        return {
+          tags: [],
+          pointColor: null,
+          pointIcon: null,
+          lineColor: null,
+          polyColor: null
+        };
+      }
+      return this.currentBulkOperationsForTag(this.bulkOperationsSelectedTag);
     },
     getCookie(name) {
       let cookieValue = null;

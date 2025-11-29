@@ -1,6 +1,6 @@
 <template>
   <!-- Modal Backdrop -->
-  <div v-if="isOpen" class="fixed inset-0 z-50 overflow-y-auto" @mousedown="handleBackdropMouseDown">
+  <div v-if="isOpen" class="fixed inset-0 z-50" @mousedown="handleBackdropMouseDown">
     <div class="flex items-center justify-center min-h-screen pt-4 px-4 pb-20 text-center sm:block sm:p-0">
       <!-- Background overlay -->
       <div class="fixed inset-0 bg-gray-500 bg-opacity-75 transition-opacity"></div>
@@ -274,9 +274,15 @@ export default {
         this.initializeForm()
         // Add escape key listener
         document.addEventListener('keydown', this.handleEscapeKey)
+        // Prevent background scrolling when modal is open
+        document.documentElement.classList.add('overflow-hidden')
+        document.body.classList.add('overflow-hidden')
       } else {
         // Remove escape key listener
         document.removeEventListener('keydown', this.handleEscapeKey)
+        // Restore background scrolling
+        document.documentElement.classList.remove('overflow-hidden')
+        document.body.classList.remove('overflow-hidden')
       }
     },
     currentBulkOps: {
@@ -398,6 +404,11 @@ export default {
       this.$emit('apply', dataToEmit)
       this.closeModal()
     }
+  },
+  beforeUnmount() {
+    // Ensure scrolling is restored if component is destroyed while open
+    document.documentElement.classList.remove('overflow-hidden')
+    document.body.classList.remove('overflow-hidden')
   }
 }
 </script>

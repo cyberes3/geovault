@@ -15,6 +15,7 @@ from geo_lib.const_strings import CONST_INTERNAL_TAGS, filter_protected_tags, is
 from geo_lib.feature_id import generate_feature_hash
 from geo_lib.logging.console import get_access_logger
 from geo_lib.processing.tagging import update_feature_date_tags
+from geo_lib.processing.import_utils import apply_bulk_operations as apply_bulk_operations_to_features
 from geo_lib.types.feature import PointFeature, LineStringFeature, MultiLineStringFeature, PolygonFeature, GeoFeatureSupported
 from geo_lib.validation.geometry_validation import (
     normalize_and_validate_feature_update,
@@ -478,9 +479,92 @@ def bulk_update_features_metadata(request):
             'errors': errors
         })
     
-    except Exception as e:
+    except Exception:
         logger.error(f"Error in bulk update features metadata: {traceback.format_exc()}")
         return _error_response('Failed to process bulk update request', 500)
+
+
+@login_required_401
+@csrf_protect
+@require_http_methods(["POST"])
+def apply_bulk_operations_to_tag(request, tag_name: str):
+    """
+    Apply bulk styling operations to all features that have the specified tag.
+
+    This endpoint is used from the Tags page to style all features in a tag
+    (point color, point icon, line color, polygon color, and additional tags).
+
+    Request body:
+    - bulk_operations: JSON object with the same structure as import bulk operations:
+      {
+        "tags": [...],
+        "pointColor": "#rrggbb" | null,
+        "pointIcon": "url" | null,
+        "lineColor": "#rrggbb" | null,
+        "polyColor": "#rrggbb" | null
+      }
+    """
+    try:
+        try:
+            data = json.loads(request.body)
+        except json.JSONDecodeError:
+            return _error_response('Invalid JSON in request body', 400)
+
+        if not isinstance(data, dict):
+            return _error_response('Request body must be a valid JSON object', 400)
+
+        bulk_ops = data.get('bulk_operations', {})
+        if not isinstance(bulk_ops, dict):
+            return _error_response('bulk_operations must be a JSON object', 400)
+
+        # Validate tag name
+        if not isinstance(tag_name, str) or not tag_name.strip():
+            return _error_response('Tag name is required', 400)
+
+        # Only operate on the current user's features
+        features_qs = FeatureStore.objects.filter(
+            user=request.user,
+            geojson__properties__tags__contains=[tag_name]
+        ).only('id', 'geojson')
+
+        if not features_qs.exists():
+            return JsonResponse({
+                'success': True,
+                'updated_count': 0,
+                'msg': 'No features found for this tag'
+            })
+
+        updated_count = 0
+
+        with transaction.atomic():
+            for feature in features_qs.iterator(chunk_size=200):
+                original_geojson = feature.geojson
+                if not isinstance(original_geojson, dict):
+                    # Skip invalid geojson entries defensively
+                    continue
+
+                # apply_bulk_operations_to_features expects a list of features
+                updated_features = apply_bulk_operations_to_features([original_geojson], bulk_ops)
+                if not updated_features:
+                    continue
+
+                updated_geojson = updated_features[0]
+
+                # Update the feature's GeoJSON and hash.
+                # Geometry is not modified by bulk styling, so we keep the existing geometry field.
+                feature.geojson = updated_geojson
+                feature.file_hash = generate_feature_hash(updated_geojson)
+                feature.save(update_fields=['geojson', 'file_hash'])
+                updated_count += 1
+
+        return JsonResponse({
+            'success': True,
+            'updated_count': updated_count
+        })
+
+    except Exception:
+        logger.error(f"Error applying bulk operations to tag '{tag_name}': {traceback.format_exc()}")
+        return _error_response('Failed to apply bulk operations to tag', 500)
 
 
 @login_required_401
