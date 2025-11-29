@@ -1,15 +1,18 @@
 import unittest
 import sys
 import os
-from unittest.mock import MagicMock
+from unittest.mock import MagicMock, patch
 
-# Mock django
-sys.modules['django'] = MagicMock()
-sys.modules['django.conf'] = MagicMock()
-settings = MagicMock()
-settings.ICON_PROCESSING_ENABLED = True
-settings.ICON_FETCH_TIMEOUT = 5
-sys.modules['django.conf'].settings = settings
+# Mock django.conf.settings more selectively
+# Don't mock the entire django module as it breaks version checking
+mock_settings = MagicMock()
+mock_settings.ICON_PROCESSING_ENABLED = True
+mock_settings.ICON_FETCH_TIMEOUT = 5
+
+# Only mock django.conf, not the entire django module
+if 'django.conf' not in sys.modules:
+    sys.modules['django.conf'] = MagicMock()
+sys.modules['django.conf'].settings = mock_settings
 
 # Add src to path
 sys.path.append(os.path.join(os.path.dirname(__file__), '../backend'))

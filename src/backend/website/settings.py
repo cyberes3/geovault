@@ -117,6 +117,16 @@ DATABASES = {
         'PASSWORD': config.get_with_env_override('database.password', 'DB_PASSWORD', ''),
         'HOST': config.get_str('database.host', 'localhost'),
         'PORT': config.get_str('database.port', '5432'),
+        # Test database configuration - hardcoded for test environment
+        # Uses existing database (gv_tests) and drops all tables instead of creating new DB
+        # The --reuse-db flag in pytest ensures the database is not created/destroyed
+        'TEST': {
+            'NAME': 'gv_tests',
+            'USER': 'gv_tests',
+            'PASSWORD': 'bobjoe99',
+            'HOST': '172.0.2.105',
+            'PORT': '5432',
+        },
     }
 }
 # Password validation
