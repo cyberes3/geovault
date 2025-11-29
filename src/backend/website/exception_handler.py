@@ -41,13 +41,12 @@ def custom_exception_handler(request, exception=None):
     Exception logging is handled by the signal handler.
     """
     # Return appropriate error response based on request path
-    from django.http import JsonResponse, HttpResponse
+    from django.http import HttpResponse
+    from api.utils.responses import server_error_response
+    
     if request.path.startswith('/api/'):
         # Return JSON error response for API endpoints
-        return JsonResponse({
-            'msg': 'Internal server error occurred',
-            'code': 500
-        }, status=500)
+        return server_error_response('Internal server error occurred')
     else:
         # Return generic 500 for non-API endpoints
         return HttpResponse('Internal Server Error', status=500)

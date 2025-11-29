@@ -208,7 +208,7 @@ class TestImportAPI(TestCase):
         )
 
         response = self.client.get(f'/api/item/import/get/history/{import_queue.id}')
-        self.assertEqual(response.status_code, 400)
+        self.assertEqual(response.status_code, 404)
 
     def test_get_import_queue_item_features(self):
         """Test getting features from import queue item."""
@@ -276,6 +276,9 @@ class TestImportAPI(TestCase):
 
         response = self.client.get(f'/api/item/import/search/{import_queue.id}')
         self.assertEqual(response.status_code, 400)
+        data = json.loads(response.content)
+        self.assertIn('error', data)
+        self.assertEqual(data['error'], 'query parameter is required')
 
     @patch('api.views.import_item.delete_job')
     def test_delete_import_item(self, mock_delete_job):
@@ -296,7 +299,7 @@ class TestImportAPI(TestCase):
     def test_delete_import_item_not_found(self):
         """Test deleting non-existent import item."""
         response = self.client.delete('/api/item/import/delete/99999')
-        self.assertEqual(response.status_code, 400)
+        self.assertEqual(response.status_code, 404)
 
     def test_update_import_item(self):
         """Test updating an import item."""
@@ -483,7 +486,7 @@ class TestImportAPI(TestCase):
         self.assertEqual(response.status_code, 200)
         data = json.loads(response.content)
         self.assertEqual(data['duplicate_count'], 1)
-        self.assertIn('Duplicates rechecked successfully', data['msg'])
+        self.assertIn('Duplicates rechecked successfully', data.get('msg', ''))
 
         # Verify RealTimeImportLog was initialized with correct parameters
         mock_realtime_log_class.assert_called_once_with(user_id=self.user.id, log_id=import_queue.log_id)
@@ -524,7 +527,7 @@ class TestImportAPI(TestCase):
         )
 
         response = self.client.post(f'/api/item/import/recheck-duplicates/{import_queue.id}')
-        self.assertEqual(response.status_code, 403)
+        self.assertEqual(response.status_code, 404)
 
     def test_recheck_duplicates_already_imported(self):
         """Test rechecking duplicates for already imported item."""
@@ -539,5 +542,5 @@ class TestImportAPI(TestCase):
         response = self.client.post(f'/api/item/import/recheck-duplicates/{import_queue.id}')
         self.assertEqual(response.status_code, 400)
         data = json.loads(response.content)
-        self.assertIn('already been imported', data['msg'])
+        self.assertIn('already been imported', data.get('error', ''))
 

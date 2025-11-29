@@ -8,6 +8,13 @@ from django.views.decorators.http import require_http_methods
 import time
 
 from api.models import ImportQueue
+from api.utils.responses import (
+    error_response,
+    success_response,
+    not_found_response,
+    forbidden_response,
+    server_error_response,
+)
 from geo_lib.const_strings import CONST_INTERNAL_TAGS, filter_protected_tags, prepare_user_tags
 from geo_lib.logging.console import get_access_logger
 from geo_lib.processing.jobs import process_job, delete_job, import_job
@@ -41,10 +48,11 @@ def upload_item(request):
 
             if not is_valid:
                 logger.warning(f"Basic security check failed for {file_name}: {validation_message}")
-                return JsonResponse({
-                    'msg': f'File validation failed: {validation_message}',
-                    'job_id': None
-                }, status=400)
+                return error_response(
+                    f'File validation failed: {validation_message}',
+                    code=400,
+                    details={'job_id': None}
+                )
 
             # Read file data after basic security check
             file_data = uploaded_file.read()
@@ -55,34 +63,33 @@ def upload_item(request):
                 try:
                     replacement_feature_id = int(request.POST['replacement'])
                 except (ValueError, TypeError):
-                    return JsonResponse({
-                        'msg': 'Invalid replacement feature ID',
-                        'job_id': None
-                    }, status=400)
+                    return error_response(
+                        'Invalid replacement feature ID',
+                        code=400,
+                        details={'job_id': None}
+                    )
 
             # Create a processing job
             job_id = status_tracker.create_job(file_name, request.user.id)
 
             # Start background processing
             if process_job.start_process_job(job_id, file_data, file_name, request.user.id, replacement_feature_id=replacement_feature_id):
-                return JsonResponse({
+                return success_response({
                     'msg': 'File uploaded successfully, processing started',
                     'job_id': job_id
-                }, status=200)
+                })
             else:
-                return JsonResponse({
-                    'msg': 'Failed to start file processing',
-                    'job_id': None
-                }, status=500)
+                return server_error_response('Failed to start file processing')
         else:
             # Try to get filename even if form validation failed
             filename = "unknown file"
             if 'file' in request.FILES:
                 filename = request.FILES['file'].name
-            return JsonResponse({
-                'msg': f'Invalid upload structure for file "{filename}"',
-                'job_id': None
-            }, status=400)
+            return error_response(
+                f'Invalid upload structure for file "{filename}"',
+                code=400,
+                details={'job_id': None}
+            )
     else:
         return HttpResponse(status=405)
 
@@ -93,22 +100,20 @@ def get_processing_status(request, job_id):
     Get the processing status of a file processing job.
     """
     if not job_id:
-        return JsonResponse({'msg': 'Job ID not provided'}, status=400)
+        return error_response('Job ID not provided', code=400)
 
     # Get job status
     job_status = status_tracker.get_job_status(job_id)
 
     if not job_status:
-        return JsonResponse({'msg': 'Job not found'}, status=404)
+        return not_found_response('Job not found')
 
     # Check if user owns this job
     job = status_tracker.get_job(job_id)
     if not job or job.user_id != request.user.id:
-        return JsonResponse({'msg': 'Not authorized to view this job'}, status=403)
+        return forbidden_response('Not authorized to view this job')
 
-    return JsonResponse({
-        'job_status': job_status
-    }, status=200)
+    return success_response({'job_status': job_status})
 
 
 @api_or_login_required_401()
@@ -124,16 +129,18 @@ def get_user_processing_jobs(request):
         if job_status:
             job_statuses.append(job_status)
 
-    return JsonResponse({
-        'jobs': job_statuses
-    }, status=200)
+    return success_response({'jobs': job_statuses})
 
 
 @api_or_login_required_401()
 def fetch_import_history_item(request, item_id: int):
-    item = ImportQueue.objects.get(id=item_id)
+    try:
+        item = ImportQueue.objects.get(id=item_id)
+    except ImportQueue.DoesNotExist:
+        return not_found_response('Import item not found')
+    
     if item.user_id != request.user.id:
-        return JsonResponse({'msg': 'not authorized to view this item', 'code': 403}, status=400)
+        return not_found_response('Import item not found')  # Don't reveal existence
 
     response = HttpResponse(item.raw_file, content_type='application/octet-stream')
     response['Content-Disposition'] = 'attachment; filename="%s"' % item.original_filename
@@ -149,23 +156,17 @@ def get_import_queue_item_features(request, item_id: int):
     try:
         item = ImportQueue.objects.get(id=item_id, user=request.user)
 
-        return JsonResponse({
+        return success_response({
             'geofeatures': item.geofeatures,
             'original_filename': item.original_filename,
             'imported': item.imported,
             'replacement': item.replacement
         })
     except ImportQueue.DoesNotExist:
-        return JsonResponse({
-            'error': 'Import queue item not found or access denied',
-            'code': 404
-        }, status=404)
+        return not_found_response('Import queue item not found or access denied')
     except Exception as e:
         logger.error(f"Error fetching import queue item features: {traceback.format_exc()}")
-        return JsonResponse({
-            'error': 'Failed to fetch features',
-            'code': 500
-        }, status=500)
+        return server_error_response('Failed to fetch features')
 
 
 @api_or_login_required_401()
@@ -179,19 +180,13 @@ def search_import_item_features(request, item_id: int):
         # Validate query parameter
         query = request.GET.get('query', '').strip()
         if not query:
-            return JsonResponse({
-                'error': 'query parameter is required',
-                'code': 400
-            }, status=400)
+            return error_response('query parameter is required', code=400)
 
         # Get import queue item
         try:
             item = ImportQueue.objects.get(id=item_id, user=request.user)
         except ImportQueue.DoesNotExist:
-            return JsonResponse({
-                'error': 'Import queue item not found or access denied',
-                'code': 404
-            }, status=404)
+            return not_found_response('Import queue item not found or access denied')
 
         # Validate geofeatures
         geofeatures = item.geofeatures
@@ -234,17 +229,14 @@ def search_import_item_features(request, item_id: int):
                         'feature': feature
                     })
 
-        return JsonResponse({
+        return success_response({
             'matches': matches,
             'total_matches': total_matches
         })
 
     except Exception as e:
         logger.error(f"Error searching import item features: {traceback.format_exc()}")
-        return JsonResponse({
-            'error': 'Failed to search features',
-            'code': 500
-        }, status=500)
+        return server_error_response('Failed to search features')
 
 
 @api_or_login_required_401()
@@ -253,24 +245,22 @@ def delete_import_item(request, id):
         try:
             queue = ImportQueue.objects.get(id=id)
         except ImportQueue.DoesNotExist:
-            return JsonResponse({'msg': 'ID does not exist', 'code': 404}, status=400)
+            return not_found_response('Import item not found')
 
         # Check if user owns this item
         if queue.user_id != request.user.id:
-            return JsonResponse({'msg': 'Not authorized to delete this item', 'code': 403}, status=400)
+            return not_found_response('Import item not found')  # Don't reveal existence
 
         # Start async delete job
         job_id = delete_job.start_delete_job(id, request.user.id, queue.original_filename)
 
         if job_id:
-            return JsonResponse({
+            return success_response({
                 'msg': 'Delete job started',
                 'job_id': job_id
             })
         else:
-            return JsonResponse({
-                'msg': 'Failed to start delete job'
-            }, status=500)
+            return server_error_response('Failed to start delete job')
     return HttpResponse(status=405)
 
 
@@ -280,16 +270,16 @@ def update_import_item(request, item_id):
     try:
         queue = ImportQueue.objects.get(id=item_id)
     except ImportQueue.DoesNotExist:
-        return JsonResponse({'msg': 'ID does not exist', 'code': 404}, status=400)
+        return not_found_response('Import item not found')
     if queue.user_id != request.user.id:
-        return JsonResponse({'msg': 'not authorized to edit this item', 'code': 403}, status=403)
+        return not_found_response('Import item not found')  # Don't reveal existence
 
     # Prevent updating items that have already been imported to the feature store
     if queue.imported:
-        return JsonResponse({
-            'msg': 'Cannot update items that have already been imported to the feature store',
-            'code': 400
-        }, status=400)
+        return error_response(
+            'Cannot update items that have already been imported to the feature store',
+            code=400
+        )
 
     try:
         data = json.loads(request.body)
@@ -300,7 +290,7 @@ def update_import_item(request, item_id):
         if not isinstance(features_to_update, list):
             raise ValueError('features must be a list')
     except (json.JSONDecodeError, ValueError) as e:
-        return JsonResponse({'msg': str(e), 'code': 400}, status=400)
+        return error_response(str(e), code=400)
 
     # Build a lookup map of feature ID to partial update fields
     updates_by_id = {}
@@ -389,7 +379,7 @@ def update_import_item(request, item_id):
     # Save the updated queue
     queue.save()
 
-    return JsonResponse({
+    return success_response({
         'msg': f'Successfully updated {updated_count} feature(s)',
         'updated_count': updated_count
     })
@@ -405,16 +395,16 @@ def import_to_featurestore(request, item_id):
     try:
         import_item = ImportQueue.objects.get(id=item_id)
     except ImportQueue.DoesNotExist:
-        return JsonResponse({'msg': 'ID does not exist', 'code': 404}, status=404)
+        return not_found_response('Import item not found')
     if import_item.user_id != request.user.id:
-        return JsonResponse({'msg': 'not authorized to edit this item', 'code': 403}, status=403)
+        return not_found_response('Import item not found')  # Don't reveal existence
 
     # Prevent importing items that have already been imported to the feature store
     if import_item.imported:
-        return JsonResponse({
-            'msg': 'This item has already been imported to the feature store',
-            'code': 400
-        }, status=400)
+        return error_response(
+            'This item has already been imported to the feature store',
+            code=400
+        )
 
     # Parse request body to get import_custom_icons flag and skipped_feature_ids
     import_custom_icons = True  # Default to True for backward compatibility
@@ -444,10 +434,10 @@ def import_to_featurestore(request, item_id):
         ).order_by('timestamp').first()
 
         if earlier_duplicates:
-            return JsonResponse({
-                'msg': f'This file is a duplicate of "{earlier_duplicates.original_filename}" which is already in the import queue',
-                'code': 409
-            }, status=409)
+            return error_response(
+                f'This file is a duplicate of "{earlier_duplicates.original_filename}" which is already in the import queue',
+                code=409
+            )
 
     # Start async import job - all processing happens there
     job_id = import_job.start_import_job(
@@ -462,10 +452,10 @@ def import_to_featurestore(request, item_id):
 
     if not blocking:
         # Default behavior: return immediately and let the job run in background
-        return JsonResponse({
+        return success_response({
             'msg': 'Import job started',
             'job_id': job_id
-        }, status=200)
+        })
 
     # Blocking behavior: wait for the job to finish before returning a response
     timeout_seconds = 300  # 5 minutes
@@ -475,21 +465,17 @@ def import_to_featurestore(request, item_id):
     while True:
         # Check for timeout
         if time.time() - start_time > timeout_seconds:
-            return JsonResponse({
-                'msg': 'Import job timed out while waiting for completion',
-                'job_id': job_id,
-                'code': 504
-            }, status=504)
+            return error_response(
+                'Import job timed out while waiting for completion',
+                code=504,
+                details={'job_id': job_id}
+            )
 
         job_status = status_tracker.get_job_status(job_id)
 
         # If job no longer exists, return an error
         if not job_status:
-            return JsonResponse({
-                'msg': 'Import job not found',
-                'job_id': job_id,
-                'code': 404
-            }, status=404)
+            return not_found_response('Import job not found')
 
         status = job_status.get('status')
 
@@ -506,13 +492,19 @@ def import_to_featurestore(request, item_id):
             }
 
             if status == 'completed':
-                return JsonResponse(response_payload, status=200)
+                return success_response(response_payload)
             elif status == 'failed':
-                response_payload['code'] = 500
-                return JsonResponse(response_payload, status=500)
+                return error_response(
+                    job_status.get('message', 'Import failed'),
+                    code=500,
+                    details={'job_id': job_id, 'job_status': job_status}
+                )
             else:  # cancelled
-                response_payload['code'] = 499  # client closed request / cancelled
-                return JsonResponse(response_payload, status=499)
+                return error_response(
+                    'Import cancelled',
+                    code=499,
+                    details={'job_id': job_id, 'job_status': job_status}
+                )
 
         # Not finished yet, wait a bit before polling again
         time.sleep(poll_interval)
@@ -528,16 +520,16 @@ def save_bulk_operations(request, item_id):
     try:
         import_item = ImportQueue.objects.get(id=item_id)
     except ImportQueue.DoesNotExist:
-        return JsonResponse({'msg': 'ID does not exist', 'code': 404}, status=400)
+        return not_found_response('Import item not found')
     if import_item.user_id != request.user.id:
-        return JsonResponse({'msg': 'not authorized to edit this item', 'code': 403}, status=403)
+        return not_found_response('Import item not found')  # Don't reveal existence
 
     # Prevent updating items that have already been imported
     if import_item.imported:
-        return JsonResponse({
-            'msg': 'Cannot update bulk operations for items that have already been imported',
-            'code': 400
-        }, status=400)
+        return error_response(
+            'Cannot update bulk operations for items that have already been imported',
+            code=400
+        )
 
     try:
         data = json.loads(request.body)
@@ -558,18 +550,13 @@ def save_bulk_operations(request, item_id):
         import_item.bulk_operations = bulk_ops
         import_item.save(update_fields=['bulk_operations'])
 
-        return JsonResponse({
-            'msg': 'Bulk operations saved successfully'
-        }, status=200)
+        return success_response({'msg': 'Bulk operations saved successfully'})
 
     except (json.JSONDecodeError, ValueError) as e:
-        return JsonResponse({'msg': str(e), 'code': 400}, status=400)
+        return error_response(str(e), code=400)
     except Exception as e:
         logger.error(f"Error saving bulk operations: {str(e)}")
-        return JsonResponse({
-            'msg': 'Failed to save bulk operations',
-            'code': 500
-        }, status=500)
+        return server_error_response('Failed to save bulk operations')
 
 
 @api_or_login_required_401()
@@ -581,15 +568,13 @@ def get_bulk_operations(request, item_id):
     try:
         import_item = ImportQueue.objects.get(id=item_id)
     except ImportQueue.DoesNotExist:
-        return JsonResponse({'msg': 'ID does not exist', 'code': 404}, status=400)
+        return not_found_response('Import item not found')
     if import_item.user_id != request.user.id:
-        return JsonResponse({'msg': 'not authorized to view this item', 'code': 403}, status=403)
+        return not_found_response('Import item not found')  # Don't reveal existence
 
     # Return bulk operations (default to empty dict if None)
     bulk_ops = import_item.bulk_operations or {}
-    return JsonResponse({
-        'bulk_operations': bulk_ops
-    }, status=200)
+    return success_response({'bulk_operations': bulk_ops})
 
 
 @api_or_login_required_401()
@@ -602,16 +587,16 @@ def recheck_duplicates(request, item_id):
     try:
         import_item = ImportQueue.objects.get(id=item_id)
     except ImportQueue.DoesNotExist:
-        return JsonResponse({'msg': 'ID does not exist', 'code': 404}, status=404)
+        return not_found_response('Import item not found')
     if import_item.user_id != request.user.id:
-        return JsonResponse({'msg': 'not authorized to edit this item', 'code': 403}, status=403)
+        return not_found_response('Import item not found')  # Don't reveal existence
 
     # Prevent rechecking duplicates for items that have already been imported
     if import_item.imported:
-        return JsonResponse({
-            'msg': 'Cannot recheck duplicates for items that have already been imported',
-            'code': 400
-        }, status=400)
+        return error_response(
+            'Cannot recheck duplicates for items that have already been imported',
+            code=400
+        )
 
     try:
         from geo_lib.processing.duplicate_detection import find_coordinate_duplicates
@@ -621,10 +606,10 @@ def recheck_duplicates(request, item_id):
         # Get the features from the import item
         features = import_item.geofeatures
         if not features:
-            return JsonResponse({
+            return success_response({
                 'msg': 'No features to check',
                 'duplicate_count': 0
-            }, status=200)
+            })
 
         # Create a real-time log for this operation
         realtime_log = RealTimeImportLog(user_id=request.user.id, log_id=import_item.log_id)
@@ -665,14 +650,11 @@ def recheck_duplicates(request, item_id):
             DatabaseLogLevel.INFO
         )
 
-        return JsonResponse({
+        return success_response({
             'msg': 'Duplicates rechecked successfully',
             'duplicate_count': duplicate_count
-        }, status=200)
+        })
 
     except Exception as e:
         logger.error(f"Error rechecking duplicates for item {item_id}: {str(e)}")
-        return JsonResponse({
-            'msg': 'Failed to recheck duplicates',
-            'code': 500
-        }, status=500)
+        return server_error_response('Failed to recheck duplicates')

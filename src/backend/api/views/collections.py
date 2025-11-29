@@ -7,6 +7,12 @@ from django.http import JsonResponse
 from django.views.decorators.http import require_http_methods
 
 from api.models import Collection, FeatureStore
+from api.utils.responses import (
+    error_response,
+    success_response,
+    not_found_response,
+    server_error_response,
+)
 from geo_lib.feature_id import generate_feature_hash
 from geo_lib.logging.console import get_access_logger
 from geo_lib.processing.import_utils import (
@@ -43,16 +49,13 @@ def list_collections(request):
                 'updated_at': collection.updated_at.isoformat()
             })
         
-        return JsonResponse({
+        return success_response({
             'collections': collections_data
         })
     
     except Exception:
         logger.error(f"Error listing collections: {traceback.format_exc()}")
-        return JsonResponse({
-            'error': 'Failed to list collections',
-            'code': 500
-        }, status=500)
+        return server_error_response('Failed to list collections')
 
 
 @api_or_login_required_401()
@@ -79,10 +82,7 @@ def create_collection(request):
         feature_ids = data.get('feature_ids', [])
         
         if not name:
-            return JsonResponse({
-                'error': 'name is required',
-                'code': 400
-            }, status=400)
+            return error_response('name is required', code=400)
         
         # Validate tags is a list
         if not isinstance(tags, list):
@@ -117,7 +117,7 @@ def create_collection(request):
         
         feature_count = _count_collection_features(collection)
         
-        return JsonResponse({
+        return success_response({
             'collection': {
                 'id': collection.id,
                 'name': collection.name,
@@ -131,16 +131,10 @@ def create_collection(request):
         }, status=201)
     
     except json.JSONDecodeError:
-        return JsonResponse({
-            'error': 'Invalid JSON in request body',
-            'code': 400
-        }, status=400)
+        return error_response('Invalid JSON in request body', code=400)
     except Exception:
         logger.error(f"Error creating collection: {traceback.format_exc()}")
-        return JsonResponse({
-            'error': 'Failed to create collection',
-            'code': 500
-        }, status=500)
+        return server_error_response('Failed to create collection')
 
 
 @api_or_login_required_401()
@@ -154,7 +148,7 @@ def get_collection(request, collection_id):
         
         feature_count = _count_collection_features(collection)
         
-        return JsonResponse({
+        return success_response({
             'collection': {
                 'id': collection.id,
                 'name': collection.name,
@@ -168,16 +162,10 @@ def get_collection(request, collection_id):
         })
     
     except Collection.DoesNotExist:
-        return JsonResponse({
-            'error': 'Collection not found',
-            'code': 404
-        }, status=404)
+        return not_found_response('Collection not found')
     except Exception:
         logger.error(f"Error getting collection: {traceback.format_exc()}")
-        return JsonResponse({
-            'error': 'Failed to get collection',
-            'code': 500
-        }, status=500)
+        return server_error_response('Failed to get collection')
 
 
 @api_or_login_required_401()
@@ -203,10 +191,7 @@ def update_collection(request, collection_id):
             if name:
                 collection.name = name
             else:
-                return JsonResponse({
-                    'error': 'name cannot be empty',
-                    'code': 400
-                }, status=400)
+                return error_response('name cannot be empty', code=400)
         
         # Update description if provided
         if 'description' in data:
@@ -251,7 +236,7 @@ def update_collection(request, collection_id):
         
         feature_count = _count_collection_features(collection)
         
-        return JsonResponse({
+        return success_response({
             'collection': {
                 'id': collection.id,
                 'name': collection.name,
@@ -265,21 +250,12 @@ def update_collection(request, collection_id):
         })
     
     except Collection.DoesNotExist:
-        return JsonResponse({
-            'error': 'Collection not found',
-            'code': 404
-        }, status=404)
+        return not_found_response('Collection not found')
     except json.JSONDecodeError:
-        return JsonResponse({
-            'error': 'Invalid JSON in request body',
-            'code': 400
-        }, status=400)
+        return error_response('Invalid JSON in request body', code=400)
     except Exception:
         logger.error(f"Error updating collection: {traceback.format_exc()}")
-        return JsonResponse({
-            'error': 'Failed to update collection',
-            'code': 500
-        }, status=500)
+        return server_error_response('Failed to update collection')
 
 
 @api_or_login_required_401()
@@ -292,21 +268,13 @@ def delete_collection(request, collection_id):
         collection = Collection.objects.get(id=collection_id, user=request.user)
         collection.delete()
         
-        return JsonResponse({
-            'message': 'Collection deleted successfully'
-        })
+        return success_response({'msg': 'Collection deleted successfully'})
     
     except Collection.DoesNotExist:
-        return JsonResponse({
-            'error': 'Collection not found',
-            'code': 404
-        }, status=404)
+        return not_found_response('Collection not found')
     except Exception:
         logger.error(f"Error deleting collection: {traceback.format_exc()}")
-        return JsonResponse({
-            'error': 'Failed to delete collection',
-            'code': 500
-        }, status=500)
+        return server_error_response('Failed to delete collection')
 
 
 @api_or_login_required_401()
@@ -379,22 +347,16 @@ def get_collection_features(request, collection_id):
             "features": geojson_features
         }
         
-        return JsonResponse({
+        return success_response({
             'data': geojson_data,
             'feature_count': len(geojson_features)
         })
     
     except Collection.DoesNotExist:
-        return JsonResponse({
-            'error': 'Collection not found',
-            'code': 404
-        }, status=404)
+        return not_found_response('Collection not found')
     except Exception:
         logger.error(f"Error getting collection features: {traceback.format_exc()}")
-        return JsonResponse({
-            'error': 'Failed to get collection features',
-            'code': 500
-        }, status=500)
+        return server_error_response('Failed to get collection features')
 
 
 @api_or_login_required_401()
@@ -418,32 +380,20 @@ def apply_bulk_operations_to_collection(request, collection_id):
         try:
             data = json.loads(request.body)
         except json.JSONDecodeError:
-            return JsonResponse({
-                "error": "Invalid JSON in request body",
-                "code": 400
-            }, status=400)
+            return error_response('Invalid JSON in request body', code=400)
 
         if not isinstance(data, dict):
-            return JsonResponse({
-                "error": "Request body must be a valid JSON object",
-                "code": 400
-            }, status=400)
+            return error_response('Request body must be a valid JSON object', code=400)
 
         bulk_ops = data.get("bulk_operations", {})
         is_valid, error_message = validate_bulk_operations_payload(bulk_ops)
         if not is_valid:
-            return JsonResponse({
-                "error": error_message,
-                "code": 400
-            }, status=400)
+            return error_response(error_message, code=400)
 
         try:
             collection = Collection.objects.get(id=collection_id, user=request.user)
         except Collection.DoesNotExist:
-            return JsonResponse({
-                "error": "Collection not found",
-                "code": 404
-            }, status=404)
+            return not_found_response('Collection not found')
 
         # Build the same feature ID set used by get_collection_features/_count_collection_features
         feature_ids_set: Set[int] = set()
@@ -472,8 +422,7 @@ def apply_bulk_operations_to_collection(request, collection_id):
             feature_ids_set.update(user_feature_ids)
 
         if not feature_ids_set:
-            return JsonResponse({
-                "success": True,
+            return success_response({
                 "updated_count": 0,
                 "msg": "No features found for this collection"
             })
@@ -490,17 +439,14 @@ def apply_bulk_operations_to_collection(request, collection_id):
             if _apply_bulk_ops_and_save_feature(feature, bulk_ops):
                 updated_count += 1
 
-        return JsonResponse({
-            "success": True,
-            "updated_count": updated_count
+        return success_response({
+            "updated_count": updated_count,
+            "msg": f"Successfully updated {updated_count} feature(s) in collection"
         })
 
     except Exception:
         logger.error(f"Error applying bulk operations to collection {collection_id}: {traceback.format_exc()}")
-        return JsonResponse({
-            "error": "Failed to apply bulk operations to collection",
-            "code": 500
-        }, status=500)
+        return server_error_response('Failed to apply bulk operations to collection')
 
 
 def _count_collection_features(collection: Collection) -> int:
