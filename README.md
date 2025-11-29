@@ -5,7 +5,7 @@
 <br>
 
 <p align="center">
-  <img src="other/deviceframes.png" alt="deviceframes.com" height="300px">
+  <img src="other/pictures/deviceframes.png" alt="deviceframes.com" height="300px">
 </p>
 
 <br>
@@ -35,64 +35,26 @@ to [GitHub](https://github.com/Cyberes/geovault).
 
 ## Installation
 
-Installation instructions are in the [installation/](https://git.evulid.cc/cyberes/geovault/src/branch/master/installation) folder.
+Installation instructions are in
+the [installation/](https://git.evulid.cc/cyberes/geovault/src/branch/master/installation) folder.
 
 ## Development
 
-Test files are in the [geovault-tests](https://git.evulid.cc/cyberes/geovault-tests) repository. Please submit issues on [git.evulid.cc](https://git.evulid.cc/cyberes/geovault).
+Test files are in the [geovault-tests](https://git.evulid.cc/cyberes/geovault-tests) repository. Please submit issues
+on [git.evulid.cc](https://git.evulid.cc/cyberes/geovault).
 
-If you are having issues uploading or importing files, please provide the problem file. You can email it to me if you'd like.
-
-## API Keys
-
-GeoVault supports API key authentication for programmatic access to the API. API keys can be created and managed from the Account Settings page in the web interface.
-
-### Creating API Keys
-
-1. Navigate to Settings → Account Settings
-2. Scroll to the "API Keys" section
-3. Enter a name for your key (e.g., "My Phone", "Desktop App")
-4. Click "Create API Key"
-5. **Important**: Copy the full key immediately - it will only be shown once. The key starts with `gv_` and is 64 characters long.
-
-### Using API Keys
-
-API keys are authenticated using the `Authorization` header with the `Bearer` token format:
-
-```
-Authorization: Bearer gv_<your-api-key-here>
-```
-
-API keys have full access to all API endpoints except for API key management routes (create, delete, list API keys). This ensures that compromised keys cannot be used to create additional keys.
-
-### Validating API Keys
-
-You can validate an API key by making a POST request to `/api/user/api-keys/validate/` with the `Authorization: Bearer <key>` header. This endpoint can be called using either session authentication or an API key.
+If you are having issues uploading or importing files, please provide the problem file. You can email it to me if you'd
+like.
 
 ## Android Uploader App
 
-A simple Android app is included that allows you to quickly upload KML/KMZ/GPX files to your GeoVault server via Android's share intent.
+A simple Android app is included that allows you to quickly upload KML/KMZ/GPX files to your GeoVault server via
+Android's share intent. More info in `src/android`.
 
-### Building the App
+DOWNLOAD LINK TODO
 
-From the `src/android` directory, run:
+## Screenshots
 
-```bash
-./build-android.sh
-```
-
-This will build a debug APK located at `app/build/outputs/apk/debug/app-debug.apk`.
-
-### Installing and Using
-
-1. Install the APK on your Android device
-2. On first launch, you'll be prompted to enter:
-   - **Server URL**: Your GeoVault server URL (e.g., `https://geovault.example.com`)
-   - **API Key**: An API key created from the web interface
-3. To upload a file:
-   - Share a KML, KMZ, or GPX file from any app (file manager, email, etc.)
-   - Select "GeoVault Uploader" from the share menu
-   - Optionally rename the file (the app will automatically append `_android_upload_<timestamp>` to the filename)
-   - Tap "Upload" to send the file to your server
-
-The app will show upload progress and automatically close on successful upload.
+<img src="other/pictures/home%20screen.png" alt="deviceframes.com" height="500px">
+<img src="other/pictures/map%20view.png" alt="deviceframes.com" height="500px">
+<img src="other/pictures/import%20page.png" alt="deviceframes.com" height="800px">
