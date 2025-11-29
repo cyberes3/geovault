@@ -3,6 +3,7 @@ import json
 import traceback
 
 from django import forms
+from django.db import transaction
 from django.http import HttpResponse, JsonResponse
 from django.views.decorators.http import require_http_methods
 import time
@@ -322,62 +323,64 @@ def update_import_item(request, item_id):
         updates_by_id[feature_id] = update_fields
 
     # Update features in the geofeatures array by matching IDs
+    # Wrap in transaction to ensure atomicity
     updated_count = 0
-    for i, existing_feature in enumerate(queue.geofeatures):
-        feature_id = existing_feature.get('properties', {}).get('id')
-        if feature_id and feature_id in updates_by_id:
-            # Create a deep copy of the original feature to merge updates into
-            merged_feature = copy.deepcopy(existing_feature)
+    with transaction.atomic():
+        for i, existing_feature in enumerate(queue.geofeatures):
+            feature_id = existing_feature.get('properties', {}).get('id')
+            if feature_id and feature_id in updates_by_id:
+                # Create a deep copy of the original feature to merge updates into
+                merged_feature = copy.deepcopy(existing_feature)
 
-            # Preserve existing system_tags from original feature
-            from api.views.feature_update import _extract_system_tags
-            original_system_tags = _extract_system_tags(existing_feature)
+                # Preserve existing system_tags from original feature
+                from api.views.feature_update import _extract_system_tags
+                original_system_tags = _extract_system_tags(existing_feature)
 
-            # Get the partial update fields
-            update_fields = updates_by_id[feature_id]
+                # Get the partial update fields
+                update_fields = updates_by_id[feature_id]
 
-            # Merge update fields into the feature properties (only update fields that are present)
-            merged_feature.setdefault('properties', {})
+                # Merge update fields into the feature properties (only update fields that are present)
+                merged_feature.setdefault('properties', {})
 
-            for field, value in update_fields.items():
-                if field == 'tags':
-                    # Handle tags specially - filter out system tags and prepare user tags
-                    if not isinstance(value, list):
-                        value = []
-                    # Filter out any system tags that user might have added
-                    user_tags = filter_protected_tags(value, CONST_INTERNAL_TAGS)
-                    # Prepare user tags (lowercase and deduplicate)
-                    user_tags = prepare_user_tags(user_tags)
-                    merged_feature['properties']['tags'] = user_tags
-                else:
-                    # For name, description, created - update directly
-                    merged_feature['properties'][field] = value
+                for field, value in update_fields.items():
+                    if field == 'tags':
+                        # Handle tags specially - filter out system tags and prepare user tags
+                        if not isinstance(value, list):
+                            value = []
+                        # Filter out any system tags that user might have added
+                        user_tags = filter_protected_tags(value, CONST_INTERNAL_TAGS)
+                        # Prepare user tags (lowercase and deduplicate)
+                        user_tags = prepare_user_tags(user_tags)
+                        merged_feature['properties']['tags'] = user_tags
+                    else:
+                        # For name, description, created - update directly
+                        merged_feature['properties'][field] = value
 
-            # Ensure the feature has the required structure (type, geometry, properties)
-            if 'type' not in merged_feature:
-                merged_feature['type'] = 'Feature'
-            if 'geometry' not in merged_feature:
-                merged_feature['geometry'] = existing_feature.get('geometry', {})
+                # Ensure the feature has the required structure (type, geometry, properties)
+                if 'type' not in merged_feature:
+                    merged_feature['type'] = 'Feature'
+                if 'geometry' not in merged_feature:
+                    merged_feature['geometry'] = existing_feature.get('geometry', {})
 
-            # Run the merged feature through validate_and_normalize_geojson_feature()
-            try:
-                normalized_feature = validate_and_normalize_geojson_feature(
-                    merged_feature,
-                    preserve_system_tags=original_system_tags,
-                    preserve_id=False
-                )
-            except GeometryValidationError as e:
-                logger.warning(f"Error validating feature {feature_id} during update: {str(e)}")
-                continue
+                # Run the merged feature through validate_and_normalize_geojson_feature()
+                try:
+                    normalized_feature = validate_and_normalize_geojson_feature(
+                        merged_feature,
+                        preserve_system_tags=original_system_tags,
+                        preserve_id=False
+                    )
+                except GeometryValidationError as e:
+                    logger.warning(f"Error validating feature {feature_id} during update: {str(e)}")
+                    continue
 
-            # Ensure system_tags are preserved after normalization
-            normalized_feature['properties']['system_tags'] = original_system_tags
+                # Ensure system_tags are preserved after normalization
+                normalized_feature['properties']['system_tags'] = original_system_tags
 
-            queue.geofeatures[i] = normalized_feature
-            updated_count += 1
+                queue.geofeatures[i] = normalized_feature
+                updated_count += 1
 
-    # Save the updated queue
-    queue.save()
+        # Save the updated queue
+        queue.save()
 
     return success_response({
         'msg': f'Successfully updated {updated_count} feature(s)',

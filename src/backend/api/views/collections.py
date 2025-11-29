@@ -3,6 +3,7 @@ import traceback
 from typing import Set
 
 from django.db.models import Q
+from django.db import transaction
 from django.http import JsonResponse
 from django.views.decorators.http import require_http_methods
 
@@ -185,54 +186,56 @@ def update_collection(request, collection_id):
         
         data = json.loads(request.body)
         
-        # Update name if provided
-        if 'name' in data:
-            name = data.get('name', '').strip()
-            if name:
-                collection.name = name
-            else:
-                return error_response('name cannot be empty', code=400)
-        
-        # Update description if provided
-        if 'description' in data:
-            description = data.get('description')
-            if description is not None:
-                description = description.strip() if description else None
-            else:
-                description = None
-            collection.description = description
-        
-        # Update tags if provided
-        if 'tags' in data:
-            tags = data.get('tags', [])
-            if isinstance(tags, list):
-                collection.tags = tags
-            else:
-                collection.tags = []
-        
-        # Update feature_ids if provided
-        if 'feature_ids' in data:
-            feature_ids = data.get('feature_ids', [])
-            if isinstance(feature_ids, list):
-                # Convert to integers and filter out invalid values
-                try:
-                    feature_ids = [int(fid) for fid in feature_ids if fid is not None]
-                except (ValueError, TypeError):
-                    feature_ids = []
-                
-                # Verify that all feature_ids belong to the user
-                if feature_ids:
-                    user_feature_ids = set(
-                        FeatureStore.objects.filter(user=request.user, id__in=feature_ids)
-                        .values_list('id', flat=True)
-                    )
-                    feature_ids = [fid for fid in feature_ids if fid in user_feature_ids]
-                
-                collection.feature_ids = feature_ids
-            else:
-                collection.feature_ids = []
-        
-        collection.save()
+        # Wrap all database modifications in a transaction
+        with transaction.atomic():
+            # Update name if provided
+            if 'name' in data:
+                name = data.get('name', '').strip()
+                if name:
+                    collection.name = name
+                else:
+                    return error_response('name cannot be empty', code=400)
+            
+            # Update description if provided
+            if 'description' in data:
+                description = data.get('description')
+                if description is not None:
+                    description = description.strip() if description else None
+                else:
+                    description = None
+                collection.description = description
+            
+            # Update tags if provided
+            if 'tags' in data:
+                tags = data.get('tags', [])
+                if isinstance(tags, list):
+                    collection.tags = tags
+                else:
+                    collection.tags = []
+            
+            # Update feature_ids if provided
+            if 'feature_ids' in data:
+                feature_ids = data.get('feature_ids', [])
+                if isinstance(feature_ids, list):
+                    # Convert to integers and filter out invalid values
+                    try:
+                        feature_ids = [int(fid) for fid in feature_ids if fid is not None]
+                    except (ValueError, TypeError):
+                        feature_ids = []
+                    
+                    # Verify that all feature_ids belong to the user
+                    if feature_ids:
+                        user_feature_ids = set(
+                            FeatureStore.objects.filter(user=request.user, id__in=feature_ids)
+                            .values_list('id', flat=True)
+                        )
+                        feature_ids = [fid for fid in feature_ids if fid in user_feature_ids]
+                    
+                    collection.feature_ids = feature_ids
+                else:
+                    collection.feature_ids = []
+            
+            collection.save()
         
         feature_count = _count_collection_features(collection)
         
@@ -435,9 +438,11 @@ def apply_bulk_operations_to_collection(request, collection_id):
         # Import helper from feature_update module
         from api.views.feature_update import _apply_bulk_ops_and_save_feature
 
-        for feature in features_qs.iterator(chunk_size=200):
-            if _apply_bulk_ops_and_save_feature(feature, bulk_ops):
-                updated_count += 1
+        # Wrap in transaction to ensure atomicity
+        with transaction.atomic():
+            for feature in features_qs.iterator(chunk_size=200):
+                if _apply_bulk_ops_and_save_feature(feature, bulk_ops):
+                    updated_count += 1
 
         return success_response({
             "updated_count": updated_count,
