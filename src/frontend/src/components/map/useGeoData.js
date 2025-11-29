@@ -1,4 +1,7 @@
 // Helper to attach geo-data loading and feature bookkeeping methods to GeoJsonMap
+import {toLonLat} from 'ol/proj'
+import {GeoJSON} from 'ol/format'
+
 export function useGeoData() {
   return {
     async loadDataForCurrentView() {

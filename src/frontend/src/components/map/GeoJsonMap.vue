@@ -79,25 +79,6 @@
             title="Error Loading Map"
         />
 
-        <!-- Public Share Title (shown when viewing a public share) -->
-        <div v-if="isPublicShareMode" class="hidden sm:block absolute top-4 right-4 bg-white bg-opacity-90 px-4 py-2 rounded-lg shadow-md z-10">
-          <div class="flex items-center space-x-2">
-            <ShareIcon class="w-5 h-5 text-blue-500"/>
-            <span v-if="(publicShareTag || publicShareCollectionName) && !publicShareError" class="text-sm font-medium text-gray-900">
-              <template v-if="publicShareTag">Shared Tag: {{ publicShareTag }}</template>
-              <template v-else-if="publicShareCollectionName">Shared Collection: {{ publicShareCollectionName }}</template>
-            </span>
-          </div>
-        </div>
-
-        <!-- Collection Title (shown when viewing a collection) -->
-        <div v-if="collectionName && !isPublicShareMode" class="hidden sm:block absolute top-4 right-4 bg-white bg-opacity-90 px-4 py-2 rounded-lg shadow-md z-10">
-          <div class="flex items-center space-x-2">
-            <FolderIcon class="w-5 h-5 text-blue-500"/>
-            <span class="text-sm font-medium text-gray-900">Collection: {{ collectionName }}</span>
-          </div>
-        </div>
-
         <!-- Loading Indicator -->
         <MapLoadingIndicator
             :is-loading="isMapInitializing || isDataLoading || isRestoring || isTagFilterLoading"
@@ -180,6 +161,7 @@
         :share-id="shareId"
         :tile-sources="tileSources"
         :user-location="userLocation"
+        :view-context="viewContext"
         @close="activeMobileSidebar = null"
         @layer-change="updateMapLayer"
     />
@@ -254,6 +236,30 @@ export default {
       }
       // Vue Router may return a single string or an array for repeated query params
       return Array.isArray(tag) ? tag : [tag]
+    },
+    // Get the current view context (tag, collection, or null)
+    viewContext() {
+      // Priority: public share > collection > tag
+      if (this.isPublicShareMode) {
+        if (this.publicShareTag) {
+          return { type: 'tag', name: this.publicShareTag, isPublicShare: true }
+        } else if (this.publicShareCollectionName) {
+          return { type: 'collection', name: this.publicShareCollectionName, isPublicShare: true }
+        }
+        return null
+      }
+      
+      if (this.collectionName) {
+        return { type: 'collection', name: this.collectionName, isPublicShare: false }
+      }
+      
+      // Check for tag in URL query
+      const tag = this.$route.query.tag
+      if (tag) {
+        return { type: 'tag', name: Array.isArray(tag) ? tag[0] : tag, isPublicShare: false }
+      }
+      
+      return null
     },
     // Get allowed options based on mode (public share or authenticated)
     publicShareAllowedOptions() {
@@ -1693,31 +1699,60 @@ export default {
   },
 
   activated() {
-    // If the map was fully destroyed for memory reasons, restore it
+    // Whenever we re-activate the map view, do a light reset so we don't
+    // carry stale features or caches across pages.
+
+    // Clear current features and feature-related state
+    if (this.vectorSource) {
+      this.vectorSource.clear()
+    }
+    this.featuresInExtent = []
+    this.featureTimestamps = {}
+    this.loadedBounds.clear()
+    this.selectedFeature = null
+    this.isEditingFeature = false
+    this.showElevationProfile = false
+
+    // Clear any active tag filter state on the map side. The URL tag query
+    // (if present) will re-apply the filter via the sidebar on re-activation.
+    this.isTagFilterActive = false
+    this.tagFilteredFeatures = []
+    this.isTagFilterLoading = false
+
+    // Treat this as a fresh initial load for the current session
+    this.isInitialLoad = true
+
+    // If the map was fully destroyed for memory reasons, let restoreMap
+    // handle re-initialization and data loading.
     if (this.mapWasDestroyed) {
-      // Let restoreMap manage loading flags
       this.restoreMap()
       this.mapWasDestroyed = false
       return
     }
 
-    // If the map is still present but has no features loaded, reload data for current view
-    if (this.map && this.vectorSource && this.vectorSource.getFeatures().length === 0) {
-      const hasTagQuery = !!this.$route.query.tag
+    const hasTagQuery = !!this.$route.query.tag
+    const hasCollectionQuery = !!this.$route.query.collection
 
-      // Treat this as an initial load for the current session
-      this.isInitialLoad = true
+    // Always remount the sidebar so its internal selectedTags state is cleared,
+    // and then let the tag query (if present) drive any new selection.
+    this.sidebarKey += 1
 
-      if (hasTagQuery) {
-        // For tag-based views, force the sidebar to remount so it re-applies the tag filter.
-        // The sidebar will fetch filtered features and emit them back via handleTagFilterChange.
-        this.sidebarKey += 1
-      } else {
-        // For normal views, reload data for current bbox
+    // Reload data based on route query parameters
+    if (this.map && this.vectorSource) {
+      if (hasCollectionQuery) {
+        // Collection mode - load collection features
+        this.handleCollectionFilter(this.collectionId)
+      } else if (!hasTagQuery) {
+        // Normal view - reload bbox data
         this.withLoading('isMapInitializing', async () => {
-          // Start data fetch immediately (no debounce) when navigating back
           await this.loadDataForCurrentView()
+          // Update feature list after data loads
+          this.updateFeaturesInExtent()
         })
+      } else {
+        // Tag filter mode - sidebar will handle loading via tag filter
+        // Just update empty feature list for now
+        this.updateFeaturesInExtent()
       }
     }
   },

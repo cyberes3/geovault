@@ -103,6 +103,15 @@
             <div v-if="editingTag !== tag" class="flex items-center space-x-1">
               <button
                   class="p-1.5 text-gray-400 hover:text-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-1 rounded"
+                  title="View on Map"
+                  type="button"
+                  @click.stop.prevent="viewTagOnMap(tag)"
+                  @mousedown.stop.prevent
+              >
+                <MapIcon class="w-4 h-4" />
+              </button>
+              <button
+                  class="p-1.5 text-gray-400 hover:text-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-1 rounded"
                   title="Share tag"
                   type="button"
                   @click.stop.prevent="openShareDialog(tag)"
@@ -118,15 +127,6 @@
                   @mousedown.stop.prevent
               >
                 <ArrowDownTrayIcon class="w-4 h-4" />
-              </button>
-              <button
-                  class="p-1.5 text-gray-400 hover:text-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-1 rounded"
-                  title="View tag on map"
-                  type="button"
-                  @click.stop.prevent="viewTagOnMap(tag)"
-                  @mousedown.stop.prevent
-              >
-                <MapIcon class="w-4 h-4" />
               </button>
               <button
                   v-if="!isSystemTag(tag)"
@@ -898,7 +898,7 @@ export default {
     },
     openBulkOperationsModal(tag) {
       if (this.isSystemTag(tag)) {
-         alert('Bulk operations are not available for system tags.');
+        alert('Bulk styling is not available for system tags.');
         return;
       }
       this.bulkOperationsSelectedTag = tag;
@@ -985,14 +985,10 @@ export default {
       window.open(url, '_blank');
     },
     viewTagOnMap(tag) {
-      if (!tag) {
-        return;
-      }
+      // Navigate to map page with tag query parameter
       this.$router.push({
         path: '/map',
-        query: {
-          tag
-        }
+        query: { tag: tag }
       });
     },
     nextPage() {

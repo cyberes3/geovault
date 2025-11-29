@@ -19,6 +19,23 @@
       </button>
     </div>
 
+    <!-- View Context Header (Tag/Collection name) -->
+    <div v-if="viewContext" class="mb-4 pb-3 border-b border-gray-200">
+      <div class="flex items-center gap-2">
+        <TagIcon v-if="viewContext.type === 'tag'" class="w-5 h-5 text-blue-500 flex-shrink-0" />
+        <FolderIcon v-else-if="viewContext.type === 'collection'" class="w-5 h-5 text-blue-500 flex-shrink-0" />
+        <div class="flex-1 min-w-0">
+          <div class="flex items-center gap-1 text-xs text-gray-500 uppercase tracking-wide">
+            <ShareIcon v-if="viewContext.isPublicShare" class="w-3 h-3" />
+            <span>{{ viewContext.isPublicShare ? 'Shared ' : '' }}{{ viewContext.type === 'tag' ? 'Tag' : 'Collection' }}</span>
+          </div>
+          <div class="text-sm font-semibold text-gray-900 truncate" :title="viewContext.name">
+            {{ viewContext.name }}
+          </div>
+        </div>
+      </div>
+    </div>
+
     <h2 class="hidden md:block text-lg font-semibold text-gray-900 mb-4">Map Controls</h2>
     
     <!-- Layer Selection -->
@@ -70,13 +87,16 @@
 
 <script>
 import {APIHOST} from '@/config.js'
-import { XMarkIcon, ArrowDownTrayIcon } from '@heroicons/vue/24/outline'
+import { XMarkIcon, ArrowDownTrayIcon, TagIcon, FolderIcon, ShareIcon } from '@heroicons/vue/24/outline'
 
 export default {
   name: 'MapControlsSidebar',
   components: {
     XMarkIcon,
-    ArrowDownTrayIcon
+    ArrowDownTrayIcon,
+    TagIcon,
+    FolderIcon,
+    ShareIcon
   },
   props: {
     selectedLayer: {
@@ -129,6 +149,10 @@ export default {
     isMobileOpen: {
       type: Boolean,
       default: false
+    },
+    viewContext: {
+      type: Object,
+      default: null
     }
   },
   emits: ['layer-change', 'close'],
