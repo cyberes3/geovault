@@ -34,11 +34,11 @@ VALID_GEOMETRY_TYPES = {
     'GeometryCollection',
 }
 
-# Line geometry types
-LINE_GEOMETRY_TYPES = {'LineString', 'MultiLineString'}
+# Line geometry types (lowercase for comparison with lowercased geom_type)
+LINE_GEOMETRY_TYPES = {'linestring', 'multilinestring'}
 
-# Polygon geometry types
-POLYGON_GEOMETRY_TYPES = {'Polygon', 'MultiPolygon'}
+# Polygon geometry types (lowercase for comparison with lowercased geom_type)
+POLYGON_GEOMETRY_TYPES = {'polygon', 'multipolygon'}
 
 
 class GeometryModel(BaseModel):

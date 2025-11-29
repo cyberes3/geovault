@@ -405,7 +405,7 @@ def import_to_featurestore(request, item_id):
     try:
         import_item = ImportQueue.objects.get(id=item_id)
     except ImportQueue.DoesNotExist:
-        return JsonResponse({'msg': 'ID does not exist', 'code': 404}, status=400)
+        return JsonResponse({'msg': 'ID does not exist', 'code': 404}, status=404)
     if import_item.user_id != request.user.id:
         return JsonResponse({'msg': 'not authorized to edit this item', 'code': 403}, status=403)
 

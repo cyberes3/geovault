@@ -361,7 +361,7 @@ class TestImportAPI(TestCase):
             'lineColor': '#00ff00'
         }
 
-        response = self.client.post(
+        response = self.client.put(
             f'/api/item/import/bulk-operations/{import_queue.id}',
             data=json.dumps({'bulk_operations': bulk_ops}),
             content_type='application/json'

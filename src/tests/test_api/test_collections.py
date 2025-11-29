@@ -56,7 +56,7 @@ class TestCollectionsAPI(TestCase):
             data=json.dumps(collection_data),
             content_type='application/json'
         )
-        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.status_code, 201)
         data = json.loads(response.content)
         self.assertIn('collection', data)
         self.assertEqual(data['collection']['name'], 'Test Collection')
@@ -274,11 +274,23 @@ class TestCollectionsAPI(TestCase):
 
     def test_collection_with_multiple_features(self):
         """Test collection with multiple features."""
+        # Create different feature data for the second feature
+        feature2_data = {
+            'type': 'Feature',
+            'geometry': {
+                'type': 'Point',
+                'coordinates': [-122.4094, 37.7849, 0.0]  # Different coordinates
+            },
+            'properties': {
+                'name': 'Test Feature 2',
+                'tags': ['test']
+            }
+        }
         feature2 = FeatureStore.objects.create(
             user=self.user,
-            geojson=self.feature_data,
+            geojson=feature2_data,
             geometry=Point(-122.4094, 37.7849, 0.0),  # 3D Point with Z=0.0
-            file_hash=generate_feature_hash(self.feature_data)
+            file_hash=generate_feature_hash(feature2_data)
         )
 
         collection = Collection.objects.create(

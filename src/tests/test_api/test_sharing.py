@@ -148,7 +148,7 @@ class TestSharingAPI(TestCase):
             user=self.user
         )
 
-        response = self.client.get(f'/api/sharing/public/{share.share_id}/')
+        response = self.client.get(f'/api/sharing/public/{share.share_id}/?bbox=-123,37,-122,38')
         self.assertEqual(response.status_code, 200)
         data = json.loads(response.content)
         self.assertIn('data', data)
@@ -163,7 +163,7 @@ class TestSharingAPI(TestCase):
             allow_downloads=True
         )
 
-        response = self.client.get(f'/api/sharing/public/{share.share_id}/')
+        response = self.client.get(f'/api/sharing/public/{share.share_id}/?bbox=-123,37,-122,38')
         self.assertEqual(response.status_code, 200)
         data = json.loads(response.content)
         self.assertIn('data', data)
@@ -178,7 +178,7 @@ class TestSharingAPI(TestCase):
         )
 
         initial_count = share.access_count
-        response = self.client.get(f'/api/sharing/public/{share.share_id}/')
+        response = self.client.get(f'/api/sharing/public/{share.share_id}/?bbox=-123,37,-122,38')
         self.assertEqual(response.status_code, 200)
         share.refresh_from_db()
         self.assertEqual(share.access_count, initial_count + 1)
@@ -221,7 +221,7 @@ class TestSharingAPI(TestCase):
             user=self.user
         )
 
-        response = self.client.get(f'/api/sharing/public/collection/{share.share_id}/')
+        response = self.client.get(f'/api/sharing/public/collection/{share.share_id}/?bbox=-123,37,-122,38')
         self.assertEqual(response.status_code, 200)
         data = json.loads(response.content)
         self.assertIn('data', data)
@@ -235,7 +235,7 @@ class TestSharingAPI(TestCase):
     def test_share_id_validation(self):
         """Test that invalid share IDs are rejected."""
         response = self.client.get('/api/sharing/public/info/invalid-share-id/')
-        self.assertEqual(response.status_code, 400)
+        self.assertEqual(response.status_code, 404)
 
     def test_collection_share_access_count(self):
         """Test that collection share access count increments."""
@@ -252,7 +252,7 @@ class TestSharingAPI(TestCase):
         )
 
         initial_count = share.access_count
-        response = self.client.get(f'/api/sharing/public/collection/{share.share_id}/')
+        response = self.client.get(f'/api/sharing/public/collection/{share.share_id}/?bbox=-123,37,-122,38')
         self.assertEqual(response.status_code, 200)
         share.refresh_from_db()
         self.assertEqual(share.access_count, initial_count + 1)

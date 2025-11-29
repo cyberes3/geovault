@@ -8,7 +8,7 @@ Settings are structured as nested JSON objects.
 from enum import Enum
 from typing import Any, Dict, Optional
 
-from pydantic import BaseModel, Field, ValidationError, ConfigDict, field_validator
+from pydantic import BaseModel, Field, ValidationError, ConfigDict, field_validator, model_serializer
 
 
 class ElevationProfileSource(str, Enum):
@@ -25,7 +25,7 @@ class UnitsPreference(str, Enum):
 
 class MapSettings(BaseModel):
     """Pydantic model for map settings section."""
-    model_config = ConfigDict(extra='ignore')
+    model_config = ConfigDict(extra='forbid')
     
     elevation_profile_source: Optional[ElevationProfileSource] = Field(
         default='gps',
@@ -66,7 +66,7 @@ class MapSettings(BaseModel):
 
 class ImportSettings(BaseModel):
     """Pydantic model for import settings section."""
-    model_config = ConfigDict(extra='ignore')
+    model_config = ConfigDict(extra='forbid')
     
     overwrite_single_track_name_with_filename: Optional[bool] = Field(
         default=False,
@@ -81,7 +81,7 @@ class ImportSettings(BaseModel):
 
 class AccountSettings(BaseModel):
     """Pydantic model for account settings section."""
-    model_config = ConfigDict(extra='ignore')
+    model_config = ConfigDict(extra='forbid')
     
     units: Optional[UnitsPreference] = Field(
         default='imperial',
@@ -91,7 +91,7 @@ class AccountSettings(BaseModel):
 
 class UserSettingsModel(BaseModel):
     """Unified Pydantic model for all user settings."""
-    model_config = ConfigDict(extra='ignore')
+    model_config = ConfigDict(extra='forbid')
     
     map: Optional[MapSettings] = Field(default_factory=MapSettings)
     import_: Optional[ImportSettings] = Field(default_factory=ImportSettings, alias='import')
@@ -118,9 +118,11 @@ def validate_settings(settings: Dict[str, Any]) -> tuple[bool, Optional[str], Op
     try:
         # Validate using the unified model
         # Pydantic will use default_factory to create nested models with defaults if missing
+        # With extra='forbid', any extra fields will raise a ValidationError
         validated_model = UserSettingsModel.model_validate(settings)
         # Convert back to dict, excluding None values, using aliases for field names
-        validated_dict = validated_model.model_dump(exclude_none=True, by_alias=True)
+        # Use mode='json' to properly serialize enums without warnings
+        validated_dict = validated_model.model_dump(mode='json', exclude_none=True, by_alias=True)
         return True, None, None, validated_dict
     except ValidationError as e:
         # Extract detailed error information

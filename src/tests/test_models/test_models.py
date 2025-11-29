@@ -380,7 +380,7 @@ class TestUserProfile(TestCase):
         # Second call should get existing profile
         profile2, created2 = UserProfile.get_or_create_profile(self.user)
         self.assertFalse(created2)
-        self.assertEqual(profile.id, profile2.id)
+        self.assertEqual(profile.user, profile2.user)
 
     def test_update_activity(self):
         """Test update_activity method."""

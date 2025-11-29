@@ -29,7 +29,7 @@ class UserProfile(models.Model):
     def get_or_create_profile(cls, user):
         """Get or create a profile for a user."""
         profile, created = cls.objects.get_or_create(user=user)
-        return profile
+        return profile, created
 
     def update_activity(self):
         """Update the last activity timestamp to now."""

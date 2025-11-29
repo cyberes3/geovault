@@ -138,6 +138,17 @@ def get_file_type_by_extension(extension: str) -> FileType:
 
 def get_file_type_by_signature(file_data: bytes) -> FileType:
     """Get file type by file signature (magic numbers)."""
+    # Check for more specific signatures first (root elements) before generic XML
+    # This prevents GPX files from being misidentified as KML
+    file_data_lower = file_data.lower()
+    
+    # Check for root elements first (most specific)
+    if b'<gpx' in file_data_lower or b'<GPX' in file_data:
+        return FileType.GPX
+    if b'<kml' in file_data_lower or b'<KML' in file_data:
+        return FileType.KML
+    
+    # Then check other signatures
     for file_type, config in FILE_TYPE_CONFIGS.items():
         if any(file_data.startswith(sig) for sig in config.signatures):
             return file_type
@@ -260,11 +271,15 @@ def detect_file_type(file_data: Union[bytes, str], filename: str = "") -> FileTy
         content = file_data
     
     # Check for KML/GPX XML signatures in content
+    # Check for root elements first (more specific), then generic XML
     content_lower = content.lower().strip()
-    if content_lower.startswith('<?xml') or content_lower.startswith('<kml'):
-        return FileType.KML
-    elif content_lower.startswith('<?xml') or content_lower.startswith('<gpx'):
+    if '<gpx' in content_lower:
         return FileType.GPX
+    elif '<kml' in content_lower:
+        return FileType.KML
+    elif content_lower.startswith('<?xml'):
+        # Generic XML - default to KML
+        return FileType.KML
     
     # Default to KML if we can't determine
     return FileType.KML

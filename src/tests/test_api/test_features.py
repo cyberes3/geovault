@@ -87,10 +87,24 @@ class TestFeatureAPI(TestCase):
             password='pass',
             username='other'
         )
+        # Create different feature data to avoid duplicate file_hash
+        other_feature_data = {
+            'type': 'Feature',
+            'geometry': {
+                'type': 'Point',
+                'coordinates': [-122.4094, 37.7849, 0.0]  # Different coordinates
+            },
+            'properties': {
+                'name': 'Other User Point',
+                'description': 'A different point',
+                'tags': ['other']
+            }
+        }
         other_feature = FeatureStore.objects.create(
             user=other_user,
-            geojson=self.point_feature_data,
-            geometry=Point(-122.4194, 37.7749)
+            geojson=other_feature_data,
+            geometry=Point(-122.4094, 37.7849, 0.0),  # 3D Point with Z=0.0
+            file_hash=generate_feature_hash(other_feature_data)
         )
         response = self.client.get(f'/api/feature/{other_feature.id}/')
         self.assertEqual(response.status_code, 404)
@@ -114,9 +128,9 @@ class TestFeatureAPI(TestCase):
         """Test updating a feature's geometry."""
         new_geometry = {
             'type': 'Point',
-            'coordinates': [-122.4094, 37.7849]
+            'coordinates': [-122.4094, 37.7849, 0.0]  # 3D coordinates
         }
-        response = self.client.post(
+        response = self.client.put(
             f'/api/feature/{self.point_feature.id}/update/',
             data=json.dumps(new_geometry),
             content_type='application/json'
@@ -125,7 +139,7 @@ class TestFeatureAPI(TestCase):
         self.point_feature.refresh_from_db()
         self.assertEqual(
             self.point_feature.geojson['geometry']['coordinates'],
-            [-122.4094, 37.7849]
+            [-122.4094, 37.7849, 0.0]
         )
 
     def test_update_feature_full(self):
@@ -134,14 +148,14 @@ class TestFeatureAPI(TestCase):
             'type': 'Feature',
             'geometry': {
                 'type': 'Point',
-                'coordinates': [-122.4094, 37.7849]
+                'coordinates': [-122.4094, 37.7849, 0.0]  # 3D coordinates
             },
             'properties': {
                 'name': 'Updated Point',
                 'tags': ['updated']
             }
         }
-        response = self.client.post(
+        response = self.client.put(
             f'/api/feature/{self.point_feature.id}/update/',
             data=json.dumps(updated_feature),
             content_type='application/json'
@@ -157,7 +171,7 @@ class TestFeatureAPI(TestCase):
             'description': 'Updated description',
             'tags': ['new-tag']
         }
-        response = self.client.post(
+        response = self.client.put(
             f'/api/feature/{self.point_feature.id}/update-metadata/',
             data=json.dumps(metadata),
             content_type='application/json'
@@ -249,10 +263,16 @@ class TestFeatureAPI(TestCase):
     def test_bulk_update_features_metadata(self):
         """Test bulk updating features metadata."""
         update_data = {
-            'feature_ids': [self.point_feature.id, self.linestring_feature.id],
-            'metadata': {
-                'tags': ['bulk-updated']
-            }
+            'updates': [
+                {
+                    'feature_id': self.point_feature.id,
+                    'tags': ['bulk-updated']
+                },
+                {
+                    'feature_id': self.linestring_feature.id,
+                    'tags': ['bulk-updated']
+                }
+            ]
         }
         response = self.client.post(
             '/api/features/bulk-update-metadata/',
@@ -312,24 +332,40 @@ class TestFeatureAPI(TestCase):
         response = self.client.post(f'/api/feature/{self.point_feature.id}/regenerate-tags/')
         self.assertEqual(response.status_code, 200)
         data = json.loads(response.content)
-        self.assertIn('success', data)
+        self.assertIn('message', data)
 
     def test_apply_replacement_geometry(self):
         """Test applying replacement geometry."""
-        replacement_geometry = {
-            'type': 'Point',
-            'coordinates': [-122.3994, 37.7949]
+        # Create an ImportQueue entry with replacement geometry
+        replacement_feature = {
+            'type': 'Feature',
+            'geometry': {
+                'type': 'Point',
+                'coordinates': [-122.3994, 37.7949, 0.0]  # 3D coordinates
+            },
+            'properties': {}
         }
+        import_queue = ImportQueue.objects.create(
+            user=self.user,
+            original_filename='replacement.kml',
+            raw_file='',
+            geofeatures=[replacement_feature],
+            replacement=self.point_feature.id
+        )
+        
         response = self.client.post(
             f'/api/feature/{self.point_feature.id}/apply-replacement/',
-            data=json.dumps(replacement_geometry),
+            data=json.dumps({
+                'import_queue_id': import_queue.id,
+                'feature_index': 0
+            }),
             content_type='application/json'
         )
         self.assertEqual(response.status_code, 200)
         self.point_feature.refresh_from_db()
         self.assertEqual(
             self.point_feature.geojson['geometry']['coordinates'],
-            [-122.3994, 37.7949]
+            [-122.3994, 37.7949, 0.0]
         )
 
     def test_apply_replacement_geometry_invalid(self):

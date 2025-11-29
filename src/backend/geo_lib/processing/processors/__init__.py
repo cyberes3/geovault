@@ -36,6 +36,14 @@ def get_processor(file_data: Union[bytes, str], filename: str = "",
     """
     file_type = detect_file_type(file_data, filename)
 
+    # Check if file extension is supported (more reliable than content detection for unknown files)
+    import os
+    if filename:
+        _, ext = os.path.splitext(filename.lower())
+        supported_extensions = ['.kml', '.kmz', '.gpx']
+        if ext and ext not in supported_extensions:
+            raise ValueError(f"Unsupported file type: {ext}")
+
     if file_type == FileType.KML:
         return KMLProcessor(file_data, filename, job_id=job_id, status_tracker=status_tracker, minimal_processing=minimal_processing)
     elif file_type == FileType.KMZ:

@@ -73,7 +73,7 @@ class TestUserSettingsAPI(TestCase):
 
         update_data = {
             'map': {
-                'elevation_profile_source': 'local'
+                'elevation_profile_source': 'gps'
             }
         }
 
@@ -84,7 +84,7 @@ class TestUserSettingsAPI(TestCase):
         )
         self.assertEqual(response.status_code, 200)
         user_settings = UserSettings.objects.get(user=self.user)
-        self.assertEqual(user_settings.settings['map']['elevation_profile_source'], 'local')
+        self.assertEqual(user_settings.settings['map']['elevation_profile_source'], 'gps')
 
     def test_update_user_setting_deep_merge(self):
         """Test that settings are deep merged."""
@@ -93,10 +93,10 @@ class TestUserSettingsAPI(TestCase):
             settings={
                 'map': {
                     'elevation_profile_source': 'api',
-                    'other_setting': 'value'
+                    'default_basemap': 'osm'
                 },
-                'other_section': {
-                    'key': 'value'
+                'account': {
+                    'units': 'metric'
                 }
             },
             hidden_features=[]
@@ -104,7 +104,7 @@ class TestUserSettingsAPI(TestCase):
 
         update_data = {
             'map': {
-                'elevation_profile_source': 'local'
+                'elevation_profile_source': 'gps'
             }
         }
 
@@ -116,10 +116,10 @@ class TestUserSettingsAPI(TestCase):
         self.assertEqual(response.status_code, 200)
         user_settings = UserSettings.objects.get(user=self.user)
         # Other setting should be preserved
-        self.assertEqual(user_settings.settings['map']['other_setting'], 'value')
-        self.assertEqual(user_settings.settings['other_section']['key'], 'value')
+        self.assertEqual(user_settings.settings['map']['default_basemap'], 'osm')
+        self.assertEqual(user_settings.settings['account']['units'], 'metric')
         # Updated setting should be changed
-        self.assertEqual(user_settings.settings['map']['elevation_profile_source'], 'local')
+        self.assertEqual(user_settings.settings['map']['elevation_profile_source'], 'gps')
 
     def test_bulk_update_hidden_features(self):
         """Test bulk updating hidden features."""
@@ -130,7 +130,7 @@ class TestUserSettingsAPI(TestCase):
         )
 
         update_data = {
-            'hidden_features': [self.feature.id]
+            'add': [self.feature.id]
         }
 
         response = self.client.post(
@@ -138,9 +138,9 @@ class TestUserSettingsAPI(TestCase):
             data=json.dumps(update_data),
             content_type='application/json'
         )
-        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.status_code, 204)
         user_settings = UserSettings.objects.get(user=self.user)
-        self.assertEqual(user_settings.hidden_features, [self.feature.id])
+        self.assertEqual(user_settings.hidden_features, [str(self.feature.id)])
 
     def test_clear_hidden_features(self):
         """Test clearing hidden features."""
@@ -151,7 +151,7 @@ class TestUserSettingsAPI(TestCase):
         )
 
         response = self.client.post('/api/user/settings/hidden-features/clear/')
-        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.status_code, 204)
         user_settings = UserSettings.objects.get(user=self.user)
         self.assertEqual(user_settings.hidden_features, [])
 

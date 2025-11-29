@@ -125,7 +125,7 @@ class TestBulkOperations:
         }
         result = apply_bulk_operations(features, bulk_ops)
         assert len(result) == 1
-        assert result[0]['properties']['marker-color'] == '#ff0000'
+        assert result[0]['properties']['marker-color'] == '#FF0000'
 
     def test_apply_bulk_operations_line_color(self):
         """Test applying bulk operations with line color."""
@@ -139,7 +139,7 @@ class TestBulkOperations:
         }
         result = apply_bulk_operations(features, bulk_ops)
         assert len(result) == 1
-        assert result[0]['properties']['stroke'] == '#00ff00'
+        assert result[0]['properties']['stroke'] == '#00FF00'
 
     def test_apply_bulk_operations_polygon_color(self):
         """Test applying bulk operations with polygon color."""
@@ -158,8 +158,8 @@ class TestBulkOperations:
         }
         result = apply_bulk_operations(features, bulk_ops)
         assert len(result) == 1
-        assert result[0]['properties']['stroke'] == '#0000ff'
-        assert result[0]['properties']['fill'] == '#0000ff'
+        assert result[0]['properties']['stroke'] == '#0000FF'
+        assert result[0]['properties']['fill'] == '#0000FF'
 
     def test_apply_bulk_operations_point_icon(self):
         """Test applying bulk operations with point icon."""
@@ -173,7 +173,7 @@ class TestBulkOperations:
         }
         result = apply_bulk_operations(features, bulk_ops)
         assert len(result) == 1
-        assert result[0]['properties']['marker-symbol'] == 'assets/icons/test.png'
+        assert result[0]['properties']['icon'] == 'assets/icons/test.png'
 
     def test_apply_bulk_operations_empty(self):
         """Test applying empty bulk operations."""

@@ -119,7 +119,9 @@ class TestAPIKeys(TestCase):
 
         response = self.client.delete(f'/api/user/api-keys/{key_obj.id}/')
         self.assertEqual(response.status_code, 200)
-        self.assertFalse(ApiKey.objects.filter(id=key_obj.id).exists())
+        # API keys are soft-deleted (is_active=False), not actually deleted
+        key_obj.refresh_from_db()
+        self.assertFalse(key_obj.is_active)
 
     def test_delete_api_key_unauthorized(self):
         """Test that users cannot delete other users' API keys."""
@@ -149,6 +151,8 @@ class TestAPIKeys(TestCase):
 
     def test_validate_api_key_endpoint_invalid(self):
         """Test API key validation endpoint with invalid key."""
+        # Endpoint requires authentication, so login first
+        self.client.force_login(self.user)
         response = self.client.post(
             '/api/user/api-keys/validate/',
             HTTP_AUTHORIZATION='Bearer invalid-key'

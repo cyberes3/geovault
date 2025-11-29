@@ -147,7 +147,7 @@ class ActivityTrackingMiddleware:
             request.path != '/favicon.ico'):
             try:
                 from users.models import UserProfile
-                profile = UserProfile.get_or_create_profile(request.user)
+                profile, _ = UserProfile.get_or_create_profile(request.user)
                 profile.update_activity()
             except Exception as e:
                 # Log but don't break the request if activity tracking fails

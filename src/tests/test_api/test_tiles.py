@@ -27,13 +27,20 @@ class TestTilesAPI(TestCase):
         data = json.loads(response.content)
         self.assertIn('sources', data)
 
-    @patch('api.views.tiles.fetch_tile')
-    def test_tile_proxy(self, mock_fetch_tile):
+    @patch('urllib.request.urlopen')
+    def test_tile_proxy(self, mock_urlopen):
         """Test tile proxy endpoint."""
-        mock_response = MagicMock()
-        mock_response.content = b'fake tile data'
-        mock_response.headers = {'Content-Type': 'image/png'}
-        mock_fetch_tile.return_value = mock_response
+        from urllib.response import addinfourl
+        from io import BytesIO
+        
+        # Create a mock response object
+        mock_response = addinfourl(
+            BytesIO(b'fake tile data'),
+            {'Content-Type': 'image/png'},
+            'http://example.com/tile.png',
+            200
+        )
+        mock_urlopen.return_value = mock_response
 
         response = self.client.get('/api/tiles/test-service/10/512/512')
         # May return 200 if tile fetched successfully, or error if not
