@@ -485,23 +485,12 @@ def apply_bulk_operations_to_collection(request, collection_id):
         # Iterate through all features and apply bulk operations using shared helper
         features_qs = FeatureStore.objects.filter(id__in=feature_ids_set).only("id", "geojson")
 
+        # Import helper from feature_update module
+        from api.views.feature_update import _apply_bulk_ops_and_save_feature
+
         for feature in features_qs.iterator(chunk_size=200):
-            original_geojson = feature.geojson
-            if not isinstance(original_geojson, dict):
-                # Skip invalid geojson entries defensively
-                continue
-
-            updated_features = apply_bulk_operations_to_features([original_geojson], bulk_ops)
-            if not updated_features:
-                continue
-
-            updated_geojson = updated_features[0]
-
-            # Update feature geojson and hash (geometry is unchanged by styling)
-            feature.geojson = updated_geojson
-            feature.file_hash = generate_feature_hash(updated_geojson)
-            feature.save(update_fields=["geojson", "file_hash"])
-            updated_count += 1
+            if _apply_bulk_ops_and_save_feature(feature, bulk_ops):
+                updated_count += 1
 
         return JsonResponse({
             "success": True,

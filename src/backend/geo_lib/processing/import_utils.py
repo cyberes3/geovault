@@ -18,6 +18,13 @@ from geo_lib.feature_id import generate_feature_hash
 from geo_lib.types.feature import PointFeature, PolygonFeature, LineStringFeature, MultiLineStringFeature
 from geo_lib.logging.console import get_job_logger
 from geo_lib.processing.duplicate_detection import normalize_coordinates
+from geo_lib.validation.styling_validation import (
+    is_valid_hex_color,
+    is_valid_icon_url,
+    normalize_hex_color,
+    describe_color_format,
+    describe_icon_format,
+)
 
 logger = get_job_logger()
 
@@ -103,16 +110,27 @@ def validate_bulk_operations_payload(bulk_ops: Dict[str, Any]) -> Tuple[bool, Op
     # Validate tags: must be an array of strings if provided
     if "tags" in bulk_ops:
         tags_value = bulk_ops["tags"]
-        if (not isinstance(tags_value, list) or
-                any(not isinstance(t, str) for t in tags_value)):
+        if (
+            not isinstance(tags_value, list)
+            or any(not isinstance(t, str) for t in tags_value)
+        ):
             return False, "bulk_operations.tags must be an array of strings"
 
-    # Validate colors and icon: string or null
-    for field_name in ("pointColor", "lineColor", "polyColor", "pointIcon"):
+    # Validate colors: string (valid hex) or null
+    for field_name in ("pointColor", "lineColor", "polyColor"):
         if field_name in bulk_ops:
             value = bulk_ops[field_name]
-            if value is not None and not isinstance(value, str):
-                return False, f"bulk_operations.{field_name} must be a string or null"
+            if value is None:
+                continue
+            if not isinstance(value, str) or not is_valid_hex_color(value):
+                return False, describe_color_format(field_name)
+
+    # Validate icon URL: string (allowed icon path) or null
+    if "pointIcon" in bulk_ops:
+        value = bulk_ops["pointIcon"]
+        if value is not None:
+            if not isinstance(value, str) or not is_valid_icon_url(value):
+                return False, describe_icon_format("pointIcon")
 
     return True, None
 
@@ -377,29 +395,57 @@ def apply_bulk_operations(features: List[Dict[str, Any]], bulk_ops: Dict[str, An
 
         # Apply point styling (only if value is not None)
         # Applies to both Point and MultiPoint
+        DEFAULT_COLOR = '#ff0000'
+        
         if geometry_type in ('Point', 'MultiPoint'):
             if bulk_ops.get('pointColor') is not None:
-                modified_feature['properties']['marker-color'] = bulk_ops['pointColor']
+                color = bulk_ops['pointColor']
+                if is_valid_hex_color(color):
+                    modified_feature['properties']['marker-color'] = normalize_hex_color(
+                        color
+                    )
+                else:
+                    # Invalid color - set to default red
+                    modified_feature['properties']['marker-color'] = DEFAULT_COLOR
             
             if bulk_ops.get('pointIcon') is not None:
-                modified_feature['properties']['icon_url'] = bulk_ops['pointIcon']
-                modified_feature['properties']['iconUrl'] = bulk_ops['pointIcon']
-                modified_feature['properties']['icon-href'] = bulk_ops['pointIcon']
+                icon_value = bulk_ops['pointIcon']
+                if is_valid_icon_url(icon_value):
+                    # Keep a single canonical property plus common aliases for compatibility
+                    modified_feature['properties']['icon'] = icon_value
+                    modified_feature['properties']['icon_url'] = icon_value
+                    modified_feature['properties']['iconUrl'] = icon_value
+                    modified_feature['properties']['icon-href'] = icon_value
 
         # Apply line styling (only if value is not None)
         # Applies to both LineString and MultiLineString
         if geometry_type in ('LineString', 'MultiLineString'):
             if bulk_ops.get('lineColor') is not None:
-                modified_feature['properties']['stroke'] = bulk_ops['lineColor']
+                color = bulk_ops['lineColor']
+                if is_valid_hex_color(color):
+                    modified_feature['properties']['stroke'] = normalize_hex_color(
+                        color
+                    )
+                else:
+                    # Invalid color - set to default red
+                    modified_feature['properties']['stroke'] = DEFAULT_COLOR
 
         # Apply polygon styling (only if value is not None)
         if geometry_type in ('Polygon', 'MultiPolygon'):
             if bulk_ops.get('polyColor') is not None:
-                # Set both stroke (border) and fill to the same color
-                # Fill should have 10% opacity
-                modified_feature['properties']['stroke'] = bulk_ops['polyColor']
-                modified_feature['properties']['fill'] = bulk_ops['polyColor']
-                modified_feature['properties']['fill-opacity'] = 0.1
+                color = bulk_ops['polyColor']
+                if is_valid_hex_color(color):
+                    norm_color = normalize_hex_color(color)
+                    # Set both stroke (border) and fill to the same color
+                    # Fill should have 10% opacity
+                    modified_feature['properties']['stroke'] = norm_color
+                    modified_feature['properties']['fill'] = norm_color
+                    modified_feature['properties']['fill-opacity'] = 0.1
+                else:
+                    # Invalid color - set to default red
+                    modified_feature['properties']['stroke'] = DEFAULT_COLOR
+                    modified_feature['properties']['fill'] = DEFAULT_COLOR
+                    modified_feature['properties']['fill-opacity'] = 0.1
 
         result.append(modified_feature)
 

@@ -27,6 +27,9 @@ from geo_lib.validation.geometry_validation import (
 from geo_lib.validation.geojson_whitelist import (
     validate_and_normalize_geojson_feature
 )
+from geo_lib.validation.styling_validation import (
+    is_valid_icon_url,
+)
 from geo_lib.website.auth import login_required_401
 
 logger = get_access_logger()
@@ -93,6 +96,91 @@ def _validate_tags(tags):
             return False, _error_response('Tags cannot contain control characters', 400)
     
     return True, None
+
+
+def _extract_system_tags(feature: dict) -> list:
+    """
+    Extract and normalize system_tags from a feature dictionary.
+    
+    Args:
+        feature: Feature dictionary (can be full feature or just properties)
+        
+    Returns:
+        List of system_tags (empty list if not present or invalid)
+    """
+    if isinstance(feature, dict):
+        properties = feature.get('properties', feature)
+        system_tags = properties.get('system_tags', [])
+        if isinstance(system_tags, list):
+            return system_tags
+    return []
+
+
+def _validate_and_preserve_feature(feature: dict, preserve_id: bool = False) -> dict:
+    """
+    Validate and normalize a feature, preserving system_tags.
+    
+    Args:
+        feature: GeoJSON Feature dictionary
+        preserve_id: Whether to preserve the '_id' property
+        
+    Returns:
+        Validated and normalized feature dictionary
+        
+    Raises:
+        GeometryValidationError: If validation fails
+    """
+    # Extract system_tags before validation
+    system_tags = _extract_system_tags(feature)
+    
+    # Validate and normalize
+    normalized_feature = validate_and_normalize_geojson_feature(
+        feature,
+        preserve_system_tags=system_tags,
+        preserve_id=preserve_id
+    )
+    
+    # Ensure system_tags are preserved after normalization
+    normalized_feature['properties']['system_tags'] = system_tags
+    
+    return normalized_feature
+
+
+def _apply_bulk_ops_and_save_feature(feature: FeatureStore, bulk_ops: dict) -> bool:
+    """
+    Apply bulk operations to a feature, validate, and save.
+    
+    Args:
+        feature: FeatureStore instance to update
+        bulk_ops: Bulk operations dictionary
+        
+    Returns:
+        True if feature was successfully updated, False if skipped due to error
+    """
+    original_geojson = feature.geojson
+    if not isinstance(original_geojson, dict):
+        return False
+    
+    # Apply bulk operations
+    updated_features = apply_bulk_operations_to_features([original_geojson], bulk_ops)
+    if not updated_features:
+        return False
+    
+    updated_geojson = updated_features[0]
+    
+    # Validate and normalize the updated feature
+    try:
+        normalized_feature = _validate_and_preserve_feature(updated_geojson, preserve_id=False)
+    except GeometryValidationError as e:
+        logger.warning(f"Feature validation failed for feature {feature.id} in bulk operations: {str(e)}")
+        return False
+    
+    # Update feature geojson and hash (geometry is unchanged by styling)
+    feature.geojson = normalized_feature
+    feature.file_hash = generate_feature_hash(normalized_feature)
+    feature.save(update_fields=['geojson', 'file_hash'])
+    
+    return True
 
 
 def _validate_and_preserve_system_tags(properties_dict, original_system_tags):
@@ -172,9 +260,7 @@ def update_feature_metadata(request, feature_id):
         merged_feature = copy.deepcopy(original_geojson)
         
         # Preserve existing system_tags from original feature
-        original_system_tags = original_geojson.get('properties', {}).get('system_tags', [])
-        if not isinstance(original_system_tags, list):
-            original_system_tags = []
+        original_system_tags = _extract_system_tags(original_geojson)
         
         # Validate that system_tags are not being modified (reject if present in request)
         if 'system_tags' in metadata:
@@ -364,9 +450,7 @@ def bulk_update_features_metadata(request):
                     merged_feature = copy.deepcopy(original_geojson)
                     
                     # Preserve existing system_tags from original feature
-                    original_system_tags = original_geojson.get('properties', {}).get('system_tags', [])
-                    if not isinstance(original_system_tags, list):
-                        original_system_tags = []
+                    original_system_tags = _extract_system_tags(original_geojson)
                     
                     # Validate that system_tags are not being modified (reject if present in request)
                     if 'system_tags' in update_data:
@@ -542,24 +626,8 @@ def apply_bulk_operations_to_tag(request, tag_name: str):
 
         with transaction.atomic():
             for feature in features_qs.iterator(chunk_size=200):
-                original_geojson = feature.geojson
-                if not isinstance(original_geojson, dict):
-                    # Skip invalid geojson entries defensively
-                    continue
-
-                # apply_bulk_operations_to_features expects a list of features
-                updated_features = apply_bulk_operations_to_features([original_geojson], bulk_ops)
-                if not updated_features:
-                    continue
-
-                updated_geojson = updated_features[0]
-
-                # Update the feature's GeoJSON and hash.
-                # Geometry is not modified by bulk operations, so we keep the existing geometry field.
-                feature.geojson = updated_geojson
-                feature.file_hash = generate_feature_hash(updated_geojson)
-                feature.save(update_fields=['geojson', 'file_hash'])
-                updated_count += 1
+                if _apply_bulk_ops_and_save_feature(feature, bulk_ops):
+                    updated_count += 1
 
         return JsonResponse({
             'success': True,
@@ -608,15 +676,11 @@ def update_feature(request, feature_id):
             return _error_response(str(e), 400)
 
         # Preserve existing system_tags from original feature
-        original_system_tags = original_properties.get('system_tags', [])
+        original_system_tags = _extract_system_tags(original_geojson)
         
         # Validate, whitelist, and normalize the feature
         try:
-            feature_data = validate_and_normalize_geojson_feature(
-                feature_data,
-                preserve_system_tags=original_system_tags,
-                preserve_id=False  # Don't preserve _id in backend
-            )
+            feature_data = _validate_and_preserve_feature(feature_data, preserve_id=False)
         except GeometryValidationError as e:
             return _error_response(str(e), 400)
 
@@ -661,19 +725,15 @@ def update_feature(request, feature_id):
         new_properties['tags'] = user_tags
         new_properties['system_tags'] = preserved_system_tags
 
-        # Check for icon URLs in original feature (built-in, uploaded, or custom)
+        # Check for icon URLs in original feature (built-in or uploaded only)
         icon_property_names = ['icon', 'icon-href', 'iconUrl', 'icon_url', 'marker-icon', 'marker-symbol', 'symbol']
         original_icon_url = None
         for prop_name in icon_property_names:
             if prop_name in original_properties and original_properties[prop_name]:
                 icon_url = original_properties[prop_name]
-                if isinstance(icon_url, str) and icon_url.strip():
-                    # Check if it's an icon (built-in, uploaded, or ends with image extension)
-                    if (icon_url.startswith('assets/') or 
-                            icon_url.startswith('/api/icons/') or 
-                            icon_url.endswith(('.png', '.jpg', '.jpeg', '.gif', '.bmp', '.svg', '.webp', '.ico'))):
-                        original_icon_url = icon_url
-                        break
+                if isinstance(icon_url, str) and icon_url.strip() and is_valid_icon_url(icon_url):
+                    original_icon_url = icon_url
+                    break
 
         # Handle icon URL changes
         # Allow: removing icons (null/empty), setting new built-in icons (assets/), 
@@ -692,9 +752,10 @@ def update_feature(request, feature_id):
             elif isinstance(new_icon_url, str) and new_icon_url.strip():
                 # Icon is being changed - validate new icon URL
                 # Allow: same icon, built-in icons (assets/), uploaded icons (/api/icons/)
-                if (new_icon_url == original_icon_url or 
-                        new_icon_url.startswith('assets/') or 
-                        new_icon_url.startswith('/api/icons/')):
+                if (
+                    new_icon_url == original_icon_url
+                    or is_valid_icon_url(new_icon_url)
+                ):
                     # Valid icon change - clear other icon property names to avoid conflicts
                     for prop_name in icon_property_names:
                         if prop_name != 'icon' and prop_name in new_properties:
@@ -711,7 +772,7 @@ def update_feature(request, feature_id):
             # No original icon - validate that new icons are built-in or uploaded (not external URLs)
             if isinstance(new_icon_url, str) and new_icon_url.strip():
                 # Only allow built-in icons (assets/) or uploaded icons (/api/icons/)
-                if not (new_icon_url.startswith('assets/') or new_icon_url.startswith('/api/icons/')):
+                if not is_valid_icon_url(new_icon_url):
                     # Remove invalid external icon URL
                     new_properties['icon'] = ''
                     # Clear other icon properties
@@ -722,6 +783,7 @@ def update_feature(request, feature_id):
 
         # Note: stroke-width, fill, and fill-opacity normalization is now handled by validate_and_normalize_geojson_feature
         # The normalization function ensures stroke-width=2 for lines/polygons and proper fill/fill-opacity for polygons
+        # Color validation (invalid colors set to default red) is also handled by validate_and_normalize_geojson_feature
 
         # Validate feature structure using the same validation as import conversion
         try:
@@ -948,6 +1010,12 @@ def apply_replacement_geometry(request, feature_id):
             logger.error(f"Feature validation error for replacement feature {feature_id}: {str(e)}")
             return _error_response(f'Feature validation failed: {str(e)}', 400)
 
+        # Validate and normalize the feature (including color/icon validation)
+        try:
+            feature_data = _validate_and_preserve_feature(feature_data, preserve_id=False)
+        except GeometryValidationError as e:
+            return _error_response(f'Feature validation failed: {str(e)}', 400)
+
         # Update the feature's geometry (preserving all properties)
         feature.geojson = feature_data
 
@@ -992,9 +1060,7 @@ def apply_replacement_geometry(request, feature_id):
         if regenerate_tags:
             try:
                 # Preserve original import-year and import-month tags from the original feature
-                original_system_tags = original_geojson.get('properties', {}).get('system_tags', [])
-                if not isinstance(original_system_tags, list):
-                    original_system_tags = []
+                original_system_tags = _extract_system_tags(original_geojson)
                 
                 # Extract import-year and import-month tags from original system_tags
                 preserved_import_tags = [
@@ -1052,6 +1118,16 @@ def apply_replacement_geometry(request, feature_id):
                             feature_data['properties'] = {}
                         feature_data['properties']['tags'] = existing_user_tags
                         feature_data['properties']['system_tags'] = new_system_tags
+
+                        # Validate and normalize the feature after tag regeneration
+                        try:
+                            # Temporarily set system_tags for validation
+                            feature_data['properties']['system_tags'] = new_system_tags
+                            feature_data = _validate_and_preserve_feature(feature_data, preserve_id=False)
+                        except GeometryValidationError as e:
+                            logger.error(f"Feature validation failed for feature {feature_id} during tag regeneration in replacement: {str(e)}")
+                            # Continue without regenerating tags if validation fails
+                            feature_data = feature.geojson  # Restore original
 
                         # Update the feature's geojson with regenerated tags
                         feature.geojson = feature_data
@@ -1136,8 +1212,15 @@ def regenerate_feature_tags(request, feature_id):
         geojson_data['properties']['tags'] = existing_user_tags
         geojson_data['properties']['system_tags'] = new_system_tags
 
+        # Validate and normalize the feature after tag regeneration
+        try:
+            normalized_feature = _validate_and_preserve_feature(geojson_data, preserve_id=False)
+        except GeometryValidationError as e:
+            logger.error(f"Feature validation failed for feature {feature_id} during tag regeneration: {str(e)}")
+            return _error_response(f'Feature validation failed: {str(e)}', 400)
+
         # Update the feature
-        feature.geojson = geojson_data
+        feature.geojson = normalized_feature
         feature.save()
 
         return JsonResponse({

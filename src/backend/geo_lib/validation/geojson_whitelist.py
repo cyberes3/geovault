@@ -15,6 +15,10 @@ from datetime import datetime
 from pydantic import BaseModel, Field, ConfigDict, field_validator
 
 from geo_lib.validation.geometry_validation import GeometryValidationError
+from geo_lib.validation.styling_validation import (
+    is_valid_hex_color,
+    normalize_hex_color,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -203,6 +207,33 @@ def _normalize_properties(feature: Dict[str, Any]) -> Dict[str, Any]:
     # Use mode='json' to ensure datetime objects are serialized to ISO strings
     normalized = validated_properties.model_dump(mode='json', exclude_none=True, by_alias=True)
     
+    # Validate and normalize colors - set invalid colors to default red (#ff0000)
+    DEFAULT_COLOR = '#ff0000'
+    
+    # Validate marker-color (for points)
+    if 'marker-color' in normalized:
+        color = normalized['marker-color']
+        if isinstance(color, str) and is_valid_hex_color(color):
+            normalized['marker-color'] = normalize_hex_color(color)
+        else:
+            normalized['marker-color'] = DEFAULT_COLOR
+    
+    # Validate stroke (for lines and polygons)
+    if 'stroke' in normalized:
+        color = normalized['stroke']
+        if isinstance(color, str) and is_valid_hex_color(color):
+            normalized['stroke'] = normalize_hex_color(color)
+        else:
+            normalized['stroke'] = DEFAULT_COLOR
+    
+    # Validate fill (for polygons)
+    if 'fill' in normalized:
+        color = normalized['fill']
+        if isinstance(color, str) and is_valid_hex_color(color):
+            normalized['fill'] = normalize_hex_color(color)
+        else:
+            normalized['fill'] = DEFAULT_COLOR
+    
     # Apply style normalization based on geometry type
     geom_type = geometry.get('type', '').lower()
     has_polygon = _has_polygon_geometry(geometry)
@@ -222,8 +253,8 @@ def _normalize_properties(feature: Dict[str, Any]) -> Dict[str, Any]:
         # Also applies to GeometryCollection that contains polygon geometries
         if 'stroke' in normalized:
             normalized['stroke-width'] = 2
-            # Set fill to match stroke color (or default to #ff0000)
-            stroke_color = normalized.get('stroke', '#ff0000')
+            # Set fill to match stroke color (stroke is already validated above)
+            stroke_color = normalized.get('stroke', DEFAULT_COLOR)
             normalized['fill'] = stroke_color
             normalized['fill-opacity'] = 0.1
         elif 'fill' in normalized:

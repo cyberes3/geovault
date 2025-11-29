@@ -12,6 +12,7 @@ from api.models import ImportQueue
 from geo_lib.const_strings import CONST_INTERNAL_TAGS, filter_protected_tags, prepare_user_tags
 from geo_lib.logging.console import get_access_logger
 from geo_lib.processing.jobs import process_job, delete_job, import_job
+from geo_lib.processing.import_utils import validate_bulk_operations_payload
 from geo_lib.processing.status_tracker import status_tracker
 from geo_lib.security.file_validation import basic_file_security_check
 from geo_lib.validation.geojson_whitelist import validate_and_normalize_geojson_feature
@@ -343,9 +344,8 @@ def update_import_item(request, item_id):
             merged_feature = copy.deepcopy(existing_feature)
 
             # Preserve existing system_tags from original feature
-            original_system_tags = existing_feature.get('properties', {}).get('system_tags', [])
-            if not isinstance(original_system_tags, list):
-                original_system_tags = []
+            from api.views.feature_update import _extract_system_tags
+            original_system_tags = _extract_system_tags(existing_feature)
 
             # Get the partial update fields
             update_fields = updates_by_id[feature_id]
@@ -554,6 +554,11 @@ def save_bulk_operations(request, item_id):
         bulk_ops = data.get('bulk_operations', {})
         if not isinstance(bulk_ops, dict):
             raise ValueError('bulk_operations must be a JSON object')
+
+        # Validate payload using shared helper
+        is_valid, error_message = validate_bulk_operations_payload(bulk_ops)
+        if not is_valid:
+            raise ValueError(error_message or 'Invalid bulk_operations payload')
 
         # Save bulk operations to the import queue item
         import_item.bulk_operations = bulk_ops
