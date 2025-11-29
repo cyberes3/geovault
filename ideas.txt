@@ -12,8 +12,6 @@ Geotagged photo support (set path to scan)
 
 Some way to record and push to server from an app. Use GPSLogger with %ALL
 
-A very simple Android app to Make it easy to push data to the server. For example, export from back country navigator, share to this app, import to server using app
-
 Plugin to automatically pull saved locations from Google maps. Support multiple accounts with the option to automatically apply set tags on imported features per account
 
 Auto scrape inreach tracks and present the user with a dialog to import them (also tag them as inreach)
