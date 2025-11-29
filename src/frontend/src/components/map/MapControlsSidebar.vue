@@ -59,14 +59,28 @@
       </select>
     </div>
 
-    <!-- Feature Stats -->
-    <div v-if="allowedOptions.featureStats || allowedOptions.userLocation" class="mt-auto text-xs text-gray-600 mb-4">
-      <div class="space-y-1">
-        <div v-if="allowedOptions.featureStats">
-          Features: <span class="font-medium">{{ featureCount }}</span> / <span class="font-medium">{{ maxFeatures }}</span>
-        </div>
-        <div v-if="allowedOptions.userLocation && userLocation" class="text-gray-600">
-          📍 {{ locationDisplayName }}
+    <!-- Hidden Features Summary & Feature Stats -->
+    <div class="mt-auto text-xs text-gray-600 mb-4 space-y-3">
+      <!-- Hidden features summary (account-level, main map only) -->
+      <HiddenFeaturesWidget
+        v-if="canManageHidden"
+        :hidden-features="hiddenFeatures"
+        :can-manage-hidden="canManageHidden"
+        :is-mobile-open="isMobileOpen"
+        :show-count="true"
+        @unhide="$emit('unhide-feature', $event)"
+        @unhide-all="$emit('unhide-all')"
+      />
+
+      <!-- Feature Stats -->
+      <div v-if="allowedOptions.featureStats || allowedOptions.userLocation">
+        <div class="space-y-1">
+          <div v-if="allowedOptions.featureStats">
+            Features: <span class="font-medium">{{ featureCount }}</span> / <span class="font-medium">{{ maxFeatures }}</span>
+          </div>
+          <div v-if="allowedOptions.userLocation && userLocation" class="text-gray-600">
+            📍 {{ locationDisplayName }}
+          </div>
         </div>
       </div>
     </div>
@@ -88,6 +102,7 @@
 <script>
 import {APIHOST} from '@/config.js'
 import { XMarkIcon, ArrowDownTrayIcon, TagIcon, FolderIcon, ShareIcon } from '@heroicons/vue/24/outline'
+import HiddenFeaturesWidget from './HiddenFeaturesWidget.vue'
 
 export default {
   name: 'MapControlsSidebar',
@@ -96,7 +111,8 @@ export default {
     ArrowDownTrayIcon,
     TagIcon,
     FolderIcon,
-    ShareIcon
+    ShareIcon,
+    HiddenFeaturesWidget,
   },
   props: {
     selectedLayer: {
@@ -153,9 +169,17 @@ export default {
     viewContext: {
       type: Object,
       default: null
+    },
+    hiddenFeatures: {
+      type: Array,
+      default: () => []
+    },
+    canManageHidden: {
+      type: Boolean,
+      default: false
     }
   },
-  emits: ['layer-change', 'close'],
+  emits: ['layer-change', 'close', 'unhide-feature', 'unhide-all'],
   methods: {
     handleDownload() {
       if (!this.shareId) {

@@ -37,6 +37,36 @@ export async function updateUserSetting(settingsUpdate) {
 }
 
 /**
+ * Clear all hidden feature IDs for the current account.
+ * Frontend keeps a local cache, so the backend only returns a status code.
+ * @returns {Promise<void>}
+ */
+export async function clearHiddenFeatures() {
+  try {
+    const response = await axios.post(
+      '/api/user/settings/hidden-features/clear/',
+      {},
+      {
+        headers: {
+          'X-CSRFToken': getCookie('csrftoken'),
+          'Content-Type': 'application/json',
+        },
+      },
+    );
+
+    if (response.status >= 200 && response.status < 300) {
+      return;
+    }
+    throw new Error(response.data?.error || 'Failed to clear hidden features.');
+  } catch (error) {
+    if (error.response?.data?.error) {
+      throw new Error(error.response.data.error);
+    }
+    throw error;
+  }
+}
+
+/**
  * Get settings for a specific section from configuration
  * @param {Array} config - Settings configuration array
  * @param {string} section - The section name to filter by

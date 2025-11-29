@@ -17,6 +17,13 @@ interface ImportHistoryItem {
     timestamp: string
 }
 
+// Define hidden feature interface
+interface HiddenFeature {
+    id: string
+    name: string | null
+    geometry_type: string | null
+}
+
 // Define user settings interface
 interface UserSettings {
     [key: string]: any
@@ -26,6 +33,7 @@ interface UserSettings {
 interface State {
     userInfo: UserInfo | null
     userSettings: UserSettings | null
+    hiddenFeatures: HiddenFeature[]
     importQueue: ImportQueueItem[]
     importHistory: ImportHistoryItem[]
     importHistoryLoaded: boolean
@@ -45,6 +53,7 @@ export default createStore<State>({
     state: {
         userInfo: null,
         userSettings: null,
+        hiddenFeatures: [],
         importQueue: [],
         importHistory: [],
         importHistoryLoaded: false,
@@ -62,6 +71,42 @@ export default createStore<State>({
         },
         userSettings(state: State, payload: UserSettings | null) {
             state.userSettings = payload
+        },
+        setHiddenFeatures(state: State, payload: HiddenFeature[] | any[]) {
+            // Normalize payload to HiddenFeature[] format
+            if (!Array.isArray(payload)) {
+                state.hiddenFeatures = []
+                return
+            }
+            
+            // Handle both old format (string[]) and new format ({id, name, geometry_type}[])
+            state.hiddenFeatures = payload.map(item => {
+                if (typeof item === 'string') {
+                    return { id: item, name: null, geometry_type: null }
+                } else if (item && typeof item === 'object' && 'id' in item) {
+                    return {
+                        id: String(item.id),
+                        name: item.name || null,
+                        geometry_type: item.geometry_type || null
+                    }
+                }
+                return { id: String(item), name: null, geometry_type: null }
+            })
+        },
+        addHiddenFeature(state: State, payload: { featureId: string; featureName?: string | null; geometryType?: string | null }) {
+            const id = String(payload.featureId)
+            const existing = state.hiddenFeatures.find(f => f.id === id)
+            if (!existing) {
+                state.hiddenFeatures.push({
+                    id,
+                    name: payload.featureName || null,
+                    geometry_type: payload.geometryType || null
+                })
+            }
+        },
+        removeHiddenFeature(state: State, featureId: string) {
+            const id = String(featureId)
+            state.hiddenFeatures = state.hiddenFeatures.filter(f => f.id !== id)
         },
         importQueue(state: State, payload: ImportQueueItem[]) {
             state.importQueue = payload
@@ -210,6 +255,7 @@ export default createStore<State>({
                     if (response.status === 401) {
                         // User not authenticated, clear settings
                         commit('userSettings', null);
+                        commit('setHiddenFeatures', []);
                         return null;
                     }
                     throw new Error(`HTTP error! status: ${response.status}`);
@@ -219,16 +265,19 @@ export default createStore<State>({
                 
                 if (response.ok && data.settings) {
                     commit('userSettings', data.settings);
+                    commit('setHiddenFeatures', data.hidden_features || []);
                     return data.settings;
                 } else {
                     // No settings found, initialize with empty object
                     commit('userSettings', {});
+                    commit('setHiddenFeatures', data?.hidden_features || []);
                     return {};
                 }
             } catch (error) {
                 console.error('Error fetching user settings:', error);
                 // On error, initialize with empty object rather than null
                 commit('userSettings', {});
+                commit('setHiddenFeatures', []);
                 return {};
             }
         },

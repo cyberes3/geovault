@@ -2,10 +2,10 @@ import json
 import traceback
 from copy import deepcopy
 
-from django.http import JsonResponse
+from django.http import JsonResponse, HttpResponse
 from django.views.decorators.http import require_http_methods
 
-from api.models import UserSettings
+from api.models import UserSettings, FeatureStore
 from api.validation.user_settings import validate_settings
 from geo_lib.logging.console import get_access_logger
 from geo_lib.website.auth import login_required_401
@@ -55,9 +55,20 @@ def get_user_settings(request):
                 f"Invalid settings for user {request.user.id}: {error_message}. Returning empty settings."
             )
             validated_settings = {}
-        
+
+        # Normalize hidden_features to a list of strings
+        raw_hidden = getattr(user_settings, 'hidden_features', []) or []
+        if not isinstance(raw_hidden, list):
+            hidden_feature_ids = []
+        else:
+            hidden_feature_ids = [str(fid) for fid in raw_hidden if isinstance(fid, (str, int))]
+
+        # Fetch feature names for hidden features to avoid frontend making individual API calls
+        hidden_features_with_names = _get_hidden_features_with_names(request.user, hidden_feature_ids)
+
         return JsonResponse({
-            'settings': validated_settings or {}
+            'settings': validated_settings or {},
+            'hidden_features': hidden_features_with_names,
         })
     
     except Exception:
@@ -110,12 +121,22 @@ def update_user_setting(request):
             logger.warning(f"Setting validation failed for user {request.user.id}: {error_message}")
             return JsonResponse(response_data, status=400)
         
-        # Update the settings
+        # Update the settings (do not modify hidden_features here)
         user_settings.settings = validated_settings
         user_settings.save()
         
+        # Normalize hidden_features for response consistency
+        raw_hidden = getattr(user_settings, 'hidden_features', []) or []
+        if not isinstance(raw_hidden, list):
+            hidden_feature_ids = []
+        else:
+            hidden_feature_ids = [str(fid) for fid in raw_hidden if isinstance(fid, (str, int))]
+
+        hidden_features_with_names = _get_hidden_features_with_names(request.user, hidden_feature_ids)
+
         return JsonResponse({
-            'settings': validated_settings
+            'settings': validated_settings,
+            'hidden_features': hidden_features_with_names,
         })
     
     except json.JSONDecodeError:
@@ -128,5 +149,138 @@ def update_user_setting(request):
         return JsonResponse({
             'error': 'Failed to update user setting',
             'code': 500
+        }, status=500)
+
+
+def _normalize_hidden_features(hidden_list):
+    """
+    Ensure hidden_features is always a list of string IDs.
+    """
+    if not isinstance(hidden_list, list):
+        return []
+    return [str(fid) for fid in hidden_list if isinstance(fid, (str, int))]
+
+
+def _get_hidden_features_with_names(user, hidden_feature_ids):
+    """
+    Fetch feature names and geometry types for a list of hidden feature IDs.
+    Returns a list of dicts with 'id', 'name', and 'geometry_type' keys.
+    """
+    hidden_features_with_names = []
+    if hidden_feature_ids:
+        # Query all hidden features at once
+        features = FeatureStore.objects.filter(
+            user=user,
+            id__in=[int(fid) for fid in hidden_feature_ids if fid.isdigit()]
+        ).only('id', 'geojson')
+        
+        # Build a map of id -> {name, geometry_type}
+        feature_info = {}
+        for feature in features:
+            feature_id = str(feature.id)
+            feature_name = None
+            geometry_type = None
+            
+            if feature.geojson:
+                if 'properties' in feature.geojson:
+                    feature_name = feature.geojson['properties'].get('name')
+                if 'geometry' in feature.geojson and feature.geojson['geometry']:
+                    geometry_type = feature.geojson['geometry'].get('type')
+            
+            feature_info[feature_id] = {
+                'name': feature_name,
+                'geometry_type': geometry_type
+            }
+        
+        # Build the list with names and geometry types included
+        for fid in hidden_feature_ids:
+            info = feature_info.get(fid, {})
+            hidden_features_with_names.append({
+                'id': fid,
+                'name': info.get('name'),
+                'geometry_type': info.get('geometry_type')
+            })
+    
+    return hidden_features_with_names
+
+
+@login_required_401
+@require_http_methods(["POST"])
+def clear_hidden_features(request):
+    """
+    Clear all hidden feature IDs for the current user.
+    """
+    try:
+        user_settings, _ = UserSettings.objects.get_or_create(user=request.user)
+        user_settings.hidden_features = []
+        user_settings.save(update_fields=["hidden_features"])
+
+        # No body needed; frontend maintains its own cache of hidden features.
+        # Return 204 No Content to indicate success.
+        return HttpResponse(status=204)
+
+    except Exception:
+        logger.error(f"Error clearing hidden features: {traceback.format_exc()}")
+        return JsonResponse({
+            "error": "Failed to clear hidden features",
+            "code": 500,
+        }, status=500)
+
+
+@login_required_401
+@require_http_methods(["POST"])
+def bulk_update_hidden_features(request):
+    """
+    Bulk update hidden features list by adding and/or removing multiple feature IDs.
+    Body: {
+        "add": [list of feature IDs to add],
+        "remove": [list of feature IDs to remove]
+    }
+    """
+    try:
+        data = json.loads(request.body or "{}")
+        add_ids = data.get("add", [])
+        remove_ids = data.get("remove", [])
+
+        if not isinstance(add_ids, list):
+            add_ids = []
+        if not isinstance(remove_ids, list):
+            remove_ids = []
+
+        # Normalize to string IDs
+        add_ids = [str(fid) for fid in add_ids if fid and isinstance(fid, (str, int))]
+        remove_ids = [str(fid) for fid in remove_ids if fid and isinstance(fid, (str, int))]
+
+        user_settings, _ = UserSettings.objects.get_or_create(user=request.user)
+        current_hidden = _normalize_hidden_features(getattr(user_settings, "hidden_features", []))
+
+        # Remove IDs first
+        if remove_ids:
+            current_hidden = [fid for fid in current_hidden if fid not in remove_ids]
+
+        # Add new IDs (avoiding duplicates)
+        if add_ids:
+            current_hidden_set = set(current_hidden)
+            for fid in add_ids:
+                if fid not in current_hidden_set:
+                    current_hidden.append(fid)
+
+        user_settings.hidden_features = current_hidden
+        user_settings.save(update_fields=["hidden_features"])
+
+        # No response body needed; frontend uses an optimistic local cache.
+        # Return 204 No Content to indicate success.
+        return HttpResponse(status=204)
+
+    except json.JSONDecodeError:
+        return JsonResponse({
+            "error": "Invalid JSON in request body",
+            "code": 400,
+        }, status=400)
+    except Exception:
+        logger.error(f"Error bulk updating hidden features: {traceback.format_exc()}")
+        return JsonResponse({
+            "error": "Failed to bulk update hidden features",
+            "code": 500,
         }, status=500)
 

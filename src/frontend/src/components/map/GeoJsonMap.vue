@@ -9,8 +9,10 @@
         :initial-selected-tags="initialSelectedTags"
         :is-initial-load="isMapInitializing || (isDataLoading && isInitialLoad)"
         :is-mobile-open="activeMobileSidebar === 'features'"
+        :can-hide-features="isMainMapRoute && !isPublicShareMode && !!$store.state.userInfo"
         @close="activeMobileSidebar = null"
         @feature-click="zoomToFeature"
+        @feature-hide="handleHideFeature"
         @tag-filter-change="handleTagFilterChange"
         @tag-filter-loading-change="isTagFilterLoading = $event"
     />
@@ -110,9 +112,12 @@
             v-if="isEditingFeature && !isPublicShareMode"
             :available-tags="availableTags"
             :feature="selectedFeature"
+            :can-hide-feature="isMainMapRoute && !!$store.state.userInfo"
+            :initial-hidden="hiddenFeatureIds.includes(String(selectedFeature?.get('properties')?._id || ''))"
             @cancel="handleCancelEdit"
             @deleted="handleFeatureDeleted"
             @saved="handleFeatureSaved"
+            @visibility-change="handleEditBoxVisibilityChange"
         />
 
         <!-- Elevation Profile Dialog -->
@@ -147,12 +152,13 @@
       </button>
     </div>
 
-    <!-- Right Sidebar - Map Controls -->
-    <MapControlsSidebar
+      <!-- Right Sidebar - Map Controls -->
+      <MapControlsSidebar
         :allow-downloads="publicShareInfo && publicShareInfo.allow_downloads"
         :allowed-options="publicShareAllowedOptions"
         :class="['transition-opacity duration-300', (publicShareError || loadError) ? 'opacity-50 pointer-events-none' : 'opacity-100']"
         :feature-count="featureCount"
+        :hidden-features="hiddenFeatureSummaries"
         :is-mobile-open="activeMobileSidebar === 'controls'"
         :is-public-share-mode="isPublicShareMode"
         :location-display-name="getLocationDisplayName()"
@@ -162,8 +168,11 @@
         :tile-sources="tileSources"
         :user-location="userLocation"
         :view-context="viewContext"
+        :can-manage-hidden="isMainMapRoute && !isPublicShareMode && !!$store.state.userInfo"
         @close="activeMobileSidebar = null"
         @layer-change="updateMapLayer"
+        @unhide-feature="handleUnhideFeature"
+        @unhide-all="handleUnhideAllHidden"
     />
   </div>
 </template>
@@ -220,6 +229,29 @@ export default {
   },
   mixins: [],
   computed: {
+    isMainMapRoute() {
+      // Base map page (/#/map) without collection or tag view context
+      const path = this.$route.path
+      const hasCollection = !!this.$route.query.collection
+      const hasTag = !!this.$route.query.tag
+      return path === '/map' && !hasCollection && !hasTag
+    },
+    hiddenFeatureIds() {
+      const features = this.$store.state.hiddenFeatures || []
+      if (!Array.isArray(features)) return []
+      // Extract IDs from the {id, name} objects
+      return features.map(f => String(f.id))
+    },
+    hiddenFeatureSummaries() {
+      // Simply return the hiddenFeatures from the store, which now includes names and geometry types
+      const features = this.$store.state.hiddenFeatures || []
+      if (!Array.isArray(features)) return []
+      return features.map(f => ({
+        id: String(f.id),
+        name: f.name || null,
+        geometry_type: f.geometry_type || null
+      }))
+    },
     isPublicShareMode() {
       return this.$route.path === '/mapshare' && this.$route.query.id
     },
@@ -340,12 +372,136 @@ export default {
       isTagFilterLoading: false, // Track loading for tag-based filtering in sidebar
       sidebarKey: 0, // Force sidebar remount when tag share state changes
       activeMobileSidebar: null, // 'features', 'controls', or null
-      mapWasDestroyed: false // Track if map was fully destroyed for memory reasons
+      mapWasDestroyed: false, // Track if map was fully destroyed for memory reasons
     }
   },
   methods: {
     // Attach geo-data helpers (data loading, feature bookkeeping)
     ...useGeoData(),
+    async handleHideFeature(feature) {
+      // Account-level hide is only allowed on main /map view for authenticated users (non-public)
+      if (!this.isMainMapRoute || this.isPublicShareMode || !this.$store.state.userInfo) {
+        return
+      }
+
+      if (!feature) {
+        return
+      }
+
+      const props = feature.get('properties') || {}
+      const featureId = props._id
+      const featureName = props.name
+      const geometryType = feature.getGeometry()?.getType()
+      
+      if (!featureId) {
+        return
+      }
+
+      // Import the debounced manager
+      const hiddenFeaturesManager = (await import('@/utils/hiddenFeaturesManager.js')).default
+
+      // Optimistic update: immediately update UI
+      const optimisticUpdate = () => {
+        // Add to store
+        this.$store.commit('addHiddenFeature', {
+          featureId: String(featureId),
+          featureName: featureName || null,
+          geometryType: geometryType || null
+        })
+
+        // Remove the feature from the map if present
+        if (this.vectorSource) {
+          const allFeatures = this.vectorSource.getFeatures()
+          const toRemove = allFeatures.find(f => {
+            const p = f.get('properties') || {}
+            return p._id === featureId
+          })
+          if (toRemove) {
+            this.vectorSource.removeFeature(toRemove)
+          }
+        }
+
+        // Clear selection if this was the selected feature
+        if (this.selectedFeature) {
+          const propsSelected = this.selectedFeature.get('properties') || {}
+          if (propsSelected._id === featureId) {
+            this.selectedFeature = null
+            this.isEditingFeature = false
+          }
+        }
+
+        // Update counts and sidebar list
+        this.updateFeatureCount()
+        this.debouncedUpdateFeaturesInExtent()
+      }
+
+      // Add to debounced bulk update with optimistic callback
+      hiddenFeaturesManager.addHidden(featureId, optimisticUpdate)
+    },
+    async handleEditBoxVisibilityChange(payload) {
+      if (!payload || !payload.featureId) {
+        return
+      }
+      if (payload.hidden) {
+        // Build a minimal fake feature object with properties so handleHideFeature can reuse logic
+        const fakeFeature = {
+          get: (key) => {
+            if (key === 'properties') {
+              return { _id: payload.featureId }
+            }
+            return null
+          }
+        }
+        await this.handleHideFeature(fakeFeature)
+      } else {
+        await this.handleUnhideFeature(payload.featureId)
+      }
+    },
+    async handleUnhideFeature(featureId) {
+      if (!this.isMainMapRoute || this.isPublicShareMode || !this.$store.state.userInfo) {
+        return
+      }
+
+      if (!featureId) {
+        return
+      }
+
+      // Import the debounced manager
+      const hiddenFeaturesManager = (await import('@/utils/hiddenFeaturesManager.js')).default
+
+      // Optimistic update: immediately update UI
+      const optimisticUpdate = () => {
+        // Remove from store
+        this.$store.commit('removeHiddenFeature', String(featureId))
+
+        // After un-hiding, reload data for current view so the feature can reappear
+        this.loadedBounds.clear()
+        this.loadDataForCurrentView()
+        this.debouncedUpdateFeaturesInExtent()
+      }
+
+      // Add to debounced bulk update with optimistic callback
+      hiddenFeaturesManager.removeHidden(featureId, optimisticUpdate)
+    },
+    async handleUnhideAllHidden() {
+      if (!this.isMainMapRoute || this.isPublicShareMode || !this.$store.state.userInfo) {
+        return
+      }
+
+      try {
+        const { clearHiddenFeatures } = await import('@/utils/userSettingsService.js')
+        await clearHiddenFeatures()
+        // Local cache: clear all hidden features in the store
+        this.$store.commit('setHiddenFeatures', [])
+      } catch (error) {
+        console.error('Error clearing hidden features:', error)
+        return
+      }
+
+      this.loadedBounds.clear()
+      this.loadDataForCurrentView()
+      this.debouncedUpdateFeaturesInExtent()
+    },
     async withLoading(flagKey, fn) {
       if (!flagKey || typeof fn !== 'function') {
         return
@@ -1762,7 +1918,17 @@ export default {
     this.cleanupOnNavigateAway()
   },
 
-  beforeUnmount() {
+  async beforeUnmount() {
+    // Flush any pending hidden feature updates before unmounting
+    try {
+      const hiddenFeaturesManager = (await import('@/utils/hiddenFeaturesManager.js')).default
+      if (hiddenFeaturesManager.hasPending()) {
+        await hiddenFeaturesManager.forceFlush()
+      }
+    } catch (error) {
+      console.error('Error flushing pending hidden features:', error)
+    }
+    
     // Always run lightweight cleanup before component is destroyed
     this.cleanupOnNavigateAway()
   }

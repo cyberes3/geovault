@@ -160,6 +160,7 @@ class Collection(django_models.Model):
 class UserSettings(django_models.Model):
     user = django_models.OneToOneField(get_user_model(), on_delete=django_models.CASCADE, primary_key=True)
     settings = django_models.JSONField(default=dict, help_text="Key-value pairs for user settings")
+    hidden_features = django_models.JSONField(default=list, help_text="List of feature IDs hidden on the main map page")
     created_at = django_models.DateTimeField(auto_now_add=True)
     updated_at = django_models.DateTimeField(auto_now=True)
 

@@ -100,12 +100,25 @@
             v-for="feature in displayFeatures"
             :key="getFeatureId(feature)"
             @click="handleFeatureClick(feature)"
+            @contextmenu.prevent="handleFeatureContextMenu(feature)"
             class="px-1.5 py-1 bg-gray-50 hover:bg-gray-100 transition-colors flex items-center cursor-pointer"
             :style="{ borderLeft: `3px solid ${getGeometryTypeColor(feature)}` }"
           >
-            <div class="text-xs text-gray-900 truncate">
-              {{ getFeatureName(feature) }}
+            <div class="flex-1 min-w-0">
+              <div class="text-xs text-gray-900 truncate">
+                {{ getFeatureName(feature) }}
+              </div>
             </div>
+            <!-- Mobile hide icon -->
+            <button
+              v-if="canHideFeatures && isMobileOpen"
+              type="button"
+              class="ml-1 text-gray-400 hover:text-gray-600 p-1"
+              title="Hide this feature from the main map"
+              @click.stop.prevent="emitHideFeature(feature)"
+            >
+              <EyeSlashIcon class="w-4 h-4" />
+            </button>
           </div>
         </div>
       </div>
@@ -200,16 +213,18 @@
 <script>
 import {GeoJSON} from 'ol/format'
 import {APIHOST} from '@/config.js'
-import { FunnelIcon, XMarkIcon } from '@heroicons/vue/24/outline'
+import { FunnelIcon, XMarkIcon, EyeSlashIcon } from '@heroicons/vue/24/outline'
 import Loader from '@/components/parts/Loader.vue'
 import {fetchConfig} from '@/utils/configService.js'
+import { getGeometryTypeColor } from '@/utils/geometryColors.js'
 
 export default {
   name: 'FeatureListSidebar',
   components: {
     Loader,
     FunnelIcon,
-    XMarkIcon
+    XMarkIcon,
+    EyeSlashIcon
   },
   props: {
     features: {
@@ -235,9 +250,13 @@ export default {
     isMobileOpen: {
       type: Boolean,
       default: false
+    },
+    canHideFeatures: {
+      type: Boolean,
+      default: false
     }
   },
-  emits: ['feature-click', 'tag-filter-change', 'tag-filter-loading-change', 'close'],
+  emits: ['feature-click', 'feature-hide', 'tag-filter-change', 'tag-filter-loading-change', 'close'],
   data() {
     return {
       activeTab: 'features-in-vicinity',
@@ -339,17 +358,20 @@ export default {
     },
     getGeometryTypeColor(feature) {
       const geometryType = this.getFeatureGeometryType(feature)
-
-      const colors = {
-        'Point': '#93c5fd',
-        'MultiPoint': '#93c5fd',
-        'LineString': '#86efac',
-        'MultiLineString': '#86efac',
-        'Polygon': '#fbbf24',
-        'MultiPolygon': '#fbbf24'
+      return getGeometryTypeColor(geometryType)
+    },
+    handleFeatureContextMenu(feature) {
+      // Right-click hide (desktop only)
+      if (!this.canHideFeatures) {
+        return
       }
-
-      return colors[geometryType] || '#d1d5db'
+      this.emitHideFeature(feature)
+    },
+    emitHideFeature(feature) {
+      if (!this.canHideFeatures) {
+        return
+      }
+      this.$emit('feature-hide', feature)
     },
     handleFeatureClick(feature) {
       this.$emit('feature-click', feature)

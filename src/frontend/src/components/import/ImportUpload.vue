@@ -235,8 +235,6 @@ import {
   getFileTypeConfig
 } from "@/fileTypes.js";
 
-// TODO: after import, don't disable the upload, instead add the new item to a table at the button and then prompt the user to continue
-
 export default {
   computed: {
     ...mapState(["userInfo", "importQueue"]),

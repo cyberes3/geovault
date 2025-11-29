@@ -191,6 +191,30 @@
           </div>
         </div>
 
+        <!-- Account-level visibility toggle (main map only) -->
+        <div
+          v-if="canHideFeature && featureId"
+          class="mt-3 pt-3 border-t border-gray-200"
+        >
+          <label class="inline-flex items-start gap-2 cursor-pointer">
+            <input
+              type="checkbox"
+              v-model="hideOnMainMap"
+              @change="handleHideToggle"
+              :disabled="isSaving"
+              class="mt-0.5 h-4 w-4 rounded border-gray-300 text-blue-600 focus:ring-blue-500 disabled:opacity-50 disabled:cursor-not-allowed"
+            />
+            <div>
+              <span class="block text-xs font-semibold text-gray-800">
+                Hide this feature on the main map
+              </span>
+              <span class="block text-[11px] text-gray-500">
+                Only affects your /map view. Collections, tag views, and public shares are unaffected.
+              </span>
+            </div>
+          </label>
+        </div>
+
         <!-- Error Message -->
         <div v-if="errorMessage" class="p-2 bg-red-50 border border-red-200 rounded-md">
           <p class="text-xs text-red-800">{{ errorMessage }}</p>
@@ -330,9 +354,17 @@ export default {
       type: Array,
       required: false,
       default: () => []
+    },
+    canHideFeature: {
+      type: Boolean,
+      default: false
+    },
+    initialHidden: {
+      type: Boolean,
+      default: false
     }
   },
-  emits: ['cancel', 'saved', 'deleted'],
+  emits: ['cancel', 'saved', 'deleted', 'visibility-change'],
   data() {
     return {
       formData: {
@@ -357,7 +389,8 @@ export default {
       iconRemoved: false,
       iconPickerOpen: false,
       replacementDialogOpen: false,
-      coordinatesDialogOpen: false
+      coordinatesDialogOpen: false,
+      hideOnMainMap: false
     }
   },
   computed: {
@@ -457,6 +490,9 @@ export default {
       this.iconPreviewUrl = null
       this.iconUploadError = ''
       this.iconRemoved = false
+
+      // Initialize hide toggle based on prop
+      this.hideOnMainMap = !!this.initialHidden
     },
 
     checkForPngIcon(properties) {
@@ -1060,6 +1096,15 @@ export default {
       // The parent component should handle refreshing the map
       this.$emit('saved')
       this.closeReplacementDialog()
+    },
+    handleHideToggle() {
+      if (!this.featureId) {
+        return
+      }
+      this.$emit('visibility-change', {
+        featureId: this.featureId,
+        hidden: this.hideOnMainMap
+      })
     },
     openCoordinatesDialog() {
       this.coordinatesDialogOpen = true

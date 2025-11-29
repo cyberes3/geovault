@@ -202,7 +202,7 @@ export function useGeoData() {
           })
 
           // Filter new features using hash-based duplicate detection (O(n) instead of O(n²))
-          const newFeatures = features.filter(newFeature => {
+          let newFeatures = features.filter(newFeature => {
             const newHash = newFeature.get('geojson_hash')
             if (!newHash) {
               // If no hash is available, keep the feature (shouldn't happen with backend fix)
@@ -213,6 +213,20 @@ export function useGeoData() {
             // O(1) hash lookup instead of O(n) geometry comparison
             return !existingFeatureHashes.has(newHash)
           })
+
+          // Account-level hidden-feature filtering:
+          // Only apply on the main /map view for authenticated users, never on public shares.
+          if (this.isMainMapRoute && !this.isPublicShareMode && Array.isArray(this.hiddenFeatureIds)) {
+            const hiddenSet = new Set(this.hiddenFeatureIds.map(id => String(id)))
+            newFeatures = newFeatures.filter(feature => {
+              const props = feature.get('properties') || {}
+              const featureId = props._id
+              if (!featureId) {
+                return true
+              }
+              return !hiddenSet.has(String(featureId))
+            })
+          }
 
           if (newFeatures.length > 0) {
             // Add timestamps to new features before adding them to the map

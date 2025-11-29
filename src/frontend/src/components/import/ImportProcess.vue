@@ -633,9 +633,6 @@ import TagPicker from "@/components/TagPicker.vue";
 import { DEFAULT_BULK_OPERATIONS, hasBulkOperationsConfigured, areBulkOperationsEqual, cloneBulkOperations } from "@/utils/bulkOperations.js";
 import { CheckIcon, ExclamationCircleIcon, ArrowTopRightOnSquareIcon, DocumentIcon, ExclamationTriangleIcon, ArrowDownTrayIcon, ArrowUpTrayIcon, XMarkIcon, MapIcon, ArrowPathIcon, MagnifyingGlassIcon, RectangleStackIcon } from '@heroicons/vue/24/outline';
 
-// TODO: for each feature, query the DB and check if there is a duplicate. For points that's duplicate coords, for linestrings and polygons that's duplicate points
-// TODO: redo the entire log feature to include local timestamps
-
 export default {
   computed: {
     ...mapState(["userInfo", "userSettings"]),

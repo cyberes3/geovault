@@ -13,7 +13,12 @@ from api.views.import_item import upload_item, get_processing_status, get_user_p
     import_to_featurestore, get_import_queue_item_features, search_import_item_features, save_bulk_operations, get_bulk_operations
 from api.views.sharing import create_share, list_shares, delete_share, get_public_share_info, get_public_share, create_collection_share, get_public_collection_share
 from api.views.collections import list_collections, create_collection, get_collection, update_collection, delete_collection, get_collection_features, apply_bulk_operations_to_collection
-from api.views.user_settings import get_user_settings, update_user_setting
+from api.views.user_settings import (
+    get_user_settings,
+    update_user_setting,
+    clear_hidden_features,
+    bulk_update_hidden_features,
+)
 from api.views.tiles import tile_proxy, get_tile_sources
 from api.views.feature_export import export_feature_kmz
 
@@ -80,6 +85,8 @@ urlpatterns = [
     # User settings API endpoints
     path('user/settings/', get_user_settings),
     path('user/settings/update/', update_user_setting),
+    path('user/settings/hidden-features/bulk/', bulk_update_hidden_features),
+    path('user/settings/hidden-features/clear/', clear_hidden_features),
     # Tile API endpoints
     path('tiles/sources/', get_tile_sources, name='get_tile_sources'),
     path('tiles/<str:service>/<int:z>/<int:x>/<int:y>', tile_proxy, name='tile_proxy'),
