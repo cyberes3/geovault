@@ -136,12 +136,9 @@ def get_user_processing_jobs(request):
 @api_or_login_required_401()
 def fetch_import_history_item(request, item_id: int):
     try:
-        item = ImportQueue.objects.get(id=item_id)
+        item = ImportQueue.objects.get(id=item_id, user=request.user)
     except ImportQueue.DoesNotExist:
         return not_found_response('Import item not found')
-    
-    if item.user_id != request.user.id:
-        return not_found_response('Import item not found')  # Don't reveal existence
 
     response = HttpResponse(item.raw_file, content_type='application/octet-stream')
     response['Content-Disposition'] = 'attachment; filename="%s"' % item.original_filename
@@ -244,13 +241,9 @@ def search_import_item_features(request, item_id: int):
 def delete_import_item(request, id):
     if request.method == 'DELETE':
         try:
-            queue = ImportQueue.objects.get(id=id)
+            queue = ImportQueue.objects.get(id=id, user=request.user)
         except ImportQueue.DoesNotExist:
             return not_found_response('Import item not found')
-
-        # Check if user owns this item
-        if queue.user_id != request.user.id:
-            return not_found_response('Import item not found')  # Don't reveal existence
 
         # Start async delete job
         job_id = delete_job.start_delete_job(id, request.user.id, queue.original_filename)
@@ -269,11 +262,9 @@ def delete_import_item(request, id):
 @require_http_methods(["PUT", "PATCH"])
 def update_import_item(request, item_id):
     try:
-        queue = ImportQueue.objects.get(id=item_id)
+        queue = ImportQueue.objects.get(id=item_id, user=request.user)
     except ImportQueue.DoesNotExist:
         return not_found_response('Import item not found')
-    if queue.user_id != request.user.id:
-        return not_found_response('Import item not found')  # Don't reveal existence
 
     # Prevent updating items that have already been imported to the feature store
     if queue.imported:
@@ -396,11 +387,9 @@ def import_to_featurestore(request, item_id):
     All processing happens in the async ImportJob.
     """
     try:
-        import_item = ImportQueue.objects.get(id=item_id)
+        import_item = ImportQueue.objects.get(id=item_id, user=request.user)
     except ImportQueue.DoesNotExist:
         return not_found_response('Import item not found')
-    if import_item.user_id != request.user.id:
-        return not_found_response('Import item not found')  # Don't reveal existence
 
     # Prevent importing items that have already been imported to the feature store
     if import_item.imported:
@@ -521,11 +510,9 @@ def save_bulk_operations(request, item_id):
     These operations will be applied during import.
     """
     try:
-        import_item = ImportQueue.objects.get(id=item_id)
+        import_item = ImportQueue.objects.get(id=item_id, user=request.user)
     except ImportQueue.DoesNotExist:
         return not_found_response('Import item not found')
-    if import_item.user_id != request.user.id:
-        return not_found_response('Import item not found')  # Don't reveal existence
 
     # Prevent updating items that have already been imported
     if import_item.imported:
@@ -569,11 +556,9 @@ def get_bulk_operations(request, item_id):
     Get bulk operations for an import queue item.
     """
     try:
-        import_item = ImportQueue.objects.get(id=item_id)
+        import_item = ImportQueue.objects.get(id=item_id, user=request.user)
     except ImportQueue.DoesNotExist:
         return not_found_response('Import item not found')
-    if import_item.user_id != request.user.id:
-        return not_found_response('Import item not found')  # Don't reveal existence
 
     # Return bulk operations (default to empty dict if None)
     bulk_ops = import_item.bulk_operations or {}
@@ -588,11 +573,9 @@ def recheck_duplicates(request, item_id):
     This is useful when other features may have been imported after the file was initially uploaded.
     """
     try:
-        import_item = ImportQueue.objects.get(id=item_id)
+        import_item = ImportQueue.objects.get(id=item_id, user=request.user)
     except ImportQueue.DoesNotExist:
         return not_found_response('Import item not found')
-    if import_item.user_id != request.user.id:
-        return not_found_response('Import item not found')  # Don't reveal existence
 
     # Prevent rechecking duplicates for items that have already been imported
     if import_item.imported:
