@@ -12,6 +12,7 @@ OSM_CONFIG = {
     'name': 'OpenStreetMap',
     'type': 'osm',
     'requires_proxy': False,
+    'url_template': 'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
     'client_config': {
         'type': 'osm'
     }

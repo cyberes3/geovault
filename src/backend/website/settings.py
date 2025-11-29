@@ -46,6 +46,10 @@ SITE_NAME = config.get_str('site.name', 'GeoVault')
 _additional_allowed_hosts = config.get_list('security.additional_allowed_hosts', [])
 ALLOWED_HOSTS = [SITE_DOMAIN] + _additional_allowed_hosts
 
+# CORS Configuration
+# Additional CORS origins from config (user-specified)
+ADDITIONAL_CORS_ORIGINS = config.get_list('security.additional_cors_origins', [])
+
 # Application definition
 
 INSTALLED_APPS = [
@@ -544,3 +548,79 @@ LOGGING = {
 # MaxMind IP Geolocation Configuration
 # Default to GeoLite2-City database; can be overridden in config.yaml
 MAXMIND_DATABASE_PATH = config.get_str('maxmind.database_path', '/var/lib/GeoIP/GeoLite2-City.mmdb')
+
+
+def get_tile_source_origins():
+    """
+    Extract origins from external tile sources that don't require proxy.
+    These origins will be used for CORS and CSP configuration.
+    
+    Returns:
+        list: List of origin URLs (e.g., ['https://tile.opentopomap.org'])
+    """
+    from urllib.parse import urlparse
+    from geo_lib.tile_sources import get_all_tile_sources
+    
+    origins = set()
+    
+    try:
+        tile_sources = get_all_tile_sources()
+        for source_config in tile_sources.values():
+            # Only include external tile sources that don't require proxy
+            if not source_config.get('requires_proxy', False):
+                # Try to extract origin from url_template
+                url_template = source_config.get('url_template')
+                if url_template:
+                    try:
+                        # Replace common template variables before parsing
+                        clean_url = url_template.replace('{s}', 'a').replace('{z}', '0').replace('{x}', '0').replace('{y}', '0')
+                        parsed = urlparse(clean_url)
+                        if parsed.scheme and parsed.netloc:
+                            # Extract the base netloc without subdomain placeholders
+                            netloc = parsed.netloc
+                            # If the original had {s} in netloc, we need to handle wildcard
+                            if '{s}' in url_template:
+                                # Remove the placeholder subdomain part and use wildcard
+                                # For a.tile.opentopomap.org, we want tile.opentopomap.org
+                                parts = netloc.split('.')
+                                if len(parts) > 2:
+                                    # Use the last two parts (domain.tld) or last three for co.uk style
+                                    if len(parts) >= 3 and parts[-2] in ['co', 'org', 'com', 'net']:
+                                        netloc = '.'.join(parts[-3:])
+                                    else:
+                                        netloc = '.'.join(parts[-2:])
+                            origin = f"{parsed.scheme}://{netloc}"
+                            origins.add(origin)
+                    except Exception:
+                        pass
+                
+                # Also check client_config.url
+                client_config = source_config.get('client_config', {})
+                client_url = client_config.get('url')
+                if client_url and not client_url.startswith('/'):
+                    try:
+                        # Replace common template variables before parsing
+                        clean_url = client_url.replace('{s}', 'a').replace('{z}', '0').replace('{x}', '0').replace('{y}', '0')
+                        parsed = urlparse(clean_url)
+                        if parsed.scheme and parsed.netloc:
+                            netloc = parsed.netloc
+                            # Handle subdomain placeholders
+                            if '{s}' in client_url:
+                                parts = netloc.split('.')
+                                if len(parts) > 2:
+                                    if len(parts) >= 3 and parts[-2] in ['co', 'org', 'com', 'net']:
+                                        netloc = '.'.join(parts[-3:])
+                                    else:
+                                        netloc = '.'.join(parts[-2:])
+                            origin = f"{parsed.scheme}://{netloc}"
+                            origins.add(origin)
+                    except Exception:
+                        pass
+    except Exception as e:
+        # If tile sources aren't loaded yet (during startup), return empty list
+        # The middleware will call this again later when needed
+        import logging
+        logger = logging.getLogger('config')
+        logger.debug(f"Could not load tile source origins during settings initialization: {e}")
+    
+    return list(origins)

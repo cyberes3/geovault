@@ -24,6 +24,16 @@ security:
   # additional_allowed_hosts:
   #   - 192.168.1.88
 
+  # Additional CORS origins to allow (beyond the site domain and tile sources)
+  # Format: https://example.com (no trailing slash)
+  # The system automatically allows:
+  #   - The site's own domain (from site.domain)
+  #   - External tile source origins (e.g., https://tile.opentopomap.org)
+  # Use this to add any additional origins your frontend might need
+  # additional_cors_origins:
+  #   - https://app.example.com
+  #   - https://mobile.example.com
+
 
 database:
   name: geovault

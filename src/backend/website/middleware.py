@@ -158,10 +158,114 @@ class ActivityTrackingMiddleware:
 
 
 class CustomHeaderMiddleware:
+    """Middleware to add security headers including CORS and CSP."""
+    
     def __init__(self, get_response):
         self.get_response = get_response
+        self._cors_origins = None
+        self._csp_connect_src = None
+    
+    def _get_cors_origins(self):
+        """Get list of allowed CORS origins (cached)."""
+        if self._cors_origins is None:
+            from django.conf import settings
+            from website.settings import get_tile_source_origins
+            from urllib.parse import urlparse
+            
+            origins = set()
+            
+            # Add site's own domain
+            protocol = 'https' if not settings.DEBUG else 'http'
+            site_origin = f"{protocol}://{settings.SITE_DOMAIN}"
+            origins.add(site_origin)
+            
+            # Add external tile source origins
+            try:
+                tile_origins = get_tile_source_origins()
+                origins.update(tile_origins)
+            except Exception as e:
+                # Log but don't fail if tile sources aren't available yet
+                access_logger.debug(f"Could not load tile source origins: {e}")
+            
+            # Add user-configured additional origins
+            additional_origins = getattr(settings, 'ADDITIONAL_CORS_ORIGINS', [])
+            origins.update(additional_origins)
+            
+            self._cors_origins = list(origins)
+        
+        return self._cors_origins
+    
+    def _get_csp_connect_src(self):
+        """Get CSP connect-src directive (cached)."""
+        if self._csp_connect_src is None:
+            from django.conf import settings
+            from website.settings import get_tile_source_origins
+            from urllib.parse import urlparse
+            
+            # Start with 'self'
+            connect_sources = ["'self'"]
+            
+            # Add external tile source origins for connect-src
+            try:
+                tile_origins = get_tile_source_origins()
+                connect_sources.extend(tile_origins)
+            except Exception:
+                pass
+            
+            self._csp_connect_src = ' '.join(connect_sources)
+        
+        return self._csp_connect_src
+    
+    def _set_cors_headers(self, request, response):
+        """Set CORS headers on response."""
+        # Get the Origin header from the request
+        origin = request.META.get('HTTP_ORIGIN')
+        
+        allowed_origins = self._get_cors_origins()
+        
+        # Check if the origin is allowed
+        if origin and origin in allowed_origins:
+            response['Access-Control-Allow-Origin'] = origin
+            response['Access-Control-Allow-Credentials'] = 'true'
+        else:
+            # For requests without Origin header or from same origin, allow the site domain
+            from django.conf import settings
+            protocol = 'https' if not settings.DEBUG else 'http'
+            response['Access-Control-Allow-Origin'] = f"{protocol}://{settings.SITE_DOMAIN}"
+        
+        # Set other CORS headers for preflight requests
+        if request.method == 'OPTIONS':
+            response['Access-Control-Allow-Methods'] = 'GET, POST, PUT, DELETE, PATCH, OPTIONS'
+            response['Access-Control-Allow-Headers'] = 'Content-Type, Authorization, X-Requested-With, Accept'
+            response['Access-Control-Max-Age'] = '86400'  # 24 hours
+    
+    def _set_csp_headers(self, response):
+        """Set Content Security Policy headers on response."""
+        # Build CSP directives
+        csp_directives = [
+            "default-src 'self'",
+            "script-src 'self' 'unsafe-inline'",
+            "style-src 'self' 'unsafe-inline'",
+            "img-src 'self' data: blob: https:",
+            f"connect-src {self._get_csp_connect_src()}",
+            "font-src 'self' data:",
+            "frame-ancestors 'none'",
+            "base-uri 'self'",
+            "form-action 'self'"
+        ]
+        
+        csp_policy = '; '.join(csp_directives)
+        response['Content-Security-Policy'] = csp_policy
 
     def __call__(self, request):
         response = self.get_response(request)
-        response['Access-Control-Allow-Origin'] = '*'
+        
+        # Set CORS headers on all responses
+        self._set_cors_headers(request, response)
+        
+        # Set CSP headers on HTML responses
+        content_type = response.get('Content-Type', '')
+        if 'text/html' in content_type:
+            self._set_csp_headers(response)
+        
         return response
