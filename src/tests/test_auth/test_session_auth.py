@@ -75,7 +75,7 @@ class TestSessionAuth(TestCase):
         other_feature = FeatureStore.objects.create(
             user=other_user,
             geojson=self.feature_data,
-            file_hash=generate_feature_hash(self.feature_data)
+            geojson_hash=generate_feature_hash(self.feature_data)
         )
 
         # Try to access other user's feature

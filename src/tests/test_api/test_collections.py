@@ -40,7 +40,7 @@ class TestCollectionsAPI(TestCase):
             user=self.user,
             geojson=self.feature_data,
             geometry=Point(-122.4194, 37.7749, 0.0),  # 3D Point with Z=0.0
-            file_hash=generate_feature_hash(self.feature_data)
+            geojson_hash=generate_feature_hash(self.feature_data)
         )
 
     def test_create_collection(self):
@@ -290,7 +290,7 @@ class TestCollectionsAPI(TestCase):
             user=self.user,
             geojson=feature2_data,
             geometry=Point(-122.4094, 37.7849, 0.0),  # 3D Point with Z=0.0
-            file_hash=generate_feature_hash(feature2_data)
+            geojson_hash=generate_feature_hash(feature2_data)
         )
 
         collection = Collection.objects.create(

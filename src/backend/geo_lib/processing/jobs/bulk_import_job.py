@@ -210,7 +210,7 @@ class BulkImportJob(BaseJob):
             current_batch_hashes = set()
 
             # Get existing feature hashes for this user to avoid duplicates
-            existing_features = FeatureStore.objects.filter(user_id=user_id).values_list('file_hash', flat=True)
+            existing_features = FeatureStore.objects.filter(user_id=user_id).values_list('geojson_hash', flat=True)
             existing_hashes.update(existing_features)
 
             # Thread-safe duplicate checking

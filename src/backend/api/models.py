@@ -37,7 +37,7 @@ class FeatureStore(models.Model):
     user = models.ForeignKey(get_user_model(), on_delete=models.CASCADE)
     source = models.ForeignKey(ImportQueue, on_delete=models.SET_NULL, null=True)
     geojson = models.JSONField(null=False)
-    file_hash = models.CharField(max_length=64, unique=True, null=True, blank=True, help_text="SHA-256 hash of the feature's GeoJSON content")
+    geojson_hash = models.CharField(max_length=64, null=True, blank=True, help_text="SHA-256 hash of the feature's GeoJSON content")
     geometry = models.GeometryField(null=True, blank=True, dim=3)  # Spatial field for efficient queries, supports 3D
     timestamp = models.DateTimeField(auto_now_add=True)
 
@@ -46,15 +46,15 @@ class FeatureStore(models.Model):
             # Original indexes
             models.Index(fields=['user', 'timestamp']),
             GistIndex(fields=['geometry'], name='featurestore_geometry_idx'),  # GIST spatial index
-            models.Index(fields=['file_hash']),  # Index for hash-based lookups
+            models.Index(fields=['geojson_hash']),  # Index for hash-based lookups
             
             # NEW COMPOUND INDEXES FOR OPTIMIZED QUERIES (with short names)
             # NOTE: Removed compound indexes that include geometry fields to avoid PostgreSQL
             # btree index size limits. Geometry fields use GiST spatial indexes instead.
             
             # 1. User + Hash lookups (used in duplicate detection and hash-based queries)
-            # Optimizes queries like: user_id=user_id, file_hash=hash
-            models.Index(fields=['user', 'file_hash'], name='fs_user_hash'),
+            # Optimizes queries like: user_id=user_id, geojson_hash=hash
+            models.Index(fields=['user', 'geojson_hash'], name='fs_user_hash'),
             
             # 2. User + Timestamp for chronological queries
             # Optimizes queries like: user_id=user_id ORDER BY timestamp
@@ -66,7 +66,17 @@ class FeatureStore(models.Model):
             
             # 4. Hash + Timestamp for hash-based chronological queries
             # Optimizes duplicate detection with temporal ordering
-            models.Index(fields=['file_hash', 'timestamp'], name='fs_hash_time'),
+            models.Index(fields=['geojson_hash', 'timestamp'], name='fs_hash_time'),
+        ]
+        constraints = [
+            # Unique constraint: Each user can only have one feature with a given hash
+            # This prevents race conditions during concurrent imports while allowing
+            # different users to have the same features (e.g., public POIs)
+            django_models.UniqueConstraint(
+                fields=['user', 'geojson_hash'],
+                name='unique_user_geojson_hash',
+                violation_error_message='Feature with this hash already exists for this user'
+            )
         ]
 
 

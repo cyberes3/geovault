@@ -337,7 +337,7 @@ def process_single_feature_for_import(
         # Create FeatureStore object
         return FeatureStore(
             geojson=geojson_data,
-            file_hash=feature_hash,
+            geojson_hash=feature_hash,
             geometry=geometry,
             source=import_item,
             user_id=user_id

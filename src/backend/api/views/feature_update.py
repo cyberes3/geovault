@@ -176,8 +176,8 @@ def _apply_bulk_ops_and_save_feature(feature: FeatureStore, bulk_ops: dict) -> b
     
     # Update feature geojson and hash (geometry is unchanged by styling)
     feature.geojson = normalized_feature
-    feature.file_hash = generate_feature_hash(normalized_feature)
-    feature.save(update_fields=['geojson', 'file_hash'])
+    feature.geojson_hash = generate_feature_hash(normalized_feature)
+    feature.save(update_fields=['geojson', 'geojson_hash'])
     
     return True
 
@@ -821,7 +821,7 @@ def update_feature(request, feature_id):
         feature.geojson = feature_data
 
         # Regenerate the hash for the updated feature
-        feature.file_hash = generate_feature_hash(feature_data)
+        feature.geojson_hash = generate_feature_hash(feature_data)
 
         # Update the geometry field if coordinates changed
         try:
@@ -1014,7 +1014,7 @@ def apply_replacement_geometry(request, feature_id):
         feature.geojson = feature_data
 
         # Regenerate the hash for the updated feature
-        feature.file_hash = generate_feature_hash(feature_data)
+        feature.geojson_hash = generate_feature_hash(feature_data)
 
         # Update the geometry field if coordinates changed
         try:

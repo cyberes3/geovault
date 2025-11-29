@@ -281,7 +281,7 @@ def _convert_feature_to_geojson(feature: FeatureStore, public_safe: bool = False
         "type": "Feature",
         "geometry": geojson_data.get('geometry'),
         "properties": properties,
-        "geojson_hash": feature.file_hash
+        "geojson_hash": feature.geojson_hash
     }
 
 

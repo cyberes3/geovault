@@ -38,7 +38,7 @@ class TestUserSettingsAPI(TestCase):
             user=self.user,
             geojson=self.feature_data,
             geometry=Point(-122.4194, 37.7749, 0.0),  # 3D Point with Z=0.0
-            file_hash=generate_feature_hash(self.feature_data)
+            geojson_hash=generate_feature_hash(self.feature_data)
         )
 
     def test_get_user_settings(self):

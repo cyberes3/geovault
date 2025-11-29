@@ -42,7 +42,7 @@ class TestFeatureAPI(TestCase):
             user=self.user,
             geojson=self.point_feature_data,
             geometry=Point(-122.4194, 37.7749, 0.0),  # 3D Point with Z=0.0
-            file_hash=generate_feature_hash(self.point_feature_data)
+            geojson_hash=generate_feature_hash(self.point_feature_data)
         )
 
         self.linestring_feature_data = {
@@ -61,7 +61,7 @@ class TestFeatureAPI(TestCase):
             user=self.user,
             geojson=self.linestring_feature_data,
             geometry=Point(-122.4194, 37.7749, 0.0),  # 3D Point with Z=0.0  # Simplified for test
-            file_hash=generate_feature_hash(self.linestring_feature_data)
+            geojson_hash=generate_feature_hash(self.linestring_feature_data)
         )
 
     def test_get_feature(self):
@@ -104,7 +104,7 @@ class TestFeatureAPI(TestCase):
             user=other_user,
             geojson=other_feature_data,
             geometry=Point(-122.4094, 37.7849, 0.0),  # 3D Point with Z=0.0
-            file_hash=generate_feature_hash(other_feature_data)
+            geojson_hash=generate_feature_hash(other_feature_data)
         )
         response = self.client.get(f'/api/feature/{other_feature.id}/')
         self.assertEqual(response.status_code, 404)

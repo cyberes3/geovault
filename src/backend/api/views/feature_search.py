@@ -279,7 +279,7 @@ def search_features(request):
                     "type": "Feature",
                     "geometry": geojson_data.get('geometry'),
                     "properties": properties,
-                    "geojson_hash": feature.file_hash
+                    "geojson_hash": feature.geojson_hash
                 })
 
         # Create GeoJSON FeatureCollection
@@ -352,7 +352,7 @@ def filter_features_by_tags(request):
                     "type": "Feature",
                     "geometry": geojson_data.get('geometry'),
                     "properties": properties,
-                    "geojson_hash": feature.file_hash
+                    "geojson_hash": feature.geojson_hash
                 })
         
         # Create GeoJSON FeatureCollection
@@ -399,7 +399,7 @@ def get_all_features(request):
                     "type": "Feature",
                     "geometry": geojson_data.get('geometry'),
                     "properties": properties,
-                    "geojson_hash": feature.file_hash
+                    "geojson_hash": feature.geojson_hash
                 })
         
         # Create GeoJSON FeatureCollection

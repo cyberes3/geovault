@@ -340,7 +340,7 @@ def get_collection_features(request, collection_id):
                     "type": "Feature",
                     "geometry": geojson_data.get('geometry'),
                     "properties": properties,
-                    "geojson_hash": feature.file_hash
+                    "geojson_hash": feature.geojson_hash
                 }
                 geojson_features.append(geojson_feature)
         

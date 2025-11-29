@@ -44,7 +44,7 @@ class TestFeatureStore(TestCase):
             user=self.user,
             geojson=feature_data,
             geometry=Point(-122.4194, 37.7749, 0.0),  # 3D Point with Z=0.0
-            file_hash=generate_feature_hash(feature_data)
+            geojson_hash=generate_feature_hash(feature_data)
         )
         self.assertIsNotNone(feature.id)
         self.assertEqual(feature.user, self.user)
@@ -61,10 +61,10 @@ class TestFeatureStore(TestCase):
             user=self.user,
             geojson=feature_data,
             geometry=Point(-122.4194, 37.7749, 0.0),  # 3D Point with Z=0.0
-            file_hash=generate_feature_hash(feature_data)
+            geojson_hash=generate_feature_hash(feature_data)
         )
-        self.assertIsNotNone(feature.file_hash)
-        self.assertEqual(len(feature.file_hash), 64)  # SHA-256 hex
+        self.assertIsNotNone(feature.geojson_hash)
+        self.assertEqual(len(feature.geojson_hash), 64)  # SHA-256 hex
 
     def test_feature_store_geometry_storage(self):
         """Test that geometry is stored correctly."""
@@ -77,7 +77,7 @@ class TestFeatureStore(TestCase):
             user=self.user,
             geojson=feature_data,
             geometry=Point(-122.4194, 37.7749, 0.0),  # 3D Point with Z=0.0
-            file_hash=generate_feature_hash(feature_data)
+            geojson_hash=generate_feature_hash(feature_data)
         )
         self.assertIsNotNone(feature.geometry)
         self.assertEqual(feature.geometry.x, -122.4194)
@@ -94,7 +94,7 @@ class TestFeatureStore(TestCase):
             user=self.user,
             geojson=feature_data,
             geometry=Point(-122.4194, 37.7749, 0.0),  # 3D Point with Z=0.0
-            file_hash=generate_feature_hash(feature_data)
+            geojson_hash=generate_feature_hash(feature_data)
         )
         self.assertIsNotNone(feature.timestamp)
 
