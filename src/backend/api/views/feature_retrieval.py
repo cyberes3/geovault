@@ -3,7 +3,7 @@ from typing import List, Tuple, Optional
 
 import requests
 from django.conf import settings
-from django.http import JsonResponse
+from django.http import JsonResponse, Http404
 from website.settings_utils import get_required_setting
 from django.views.decorators.http import require_http_methods
 
@@ -29,31 +29,23 @@ def get_feature(request, feature_id):
     URL parameter:
     - feature_id: ID of the feature to retrieve
     """
-    try:
-        # Get the feature from database
-        feature = get_object_or_404_for_user(FeatureStore, request.user, id=feature_id)
+    # Get the feature from database
+    feature = get_object_or_404_for_user(FeatureStore, request.user, id=feature_id)
 
-        # Include database ID in properties for frontend editing (same as _get_features_in_bbox)
-        geojson_data = feature.geojson.copy()
-        if geojson_data and 'properties' in geojson_data:
-            geojson_data['properties']['_id'] = feature.id
+    # Include database ID in properties for frontend editing (same as _get_features_in_bbox)
+    geojson_data = feature.geojson.copy()
+    if geojson_data and 'properties' in geojson_data:
+        geojson_data['properties']['_id'] = feature.id
 
-        # Return the feature data
-        return JsonResponse({
-            'feature': {
-                'id': feature.id,
-                'geojson': geojson_data,
-                'geojson_hash': feature.geojson_hash,
-                'timestamp': feature.timestamp.isoformat() if feature.timestamp else None
-            }
-        })
-
-    except Exception:
-        logger.error(f"Error getting feature {feature_id}: {traceback.format_exc()}")
-        return JsonResponse({
-            'error': 'Failed to get feature',
-            'code': 500
-        }, status=500)
+    # Return the feature data
+    return JsonResponse({
+        'feature': {
+            'id': feature.id,
+            'geojson': geojson_data,
+            'geojson_hash': feature.geojson_hash,
+            'timestamp': feature.timestamp.isoformat() if feature.timestamp else None
+        }
+    })
 
 
 def _extract_coordinates_from_geojson(geojson_data: dict) -> List[Tuple[float, float]]:
@@ -163,39 +155,31 @@ def get_feature_elevations(request, feature_id):
     Returns:
     - coordinates: List of [lon, lat, elevation] arrays
     """
-    try:
-        # Get the feature from database and verify user ownership
-        feature = get_object_or_404_for_user(FeatureStore, request.user, id=feature_id)
-        
-        # Extract coordinates from the feature's GeoJSON
-        geojson_data = feature.geojson
-        coordinates = _extract_coordinates_from_geojson(geojson_data)
-        
-        if not coordinates:
-            return JsonResponse({
-                'error': 'Feature does not contain LineString or MultiLineString geometry',
-                'code': 400
-            }, status=400)
-        
-        # Fetch elevations from API
-        elevations = _fetch_elevations_from_api(coordinates)
-        
-        # Combine coordinates with elevations: [lon, lat, elevation]
-        coordinates_with_elevations = []
-        for (lon, lat), elevation in zip(coordinates, elevations):
-            if elevation is not None:
-                coordinates_with_elevations.append([lon, lat, elevation])
-            else:
-                # If elevation fetch failed, include coordinate without elevation
-                coordinates_with_elevations.append([lon, lat])
-        
+    # Get the feature from database and verify user ownership
+    feature = get_object_or_404_for_user(FeatureStore, request.user, id=feature_id)
+    
+    # Extract coordinates from the feature's GeoJSON
+    geojson_data = feature.geojson
+    coordinates = _extract_coordinates_from_geojson(geojson_data)
+    
+    if not coordinates:
         return JsonResponse({
-            'coordinates': coordinates_with_elevations
-        })
-        
-    except Exception:
-        logger.error(f"Error getting elevations for feature {feature_id}: {traceback.format_exc()}")
-        return JsonResponse({
-            'error': 'Failed to get feature elevations',
-            'code': 500
-        }, status=500)
+            'error': 'Feature does not contain LineString or MultiLineString geometry',
+            'code': 400
+        }, status=400)
+    
+    # Fetch elevations from API
+    elevations = _fetch_elevations_from_api(coordinates)
+    
+    # Combine coordinates with elevations: [lon, lat, elevation]
+    coordinates_with_elevations = []
+    for (lon, lat), elevation in zip(coordinates, elevations):
+        if elevation is not None:
+            coordinates_with_elevations.append([lon, lat, elevation])
+        else:
+            # If elevation fetch failed, include coordinate without elevation
+            coordinates_with_elevations.append([lon, lat])
+    
+    return JsonResponse({
+        'coordinates': coordinates_with_elevations
+    })

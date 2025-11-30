@@ -61,32 +61,21 @@ class AdvisoryLock:
         
     def __enter__(self):
         """Acquire the advisory lock."""
-        try:
-            with connection.cursor() as cursor:
-                # pg_advisory_lock blocks until the lock is available
-                cursor.execute("SELECT pg_advisory_lock(%s)", [self.lock_id])
-                self.acquired = True
-                logger.debug(f"Acquired advisory lock for hash {self.file_hash[:16]}... (lock_id: {self.lock_id})")
-        except Exception as e:
-            logger.error(f"Failed to acquire advisory lock for hash {self.file_hash[:16]}...: {e}")
-            raise
+        with connection.cursor() as cursor:
+            # pg_advisory_lock blocks until the lock is available
+            cursor.execute("SELECT pg_advisory_lock(%s)", [self.lock_id])
+            self.acquired = True
         return self
     
     def __exit__(self, exc_type, exc_val, exc_tb):
         """Release the advisory lock."""
         if self.acquired:
-            try:
-                with connection.cursor() as cursor:
-                    # pg_advisory_unlock returns true if the lock was held and released
-                    cursor.execute("SELECT pg_advisory_unlock(%s)", [self.lock_id])
-                    result = cursor.fetchone()
-                    if result and result[0]:
-                        logger.debug(f"Released advisory lock for hash {self.file_hash[:16]}... (lock_id: {self.lock_id})")
-                    else:
-                        logger.warning(f"Advisory lock was not held when trying to release for hash {self.file_hash[:16]}...")
-            except Exception as e:
-                logger.error(f"Failed to release advisory lock for hash {self.file_hash[:16]}...: {e}")
-                # Don't re-raise - we want to allow the original exception to propagate
+            with connection.cursor() as cursor:
+                # pg_advisory_unlock returns true if the lock was held and released
+                cursor.execute("SELECT pg_advisory_unlock(%s)", [self.lock_id])
+                result = cursor.fetchone()
+                if not (result and result[0]):
+                    logger.error('Advisory lock was not held when trying to release')
         return False  # Don't suppress exceptions
 
 

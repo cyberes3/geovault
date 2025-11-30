@@ -260,4 +260,77 @@ def user_settings(db, user):
     )
 
 
+# New fixtures for concurrent and performance tests
+
+@pytest.fixture
+def concurrent_users(db):
+    """Create multiple test users for concurrent operation testing."""
+    users = []
+    for i in range(3):
+        user = User.objects.create_user(
+            email=f'concurrent{i}@example.com',
+            password='testpass123',
+            username=f'concurrent_user_{i}'
+        )
+        users.append(user)
+    return users
+
+
+@pytest.fixture
+def large_feature_set(db, user):
+    """Create a large set of features for performance testing."""
+    features = []
+    for i in range(1000):
+        feature_data = {
+            'type': 'Feature',
+            'geometry': {
+                'type': 'Point',
+                'coordinates': [-122.4194 + (i % 100) * 0.001, 37.7749 + (i // 100) * 0.001, 0.0]
+            },
+            'properties': {
+                'name': f'Performance Test Feature {i}',
+                'tags': ['performance', f'batch_{i // 100}']
+            }
+        }
+        
+        from geo_lib.feature_id import generate_feature_hash
+        
+        feature = FeatureStore(
+            user=user,
+            geojson=feature_data,
+            geometry=Point(
+                feature_data['geometry']['coordinates'][0],
+                feature_data['geometry']['coordinates'][1],
+                0.0
+            ),
+            geojson_hash=generate_feature_hash(feature_data)
+        )
+        features.append(feature)
+    
+    # Bulk create for efficiency
+    FeatureStore.objects.bulk_create(features, batch_size=100)
+    
+    return FeatureStore.objects.filter(user=user)
+
+
+@pytest.fixture
+def mock_external_services():
+    """Mock external services (elevation, geocoding) for error testing."""
+    from unittest.mock import patch, MagicMock
+    
+    mocks = {}
+    
+    # Mock elevation service
+    with patch('geo_lib.processing.elevation_service.get_elevation_for_coordinates') as mock_elevation:
+        mock_elevation.return_value = [100.0]  # Default elevation
+        mocks['elevation'] = mock_elevation
+        
+        # Mock geocoding service
+        with patch('geo_lib.processing.geocoding.reverse_geocode') as mock_geocode:
+            mock_geocode.return_value = {'address': 'Test Address'}
+            mocks['geocode'] = mock_geocode
+            
+            yield mocks
+
+
 

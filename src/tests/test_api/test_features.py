@@ -596,3 +596,179 @@ class TestFeatureAPI(TestCase):
         response = self.client.get(f'/api/feature/{self.point_feature.id}/')
         self.assertEqual(response.status_code, 401)
 
+
+class TestFeatureEdgeCases(TestCase):
+    """Edge case tests for feature operations."""
+    
+    def setUp(self):
+        """Set up test fixtures."""
+        from django.contrib.auth import get_user_model
+        User = get_user_model()
+        self.user = User.objects.create_user(
+            email='edge@example.com',
+            password='testpass123',
+            username='edgeuser'
+        )
+        self.client.force_login(self.user)
+    
+    def test_create_feature_with_empty_tags(self):
+        """Test updating feature metadata with empty tags array."""
+        # Create a feature first
+        feature_data = {
+            'type': 'Feature',
+            'geometry': {
+                'type': 'Point',
+                'coordinates': [-122.4194, 37.7749, 0.0]
+            },
+            'properties': {
+                'name': 'Test Feature',
+                'tags': ['initial']
+            }
+        }
+        feature = FeatureStore.objects.create(
+            user=self.user,
+            geojson=feature_data,
+            geometry=Point(-122.4194, 37.7749, 0.0),
+            geojson_hash=generate_feature_hash(feature_data)
+        )
+        
+        # Update with empty tags
+        response = self.client.post(
+            '/api/features/bulk-update-metadata/',
+            data=json.dumps({
+                'updates': [{
+                    'feature_id': feature.id,
+                    'tags': []  # Empty tags
+                }]
+            }),
+            content_type='application/json'
+        )
+        # Should succeed with empty tags
+        self.assertIn(response.status_code, [200, 201])
+    
+    def test_create_feature_with_null_name(self):
+        """Test updating feature metadata with null name."""
+        # Create a feature first
+        feature_data = {
+            'type': 'Feature',
+            'geometry': {
+                'type': 'Point',
+                'coordinates': [-122.4194, 37.7749, 0.0]
+            },
+            'properties': {
+                'name': 'Original Name',
+                'tags': ['test']
+            }
+        }
+        feature = FeatureStore.objects.create(
+            user=self.user,
+            geojson=feature_data,
+            geometry=Point(-122.4194, 37.7749, 0.0),
+            geojson_hash=generate_feature_hash(feature_data)
+        )
+        
+        # Update with null name
+        response = self.client.post(
+            '/api/features/bulk-update-metadata/',
+            data=json.dumps({
+                'updates': [{
+                    'feature_id': feature.id,
+                    'name': None  # Null name
+                }]
+            }),
+            content_type='application/json'
+        )
+        # Should handle null name appropriately
+        self.assertIn(response.status_code, [200, 201, 400])
+    
+    def test_create_feature_with_null_description(self):
+        """Test updating feature metadata with null description."""
+        # Create a feature first
+        feature_data = {
+            'type': 'Feature',
+            'geometry': {
+                'type': 'Point',
+                'coordinates': [-122.4194, 37.7749, 0.0]
+            },
+            'properties': {
+                'name': 'Test Feature',
+                'description': 'Original description'
+            }
+        }
+        feature = FeatureStore.objects.create(
+            user=self.user,
+            geojson=feature_data,
+            geometry=Point(-122.4194, 37.7749, 0.0),
+            geojson_hash=generate_feature_hash(feature_data)
+        )
+        
+        # Update with null description
+        response = self.client.post(
+            '/api/features/bulk-update-metadata/',
+            data=json.dumps({
+                'updates': [{
+                    'feature_id': feature.id,
+                    'description': None  # Null description
+                }]
+            }),
+            content_type='application/json'
+        )
+        # Should succeed with null description
+        self.assertIn(response.status_code, [200, 201])
+    
+    def test_update_feature_with_empty_properties(self):
+        """Test updating a feature metadata with empty name (essentially clearing it)."""
+        # Create initial feature
+        feature_data = {
+            'type': 'Feature',
+            'geometry': {
+                'type': 'Point',
+                'coordinates': [-122.4194, 37.7749, 0.0]
+            },
+            'properties': {
+                'name': 'Test Feature',
+                'tags': ['test']
+            }
+        }
+        feature = FeatureStore.objects.create(
+            user=self.user,
+            geojson=feature_data,
+            geometry=Point(-122.4194, 37.7749, 0.0),
+            geojson_hash=generate_feature_hash(feature_data)
+        )
+        
+        # Update to clear tags
+        response = self.client.post(
+            '/api/features/bulk-update-metadata/',
+            data=json.dumps({
+                'updates': [{
+                    'feature_id': feature.id,
+                    'tags': []  # Empty tags
+                }]
+            }),
+            content_type='application/json'
+        )
+        # Should handle empty tags
+        self.assertIn(response.status_code, [200, 400])
+    
+    def test_query_features_with_very_large_bbox(self):
+        """Test bbox query with world-spanning bbox."""
+        response = self.client.get(
+            '/api/geojson/',
+            {
+                'bbox': '-180,-90,180,90',  # Entire world
+                'zoom': '1'
+            }
+        )
+        self.assertEqual(response.status_code, 200)
+    
+    def test_bulk_create_with_empty_array(self):
+        """Test bulk update metadata with empty updates array."""
+        response = self.client.post(
+            '/api/features/bulk-update-metadata/',
+            data=json.dumps({'updates': []}),  # Empty array
+            content_type='application/json'
+        )
+        # Should handle empty array gracefully
+        self.assertIn(response.status_code, [200, 400])
+

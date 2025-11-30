@@ -1,6 +1,6 @@
 import traceback
 
-from django.http import JsonResponse
+from django.http import JsonResponse, Http404
 from django.views.decorators.http import require_http_methods
 
 from api.models import FeatureStore
@@ -22,21 +22,13 @@ def delete_feature(request, feature_id):
     URL parameter:
     - feature_id: ID of the feature to delete
     """
-    try:
-        # Get the feature from database and verify user ownership
-        feature = get_object_or_404_for_user(FeatureStore, request.user, id=feature_id)
+    # Get the feature from database and verify user ownership
+    feature = get_object_or_404_for_user(FeatureStore, request.user, id=feature_id)
 
-        # Delete the feature
-        feature.delete()
+    # Delete the feature
+    feature.delete()
 
-        return JsonResponse({
-            'message': 'Feature deleted successfully',
-            'feature_id': feature_id
-        })
-
-    except Exception as e:
-        logger.error(f"Error deleting feature {feature_id}: {traceback.format_exc()}")
-        return JsonResponse({
-            'error': 'Failed to delete feature',
-            'code': 500
-        }, status=500)
+    return JsonResponse({
+        'message': 'Feature deleted successfully',
+        'feature_id': feature_id
+    })

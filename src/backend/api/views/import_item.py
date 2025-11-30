@@ -152,18 +152,14 @@ def get_import_queue_item_features(request, item_id: int):
     Get the processed features (geofeatures) from an import queue item.
     Used for replacement uploads to display features for selection.
     """
-    try:
-        item = get_object_or_404_for_user(ImportQueue, request.user, id=item_id)
+    item = get_object_or_404_for_user(ImportQueue, request.user, id=item_id)
 
-        return success_response({
-            'geofeatures': item.geofeatures,
-            'original_filename': item.original_filename,
-            'imported': item.imported,
-            'replacement': item.replacement
-        })
-    except Exception as e:
-        logger.error(f"Error fetching import queue item features: {traceback.format_exc()}")
-        return server_error_response('Failed to fetch features')
+    return success_response({
+        'geofeatures': item.geofeatures,
+        'original_filename': item.original_filename,
+        'imported': item.imported,
+        'replacement': item.replacement
+    })
 
 
 @api_or_login_required_401()
@@ -174,64 +170,59 @@ def search_import_item_features(request, item_id: int):
     Search through all features in an import queue item by name or description.
     Returns matching features with their global index and page number.
     """
-    try:
-        # Validate query parameter
-        query = request.GET.get('query', '').strip()
-        if not query:
-            return error_response('query parameter is required', code=400)
+    # Validate query parameter
+    query = request.GET.get('query', '').strip()
+    if not query:
+        return error_response('query parameter is required', code=400)
 
-        # Get import queue item
-        item = get_object_or_404_for_user(ImportQueue, request.user, id=item_id)
+    # Get import queue item
+    item = get_object_or_404_for_user(ImportQueue, request.user, id=item_id)
 
-        # Validate geofeatures
-        geofeatures = item.geofeatures
-        if not isinstance(geofeatures, list):
-            return JsonResponse({
-                'matches': [],
-                'total_matches': 0
-            })
-
-        # Search configuration
-        PAGE_SIZE = 50
-        MAX_RESULTS = 150
-        query_lower = query.lower()
-
-        # Search through all features
-        matches = []
-        total_matches = 0
-
-        for feature_index, feature in enumerate(geofeatures):
-            if not isinstance(feature, dict):
-                continue
-
-            properties = feature.get('properties', {})
-            if not isinstance(properties, dict):
-                continue
-
-            # Check if feature matches query
-            name = (properties.get('name') or '').lower()
-            description = (properties.get('description') or '').lower()
-
-            if query_lower in name or query_lower in description:
-                total_matches += 1
-
-                # Only include in results if under limit
-                if len(matches) < MAX_RESULTS:
-                    page = (feature_index // PAGE_SIZE) + 1
-                    matches.append({
-                        'feature_index': feature_index,
-                        'page': page,
-                        'feature': feature
-                    })
-
-        return success_response({
-            'matches': matches,
-            'total_matches': total_matches
+    # Validate geofeatures
+    geofeatures = item.geofeatures
+    if not isinstance(geofeatures, list):
+        return JsonResponse({
+            'matches': [],
+            'total_matches': 0
         })
 
-    except Exception as e:
-        logger.error(f"Error searching import item features: {traceback.format_exc()}")
-        return server_error_response('Failed to search features')
+    # Search configuration
+    PAGE_SIZE = 50
+    MAX_RESULTS = 150
+    query_lower = query.lower()
+
+    # Search through all features
+    matches = []
+    total_matches = 0
+
+    for feature_index, feature in enumerate(geofeatures):
+        if not isinstance(feature, dict):
+            continue
+
+        properties = feature.get('properties', {})
+        if not isinstance(properties, dict):
+            continue
+
+        # Check if feature matches query
+        name = (properties.get('name') or '').lower()
+        description = (properties.get('description') or '').lower()
+
+        if query_lower in name or query_lower in description:
+            total_matches += 1
+
+            # Only include in results if under limit
+            if len(matches) < MAX_RESULTS:
+                page = (feature_index // PAGE_SIZE) + 1
+                matches.append({
+                    'feature_index': feature_index,
+                    'page': page,
+                    'feature': feature
+                })
+
+    return success_response({
+        'matches': matches,
+        'total_matches': total_matches
+    })
 
 
 @api_or_login_required_401()

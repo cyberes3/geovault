@@ -313,47 +313,42 @@ def create_collection_share(request, validated_data):
     - collection_id: string (required) - The collection ID to share
     - include_tags: boolean (optional, default=False) - Whether to include tags in the shared features
     """
-    try:
-        collection_id_str = validated_data['collection_id']
-        include_tags = validated_data.get('include_tags', False)
+    collection_id_str = validated_data['collection_id']
+    include_tags = validated_data.get('include_tags', False)
 
-        # Convert collection_id to UUID (Pydantic already validated it's valid)
-        collection_id = uuid.UUID(collection_id_str)
+    # Convert collection_id to UUID (Pydantic already validated it's valid)
+    collection_id = uuid.UUID(collection_id_str)
 
-        # Verify collection exists and belongs to user
-        collection = get_object_or_404_for_user(Collection, request.user, id=collection_id)
+    # Verify collection exists and belongs to user
+    collection = get_object_or_404_for_user(Collection, request.user, id=collection_id)
 
-        # Generate UUID4 share_id
+    # Generate UUID4 share_id
+    share_id = str(uuid.uuid4())
+    # Ensure uniqueness (very unlikely but check anyway)
+    while TagShare.objects.filter(share_id=share_id).exists() or CollectionShare.objects.filter(share_id=share_id).exists():
         share_id = str(uuid.uuid4())
-        # Ensure uniqueness (very unlikely but check anyway)
-        while TagShare.objects.filter(share_id=share_id).exists() or CollectionShare.objects.filter(share_id=share_id).exists():
-            share_id = str(uuid.uuid4())
 
-        # Get allow_downloads from validated data
-        allow_downloads = validated_data.get('allow_downloads', False)
+    # Get allow_downloads from validated data
+    allow_downloads = validated_data.get('allow_downloads', False)
 
-        # Create new share
-        collection_share = CollectionShare.objects.create(
-            share_id=share_id,
-            collection=collection,
-            user=request.user,
-            include_tags=include_tags,
-            allow_downloads=allow_downloads
-        )
+    # Create new share
+    collection_share = CollectionShare.objects.create(
+        share_id=share_id,
+        collection=collection,
+        user=request.user,
+        include_tags=include_tags,
+        allow_downloads=allow_downloads
+    )
 
-        # Build full URL
-        base_url = request.build_absolute_uri('/').rstrip('/')
-        share_url = f"{base_url}/#/mapshare?id={collection_share.share_id}"
+    # Build full URL
+    base_url = request.build_absolute_uri('/').rstrip('/')
+    share_url = f"{base_url}/#/mapshare?id={collection_share.share_id}"
 
-        return JsonResponse({
-            'share_id': collection_share.share_id,
-            'url': share_url,
-            'created_at': collection_share.created_at.isoformat()
-        })
-
-    except Exception:
-        logger.error(f"Error creating collection share: {traceback.format_exc()}")
-        return error_response('Failed to create collection share', code=500)
+    return JsonResponse({
+        'share_id': collection_share.share_id,
+        'url': share_url,
+        'created_at': collection_share.created_at.isoformat()
+    })
 
 
 

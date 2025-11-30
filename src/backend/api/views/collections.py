@@ -4,7 +4,7 @@ from typing import Set
 
 from django.db.models import Q
 from django.db import transaction
-from django.http import JsonResponse
+from django.http import JsonResponse, Http404
 from django.views.decorators.http import require_http_methods
 
 from api.models import Collection, FeatureStore
@@ -119,16 +119,11 @@ def get_collection(request, collection_id):
     """
     Get a single collection by ID.
     """
-    try:
-        collection = get_object_or_404_for_user(Collection, request.user, id=collection_id)
-        
-        return success_response({
-            'collection': _serialize_collection(collection)
-        })
+    collection = get_object_or_404_for_user(Collection, request.user, id=collection_id)
     
-    except Exception:
-        logger.error(f"Error getting collection: {traceback.format_exc()}")
-        return server_error_response('Failed to get collection')
+    return success_response({
+        'collection': _serialize_collection(collection)
+    })
 
 
 @api_or_login_required_401()
@@ -145,56 +140,51 @@ def update_collection(request, collection_id, validated_data):
     - tags: array of strings (optional)
     - feature_ids: array of integers (optional)
     """
-    try:
-        collection = get_object_or_404_for_user(Collection, request.user, id=collection_id)
-        
-        # Wrap all database modifications in a transaction
-        with transaction.atomic():
-            # Update name if provided
-            if 'name' in validated_data:
-                name = validated_data['name'].strip()
-                if name:
-                    collection.name = name
-                else:
-                    return error_response('name cannot be empty', code=400)
-            
-            # Update description if provided
-            if 'description' in validated_data:
-                description = validated_data.get('description')
-                if description is not None:
-                    description = description.strip() if description else None
-                else:
-                    description = None
-                collection.description = description
-            
-            # Update tags if provided
-            if 'tags' in validated_data:
-                tags = validated_data.get('tags', [])
-                collection.tags = tags
-            
-            # Update feature_ids if provided
-            if 'feature_ids' in validated_data:
-                feature_ids = validated_data.get('feature_ids', [])
-                
-                # Verify that all feature_ids belong to the user
-                if feature_ids:
-                    user_feature_ids = set(
-                        FeatureStore.objects.filter(user=request.user, id__in=feature_ids)
-                        .values_list('id', flat=True)
-                    )
-                    feature_ids = [fid for fid in feature_ids if fid in user_feature_ids]
-                
-                collection.feature_ids = feature_ids
-            
-            collection.save()
-        
-        return success_response({
-            'collection': _serialize_collection(collection)
-        })
+    collection = get_object_or_404_for_user(Collection, request.user, id=collection_id)
     
-    except Exception:
-        logger.error(f"Error updating collection: {traceback.format_exc()}")
-        return server_error_response('Failed to update collection')
+    # Wrap all database modifications in a transaction
+    with transaction.atomic():
+        # Update name if provided
+        if 'name' in validated_data:
+            name = validated_data['name'].strip()
+            if name:
+                collection.name = name
+            else:
+                return error_response('name cannot be empty', code=400)
+        
+        # Update description if provided
+        if 'description' in validated_data:
+            description = validated_data.get('description')
+            if description is not None:
+                description = description.strip() if description else None
+            else:
+                description = None
+            collection.description = description
+        
+        # Update tags if provided
+        if 'tags' in validated_data:
+            tags = validated_data.get('tags', [])
+            collection.tags = tags
+        
+        # Update feature_ids if provided
+        if 'feature_ids' in validated_data:
+            feature_ids = validated_data.get('feature_ids', [])
+            
+            # Verify that all feature_ids belong to the user
+            if feature_ids:
+                user_feature_ids = set(
+                    FeatureStore.objects.filter(user=request.user, id__in=feature_ids)
+                    .values_list('id', flat=True)
+                )
+                feature_ids = [fid for fid in feature_ids if fid in user_feature_ids]
+            
+            collection.feature_ids = feature_ids
+        
+        collection.save()
+    
+    return success_response({
+        'collection': _serialize_collection(collection)
+    })
 
 
 @api_or_login_required_401()
@@ -204,15 +194,10 @@ def delete_collection(request, collection_id):
     """
     Delete a collection.
     """
-    try:
-        collection = get_object_or_404_for_user(Collection, request.user, id=collection_id)
-        collection.delete()
-        
-        return success_response({'msg': 'Collection deleted successfully'})
+    collection = get_object_or_404_for_user(Collection, request.user, id=collection_id)
+    collection.delete()
     
-    except Exception:
-        logger.error(f"Error deleting collection: {traceback.format_exc()}")
-        return server_error_response('Failed to delete collection')
+    return success_response({'msg': 'Collection deleted successfully'})
 
 
 @api_or_login_required_401()
@@ -227,50 +212,45 @@ def get_collection_features(request, collection_id):
     
     Returns GeoJSON FeatureCollection format.
     """
-    try:
-        collection = get_object_or_404_for_user(Collection, request.user, id=collection_id)
-        
-        # Get all feature IDs that match the collection criteria
-        feature_ids_set = _get_collection_feature_ids(collection)
-        
-        # Get all features by their IDs
-        features = FeatureStore.objects.filter(id__in=feature_ids_set).exclude(geometry__isnull=True).order_by('id')
-        
-        # Convert to GeoJSON format
-        geojson_features = []
-        for feature in features:
-            geojson_data = feature.geojson
-            if geojson_data and 'geometry' in geojson_data:
-                properties = geojson_data.get('properties', {}).copy()
-                
-                # Tags are already separated - user tags only in tags field
-                # System tags are in system_tags field and not shown to user
-                
-                # Include database ID in properties
-                properties['_id'] = feature.id
-                
-                geojson_feature = {
-                    "type": "Feature",
-                    "geometry": geojson_data.get('geometry'),
-                    "properties": properties,
-                    "geojson_hash": feature.geojson_hash
-                }
-                geojson_features.append(geojson_feature)
-        
-        # Create GeoJSON FeatureCollection
-        geojson_data = {
-            "type": "FeatureCollection",
-            "features": geojson_features
-        }
-        
-        return success_response({
-            'data': geojson_data,
-            'feature_count': len(geojson_features)
-        })
+    collection = get_object_or_404_for_user(Collection, request.user, id=collection_id)
     
-    except Exception:
-        logger.error(f"Error getting collection features: {traceback.format_exc()}")
-        return server_error_response('Failed to get collection features')
+    # Get all feature IDs that match the collection criteria
+    feature_ids_set = _get_collection_feature_ids(collection)
+    
+    # Get all features by their IDs
+    features = FeatureStore.objects.filter(id__in=feature_ids_set).exclude(geometry__isnull=True).order_by('id')
+    
+    # Convert to GeoJSON format
+    geojson_features = []
+    for feature in features:
+        geojson_data = feature.geojson
+        if geojson_data and 'geometry' in geojson_data:
+            properties = geojson_data.get('properties', {}).copy()
+            
+            # Tags are already separated - user tags only in tags field
+            # System tags are in system_tags field and not shown to user
+            
+            # Include database ID in properties
+            properties['_id'] = feature.id
+            
+            geojson_feature = {
+                "type": "Feature",
+                "geometry": geojson_data.get('geometry'),
+                "properties": properties,
+                "geojson_hash": feature.geojson_hash
+            }
+            geojson_features.append(geojson_feature)
+    
+    # Create GeoJSON FeatureCollection
+    geojson_data = {
+        "type": "FeatureCollection",
+        "features": geojson_features
+    }
+    
+    return success_response({
+        'data': geojson_data,
+        'feature_count': len(geojson_features)
+    })
 
 
 @api_or_login_required_401()
@@ -292,52 +272,47 @@ def apply_bulk_operations_to_collection(request, collection_id):
     }
     """
     try:
-        try:
-            data = json.loads(request.body)
-        except json.JSONDecodeError:
-            return error_response('Invalid JSON in request body', code=400)
+        data = json.loads(request.body)
+    except json.JSONDecodeError:
+        return error_response('Invalid JSON in request body', code=400)
 
-        if not isinstance(data, dict):
-            return error_response('Request body must be a valid JSON object', code=400)
+    if not isinstance(data, dict):
+        return error_response('Request body must be a valid JSON object', code=400)
 
-        bulk_ops = data.get("bulk_operations", {})
-        is_valid, error_message = validate_bulk_operations_payload(bulk_ops)
-        if not is_valid:
-            return error_response(error_message, code=400)
+    bulk_ops = data.get("bulk_operations", {})
+    is_valid, error_message = validate_bulk_operations_payload(bulk_ops)
+    if not is_valid:
+        return error_response(error_message, code=400)
 
-        collection = get_object_or_404_for_user(Collection, request.user, id=collection_id)
+    collection = get_object_or_404_for_user(Collection, request.user, id=collection_id)
 
-        # Build the same feature ID set used by get_collection_features/_count_collection_features
-        feature_ids_set = _get_collection_feature_ids(collection)
+    # Build the same feature ID set used by get_collection_features/_count_collection_features
+    feature_ids_set = _get_collection_feature_ids(collection)
 
-        if not feature_ids_set:
-            return success_response({
-                "updated_count": 0,
-                "msg": "No features found for this collection"
-            })
-
-        updated_count = 0
-
-        # Iterate through all features and apply bulk operations using shared helper
-        features_qs = FeatureStore.objects.filter(id__in=feature_ids_set).only("id", "geojson")
-
-        # Import helper from feature_update module
-        from api.views.feature_update import _apply_bulk_ops_and_save_feature
-
-        # Wrap in transaction to ensure atomicity
-        with transaction.atomic():
-            for feature in features_qs.iterator(chunk_size=200):
-                if _apply_bulk_ops_and_save_feature(feature, bulk_ops):
-                    updated_count += 1
-
+    if not feature_ids_set:
         return success_response({
-            "updated_count": updated_count,
-            "msg": f"Successfully updated {updated_count} feature(s) in collection"
+            "updated_count": 0,
+            "msg": "No features found for this collection"
         })
 
-    except Exception:
-        logger.error(f"Error applying bulk operations to collection {collection_id}: {traceback.format_exc()}")
-        return server_error_response('Failed to apply bulk operations to collection')
+    updated_count = 0
+
+    # Iterate through all features and apply bulk operations using shared helper
+    features_qs = FeatureStore.objects.filter(id__in=feature_ids_set).only("id", "geojson")
+
+    # Import helper from feature_update module
+    from api.views.feature_update import _apply_bulk_ops_and_save_feature
+
+    # Wrap in transaction to ensure atomicity
+    with transaction.atomic():
+        for feature in features_qs.iterator(chunk_size=200):
+            if _apply_bulk_ops_and_save_feature(feature, bulk_ops):
+                updated_count += 1
+
+    return success_response({
+        "updated_count": updated_count,
+        "msg": f"Successfully updated {updated_count} feature(s) in collection"
+    })
 
 
 def _get_collection_feature_ids(collection: Collection) -> Set[int]:

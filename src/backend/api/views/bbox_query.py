@@ -395,20 +395,12 @@ def get_geojson_data(request):
             }, status=400)
 
     # Fetch data from database with optimized single query
-    try:
-        query_result = _get_features_in_bbox(bbox, request.user.id, zoom_level, collection_id=collection_id)
-        features = query_result.features
-        total_features_in_bbox = query_result.total_count
-        fallback_used = query_result.fallback_used
+    query_result = _get_features_in_bbox(bbox, request.user.id, zoom_level, collection_id=collection_id)
+    features = query_result.features
+    total_features_in_bbox = query_result.total_count
+    fallback_used = query_result.fallback_used
 
-        # Build response using helper function
-        response_data = _build_bbox_response(features, total_features_in_bbox, zoom_level, fallback_used)
+    # Build response using helper function
+    response_data = _build_bbox_response(features, total_features_in_bbox, zoom_level, fallback_used)
 
-        return JsonResponse(response_data)
-
-    except Exception:
-        logger.error(f"Error in get_geojson_data API: {traceback.format_exc()}")
-        return JsonResponse({
-            'error': 'Failed to get features in bounding box',
-            'code': 500
-        }, status=500)
+    return JsonResponse(response_data)

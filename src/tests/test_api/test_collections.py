@@ -378,3 +378,139 @@ class TestCollectionsAPI(TestCase):
         response = self.client.get('/api/collections/')
         self.assertEqual(response.status_code, 401)
 
+
+class TestCollectionEdgeCases(TestCase):
+    """Edge case tests for collection operations."""
+    
+    def setUp(self):
+        """Set up test fixtures."""
+        from django.contrib.auth import get_user_model
+        User = get_user_model()
+        self.user = User.objects.create_user(
+            email='edge@example.com',
+            password='testpass123',
+            username='edgeuser'
+        )
+        self.client.force_login(self.user)
+    
+    def test_create_collection_with_empty_feature_ids(self):
+        """Test creating a collection with empty feature_ids array."""
+        collection_data = {
+            'name': 'Empty Collection',
+            'description': 'No features',
+            'tags': ['test'],
+            'feature_ids': []  # Empty feature_ids
+        }
+        
+        response = self.client.post(
+            '/api/collections/create/',
+            data=json.dumps(collection_data),
+            content_type='application/json'
+        )
+        self.assertEqual(response.status_code, 201)
+        data = json.loads(response.content)
+        collection_id = data['collection']['id']
+        
+        # Verify collection was created with empty feature_ids
+        collection = Collection.objects.get(id=collection_id)
+        self.assertEqual(collection.feature_ids, [])
+    
+    def test_create_collection_with_empty_tags(self):
+        """Test creating a collection with empty tags array."""
+        collection_data = {
+            'name': 'No Tags Collection',
+            'description': 'Collection without tags',
+            'tags': [],  # Empty tags
+            'feature_ids': []
+        }
+        
+        response = self.client.post(
+            '/api/collections/create/',
+            data=json.dumps(collection_data),
+            content_type='application/json'
+        )
+        self.assertEqual(response.status_code, 201)
+        data = json.loads(response.content)
+        collection_id = data['collection']['id']
+        
+        # Verify collection was created with empty tags
+        collection = Collection.objects.get(id=collection_id)
+        self.assertEqual(collection.tags, [])
+    
+    def test_create_collection_with_null_description(self):
+        """Test creating a collection with null description."""
+        collection_data = {
+            'name': 'Null Description Collection',
+            'description': None,  # Null description
+            'tags': ['test'],
+            'feature_ids': []
+        }
+        
+        response = self.client.post(
+            '/api/collections/create/',
+            data=json.dumps(collection_data),
+            content_type='application/json'
+        )
+        self.assertEqual(response.status_code, 201)
+        data = json.loads(response.content)
+        collection_id = data['collection']['id']
+        
+        # Verify collection was created with null description
+        collection = Collection.objects.get(id=collection_id)
+        self.assertIsNone(collection.description)
+    
+    def test_update_collection_to_empty_feature_ids(self):
+        """Test updating a collection to have empty feature_ids."""
+        # Create collection with a feature
+        feature_data = {
+            'type': 'Feature',
+            'geometry': {
+                'type': 'Point',
+                'coordinates': [-122.4194, 37.7749, 0.0]
+            },
+            'properties': {'name': 'Test Feature'}
+        }
+        feature = FeatureStore.objects.create(
+            user=self.user,
+            geojson=feature_data,
+            geometry=Point(-122.4194, 37.7749, 0.0),
+            geojson_hash=generate_feature_hash(feature_data)
+        )
+        
+        collection = Collection.objects.create(
+            user=self.user,
+            name='Test Collection',
+            feature_ids=[feature.id]
+        )
+        
+        # Update to empty feature_ids
+        update_data = {
+            'feature_ids': []  # Empty array
+        }
+        
+        response = self.client.put(
+            f'/api/collections/{collection.id}/update/',
+            data=json.dumps(update_data),
+            content_type='application/json'
+        )
+        self.assertEqual(response.status_code, 200)
+        
+        # Verify feature_ids is now empty
+        collection.refresh_from_db()
+        self.assertEqual(collection.feature_ids, [])
+    
+    def test_query_collection_features_when_empty(self):
+        """Test querying features of an empty collection."""
+        collection = Collection.objects.create(
+            user=self.user,
+            name='Empty Collection',
+            feature_ids=[]  # No features
+        )
+        
+        response = self.client.get(f'/api/collections/{collection.id}/features/')
+        self.assertEqual(response.status_code, 200)
+        data = json.loads(response.content)
+        # Should return empty or zero count
+        self.assertIn('feature_count', data)
+        self.assertEqual(data['feature_count'], 0)
+

@@ -1,0 +1,517 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<kml xmlns="http://www.opengis.net/kml/2.2" xmlns:gx="http://www.google.com/kml/ext/2.2" xmlns:kml="http://www.opengis.net/kml/2.2" xmlns:atom="http://www.w3.org/2005/Atom">
+<Document>
+	<name>CalTopo Export</name>
+	<open>1</open>
+	<description>Export from CalTopo</description>
+	<atom:link rel="app" href="https://www.google.com/earth/about/versions/#earth-pro" title="Google Earth Pro 7.3.6.10441"></atom:link>
+	<StyleMap id="m_ylw-pushpin">
+		<Pair>
+			<key>normal</key>
+			<styleUrl>#s_ylw-pushpin1</styleUrl>
+		</Pair>
+		<Pair>
+			<key>highlight</key>
+			<styleUrl>#s_ylw-pushpin_hl</styleUrl>
+		</Pair>
+	</StyleMap>
+	<StyleMap id="m_ylw-pushpin1">
+		<Pair>
+			<key>normal</key>
+			<styleUrl>#s_ylw-pushpin0</styleUrl>
+		</Pair>
+		<Pair>
+			<key>highlight</key>
+			<styleUrl>#s_ylw-pushpin_hl0</styleUrl>
+		</Pair>
+	</StyleMap>
+	<StyleMap id="m_ylw-pushpin0">
+		<Pair>
+			<key>normal</key>
+			<styleUrl>#s_ylw-pushpin</styleUrl>
+		</Pair>
+		<Pair>
+			<key>highlight</key>
+			<styleUrl>#s_ylw-pushpin_hl1</styleUrl>
+		</Pair>
+	</StyleMap>
+	<StyleMap id="msn_grn-pushpin">
+		<Pair>
+			<key>normal</key>
+			<styleUrl>#sn_grn-pushpin</styleUrl>
+		</Pair>
+		<Pair>
+			<key>highlight</key>
+			<styleUrl>#sh_grn-pushpin</styleUrl>
+		</Pair>
+	</StyleMap>
+	<StyleMap id="msn_purple-diamond">
+		<Pair>
+			<key>normal</key>
+			<styleUrl>#sn_purple-diamond</styleUrl>
+		</Pair>
+		<Pair>
+			<key>highlight</key>
+			<styleUrl>#sh_purple-diamond</styleUrl>
+		</Pair>
+	</StyleMap>
+	<Style id="s_ylw-pushpin">
+		<IconStyle>
+			<scale>1.1</scale>
+			<Icon>
+				<href>http://maps.google.com/mapfiles/kml/pushpin/ylw-pushpin.png</href>
+			</Icon>
+			<hotSpot x="20" y="2" xunits="pixels" yunits="pixels"/>
+		</IconStyle>
+		<LineStyle>
+			<color>ffff0055</color>
+		</LineStyle>
+	</Style>
+	<Style id="s_ylw-pushpin1">
+		<IconStyle>
+			<scale>1.1</scale>
+			<Icon>
+				<href>http://maps.google.com/mapfiles/kml/pushpin/ylw-pushpin.png</href>
+			</Icon>
+			<hotSpot x="20" y="2" xunits="pixels" yunits="pixels"/>
+		</IconStyle>
+	</Style>
+	<Style id="s_ylw-pushpin0">
+		<IconStyle>
+			<scale>1.1</scale>
+			<Icon>
+				<href>http://maps.google.com/mapfiles/kml/pushpin/ylw-pushpin.png</href>
+			</Icon>
+			<hotSpot x="20" y="2" xunits="pixels" yunits="pixels"/>
+		</IconStyle>
+		<LineStyle>
+			<color>ffff0055</color>
+		</LineStyle>
+	</Style>
+	<Style id="s_ylw-pushpin_hl">
+		<IconStyle>
+			<scale>1.3</scale>
+			<Icon>
+				<href>http://maps.google.com/mapfiles/kml/pushpin/ylw-pushpin.png</href>
+			</Icon>
+			<hotSpot x="20" y="2" xunits="pixels" yunits="pixels"/>
+		</IconStyle>
+	</Style>
+	<Style id="s_ylw-pushpin_hl1">
+		<IconStyle>
+			<scale>1.3</scale>
+			<Icon>
+				<href>http://maps.google.com/mapfiles/kml/pushpin/ylw-pushpin.png</href>
+			</Icon>
+			<hotSpot x="20" y="2" xunits="pixels" yunits="pixels"/>
+		</IconStyle>
+		<LineStyle>
+			<color>ffff0055</color>
+		</LineStyle>
+	</Style>
+	<Style id="s_ylw-pushpin_hl0">
+		<IconStyle>
+			<scale>1.3</scale>
+			<Icon>
+				<href>http://maps.google.com/mapfiles/kml/pushpin/ylw-pushpin.png</href>
+			</Icon>
+			<hotSpot x="20" y="2" xunits="pixels" yunits="pixels"/>
+		</IconStyle>
+		<LineStyle>
+			<color>ffff0055</color>
+		</LineStyle>
+	</Style>
+	<Style id="sh_grn-pushpin">
+		<IconStyle>
+			<scale>1.3</scale>
+			<Icon>
+				<href>http://maps.google.com/mapfiles/kml/pushpin/grn-pushpin.png</href>
+			</Icon>
+			<hotSpot x="20" y="2" xunits="pixels" yunits="pixels"/>
+		</IconStyle>
+	</Style>
+	<Style id="sh_purple-diamond">
+		<IconStyle>
+			<scale>1.3</scale>
+			<Icon>
+				<href>http://maps.google.com/mapfiles/kml/paddle/purple-diamond.png</href>
+			</Icon>
+			<hotSpot x="32" y="1" xunits="pixels" yunits="pixels"/>
+		</IconStyle>
+		<ListStyle>
+			<ItemIcon>
+				<href>http://maps.google.com/mapfiles/kml/paddle/purple-diamond-lv.png</href>
+			</ItemIcon>
+		</ListStyle>
+	</Style>
+	<Style id="sn_grn-pushpin">
+		<IconStyle>
+			<scale>1.1</scale>
+			<Icon>
+				<href>http://maps.google.com/mapfiles/kml/pushpin/grn-pushpin.png</href>
+			</Icon>
+			<hotSpot x="20" y="2" xunits="pixels" yunits="pixels"/>
+		</IconStyle>
+	</Style>
+	<Style id="sn_purple-diamond">
+		<IconStyle>
+			<scale>1.1</scale>
+			<Icon>
+				<href>http://maps.google.com/mapfiles/kml/paddle/purple-diamond.png</href>
+			</Icon>
+			<hotSpot x="32" y="1" xunits="pixels" yunits="pixels"/>
+		</IconStyle>
+		<ListStyle>
+			<ItemIcon>
+				<href>http://maps.google.com/mapfiles/kml/paddle/purple-diamond-lv.png</href>
+			</ItemIcon>
+		</ListStyle>
+	</Style>
+	<Folder>
+		<name>Points</name>
+		<open>1</open>
+		<Placemark>
+			<name>Test Icon Yellow</name>
+			<LookAt>
+				<longitude>-102.4171068555681</longitude>
+				<latitude>42.72862982518041</latitude>
+				<altitude>0</altitude>
+				<heading>-4.95526871028558</heading>
+				<tilt>0</tilt>
+				<range>1754324.017937246</range>
+				<gx:altitudeMode>relativeToSeaFloor</gx:altitudeMode>
+			</LookAt>
+			<styleUrl>#m_ylw-pushpin</styleUrl>
+			<Point>
+				<gx:drawOrder>1</gx:drawOrder>
+				<coordinates>-102.4171068555681,42.72862982518041,0</coordinates>
+			</Point>
+		</Placemark>
+		<Placemark>
+			<name>Test Icon Green</name>
+			<LookAt>
+				<longitude>-102.4171068555681</longitude>
+				<latitude>42.72862982518041</latitude>
+				<altitude>0</altitude>
+				<heading>-4.95526871028558</heading>
+				<tilt>0</tilt>
+				<range>1754324.017937246</range>
+				<gx:altitudeMode>relativeToSeaFloor</gx:altitudeMode>
+			</LookAt>
+			<styleUrl>#msn_grn-pushpin</styleUrl>
+			<Point>
+				<gx:drawOrder>1</gx:drawOrder>
+				<coordinates>-101.3843521853619,41.69346596630309,0</coordinates>
+			</Point>
+		</Placemark>
+		<Placemark>
+			<name>Test Icon Purple</name>
+			<LookAt>
+				<longitude>-102.4171068555681</longitude>
+				<latitude>42.72862982518041</latitude>
+				<altitude>0</altitude>
+				<heading>-4.95526871028558</heading>
+				<tilt>0</tilt>
+				<range>1754324.017937246</range>
+				<gx:altitudeMode>relativeToSeaFloor</gx:altitudeMode>
+			</LookAt>
+			<styleUrl>#msn_purple-diamond</styleUrl>
+			<Point>
+				<gx:drawOrder>1</gx:drawOrder>
+				<coordinates>-102.8718526514839,41.72922511388108,0</coordinates>
+			</Point>
+		</Placemark>
+		<Placemark>
+			<name>Point #1</name>
+			<description>Point comment #1.</description>
+			<Style>
+				<IconStyle>
+					<Icon>
+						<href>http://caltopo.com/icon.png?cfg=http%3A%2F%2Fcaltopo.com%2Ficon.png%3Fcfg%3Dpoint%252CFF0000%25231.0%231.0</href>
+					</Icon>
+					<hotSpot x="0.5" y="0.5" xunits="fraction" yunits="fraction"/>
+				</IconStyle>
+			</Style>
+			<Point>
+				<coordinates>-103.23321,40.18681,0</coordinates>
+			</Point>
+		</Placemark>
+		<Placemark>
+			<name>Point #2</name>
+			<description>Point comment #2.</description>
+			<Style>
+				<IconStyle>
+					<Icon>
+						<href>http://caltopo.com/icon.png?cfg=http%3A%2F%2Fcaltopo.com%2Ficon.png%3Fcfg%3Dpoint%252C0000FF%25231.0%231.0</href>
+					</Icon>
+					<hotSpot x="0.5" y="0.5" xunits="fraction" yunits="fraction"/>
+				</IconStyle>
+			</Style>
+			<Point>
+				<coordinates>-104.26043,39.43149,0</coordinates>
+			</Point>
+		</Placemark>
+		<Placemark>
+			<name>Far Away Point</name>
+			<Style>
+				<IconStyle>
+					<Icon>
+						<href>http://caltopo.com/icon.png?cfg=http%3A%2F%2Fcaltopo.com%2Ficon.png%3Fcfg%3Dpoint%252C00CD00%25231.0%231.0</href>
+					</Icon>
+					<hotSpot x="0.5" y="0.5" xunits="fraction" yunits="fraction"/>
+				</IconStyle>
+			</Style>
+			<Point>
+				<coordinates>87.73681999999999,49.22836,0</coordinates>
+			</Point>
+		</Placemark>
+		<Placemark>
+			<name>Identical Coords #1</name>
+			<Style>
+				<IconStyle>
+					<Icon>
+						<href>http://caltopo.com/icon.png?cfg=http%3A%2F%2Fcaltopo.com%2Ficon.png%3Fcfg%3Dc%253Atarget2%252CFF0000%25231.0%231.0</href>
+					</Icon>
+					<hotSpot x="0.5" y="0.5" xunits="fraction" yunits="fraction"/>
+				</IconStyle>
+			</Style>
+			<Point>
+				<coordinates>-108.9267,42.62487,0</coordinates>
+			</Point>
+		</Placemark>
+		<Placemark>
+			<name>Identical Coords #2</name>
+			<Style>
+				<IconStyle>
+					<Icon>
+						<href>http://caltopo.com/icon.png?cfg=http%3A%2F%2Fcaltopo.com%2Ficon.png%3Fcfg%3Dc%253Atarget3%252CFF0000%25231.0%231.0</href>
+					</Icon>
+					<hotSpot x="0.5" y="0.5" xunits="fraction" yunits="fraction"/>
+				</IconStyle>
+			</Style>
+			<Point>
+				<coordinates>-108.9267,42.62487,0</coordinates>
+			</Point>
+		</Placemark>
+		<Placemark>
+			<name>Point Overlap Line</name>
+			<Style>
+				<IconStyle>
+					<Icon>
+						<href>http://caltopo.com/icon.png?cfg=point%2CFF0000%231.0</href>
+					</Icon>
+					<hotSpot x="0.5" y="0.5" xunits="fraction" yunits="fraction"/>
+				</IconStyle>
+			</Style>
+			<Point>
+				<coordinates>-107.69897,37.71859,0</coordinates>
+			</Point>
+		</Placemark>
+		<Placemark>
+			<name>Point Overlap Line</name>
+			<Style>
+				<IconStyle>
+					<Icon>
+						<href>http://caltopo.com/icon.png?cfg=point%2CFF0000%231.0</href>
+					</Icon>
+					<hotSpot x="0.5" y="0.5" xunits="fraction" yunits="fraction"/>
+				</IconStyle>
+			</Style>
+			<Point>
+				<coordinates>-107.8438568115235,37.62674047813386,0</coordinates>
+			</Point>
+		</Placemark>
+	</Folder>
+	<Folder>
+		<name>LineStrings</name>
+		<open>1</open>
+		<Placemark>
+			<name>Line #1</name>
+			<description>Line comment #1.</description>
+			<Style>
+				<LineStyle>
+					<color>ff0000ff</color>
+					<width>2</width>
+					<gx:labelVisibility>1</gx:labelVisibility>
+				</LineStyle>
+			</Style>
+			<LineString>
+				<tessellate>1</tessellate>
+				<coordinates>
+					-102.3762815944828,39.70250651971969,0 -104.0022581569828,38.94186200533267,0 -103.4639280788578,38.26791257513303,0 -102.7498167507328,38.41440008150219,0 -103.4364622585453,38.93758938076041,0 -103.5298460476078,38.69791175671248,0 -103.2606810085453,38.44022006030676,0 -103.0574339382328,38.54770390821858,0 -103.3375853054203,38.70648555762732,0 -103.3705442897953,38.78788538583812,0 
+				</coordinates>
+			</LineString>
+		</Placemark>
+		<Placemark>
+			<name>Line #2</name>
+			<description>Line comment #2.</description>
+			<Style>
+				<LineStyle>
+					<color>ffff0000</color>
+					<width>2</width>
+					<gx:labelVisibility>1</gx:labelVisibility>
+				</LineStyle>
+			</Style>
+			<LineString>
+				<tessellate>1</tessellate>
+				<coordinates>
+					-107.6002806179203,39.66445351631023,0 -106.1775511257328,39.07844399706762,0 -105.0349730007328,38.56488038549641,0 -104.5790403835453,38.86063209248186,0 -104.0626829616703,39.15941828258434,0 -103.6342161647953,39.46118206994004,0 -103.7166136257328,39.56289226895088,0 -104.3483274929203,39.68136590237291,0 -103.9967649929203,39.92191726208537,0 
+				</coordinates>
+			</LineString>
+		</Placemark>
+		<Placemark>
+			<name>Polygon #1</name>
+			<description><![CDATA[Polygon comment #1.
+
+<h3>Admiralty Islands lowland rain forests</h3>
+<table border="1" cellpadding="3" cellspacing="0">
+<tr><td><b>Biome:</b></td><td>Tropical & Subtropical Moist Broadleaf Forests</td></tr>
+<tr><td><b>Realm:</b></td><td>Australasia</td></tr>
+<tr><td><b>NNH Status:</b></td><td>Nature Could Reach Half Protected</td></tr>
+<tr><td><b>NNH Level:</b></td><td>2</td></tr>
+<tr><td><b>Color:</b></td><td>#70A800</td></tr>
+</table>]]></description>
+			<Style>
+				<IconStyle>
+					<scale>0</scale>
+				</IconStyle>
+				<LineStyle>
+					<color>ff0000ff</color>
+					<width>2</width>
+					<gx:labelVisibility>1</gx:labelVisibility>
+				</LineStyle>
+				<PolyStyle>
+					<color>1a0000ff</color>
+					<fill>1</fill>
+					<outline>1</outline>
+					<width>2.0</width>
+				</PolyStyle>
+			</Style>
+			<MultiGeometry>
+				<Point>
+					<coordinates>-104.2997732828628,37.97936047517191,0</coordinates>
+				</Point>
+				<Polygon>
+					<tessellate>1</tessellate>
+					<outerBoundaryIs>
+						<LinearRing>
+							<coordinates>
+								-104.487430431758,38.09644604353499,0 -104.3940466426955,37.85395884905618,0 -104.080936291133,37.82359164847685,0 -104.256717541133,38.13966299031064,0 -104.421512463008,38.13102164714076,0 -104.421512463008,38.13102164714076,0 -104.487430431758,38.09644604353499,0 
+							</coordinates>
+						</LinearRing>
+					</outerBoundaryIs>
+				</Polygon>
+			</MultiGeometry>
+		</Placemark>
+		<Placemark>
+			<name>Polygon #2</name>
+			<description>Polygon Comment #2</description>
+			<Style>
+				<IconStyle>
+					<scale>0</scale>
+				</IconStyle>
+				<LineStyle>
+					<color>ffff0000</color>
+					<width>2</width>
+					<gx:labelVisibility>1</gx:labelVisibility>
+				</LineStyle>
+				<PolyStyle>
+					<color>1aff0000</color>
+					<fill>1</fill>
+					<outline>1</outline>
+					<width>2.0</width>
+				</PolyStyle>
+			</Style>
+			<MultiGeometry>
+				<Point>
+					<coordinates>-104.4864610418739,40.4536992369933,0</coordinates>
+				</Point>
+				<Polygon>
+					<tessellate>1</tessellate>
+					<outerBoundaryIs>
+						<LinearRing>
+							<coordinates>
+								-104.2648005036512,40.89226434790851,0 -105.2700495270887,40.64681267630733,0 -104.8305964020887,40.05235236955955,0 -103.8198542145887,40.16998449069924,0 -103.8747858552137,40.61346130971884,0 -104.1988825349012,40.79252899727321,0 -104.2648005036512,40.89226434790851,0 
+							</coordinates>
+						</LinearRing>
+					</outerBoundaryIs>
+				</Polygon>
+			</MultiGeometry>
+		</Placemark>
+		<Placemark>
+			<name>Line Overlap</name>
+			<Style>
+				<LineStyle>
+					<color>ff0000ff</color>
+					<width>2</width>
+					<gx:labelVisibility>1</gx:labelVisibility>
+				</LineStyle>
+			</Style>
+			<LineString>
+				<tessellate>1</tessellate>
+				<coordinates>
+					-108.52294921875,38.19502155795575,0 -107.698974609375,37.71859032558816,0 -108.544921875,37.46613860234406,0 -108.56689453125,37.82280243352759,0 -108.193359375,37.77071473849611,0 -108.8525390625,37.93553306183644,0 -109.720458984375,38.36750215395048,0 -108.896484375,38.65119833229951,0 -108.094482421875,38.33303882235456,0 
+				</coordinates>
+			</LineString>
+		</Placemark>
+		<Placemark>
+			<name>Polygon Overlap</name>
+			<Style>
+				<IconStyle>
+					<scale>0</scale>
+				</IconStyle>
+				<LineStyle>
+					<color>ff0000ff</color>
+					<width>2</width>
+					<gx:labelVisibility>1</gx:labelVisibility>
+				</LineStyle>
+				<PolyStyle>
+					<color>1a0000ff</color>
+					<fill>1</fill>
+					<outline>1</outline>
+					<width>2.0</width>
+				</PolyStyle>
+			</Style>
+			<MultiGeometry>
+				<Point>
+					<coordinates>-108.2563178238319,37.62197674204936,0</coordinates>
+				</Point>
+				<Polygon>
+					<tessellate>1</tessellate>
+					<outerBoundaryIs>
+						<LinearRing>
+							<coordinates>
+								-108.6685180664063,37.80327385185868,0 -108.4268188476563,37.93986540897977,0 -108.0532836914063,37.80544394934274,0 -107.655029296875,37.53150992479082,0 -108.2785034179688,37.34395908944491,0 -108.5971069335938,37.4138003506629,0 -108.6575317382813,37.71424496764926,0 -108.6685180664063,37.80327385185868,0 
+							</coordinates>
+						</LinearRing>
+					</outerBoundaryIs>
+				</Polygon>
+			</MultiGeometry>
+		</Placemark>
+	</Folder>
+	<Placemark>
+		<name>Small Polygon</name>
+		<styleUrl>#m_ylw-pushpin1</styleUrl>
+		<Polygon>
+			<tessellate>1</tessellate>
+			<outerBoundaryIs>
+				<LinearRing>
+					<coordinates>
+						-105.0002055771798,39.65892735812433,0 -105.0000946223981,39.65892409059907,0 -105.0000884350768,39.65904834727537,0 -104.9998495131811,39.65905031374933,0 -104.9998496113831,39.65913621904782,0 -105.0002031259519,39.65913595967682,0 -105.0002055771798,39.65892735812433,0 
+					</coordinates>
+				</LinearRing>
+			</outerBoundaryIs>
+		</Polygon>
+	</Placemark>
+	<Placemark>
+		<name>Small Line</name>
+		<styleUrl>#m_ylw-pushpin0</styleUrl>
+		<LineString>
+			<tessellate>1</tessellate>
+			<coordinates>
+				-105.632059254406,37.31274185130368,0 -105.6239451675389,37.31269707200935,0 -105.6147129937325,37.31286366399857,0 -105.6147905226486,37.31668892958805,0 -105.614892975808,37.31864038638547,0 -105.6257962853685,37.318510991632,0 -105.6291766008302,37.31941321970495,0 -105.6263535854169,37.3252243479403,0 -105.6255509367612,37.32651707486141,0 -105.6258792467882,37.33084292354256,0 -105.6234783022657,37.33102483194992,0 -105.6237868592375,37.33462719949358,0 -105.6180016144783,37.33474986854378,0 -105.6172600417343,37.33483928135691,0 -105.6171302427143,37.33552051189154,0 -105.6172529765787,37.33818953020647,0 -105.614906324822,37.33835058911352,0 -105.6145945263494,37.34193087246108,0 -105.6073764369113,37.34216313217942,0 -105.6075891444287,37.34546283717198,0 
+			</coordinates>
+		</LineString>
+	</Placemark>
+</Document>
+</kml>
