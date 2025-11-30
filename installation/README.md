@@ -123,24 +123,10 @@ You need to create a new user and database. Quick guide:
 4. `CREATE USER geovault WITH PASSWORD 'your_password_here';`
 5. `GRANT ALL PRIVILEGES ON DATABASE geovault TO geovault;`
 6. `\c geovault;`
-7. `GRANT ALL ON SCHEMA public TO geovault;`
-8. `GRANT ALL PRIVILEGES ON ALL TABLES IN SCHEMA public TO geovault;`
-9. `GRANT ALL PRIVILEGES ON ALL SEQUENCES IN SCHEMA public TO geovault;`
-
-
-
-Then, manually create the PostGIS extension:
-
-```sql
-CREATE EXTENSION IF NOT EXISTS postgis;
-GRANT ALL PRIVILEGES ON TABLE geometry_columns TO geovault;
-GRANT ALL PRIVILEGES ON TABLE geography_columns TO geovault;
-GRANT ALL PRIVILEGES ON TABLE spatial_ref_sys TO geovault;
-ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT ALL ON TABLES TO geovault;
-ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT ALL ON SEQUENCES TO geovault;
-```
-
-
+7. `CREATE EXTENSION IF NOT EXISTS postgis;`
+8. `GRANT ALL ON SCHEMA public TO geovault;`
+9. `GRANT ALL PRIVILEGES ON ALL TABLES IN SCHEMA public TO geovault;`
+10. `GRANT ALL PRIVILEGES ON ALL SEQUENCES IN SCHEMA public TO geovault;`
 
 To exit the SQL console, enter `\q`.
 
