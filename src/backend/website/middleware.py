@@ -7,6 +7,21 @@ from geo_lib.utils.ip_utils import get_client_ip, get_user_identifier
 access_logger = get_access_logger()
 
 
+def _get_content_length(response):
+    """Extract content length from response."""
+    try:
+        if hasattr(response, 'get'):
+            return response.get('Content-Length', '')
+        if hasattr(response, 'headers'):
+            return response.headers.get('Content-Length', '')
+        if hasattr(response, '_headers'):
+            header_val = response._headers.get('content-length', ('', ''))
+            return header_val[1] if isinstance(header_val, tuple) else header_val
+    except:
+        pass
+    return ''
+
+
 class LoggingMiddleware:
     """Middleware to log all HTTP requests and catch unhandled exceptions."""
     
@@ -48,22 +63,7 @@ class LoggingMiddleware:
         # Log static file requests (no username for static files)
         elif request.path.startswith('/static/'):
             # Get file size if available
-            content_length = ''
-            try:
-                # Try different methods to get Content-Length header
-                if hasattr(response, 'get'):
-                    content_length = response.get('Content-Length', '')
-                if not content_length and hasattr(response, 'headers'):
-                    content_length = response.headers.get('Content-Length', '')
-                if not content_length and hasattr(response, '_headers'):
-                    header_val = response._headers.get('content-length', ('', ''))
-                    if isinstance(header_val, tuple) and len(header_val) > 1:
-                        content_length = header_val[1]
-                    elif isinstance(header_val, str):
-                        content_length = header_val
-            except Exception as e:
-                # If we can't get content length, just log without it
-                access_logger.debug(f"Could not get Content-Length header for static file {request.path}: {str(e)}")
+            content_length = _get_content_length(response)
             
             # Build log message
             if content_length:
@@ -79,23 +79,8 @@ class LoggingMiddleware:
         
         # Log favicon requests (no username)
         elif request.path == '/favicon.ico':
-            # Get file size if available - try multiple ways to get Content-Length
-            content_length = ''
-            try:
-                content_length = response.get('Content-Length', '')
-            except (AttributeError, KeyError) as e:
-                access_logger.debug(f"Could not get Content-Length header for favicon (method 1): {str(e)}")
-            if not content_length:
-                try:
-                    content_length = response.headers.get('Content-Length', '')
-                except (AttributeError, KeyError) as e:
-                    access_logger.debug(f"Could not get Content-Length header for favicon (method 2): {str(e)}")
-            if not content_length:
-                try:
-                    if hasattr(response, '_headers'):
-                        content_length = response._headers.get('content-length', ('', ''))[1]
-                except (AttributeError, KeyError, IndexError) as e:
-                    access_logger.debug(f"Could not get Content-Length header for favicon (method 3): {str(e)}")
+            # Get file size if available
+            content_length = _get_content_length(response)
             
             if content_length:
                 log_msg = f"{request.method} {request.path} - {client_ip} - {content_length} bytes"

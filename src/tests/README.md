@@ -1,4 +1,7 @@
-# gv_tests Test Suite
+# GeoVault Test Suite
+
+When doing AI programming its really really nice to have comprehensive tests.
+
 
 ```shell
 ./run_tests.sh
