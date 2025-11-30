@@ -393,9 +393,10 @@ class MainActivity : AppCompatActivity() {
         validationStatusText.text = getString(R.string.connecting_server)
         
         val client = OkHttpClient.Builder()
-            .connectTimeout(15, TimeUnit.SECONDS)
-            .readTimeout(15, TimeUnit.SECONDS)
-            .writeTimeout(15, TimeUnit.SECONDS)
+            .connectTimeout(20, TimeUnit.SECONDS)
+            .readTimeout(20, TimeUnit.SECONDS)
+            .writeTimeout(20, TimeUnit.SECONDS)
+            .retryOnConnectionFailure(true)
             .build()
         
         // Construct the full URL
@@ -405,6 +406,7 @@ class MainActivity : AppCompatActivity() {
             .url(validateUrl)
             .addHeader("Authorization", "Bearer $apiKey")
             .addHeader("Content-Type", "application/json")
+            .addHeader("Connection", "close")
             .post("{}".toByteArray().toRequestBody("application/json".toMediaType()))
             .build()
         
@@ -413,9 +415,18 @@ class MainActivity : AppCompatActivity() {
                 runOnUiThread {
                     validationTitleText.text = getString(R.string.validation_failed)
                     validationProgressBar.visibility = android.view.View.GONE
+                    
                     val errorMsg = e.message ?: "Unknown error"
                     val cleanErrorMsg = errorMsg.replace(Regex("^Failed to connect to /"), "Failed to connect to ")
-                    validationStatusText.text = "✗ Connection failed\n\n$cleanErrorMsg\n\nCheck your server URL and network connection."
+                    
+                    // Special handling for "end of stream" errors
+                    val displayMsg = if (cleanErrorMsg.contains("end of stream", ignoreCase = true)) {
+                        "✗ Connection closed unexpectedly\n\nThe server may be slow or not responding.\nTap Settings to retry."
+                    } else {
+                        "✗ Connection failed\n\n$cleanErrorMsg\n\nCheck your server URL and network connection."
+                    }
+                    
+                    validationStatusText.text = displayMsg
                 }
             }
             
@@ -424,7 +435,14 @@ class MainActivity : AppCompatActivity() {
                 val responseBody = try {
                     response.body?.string() ?: ""
                 } catch (e: Exception) {
-                    ""
+                    // Handle "end of stream" errors when reading body
+                    runOnUiThread {
+                        validationTitleText.text = getString(R.string.validation_failed)
+                        validationProgressBar.visibility = android.view.View.GONE
+                        validationStatusText.text = "✗ Error reading response\n\nThe server connection was interrupted.\nTap Settings to retry."
+                    }
+                    response.close()
+                    return
                 }
                 
                 val statusCode = response.code
@@ -489,7 +507,12 @@ class MainActivity : AppCompatActivity() {
                         }
                     } catch (e: Exception) {
                         validationTitleText.text = getString(R.string.validation_failed)
-                        validationStatusText.text = "✗ Error: ${e.message ?: "Unknown error"}"
+                        val errorMsg = if (e.message?.contains("end of stream", ignoreCase = true) == true) {
+                            "✗ Connection interrupted\n\nTap Settings to retry."
+                        } else {
+                            "✗ Error: ${e.message ?: "Unknown error"}"
+                        }
+                        validationStatusText.text = errorMsg
                     } finally {
                         response.close()
                     }

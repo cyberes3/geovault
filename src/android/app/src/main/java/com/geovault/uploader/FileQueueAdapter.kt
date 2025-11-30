@@ -31,6 +31,7 @@ class FileQueueAdapter(
     class FileViewHolder(itemView: View) : RecyclerView.ViewHolder(itemView) {
         val statusIcon: TextView = itemView.findViewById(R.id.fileStatusIcon)
         val filenameEdit: EditText = itemView.findViewById(R.id.filenameEditText)
+        val fileExtensionText: TextView = itemView.findViewById(R.id.fileExtensionText)
         val fileSizeText: TextView = itemView.findViewById(R.id.fileSizeText)
         val errorText: TextView = itemView.findViewById(R.id.fileErrorText)
     }
@@ -47,28 +48,35 @@ class FileQueueAdapter(
         // Set status icon and color
         when (file.status) {
             FileStatus.PENDING -> {
-                holder.statusIcon.text = "•"
-                holder.statusIcon.setTextColor(holder.itemView.context.getColor(R.color.text_secondary))
+                // Keep space reserved but hide icon
+                holder.statusIcon.visibility = View.INVISIBLE
             }
             FileStatus.UPLOADING -> {
+                holder.statusIcon.visibility = View.VISIBLE
                 holder.statusIcon.text = "↑"
                 holder.statusIcon.setTextColor(holder.itemView.context.getColor(R.color.primary_blue))
             }
             FileStatus.SUCCESS -> {
+                holder.statusIcon.visibility = View.VISIBLE
                 holder.statusIcon.text = "✓"
                 holder.statusIcon.setTextColor(holder.itemView.context.getColor(R.color.success_green))
             }
             FileStatus.ERROR -> {
+                holder.statusIcon.visibility = View.VISIBLE
                 holder.statusIcon.text = "✗"
                 holder.statusIcon.setTextColor(holder.itemView.context.getColor(R.color.error_red))
             }
         }
         
-        // Set filename (editable only if pending)
-        holder.filenameEdit.setText(file.filename)
+        // Split filename into base name and extension
+        val (baseName, extension) = splitFilename(file.filename)
+        
+        // Set filename (editable only if pending) - only the base name
+        holder.filenameEdit.setText(baseName)
+        holder.fileExtensionText.text = if (extension.isNotEmpty()) ".$extension" else ""
         holder.filenameEdit.isEnabled = file.status == FileStatus.PENDING
         
-        // Update filename when edited
+        // Update filename when edited - reconstruct with extension
         holder.filenameEdit.removeTextChangedListener(holder.filenameEdit.tag as? TextWatcher)
         val watcher = object : TextWatcher {
             override fun beforeTextChanged(s: CharSequence?, start: Int, count: Int, after: Int) {}
@@ -76,7 +84,14 @@ class FileQueueAdapter(
             override fun afterTextChanged(s: Editable?) {
                 val currentPosition = holder.bindingAdapterPosition
                 if (currentPosition != RecyclerView.NO_POSITION) {
-                    files[currentPosition].filename = s.toString()
+                    val newBaseName = s.toString()
+                    // Reconstruct filename with original extension
+                    val (_, ext) = splitFilename(files[currentPosition].filename)
+                    files[currentPosition].filename = if (ext.isNotEmpty()) {
+                        "$newBaseName.$ext"
+                    } else {
+                        newBaseName
+                    }
                 }
             }
         }
@@ -96,6 +111,17 @@ class FileQueueAdapter(
     }
 
     override fun getItemCount() = files.size
+
+    private fun splitFilename(filename: String): Pair<String, String> {
+        val lastDotIndex = filename.lastIndexOf('.')
+        return if (lastDotIndex > 0 && lastDotIndex < filename.length - 1) {
+            // Has extension
+            Pair(filename.substring(0, lastDotIndex), filename.substring(lastDotIndex + 1))
+        } else {
+            // No extension
+            Pair(filename, "")
+        }
+    }
 
     private fun formatFileSize(bytes: Long): String {
         return when {

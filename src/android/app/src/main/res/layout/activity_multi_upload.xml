@@ -15,22 +15,13 @@
         android:elevation="4dp">
 
         <TextView
-            android:id="@+id/titleText"
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:text="Upload Files"
-            android:textSize="20sp"
-            android:textStyle="bold"
-            android:textColor="@color/text_primary"
-            android:layout_marginBottom="8dp" />
-
-        <TextView
             android:id="@+id/fileCountText"
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
             android:text="0 files"
-            android:textSize="14sp"
-            android:textColor="@color/text_secondary" />
+            android:textSize="16sp"
+            android:textStyle="bold"
+            android:textColor="@color/text_primary" />
     </LinearLayout>
 
     <!-- File list -->
