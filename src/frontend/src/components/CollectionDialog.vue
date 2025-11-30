@@ -236,6 +236,7 @@
 import { getCookie } from "@/assets/js/auth.js";
 import Loader from "@/components/parts/Loader.vue";
 import { XMarkIcon, MagnifyingGlassIcon } from '@heroicons/vue/24/outline';
+import { sortTagsByPriority, sortUserTagsAlphabetically, isSystemTag } from "@/utils/tagUtils.js";
 
 export default {
   name: 'CollectionDialog',
@@ -271,13 +272,21 @@ export default {
   },
   computed: {
     filteredTags() {
+      let tags;
       if (!this.tagSearchQuery.trim()) {
-        return this.availableTags.filter(tag => !this.formData.tags.includes(tag));
+        tags = this.availableTags.filter(tag => !this.formData.tags.includes(tag));
+      } else {
+        const query = this.tagSearchQuery.toLowerCase();
+        tags = this.availableTags.filter(tag => 
+          tag.toLowerCase().includes(query) && !this.formData.tags.includes(tag)
+        );
       }
-      const query = this.tagSearchQuery.toLowerCase();
-      return this.availableTags.filter(tag => 
-        tag.toLowerCase().includes(query) && !this.formData.tags.includes(tag)
-      );
+      // Separate and sort: user tags alphabetically, system tags by priority
+      const userTags = tags.filter(tag => !isSystemTag(tag));
+      const systemTags = tags.filter(tag => isSystemTag(tag));
+      const sortedUserTags = sortUserTagsAlphabetically(userTags);
+      const sortedSystemTags = sortTagsByPriority(systemTags);
+      return [...sortedUserTags, ...sortedSystemTags];
     },
     filteredFeatures() {
       if (!this.featureSearchQuery.trim()) {
@@ -321,11 +330,15 @@ export default {
         
         if (response.ok) {
           // Get user tags and system tags separately
-          const userTags = data.user_tags ? Object.keys(data.user_tags).sort() : [];
-          const systemTags = data.system_tags ? Object.keys(data.system_tags).sort() : [];
+          const userTags = data.user_tags ? Object.keys(data.user_tags) : [];
+          const systemTags = data.system_tags ? Object.keys(data.system_tags) : [];
           
-          // Combine with user tags first, then system tags
-          this.availableTags = [...userTags, ...systemTags];
+          // Sort user tags alphabetically, system tags by priority
+          const sortedUserTags = sortUserTagsAlphabetically(userTags);
+          const sortedSystemTags = sortTagsByPriority(systemTags);
+          
+          // Combine: user tags first, then system tags
+          this.availableTags = [...sortedUserTags, ...sortedSystemTags];
         } else {
           this.availableTags = [];
         }

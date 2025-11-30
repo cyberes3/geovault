@@ -42,6 +42,8 @@ class TestHealthConfigAPI(TestCase):
         data = json.loads(response.content)
         self.assertIn('systemTagPrefixes', data)
         self.assertIsInstance(data['systemTagPrefixes'], list)
+        self.assertIn('tagPriorities', data)
+        self.assertIsInstance(data['tagPriorities'], dict)
 
     def test_health_check_no_auth_required(self):
         """Test that health check doesn't require authentication."""

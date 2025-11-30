@@ -119,6 +119,7 @@ import { formatElevation, formatDistance, formatArea } from '@/utils/units'
 import MeasurementIcon from '@/components/icons/MeasurementIcon.vue'
 import AreaIcon from '@/components/icons/AreaIcon.vue'
 import { getGeometryTypeColor } from '@/utils/geometryColors.js'
+import { sortTagsByPriority, sortUserTagsAlphabetically } from '@/utils/tagUtils.js'
 
 export default {
   name: 'FeatureInfoBox',
@@ -206,7 +207,11 @@ export default {
       const systemTags = Array.isArray(properties.system_tags)
         ? properties.system_tags.filter(tag => tag && tag.trim() !== '')
         : []
-      return { userTags, systemTags }
+      // Sort system tags by priority, user tags alphabetically
+      return { 
+        userTags: sortUserTagsAlphabetically(userTags), 
+        systemTags: sortTagsByPriority(systemTags) 
+      }
     },
     renderMarkdown(markdown) {
       if (!markdown) return ''

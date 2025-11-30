@@ -9,7 +9,7 @@
         <div class="max-h-20 overflow-y-auto p-2 pb-10" ref="systemTagsContainer">
           <div class="flex flex-wrap gap-2">
             <span
-              v-for="tag in systemTags"
+              v-for="tag in sortedSystemTags"
               :key="`system-${tag}`"
               class="inline-flex items-center px-2 py-1 rounded-md text-xs font-medium bg-gray-200 text-gray-600"
             >
@@ -105,7 +105,7 @@
 </template>
 
 <script>
-import { isSystemTag } from '@/utils/tagUtils'
+import { isSystemTag, sortTagsByPriority, sortUserTagsAlphabetically } from '@/utils/tagUtils'
 import { XMarkIcon, CheckIcon } from '@heroicons/vue/24/outline'
 
 export default {
@@ -160,21 +160,28 @@ export default {
         this.$emit('update:tags', value)
       }
     },
+    sortedSystemTags() {
+      // Sort system tags by priority (ascending: 1 first, then 2, ..., then 0), then alphabetically
+      return sortTagsByPriority(this.systemTags)
+    },
     filteredTagSuggestions() {
       // Filter out system tags from suggestions
       const userTags = this.availableTags.filter(tag => !isSystemTag(tag))
 
+      let suggestions;
       if (!this.tagInput.trim()) {
-        return userTags.filter(tag => !this.localTags.includes(tag)).slice(0, 10)
+        suggestions = userTags.filter(tag => !this.localTags.includes(tag)).slice(0, 10)
+      } else {
+        const query = this.tagInput.toLowerCase().trim()
+        suggestions = userTags
+          .filter(tag =>
+            tag.toLowerCase().includes(query) &&
+            !this.localTags.includes(tag)
+          )
+          .slice(0, 10)
       }
-
-      const query = this.tagInput.toLowerCase().trim()
-      return userTags
-        .filter(tag =>
-          tag.toLowerCase().includes(query) &&
-          !this.localTags.includes(tag)
-        )
-        .slice(0, 10)
+      // Sort user tags alphabetically (no priority sorting for user tags)
+      return sortUserTagsAlphabetically(suggestions)
     }
   },
   mounted() {

@@ -6,6 +6,7 @@ from django.http import JsonResponse
 from django.views.decorators.http import require_http_methods
 
 from api.models import FeatureStore
+from geo_lib.const_strings import get_tag_priority
 from geo_lib.logging.console import get_access_logger
 from geo_lib.website.auth import api_or_login_required_401
 
@@ -151,12 +152,25 @@ def get_features_by_tag(request):
             total_pages = (total_tags + page_size - 1) // page_size if total_tags > 0 else 0
             
             # Build paginated query (LIMIT/OFFSET) - all done in database
+            # Note: We fetch all tags first, then sort by priority in Python
+            # This is necessary because priority sorting requires the get_tag_priority function
             offset = (page - 1) * page_size
             paginated_query = cte_part + "SELECT tag, tag_type FROM filtered_tags ORDER BY tag LIMIT %s OFFSET %s"
             params.extend([page_size, offset])
             
             cursor.execute(paginated_query, params)
             paginated_tags = [{'tag': row[0], 'type': row[1]} for row in cursor.fetchall()]
+            
+            # Separate user tags and system tags
+            user_tags_list = [t for t in paginated_tags if t['type'] == 'user']
+            system_tags_list = [t for t in paginated_tags if t['type'] == 'system']
+            
+            # Sort user tags alphabetically, system tags by priority then alphabetically
+            user_tags_list.sort(key=lambda x: x['tag'].lower())
+            system_tags_list.sort(key=lambda x: (get_tag_priority(x['tag']), x['tag'].lower()))
+            
+            # Combine: user tags first, then system tags
+            paginated_tags = user_tags_list + system_tags_list
         
         # Step 3: Fetch features only for tags on the current page
         # This is the key optimization - we only query features for tags we'll return

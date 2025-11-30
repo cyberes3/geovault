@@ -642,6 +642,7 @@ import {getCookie} from "@/assets/js/auth.js";
 import {APIHOST} from "@/config.js";
 // Removed flatpickr dependency - using native HTML5 date input
 import Loader from "@/components/parts/Loader.vue";
+import { sortUserTagsAlphabetically } from "@/utils/tagUtils.js";
 import ToggleButton from "@/components/parts/ToggleButton.vue";
 import MapPreviewDialog from "@/components/import/parts/MapPreviewDialog.vue";
 import FeatureMapDialog from "@/components/import/parts/FeatureMapDialog.vue";
@@ -1465,8 +1466,8 @@ export default {
         const data = await response.json();
 
         if (response.ok && data.user_tags) {
-          // Extract unique tags from the user_tags object keys
-          this.availableUserTags = Object.keys(data.user_tags).sort();
+          // Extract unique tags from the user_tags object keys and sort alphabetically
+          this.availableUserTags = sortUserTagsAlphabetically(Object.keys(data.user_tags));
         } else {
           console.error('Failed to fetch user tags:', data.error || 'Unknown error');
           this.availableUserTags = [];

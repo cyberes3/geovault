@@ -6,8 +6,8 @@ let cachedConfig = null;
 let configPromise = null;
 
 /**
- * Fetch server configuration including system tag prefixes
- * @returns {Promise<{systemTagPrefixes: string[]}>}
+ * Fetch server configuration including system tag prefixes and tag priorities
+ * @returns {Promise<{systemTagPrefixes: string[], tagPriorities: object}>}
  */
 export async function fetchConfig() {
     // Return cached config if available
@@ -34,8 +34,8 @@ export async function fetchConfig() {
         })
         .catch(error => {
             console.error('Error fetching config:', error);
-            // Return default empty array on error
-            cachedConfig = { systemTagPrefixes: [] };
+            // Return default empty values on error
+            cachedConfig = { systemTagPrefixes: [], tagPriorities: {} };
             return cachedConfig;
         })
         .finally(() => {

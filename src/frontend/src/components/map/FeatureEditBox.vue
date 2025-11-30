@@ -326,6 +326,7 @@ import IconPickerDialog from './IconPickerDialog.vue'
 import ReplacementFeatureDialog from './ReplacementFeatureDialog.vue'
 import TagPicker from '@/components/TagPicker.vue'
 import { XMarkIcon, MapIcon, ArrowUpTrayIcon } from '@heroicons/vue/24/outline'
+import { sortTagsByPriority } from '@/utils/tagUtils.js'
 
 // Helper functions for icon type checking
 function isSystemIcon(iconUrl) {
@@ -430,9 +431,11 @@ export default {
     systemTags() {
       if (!this.feature) return []
       const properties = this.feature.get('properties') || {}
-      return Array.isArray(properties.system_tags)
+      const tags = Array.isArray(properties.system_tags)
         ? properties.system_tags.filter(tag => tag && tag.trim() !== '')
         : []
+      // Sort system tags by priority (ascending: 1 first, then 2, ..., then 0), then alphabetically
+      return sortTagsByPriority(tags)
     }
   },
   mounted() {

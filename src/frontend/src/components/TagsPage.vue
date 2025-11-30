@@ -353,6 +353,7 @@ import TagShareDialog from "./TagShareDialog.vue";
 import Loader from "./parts/Loader.vue";
 import BulkStylingModal from "@/components/import/parts/BulkStylingModal.vue";
 import { createEmptyBulkOperations, cloneBulkOperations } from "@/utils/bulkOperations.js";
+import { sortTagsByPriority, sortUserTagsAlphabetically, isSystemTag } from "@/utils/tagUtils.js";
 import { MagnifyingGlassIcon, ExclamationCircleIcon, TagIcon, ShareIcon, ArrowDownTrayIcon, PencilIcon, TrashIcon, CheckIcon, MapIcon, ArrowLeftIcon, ArrowRightIcon, XMarkIcon, RectangleStackIcon } from '@heroicons/vue/24/outline';
 
 export default {
@@ -410,7 +411,18 @@ export default {
     },
     sortedTagKeys() {
       // Get sorted array of tag keys from filteredTagsData
-      return Object.keys(this.filteredTagsData).sort();
+      const tagKeys = Object.keys(this.filteredTagsData);
+      
+      // Separate user tags and system tags
+      const userTags = tagKeys.filter(tag => !this.isSystemTag(tag));
+      const systemTags = tagKeys.filter(tag => this.isSystemTag(tag));
+      
+      // Sort user tags alphabetically, system tags by priority
+      const sortedUserTags = sortUserTagsAlphabetically(userTags);
+      const sortedSystemTags = sortTagsByPriority(systemTags);
+      
+      // Return user tags first, then system tags
+      return [...sortedUserTags, ...sortedSystemTags];
     },
     totalTags() {
       // Use server-side pagination info if available, otherwise fall back to client-side count

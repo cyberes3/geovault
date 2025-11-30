@@ -217,8 +217,8 @@ import {GeoJSON} from 'ol/format'
 import {APIHOST} from '@/config.js'
 import { FunnelIcon, XMarkIcon, EyeSlashIcon } from '@heroicons/vue/24/outline'
 import Loader from '@/components/parts/Loader.vue'
-import {fetchConfig} from '@/utils/configService.js'
 import { getGeometryTypeColor } from '@/utils/geometryColors.js'
+import { sortTagsByPriority, sortUserTagsAlphabetically, isSystemTag } from '@/utils/tagUtils.js'
 
 export default {
   name: 'FeatureListSidebar',
@@ -273,8 +273,6 @@ export default {
       tagFilteredFeatures: [],
       isFiltering: false,
       filterTimeout: null,
-      // System tag prefixes from config
-      systemTagPrefixes: [],
     }
   },
   computed: {
@@ -301,23 +299,15 @@ export default {
       }
 
       // Separate user tags and system tags
-      const userTags = []
-      const systemTags = []
-
-      for (const tag of unselectedTags) {
-        if (this.isSystemTag(tag)) {
-          systemTags.push(tag)
-        } else {
-          userTags.push(tag)
-        }
-      }
-
-      // Sort each group alphabetically
-      userTags.sort()
-      systemTags.sort()
-
+      const userTags = unselectedTags.filter(tag => !isSystemTag(tag))
+      const systemTags = unselectedTags.filter(tag => isSystemTag(tag))
+      
+      // Sort user tags alphabetically, system tags by priority
+      const sortedUserTags = sortUserTagsAlphabetically(userTags)
+      const sortedSystemTags = sortTagsByPriority(systemTags)
+      
       // Return user tags first, then system tags
-      return [...userTags, ...systemTags]
+      return [...sortedUserTags, ...sortedSystemTags]
     }
   },
   watch: {
@@ -471,25 +461,6 @@ export default {
     clearTagSearch() {
       this.tagSearchQuery = ''
     },
-    isSystemTag(tag) {
-      // Check if tag matches any system tag prefix (exact match or prefix:value)
-      if (!tag || typeof tag !== 'string') {
-        return false
-      }
-      
-      for (const prefix of this.systemTagPrefixes) {
-        // Exact match
-        if (tag === prefix) {
-          return true
-        }
-        // Prefix match (e.g., "type:point" matches "type")
-        if (tag.startsWith(prefix + ':')) {
-          return true
-        }
-      }
-      
-      return false
-    },
     toggleTag(tag) {
       if (this.selectedTags.includes(tag)) {
         this.removeTag(tag)
@@ -594,14 +565,7 @@ export default {
   },
   async mounted() {
     // Tags are now provided via prop from parent component
-    // Fetch config to get system tag prefixes
-    try {
-      const config = await fetchConfig()
-      this.systemTagPrefixes = config.systemTagPrefixes || []
-    } catch (error) {
-      console.error('Error fetching config for system tag prefixes:', error)
-      this.systemTagPrefixes = []
-    }
+    // System tag detection is handled by the imported isSystemTag function from tagUtils.js
   },
   beforeUnmount() {
     // Clean up timeouts

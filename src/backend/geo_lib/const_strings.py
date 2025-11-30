@@ -15,6 +15,12 @@ CONST_INTERNAL_TAGS = [
     'geocoding'
 ]
 
+# Tag priority mapping: prefixes to priority (1-10, with 1 being most important)
+# Tags matching these prefixes get the assigned priority. All other tags get priority 0.
+TAG_PRIORITIES = {
+    'source-file': 1
+}
+
 
 def is_protected_tag(tag: str, protected_prefixes: List[str]) -> bool:
     """
@@ -76,3 +82,36 @@ def prepare_user_tags(tags: List[str]) -> List[str]:
     # Convert to lowercase first, then deduplicate using dict (single data structure)
     unique_tags = dict.fromkeys(tag.lower() for tag in tags if tag)
     return list(unique_tags)
+
+
+def get_tag_priority(tag: str) -> int:
+    """
+    Get the priority for a tag based on prefix matching.
+    
+    Tags are matched against TAG_PRIORITIES prefixes (case-insensitive).
+    If a tag matches a prefix (exact match or starts with prefix + ':'),
+    returns the assigned priority (1-10). Otherwise returns 0 (lowest priority).
+    
+    Args:
+        tag: The tag string to check
+        
+    Returns:
+        Priority value (1-10 if matched, 0 if not matched)
+    """
+    if not isinstance(tag, str):
+        return 0
+    
+    tag_lower = tag.lower()
+    
+    # Check each prefix in priority order
+    for prefix, priority in TAG_PRIORITIES.items():
+        prefix_lower = prefix.lower()
+        # Exact match
+        if tag_lower == prefix_lower:
+            return priority
+        # Prefix match (e.g., "type:point" matches "type")
+        if tag_lower.startswith(prefix_lower + ':'):
+            return priority
+    
+    # No match found, return 0 (lowest priority)
+    return 0

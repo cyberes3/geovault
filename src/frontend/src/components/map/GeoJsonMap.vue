@@ -192,6 +192,7 @@ import {getFeatureIconStyle} from '@/utils/map/styleUtils'
 import {getFeatureTextStyle} from '@/utils/map/textUtils'
 import {getInitialMapConfig, getLocationDisplayName} from '@/utils/map/mapConfigUtils'
 import {getBoundingBoxKey, getBoundingBoxString} from '@/utils/map/coordinateUtils'
+import { sortTagsByPriority, sortUserTagsAlphabetically, isSystemTag } from '@/utils/tagUtils.js'
 import {getInverseColor} from '@/utils/map/colorUtils'
 import {useGeoData} from './useGeoData'
 import {getCookie} from '@/assets/js/auth.js'
@@ -580,11 +581,15 @@ export default {
 
         if (response.ok) {
           // Get user tags and system tags separately
-          const userTags = data.user_tags ? Object.keys(data.user_tags).sort() : []
-          const systemTags = data.system_tags ? Object.keys(data.system_tags).sort() : []
-
-          // Combine with user tags first, then system tags (like TagPicker expects)
-          this.availableTags = [...userTags, ...systemTags]
+          const userTags = data.user_tags ? Object.keys(data.user_tags) : []
+          const systemTags = data.system_tags ? Object.keys(data.system_tags) : []
+          
+          // Sort user tags alphabetically, system tags by priority
+          const sortedUserTags = sortUserTagsAlphabetically(userTags)
+          const sortedSystemTags = sortTagsByPriority(systemTags)
+          
+          // Combine: user tags first, then system tags
+          this.availableTags = [...sortedUserTags, ...sortedSystemTags]
         } else {
           console.error('Failed to fetch tags:', data.error || 'Unknown error')
           this.availableTags = []
