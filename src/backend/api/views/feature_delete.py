@@ -4,6 +4,8 @@ from django.http import JsonResponse
 from django.views.decorators.http import require_http_methods
 
 from api.models import FeatureStore
+from api.utils.authorization import get_object_or_404_for_user
+from api.utils.responses import handle_404
 from geo_lib.logging.console import get_access_logger
 from geo_lib.website.auth import api_or_login_required_401
 
@@ -12,6 +14,7 @@ logger = get_access_logger()
 
 @api_or_login_required_401()
 @require_http_methods(["DELETE"])
+@handle_404
 def delete_feature(request, feature_id):
     """
     API endpoint to delete a specific feature.
@@ -21,7 +24,7 @@ def delete_feature(request, feature_id):
     """
     try:
         # Get the feature from database and verify user ownership
-        feature = FeatureStore.objects.get(id=feature_id, user=request.user)
+        feature = get_object_or_404_for_user(FeatureStore, request.user, id=feature_id)
 
         # Delete the feature
         feature.delete()
@@ -31,11 +34,6 @@ def delete_feature(request, feature_id):
             'feature_id': feature_id
         })
 
-    except FeatureStore.DoesNotExist:
-        return JsonResponse({
-            'error': 'Feature not found or access denied',
-            'code': 404
-        }, status=404)
     except Exception as e:
         logger.error(f"Error deleting feature {feature_id}: {traceback.format_exc()}")
         return JsonResponse({

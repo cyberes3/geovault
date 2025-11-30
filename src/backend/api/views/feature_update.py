@@ -4,12 +4,15 @@ import traceback
 
 from django.conf import settings
 from django.contrib.gis.geos import GEOSGeometry
+from django.http import Http404
 from website.settings_utils import get_required_setting
 from django.db import transaction
 from django.http import JsonResponse
 from django.views.decorators.http import require_http_methods
 
 from api.models import FeatureStore, ImportQueue
+from api.utils.authorization import get_object_or_404_for_user
+from api.utils.responses import error_response, success_response, not_found_response, handle_404
 from geo_lib.const_strings import CONST_INTERNAL_TAGS, filter_protected_tags, is_protected_tag, prepare_user_tags
 from geo_lib.feature_id import generate_feature_hash
 from geo_lib.logging.console import get_access_logger
@@ -31,7 +34,6 @@ from geo_lib.validation.styling_validation import (
 )
 from geo_lib.website.auth import api_or_login_required_401
 from api.validation.feature_updates import validate_payload, validate_pydantic_model, BulkFeatureUpdatePayload, FeatureMetadataUpdate, ReplacementGeometryPayload
-from api.utils.responses import error_response, success_response, not_found_response
 
 logger = get_access_logger()
 
@@ -190,6 +192,7 @@ def _validate_and_preserve_system_tags(properties_dict, original_system_tags):
 @api_or_login_required_401()
 @require_http_methods(["PUT"])
 @validate_payload(FeatureMetadataUpdate)
+@handle_404
 def update_feature_metadata(request, feature_id, validated_data):
     """
     API endpoint to update only the metadata of a specific feature (name, description, tags, created date).
@@ -206,7 +209,7 @@ def update_feature_metadata(request, feature_id, validated_data):
     """
     try:
         # Get the feature from database
-        feature = FeatureStore.objects.get(id=feature_id, user=request.user)
+        feature = get_object_or_404_for_user(FeatureStore, request.user, id=feature_id)
 
         # Extract allowed metadata fields
         allowed_fields = {'name', 'description', 'created', 'tags'}
@@ -291,8 +294,6 @@ def update_feature_metadata(request, feature_id, validated_data):
             'updated_fields': updated_fields
         })
 
-    except FeatureStore.DoesNotExist:
-        return error_response('Feature not found or access denied', 404)
     except Exception as e:
         logger.error(f"Error updating feature metadata {feature_id}: {traceback.format_exc()}")
         return error_response('Failed to update feature metadata', 500)
@@ -347,7 +348,7 @@ def bulk_update_features_metadata(request, validated_data):
                 
                 try:
                     # Get the feature from database
-                    feature = FeatureStore.objects.get(id=feature_id, user=request.user)
+                    feature = get_object_or_404_for_user(FeatureStore, request.user, id=feature_id)
                     
                     # Create a deep copy of the original feature to merge updates into
                     original_geojson = feature.geojson
@@ -408,7 +409,7 @@ def bulk_update_features_metadata(request, validated_data):
                     
                     updated_count += 1
                     
-                except FeatureStore.DoesNotExist:
+                except Http404:
                     errors.append({
                         'feature_id': feature_id,
                         'error': 'Feature not found or access denied'
@@ -499,6 +500,7 @@ def apply_bulk_operations_to_tag(request, tag_name: str):
 
 @api_or_login_required_401()
 @require_http_methods(["PUT"])
+@handle_404
 def update_feature(request, feature_id):
     """
     API endpoint to update a specific feature.
@@ -510,7 +512,7 @@ def update_feature(request, feature_id):
     """
     try:
         # Get the feature from database
-        feature = FeatureStore.objects.get(id=feature_id, user=request.user)
+        feature = get_object_or_404_for_user(FeatureStore, request.user, id=feature_id)
 
         # Parse request body
         try:
@@ -727,8 +729,6 @@ def update_feature(request, feature_id):
             'feature_id': feature.id
         })
 
-    except FeatureStore.DoesNotExist:
-        return error_response('Feature not found or access denied', 404)
     except Exception as e:
         logger.error(f"Error updating feature {feature_id}: {traceback.format_exc()}")
         return error_response('Failed to update feature', 500)
@@ -737,6 +737,7 @@ def update_feature(request, feature_id):
 @api_or_login_required_401()
 @require_http_methods(["POST"])
 @validate_payload(ReplacementGeometryPayload)
+@handle_404
 def apply_replacement_geometry(request, feature_id, validated_data):
     """
     API endpoint to apply replacement geometry from an ImportQueue entry to an existing feature.
@@ -752,17 +753,14 @@ def apply_replacement_geometry(request, feature_id, validated_data):
     """
     try:
         # Get the feature from database
-        feature = FeatureStore.objects.get(id=feature_id, user=request.user)
+        feature = get_object_or_404_for_user(FeatureStore, request.user, id=feature_id)
 
         import_queue_id = validated_data['import_queue_id']
         feature_index = validated_data['feature_index']
         regenerate_tags = validated_data.get('regenerate_tags', False)
 
         # Get the ImportQueue entry
-        try:
-            import_queue = ImportQueue.objects.get(id=import_queue_id, user=request.user)
-        except ImportQueue.DoesNotExist:
-            return error_response('ImportQueue entry not found or access denied', 404)
+        import_queue = get_object_or_404_for_user(ImportQueue, request.user, id=import_queue_id)
 
         # Verify this is a replacement upload for this feature
         if import_queue.replacement != feature_id:
@@ -987,8 +985,6 @@ def apply_replacement_geometry(request, feature_id, validated_data):
             'feature_id': feature.id
         })
 
-    except FeatureStore.DoesNotExist:
-        return error_response('Feature not found or access denied', 404)
     except Exception as e:
         logger.error(f"Error applying replacement geometry for feature {feature_id}: {traceback.format_exc()}")
         return error_response('Failed to apply replacement geometry', 500)
@@ -996,6 +992,7 @@ def apply_replacement_geometry(request, feature_id, validated_data):
 
 @api_or_login_required_401()
 @require_http_methods(["POST"])
+@handle_404
 def regenerate_feature_tags(request, feature_id):
     """
     API endpoint to regenerate automatic tags for a feature based on its current geometry.
@@ -1006,7 +1003,7 @@ def regenerate_feature_tags(request, feature_id):
     """
     try:
         # Get the feature from database
-        feature = FeatureStore.objects.get(id=feature_id, user=request.user)
+        feature = get_object_or_404_for_user(FeatureStore, request.user, id=feature_id)
 
         # Get the feature's GeoJSON data
         geojson_data = feature.geojson
@@ -1070,8 +1067,6 @@ def regenerate_feature_tags(request, feature_id):
             'system_tags': new_system_tags
         })
 
-    except FeatureStore.DoesNotExist:
-        return error_response('Feature not found or access denied', 404)
     except Exception as e:
         logger.error(f"Error regenerating tags for feature {feature_id}: {traceback.format_exc()}")
         return error_response('Failed to regenerate feature tags', 500)

@@ -4,14 +4,15 @@ import uuid
 from typing import Tuple
 
 from django.db.models import F, Q
-from django.http import JsonResponse
+from django.http import JsonResponse, Http404
 from django.views.decorators.http import require_http_methods
 
 from api.models import TagShare, CollectionShare, Collection, FeatureStore
+from api.utils.authorization import get_object_or_404_for_user
 from api.views.bbox_query import BboxQueryResult, _build_bbox_response, _get_features_in_bbox, _validate_bbox_params
 from geo_lib.logging.console import get_access_logger
 from geo_lib.website.auth import api_or_login_required_401
-from api.utils.responses import error_response, success_response, not_found_response
+from api.utils.responses import error_response, success_response, not_found_response, handle_404
 from api.validation.feature_updates import validate_payload, TagSharePayload, CollectionSharePayload
 
 logger = get_access_logger()
@@ -302,6 +303,7 @@ def get_public_share(request, share_id):
 @api_or_login_required_401()
 @require_http_methods(["POST"])
 @validate_payload(CollectionSharePayload)
+@handle_404
 def create_collection_share(request, validated_data):
     """
     Create a new share link for a collection.
@@ -319,10 +321,7 @@ def create_collection_share(request, validated_data):
         collection_id = uuid.UUID(collection_id_str)
 
         # Verify collection exists and belongs to user
-        try:
-            collection = Collection.objects.get(id=collection_id, user=request.user)
-        except Collection.DoesNotExist:
-            return not_found_response('Collection not found or access denied')
+        collection = get_object_or_404_for_user(Collection, request.user, id=collection_id)
 
         # Generate UUID4 share_id
         share_id = str(uuid.uuid4())

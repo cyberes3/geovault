@@ -4,8 +4,9 @@ Provides consistent response formats across all API endpoints.
 """
 
 from typing import Any, Dict, Optional
+from functools import wraps
 from pydantic import BaseModel, Field
-from django.http import JsonResponse
+from django.http import JsonResponse, Http404
 
 
 class ErrorResponse(BaseModel):
@@ -165,4 +166,29 @@ def server_error_response(message: str = "Internal server error") -> JsonRespons
         JsonResponse with 500 status
     """
     return error_response(message, code=500)
+
+
+def handle_404(view_func):
+    """
+    Decorator that catches Http404 exceptions and converts them to not_found_response().
+    
+    This decorator should be used on views that use get_object_or_404_for_user() to
+    ensure Http404 exceptions are properly converted to JSON responses.
+    
+    Usage:
+        @api_or_login_required_401()
+        @handle_404
+        def my_view(request, obj_id):
+            obj = get_object_or_404_for_user(MyModel, request.user, id=obj_id)
+            # ... rest of view logic
+    """
+    @wraps(view_func)
+    def wrapper(request, *args, **kwargs):
+        try:
+            return view_func(request, *args, **kwargs)
+        except Http404 as e:
+            # Extract message from Http404 if available
+            message = str(e) if str(e) else "Resource not found"
+            return not_found_response(message)
+    return wrapper
 

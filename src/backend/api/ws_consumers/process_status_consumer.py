@@ -3,9 +3,11 @@ Process status WebSocket consumer for specific import item updates.
 """
 
 import json
+import traceback
 
 from channels.generic.websocket import AsyncWebsocketConsumer
 from django.contrib.auth.models import AnonymousUser
+from django.http import Http404
 
 from geo_lib.websocket.modules.process_status_module import ProcessStatusModule
 from geo_lib.logging.console import get_websocket_logger
@@ -51,11 +53,12 @@ class ProcessStatusConsumer(AsyncWebsocketConsumer):
         try:
             # Verify user owns this import item using async database query
             from api.models import ImportQueue
+            from api.utils.authorization import get_object_or_404_for_user
             from asgiref.sync import sync_to_async
 
             # Use sync_to_async to make the database query async-safe
-            get_item = sync_to_async(ImportQueue.objects.get)
-            item = await get_item(id=self.item_id, user=self.user)
+            get_item = sync_to_async(get_object_or_404_for_user)
+            item = await get_item(ImportQueue, self.user, id=self.item_id)
 
             # Only accept the connection if the item exists and user owns it
             await self.accept()
@@ -79,7 +82,7 @@ class ProcessStatusConsumer(AsyncWebsocketConsumer):
             # Send initial state
             await self.process_status_module.send_initial_state()
 
-        except ImportQueue.DoesNotExist:
+        except Http404:
             # Accept connection briefly to send error message, then close
             await self.accept()
             user_identifier = get_user_identifier(self.scope)

@@ -4,11 +4,12 @@ from typing import Optional, Tuple, Union
 
 from django.conf import settings
 from django.db.models import Q, QuerySet
-from django.http import HttpResponse, JsonResponse
+from django.http import HttpResponse, JsonResponse, Http404
 from django.utils.text import slugify
 from django.views.decorators.http import require_http_methods
 
 from api.models import FeatureStore, TagShare, CollectionShare, Collection
+from api.utils.authorization import get_object_or_404_for_user
 from api.views.bbox_query import _build_base_query, _build_collection_query
 from api.views.sharing import _validate_share_id
 from geo_lib.export import (
@@ -270,14 +271,8 @@ def _handle_user_bulk_download(request, tag_name: Optional[str], collection_id_s
                 )
 
             # Verify collection exists and belongs to user
-            try:
-                collection = Collection.objects.get(id=collection_id, user=request.user)
-                share_name = collection.name
-            except Collection.DoesNotExist:
-                return JsonResponse(
-                    {"error": "Collection not found", "code": 404},
-                    status=404,
-                )
+            collection = get_object_or_404_for_user(Collection, request.user, id=collection_id)
+            share_name = collection.name
 
             # Build feature collection using collection query
             features = _build_collection_query(request.user.id, collection_id)
@@ -344,7 +339,7 @@ def _handle_single_feature_download(request, feature_id: int, share_id: Optional
                     status=401,
                 )
             # Ensure the feature belongs to the requesting user
-            feature = FeatureStore.objects.get(id=feature_id, user=request.user)
+            feature = get_object_or_404_for_user(FeatureStore, request.user, id=feature_id)
 
         geojson = feature.geojson or {}
         props = geojson.get("properties") or {}
@@ -365,7 +360,7 @@ def _handle_single_feature_download(request, feature_id: int, share_id: Optional
 
         return _create_kmz_response(kmz_bytes, filename)
 
-    except FeatureStore.DoesNotExist:
+    except Exception:
         # Security: Use generic error message
         return JsonResponse(
             {"error": "Invalid request", "code": 404},

@@ -8,12 +8,14 @@ from django.http import HttpResponse, JsonResponse
 from django.views.decorators.http import require_http_methods
 
 from api.models import ImportQueue
+from api.utils.authorization import get_object_or_404_for_user
 from api.utils.responses import (
     error_response,
     success_response,
     not_found_response,
     forbidden_response,
     server_error_response,
+    handle_404,
 )
 from geo_lib.const_strings import CONST_INTERNAL_TAGS, filter_protected_tags, prepare_user_tags
 from geo_lib.logging.console import get_access_logger
@@ -134,11 +136,9 @@ def get_user_processing_jobs(request):
 
 
 @api_or_login_required_401()
+@handle_404
 def fetch_import_history_item(request, item_id: int):
-    try:
-        item = ImportQueue.objects.get(id=item_id, user=request.user)
-    except ImportQueue.DoesNotExist:
-        return not_found_response('Import item not found')
+    item = get_object_or_404_for_user(ImportQueue, request.user, id=item_id)
 
     response = HttpResponse(item.raw_file, content_type='application/octet-stream')
     response['Content-Disposition'] = 'attachment; filename="%s"' % item.original_filename
@@ -146,13 +146,14 @@ def fetch_import_history_item(request, item_id: int):
 
 
 @api_or_login_required_401()
+@handle_404
 def get_import_queue_item_features(request, item_id: int):
     """
     Get the processed features (geofeatures) from an import queue item.
     Used for replacement uploads to display features for selection.
     """
     try:
-        item = ImportQueue.objects.get(id=item_id, user=request.user)
+        item = get_object_or_404_for_user(ImportQueue, request.user, id=item_id)
 
         return success_response({
             'geofeatures': item.geofeatures,
@@ -160,8 +161,6 @@ def get_import_queue_item_features(request, item_id: int):
             'imported': item.imported,
             'replacement': item.replacement
         })
-    except ImportQueue.DoesNotExist:
-        return not_found_response('Import queue item not found or access denied')
     except Exception as e:
         logger.error(f"Error fetching import queue item features: {traceback.format_exc()}")
         return server_error_response('Failed to fetch features')
@@ -169,6 +168,7 @@ def get_import_queue_item_features(request, item_id: int):
 
 @api_or_login_required_401()
 @require_http_methods(["GET"])
+@handle_404
 def search_import_item_features(request, item_id: int):
     """
     Search through all features in an import queue item by name or description.
@@ -181,10 +181,7 @@ def search_import_item_features(request, item_id: int):
             return error_response('query parameter is required', code=400)
 
         # Get import queue item
-        try:
-            item = ImportQueue.objects.get(id=item_id, user=request.user)
-        except ImportQueue.DoesNotExist:
-            return not_found_response('Import queue item not found or access denied')
+        item = get_object_or_404_for_user(ImportQueue, request.user, id=item_id)
 
         # Validate geofeatures
         geofeatures = item.geofeatures
@@ -238,12 +235,10 @@ def search_import_item_features(request, item_id: int):
 
 
 @api_or_login_required_401()
+@handle_404
 def delete_import_item(request, id):
     if request.method == 'DELETE':
-        try:
-            queue = ImportQueue.objects.get(id=id, user=request.user)
-        except ImportQueue.DoesNotExist:
-            return not_found_response('Import item not found')
+        queue = get_object_or_404_for_user(ImportQueue, request.user, id=id)
 
         # Start async delete job
         job_id = delete_job.start_delete_job(id, request.user.id, queue.original_filename)
@@ -261,11 +256,9 @@ def delete_import_item(request, id):
 @api_or_login_required_401()
 @require_http_methods(["PUT", "PATCH"])
 @validate_payload(FeatureUpdatePayload)
+@handle_404
 def update_import_item(request, item_id, validated_data):
-    try:
-        queue = ImportQueue.objects.get(id=item_id, user=request.user)
-    except ImportQueue.DoesNotExist:
-        return not_found_response('Import item not found')
+    queue = get_object_or_404_for_user(ImportQueue, request.user, id=item_id)
 
     # Prevent updating items that have already been imported to the feature store
     if queue.imported:
@@ -367,15 +360,13 @@ def update_import_item(request, item_id, validated_data):
 @api_or_login_required_401()
 @require_http_methods(["POST"])
 @validate_payload(ImportToFeaturestorePayload, allow_empty=True)
+@handle_404
 def import_to_featurestore(request, item_id, validated_data):
     """
     Start async import job for importing an import queue item to the feature store.
     All processing happens in the async ImportJob.
     """
-    try:
-        import_item = ImportQueue.objects.get(id=item_id, user=request.user)
-    except ImportQueue.DoesNotExist:
-        return not_found_response('Import item not found')
+    import_item = get_object_or_404_for_user(ImportQueue, request.user, id=item_id)
 
     # Prevent importing items that have already been imported to the feature store
     if import_item.imported:
@@ -424,15 +415,13 @@ def import_to_featurestore(request, item_id, validated_data):
 
 @api_or_login_required_401()
 @require_http_methods(["PUT", "PATCH"])
+@handle_404
 def save_bulk_operations(request, item_id):
     """
     Save bulk operations (tags, styling) for an import queue item.
     These operations will be applied during import.
     """
-    try:
-        import_item = ImportQueue.objects.get(id=item_id, user=request.user)
-    except ImportQueue.DoesNotExist:
-        return not_found_response('Import item not found')
+    import_item = get_object_or_404_for_user(ImportQueue, request.user, id=item_id)
 
     # Prevent updating items that have already been imported
     if import_item.imported:
@@ -471,14 +460,12 @@ def save_bulk_operations(request, item_id):
 
 @api_or_login_required_401()
 @require_http_methods(["GET"])
+@handle_404
 def get_bulk_operations(request, item_id):
     """
     Get bulk operations for an import queue item.
     """
-    try:
-        import_item = ImportQueue.objects.get(id=item_id, user=request.user)
-    except ImportQueue.DoesNotExist:
-        return not_found_response('Import item not found')
+    import_item = get_object_or_404_for_user(ImportQueue, request.user, id=item_id)
 
     # Return bulk operations (default to empty dict if None)
     bulk_ops = import_item.bulk_operations or {}
@@ -487,15 +474,13 @@ def get_bulk_operations(request, item_id):
 
 @api_or_login_required_401()
 @require_http_methods(["POST"])
+@handle_404
 def recheck_duplicates(request, item_id):
     """
     Re-run coordinate duplicate detection for an import queue item.
     This is useful when other features may have been imported after the file was initially uploaded.
     """
-    try:
-        import_item = ImportQueue.objects.get(id=item_id, user=request.user)
-    except ImportQueue.DoesNotExist:
-        return not_found_response('Import item not found')
+    import_item = get_object_or_404_for_user(ImportQueue, request.user, id=item_id)
 
     # Prevent rechecking duplicates for items that have already been imported
     if import_item.imported:

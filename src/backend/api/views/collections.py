@@ -8,11 +8,13 @@ from django.http import JsonResponse
 from django.views.decorators.http import require_http_methods
 
 from api.models import Collection, FeatureStore
+from api.utils.authorization import get_object_or_404_for_user
 from api.utils.responses import (
     error_response,
     success_response,
     not_found_response,
     server_error_response,
+    handle_404,
 )
 from api.validation.feature_updates import validate_payload, CollectionCreatePayload, CollectionUpdatePayload
 from geo_lib.feature_id import generate_feature_hash
@@ -112,19 +114,18 @@ def create_collection(request, validated_data):
 
 @api_or_login_required_401()
 @require_http_methods(["GET"])
+@handle_404
 def get_collection(request, collection_id):
     """
     Get a single collection by ID.
     """
     try:
-        collection = Collection.objects.get(id=collection_id, user=request.user)
+        collection = get_object_or_404_for_user(Collection, request.user, id=collection_id)
         
         return success_response({
             'collection': _serialize_collection(collection)
         })
     
-    except Collection.DoesNotExist:
-        return not_found_response('Collection not found')
     except Exception:
         logger.error(f"Error getting collection: {traceback.format_exc()}")
         return server_error_response('Failed to get collection')
@@ -133,6 +134,7 @@ def get_collection(request, collection_id):
 @api_or_login_required_401()
 @require_http_methods(["PUT", "PATCH"])
 @validate_payload(CollectionUpdatePayload)
+@handle_404
 def update_collection(request, collection_id, validated_data):
     """
     Update a collection.
@@ -144,7 +146,7 @@ def update_collection(request, collection_id, validated_data):
     - feature_ids: array of integers (optional)
     """
     try:
-        collection = Collection.objects.get(id=collection_id, user=request.user)
+        collection = get_object_or_404_for_user(Collection, request.user, id=collection_id)
         
         # Wrap all database modifications in a transaction
         with transaction.atomic():
@@ -190,8 +192,6 @@ def update_collection(request, collection_id, validated_data):
             'collection': _serialize_collection(collection)
         })
     
-    except Collection.DoesNotExist:
-        return not_found_response('Collection not found')
     except Exception:
         logger.error(f"Error updating collection: {traceback.format_exc()}")
         return server_error_response('Failed to update collection')
@@ -199,18 +199,17 @@ def update_collection(request, collection_id, validated_data):
 
 @api_or_login_required_401()
 @require_http_methods(["DELETE"])
+@handle_404
 def delete_collection(request, collection_id):
     """
     Delete a collection.
     """
     try:
-        collection = Collection.objects.get(id=collection_id, user=request.user)
+        collection = get_object_or_404_for_user(Collection, request.user, id=collection_id)
         collection.delete()
         
         return success_response({'msg': 'Collection deleted successfully'})
     
-    except Collection.DoesNotExist:
-        return not_found_response('Collection not found')
     except Exception:
         logger.error(f"Error deleting collection: {traceback.format_exc()}")
         return server_error_response('Failed to delete collection')
@@ -218,6 +217,7 @@ def delete_collection(request, collection_id):
 
 @api_or_login_required_401()
 @require_http_methods(["GET"])
+@handle_404
 def get_collection_features(request, collection_id):
     """
     Get all features in a collection.
@@ -228,7 +228,7 @@ def get_collection_features(request, collection_id):
     Returns GeoJSON FeatureCollection format.
     """
     try:
-        collection = Collection.objects.get(id=collection_id, user=request.user)
+        collection = get_object_or_404_for_user(Collection, request.user, id=collection_id)
         
         # Get all feature IDs that match the collection criteria
         feature_ids_set = _get_collection_feature_ids(collection)
@@ -268,8 +268,6 @@ def get_collection_features(request, collection_id):
             'feature_count': len(geojson_features)
         })
     
-    except Collection.DoesNotExist:
-        return not_found_response('Collection not found')
     except Exception:
         logger.error(f"Error getting collection features: {traceback.format_exc()}")
         return server_error_response('Failed to get collection features')
@@ -277,6 +275,7 @@ def get_collection_features(request, collection_id):
 
 @api_or_login_required_401()
 @require_http_methods(["POST"])
+@handle_404
 def apply_bulk_operations_to_collection(request, collection_id):
     """
     Apply bulk operations to all features in a collection.
@@ -306,10 +305,7 @@ def apply_bulk_operations_to_collection(request, collection_id):
         if not is_valid:
             return error_response(error_message, code=400)
 
-        try:
-            collection = Collection.objects.get(id=collection_id, user=request.user)
-        except Collection.DoesNotExist:
-            return not_found_response('Collection not found')
+        collection = get_object_or_404_for_user(Collection, request.user, id=collection_id)
 
         # Build the same feature ID set used by get_collection_features/_count_collection_features
         feature_ids_set = _get_collection_feature_ids(collection)

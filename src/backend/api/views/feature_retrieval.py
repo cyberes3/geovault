@@ -8,6 +8,8 @@ from website.settings_utils import get_required_setting
 from django.views.decorators.http import require_http_methods
 
 from api.models import FeatureStore
+from api.utils.authorization import get_object_or_404_for_user
+from api.utils.responses import handle_404
 from geo_lib.logging.console import get_access_logger
 from geo_lib.website.auth import api_or_login_required_401
 
@@ -19,6 +21,7 @@ MAX_POINTS_PER_REQUEST = 10000
 
 @api_or_login_required_401()
 @require_http_methods(["GET"])
+@handle_404
 def get_feature(request, feature_id):
     """
     API endpoint to get a specific feature by ID.
@@ -28,7 +31,7 @@ def get_feature(request, feature_id):
     """
     try:
         # Get the feature from database
-        feature = FeatureStore.objects.get(id=feature_id, user=request.user)
+        feature = get_object_or_404_for_user(FeatureStore, request.user, id=feature_id)
 
         # Include database ID in properties for frontend editing (same as _get_features_in_bbox)
         geojson_data = feature.geojson.copy()
@@ -45,11 +48,6 @@ def get_feature(request, feature_id):
             }
         })
 
-    except FeatureStore.DoesNotExist:
-        return JsonResponse({
-            'error': 'Feature not found or access denied',
-            'code': 404
-        }, status=404)
     except Exception:
         logger.error(f"Error getting feature {feature_id}: {traceback.format_exc()}")
         return JsonResponse({
@@ -154,6 +152,7 @@ def _fetch_elevations_from_api(coordinates: List[Tuple[float, float]]) -> List[O
 
 @api_or_login_required_401()
 @require_http_methods(["GET"])
+@handle_404
 def get_feature_elevations(request, feature_id):
     """
     API endpoint to get elevations for a feature's coordinates from the external elevation API.
@@ -166,7 +165,7 @@ def get_feature_elevations(request, feature_id):
     """
     try:
         # Get the feature from database and verify user ownership
-        feature = FeatureStore.objects.get(id=feature_id, user=request.user)
+        feature = get_object_or_404_for_user(FeatureStore, request.user, id=feature_id)
         
         # Extract coordinates from the feature's GeoJSON
         geojson_data = feature.geojson
@@ -194,11 +193,6 @@ def get_feature_elevations(request, feature_id):
             'coordinates': coordinates_with_elevations
         })
         
-    except FeatureStore.DoesNotExist:
-        return JsonResponse({
-            'error': 'Feature not found or access denied',
-            'code': 404
-        }, status=404)
     except Exception:
         logger.error(f"Error getting elevations for feature {feature_id}: {traceback.format_exc()}")
         return JsonResponse({

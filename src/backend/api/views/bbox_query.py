@@ -5,6 +5,7 @@ from typing import List, Tuple, Dict, NamedTuple, Union
 
 from django.conf import settings
 from django.contrib.gis.geos import Polygon
+from django.http import Http404
 from website.settings_utils import get_required_setting
 from django.http import JsonResponse
 from django.views.decorators.http import require_http_methods
@@ -12,6 +13,8 @@ from django.views.decorators.http import require_http_methods
 from django.db.models import QuerySet, Q
 
 from api.models import FeatureStore, Collection
+from api.utils.authorization import get_object_or_404_for_user
+from api.utils.responses import handle_404
 from api.views.collections import _get_collection_feature_ids
 from geo_lib.logging.console import get_access_logger
 from geo_lib.website.auth import api_or_login_required_401
@@ -361,6 +364,7 @@ def _get_features_in_bbox(bbox: Tuple[float, float, float, float], user_id: int,
 
 @api_or_login_required_401()
 @require_http_methods(["GET"])
+@handle_404
 def get_geojson_data(request):
     """
     API endpoint to fetch GeoJSON data for a given bounding box.
@@ -383,13 +387,7 @@ def get_geojson_data(request):
         try:
             collection_id = uuid.UUID(collection_str)
             # Verify collection belongs to user
-            try:
-                Collection.objects.get(id=collection_id, user=request.user)
-            except Collection.DoesNotExist:
-                return JsonResponse({
-                    'error': 'Collection not found',
-                    'code': 404
-                }, status=404)
+            get_object_or_404_for_user(Collection, request.user, id=collection_id)
         except (ValueError, TypeError):
             return JsonResponse({
                 'error': 'Invalid collection ID. Expected UUID',
