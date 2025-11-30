@@ -49,21 +49,27 @@
       <!-- Stats Row (Mobile) / Stacked (Desktop) -->
       <div class="flex flex-wrap items-center gap-2 text-sm text-gray-600 italic mb-2 md:mb-4">
         <!-- Elevation (for Point/MultiPoint features) -->
-        <div v-if="getFeatureElevation(feature) !== null" class="flex items-center space-x-1 bg-gray-100 border border-gray-300 rounded px-1.5 py-0.5 md:px-2 md:py-1.5">
+        <div v-if="getFeatureElevation(feature) !== null" class="flex items-center space-x-1 bg-gray-100 border border-gray-300 rounded px-1.5 py-0.5 md:px-2 md:py-1.5" title="Elevation">
           <MeasurementIcon class="w-3 h-3 md:w-4 md:h-4" />
           <span class="text-xs text-gray-700">{{ formatElevation(getFeatureElevation(feature)) }}</span>
         </div>
 
         <!-- Length (for LineString/MultiLineString features) -->
-        <div v-if="featureLength !== null" class="flex items-center space-x-1 bg-gray-100 border border-gray-300 rounded px-1.5 py-0.5 md:px-2 md:py-1.5">
+        <div v-if="featureLength !== null" class="flex items-center space-x-1 bg-gray-100 border border-gray-300 rounded px-1.5 py-0.5 md:px-2 md:py-1.5" title="Length">
           <MeasurementIcon :rotation="90" class="w-3 h-3 md:w-4 md:h-4" />
           <span class="text-xs text-gray-700">{{ formatDistance(featureLength) }}</span>
         </div>
 
         <!-- Area (for Polygon/MultiPolygon features) -->
-        <div v-if="featureArea !== null" class="flex items-center space-x-1 bg-gray-100 border border-gray-300 rounded px-1.5 py-0.5 md:px-2 md:py-1.5">
+        <div v-if="featureArea !== null" class="flex items-center space-x-1 bg-gray-100 border border-gray-300 rounded px-1.5 py-0.5 md:px-2 md:py-1.5" title="Area">
           <AreaIcon />
           <span class="text-xs text-gray-700">{{ formatArea(featureArea) }}</span>
+        </div>
+
+        <!-- Created Date -->
+        <div v-if="getFeatureCreatedDate(feature) !== null" class="flex items-center space-x-1 bg-gray-100 border border-gray-300 rounded px-1.5 py-0.5 md:px-2 md:py-1.5" title="Created Date">
+          <CalendarDaysIcon class="w-3 h-3 md:w-4 md:h-4" />
+          <span class="text-xs text-gray-700">{{ formatCreatedDate(getFeatureCreatedDate(feature)) }}</span>
         </div>
       </div>
 
@@ -108,7 +114,7 @@
 import { marked } from 'marked'
 import { GeoJSON } from 'ol/format'
 import { getLength, getArea } from 'ol/sphere'
-import { ChartBarIcon, ArrowDownTrayIcon, PencilSquareIcon, MapPinIcon, XMarkIcon } from '@heroicons/vue/24/outline'
+import { ChartBarIcon, ArrowDownTrayIcon, PencilSquareIcon, MapPinIcon, XMarkIcon, CalendarDaysIcon } from '@heroicons/vue/24/outline'
 import { formatElevation, formatDistance, formatArea } from '@/utils/units'
 import MeasurementIcon from '@/components/icons/MeasurementIcon.vue'
 import AreaIcon from '@/components/icons/AreaIcon.vue'
@@ -122,6 +128,7 @@ export default {
     PencilSquareIcon,
     MapPinIcon,
     XMarkIcon,
+    CalendarDaysIcon,
     MeasurementIcon,
     AreaIcon
   },
@@ -269,6 +276,32 @@ export default {
       if (!geometry) return '#d1d5db'
       const geometryType = geometry.getType()
       return getGeometryTypeColor(geometryType)
+    },
+    getFeatureCreatedDate(feature) {
+      if (!feature) return null
+      const properties = feature.get('properties') || {}
+      return properties.created || null
+    },
+    formatCreatedDate(dateString) {
+      if (!dateString) return ''
+      try {
+        const date = new Date(dateString)
+        if (isNaN(date.getTime())) return ''
+        // Format in local timezone with short format
+        const dateStr = date.toLocaleDateString(undefined, {
+          year: 'numeric',
+          month: 'short',
+          day: 'numeric'
+        })
+        const timeStr = date.toLocaleTimeString(undefined, {
+          hour: '2-digit',
+          minute: '2-digit'
+        })
+        return `${dateStr} ${timeStr}`
+      } catch (error) {
+        console.error('Error formatting created date:', error)
+        return ''
+      }
     }
   }
 }
