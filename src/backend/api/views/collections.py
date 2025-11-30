@@ -30,25 +30,26 @@ logger = get_access_logger()
 def list_collections(request):
     """
     List all collections for the current user.
+    Feature counts are pre-computed in batch to avoid N+1 queries.
     """
     try:
         collections = Collection.objects.filter(user=request.user).order_by('-created_at')
         
-        collections_data = []
-        for collection in collections:
-            # Count features in collection
-            feature_count = _count_collection_features(collection)
-            
-            collections_data.append({
-                'id': collection.id,
-                'name': collection.name,
-                'description': collection.description or '',
-                'tags': collection.tags,
-                'feature_ids': collection.feature_ids,
-                'feature_count': feature_count,
-                'created_at': collection.created_at.isoformat(),
-                'updated_at': collection.updated_at.isoformat()
-            })
+        # Pre-compute ALL feature counts before serialization to avoid N+1 query pattern
+        # Without this, each _serialize_collection call would query the database separately
+        collection_feature_counts = {
+            collection.id: _count_collection_features(collection)
+            for collection in collections
+        }
+        
+        # Serialize with pre-computed counts
+        collections_data = [
+            _serialize_collection(
+                collection,
+                feature_count=collection_feature_counts[collection.id]
+            )
+            for collection in collections
+        ]
         
         return success_response({
             'collections': collections_data
@@ -116,19 +117,8 @@ def create_collection(request):
             feature_ids=feature_ids
         )
         
-        feature_count = _count_collection_features(collection)
-        
         return success_response({
-            'collection': {
-                'id': collection.id,
-                'name': collection.name,
-                'description': collection.description or '',
-                'tags': collection.tags,
-                'feature_ids': collection.feature_ids,
-                'feature_count': feature_count,
-                'created_at': collection.created_at.isoformat(),
-                'updated_at': collection.updated_at.isoformat()
-            }
+            'collection': _serialize_collection(collection)
         }, status=201)
     
     except json.JSONDecodeError:
@@ -147,19 +137,8 @@ def get_collection(request, collection_id):
     try:
         collection = Collection.objects.get(id=collection_id, user=request.user)
         
-        feature_count = _count_collection_features(collection)
-        
         return success_response({
-            'collection': {
-                'id': collection.id,
-                'name': collection.name,
-                'description': collection.description or '',
-                'tags': collection.tags,
-                'feature_ids': collection.feature_ids,
-                'feature_count': feature_count,
-                'created_at': collection.created_at.isoformat(),
-                'updated_at': collection.updated_at.isoformat()
-            }
+            'collection': _serialize_collection(collection)
         })
     
     except Collection.DoesNotExist:
@@ -237,19 +216,8 @@ def update_collection(request, collection_id):
             
             collection.save()
         
-        feature_count = _count_collection_features(collection)
-        
         return success_response({
-            'collection': {
-                'id': collection.id,
-                'name': collection.name,
-                'description': collection.description or '',
-                'tags': collection.tags,
-                'feature_ids': collection.feature_ids,
-                'feature_count': feature_count,
-                'created_at': collection.created_at.isoformat(),
-                'updated_at': collection.updated_at.isoformat()
-            }
+            'collection': _serialize_collection(collection)
         })
     
     except Collection.DoesNotExist:
@@ -295,30 +263,7 @@ def get_collection_features(request, collection_id):
         collection = Collection.objects.get(id=collection_id, user=request.user)
         
         # Get all feature IDs that match the collection criteria
-        feature_ids_set: Set[int] = set()
-        
-        # 1. Get features matching ANY of the collection's tags (OR logic)
-        if collection.tags:
-            base_query = FeatureStore.objects.filter(user=request.user).exclude(geometry__isnull=True)
-            
-            # Build OR query for tags (search in both tags and system_tags)
-            tag_query = Q()
-            for tag in collection.tags:
-                if tag:  # Only process non-empty tags
-                    tag_query |= Q(geojson__properties__tags__contains=[tag]) | Q(geojson__properties__system_tags__contains=[tag])
-            
-            if tag_query:
-                tag_features = base_query.filter(tag_query).values_list('id', flat=True)
-                feature_ids_set.update(tag_features)
-        
-        # 2. Add individually selected features
-        if collection.feature_ids:
-            # Verify these features belong to the user
-            user_feature_ids = set(
-                FeatureStore.objects.filter(user=request.user, id__in=collection.feature_ids)
-                .values_list('id', flat=True)
-            )
-            feature_ids_set.update(user_feature_ids)
+        feature_ids_set = _get_collection_feature_ids(collection)
         
         # Get all features by their IDs
         features = FeatureStore.objects.filter(id__in=feature_ids_set).exclude(geometry__isnull=True).order_by('id')
@@ -399,30 +344,7 @@ def apply_bulk_operations_to_collection(request, collection_id):
             return not_found_response('Collection not found')
 
         # Build the same feature ID set used by get_collection_features/_count_collection_features
-        feature_ids_set: Set[int] = set()
-
-        # 1. Features matching ANY of the collection's tags (OR logic)
-        if collection.tags:
-            base_query = FeatureStore.objects.filter(user=request.user).exclude(geometry__isnull=True)
-
-            tag_query = Q()
-            for tag in collection.tags:
-                if tag:
-                    tag_query |= Q(geojson__properties__tags__contains=[tag]) | Q(
-                        geojson__properties__system_tags__contains=[tag]
-                    )
-
-            if tag_query:
-                tag_features = base_query.filter(tag_query).values_list("id", flat=True)
-                feature_ids_set.update(tag_features)
-
-        # 2. Individually selected features
-        if collection.feature_ids:
-            user_feature_ids = set(
-                FeatureStore.objects.filter(user=request.user, id__in=collection.feature_ids)
-                .values_list("id", flat=True)
-            )
-            feature_ids_set.update(user_feature_ids)
+        feature_ids_set = _get_collection_feature_ids(collection)
 
         if not feature_ids_set:
             return success_response({
@@ -454,33 +376,74 @@ def apply_bulk_operations_to_collection(request, collection_id):
         return server_error_response('Failed to apply bulk operations to collection')
 
 
-def _count_collection_features(collection: Collection) -> int:
+def _get_collection_feature_ids(collection: Collection) -> Set[int]:
     """
-    Count the number of features in a collection.
+    Get the set of feature IDs that belong to a collection.
     This is the union of features matching tags and individually selected features.
+    
+    Args:
+        collection: The Collection instance to get feature IDs for
+        
+    Returns:
+        Set of feature IDs (integers) that match the collection criteria
     """
     feature_ids_set: Set[int] = set()
     
-    # Get features matching tags
+    # 1. Get features matching ANY of the collection's tags (OR logic)
     if collection.tags:
         base_query = FeatureStore.objects.filter(user=collection.user).exclude(geometry__isnull=True)
         
         tag_query = Q()
         for tag in collection.tags:
-            if tag:
+            if tag:  # Only process non-empty tags
                 tag_query |= Q(geojson__properties__tags__contains=[tag]) | Q(geojson__properties__system_tags__contains=[tag])
         
         if tag_query:
             tag_features = base_query.filter(tag_query).values_list('id', flat=True)
             feature_ids_set.update(tag_features)
     
-    # Add individually selected features
+    # 2. Add individually selected features
     if collection.feature_ids:
+        # Verify these features belong to the user
         user_feature_ids = set(
             FeatureStore.objects.filter(user=collection.user, id__in=collection.feature_ids)
             .values_list('id', flat=True)
         )
         feature_ids_set.update(user_feature_ids)
     
-    return len(feature_ids_set)
+    return feature_ids_set
+
+
+def _serialize_collection(collection: Collection, feature_count: int = None) -> dict:
+    """
+    Serialize a Collection instance to a dictionary representation.
+    
+    Args:
+        collection: The Collection instance to serialize
+        feature_count: Optional pre-computed feature count. If None, will be computed.
+        
+    Returns:
+        Dictionary representation of the collection
+    """
+    if feature_count is None:
+        feature_count = _count_collection_features(collection)
+    
+    return {
+        'id': collection.id,
+        'name': collection.name,
+        'description': collection.description or '',
+        'tags': collection.tags,
+        'feature_ids': collection.feature_ids,
+        'feature_count': feature_count,
+        'created_at': collection.created_at.isoformat(),
+        'updated_at': collection.updated_at.isoformat()
+    }
+
+
+def _count_collection_features(collection: Collection) -> int:
+    """
+    Count the number of features in a collection.
+    This is the union of features matching tags and individually selected features.
+    """
+    return len(_get_collection_feature_ids(collection))
 

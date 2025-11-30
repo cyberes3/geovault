@@ -12,6 +12,7 @@ from django.views.decorators.http import require_http_methods
 from django.db.models import QuerySet, Q
 
 from api.models import FeatureStore, Collection
+from api.views.collections import _get_collection_feature_ids
 from geo_lib.logging.console import get_access_logger
 from geo_lib.website.auth import api_or_login_required_401
 
@@ -177,33 +178,11 @@ def _build_collection_query(user_id: int, collection_id: uuid.UUID) -> QuerySet:
         # Return empty queryset if collection doesn't exist
         return FeatureStore.objects.none()
     
+    # Get feature IDs using the shared function to avoid code duplication
+    feature_ids_set = _get_collection_feature_ids(collection)
+    
     # Start with base user filter
     base_query = FeatureStore.objects.filter(user_id=user_id).exclude(geometry__isnull=True)
-    
-    # Build query for features matching collection criteria
-    # Union of: features matching ANY collection tag OR features in feature_ids
-    feature_ids_set = set()
-    
-    # 1. Get features matching ANY of the collection's tags (OR logic)
-    # Search in both tags and system_tags arrays
-    if collection.tags:
-        tag_query = Q()
-        for tag in collection.tags:
-            if tag:  # Only process non-empty tags
-                tag_query |= Q(geojson__properties__tags__contains=[tag]) | Q(geojson__properties__system_tags__contains=[tag])
-        
-        if tag_query:
-            tag_features = base_query.filter(tag_query).values_list('id', flat=True)
-            feature_ids_set.update(tag_features)
-    
-    # 2. Add individually selected features
-    if collection.feature_ids:
-        # Verify these features belong to the user
-        user_feature_ids = set(
-            FeatureStore.objects.filter(user_id=user_id, id__in=collection.feature_ids)
-            .values_list('id', flat=True)
-        )
-        feature_ids_set.update(user_feature_ids)
     
     # Filter by the combined set of feature IDs
     if feature_ids_set:
