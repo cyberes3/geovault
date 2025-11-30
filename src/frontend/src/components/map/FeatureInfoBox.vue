@@ -2,8 +2,36 @@
   <div v-if="feature" class="fixed bottom-0 left-0 right-0 w-full bg-white z-20 rounded-t-xl shadow-[0_-4px_6px_-1px_rgba(0,0,0,0.1)] md:absolute md:bottom-4 md:right-4 md:left-auto md:max-w-md md:w-80 md:rounded-lg md:border-r md:border-b md:border-l md:border-gray-200 md:shadow-xl max-h-[60vh] flex flex-col" :style="{ borderTopWidth: '4px', borderTopColor: getFeatureColor(), borderTopStyle: 'solid' }">
     <div class="p-3 md:p-4 overflow-y-auto">
       <!-- Header -->
-      <div class="flex items-start justify-between mb-2 md:mb-4">
-        <h3 class="text-base md:text-lg font-bold text-gray-900 pr-2 truncate">{{ getFeatureName(feature) }}</h3>
+      <div class="flex items-start justify-between mb-2 md:mb-4 relative">
+        <div 
+          class="text-base md:text-lg font-bold text-gray-900 pr-2 flex-1 min-w-0"
+          @mouseenter="handleNameHover"
+          @mouseleave="handleNameLeave"
+          @touchstart="handleNameTouchStart"
+          @touchend="handleNameTouchEnd"
+          ref="nameContainer"
+        >
+          <div 
+            class="ticker-container overflow-hidden whitespace-nowrap"
+          >
+            <span 
+              ref="nameElement" 
+              class="ticker-content inline-block"
+              :class="{ 'ticker-scrolling': shouldScroll }"
+            >
+              <span class="ticker-item">{{ getFeatureName(feature) }}</span>
+              <span v-if="shouldScroll" class="ticker-item">{{ getFeatureName(feature) }}</span>
+            </span>
+          </div>
+        </div>
+        <!-- Custom Tooltip (moved outside to avoid overflow clipping) -->
+        <div 
+          v-if="showTooltip && shouldScroll"
+          class="custom-tooltip"
+          :style="tooltipStyle"
+        >
+          {{ getFeatureName(feature) }}
+        </div>
         <div class="flex items-center space-x-1 md:space-x-2 flex-shrink-0">
           <button
             v-if="showEditButton"
@@ -152,6 +180,14 @@ export default {
     }
   },
   emits: ['close', 'edit', 'zoom', 'show-profile', 'download'],
+  data() {
+    return {
+      shouldScroll: false,
+      showTooltip: false,
+      tooltipStyle: {},
+      touchTimeout: null
+    }
+  },
   computed: {
     isLineOrTrack() {
       if (!this.feature) return false
@@ -185,7 +221,71 @@ export default {
       return getArea(geometry, { projection: 'EPSG:3857' })
     }
   },
+  mounted() {
+    this.checkNameOverflow()
+  },
+  updated() {
+    this.checkNameOverflow()
+  },
+  beforeUnmount() {
+    if (this.touchTimeout) {
+      clearTimeout(this.touchTimeout)
+    }
+  },
   methods: {
+    checkNameOverflow() {
+      this.$nextTick(() => {
+        if (this.$refs.nameElement && this.$refs.nameContainer) {
+          // Get the width of one instance of the text
+          const nameItem = this.$refs.nameElement.querySelector('.ticker-item')
+          if (nameItem) {
+            const nameWidth = nameItem.offsetWidth
+            const containerWidth = this.$refs.nameContainer.offsetWidth
+            this.shouldScroll = nameWidth > containerWidth
+            
+            // Set CSS variable for animation duration based on text length
+            if (this.shouldScroll) {
+              const duration = Math.max(8, nameWidth / 30) // ~30px per second (slower)
+              this.$refs.nameElement.style.setProperty('--ticker-duration', `${duration}s`)
+            }
+          }
+        }
+      })
+    },
+    handleNameHover(event) {
+      if (this.shouldScroll) {
+        this.showTooltip = true
+        this.updateTooltipPosition(event)
+      }
+    },
+    handleNameLeave() {
+      this.showTooltip = false
+    },
+    handleNameTouchStart() {
+      if (this.shouldScroll) {
+        this.showTooltip = true
+        // Hide tooltip after 3 seconds on mobile
+        this.touchTimeout = setTimeout(() => {
+          this.showTooltip = false
+        }, 3000)
+      }
+    },
+    handleNameTouchEnd() {
+      // Don't hide immediately to give user time to read
+    },
+    updateTooltipPosition(event) {
+      const container = this.$refs.nameContainer
+      if (container) {
+        const rect = container.getBoundingClientRect()
+        // Position relative to the name container
+        this.tooltipStyle = {
+          left: `${rect.left + rect.width / 2}px`,
+          top: `${rect.top - 8}px`,
+          transform: 'translate(-50%, -100%)',
+          position: 'fixed'
+        }
+      }
+    },
     getFeatureName(feature) {
       const properties = feature.get('properties') || {}
       return properties.name || 'Unnamed Feature'
@@ -312,3 +412,72 @@ export default {
 }
 </script>
 
+<style scoped>
+.ticker-container {
+  position: relative;
+}
+
+.ticker-content {
+  display: inline-block;
+  white-space: nowrap;
+}
+
+.ticker-item {
+  display: inline-block;
+  padding-right: 2rem;
+}
+
+.ticker-scrolling {
+  animation: ticker-scroll var(--ticker-duration, 8s) linear infinite;
+}
+
+@keyframes ticker-scroll {
+  0% {
+    transform: translateX(0);
+  }
+  100% {
+    transform: translateX(-50%);
+  }
+}
+
+/* Pause animation on hover */
+.ticker-container:hover .ticker-scrolling {
+  animation-play-state: paused;
+}
+
+/* Custom Tooltip */
+.custom-tooltip {
+  position: fixed;
+  z-index: 9999;
+  background-color: rgba(0, 0, 0, 0.9);
+  color: white;
+  padding: 0.375rem 0.5rem;
+  border-radius: 0.25rem;
+  font-size: 0.8125rem;
+  font-weight: 500;
+  line-height: 1.2;
+  white-space: normal;
+  word-wrap: break-word;
+  max-width: 300px;
+  box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06);
+  pointer-events: none;
+}
+
+/* Tooltip arrow */
+.custom-tooltip::after {
+  content: '';
+  position: absolute;
+  top: 100%;
+  left: 50%;
+  transform: translateX(-50%);
+  border: 5px solid transparent;
+  border-top-color: rgba(0, 0, 0, 0.9);
+}
+
+/* Mobile adjustments */
+@media (max-width: 768px) {
+  .custom-tooltip {
+    max-width: calc(100vw - 2rem);
+  }
+}
+</style>
