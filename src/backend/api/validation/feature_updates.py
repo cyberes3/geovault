@@ -59,8 +59,7 @@ class FeatureUpdatePayload(BaseModel):
     model_config = ConfigDict(extra='forbid')
 
     features: List[FeatureUpdate] = Field(
-        min_length=1,
-        description="List of features to update"
+        description="List of features to update (required)"
     )
 
 
