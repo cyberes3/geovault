@@ -122,3 +122,4 @@ class TestStylingValidation:
         assert 'assets/' in description
         assert '/api/icons/' in description
 
+

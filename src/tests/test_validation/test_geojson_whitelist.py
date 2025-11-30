@@ -375,3 +375,4 @@ class TestGeoJSONWhitelist:
         assert result['properties']['fill'] == '#FFFF00'
         assert result['properties']['fill-opacity'] == 0.1
 
+

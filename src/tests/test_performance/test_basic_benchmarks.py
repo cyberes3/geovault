@@ -522,3 +522,4 @@ class TestImportPerformance:
         assert elapsed < 30.0, f"Large import took too long: {elapsed:.2f}s"
         assert len(import_item.geofeatures) == 1000
 
+

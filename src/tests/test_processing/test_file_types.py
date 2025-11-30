@@ -125,3 +125,4 @@ class TestFileTypes:
         file_type = detect_file_type(kml_content, 'test.gpx')
         assert file_type == FileType.GPX
 
+

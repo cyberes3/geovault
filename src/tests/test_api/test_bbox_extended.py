@@ -547,3 +547,4 @@ class TestBboxResponseStructure(TestCase):
         self.assertIn('features', geojson)
         self.assertIsInstance(geojson['features'], list)
 
+

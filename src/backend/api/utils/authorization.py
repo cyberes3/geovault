@@ -52,3 +52,4 @@ def get_object_or_404_for_user(model: Type[T], user: User, **filters) -> T:
     except model.DoesNotExist:
         raise Http404(f"{model.__name__} not found or access denied")
 
+

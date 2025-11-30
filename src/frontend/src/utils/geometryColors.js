@@ -24,3 +24,4 @@ export function getGeometryTypeColor(geometryType) {
   return GEOMETRY_COLORS[geometryType] || DEFAULT_GEOMETRY_COLOR
 }
 
+

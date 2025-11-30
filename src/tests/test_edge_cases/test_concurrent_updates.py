@@ -523,3 +523,4 @@ class TestReadWriteConsistency(TransactionTestCase):
         # Should see the update
         self.assertEqual(data['feature']['geojson']['properties']['name'], 'Updated Name')
 
+
