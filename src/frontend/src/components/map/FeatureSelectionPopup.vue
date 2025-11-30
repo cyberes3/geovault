@@ -8,19 +8,16 @@
       <!-- Feature List -->
       <div class="space-y-0.5 max-h-48 overflow-y-auto">
         <div
-            v-for="(feature, index) in features"
+            v-for="(feature, index) in sortedFeatures"
             :key="getFeatureKey(feature, index)"
             class="py-1 px-1.5 rounded-md hover:bg-gray-50 transition-colors"
+            :style="{ borderLeft: `3px solid ${getGeometryTypeColor(feature)}` }"
         >
           <button
               class="w-full text-left flex items-center gap-2 text-xs text-gray-900 hover:text-blue-500 transition-colors"
               @click="$emit('select', feature)"
               title="Select this feature"
           >
-            <span :class="getGeometryTypeClass(feature)"
-                  class="inline-flex items-center px-1.5 py-0.5 rounded-full text-[10px] font-medium flex-shrink-0">
-              {{ getFeatureGeometryType(feature) }}
-            </span>
             <span class="font-medium truncate">
               {{ getFeatureName(feature) }}
             </span>
@@ -34,6 +31,8 @@
 </template>
 
 <script>
+import { getGeometryTypeColor } from '@/utils/geometryColors.js'
+
 export default {
   name: 'FeatureSelectionPopup',
   props: {
@@ -54,6 +53,35 @@ export default {
   },
   emits: ['select', 'close'],
   computed: {
+    sortedFeatures() {
+      // Sort features by geometry type: Points -> Lines -> Polygons
+      // Within each group, preserve the original order
+      const getGeometryTypeSortOrder = (feature) => {
+        const geometry = feature.getGeometry()
+        if (!geometry) return 999 // Unknown types go last
+        
+        const geomType = geometry.getType()
+        
+        // Points first (order 1)
+        if (geomType === 'Point' || geomType === 'MultiPoint') {
+          return 1
+        }
+        // Lines second (order 2)
+        if (geomType === 'LineString' || geomType === 'MultiLineString') {
+          return 2
+        }
+        // Polygons third (order 3)
+        if (geomType === 'Polygon' || geomType === 'MultiPolygon') {
+          return 3
+        }
+        // Unknown types last
+        return 999
+      }
+      
+      return [...this.features].sort((a, b) => {
+        return getGeometryTypeSortOrder(a) - getGeometryTypeSortOrder(b)
+      })
+    },
     popupStyle() {
       // Center on click, but position ABOVE the point so the arrow points down to it
       let x = this.position.x
@@ -87,21 +115,20 @@ export default {
     getFeatureGeometryType(feature) {
       const geometry = feature.getGeometry()
       if (!geometry) return 'Unknown'
-      return geometry.getType()
-    },
-    getGeometryTypeClass(feature) {
-      const geometryType = this.getFeatureGeometryType(feature)
-
-      const classes = {
-        'Point': 'bg-blue-100 text-blue-700',
-        'MultiPoint': 'bg-blue-100 text-blue-700',
-        'LineString': 'bg-green-100 text-green-800',
-        'MultiLineString': 'bg-green-100 text-green-800',
-        'Polygon': 'bg-yellow-100 text-yellow-800',
-        'MultiPolygon': 'bg-yellow-100 text-yellow-800'
+      const geomType = geometry.getType()
+      
+      // Return user-friendly names
+      if (geomType === 'LineString' || geomType === 'MultiLineString') {
+        return 'Line'
       }
-
-      return classes[geometryType] || 'bg-gray-100 text-gray-800'
+      
+      return geomType
+    },
+    getGeometryTypeColor(feature) {
+      const geometry = feature.getGeometry()
+      if (!geometry) return '#d1d5db'
+      const geometryType = geometry.getType()
+      return getGeometryTypeColor(geometryType)
     }
   }
 }

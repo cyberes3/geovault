@@ -69,7 +69,7 @@
             class="p-1 text-gray-400 hover:text-gray-600 transition-colors"
             title="Close"
           >
-            <XMarkIcon class="w-5 h-5" />
+            <XMarkIcon class="w-5 h-5" style="stroke-width: 2.5" />
           </button>
         </div>
       </div>
