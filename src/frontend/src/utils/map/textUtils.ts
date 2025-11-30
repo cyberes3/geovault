@@ -30,7 +30,7 @@ function distanceToLineSegment(point: number[], lineStart: number[], lineEnd: nu
     }
 
     // Calculate parameter t (position along line segment)
-    const t = Math.max(0, Math.min(1, 
+    const t = Math.max(0, Math.min(1,
         ((point[0] - lineStart[0]) * dx + (point[1] - lineStart[1]) * dy) / lengthSquared
     ));
 
@@ -73,7 +73,7 @@ function checkLabelBorderIntersection(
     const avgCharWidthPixels = 7;
     const textWidthPixels = text.length * avgCharWidthPixels;
     const textHeightPixels = fontHeightPixels;
-    
+
     // Convert to meters
     const textHeightMeters = textHeightPixels * resolution;
     const textWidthMeters = textWidthPixels * resolution;
@@ -89,7 +89,7 @@ function checkLabelBorderIntersection(
     // Check if polygon is too small to fit label without intersection
     // Label needs space: text height/2 on each side + stroke width
     const minRequiredDimension = textHeightMeters + (strokeWidthMeters * 2);
-    
+
     if (minDimensionMeters < minRequiredDimension) {
         return true;
     }
@@ -97,7 +97,7 @@ function checkLabelBorderIntersection(
     // For more accurate check, calculate distance from centroid to boundary
     // Get the exterior ring(s) of the polygon
     let exteriorRings: any[] = [];
-    
+
     if (geometryType === 'Polygon') {
         const coordinates = geometry.getCoordinates();
         if (coordinates && coordinates.length > 0) {
@@ -187,6 +187,20 @@ export function createTextStyle(
 }
 
 /**
+ * Calculate zoom level from resolution (Web Mercator)
+ * Uses equator approximation for simplicity
+ * @param resolution - Map resolution in meters per pixel
+ * @returns Zoom level
+ */
+function getZoomFromResolution(resolution: number): number {
+    if (resolution <= 0) return 10; // Default to base zoom if invalid
+    // Web Mercator resolution formula: resolution = 156543.03392 / 2^zoom
+    // Solving for zoom: zoom = log2(156543.03392 / resolution)
+    const baseResolution = 156543.03392;
+    return Math.log2(baseResolution / resolution);
+}
+
+/**
  * Get text-only style for a feature (no icon/image)
  * Used for rendering labels on a separate layer with decluttering
  * @param feature - OpenLayers feature
@@ -205,20 +219,30 @@ export function getFeatureTextStyle(feature: any, resolution?: number): Style | 
         name = name.substring(0, maxNameLength) + '...';
     }
 
+    // Hide point labels when zoomed out to county level or lower (zoom <= 12)
+    // This prevents label clutter when viewing large areas (multi-state, country level)
+    if (geometryType === 'Point' && resolution !== undefined && resolution > 0) {
+        const zoom = getZoomFromResolution(resolution);
+        const hidePointTextThreshhold = 8;
+        if (zoom <= hidePointTextThreshhold) {
+            return null; // Hide point labels when zoomed out
+        }
+    }
+
     // For lines, check if they're too small when zoomed out
     // Note: This includes lines < 2 pixels which are rendered as points (dots)
     if ((geometryType === 'LineString' || geometryType === 'MultiLineString') && resolution !== undefined && resolution > 0) {
         // Calculate line length in meters
         const lengthMeters = getLength(geometry);
-        
+
         // Convert to pixels
         const lengthPixels = lengthMeters / resolution;
-        
+
         // Hide text for lines < 50 pixels when zoomed out
         // Threshold is approx Zoom 13 (19.1 m/px)
         const minLineLengthPixels = 50;
         const maxResolutionForSmallLines = 19.1; // meters per pixel (approx Zoom 13)
-        
+
         if (lengthPixels < minLineLengthPixels && resolution > maxResolutionForSmallLines) {
             return null; // Hide text for small lines (including dots) when zoomed out
         }
@@ -230,16 +254,16 @@ export function getFeatureTextStyle(feature: any, resolution?: number): Style | 
         const extent = geometry.getExtent();
         const widthMeters = extent[2] - extent[0];  // maxX - minX
         const heightMeters = extent[3] - extent[1]; // maxY - minY
-        
+
         // Convert to screen pixels (meters / meters per pixel = pixels)
         const widthPixels = widthMeters / resolution;
         const heightPixels = heightMeters / resolution;
-        
+
         // Hide text for polygons < 50 pixels when zoomed out
         // Threshold is approx Zoom 13 (19.1 m/px)
         const minPolygonSizePixels = 50;
         const maxResolutionForSmallPolygons = 19.1; // meters per pixel (approx Zoom 13)
-        
+
         const minDimensionPixels = Math.min(widthPixels, heightPixels);
         if (minDimensionPixels < minPolygonSizePixels && resolution > maxResolutionForSmallPolygons) {
             return null; // Hide text for small polygons (including dots) when zoomed out
@@ -268,12 +292,12 @@ export function getFeatureTextStyle(feature: any, resolution?: number): Style | 
         if (resolution !== undefined && resolution > 0) {
             const strokeWidth = properties['stroke-width'] || 2;
             shouldPlaceBelow = checkLabelBorderIntersection(geometry, name, resolution, strokeWidth);
-            
+
             if (shouldPlaceBelow) {
                 // Place label below polygon, similar to points
                 offsetY = 15; // Same offset as default circle icons for points
                 placement = null; // Remove 'point' placement to use extent-based positioning
-                
+
                 // Use the bottom of the polygon extent for label placement
                 const extent = geometry.getExtent();
                 const bottomCenter = [getCenter(extent)[0], extent[1]]; // [centerX, minY]
@@ -289,7 +313,7 @@ export function getFeatureTextStyle(feature: any, resolution?: number): Style | 
     const styleConfig: any = {
         text: textStyle
     };
-    
+
     // Use custom geometry for text placement when label is placed below polygon
     if (styleGeometry) {
         styleConfig.geometry = styleGeometry;

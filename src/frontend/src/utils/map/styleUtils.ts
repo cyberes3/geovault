@@ -36,21 +36,63 @@ export function applyFillOpacity(hexColor: string, opacity: number): string {
 }
 
 /**
+ * Calculate zoom level from resolution (Web Mercator)
+ * Uses equator approximation for simplicity
+ * @param resolution - Map resolution in meters per pixel
+ * @returns Zoom level
+ */
+function getZoomFromResolution(resolution: number): number {
+    if (resolution <= 0) return 10; // Default to base zoom if invalid
+    // Web Mercator resolution formula: resolution = 156543.03392 / 2^zoom
+    // Solving for zoom: zoom = log2(156543.03392 / resolution)
+    const baseResolution = 156543.03392;
+    return Math.log2(baseResolution / resolution);
+}
+
+/**
+ * Calculate exponential scale multiplier based on zoom level
+ * Icons are at normal size at zoom 10 and above (city level), with exponential scaling only when zoomed out
+ * Icons get smaller when zoomed out below baseZoom, but stay at normal size when zoomed in
+ * @param zoom - Current zoom level
+ * @param baseZoom - Base zoom level where icons are normal size (default: 10, city level)
+ * @param exponentFactor - Exponential scaling factor (default: 0.6 for aggressive scaling)
+ * @returns Scale multiplier (1.0 at baseZoom and above, < 1.0 when zoomed out)
+ */
+function getZoomScaleMultiplier(zoom: number, baseZoom: number = 10, exponentFactor: number = 0.6): number {
+    // At city level (zoom 10) and above, icons stay at default size
+    if (zoom >= baseZoom) {
+        return 1.0;
+    }
+    // When zoomed out below city level, apply exponential scaling
+    return Math.pow(2, (zoom - baseZoom) * exponentFactor);
+}
+
+/**
  * Create a point style at the center of a geometry's extent
+ * Scales with zoom level to match actual point icons
  * @param geometry - OpenLayers geometry
  * @param color - Color for the point (fill and stroke)
- * @param radius - Point radius in pixels (default: 3)
+ * @param radius - Base point radius in pixels (default: 3)
+ * @param resolution - Map resolution in meters per pixel (optional, for zoom-based scaling)
  * @returns OpenLayers Style object with a circle at the extent center
  */
-export function createPointStyleAtExtentCenter(geometry: any, color: string, radius: number = 3): Style {
+export function createPointStyleAtExtentCenter(geometry: any, color: string, radius: number = 3, resolution?: number): Style {
     const extent = geometry.getExtent();
     const center = getCenter(extent);
     const centerPoint = new Point(center);
     
+    // Apply exponential zoom-based scaling if resolution is provided
+    let finalRadius = radius;
+    if (resolution !== undefined && resolution > 0) {
+        const zoom = getZoomFromResolution(resolution);
+        const zoomMultiplier = getZoomScaleMultiplier(zoom);
+        finalRadius = radius * zoomMultiplier;
+    }
+    
     return new Style({
         geometry: centerPoint,
         image: new Circle({
-            radius: radius,
+            radius: finalRadius,
             fill: new Fill({
                 color: color
             }),
@@ -86,7 +128,7 @@ export function createLineStringStyle(feature: any, properties: any, resolution?
             const minPixelSize = 2;
             if (lengthPixels < minPixelSize) {
                 const strokeColor = hexToColor(properties.stroke, '#ff0000');
-                return createPointStyleAtExtentCenter(geometry, strokeColor);
+                return createPointStyleAtExtentCenter(geometry, strokeColor, 3, resolution);
             }
         }
     }
@@ -131,7 +173,7 @@ export function createPolygonStyle(feature: any, properties: any, resolution?: n
             const minPixelSize = 2;
             if (widthPixels < minPixelSize || heightPixels < minPixelSize) {
                 const strokeColor = hexToColor(properties.stroke, '#ff0000');
-                return createPointStyleAtExtentCenter(geometry, strokeColor);
+                return createPointStyleAtExtentCenter(geometry, strokeColor, 3, resolution);
             }
         }
     }
@@ -195,13 +237,13 @@ export function getFeatureIconStyle(feature: any, resolution?: number): Style | 
         // Check if icon previously failed to load
         const iconFailed = feature.get('_iconFailed');
         if (iconFailed) {
-            return getDefaultIconStyle(properties);
+            return getDefaultIconStyle(properties, resolution);
         }
 
         // Check for icon URL first
         const iconUrl = getIconUrl(properties);
         if (iconUrl) {
-            const icon = createIconStyle(iconUrl, feature, properties);
+            const icon = createIconStyle(iconUrl, feature, properties, 20, resolution);
             if (icon) {
                 return new Style({
                     image: icon
@@ -210,7 +252,7 @@ export function getFeatureIconStyle(feature: any, resolution?: number): Style | 
         }
 
         // Fall back to circle style if no icon (no black border for normal points)
-        return getDefaultIconStyle(properties);
+        return getDefaultIconStyle(properties, resolution);
     } else if (geometryType === 'LineString') {
         return createLineStringStyle(feature, properties, resolution);
     } else if (geometryType === 'Polygon' || geometryType === 'MultiPolygon') {

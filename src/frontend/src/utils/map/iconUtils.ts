@@ -100,17 +100,51 @@ function hexToColor(hexColor: string | undefined, defaultColor: string = '#ff000
 }
 
 /**
+ * Calculate zoom level from resolution (Web Mercator)
+ * Uses equator approximation for simplicity
+ * @param resolution - Map resolution in meters per pixel
+ * @returns Zoom level
+ */
+function getZoomFromResolution(resolution: number): number {
+    if (resolution <= 0) return 10; // Default to base zoom if invalid
+    // Web Mercator resolution formula: resolution = 156543.03392 / 2^zoom
+    // Solving for zoom: zoom = log2(156543.03392 / resolution)
+    const baseResolution = 156543.03392;
+    return Math.log2(baseResolution / resolution);
+}
+
+/**
+ * Calculate exponential scale multiplier based on zoom level
+ * Icons are at normal size at zoom 10 and above (city level), with exponential scaling only when zoomed out
+ * Icons get smaller when zoomed out below baseZoom, but stay at normal size when zoomed in
+ * @param zoom - Current zoom level
+ * @param baseZoom - Base zoom level where icons are normal size (default: 10, city level)
+ * @param exponentFactor - Exponential scaling factor (default: 0.6 for aggressive scaling)
+ * @returns Scale multiplier (1.0 at baseZoom and above, < 1.0 when zoomed out)
+ */
+function getZoomScaleMultiplier(zoom: number, baseZoom: number = 10, exponentFactor: number = 0.6): number {
+    // At city level (zoom 10) and above, icons stay at default size
+    if (zoom >= baseZoom) {
+        return 1.0;
+    }
+    // When zoomed out below city level, apply exponential scaling
+    return Math.pow(2, (zoom - baseZoom) * exponentFactor);
+}
+
+/**
  * Create icon style with error handling
  * Preloads image to detect loading failures and marks feature accordingly
  * Ensures icon has a minimum size by calculating appropriate scale
  * Supports server-side recoloring for built-in icons if marker-color is specified
+ * Scales exponentially with zoom level (smaller when zoomed out, larger when zoomed in)
  * @param iconUrl - Icon URL (relative or absolute)
  * @param feature - OpenLayers feature
  * @param properties - Feature properties (for marker-color)
  * @param minSize - Minimum size in pixels (default: 20)
+ * @param resolution - Map resolution in meters per pixel (optional, for zoom-based scaling)
  * @returns Icon style or null if icon failed to load
  */
-export function createIconStyle(iconUrl: string, feature: any, properties: any, minSize: number = 20): Icon | null {
+export function createIconStyle(iconUrl: string, feature: any, properties: any, minSize: number = 20, resolution?: number): Icon | null {
     const builtInIcon = isSystemIcon(iconUrl);
     const markerColor = properties['marker-color'];
 
@@ -189,7 +223,14 @@ export function createIconStyle(iconUrl: string, feature: any, properties: any, 
     }
 
     // Use stored scale if available, otherwise use default
-    const finalScale = calculatedScale !== undefined ? calculatedScale : 0.4;
+    let finalScale = calculatedScale !== undefined ? calculatedScale : 0.4;
+
+    // Apply exponential zoom-based scaling if resolution is provided
+    if (resolution !== undefined && resolution > 0) {
+        const zoom = getZoomFromResolution(resolution);
+        const zoomMultiplier = getZoomScaleMultiplier(zoom);
+        finalScale *= zoomMultiplier;
+    }
 
     return new Icon({
         src: iconSrc,
@@ -201,15 +242,26 @@ export function createIconStyle(iconUrl: string, feature: any, properties: any, 
 /**
  * Get default fallback icon style (red circle)
  * Used when custom icon fails to load or no icon is specified
+ * Scales exponentially with zoom level (smaller when zoomed out, larger when zoomed in)
  * @param properties - Feature properties
- * @param iconFailed - Whether the icon failed to load (unused, kept for API compatibility)
+ * @param resolution - Map resolution in meters per pixel (optional, for zoom-based scaling)
  * @returns OpenLayers Style with default circle icon
  */
-export function getDefaultIconStyle(properties: any): Style {
+export function getDefaultIconStyle(properties: any, resolution?: number): Style {
     const fillColor = hexToColor(properties['marker-color'], '#ff0000');
+    const baseRadius = 3;
+    
+    // Apply exponential zoom-based scaling if resolution is provided
+    let radius = baseRadius;
+    if (resolution !== undefined && resolution > 0) {
+        const zoom = getZoomFromResolution(resolution);
+        const zoomMultiplier = getZoomScaleMultiplier(zoom);
+        radius = baseRadius * zoomMultiplier;
+    }
+    
     return new Style({
         image: new Circle({
-            radius: 3,
+            radius: radius,
             fill: new Fill({
                 color: fillColor
             }),
