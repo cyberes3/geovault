@@ -1,9 +1,6 @@
 import traceback
 
 from django.contrib.auth.models import AnonymousUser
-from django.http import HttpResponse
-
-from api.utils.responses import server_error_response
 from geo_lib.logging.console import get_access_logger
 from geo_lib.utils.ip_utils import get_client_ip, get_user_identifier
 
@@ -28,13 +25,10 @@ class LoggingMiddleware:
             traceback_str = traceback.format_exc()
             access_logger.error(traceback_str)
             
-            # Return appropriate error response based on request path
-            if request.path.startswith('/api/'):
-                # Return JSON error response for API endpoints
-                return server_error_response('Internal server error occurred')
-            else:
-                # Return generic 500 for non-API endpoints
-                return HttpResponse('Internal Server Error', status=500)
+            # Re-raise the exception so Django's exception handling can process it
+            # This ensures got_request_exception signal fires and handler500 is called
+            # Response formatting is handled by custom_exception_handler in exception_handler.py
+            raise
         
         # Log API requests and errors
         if request.path.startswith('/api/'):
