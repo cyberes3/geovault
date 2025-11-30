@@ -156,33 +156,12 @@ sudo chmod 600 /srv/geovault
 
 ## Nginx
 
+Example config file is located at `geovault.conf`
+
 Quick Nginx install script:
 
 ```shell
 sudo apt update && sudo apt install -y nginx
-
-sudo openssl req -x509 -nodes -days 99999 -newkey rsa:4096 \
-  -subj "/C=PE/ST=Lima/L=Lima/O=Acme Inc. /OU=IT Department/CN=acme.com" \
-  -keyout /etc/ssl/private/nginx-selfsigned.key -out /etc/ssl/certs/nginx-selfsigned.crt
-sudo openssl dhparam -out /etc/ssl/certs/dhparam.pem 2048
-
-echo """server {
-    listen 443 ssl http2 default_server;
-    server_name _;
-    ssl_certificate /etc/ssl/certs/nginx-selfsigned.crt;
-    ssl_certificate_key /etc/ssl/private/nginx-selfsigned.key;
-    client_max_body_size 10G;
-    location / {
-      proxy_set_header Host $host;
-      proxy_set_header Connection $http_connection;
-      proxy_set_header X-Scheme $scheme;
-      proxy_http_version 1.1;
-      proxy_set_header Upgrade $http_upgrade;
-      proxy_set_header Connection "upgrade";
-      proxy_pass http://127.0.0.1:8000;
-    }
-    include /etc/nginx/snippets/ssl-params.conf;
-}""" >/etc/nginx/sites-enabled/default
 
 echo """ssl_protocols TLSv1 TLSv1.1 TLSv1.2;
 ssl_prefer_server_ciphers on;
