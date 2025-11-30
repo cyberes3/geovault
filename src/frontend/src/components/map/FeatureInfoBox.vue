@@ -72,8 +72,8 @@
         <div class="text-xs md:text-sm text-gray-700 prose prose-sm max-w-none prose-headings:text-gray-900 prose-p:text-gray-700 prose-a:text-blue-500 prose-strong:text-gray-900 prose-ul:text-gray-700 prose-ol:text-gray-700" v-html="renderMarkdown(getFeatureDescription(feature))"></div>
       </div>
 
-      <!-- Tags -->
-      <div v-if="getFeatureTags(feature).userTags.length > 0 || getFeatureTags(feature).systemTags.length > 0" class="flex flex-wrap gap-1.5 md:gap-2">
+      <!-- User Tags -->
+      <div v-if="getFeatureTags(feature).userTags.length > 0" class="mb-2 md:mb-3 flex flex-wrap gap-1.5 md:gap-2">
         <span
           v-for="tag in getFeatureTags(feature).userTags"
           :key="`user-${tag}`"
@@ -81,13 +81,24 @@
         >
           {{ tag }}
         </span>
-        <span
-          v-for="tag in getFeatureTags(feature).systemTags"
-          :key="`system-${tag}`"
-          class="inline-flex items-center px-1.5 py-0.5 md:px-2 md:py-1 rounded-md text-[10px] md:text-xs font-medium bg-gray-200 text-gray-600"
-        >
-          {{ tag }}
-        </span>
+      </div>
+
+      <!-- System Tags (Fixed Size Box) -->
+      <div v-if="getFeatureTags(feature).systemTags.length > 0" class="mb-2 md:mb-3">
+        <div class="text-[10px] md:text-xs text-gray-500 mb-1">System Tags</div>
+        <div class="border border-gray-200 rounded-md bg-gray-50 overflow-hidden">
+          <div class="h-20 md:h-24 overflow-y-auto p-2">
+            <div class="flex flex-wrap gap-1.5 md:gap-2">
+              <span
+                v-for="tag in getFeatureTags(feature).systemTags"
+                :key="`system-${tag}`"
+                class="inline-flex items-center px-1.5 py-0.5 md:px-2 md:py-1 rounded-md text-[10px] md:text-xs font-medium bg-gray-200 text-gray-600"
+              >
+                {{ tag }}
+              </span>
+            </div>
+          </div>
+        </div>
       </div>
     </div>
   </div>
