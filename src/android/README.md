@@ -74,9 +74,3 @@ To build a signed release APK, you need to set up a keystore file and configure 
    - Your key password
    
    The keystore path and alias are configured in `gradle.properties` (no passwords are stored there for security).
-
-**Important Security Notes:**
-- The keystore file (`keystore.jks`) is automatically excluded from version control via `.gitignore`
-- Never commit your keystore file or passwords to version control
-- Keep your keystore file and passwords secure - if you lose the keystore, you won't be able to update your app on Google Play Store
-- Consider backing up your keystore file securely (e.g., encrypted backup)

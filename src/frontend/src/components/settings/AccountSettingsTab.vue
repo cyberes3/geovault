@@ -142,7 +142,7 @@
       <p class="text-sm text-gray-600 mb-4">
         Download all your features and associated data as a single KMZ file. This file can be opened in Google Earth or other GIS software.
       </p>
-      
+
       <div v-if="downloadMessage" :class="[
         'p-3 rounded-md text-sm mb-4',
         downloadMessageType === 'success' ? 'bg-green-50 text-green-800' : 'bg-red-50 text-red-800'
@@ -183,6 +183,13 @@
       <h2 class="text-lg font-semibold text-gray-900 mb-4">API Keys</h2>
       <p class="text-sm text-gray-600 mb-4">
         Create API keys to allow programmatic access to your account. Keys can be used to upload files and access your data via the API.
+      </p>
+      <p class="text-sm text-gray-600 mb-4">
+        API keys can also be used with the
+        <a href="https://git.evulid.cc/cyberes/geovault-app-release/releases" target="_blank" class="text-blue-600 hover:text-blue-800 underline">
+          GeoVault Uploader app for Android
+        </a>
+        to easily upload your tracks on the go.
       </p>
 
       <!-- Create New API Key Form -->
@@ -564,7 +571,7 @@ export default {
           const url = window.URL.createObjectURL(new Blob([response.data]));
           const link = document.createElement('a');
           link.href = url;
-          
+
           // Extract filename from Content-Disposition header if available
           let filename = 'all-features.kmz';
           const contentDisposition = response.headers['content-disposition'];
@@ -574,15 +581,15 @@ export default {
               filename = filenameMatch[1];
             }
           }
-          
+
           link.setAttribute('download', filename);
           document.body.appendChild(link);
           link.click();
-          
+
           // Cleanup
           document.body.removeChild(link);
           window.URL.revokeObjectURL(url);
-          
+
           // Only show error messages, success is obvious by the download starting
           this.downloadMessage = '';
           this.downloadMessageType = '';
@@ -715,7 +722,7 @@ export default {
     },
     async copyApiKey() {
       if (!this.newKeyRawValue) return;
-      
+
       // Try modern clipboard API first
       if (navigator.clipboard && navigator.clipboard.writeText) {
         try {
@@ -726,7 +733,7 @@ export default {
           console.warn('Clipboard API failed, trying fallback:', err);
         }
       }
-      
+
       // Fallback for mobile and older browsers
       const input = this.$refs.newKeyInput;
       if (input) {
@@ -734,7 +741,7 @@ export default {
           // Select the text
           input.select();
           input.setSelectionRange(0, 99999); // For mobile devices
-          
+
           // Try execCommand as fallback
           const successful = document.execCommand('copy');
           if (successful) {

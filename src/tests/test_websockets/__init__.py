@@ -1,0 +1,4 @@
+"""
+WebSocket consumer tests.
+"""
+
