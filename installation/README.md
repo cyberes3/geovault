@@ -156,30 +156,7 @@ sudo chmod 600 /srv/geovault
 
 ## Nginx
 
-Example config file is located at `geovault.conf`
-
-Quick Nginx install script:
-
-```shell
-sudo apt update && sudo apt install -y nginx
-
-echo """ssl_protocols TLSv1 TLSv1.1 TLSv1.2;
-ssl_prefer_server_ciphers on;
-ssl_ciphers \"EECDH+AESGCM:EDH+AESGCM:AES256+EECDH:AES256+EDH\";
-ssl_ecdh_curve secp384r1;
-ssl_session_cache shared:SSL:10m;
-ssl_session_tickets off;
-ssl_stapling on;
-ssl_stapling_verify on;
-resolver 1.1.1.1 1.0.0.1 valid=300s;
-resolver_timeout 5s;
-add_header Strict-Transport-Security \"max-age=63072000; includeSubdomains\";
-add_header X-Frame-Options DENY;
-add_header X-Content-Type-Options nosniff;
-ssl_dhparam /etc/ssl/certs/dhparam.pem;""" >/etc/nginx/snippets/ssl-params.conf
-
-sudo systemctl enable --now nginx && sudo service nginx restart && sudo service nginx status
-```
+Example config file is located at `geovault.conf`.
 
 
 

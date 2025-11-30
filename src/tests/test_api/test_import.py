@@ -367,12 +367,16 @@ class TestImportAPI(TestCase):
         self.assertEqual(response.status_code, 400)
     
     def test_update_import_item_empty_features(self):
-        """Test updating import item with empty features list."""
+        """Test updating import item with empty features list (should succeed)."""
         import_queue = ImportQueue.objects.create(
             user=self.user,
             original_filename='test.kml',
             raw_file='<kml></kml>',
-            geofeatures=[],
+            geofeatures=[{
+                'type': 'Feature',
+                'geometry': {'type': 'Point', 'coordinates': [-122.4194, 37.7749]},
+                'properties': {'id': 'test-id', 'name': 'Original'}
+            }],
             imported=False
         )
         update_data = {'features': []}
@@ -381,7 +385,13 @@ class TestImportAPI(TestCase):
             data=json.dumps(update_data),
             content_type='application/json'
         )
-        self.assertEqual(response.status_code, 400)
+        # Empty features array should be accepted (e.g., when only bulk operations changed)
+        self.assertEqual(response.status_code, 200)
+        data = json.loads(response.content)
+        self.assertEqual(data['updated_count'], 0)
+        # Verify original features are unchanged
+        import_queue.refresh_from_db()
+        self.assertEqual(import_queue.geofeatures[0]['properties']['name'], 'Original')
     
     def test_update_import_item_missing_properties(self):
         """Test updating import item with missing properties."""
@@ -540,6 +550,49 @@ class TestImportAPI(TestCase):
         self.assertEqual(response.status_code, 200)
         import_queue.refresh_from_db()
         self.assertEqual(import_queue.bulk_operations, bulk_ops)
+
+    def test_update_import_item_empty_features_with_existing_features(self):
+        """Test that empty features array is accepted when no feature changes are needed.
+        
+        This simulates the scenario where only bulk operations changed (e.g., adding a global tag)
+        and the frontend sends an empty features array. This should succeed without validation errors.
+        """
+        geofeatures = [{
+            'type': 'Feature',
+            'geometry': {'type': 'Point', 'coordinates': [-122.4194, 37.7749]},
+            'properties': {'id': 'feature-1', 'name': 'Test Feature 1'}
+        }, {
+            'type': 'Feature',
+            'geometry': {'type': 'Point', 'coordinates': [-122.4094, 37.7849]},
+            'properties': {'id': 'feature-2', 'name': 'Test Feature 2'}
+        }]
+        import_queue = ImportQueue.objects.create(
+            user=self.user,
+            original_filename='test.kml',
+            raw_file='<kml></kml>',
+            geofeatures=geofeatures,
+            imported=False
+        )
+        
+        # Simulate the scenario: only bulk operations changed, no feature changes
+        # Frontend sends empty features array
+        update_data = {'features': []}
+        response = self.client.put(
+            f'/api/item/import/update/{import_queue.id}',
+            data=json.dumps(update_data),
+            content_type='application/json'
+        )
+        
+        # Should succeed with 200 status
+        self.assertEqual(response.status_code, 200)
+        data = json.loads(response.content)
+        self.assertEqual(data['updated_count'], 0)
+        
+        # Verify features remain unchanged
+        import_queue.refresh_from_db()
+        self.assertEqual(len(import_queue.geofeatures), 2)
+        self.assertEqual(import_queue.geofeatures[0]['properties']['name'], 'Test Feature 1')
+        self.assertEqual(import_queue.geofeatures[1]['properties']['name'], 'Test Feature 2')
 
     def test_get_bulk_operations(self):
         """Test getting bulk operations for an import item."""
