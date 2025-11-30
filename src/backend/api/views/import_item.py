@@ -25,6 +25,7 @@ from geo_lib.security.file_validation import basic_file_security_check
 from geo_lib.validation.geojson_whitelist import validate_and_normalize_geojson_feature
 from geo_lib.validation.geometry_validation import GeometryValidationError
 from geo_lib.website.auth import api_or_login_required_401
+from api.validation.feature_updates import validate_payload, validate_pydantic_model, FeatureUpdatePayload, ImportToFeaturestorePayload
 
 logger = get_access_logger()
 
@@ -260,7 +261,8 @@ def delete_import_item(request, id):
 
 @api_or_login_required_401()
 @require_http_methods(["PUT", "PATCH"])
-def update_import_item(request, item_id):
+@validate_payload(FeatureUpdatePayload)
+def update_import_item(request, item_id, validated_data):
     try:
         queue = ImportQueue.objects.get(id=item_id, user=request.user)
     except ImportQueue.DoesNotExist:
@@ -273,34 +275,24 @@ def update_import_item(request, item_id):
             code=400
         )
 
-    try:
-        data = json.loads(request.body)
-        if not isinstance(data, dict) or 'features' not in data:
-            raise ValueError('Invalid data format. Expected {"features": [{"properties": {"id": "...", ...}}, ...]}')
-
-        features_to_update = data['features']
-        if not isinstance(features_to_update, list):
-            raise ValueError('features must be a list')
-    except (json.JSONDecodeError, ValueError) as e:
-        return error_response(str(e), code=400)
-
     # Build a lookup map of feature ID to partial update fields
     updates_by_id = {}
+    features_to_update = validated_data['features']
     allowed_fields = {'name', 'description', 'created', 'tags'}
 
     for feature in features_to_update:
-        # Extract properties from the feature
+        # Extract properties from the validated feature
         properties = feature.get('properties', {})
-        if not isinstance(properties, dict):
-            logger.warning(f"Skipping feature with invalid properties: {feature}")
+        if not properties:
             continue
 
+        # Extract feature ID for matching (id is not an updatable field)
         feature_id = properties.get('id')
         if not feature_id:
             logger.warning(f"Skipping feature without ID: {properties.get('name', 'Unnamed')}")
             continue
 
-        # Extract only allowed fields (name, description, created, tags)
+        # Extract only allowed updatable fields (name, description, created, tags)
         update_fields = {}
         for field in allowed_fields:
             if field in properties:
@@ -335,16 +327,10 @@ def update_import_item(request, item_id):
 
                 for field, value in update_fields.items():
                     if field == 'tags':
-                        # Handle tags specially - filter out system tags and prepare user tags
-                        if not isinstance(value, list):
-                            value = []
-                        # Filter out any system tags that user might have added
                         user_tags = filter_protected_tags(value, CONST_INTERNAL_TAGS)
-                        # Prepare user tags (lowercase and deduplicate)
                         user_tags = prepare_user_tags(user_tags)
                         merged_feature['properties']['tags'] = user_tags
                     else:
-                        # For name, description, created - update directly
                         merged_feature['properties'][field] = value
 
                 # Ensure the feature has the required structure (type, geometry, properties)
@@ -381,7 +367,8 @@ def update_import_item(request, item_id):
 
 @api_or_login_required_401()
 @require_http_methods(["POST"])
-def import_to_featurestore(request, item_id):
+@validate_payload(ImportToFeaturestorePayload, allow_empty=True)
+def import_to_featurestore(request, item_id, validated_data):
     """
     Start async import job for importing an import queue item to the feature store.
     All processing happens in the async ImportJob.
@@ -398,20 +385,9 @@ def import_to_featurestore(request, item_id):
             code=400
         )
 
-    # Parse request body to get import_custom_icons flag and skipped_feature_ids
-    import_custom_icons = True  # Default to True for backward compatibility
-    skipped_feature_ids = []  # List of feature IDs to skip during import
-    try:
-        if request.body:
-            data = json.loads(request.body)
-            if isinstance(data, dict):
-                import_custom_icons = data.get('import_custom_icons', True)
-                # Parse skipped_feature_ids if provided
-                skipped_ids = data.get('skipped_feature_ids', [])
-                if isinstance(skipped_ids, list):
-                    skipped_feature_ids = skipped_ids
-    except (json.JSONDecodeError, ValueError) as e:
-        logger.warning(f"Failed to parse request body: {str(e)}, using defaults")
+    # Get import_custom_icons flag and skipped_feature_ids from validated data
+    import_custom_icons = validated_data.get('import_custom_icons', True)
+    skipped_feature_ids = validated_data.get('skipped_feature_ids', [])
 
     # Check for file-level duplicates before importing
     # Only block duplicates that are still in the queue (not yet imported)

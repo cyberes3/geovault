@@ -1442,7 +1442,14 @@ export default {
       }
     },
     updateDate(index, event) {
-      this.itemsForUser[index].properties.created = event.target.value;
+      const dateValue = event.target.value;
+      if (dateValue) {
+        // datetime-local format is YYYY-MM-DDTHH:MM (no seconds or timezone)
+        // Append ':00Z' to treat it as UTC and convert to ISO format
+        this.itemsForUser[index].properties.created = new Date(dateValue + ':00Z').toISOString();
+      } else {
+        this.itemsForUser[index].properties.created = null;
+      }
     },
     formatDateForInput(dateString) {
       if (!dateString) return '';
@@ -1478,7 +1485,7 @@ export default {
       if (properties.description !== undefined) {
         partialUpdate.properties.description = properties.description;
       }
-      if (properties.created !== undefined) {
+      if (properties.created !== undefined && properties.created !== null) {
         partialUpdate.properties.created = properties.created;
       }
       if (properties.tags !== undefined) {
@@ -1627,7 +1634,7 @@ export default {
       try {
         await this._saveChangesInternal();
       } catch (error) {
-        this.msg = 'Error saving changes: ' + (error.response?.data?.msg || error.message);
+        this.msg = 'Error saving changes: ' + (error.response?.data?.error || error.response?.data?.msg || error.message);
         window.alert(this.msg);
       } finally {
         this.lockButtons = false;
@@ -1812,7 +1819,7 @@ export default {
           this.originalBulkOperations = cloneBulkOperations(bulkData);
         }
       } catch (error) {
-        this.msg = 'Error saving bulk operations: ' + (error.response?.data?.msg || error.message);
+        this.msg = 'Error saving bulk operations: ' + (error.response?.data?.error || error.response?.data?.msg || error.message);
         window.alert(this.msg);
         throw error; // Re-throw so _saveChangesInternal can handle it
       }

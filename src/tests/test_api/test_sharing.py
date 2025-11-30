@@ -81,6 +81,28 @@ class TestSharingAPI(TestCase):
         )
         self.assertEqual(response.status_code, 404)
 
+    def test_create_tag_share_invalid_json(self):
+        """Test creating a tag share with invalid JSON."""
+        response = self.client.post(
+            '/api/sharing/create/',
+            data='invalid json',
+            content_type='application/json'
+        )
+        self.assertEqual(response.status_code, 400)
+
+    def test_create_tag_share_extra_fields(self):
+        """Test creating a tag share with extra fields."""
+        share_data = {
+            'tag': 'shared-tag',
+            'extra_field': 'should be rejected'
+        }
+        response = self.client.post(
+            '/api/sharing/create/',
+            data=json.dumps(share_data),
+            content_type='application/json'
+        )
+        self.assertEqual(response.status_code, 400)
+
     def test_list_shares(self):
         """Test listing shares."""
         TagShare.objects.create(
@@ -207,6 +229,61 @@ class TestSharingAPI(TestCase):
         data = json.loads(response.content)
         self.assertIn('share_id', data)
         self.assertTrue(CollectionShare.objects.filter(share_id=data['share_id']).exists())
+
+    def test_create_collection_share_invalid_json(self):
+        """Test creating a collection share with invalid JSON."""
+        response = self.client.post(
+            '/api/sharing/collections/create/',
+            data='invalid json',
+            content_type='application/json'
+        )
+        self.assertEqual(response.status_code, 400)
+
+    def test_create_collection_share_extra_fields(self):
+        """Test creating a collection share with extra fields."""
+        collection = Collection.objects.create(
+            user=self.user,
+            name='Test Collection',
+            feature_ids=[self.feature.id]
+        )
+
+        share_data = {
+            'collection_id': str(collection.id),
+            'extra_field': 'should be rejected'
+        }
+
+        response = self.client.post(
+            '/api/sharing/collections/create/',
+            data=json.dumps(share_data),
+            content_type='application/json'
+        )
+        self.assertEqual(response.status_code, 400)
+
+    def test_create_collection_share_invalid_uuid(self):
+        """Test creating a collection share with invalid UUID."""
+        share_data = {
+            'collection_id': 'not-a-valid-uuid'
+        }
+
+        response = self.client.post(
+            '/api/sharing/collections/create/',
+            data=json.dumps(share_data),
+            content_type='application/json'
+        )
+        self.assertEqual(response.status_code, 400)
+
+    def test_create_collection_share_missing_collection_id(self):
+        """Test creating a collection share without collection_id."""
+        share_data = {
+            'allow_downloads': False
+        }
+
+        response = self.client.post(
+            '/api/sharing/collections/create/',
+            data=json.dumps(share_data),
+            content_type='application/json'
+        )
+        self.assertEqual(response.status_code, 400)
 
     def test_get_public_collection_share(self):
         """Test getting public collection share."""

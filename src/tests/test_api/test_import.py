@@ -341,7 +341,175 @@ class TestImportAPI(TestCase):
             imported=True
         )
 
+        update_data = {'features': [{'properties': {'id': 'test-id', 'name': 'Test'}}]}
+        response = self.client.put(
+            f'/api/item/import/update/{import_queue.id}',
+            data=json.dumps(update_data),
+            content_type='application/json'
+        )
+        self.assertEqual(response.status_code, 400)
+    
+    def test_update_import_item_missing_features(self):
+        """Test updating import item with missing features field."""
+        import_queue = ImportQueue.objects.create(
+            user=self.user,
+            original_filename='test.kml',
+            raw_file='<kml></kml>',
+            geofeatures=[],
+            imported=False
+        )
+        update_data = {}
+        response = self.client.put(
+            f'/api/item/import/update/{import_queue.id}',
+            data=json.dumps(update_data),
+            content_type='application/json'
+        )
+        self.assertEqual(response.status_code, 400)
+    
+    def test_update_import_item_empty_features(self):
+        """Test updating import item with empty features list."""
+        import_queue = ImportQueue.objects.create(
+            user=self.user,
+            original_filename='test.kml',
+            raw_file='<kml></kml>',
+            geofeatures=[],
+            imported=False
+        )
         update_data = {'features': []}
+        response = self.client.put(
+            f'/api/item/import/update/{import_queue.id}',
+            data=json.dumps(update_data),
+            content_type='application/json'
+        )
+        self.assertEqual(response.status_code, 400)
+    
+    def test_update_import_item_missing_properties(self):
+        """Test updating import item with missing properties."""
+        import_queue = ImportQueue.objects.create(
+            user=self.user,
+            original_filename='test.kml',
+            raw_file='<kml></kml>',
+            geofeatures=[],
+            imported=False
+        )
+        update_data = {'features': [{}]}
+        response = self.client.put(
+            f'/api/item/import/update/{import_queue.id}',
+            data=json.dumps(update_data),
+            content_type='application/json'
+        )
+        self.assertEqual(response.status_code, 400)
+    
+    def test_update_import_item_invalid_iso_timestamp(self):
+        """Test updating import item with invalid ISO timestamp."""
+        geofeatures = [{
+            'type': 'Feature',
+            'geometry': {'type': 'Point', 'coordinates': [-122.4194, 37.7749]},
+            'properties': {'id': 'test-id', 'name': 'Original'}
+        }]
+        import_queue = ImportQueue.objects.create(
+            user=self.user,
+            original_filename='test.kml',
+            raw_file='<kml></kml>',
+            geofeatures=geofeatures,
+            imported=False
+        )
+        update_data = {
+            'features': [{
+                'properties': {
+                    'id': 'test-id',
+                    'created': 'not-a-valid-iso-timestamp'
+                }
+            }]
+        }
+        response = self.client.put(
+            f'/api/item/import/update/{import_queue.id}',
+            data=json.dumps(update_data),
+            content_type='application/json'
+        )
+        self.assertEqual(response.status_code, 400)
+    
+    def test_update_import_item_valid_iso_timestamp(self):
+        """Test updating import item with valid ISO timestamp."""
+        geofeatures = [{
+            'type': 'Feature',
+            'geometry': {'type': 'Point', 'coordinates': [-122.4194, 37.7749]},
+            'properties': {'id': 'test-id', 'name': 'Original'}
+        }]
+        import_queue = ImportQueue.objects.create(
+            user=self.user,
+            original_filename='test.kml',
+            raw_file='<kml></kml>',
+            geofeatures=geofeatures,
+            imported=False
+        )
+        update_data = {
+            'features': [{
+                'properties': {
+                    'id': 'test-id',
+                    'created': '2024-01-15T10:30:00Z'
+                }
+            }]
+        }
+        response = self.client.put(
+            f'/api/item/import/update/{import_queue.id}',
+            data=json.dumps(update_data),
+            content_type='application/json'
+        )
+        self.assertEqual(response.status_code, 200)
+    
+    def test_update_import_item_extra_fields(self):
+        """Test updating import item with extra fields (should be rejected)."""
+        geofeatures = [{
+            'type': 'Feature',
+            'geometry': {'type': 'Point', 'coordinates': [-122.4194, 37.7749]},
+            'properties': {'id': 'test-id', 'name': 'Original'}
+        }]
+        import_queue = ImportQueue.objects.create(
+            user=self.user,
+            original_filename='test.kml',
+            raw_file='<kml></kml>',
+            geofeatures=geofeatures,
+            imported=False
+        )
+        update_data = {
+            'features': [{
+                'properties': {
+                    'id': 'test-id',
+                    'name': 'Updated',
+                    'invalid_field': 'should be rejected'
+                }
+            }]
+        }
+        response = self.client.put(
+            f'/api/item/import/update/{import_queue.id}',
+            data=json.dumps(update_data),
+            content_type='application/json'
+        )
+        self.assertEqual(response.status_code, 400)
+    
+    def test_update_import_item_tags_not_list(self):
+        """Test updating import item with tags not as list."""
+        geofeatures = [{
+            'type': 'Feature',
+            'geometry': {'type': 'Point', 'coordinates': [-122.4194, 37.7749]},
+            'properties': {'id': 'test-id', 'name': 'Original'}
+        }]
+        import_queue = ImportQueue.objects.create(
+            user=self.user,
+            original_filename='test.kml',
+            raw_file='<kml></kml>',
+            geofeatures=geofeatures,
+            imported=False
+        )
+        update_data = {
+            'features': [{
+                'properties': {
+                    'id': 'test-id',
+                    'tags': 'not-a-list'
+                }
+            }]
+        }
         response = self.client.put(
             f'/api/item/import/update/{import_queue.id}',
             data=json.dumps(update_data),
@@ -408,7 +576,11 @@ class TestImportAPI(TestCase):
         )
         mock_import_job.start_import_job.return_value = 'import-job-id'
 
-        response = self.client.post(f'/api/item/import/perform/{import_queue.id}')
+        response = self.client.post(
+            f'/api/item/import/perform/{import_queue.id}',
+            data=json.dumps({}),
+            content_type='application/json'
+        )
         self.assertEqual(response.status_code, 200)
         data = json.loads(response.content)
         self.assertIn('job_id', data)
@@ -417,6 +589,62 @@ class TestImportAPI(TestCase):
         """Test importing non-existent item."""
         response = self.client.post('/api/item/import/perform/99999')
         self.assertEqual(response.status_code, 404)
+
+    def test_import_to_featurestore_invalid_json(self):
+        """Test importing with invalid JSON."""
+        import_queue = ImportQueue.objects.create(
+            user=self.user,
+            original_filename='test.kml',
+            raw_file='<kml></kml>',
+            geofeatures=[],
+            imported=False
+        )
+        
+        response = self.client.post(
+            f'/api/item/import/perform/{import_queue.id}',
+            data='invalid json',
+            content_type='application/json'
+        )
+        self.assertEqual(response.status_code, 400)
+
+    def test_import_to_featurestore_extra_fields(self):
+        """Test importing with extra fields."""
+        import_queue = ImportQueue.objects.create(
+            user=self.user,
+            original_filename='test.kml',
+            raw_file='<kml></kml>',
+            geofeatures=[],
+            imported=False
+        )
+        
+        response = self.client.post(
+            f'/api/item/import/perform/{import_queue.id}',
+            data=json.dumps({
+                'import_custom_icons': True,
+                'extra_field': 'should be rejected'
+            }),
+            content_type='application/json'
+        )
+        self.assertEqual(response.status_code, 400)
+
+    def test_import_to_featurestore_invalid_skipped_ids_type(self):
+        """Test importing with invalid skipped_feature_ids type."""
+        import_queue = ImportQueue.objects.create(
+            user=self.user,
+            original_filename='test.kml',
+            raw_file='<kml></kml>',
+            geofeatures=[],
+            imported=False
+        )
+        
+        response = self.client.post(
+            f'/api/item/import/perform/{import_queue.id}',
+            data=json.dumps({
+                'skipped_feature_ids': 'not-a-list'
+            }),
+            content_type='application/json'
+        )
+        self.assertEqual(response.status_code, 400)
 
     def test_upload_unauthorized(self):
         """Test uploading without authentication."""

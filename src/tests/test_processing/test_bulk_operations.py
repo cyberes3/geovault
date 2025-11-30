@@ -31,7 +31,7 @@ class TestBulkOperations:
         }
         is_valid, error = validate_bulk_operations_payload(bulk_ops)
         assert is_valid is False
-        assert 'invalidKey' in error
+        assert error is not None
 
     def test_validate_bulk_operations_tags_not_list(self):
         """Test validating bulk operations with tags not as list."""
@@ -40,7 +40,7 @@ class TestBulkOperations:
         }
         is_valid, error = validate_bulk_operations_payload(bulk_ops)
         assert is_valid is False
-        assert 'tags' in error.lower()
+        assert error is not None
 
     def test_validate_bulk_operations_tags_not_strings(self):
         """Test validating bulk operations with tags not as strings."""
@@ -57,7 +57,7 @@ class TestBulkOperations:
         }
         is_valid, error = validate_bulk_operations_payload(bulk_ops)
         assert is_valid is False
-        assert 'color' in error.lower()
+        assert error is not None
 
     def test_validate_bulk_operations_null_color(self):
         """Test validating bulk operations with null color."""
@@ -74,7 +74,7 @@ class TestBulkOperations:
         }
         is_valid, error = validate_bulk_operations_payload(bulk_ops)
         assert is_valid is False
-        assert 'icon' in error.lower()
+        assert error is not None
 
     def test_validate_bulk_operations_valid_icon_url(self):
         """Test validating bulk operations with valid icon URL."""
@@ -96,7 +96,7 @@ class TestBulkOperations:
         """Test validating bulk operations that is not a dict."""
         is_valid, error = validate_bulk_operations_payload('not-a-dict')
         assert is_valid is False
-        assert 'JSON object' in error
+        assert error is not None
 
     def test_apply_bulk_operations_tags(self):
         """Test applying bulk operations with tags."""

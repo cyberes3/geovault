@@ -181,6 +181,52 @@ class TestFeatureAPI(TestCase):
         self.assertEqual(self.point_feature.geojson['properties']['name'], 'Updated Name')
         self.assertEqual(self.point_feature.geojson['properties']['tags'], ['new-tag'])
 
+    def test_update_feature_metadata_invalid_json(self):
+        """Test update feature metadata with invalid JSON."""
+        response = self.client.put(
+            f'/api/feature/{self.point_feature.id}/update-metadata/',
+            data='invalid json',
+            content_type='application/json'
+        )
+        self.assertEqual(response.status_code, 400)
+
+    def test_update_feature_metadata_extra_fields(self):
+        """Test update feature metadata with extra fields."""
+        metadata = {
+            'name': 'Updated Name',
+            'extra_field': 'should be rejected'
+        }
+        response = self.client.put(
+            f'/api/feature/{self.point_feature.id}/update-metadata/',
+            data=json.dumps(metadata),
+            content_type='application/json'
+        )
+        self.assertEqual(response.status_code, 400)
+
+    def test_update_feature_metadata_invalid_iso_timestamp(self):
+        """Test update feature metadata with invalid ISO timestamp."""
+        metadata = {
+            'created': 'not-a-valid-iso-timestamp'
+        }
+        response = self.client.put(
+            f'/api/feature/{self.point_feature.id}/update-metadata/',
+            data=json.dumps(metadata),
+            content_type='application/json'
+        )
+        self.assertEqual(response.status_code, 400)
+
+    def test_update_feature_metadata_valid_iso_timestamp(self):
+        """Test update feature metadata with valid ISO timestamp."""
+        metadata = {
+            'created': '2024-01-01T12:00:00Z'
+        }
+        response = self.client.put(
+            f'/api/feature/{self.point_feature.id}/update-metadata/',
+            data=json.dumps(metadata),
+            content_type='application/json'
+        )
+        self.assertEqual(response.status_code, 200)
+
     def test_delete_feature(self):
         """Test deleting a feature."""
         feature_id = self.point_feature.id
@@ -287,7 +333,105 @@ class TestFeatureAPI(TestCase):
     def test_bulk_update_features_metadata_invalid(self):
         """Test bulk update with invalid data."""
         update_data = {
-            'feature_ids': 'not-a-list'
+            'updates': 'not-a-list'
+        }
+        response = self.client.post(
+            '/api/features/bulk-update-metadata/',
+            data=json.dumps(update_data),
+            content_type='application/json'
+        )
+        self.assertEqual(response.status_code, 400)
+    
+    def test_bulk_update_features_metadata_missing_updates(self):
+        """Test bulk update with missing updates field."""
+        update_data = {}
+        response = self.client.post(
+            '/api/features/bulk-update-metadata/',
+            data=json.dumps(update_data),
+            content_type='application/json'
+        )
+        self.assertEqual(response.status_code, 400)
+    
+    def test_bulk_update_features_metadata_empty_updates(self):
+        """Test bulk update with empty updates list."""
+        update_data = {
+            'updates': []
+        }
+        response = self.client.post(
+            '/api/features/bulk-update-metadata/',
+            data=json.dumps(update_data),
+            content_type='application/json'
+        )
+        self.assertEqual(response.status_code, 400)
+    
+    def test_bulk_update_features_metadata_invalid_feature_id_type(self):
+        """Test bulk update with invalid feature_id type."""
+        update_data = {
+            'updates': [{
+                'feature_id': 'not-an-int',
+                'name': 'Test'
+            }]
+        }
+        response = self.client.post(
+            '/api/features/bulk-update-metadata/',
+            data=json.dumps(update_data),
+            content_type='application/json'
+        )
+        self.assertEqual(response.status_code, 400)
+    
+    def test_bulk_update_features_metadata_invalid_iso_timestamp(self):
+        """Test bulk update with invalid ISO timestamp."""
+        update_data = {
+            'updates': [{
+                'feature_id': self.point_feature.id,
+                'created': 'not-a-valid-iso-timestamp'
+            }]
+        }
+        response = self.client.post(
+            '/api/features/bulk-update-metadata/',
+            data=json.dumps(update_data),
+            content_type='application/json'
+        )
+        self.assertEqual(response.status_code, 400)
+    
+    def test_bulk_update_features_metadata_valid_iso_timestamp(self):
+        """Test bulk update with valid ISO timestamp."""
+        update_data = {
+            'updates': [{
+                'feature_id': self.point_feature.id,
+                'created': '2024-01-15T10:30:00Z'
+            }]
+        }
+        response = self.client.post(
+            '/api/features/bulk-update-metadata/',
+            data=json.dumps(update_data),
+            content_type='application/json'
+        )
+        self.assertEqual(response.status_code, 200)
+    
+    def test_bulk_update_features_metadata_extra_fields(self):
+        """Test bulk update with extra fields (should be rejected)."""
+        update_data = {
+            'updates': [{
+                'feature_id': self.point_feature.id,
+                'name': 'Test',
+                'invalid_field': 'should be rejected'
+            }]
+        }
+        response = self.client.post(
+            '/api/features/bulk-update-metadata/',
+            data=json.dumps(update_data),
+            content_type='application/json'
+        )
+        self.assertEqual(response.status_code, 400)
+    
+    def test_bulk_update_features_metadata_tags_not_list(self):
+        """Test bulk update with tags not as list."""
+        update_data = {
+            'updates': [{
+                'feature_id': self.point_feature.id,
+                'tags': 'not-a-list'
+            }]
         }
         response = self.client.post(
             '/api/features/bulk-update-metadata/',
@@ -377,6 +521,33 @@ class TestFeatureAPI(TestCase):
         response = self.client.post(
             f'/api/feature/{self.point_feature.id}/apply-replacement/',
             data=json.dumps(invalid_geometry),
+            content_type='application/json'
+        )
+        self.assertEqual(response.status_code, 400)
+
+    def test_apply_replacement_geometry_missing_fields(self):
+        """Test applying replacement geometry with missing required fields."""
+        response = self.client.post(
+            f'/api/feature/{self.point_feature.id}/apply-replacement/',
+            data=json.dumps({'import_queue_id': 'some-id'}),
+            content_type='application/json'
+        )
+        self.assertEqual(response.status_code, 400)
+
+    def test_apply_replacement_geometry_invalid_feature_index_type(self):
+        """Test applying replacement geometry with invalid feature_index type."""
+        response = self.client.post(
+            f'/api/feature/{self.point_feature.id}/apply-replacement/',
+            data=json.dumps({'import_queue_id': 'some-id', 'feature_index': 'not-an-int'}),
+            content_type='application/json'
+        )
+        self.assertEqual(response.status_code, 400)
+
+    def test_apply_replacement_geometry_extra_fields(self):
+        """Test applying replacement geometry with extra fields."""
+        response = self.client.post(
+            f'/api/feature/{self.point_feature.id}/apply-replacement/',
+            data=json.dumps({'import_queue_id': 'some-id', 'feature_index': 0, 'extra': 'field'}),
             content_type='application/json'
         )
         self.assertEqual(response.status_code, 400)

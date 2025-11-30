@@ -29,6 +29,8 @@ from geo_lib.validation.styling_validation import (
     describe_color_format,
     describe_icon_format,
 )
+from api.validation.feature_updates import validate_pydantic_model, BulkOperationsPayload
+from pydantic import ValidationError
 
 logger = get_job_logger()
 
@@ -133,49 +135,19 @@ def validate_bulk_operations_payload(bulk_ops: Dict[str, Any]) -> Tuple[bool, Op
 
     Returns:
         (is_valid, error_message). error_message is None when is_valid is True.
+        
+    Note: This function maintains backward compatibility with the old signature.
+    It uses Pydantic validation internally but returns the legacy tuple format.
     """
     if not isinstance(bulk_ops, dict):
         return False, "bulk_operations must be a JSON object"
-
-    allowed_keys = {"tags", "pointColor", "pointIcon", "lineColor", "polyColor"}
-
-    invalid_keys = [k for k in bulk_ops.keys() if k not in allowed_keys]
-    if invalid_keys:
-        invalid_keys_str = ", ".join(sorted(str(k) for k in invalid_keys))
-        return (
-            False,
-            (
-                f"Unsupported bulk operation key(s): {invalid_keys_str}. "
-                "Allowed keys are: tags, pointColor, pointIcon, lineColor, polyColor"
-            ),
-        )
-
-    # Validate tags: must be an array of strings if provided
-    if "tags" in bulk_ops:
-        tags_value = bulk_ops["tags"]
-        if (
-            not isinstance(tags_value, list)
-            or any(not isinstance(t, str) for t in tags_value)
-        ):
-            return False, "bulk_operations.tags must be an array of strings"
-
-    # Validate colors: string (valid hex) or null
-    for field_name in ("pointColor", "lineColor", "polyColor"):
-        if field_name in bulk_ops:
-            value = bulk_ops[field_name]
-            if value is None:
-                continue
-            if not isinstance(value, str) or not is_valid_hex_color(value):
-                return False, describe_color_format(field_name)
-
-    # Validate icon URL: string (allowed icon path) or null
-    if "pointIcon" in bulk_ops:
-        value = bulk_ops["pointIcon"]
-        if value is not None:
-            if not isinstance(value, str) or not is_valid_icon_url(value):
-                return False, describe_icon_format("pointIcon")
-
-    return True, None
+    
+    # Use Pydantic validation
+    try:
+        validated_dict = validate_pydantic_model(BulkOperationsPayload, bulk_ops)
+        return True, None
+    except ValidationError:
+        return False, "Invalid bulk operations format"
 
 
 def delete_logs_by_log_id(log_id):

@@ -11,6 +11,8 @@ from api.models import TagShare, CollectionShare, Collection, FeatureStore
 from api.views.bbox_query import BboxQueryResult, _build_bbox_response, _get_features_in_bbox, _validate_bbox_params
 from geo_lib.logging.console import get_access_logger
 from geo_lib.website.auth import api_or_login_required_401
+from api.utils.responses import error_response, success_response, not_found_response
+from api.validation.feature_updates import validate_payload, TagSharePayload, CollectionSharePayload
 
 logger = get_access_logger()
 
@@ -41,7 +43,8 @@ def _validate_share_id(share_id: str) -> bool:
 
 @api_or_login_required_401()
 @require_http_methods(["POST"])
-def create_share(request):
+@validate_payload(TagSharePayload)
+def create_share(request, validated_data):
     """
     Create a new share link for a tag.
     Always uses UUID4 for share_id (no customization allowed).
@@ -50,25 +53,14 @@ def create_share(request):
     - tag: string (required) - The tag to share
     """
     try:
-        import json
-        data = json.loads(request.body)
-        tag = data.get('tag', '').strip()
-
-        if not tag:
-            return JsonResponse({
-                'error': 'tag parameter is required',
-                'code': 400
-            }, status=400)
+        tag = validated_data['tag'].strip()
 
         # Validate tag length
         from django.conf import settings
         from website.settings_utils import get_required_setting
         tag_max_length = get_required_setting('TAG_MAX_LENGTH')
         if len(tag) > tag_max_length:
-            return JsonResponse({
-                'error': f'Tag name exceeds maximum length of {tag_max_length} characters',
-                'code': 400
-            }, status=400)
+            return error_response(f'Tag name exceeds maximum length of {tag_max_length} characters', code=400)
 
         # Verify that the tag exists in the user's features (check both user tags and system tags)
         tag_exists = FeatureStore.objects.filter(
@@ -79,10 +71,7 @@ def create_share(request):
         ).exists()
         
         if not tag_exists:
-            return JsonResponse({
-                'error': 'Tag not found in your data',
-                'code': 404
-            }, status=404)
+            return not_found_response('Tag not found in your data')
 
         # Generate UUID4 share_id
         share_id = str(uuid.uuid4())
@@ -90,8 +79,8 @@ def create_share(request):
         while TagShare.objects.filter(share_id=share_id).exists() or CollectionShare.objects.filter(share_id=share_id).exists():
             share_id = str(uuid.uuid4())
 
-        # Get allow_downloads from request (default False)
-        allow_downloads = data.get('allow_downloads', False)
+        # Get allow_downloads from validated data
+        allow_downloads = validated_data.get('allow_downloads', False)
 
         # Create new share (always use UUID4)
         tag_share = TagShare.objects.create(
@@ -111,17 +100,9 @@ def create_share(request):
             'created_at': tag_share.created_at.isoformat()
         })
 
-    except json.JSONDecodeError:
-        return JsonResponse({
-            'error': 'Invalid JSON in request body',
-            'code': 400
-        }, status=400)
     except Exception:
         logger.error(f"Error creating share: {traceback.format_exc()}")
-        return JsonResponse({
-            'error': 'Failed to create share',
-            'code': 500
-        }, status=500)
+        return error_response('Failed to create share', code=500)
 
 
 @api_or_login_required_401()
@@ -175,10 +156,7 @@ def list_shares(request):
 
     except Exception:
         logger.error(f"Error listing shares: {traceback.format_exc()}")
-        return JsonResponse({
-            'error': 'Failed to list shares',
-            'code': 500
-        }, status=500)
+        return error_response('Failed to list shares', code=500)
 
 
 @api_or_login_required_401()
@@ -192,10 +170,7 @@ def delete_share(request, share_id):
     try:
         # Validate share_id format
         if not _validate_share_id(share_id):
-            return JsonResponse({
-                'error': 'Invalid share ID',
-                'code': 400
-            }, status=400)
+            return error_response('Invalid share ID', code=400)
 
         # Try to find as tag share first
         share = TagShare.objects.filter(share_id=share_id, user=request.user).first()
@@ -206,10 +181,7 @@ def delete_share(request, share_id):
         
         if not share:
             # Return generic error to prevent information disclosure
-            return JsonResponse({
-                'error': 'Share not found or access denied',
-                'code': 404
-            }, status=404)
+            return not_found_response('Share not found or access denied')
 
         share.delete()
 
@@ -219,10 +191,7 @@ def delete_share(request, share_id):
 
     except Exception:
         logger.error(f"Error deleting share: {traceback.format_exc()}")
-        return JsonResponse({
-            'error': 'Failed to delete share',
-            'code': 500
-        }, status=500)
+        return error_response('Failed to delete share', code=500)
 
 
 @require_http_methods(["GET"])
@@ -268,17 +237,11 @@ def get_public_share_info(request, share_id):
             })
         
         # Share not found
-        return JsonResponse({
-            'error': 'Invalid share link',
-            'code': 404
-        }, status=404)
+        return not_found_response('Invalid share link')
 
     except Exception:
         logger.error(f"Error getting public share info: {traceback.format_exc()}")
-        return JsonResponse({
-            'error': 'Failed to get share info',
-            'code': 500
-        }, status=500)
+        return error_response('Failed to get share info', code=500)
 
 
 @require_http_methods(["GET"])
@@ -333,15 +296,13 @@ def get_public_share(request, share_id):
 
     except Exception:
         logger.error(f"Error getting public share: {traceback.format_exc()}")
-        return JsonResponse({
-            'error': 'Failed to get shared features',
-            'code': 500
-        }, status=500)
+        return error_response('Failed to get shared features', code=500)
 
 
 @api_or_login_required_401()
 @require_http_methods(["POST"])
-def create_collection_share(request):
+@validate_payload(CollectionSharePayload)
+def create_collection_share(request, validated_data):
     """
     Create a new share link for a collection.
     Always uses UUID4 for share_id.
@@ -351,34 +312,17 @@ def create_collection_share(request):
     - include_tags: boolean (optional, default=False) - Whether to include tags in the shared features
     """
     try:
-        import json
-        data = json.loads(request.body)
-        collection_id_str = data.get('collection_id', '').strip()
-        include_tags = data.get('include_tags', False)
+        collection_id_str = validated_data['collection_id']
+        include_tags = validated_data.get('include_tags', False)
 
-        if not collection_id_str:
-            return JsonResponse({
-                'error': 'collection_id parameter is required',
-                'code': 400
-            }, status=400)
-
-        # Validate and convert collection_id to UUID
-        try:
-            collection_id = uuid.UUID(collection_id_str)
-        except ValueError:
-            return JsonResponse({
-                'error': 'Invalid collection ID format',
-                'code': 400
-            }, status=400)
+        # Convert collection_id to UUID (Pydantic already validated it's valid)
+        collection_id = uuid.UUID(collection_id_str)
 
         # Verify collection exists and belongs to user
         try:
             collection = Collection.objects.get(id=collection_id, user=request.user)
         except Collection.DoesNotExist:
-            return JsonResponse({
-                'error': 'Collection not found or access denied',
-                'code': 404
-            }, status=404)
+            return not_found_response('Collection not found or access denied')
 
         # Generate UUID4 share_id
         share_id = str(uuid.uuid4())
@@ -386,8 +330,8 @@ def create_collection_share(request):
         while TagShare.objects.filter(share_id=share_id).exists() or CollectionShare.objects.filter(share_id=share_id).exists():
             share_id = str(uuid.uuid4())
 
-        # Get allow_downloads from request (default False)
-        allow_downloads = data.get('allow_downloads', False)
+        # Get allow_downloads from validated data
+        allow_downloads = validated_data.get('allow_downloads', False)
 
         # Create new share
         collection_share = CollectionShare.objects.create(
@@ -408,17 +352,9 @@ def create_collection_share(request):
             'created_at': collection_share.created_at.isoformat()
         })
 
-    except json.JSONDecodeError:
-        return JsonResponse({
-            'error': 'Invalid JSON in request body',
-            'code': 400
-        }, status=400)
     except Exception:
         logger.error(f"Error creating collection share: {traceback.format_exc()}")
-        return JsonResponse({
-            'error': 'Failed to create collection share',
-            'code': 500
-        }, status=500)
+        return error_response('Failed to create collection share', code=500)
 
 
 
@@ -475,8 +411,5 @@ def get_public_collection_share(request, share_id):
 
     except Exception:
         logger.error(f"Error getting public collection share: {traceback.format_exc()}")
-        return JsonResponse({
-            'error': 'Failed to get shared features',
-            'code': 500
-        }, status=500)
+        return error_response('Failed to get shared features', code=500)
 

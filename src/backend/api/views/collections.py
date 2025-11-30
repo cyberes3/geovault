@@ -14,6 +14,7 @@ from api.utils.responses import (
     not_found_response,
     server_error_response,
 )
+from api.validation.feature_updates import validate_payload, CollectionCreatePayload, CollectionUpdatePayload
 from geo_lib.feature_id import generate_feature_hash
 from geo_lib.logging.console import get_access_logger
 from geo_lib.processing.import_utils import (
@@ -62,7 +63,8 @@ def list_collections(request):
 
 @api_or_login_required_401()
 @require_http_methods(["POST"])
-def create_collection(request):
+@validate_payload(CollectionCreatePayload)
+def create_collection(request, validated_data):
     """
     Create a new collection.
     
@@ -73,32 +75,14 @@ def create_collection(request):
     - feature_ids: array of integers (optional)
     """
     try:
-        data = json.loads(request.body)
-        name = data.get('name', '').strip()
-        description = data.get('description')
+        name = validated_data['name'].strip()
+        description = validated_data.get('description')
         if description is not None:
             description = description.strip() if description else None
         else:
             description = None
-        tags = data.get('tags', [])
-        feature_ids = data.get('feature_ids', [])
-        
-        if not name:
-            return error_response('name is required', code=400)
-        
-        # Validate tags is a list
-        if not isinstance(tags, list):
-            tags = []
-        
-        # Validate feature_ids is a list of integers
-        if not isinstance(feature_ids, list):
-            feature_ids = []
-        else:
-            # Convert to integers and filter out invalid values
-            try:
-                feature_ids = [int(fid) for fid in feature_ids if fid is not None]
-            except (ValueError, TypeError):
-                feature_ids = []
+        tags = validated_data.get('tags', [])
+        feature_ids = validated_data.get('feature_ids', [])
         
         # Verify that all feature_ids belong to the user
         if feature_ids:
@@ -121,8 +105,6 @@ def create_collection(request):
             'collection': _serialize_collection(collection)
         }, status=201)
     
-    except json.JSONDecodeError:
-        return error_response('Invalid JSON in request body', code=400)
     except Exception:
         logger.error(f"Error creating collection: {traceback.format_exc()}")
         return server_error_response('Failed to create collection')
@@ -150,7 +132,8 @@ def get_collection(request, collection_id):
 
 @api_or_login_required_401()
 @require_http_methods(["PUT", "PATCH"])
-def update_collection(request, collection_id):
+@validate_payload(CollectionUpdatePayload)
+def update_collection(request, collection_id, validated_data):
     """
     Update a collection.
     
@@ -163,21 +146,19 @@ def update_collection(request, collection_id):
     try:
         collection = Collection.objects.get(id=collection_id, user=request.user)
         
-        data = json.loads(request.body)
-        
         # Wrap all database modifications in a transaction
         with transaction.atomic():
             # Update name if provided
-            if 'name' in data:
-                name = data.get('name', '').strip()
+            if 'name' in validated_data:
+                name = validated_data['name'].strip()
                 if name:
                     collection.name = name
                 else:
                     return error_response('name cannot be empty', code=400)
             
             # Update description if provided
-            if 'description' in data:
-                description = data.get('description')
+            if 'description' in validated_data:
+                description = validated_data.get('description')
                 if description is not None:
                     description = description.strip() if description else None
                 else:
@@ -185,34 +166,23 @@ def update_collection(request, collection_id):
                 collection.description = description
             
             # Update tags if provided
-            if 'tags' in data:
-                tags = data.get('tags', [])
-                if isinstance(tags, list):
-                    collection.tags = tags
-                else:
-                    collection.tags = []
+            if 'tags' in validated_data:
+                tags = validated_data.get('tags', [])
+                collection.tags = tags
             
             # Update feature_ids if provided
-            if 'feature_ids' in data:
-                feature_ids = data.get('feature_ids', [])
-                if isinstance(feature_ids, list):
-                    # Convert to integers and filter out invalid values
-                    try:
-                        feature_ids = [int(fid) for fid in feature_ids if fid is not None]
-                    except (ValueError, TypeError):
-                        feature_ids = []
-                    
-                    # Verify that all feature_ids belong to the user
-                    if feature_ids:
-                        user_feature_ids = set(
-                            FeatureStore.objects.filter(user=request.user, id__in=feature_ids)
-                            .values_list('id', flat=True)
-                        )
-                        feature_ids = [fid for fid in feature_ids if fid in user_feature_ids]
-                    
-                    collection.feature_ids = feature_ids
-                else:
-                    collection.feature_ids = []
+            if 'feature_ids' in validated_data:
+                feature_ids = validated_data.get('feature_ids', [])
+                
+                # Verify that all feature_ids belong to the user
+                if feature_ids:
+                    user_feature_ids = set(
+                        FeatureStore.objects.filter(user=request.user, id__in=feature_ids)
+                        .values_list('id', flat=True)
+                    )
+                    feature_ids = [fid for fid in feature_ids if fid in user_feature_ids]
+                
+                collection.feature_ids = feature_ids
             
             collection.save()
         
@@ -222,8 +192,6 @@ def update_collection(request, collection_id):
     
     except Collection.DoesNotExist:
         return not_found_response('Collection not found')
-    except json.JSONDecodeError:
-        return error_response('Invalid JSON in request body', code=400)
     except Exception:
         logger.error(f"Error updating collection: {traceback.format_exc()}")
         return server_error_response('Failed to update collection')

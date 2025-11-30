@@ -30,28 +30,10 @@ from geo_lib.validation.styling_validation import (
     is_valid_icon_url,
 )
 from geo_lib.website.auth import api_or_login_required_401
+from api.validation.feature_updates import validate_payload, validate_pydantic_model, BulkFeatureUpdatePayload, FeatureMetadataUpdate, ReplacementGeometryPayload
+from api.utils.responses import error_response, success_response, not_found_response
 
 logger = get_access_logger()
-
-
-def _error_response(error_message, code=400, status=None):
-    """
-    Create a standardized error JsonResponse.
-    
-    Args:
-        error_message: Error message string
-        code: Error code (default: 400)
-        status: HTTP status code (defaults to code if not provided)
-        
-    Returns:
-        JsonResponse with error format
-    """
-    if status is None:
-        status = code
-    return JsonResponse({
-        'error': error_message,
-        'code': code
-    }, status=status)
 
 
 def _validate_tags(tags):
@@ -65,15 +47,15 @@ def _validate_tags(tags):
         Tuple of (is_valid, error_response) where error_response is None if valid
     """
     if not isinstance(tags, list):
-        return False, _error_response('tags must be an array', 400)
+        return False, error_response('tags must be an array', 400)
     
     for tag in tags:
         if not isinstance(tag, str):
-            return False, _error_response('all tags must be strings', 400)
+            return False, error_response('all tags must be strings', 400)
         
         # Check if tag is a system tag (protected tag)
         if is_protected_tag(tag, CONST_INTERNAL_TAGS):
-            return False, _error_response(
+            return False, error_response(
                 'System tags (type, import-year, import-month, feature-year, feature-month, source-file, is-track, elevation, geocoding) cannot be added as user tags',
                 400
             )
@@ -81,18 +63,18 @@ def _validate_tags(tags):
         # Validate tag length
         tag_max_length = get_required_setting('TAG_MAX_LENGTH')
         if len(tag) > tag_max_length:
-            return False, _error_response(
+            return False, error_response(
                 f'Tag "{tag[:50]}..." exceeds maximum length of {tag_max_length} characters',
                 400
             )
         
         # Validate tag is not empty after stripping
         if not tag.strip():
-            return False, _error_response('Tags cannot be empty or contain only whitespace', 400)
+            return False, error_response('Tags cannot be empty or contain only whitespace', 400)
         
         # Validate tag format: no control characters
         if any(ord(c) < 32 and c not in '\t\n\r' for c in tag):
-            return False, _error_response('Tags cannot contain control characters', 400)
+            return False, error_response('Tags cannot contain control characters', 400)
     
     return True, None
 
@@ -207,7 +189,8 @@ def _validate_and_preserve_system_tags(properties_dict, original_system_tags):
 
 @api_or_login_required_401()
 @require_http_methods(["PUT"])
-def update_feature_metadata(request, feature_id):
+@validate_payload(FeatureMetadataUpdate)
+def update_feature_metadata(request, feature_id, validated_data):
     """
     API endpoint to update only the metadata of a specific feature (name, description, tags, created date).
     Does not modify geometry or geojson_hash.
@@ -225,44 +208,30 @@ def update_feature_metadata(request, feature_id):
         # Get the feature from database
         feature = FeatureStore.objects.get(id=feature_id, user=request.user)
 
-        # Parse request body
-        try:
-            metadata = json.loads(request.body)
-        except json.JSONDecodeError:
-            return _error_response('Invalid JSON in request body', 400)
-
-        # Validate that it's a proper object
-        if not isinstance(metadata, dict):
-            return _error_response('Request body must be a valid JSON object', 400)
-
         # Extract allowed metadata fields
         allowed_fields = {'name', 'description', 'created', 'tags'}
         update_fields = {}
         updated_fields = []
         
         for field in allowed_fields:
-            if field in metadata:
-                update_fields[field] = metadata[field]
+            if field in validated_data:
+                update_fields[field] = validated_data[field]
                 updated_fields.append(field)
         
         if not updated_fields:
-            return _error_response('No valid fields to update. Supported fields: name, description, tags, created', 400)
+            return error_response('No valid fields to update. Supported fields: name, description, tags, created', 400)
 
         # Create a deep copy of the original feature to merge updates into
         original_geojson = feature.geojson
         
         # Ensure original_geojson is a dict (it should be, but be defensive)
         if not isinstance(original_geojson, dict):
-            return _error_response('Invalid feature data in database', 500)
+            return error_response('Invalid feature data in database', 500)
         
         merged_feature = copy.deepcopy(original_geojson)
         
         # Preserve existing system_tags from original feature
         original_system_tags = _extract_system_tags(original_geojson)
-        
-        # Validate that system_tags are not being modified (reject if present in request)
-        if 'system_tags' in metadata:
-            return _error_response('System tags cannot be modified or removed', 400)
         
         # Ensure the feature has the required structure (type, geometry, properties)
         # Always set these explicitly to ensure they exist
@@ -288,22 +257,10 @@ def update_feature_metadata(request, feature_id):
                 
                 merged_feature['properties']['tags'] = user_tags
             elif field == 'name':
-                if not isinstance(value, str):
-                    return _error_response('name must be a string', 400)
                 merged_feature['properties']['name'] = value
             elif field == 'description':
-                if not isinstance(value, str):
-                    return _error_response('description must be a string', 400)
                 merged_feature['properties']['description'] = value
             elif field == 'created':
-                if not isinstance(value, str):
-                    return _error_response('created must be a string', 400)
-                # Validate datetime format
-                try:
-                    from datetime import datetime
-                    datetime.fromisoformat(value.replace('Z', '+00:00'))
-                except ValueError:
-                    return _error_response('created must be a valid ISO datetime string', 400)
                 merged_feature['properties']['created'] = value
         
         # Update system tags if created date was changed
@@ -319,7 +276,7 @@ def update_feature_metadata(request, feature_id):
                 preserve_id=False
             )
         except GeometryValidationError as e:
-            return _error_response(f'Feature validation failed: {str(e)}', 400)
+            return error_response(f'Feature validation failed: {str(e)}', 400)
         
         # Ensure system_tags are preserved after normalization
         normalized_feature['properties']['system_tags'] = updated_system_tags
@@ -335,15 +292,16 @@ def update_feature_metadata(request, feature_id):
         })
 
     except FeatureStore.DoesNotExist:
-        return _error_response('Feature not found or access denied', 404)
+        return error_response('Feature not found or access denied', 404)
     except Exception as e:
         logger.error(f"Error updating feature metadata {feature_id}: {traceback.format_exc()}")
-        return _error_response('Failed to update feature metadata', 500)
+        return error_response('Failed to update feature metadata', 500)
 
 
 @api_or_login_required_401()
 @require_http_methods(["POST"])
-def bulk_update_features_metadata(request):
+@validate_payload(BulkFeatureUpdatePayload)
+def bulk_update_features_metadata(request, validated_data):
     """
     API endpoint to bulk update metadata for multiple features (name, description, tags, created date).
     Does not modify geometry or geojson_hash.
@@ -362,76 +320,34 @@ def bulk_update_features_metadata(request):
     - errors: array of error objects with feature_id and error message
     """
     try:
-        # Parse request body
-        try:
-            data = json.loads(request.body)
-        except json.JSONDecodeError:
-            return _error_response('Invalid JSON in request body', 400)
-        
-        # Validate that it's a proper object with updates array
-        if not isinstance(data, dict):
-            return _error_response('Request body must be a valid JSON object', 400)
-        
-        if 'updates' not in data:
-            return _error_response('Request body must contain an "updates" array', 400)
-        
-        updates = data['updates']
-        if not isinstance(updates, list):
-            return _error_response('"updates" must be an array', 400)
-        
-        if not updates:
-            return _error_response('"updates" array cannot be empty', 400)
-        
         # Process all updates in a single transaction
         updated_count = 0
         errors = []
+        updates = validated_data['updates']
         
         with transaction.atomic():
             for update_data in updates:
-                if not isinstance(update_data, dict):
-                    errors.append({
-                        'feature_id': None,
-                        'error': 'Update item must be an object'
-                    })
-                    continue
-                
-                if 'feature_id' not in update_data:
-                    errors.append({
-                        'feature_id': None,
-                        'error': 'Update item must contain "feature_id"'
-                    })
-                    continue
-                
                 feature_id = update_data['feature_id']
-                try:
-                    feature_id = int(feature_id)
-                except (ValueError, TypeError):
+                
+                allowed_fields = {'name', 'description', 'created', 'tags'}
+                update_fields = {}
+                updated_fields = []
+                
+                for field in allowed_fields:
+                    if field in update_data:
+                        update_fields[field] = update_data[field]
+                        updated_fields.append(field)
+                
+                if not updated_fields:
                     errors.append({
                         'feature_id': feature_id,
-                        'error': f'"feature_id" must be an integer, got {type(feature_id).__name__}'
+                        'error': 'No valid fields to update. Supported fields: name, description, tags, created'
                     })
                     continue
                 
                 try:
                     # Get the feature from database
                     feature = FeatureStore.objects.get(id=feature_id, user=request.user)
-                    
-                    # Extract allowed metadata fields
-                    allowed_fields = {'name', 'description', 'created', 'tags'}
-                    update_fields = {}
-                    updated_fields = []
-                    
-                    for field in allowed_fields:
-                        if field in update_data:
-                            update_fields[field] = update_data[field]
-                            updated_fields.append(field)
-                    
-                    if not updated_fields:
-                        errors.append({
-                            'feature_id': feature_id,
-                            'error': 'No valid fields to update. Supported fields: name, description, tags, created'
-                        })
-                        continue
                     
                     # Create a deep copy of the original feature to merge updates into
                     original_geojson = feature.geojson
@@ -449,14 +365,6 @@ def bulk_update_features_metadata(request):
                     # Preserve existing system_tags from original feature
                     original_system_tags = _extract_system_tags(original_geojson)
                     
-                    # Validate that system_tags are not being modified (reject if present in request)
-                    if 'system_tags' in update_data:
-                        errors.append({
-                            'feature_id': feature_id,
-                            'error': 'System tags cannot be modified or removed'
-                        })
-                        continue
-                    
                     # Ensure the feature has the required structure (type, geometry, properties)
                     merged_feature['type'] = 'Feature'
                     if 'geometry' not in merged_feature or not merged_feature['geometry']:
@@ -464,59 +372,13 @@ def bulk_update_features_metadata(request):
                     if 'properties' not in merged_feature:
                         merged_feature['properties'] = {}
                     
-                    # Merge update fields into the feature properties
                     for field, value in update_fields.items():
                         if field == 'tags':
-                            # Validate tags
-                            is_valid, error_response = _validate_tags(value)
-                            if not is_valid:
-                                errors.append({
-                                    'feature_id': feature_id,
-                                    'error': error_response.content.decode('utf-8') if hasattr(error_response, 'content') else str(error_response)
-                                })
-                                continue
-                            
-                            # Strip system tags from incoming tags (defensive - user shouldn't be able to add them)
                             user_tags = filter_protected_tags(value, CONST_INTERNAL_TAGS)
-                            
-                            # Prepare user tags (lowercase and deduplicate)
                             user_tags = prepare_user_tags(user_tags)
-                            
                             merged_feature['properties']['tags'] = user_tags
-                        elif field == 'name':
-                            if not isinstance(value, str):
-                                errors.append({
-                                    'feature_id': feature_id,
-                                    'error': 'name must be a string'
-                                })
-                                continue
-                            merged_feature['properties']['name'] = value
-                        elif field == 'description':
-                            if not isinstance(value, str):
-                                errors.append({
-                                    'feature_id': feature_id,
-                                    'error': 'description must be a string'
-                                })
-                                continue
-                            merged_feature['properties']['description'] = value
-                        elif field == 'created':
-                            if not isinstance(value, str):
-                                errors.append({
-                                    'feature_id': feature_id,
-                                    'error': 'created must be a string'
-                                })
-                                continue
-                            # Validate datetime format
-                            try:
-                                from datetime import datetime
-                                datetime.fromisoformat(value.replace('Z', '+00:00'))
-                            except ValueError:
-                                errors.append({
-                                    'feature_id': feature_id,
-                                    'error': 'created must be a valid ISO datetime string'
-                                })
-                                continue
-                            merged_feature['properties']['created'] = value
+                        else:
+                            merged_feature['properties'][field] = value
                     
                     # Update system tags if created date was changed
                     updated_system_tags = original_system_tags
@@ -565,7 +427,7 @@ def bulk_update_features_metadata(request):
     
     except Exception:
         logger.error(f"Error in bulk update features metadata: {traceback.format_exc()}")
-        return _error_response('Failed to process bulk update request', 500)
+        return error_response('Failed to process bulk update request', 500)
 
 
 @api_or_login_required_401()
@@ -591,19 +453,19 @@ def apply_bulk_operations_to_tag(request, tag_name: str):
         try:
             data = json.loads(request.body)
         except json.JSONDecodeError:
-            return _error_response('Invalid JSON in request body', 400)
+            return error_response('Invalid JSON in request body', 400)
 
         if not isinstance(data, dict):
-            return _error_response('Request body must be a valid JSON object', 400)
+            return error_response('Request body must be a valid JSON object', 400)
 
         bulk_ops = data.get('bulk_operations', {})
         is_valid, error_message = validate_bulk_operations_payload(bulk_ops)
         if not is_valid:
-            return _error_response(error_message, 400)
+            return error_response(error_message, 400)
 
         # Validate tag name
         if not isinstance(tag_name, str) or not tag_name.strip():
-            return _error_response('Tag name is required', 400)
+            return error_response('Tag name is required', 400)
 
         # Only operate on the current user's features
         features_qs = FeatureStore.objects.filter(
@@ -632,7 +494,7 @@ def apply_bulk_operations_to_tag(request, tag_name: str):
 
     except Exception:
         logger.error(f"Error applying bulk operations to tag '{tag_name}': {traceback.format_exc()}")
-        return _error_response('Failed to apply bulk operations to tag', 500)
+        return error_response('Failed to apply bulk operations to tag', 500)
 
 
 @api_or_login_required_401()
@@ -654,11 +516,11 @@ def update_feature(request, feature_id):
         try:
             feature_data = json.loads(request.body)
         except json.JSONDecodeError:
-            return _error_response('Invalid JSON in request body', 400)
+            return error_response('Invalid JSON in request body', 400)
 
         # Validate that it's a proper GeoJSON feature or geometry
         if not isinstance(feature_data, dict):
-            return _error_response('Request body must be a valid GeoJSON object', 400)
+            return error_response('Request body must be a valid GeoJSON object', 400)
 
         # Get original feature data for reference
         original_geojson = feature.geojson
@@ -668,7 +530,7 @@ def update_feature(request, feature_id):
         try:
             feature_data = normalize_and_validate_feature_update(feature_data, original_properties)
         except GeometryValidationError as e:
-            return _error_response(str(e), 400)
+            return error_response(str(e), 400)
 
         # Preserve existing system_tags from original feature
         original_system_tags = _extract_system_tags(original_geojson)
@@ -677,7 +539,7 @@ def update_feature(request, feature_id):
         try:
             feature_data = _validate_and_preserve_feature(feature_data, preserve_id=False)
         except GeometryValidationError as e:
-            return _error_response(str(e), 400)
+            return error_response(str(e), 400)
 
         # Get new properties after normalization
         new_properties = feature_data.get('properties', {})
@@ -790,7 +652,7 @@ def update_feature(request, feature_id):
                 # For GeometryCollection, we do basic validation but skip feature class validation
                 geom_data = feature_data.get('geometry', {})
                 if not geom_data.get('geometries') or not isinstance(geom_data.get('geometries'), list):
-                    return _error_response('GeometryCollection must have a geometries array', 400)
+                    return error_response('GeometryCollection must have a geometries array', 400)
                 # Skip feature class validation for GeometryCollection
                 feature_class = None
             else:
@@ -804,7 +666,7 @@ def update_feature(request, feature_id):
                     case 'polygon' | 'multipolygon':
                         feature_class = PolygonFeature
                     case _:
-                        return _error_response(f'Unsupported geometry type: {geom_type}', 400)
+                        return error_response(f'Unsupported geometry type: {geom_type}', 400)
 
             # Validate by instantiating the feature class (this will raise ValidationError if invalid)
             # Skip for GeometryCollection as it's not supported by feature classes
@@ -815,7 +677,7 @@ def update_feature(request, feature_id):
 
         except Exception as e:
             logger.error(f"Feature validation error for feature {feature_id}: {str(e)}")
-            return _error_response(f'Feature validation failed: {str(e)}', 400)
+            return error_response(f'Feature validation failed: {str(e)}', 400)
 
         # Update the feature data
         feature.geojson = feature_data
@@ -866,15 +728,16 @@ def update_feature(request, feature_id):
         })
 
     except FeatureStore.DoesNotExist:
-        return _error_response('Feature not found or access denied', 404)
+        return error_response('Feature not found or access denied', 404)
     except Exception as e:
         logger.error(f"Error updating feature {feature_id}: {traceback.format_exc()}")
-        return _error_response('Failed to update feature', 500)
+        return error_response('Failed to update feature', 500)
 
 
 @api_or_login_required_401()
 @require_http_methods(["POST"])
-def apply_replacement_geometry(request, feature_id):
+@validate_payload(ReplacementGeometryPayload)
+def apply_replacement_geometry(request, feature_id, validated_data):
     """
     API endpoint to apply replacement geometry from an ImportQueue entry to an existing feature.
     Only updates the geometry, preserving all properties (name, description, tags, styling, etc.).
@@ -891,54 +754,38 @@ def apply_replacement_geometry(request, feature_id):
         # Get the feature from database
         feature = FeatureStore.objects.get(id=feature_id, user=request.user)
 
-        # Parse request body
-        try:
-            request_data = json.loads(request.body)
-        except json.JSONDecodeError:
-            return _error_response('Invalid JSON in request body', 400)
-
-        # Validate required fields
-        if 'import_queue_id' not in request_data or 'feature_index' not in request_data:
-            return _error_response('Missing required fields: import_queue_id and feature_index', 400)
-
-        import_queue_id = request_data['import_queue_id']
-        feature_index = request_data['feature_index']
-        regenerate_tags = request_data.get('regenerate_tags', False)
-
-        # Validate feature_index is an integer
-        try:
-            feature_index = int(feature_index)
-        except (ValueError, TypeError):
-            return _error_response('feature_index must be an integer', 400)
+        import_queue_id = validated_data['import_queue_id']
+        feature_index = validated_data['feature_index']
+        regenerate_tags = validated_data.get('regenerate_tags', False)
 
         # Get the ImportQueue entry
         try:
             import_queue = ImportQueue.objects.get(id=import_queue_id, user=request.user)
         except ImportQueue.DoesNotExist:
-            return _error_response('ImportQueue entry not found or access denied', 404)
+            return error_response('ImportQueue entry not found or access denied', 404)
 
         # Verify this is a replacement upload for this feature
         if import_queue.replacement != feature_id:
-            return _error_response('ImportQueue entry is not a replacement for this feature', 400)
+            return error_response('ImportQueue entry is not a replacement for this feature', 400)
 
         # Get the features from the ImportQueue
         geofeatures = import_queue.geofeatures
         if not isinstance(geofeatures, list) or len(geofeatures) == 0:
-            return _error_response('ImportQueue entry has no features', 400)
+            return error_response('ImportQueue entry has no features', 400)
 
         # Validate feature_index is within bounds
         if feature_index < 0 or feature_index >= len(geofeatures):
-            return _error_response(f'feature_index {feature_index} is out of bounds (0-{len(geofeatures)-1})', 400)
+            return error_response(f'feature_index {feature_index} is out of bounds (0-{len(geofeatures)-1})', 400)
 
         # Get the selected replacement feature
         replacement_feature = geofeatures[feature_index]
         if not isinstance(replacement_feature, dict) or 'geometry' not in replacement_feature:
-            return _error_response('Selected feature has invalid structure or missing geometry', 400)
+            return error_response('Selected feature has invalid structure or missing geometry', 400)
 
         # Get the replacement geometry
         replacement_geometry = replacement_feature.get('geometry')
         if not replacement_geometry:
-            return _error_response('Selected feature has no geometry', 400)
+            return error_response('Selected feature has no geometry', 400)
 
         # Get original feature data
         original_geojson = feature.geojson.copy()
@@ -949,7 +796,7 @@ def apply_replacement_geometry(request, feature_id):
         replacement_geometry_type = replacement_geometry.get('type', '').lower()
         
         if original_geometry_type != replacement_geometry_type:
-            return _error_response(
+            return error_response(
                 f'Geometry type cannot change. Original: {original_geometry_type}, Replacement: {replacement_geometry_type}',
                 400
             )
@@ -965,7 +812,7 @@ def apply_replacement_geometry(request, feature_id):
         try:
             feature_data = normalize_and_validate_feature_update(updated_feature, original_properties)
         except GeometryValidationError as e:
-            return _error_response(str(e), 400)
+            return error_response(str(e), 400)
 
         # Validate feature structure using feature classes
         try:
@@ -977,7 +824,7 @@ def apply_replacement_geometry(request, feature_id):
                 # For GeometryCollection, we do basic validation but skip feature class validation
                 geom_data = feature_data.get('geometry', {})
                 if not geom_data.get('geometries') or not isinstance(geom_data.get('geometries'), list):
-                    return _error_response('GeometryCollection must have a geometries array', 400)
+                    return error_response('GeometryCollection must have a geometries array', 400)
                 # Skip feature class validation for GeometryCollection
                 feature_class = None
             else:
@@ -991,7 +838,7 @@ def apply_replacement_geometry(request, feature_id):
                     case 'polygon' | 'multipolygon':
                         feature_class = PolygonFeature
                     case _:
-                        return _error_response(f'Unsupported geometry type: {geom_type}', 400)
+                        return error_response(f'Unsupported geometry type: {geom_type}', 400)
 
             # Validate by instantiating the feature class (this will raise ValidationError if invalid)
             # Skip for GeometryCollection as it's not supported by feature classes
@@ -1002,13 +849,13 @@ def apply_replacement_geometry(request, feature_id):
 
         except Exception as e:
             logger.error(f"Feature validation error for replacement feature {feature_id}: {str(e)}")
-            return _error_response(f'Feature validation failed: {str(e)}', 400)
+            return error_response(f'Feature validation failed: {str(e)}', 400)
 
         # Validate and normalize the feature (including color/icon validation)
         try:
             feature_data = _validate_and_preserve_feature(feature_data, preserve_id=False)
         except GeometryValidationError as e:
-            return _error_response(f'Feature validation failed: {str(e)}', 400)
+            return error_response(f'Feature validation failed: {str(e)}', 400)
 
         # Update the feature's geometry (preserving all properties)
         feature.geojson = feature_data
@@ -1141,10 +988,10 @@ def apply_replacement_geometry(request, feature_id):
         })
 
     except FeatureStore.DoesNotExist:
-        return _error_response('Feature not found or access denied', 404)
+        return error_response('Feature not found or access denied', 404)
     except Exception as e:
         logger.error(f"Error applying replacement geometry for feature {feature_id}: {traceback.format_exc()}")
-        return _error_response('Failed to apply replacement geometry', 500)
+        return error_response('Failed to apply replacement geometry', 500)
 
 
 @api_or_login_required_401()
@@ -1178,17 +1025,17 @@ def regenerate_feature_tags(request, feature_id):
             case 'polygon' | 'multipolygon':
                 feature_class = PolygonFeature
             case _:
-                return _error_response(f'Unsupported geometry type: {geom_type}', 400)
+                return error_response(f'Unsupported geometry type: {geom_type}', 400)
 
         if feature_class is None:
-            return _error_response('Could not determine feature class', 400)
+            return error_response('Could not determine feature class', 400)
 
         # Create feature instance
         try:
             feature_instance: GeoFeatureSupported = feature_class(**geojson_data)
         except Exception as e:
             logger.error(f"Error creating feature instance for tag regeneration {feature_id}: {str(e)}")
-            return _error_response(f'Invalid feature structure: {str(e)}', 400)
+            return error_response(f'Invalid feature structure: {str(e)}', 400)
 
         # Get existing user tags (preserve them)
         existing_user_tags = geojson_data.get('properties', {}).get('tags', [])
@@ -1210,7 +1057,7 @@ def regenerate_feature_tags(request, feature_id):
             normalized_feature = _validate_and_preserve_feature(geojson_data, preserve_id=False)
         except GeometryValidationError as e:
             logger.error(f"Feature validation failed for feature {feature_id} during tag regeneration: {str(e)}")
-            return _error_response(f'Feature validation failed: {str(e)}', 400)
+            return error_response(f'Feature validation failed: {str(e)}', 400)
 
         # Update the feature
         feature.geojson = normalized_feature
@@ -1224,7 +1071,7 @@ def regenerate_feature_tags(request, feature_id):
         })
 
     except FeatureStore.DoesNotExist:
-        return _error_response('Feature not found or access denied', 404)
+        return error_response('Feature not found or access denied', 404)
     except Exception as e:
         logger.error(f"Error regenerating tags for feature {feature_id}: {traceback.format_exc()}")
-        return _error_response('Failed to regenerate feature tags', 500)
+        return error_response('Failed to regenerate feature tags', 500)

@@ -74,6 +74,41 @@ class TestCollectionsAPI(TestCase):
         )
         self.assertEqual(response.status_code, 400)
 
+    def test_create_collection_invalid_json(self):
+        """Test creating a collection with invalid JSON."""
+        response = self.client.post(
+            '/api/collections/create/',
+            data='invalid json',
+            content_type='application/json'
+        )
+        self.assertEqual(response.status_code, 400)
+
+    def test_create_collection_extra_fields(self):
+        """Test creating a collection with extra fields."""
+        collection_data = {
+            'name': 'Test Collection',
+            'extra_field': 'should be rejected'
+        }
+        response = self.client.post(
+            '/api/collections/create/',
+            data=json.dumps(collection_data),
+            content_type='application/json'
+        )
+        self.assertEqual(response.status_code, 400)
+
+    def test_create_collection_invalid_feature_ids(self):
+        """Test creating a collection with invalid feature_ids."""
+        collection_data = {
+            'name': 'Test Collection',
+            'feature_ids': ['not', 'integers']
+        }
+        response = self.client.post(
+            '/api/collections/create/',
+            data=json.dumps(collection_data),
+            content_type='application/json'
+        )
+        self.assertEqual(response.status_code, 400)
+
     def test_list_collections(self):
         """Test listing collections."""
         Collection.objects.create(
@@ -157,6 +192,39 @@ class TestCollectionsAPI(TestCase):
         collection.refresh_from_db()
         self.assertEqual(collection.name, 'Updated Name')
         self.assertEqual(collection.tags, ['new'])
+
+    def test_update_collection_invalid_json(self):
+        """Test updating a collection with invalid JSON."""
+        collection = Collection.objects.create(
+            user=self.user,
+            name='Test Collection'
+        )
+
+        response = self.client.put(
+            f'/api/collections/{collection.id}/update/',
+            data='invalid json',
+            content_type='application/json'
+        )
+        self.assertEqual(response.status_code, 400)
+
+    def test_update_collection_extra_fields(self):
+        """Test updating a collection with extra fields."""
+        collection = Collection.objects.create(
+            user=self.user,
+            name='Test Collection'
+        )
+
+        update_data = {
+            'name': 'Updated Name',
+            'extra_field': 'should be rejected'
+        }
+
+        response = self.client.put(
+            f'/api/collections/{collection.id}/update/',
+            data=json.dumps(update_data),
+            content_type='application/json'
+        )
+        self.assertEqual(response.status_code, 400)
 
     def test_delete_collection(self):
         """Test deleting a collection."""
