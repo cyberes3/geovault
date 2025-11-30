@@ -11,7 +11,7 @@
         android:text="@string/server_url_hint"
         android:textSize="14sp"
         android:layout_marginBottom="8dp"
-        android:textColor="@color/black" />
+        android:textColor="@color/text_primary" />
 
     <EditText
         android:id="@+id/serverUrlEdit"
@@ -30,7 +30,7 @@
         android:text="@string/api_key_hint"
         android:textSize="14sp"
         android:layout_marginBottom="8dp"
-        android:textColor="@color/black" />
+        android:textColor="@color/text_primary" />
 
     <EditText
         android:id="@+id/apiKeyEdit"
@@ -40,7 +40,24 @@
         android:inputType="text"
         android:padding="12dp"
         android:background="@android:drawable/edit_text"
-        android:textSize="14sp" />
+        android:textSize="14sp"
+        android:layout_marginBottom="16dp" />
+
+    <CheckBox
+        android:id="@+id/addSuffixCheckbox"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:text="@string/add_suffix_label"
+        android:textSize="14sp"
+        android:checked="true" />
+
+    <TextView
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:text="@string/settings_help_text"
+        android:textSize="12sp"
+        android:textColor="@color/text_secondary"
+        android:layout_marginTop="16dp" />
 
 </LinearLayout>
 

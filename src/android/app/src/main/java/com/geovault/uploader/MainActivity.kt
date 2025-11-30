@@ -52,6 +52,7 @@ class MainActivity : AppCompatActivity() {
     companion object {
         private const val PREF_SERVER_URL = "server_url"
         private const val PREF_API_KEY = "api_key"
+        private const val PREF_ADD_SUFFIX = "add_suffix"
         private const val DEFAULT_SERVER_URL = ""
     }
 
@@ -128,17 +129,6 @@ class MainActivity : AppCompatActivity() {
                 }
                 originalFilename = intent.getStringExtra(Intent.EXTRA_TEXT)
             }
-            Intent.ACTION_SEND_MULTIPLE -> {
-                val uris = if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.TIRAMISU) {
-                    intent.getParcelableArrayListExtra(Intent.EXTRA_STREAM, Uri::class.java)
-                } else {
-                    @Suppress("DEPRECATION")
-                    intent.getParcelableArrayListExtra<Uri>(Intent.EXTRA_STREAM)
-                }
-                if (uris != null && uris.isNotEmpty()) {
-                    fileUri = uris[0] // Handle only the first file for simplicity
-                }
-            }
             else -> {
                 // Regular launch - show validation screen
                 showValidationScreen()
@@ -164,15 +154,20 @@ class MainActivity : AppCompatActivity() {
         
         filenameEdit.setText(baseFilename)
         
-        // Show preview with postfix inserted before extension
-        val (nameWithoutExt, extension) = splitFilename(baseFilename)
-        val suffix = "_android_upload"
-        val previewFilename = if (extension.isNotEmpty()) {
-            "${nameWithoutExt}${suffix}.$extension"
+        // Show preview with suffix if enabled
+        val addSuffix = prefs.getBoolean(PREF_ADD_SUFFIX, true)
+        if (addSuffix) {
+            val (nameWithoutExt, extension) = splitFilename(baseFilename)
+            val suffix = "_android_upload"
+            val previewFilename = if (extension.isNotEmpty()) {
+                "${nameWithoutExt}${suffix}.$extension"
+            } else {
+                "${baseFilename}${suffix}"
+            }
+            suffixText.text = "Will be saved as: $previewFilename"
         } else {
-            "${baseFilename}${suffix}"
+            suffixText.text = "Will be saved as: $baseFilename"
         }
-        suffixText.text = "Full filename: $previewFilename"
     }
     
     private fun showValidationScreen() {
@@ -238,13 +233,18 @@ class MainActivity : AppCompatActivity() {
             return
         }
         
-        // Split filename into base name and extension, then insert postfix before extension
-        val (nameWithoutExt, extension) = splitFilename(userFilename)
-        val suffix = "_android_upload"
-        val finalFilename = if (extension.isNotEmpty()) {
-            "${nameWithoutExt}${suffix}.$extension"
+        // Apply suffix if enabled
+        val addSuffix = prefs.getBoolean(PREF_ADD_SUFFIX, true)
+        val finalFilename = if (addSuffix) {
+            val (nameWithoutExt, extension) = splitFilename(userFilename)
+            val suffix = "_android_upload"
+            if (extension.isNotEmpty()) {
+                "${nameWithoutExt}${suffix}.$extension"
+            } else {
+                "${userFilename}${suffix}"
+            }
         } else {
-            "${userFilename}${suffix}"
+            userFilename
         }
         
         // Show progress
@@ -299,9 +299,8 @@ class MainActivity : AppCompatActivity() {
                         uploadButton.isEnabled = true
                         cancelButton.isEnabled = true
                         val errorMsg = e.message ?: "Unknown error"
-                        // Clean up error message if it contains a malformed URL
                         val cleanErrorMsg = errorMsg.replace(Regex("^Failed to connect to /"), "Failed to connect to ")
-                        showError("Upload failed: $cleanErrorMsg\n\nAttempted URL: $uploadUrl")
+                        showError("Connection failed\n$cleanErrorMsg")
                     }
                     tempFile.delete()
                 }
@@ -323,42 +322,42 @@ class MainActivity : AppCompatActivity() {
                         
                         if (response.isSuccessful) {
                             statusText.text = getString(R.string.upload_success)
-                            Toast.makeText(this@MainActivity, getString(R.string.upload_success), Toast.LENGTH_SHORT).show()
-                            // Close after a short delay
+                            // Close after a longer delay for readability
                             android.os.Handler(android.os.Looper.getMainLooper()).postDelayed({
                                 finish()
-                            }, 1500)
+                            }, 2500)
                         } else {
                             // Parse error message from response
-                            val errorMessage = try {
+                            val serverMessage = try {
                                 if (responseBody.isNotEmpty() && responseBody.trimStart().startsWith("{")) {
-                                    // Try to parse as JSON
                                     val json = org.json.JSONObject(responseBody)
-                                    json.optString("error", json.optString("message", "Unknown error"))
-                                } else if (responseBody.isNotEmpty()) {
-                                    // Not JSON, use raw response (truncated)
-                                    responseBody.take(200)
+                                    json.optString("error", json.optString("message", ""))
                                 } else {
-                                    "No error details available"
+                                    ""
                                 }
                             } catch (e: Exception) {
-                                if (responseBody.isNotEmpty()) {
-                                    responseBody.take(200)
-                                } else {
-                                    "Unknown error"
-                                }
+                                ""
                             }
                             
-                            val fullErrorMessage = when (statusCode) {
-                                400 -> "Bad request (400): $errorMessage"
-                                401 -> "Unauthorized (401): $errorMessage\n\nPlease check your API key in settings."
-                                403 -> "Forbidden (403): $errorMessage\n\nPlease check your API key permissions."
-                                404 -> "Not found (404): $errorMessage\n\nPlease check the server URL: $uploadUrl"
-                                500 -> "Server error (500): $errorMessage"
-                                else -> "Upload failed (HTTP $statusCode): $errorMessage"
+                            val errorMessage = when (statusCode) {
+                                400 -> "Upload failed (400)\nInvalid request. Check your file format."
+                                401 -> "Upload failed (401)\nAPI key is invalid or expired.\nCheck Settings."
+                                403 -> "Upload failed (403)\nAccess denied. Check API key permissions."
+                                404 -> "Upload failed (404)\nServer endpoint not found.\nCheck your server URL in Settings."
+                                500 -> "Upload failed (500)\nServer error. Try again later."
+                                else -> "Upload failed ($statusCode)"
                             }
                             
-                            showError("$fullErrorMessage\n\nURL: $uploadUrl")
+                            // Add server message if available and not too long
+                            val fullMessage = if (serverMessage.isNotEmpty() && serverMessage.length < 100) {
+                                "$errorMessage\n\n$serverMessage"
+                            } else if (serverMessage.isNotEmpty()) {
+                                "$errorMessage\n\n${serverMessage.take(100)}..."
+                            } else {
+                                errorMessage
+                            }
+                            
+                            showError(fullMessage)
                         }
                     }
                     tempFile.delete()
@@ -376,8 +375,6 @@ class MainActivity : AppCompatActivity() {
     private fun showError(message: String) {
         statusText.visibility = View.VISIBLE
         statusText.text = message
-        // Also show in Toast for immediate visibility
-        Toast.makeText(this, message.take(100), Toast.LENGTH_LONG).show()
     }
     
     private fun validateApiKey() {
@@ -417,9 +414,8 @@ class MainActivity : AppCompatActivity() {
                     validationTitleText.text = getString(R.string.validation_failed)
                     validationProgressBar.visibility = android.view.View.GONE
                     val errorMsg = e.message ?: "Unknown error"
-                    // Clean up error message if it contains a malformed URL
                     val cleanErrorMsg = errorMsg.replace(Regex("^Failed to connect to /"), "Failed to connect to ")
-                    validationStatusText.text = getString(R.string.connection_failed_msg, cleanErrorMsg, validateUrl)
+                    validationStatusText.text = "✗ Connection failed\n\n$cleanErrorMsg\n\nCheck your server URL and network connection."
                 }
             }
             
@@ -455,81 +451,45 @@ class MainActivity : AppCompatActivity() {
                                 validationStatusText.text = getString(R.string.api_key_valid_msg, keyName)
                             } else {
                                 validationTitleText.text = getString(R.string.validation_failed)
-                                // Try to get error message from response
-                                val errorMsg = if (jsonResponse != null) {
-                                    jsonResponse.optString("error", "API key is invalid")
-                                } else if (responseBody.isNotEmpty()) {
-                                    // Response is not JSON - might be HTML or plain text
-                                    if (responseBody.contains("<html>") || responseBody.contains("<!DOCTYPE")) {
-                                        "Server returned HTML instead of JSON. Check server URL."
-                                    } else {
-                                        "Unexpected response format: ${responseBody.take(100)}"
-                                    }
-                                } else {
-                                    "API key validation failed (empty response)"
-                                }
-                                validationStatusText.text = getString(R.string.validation_failed_msg, errorMsg, responseBody.take(200))
+                                validationStatusText.text = "✗ API key validation failed\n\nThe key may be invalid or disabled."
                             }
                         } else {
                             validationTitleText.text = getString(R.string.validation_failed)
                             
-                            // Provide specific error messages based on status code
-                            val errorMessage = when (statusCode) {
-                                400 -> {
-                                    val error = if (responseBody.isNotEmpty()) {
-                                        try {
-                                            val json = org.json.JSONObject(responseBody)
-                                            json.optString("error", "Bad request")
-                                        } catch (e: Exception) {
-                                            "Bad request"
-                                        }
-                                    } else {
-                                        "Bad request - invalid API key format"
-                                    }
-                                    "✗ Invalid request: $error\n\nPlease check your API key format in settings."
+                            // Extract server message if available
+                            val serverMessage = try {
+                                if (responseBody.isNotEmpty() && responseBody.trimStart().startsWith("{")) {
+                                    val json = org.json.JSONObject(responseBody)
+                                    json.optString("error", "")
+                                } else {
+                                    ""
                                 }
-                                401 -> {
-                                    "✗ Unauthorized (401)\n\nThe API key is invalid or has been deleted.\n\nPlease check your API key in settings and ensure it starts with 'gv_'."
-                                }
-                                403 -> {
-                                    "✗ Forbidden (403)\n\nThe server rejected the request. This may indicate:\n• The API key is invalid or inactive\n• CSRF protection is blocking the request\n• The endpoint requires different authentication\n\nPlease verify your API key in settings."
-                                }
-                                404 -> {
-                                    "✗ Not Found (404)\n\nThe validation endpoint was not found.\n\nURL: $validateUrl\n\nPlease check your server URL in settings."
-                                }
-                                500 -> {
-                                    val error = if (responseBody.isNotEmpty()) {
-                                        try {
-                                            val json = org.json.JSONObject(responseBody)
-                                            json.optString("error", "Server error")
-                                        } catch (e: Exception) {
-                                            "Server error"
-                                        }
-                                    } else {
-                                        "Server error"
-                                    }
-                                    "✗ Server error (500): $error\n\nPlease try again later or contact support."
-                                }
-                                else -> {
-                                    val errorDetail = if (responseBody.isNotEmpty()) {
-                                        try {
-                                            val json = org.json.JSONObject(responseBody)
-                                            json.optString("error", responseBody.take(200))
-                                        } catch (e: Exception) {
-                                            responseBody.take(200)
-                                        }
-                                    } else {
-                                        "Unknown error"
-                                    }
-                                    "✗ Validation failed (HTTP $statusCode)\n\n$errorDetail\n\nPlease check your server URL and API key in settings."
-                                }
+                            } catch (e: Exception) {
+                                ""
                             }
                             
-                            validationStatusText.text = errorMessage
+                            // Provide specific error messages based on status code
+                            val errorMessage = when (statusCode) {
+                                400 -> "✗ Invalid request (400)\n\nCheck your API key format."
+                                401 -> "✗ Unauthorized (401)\n\nAPI key is invalid or expired.\nCheck Settings."
+                                403 -> "✗ Forbidden (403)\n\nAPI key may be disabled or inactive."
+                                404 -> "✗ Not found (404)\n\nValidation endpoint not found.\nCheck your server URL: $validateUrl"
+                                500 -> "✗ Server error (500)\n\nTry again later."
+                                else -> "✗ Validation failed ($statusCode)"
+                            }
+                            
+                            // Add server message if available and not too long
+                            val fullMessage = if (serverMessage.isNotEmpty() && serverMessage.length < 80) {
+                                "$errorMessage\n\n$serverMessage"
+                            } else {
+                                errorMessage
+                            }
+                            
+                            validationStatusText.text = fullMessage
                         }
                     } catch (e: Exception) {
                         validationTitleText.text = getString(R.string.validation_failed)
-                        validationStatusText.text = getString(R.string.error_processing_response, e.message ?: "Unknown error", statusCode)
+                        validationStatusText.text = "✗ Error: ${e.message ?: "Unknown error"}"
                     } finally {
                         response.close()
                     }
@@ -542,9 +502,11 @@ class MainActivity : AppCompatActivity() {
         val view = layoutInflater.inflate(R.layout.dialog_settings, null)
         val serverUrlEdit = view.findViewById<EditText>(R.id.serverUrlEdit)
         val apiKeyEdit = view.findViewById<EditText>(R.id.apiKeyEdit)
+        val addSuffixCheckbox = view.findViewById<android.widget.CheckBox>(R.id.addSuffixCheckbox)
         
         serverUrlEdit.setText(prefs.getString(PREF_SERVER_URL, DEFAULT_SERVER_URL) ?: DEFAULT_SERVER_URL)
         apiKeyEdit.setText(prefs.getString(PREF_API_KEY, "") ?: "")
+        addSuffixCheckbox.isChecked = prefs.getBoolean(PREF_ADD_SUFFIX, true)
         
         AlertDialog.Builder(this)
             .setTitle(R.string.settings_title)
@@ -552,6 +514,7 @@ class MainActivity : AppCompatActivity() {
             .setPositiveButton(R.string.save_settings) { _, _ ->
                 var serverUrl = normalizeServerUrl(serverUrlEdit.text.toString())
                 val apiKey = apiKeyEdit.text.toString().trim()
+                val addSuffix = addSuffixCheckbox.isChecked
                 
                 if (serverUrl.isEmpty() || apiKey.isEmpty()) {
                     Toast.makeText(this, getString(R.string.settings_required), Toast.LENGTH_LONG).show()
@@ -560,6 +523,7 @@ class MainActivity : AppCompatActivity() {
                     prefs.edit()
                         .putString(PREF_SERVER_URL, serverUrl)
                         .putString(PREF_API_KEY, apiKey)
+                        .putBoolean(PREF_ADD_SUFFIX, addSuffix)
                         .apply()
                     
                     Toast.makeText(this, getString(R.string.settings_saved), Toast.LENGTH_SHORT).show()

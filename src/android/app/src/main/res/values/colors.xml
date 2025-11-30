@@ -1,9 +1,26 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <color name="primary_blue">#163D8A</color>
-    <color name="primary_blue_dark">#163D8A</color>
+    <!-- Primary colors matching website theme -->
+    <color name="primary_blue">#163D8A</color>      <!-- blue-500 -->
+    <color name="primary_blue_dark">#063288</color> <!-- blue-600 -->
+    <color name="blue_light">#E4EAF5</color>        <!-- blue-100, for backgrounds -->
+    <color name="blue_extra_light">#F3F6FA</color>  <!-- blue-50 -->
+    
+    <!-- Text colors -->
+    <color name="text_primary">#061D4A</color>      <!-- blue-800, instead of pure black -->
+    <color name="text_secondary">#4B5563</color>    <!-- gray-600, for secondary text -->
+    
+    <!-- Status colors -->
+    <color name="success_green">#5B8A3C</color>     <!-- green-500 -->
+    <color name="error_red">#FF3E41</color>         <!-- red-500 -->
+    <color name="warning_yellow">#F4AC45</color>    <!-- yellow-500 -->
+    
+    <!-- Basic colors -->
     <color name="white">#FFFFFF</color>
     <color name="black">#000000</color>
+    <color name="border_light">#C4D2ED</color>      <!-- blue-200 -->
+    
+    <!-- Legacy colors for compatibility -->
     <color name="gray">#6B7280</color>
     <color name="gray_light">#F3F4F6</color>
 </resources>

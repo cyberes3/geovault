@@ -4,7 +4,7 @@
     android:layout_height="match_parent"
     android:orientation="vertical"
     android:padding="16dp"
-    android:background="@color/gray_light">
+    android:background="@color/blue_extra_light">
 
     <!-- Validation Screen (shown when no file is shared) -->
     <LinearLayout
@@ -23,7 +23,7 @@
             android:textSize="18sp"
             android:textStyle="bold"
             android:layout_marginBottom="16dp"
-            android:textColor="@color/black" />
+            android:textColor="@color/text_primary" />
 
         <ProgressBar
             android:id="@+id/validationProgressBar"
@@ -35,8 +35,8 @@
             android:id="@+id/validationStatusText"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:textSize="14sp"
-            android:textColor="@color/gray"
+            android:textSize="16sp"
+            android:textColor="@color/text_secondary"
             android:gravity="center"
             android:padding="16dp" />
 
@@ -66,7 +66,7 @@
             android:textSize="16sp"
             android:textStyle="bold"
             android:layout_marginBottom="8dp"
-            android:textColor="@color/black" />
+            android:textColor="@color/text_primary" />
 
         <EditText
             android:id="@+id/filenameEdit"
@@ -82,8 +82,8 @@
             android:id="@+id/suffixText"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:textSize="12sp"
-            android:textColor="@color/gray"
+            android:textSize="14sp"
+            android:textColor="@color/text_secondary"
             android:layout_marginBottom="16dp" />
 
         <Button
@@ -103,8 +103,8 @@
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:text="@string/cancel_button"
-            android:textColor="@color/gray"
-            android:backgroundTint="@android:color/transparent"
+            android:textColor="@color/text_secondary"
+            android:backgroundTint="@color/border_light"
             android:padding="12dp"
             android:textSize="14sp" />
 
@@ -121,8 +121,8 @@
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:layout_marginTop="16dp"
-            android:textSize="14sp"
-            android:textColor="@color/gray"
+            android:textSize="16sp"
+            android:textColor="@color/text_secondary"
             android:gravity="center" />
     </LinearLayout>
 
