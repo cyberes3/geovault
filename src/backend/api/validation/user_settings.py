@@ -28,7 +28,7 @@ class MapSettings(BaseModel):
     model_config = ConfigDict(extra='forbid')
     
     elevation_profile_source: Optional[ElevationProfileSource] = Field(
-        default='gps',
+        default=ElevationProfileSource.GPS,
         description="Elevation profile data source: 'gps' or 'api'"
     )
     
@@ -84,7 +84,7 @@ class AccountSettings(BaseModel):
     model_config = ConfigDict(extra='forbid')
     
     units: Optional[UnitsPreference] = Field(
-        default='imperial',
+        default=UnitsPreference.IMPERIAL,
         description="Units preference: 'metric' or 'imperial'"
     )
 

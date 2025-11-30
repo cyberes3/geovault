@@ -5,38 +5,40 @@ Provides consistent response formats across all API endpoints.
 
 from typing import Any, Dict, Optional
 from functools import wraps
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, ConfigDict, Field
 from django.http import JsonResponse, Http404
 
 
 class ErrorResponse(BaseModel):
     """Standardized error response model."""
-    error: str = Field(..., description="Human-readable error message")
-    code: int = Field(..., description="HTTP status code")
-    details: Optional[Dict[str, Any]] = Field(default=None, description="Optional detailed error information")
-
-    class Config:
-        json_schema_extra = {
+    model_config = ConfigDict(
+        json_schema_extra={
             "example": {
                 "error": "Invalid input data",
                 "code": 400,
                 "details": {"field": "name", "issue": "required"}
             }
         }
+    )
+    
+    error: str = Field(..., description="Human-readable error message")
+    code: int = Field(..., description="HTTP status code")
+    details: Optional[Dict[str, Any]] = Field(default=None, description="Optional detailed error information")
 
 
 class SuccessResponse(BaseModel):
     """Standardized success response model with optional message."""
-    msg: Optional[str] = Field(default=None, description="Success message")
-    data: Optional[Dict[str, Any]] = Field(default=None, description="Response data")
-
-    class Config:
-        json_schema_extra = {
+    model_config = ConfigDict(
+        json_schema_extra={
             "example": {
                 "msg": "Operation completed successfully",
                 "data": {"id": 123}
             }
         }
+    )
+    
+    msg: Optional[str] = Field(default=None, description="Success message")
+    data: Optional[Dict[str, Any]] = Field(default=None, description="Response data")
 
 
 def error_response(

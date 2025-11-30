@@ -333,4 +333,132 @@ def mock_external_services():
             yield mocks
 
 
+# E2E Import Test Fixtures
+
+@pytest.fixture
+def test_files_dir():
+    """Get path to test files directory."""
+    return Path(__file__).parent / 'test files'
+
+
+@pytest.fixture
+def load_test_kml(test_files_dir):
+    """Load Test Items.kml from disk."""
+    kml_path = test_files_dir / 'Test Items.kml'
+    with open(kml_path, 'rb') as f:
+        return f.read()
+
+
+@pytest.fixture
+def load_test_gpx(test_files_dir):
+    """Load blue_hills.gpx from disk."""
+    gpx_path = test_files_dir / 'blue_hills.gpx'
+    with open(gpx_path, 'rb') as f:
+        return f.read()
+
+
+@pytest.fixture
+def load_fells_loop_gpx(test_files_dir):
+    """Load fells_loop.gpx from disk."""
+    gpx_path = test_files_dir / 'fells_loop.gpx'
+    with open(gpx_path, 'rb') as f:
+        return f.read()
+
+
+@pytest.fixture
+def load_google_earth_kml(test_files_dir):
+    """Load Google Earth KML Samples.kml from disk."""
+    kml_path = test_files_dir / 'Google Earth KML Samples.kml'
+    with open(kml_path, 'rb') as f:
+        return f.read()
+
+
+@pytest.fixture
+def create_test_kmz():
+    """Create a KMZ file (ZIP with doc.kml inside) from KML content."""
+    import zipfile
+    from io import BytesIO
+    
+    def _create_kmz(kml_content: bytes) -> bytes:
+        """Create KMZ file from KML content."""
+        zip_buffer = BytesIO()
+        with zipfile.ZipFile(zip_buffer, 'w', zipfile.ZIP_DEFLATED) as zip_file:
+            zip_file.writestr('doc.kml', kml_content)
+        return zip_buffer.getvalue()
+    
+    return _create_kmz
+
+
+@pytest.fixture
+def wait_for_job_completion():
+    """Helper to wait for async job completion with timeout."""
+    import time
+    from geo_lib.processing.status_tracker import status_tracker, ProcessingStatus
+    
+    def _wait(job_id: str, timeout: float = 30.0, poll_interval: float = 0.5) -> dict:
+        """
+        Wait for job to complete.
+        
+        Args:
+            job_id: Job ID to wait for
+            timeout: Maximum time to wait in seconds
+            poll_interval: Time between status checks
+            
+        Returns:
+            Final job status dict
+            
+        Raises:
+            TimeoutError: If job doesn't complete within timeout
+        """
+        start_time = time.time()
+        while time.time() - start_time < timeout:
+            job_status = status_tracker.get_job_status(job_id)
+            if not job_status:
+                raise ValueError(f"Job {job_id} not found")
+            
+            status = job_status.get('status')
+            if status in [ProcessingStatus.COMPLETED, ProcessingStatus.FAILED]:
+                return job_status
+            
+            time.sleep(poll_interval)
+        
+        raise TimeoutError(f"Job {job_id} did not complete within {timeout} seconds")
+    
+    return _wait
+
+
+@pytest.fixture
+def wait_for_processing(wait_for_job_completion):
+    """Wait for file processing job to complete."""
+    def _wait(job_id: str, timeout: float = 30.0) -> dict:
+        """Wait for processing job and verify success."""
+        job_status = wait_for_job_completion(job_id, timeout)
+        
+        from geo_lib.processing.status_tracker import ProcessingStatus
+        if job_status['status'] == ProcessingStatus.FAILED:
+            error_msg = job_status.get('error_message', job_status.get('message', 'Unknown error'))
+            raise RuntimeError(f"Processing failed: {error_msg}")
+        
+        return job_status
+    
+    return _wait
+
+
+@pytest.fixture
+def wait_for_import(wait_for_job_completion):
+    """Wait for import job to complete."""
+    def _wait(job_id: str, timeout: float = 30.0) -> dict:
+        """Wait for import job and verify success."""
+        job_status = wait_for_job_completion(job_id, timeout)
+        
+        from geo_lib.processing.status_tracker import ProcessingStatus
+        if job_status['status'] == ProcessingStatus.FAILED:
+            error_msg = job_status.get('error_message', job_status.get('message', 'Unknown error'))
+            raise RuntimeError(f"Import failed: {error_msg}")
+        
+        return job_status
+    
+    return _wait
+
+
 

@@ -46,6 +46,8 @@ on [git.evulid.cc](https://git.evulid.cc/cyberes/geovault).
 If you are having issues uploading or importing files, please provide the problem file. You can email it to me if you'd
 like.
 
+We have a very thorough test suite in `src/tests` so make sure to run any changes through that.
+
 ## Android Uploader App
 
 A simple Android app is included that allows you to quickly upload KML/KMZ/GPX files to your GeoVault server via

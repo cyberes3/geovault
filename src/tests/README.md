@@ -2,12 +2,91 @@
 
 When doing AI programming its really really nice to have comprehensive tests.
 
+## Running Tests
 
+### Run all tests
 ```shell
 ./run_tests.sh
 ```
 
-You need to create the PostGIS extension in the test DB first.
+### Run all tests with verbose output
+```shell
+./run_tests.sh -v
+```
+
+### Run a specific test folder
+```shell
+# Run all API tests
+./run_tests.sh test_api
+
+# Run all validation tests
+./run_tests.sh test_validation
+
+# Run all processing tests
+./run_tests.sh test_processing
+```
+
+### Run a specific test file
+```shell
+# Run the E2E import tests
+./run_tests.sh test_api/test_e2e_import.py
+
+# Run the features tests
+./run_tests.sh test_api/test_features.py
+
+# Run with verbose output
+./run_tests.sh test_api/test_e2e_import.py -v
+```
+
+### Run a specific test class or test function
+```shell
+# Run a specific test class
+./run_tests.sh test_api/test_e2e_import.py::TestE2EImport
+
+# Run a specific test function
+./run_tests.sh test_api/test_e2e_import.py::TestE2EImport::test_e2e_kml_import
+
+# Run multiple specific tests
+./run_tests.sh test_api/test_e2e_import.py::TestE2EImport::test_e2e_kml_import test_api/test_e2e_import.py::TestE2EImport::test_e2e_gpx_import
+```
+
+### Run tests matching a keyword
+```shell
+# Run all tests with "duplicate" in their name
+./run_tests.sh -k duplicate
+
+# Run all tests with "icon" in their name
+./run_tests.sh -k icon
+```
+
+## Test Organization
+
+The test suite is organized into the following directories:
+
+- **test_api/** - API endpoint tests (features, collections, import, sharing, etc.)
+- **test_auth/** - Authentication tests (API keys, session auth)
+- **test_concurrent/** - Concurrent operation tests
+- **test_edge_cases/** - Edge case and boundary condition tests
+- **test_error_recovery/** - Error recovery and retry mechanism tests
+- **test_geo_lib/** - Geospatial library tests
+- **test_models/** - Django model tests
+- **test_performance/** - Performance and benchmarking tests
+- **test_processing/** - File processing and bulk operation tests
+- **test_security/** - Security and middleware tests
+- **test_utils/** - Test helper utilities
+- **test_validation/** - Data validation tests (GeoJSON, geometry, styling)
+
+## Notable Test Files
+
+- **test_api/test_e2e_import.py** - Comprehensive end-to-end import flow tests (KML, KMZ, GPX)
+- **test_api/test_features.py** - Feature CRUD operations and querying
+- **test_api/test_collections.py** - Collection management tests
+- **test_concurrent/test_concurrent_operations.py** - Race condition and concurrent access tests
+- **test_processing/test_processors.py** - File format processor tests
+
+## Database Setup
+
+Before running tests for the first time, you need to create the PostGIS extension in the test database.
 
 ```sql
 \c gv_tests
