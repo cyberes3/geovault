@@ -794,6 +794,7 @@ export default {
       importCustomIcons: true,
       statusMessage: null,
       statusDetail: null,
+      waitingForImportCompletion: false,
 
       // WebSocket connection
       ws: null,
@@ -1006,6 +1007,27 @@ export default {
       this.processing.progress = null;
       this.stopProcessingPolling();
 
+      // Check if we're waiting for import completion
+      if (this.waitingForImportCompletion) {
+        this.waitingForImportCompletion = false;
+        this.lockButtons = false;
+        this.loading.importing = false;
+        
+        // Refresh the import queue
+        this.$store.dispatch('refreshImportQueue');
+        
+        // Remove the beforeunload handler before redirecting
+        if (this.beforeUnloadHandler) {
+          window.removeEventListener('beforeunload', this.beforeUnloadHandler);
+        }
+        
+        // Redirect to import page after successful import
+        this.loading.redirecting = true;
+        window.alert('Import successful: ' + (data.message || 'Import completed successfully'));
+        this.$router.replace('/import');
+        return;
+      }
+
       // Keep processing active to show the unified loading spinner
       this.processing.active = true;
 
@@ -1017,8 +1039,21 @@ export default {
       this.processing.active = false;
       this.processing.message = 'Processing failed';
       this.processing.progress = null;
-      this.msg = data.error_message || PROCESSING_MESSAGES.PROCESSING_FAILED_DEFAULT;
       this.stopProcessingPolling();
+      
+      // Check if we're waiting for import completion
+      if (this.waitingForImportCompletion) {
+        this.waitingForImportCompletion = false;
+        this.lockButtons = false;
+        this.loading.importing = false;
+        
+        const errorMessage = data.message || data.error_message || PROCESSING_MESSAGES.PROCESSING_FAILED_DEFAULT;
+        this.msg = 'Import failed: ' + errorMessage;
+        window.alert(this.msg);
+        return;
+      }
+      
+      this.msg = data.error_message || PROCESSING_MESSAGES.PROCESSING_FAILED_DEFAULT;
     },
 
     handlePageData(data) {
@@ -1658,12 +1693,12 @@ export default {
           return; // Don't proceed with import if save fails
         }
 
-        // Perform the import - server will use the stored features in the database
+        // Perform the import - server returns immediately, completion will come via WebSocket
         // No need to send the feature collection, it's already saved
         // Convert skippedFeatureIds Set to array for JSON serialization
         // Filter out index-based IDs (temp IDs) - only send actual feature IDs to backend
         const skippedFeatureIdsArray = Array.from(this.skippedFeatureIds).filter(id => !id.startsWith('index_'));
-        const response = await axios.post('/api/item/import/perform/' + this.currentId + '?blocking=true', {
+        const response = await axios.post('/api/item/import/perform/' + this.currentId, {
           import_custom_icons: this.importCustomIcons,
           skipped_feature_ids: skippedFeatureIdsArray
         }, {
@@ -1673,25 +1708,21 @@ export default {
         });
 
         if (response.status === 200) {
-          this.$store.dispatch('refreshImportQueue');
-          // Remove the beforeunload handler before redirecting
-          if (this.beforeUnloadHandler) {
-            window.removeEventListener('beforeunload', this.beforeUnloadHandler);
-          }
-          // Redirect to import page after successful import
-          this.loading.redirecting = true;
-          window.alert('Import successful: ' + response.data.msg);
-          this.$router.replace('/import');
+          // Job started successfully - now wait for WebSocket completion event
+          this.waitingForImportCompletion = true;
+          // Keep buttons locked and loading state active until WebSocket event arrives
         } else {
           this.msg = 'Error performing import: ' + response.data.msg;
           window.alert(this.msg);
+          this.lockButtons = false;
+          this.loading.importing = false;
         }
       } catch (error) {
         this.msg = 'Error performing import: ' + (error.response?.data?.msg || error.message);
         window.alert(this.msg);
-      } finally {
         this.lockButtons = false;
         this.loading.importing = false;
+        this.waitingForImportCompletion = false;
       }
     },
     async recheckDuplicates() {

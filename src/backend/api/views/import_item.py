@@ -6,7 +6,6 @@ from django import forms
 from django.db import transaction
 from django.http import HttpResponse, JsonResponse
 from django.views.decorators.http import require_http_methods
-import time
 
 from api.models import ImportQueue
 from api.utils.responses import (
@@ -415,67 +414,12 @@ def import_to_featurestore(request, item_id, validated_data):
         skipped_feature_ids=skipped_feature_ids
     )
 
-    # Check if the caller requested blocking behavior
-    blocking = request.GET.get('blocking', 'false').lower() == 'true'
-
-    if not blocking:
-        # Default behavior: return immediately and let the job run in background
-        return success_response({
-            'msg': 'Import job started',
-            'job_id': job_id
-        })
-
-    # Blocking behavior: wait for the job to finish before returning a response
-    timeout_seconds = 300  # 5 minutes
-    poll_interval = 0.1
-    start_time = time.time()
-
-    while True:
-        # Check for timeout
-        if time.time() - start_time > timeout_seconds:
-            return error_response(
-                'Import job timed out while waiting for completion',
-                code=504,
-                details={'job_id': job_id}
-            )
-
-        job_status = status_tracker.get_job_status(job_id)
-
-        # If job no longer exists, return an error
-        if not job_status:
-            return not_found_response('Import job not found')
-
-        status = job_status.get('status')
-
-        # Terminal states: completed, failed, or cancelled
-        if status in ('completed', 'failed', 'cancelled'):
-            # Refresh import item to get latest state
-            import_item.refresh_from_db()
-
-            response_payload = {
-                'msg': job_status.get('message', ''),
-                'job_id': job_id,
-                'job_status': job_status,
-                'imported': import_item.imported
-            }
-
-            if status == 'completed':
-                return success_response(response_payload)
-            elif status == 'failed':
-                return error_response(
-                    job_status.get('message', 'Import failed'),
-                    code=500,
-                    details={'job_id': job_id, 'job_status': job_status}
-                )
-            else:  # cancelled
-                return error_response(
-                    'Import cancelled',
-                    code=499,
-                    details={'job_id': job_id, 'job_status': job_status}
-                )
-
-        # Not finished yet, wait a bit before polling again
-        time.sleep(poll_interval)
+    # Return immediately - completion status will be sent via WebSocket
+    return success_response({
+        'msg': 'Import job started',
+        'job_id': job_id,
+        'item_id': item_id
+    })
 
 
 @api_or_login_required_401()

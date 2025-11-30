@@ -2,13 +2,13 @@
 Tests for import/upload API endpoints.
 """
 import json
-from unittest.mock import patch, MagicMock
+from unittest.mock import patch, MagicMock, call, ANY
 import pytest
 from django.test import TestCase
 from django.core.files.uploadedfile import SimpleUploadedFile
 
-from api.models import ImportQueue
-from geo_lib.processing.status_tracker import ProcessingStatus, JobType
+from api.models import ImportQueue, FeatureStore
+from geo_lib.processing.status_tracker import ProcessingStatus, JobType, status_tracker
 
 
 class TestImportAPI(TestCase):
@@ -771,4 +771,199 @@ class TestImportAPI(TestCase):
         self.assertEqual(response.status_code, 400)
         data = json.loads(response.content)
         self.assertIn('already been imported', data.get('error', ''))
+
+    @patch('api.views.import_item.import_job')
+    def test_import_returns_immediately_with_item_id(self, mock_import_job):
+        """Test that import endpoint returns immediately with job_id and item_id."""
+        import_queue = ImportQueue.objects.create(
+            user=self.user,
+            original_filename='test.kml',
+            raw_file='<kml></kml>',
+            geofeatures=[{
+                'type': 'Feature',
+                'geometry': {'type': 'Point', 'coordinates': [-122.4194, 37.7749]},
+                'properties': {'name': 'Test'}
+            }],
+            imported=False
+        )
+        mock_import_job.start_import_job.return_value = 'test-job-id'
+
+        response = self.client.post(
+            f'/api/item/import/perform/{import_queue.id}',
+            data=json.dumps({}),
+            content_type='application/json'
+        )
+        
+        self.assertEqual(response.status_code, 200)
+        data = json.loads(response.content)
+        self.assertEqual(data['job_id'], 'test-job-id')
+        self.assertEqual(data['item_id'], import_queue.id)
+        self.assertIn('Import job started', data['msg'])
+
+    @patch('api.views.import_item.import_job')
+    def test_import_no_blocking_parameter_accepted(self, mock_import_job):
+        """Test that import endpoint no longer accepts blocking parameter."""
+        import_queue = ImportQueue.objects.create(
+            user=self.user,
+            original_filename='test.kml',
+            raw_file='<kml></kml>',
+            geofeatures=[{
+                'type': 'Feature',
+                'geometry': {'type': 'Point', 'coordinates': [-122.4194, 37.7749]},
+                'properties': {'name': 'Test'}
+            }],
+            imported=False
+        )
+        mock_import_job.start_import_job.return_value = 'test-job-id'
+
+        # Test with blocking=true parameter (should be ignored)
+        response = self.client.post(
+            f'/api/item/import/perform/{import_queue.id}?blocking=true',
+            data=json.dumps({}),
+            content_type='application/json'
+        )
+        
+        # Should return immediately with job_id, not wait for completion
+        self.assertEqual(response.status_code, 200)
+        data = json.loads(response.content)
+        self.assertIn('job_id', data)
+        self.assertIn('item_id', data)
+        # Should NOT have 'imported' or 'job_status' fields (those were from blocking mode)
+        self.assertNotIn('imported', data)
+        self.assertNotIn('job_status', data)
+
+
+class TestImportJobWebSocket(TestCase):
+    """Test ImportJob WebSocket broadcasting methods."""
+
+    def setUp(self):
+        """Set up test fixtures."""
+        from django.contrib.auth import get_user_model
+        User = get_user_model()
+        self.user = User.objects.create_user(
+            email='test@example.com',
+            password='testpass123',
+            username='testuser'
+        )
+
+    @patch('asgiref.sync.async_to_sync')
+    def test_broadcast_to_process_status_module_called(self, mock_async_to_sync):
+        """Test that _broadcast_to_process_status_module creates correct WebSocket message."""
+        from geo_lib.processing.jobs.import_job import ImportJob
+        
+        # Create import job instance
+        import_job = ImportJob(status_tracker)
+        
+        # Mock async_to_sync and channel layer
+        mock_group_send = MagicMock()
+        mock_async_to_sync.return_value = mock_group_send
+        
+        # Call broadcast method directly
+        import_job._broadcast_to_process_status_module(
+            user_id=self.user.id,
+            import_queue_id=123,
+            event_type='item_completed',
+            data={'message': 'Success', 'imported_count': 5}
+        )
+        
+        # Verify async_to_sync was called
+        self.assertTrue(mock_async_to_sync.called)
+        
+        # Verify group_send was called with correct arguments
+        expected_channel = f"process_status_{self.user.id}_123"
+        expected_message = {
+            'type': 'item_completed',
+            'data': {'message': 'Success', 'imported_count': 5}
+        }
+        mock_group_send.assert_called_once_with(expected_channel, expected_message)
+
+    @patch('asgiref.sync.async_to_sync')
+    def test_broadcast_completion_message_format(self, mock_async_to_sync):
+        """Test that item_completed broadcast has correct data structure."""
+        from geo_lib.processing.jobs.import_job import ImportJob
+        
+        import_job = ImportJob(status_tracker)
+        mock_group_send = MagicMock()
+        mock_async_to_sync.return_value = mock_group_send
+        
+        # Broadcast completion
+        import_job._broadcast_to_process_status_module(
+            user_id=self.user.id,
+            import_queue_id=456,
+            event_type='item_completed',
+            data={
+                'message': 'Successfully imported 10 features',
+                'imported_count': 10,
+                'skipped_count': 2,
+                'duplicates_skipped': 1
+            }
+        )
+        
+        # Extract the message argument
+        call_args = mock_group_send.call_args
+        message = call_args[0][1]
+        
+        # Verify message structure
+        self.assertEqual(message['type'], 'item_completed')
+        self.assertIn('data', message)
+        self.assertEqual(message['data']['imported_count'], 10)
+        self.assertEqual(message['data']['skipped_count'], 2)
+        self.assertEqual(message['data']['duplicates_skipped'], 1)
+
+    @patch('asgiref.sync.async_to_sync')
+    def test_broadcast_failure_message_format(self, mock_async_to_sync):
+        """Test that item_failed broadcast has correct data structure."""
+        from geo_lib.processing.jobs.import_job import ImportJob
+        
+        import_job = ImportJob(status_tracker)
+        mock_group_send = MagicMock()
+        mock_async_to_sync.return_value = mock_group_send
+        
+        # Broadcast failure
+        import_job._broadcast_to_process_status_module(
+            user_id=self.user.id,
+            import_queue_id=789,
+            event_type='item_failed',
+            data={
+                'message': 'No features were imported',
+                'reason': 'All features were duplicates'
+            }
+        )
+        
+        # Extract the message argument
+        call_args = mock_group_send.call_args
+        message = call_args[0][1]
+        
+        # Verify message structure
+        self.assertEqual(message['type'], 'item_failed')
+        self.assertIn('data', message)
+        self.assertIn('message', message['data'])
+        self.assertIn('reason', message['data'])
+
+    @patch('asgiref.sync.async_to_sync')
+    def test_broadcast_channel_name_format(self, mock_async_to_sync):
+        """Test that broadcast uses correct channel naming convention."""
+        from geo_lib.processing.jobs.import_job import ImportJob
+        
+        import_job = ImportJob(status_tracker)
+        mock_group_send = MagicMock()
+        mock_async_to_sync.return_value = mock_group_send
+        
+        user_id = 42
+        item_id = 999
+        
+        import_job._broadcast_to_process_status_module(
+            user_id=user_id,
+            import_queue_id=item_id,
+            event_type='item_completed',
+            data={'message': 'test'}
+        )
+        
+        # Extract channel name
+        call_args = mock_group_send.call_args
+        channel_name = call_args[0][0]
+        
+        # Verify channel naming convention
+        expected_channel = f"process_status_{user_id}_{item_id}"
+        self.assertEqual(channel_name, expected_channel)
 

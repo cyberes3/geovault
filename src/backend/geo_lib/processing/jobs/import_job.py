@@ -29,6 +29,40 @@ class ImportJob(BaseJob):
     def get_job_type(self) -> str:
         return "import"
 
+    def _broadcast_to_process_status_module(self, user_id: int, import_queue_id: int, event_type: str, data: dict):
+        """Broadcast WebSocket event to process_status module for specific item."""
+        from channels.layers import get_channel_layer
+        from asgiref.sync import async_to_sync
+
+        channel_layer = get_channel_layer()
+        if channel_layer:
+            async_to_sync(channel_layer.group_send)(
+                f"process_status_{user_id}_{import_queue_id}",
+                {
+                    'type': event_type,
+                    'data': data
+                }
+            )
+
+    def _handle_job_error(self, job_id: str, error_message: str):
+        """
+        Handle job errors by updating status and broadcasting via WebSocket.
+        Overrides base class to also broadcast to process_status channel.
+        """
+        # Call parent implementation for general broadcast
+        super()._handle_job_error(job_id, error_message)
+        
+        # Also broadcast to process_status channel if we have item_id
+        job = self.status_tracker.get_job(job_id)
+        if job and job.import_queue_id:
+            self._broadcast_to_process_status_module(
+                job.user_id, job.import_queue_id, 'item_failed',
+                {
+                    'message': f'Import failed: {error_message}',
+                    'error': error_message
+                }
+            )
+
     def start_import_job(self, item_id: int, user_id: int, import_custom_icons: bool = True, skipped_feature_ids: List[str] = None) -> str:
         """
         Start an import job for a single import queue item.
@@ -48,6 +82,9 @@ class ImportJob(BaseJob):
         # Create a job
         import_item = ImportQueue.objects.get(id=item_id)
         job_id = self.status_tracker.create_job(f"Import {import_item.original_filename}", user_id)
+        
+        # Set the import_queue_id so error handling can broadcast to the right channel
+        self.status_tracker.set_job_result(job_id, {}, item_id)
 
         # Start the job
         self.start_job(
@@ -146,6 +183,17 @@ class ImportJob(BaseJob):
                 job_id, ProcessingStatus.COMPLETED,
                 success_msg, 100.0
             )
+
+            # Broadcast completion event to WebSocket
+            self._broadcast_to_process_status_module(
+                user_id, item_id, 'item_completed',
+                {
+                    'message': success_msg,
+                    'imported_count': total_imported,
+                    'skipped_count': skipped_count,
+                    'duplicates_skipped': duplicates_skipped
+                }
+            )
         else:
             # No features were successfully imported
             logger.warning(f"Import failed for user {user_id}: No features were imported from '{import_item.original_filename}'")
@@ -164,4 +212,13 @@ class ImportJob(BaseJob):
                 job_id, ProcessingStatus.FAILED,
                 error_msg,
                 error_message=error_msg
+            )
+
+            # Broadcast failure event to WebSocket
+            self._broadcast_to_process_status_module(
+                user_id, item_id, 'item_failed',
+                {
+                    'message': error_msg,
+                    'reason': reason
+                }
             )
