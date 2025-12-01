@@ -195,6 +195,10 @@ class CustomHeaderMiddleware:
     
     def _set_cors_headers(self, request, response):
         """Set CORS headers on response."""
+        # Explicitly remove any existing Access-Control-Allow-Origin header
+        # to ensure we override any value set by WhiteNoise or other middleware
+        response.headers.pop('Access-Control-Allow-Origin', None)
+        
         # Get the Origin header from the request
         origin = request.META.get('HTTP_ORIGIN')
         

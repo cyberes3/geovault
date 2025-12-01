@@ -184,6 +184,17 @@ WHITENOISE_MAX_AGE = 31536000  # 1 year in seconds (60*60*24*365)
 # Mark files with content hashes as immutable for optimal caching
 WHITENOISE_IMMUTABLE_FILE_TEST = lambda path, url: url.startswith('/static/') and '-' in url.split('/')[-1]
 
+# WhiteNoise CORS header configuration
+# By default, WhiteNoise sets Access-Control-Allow-Origin: * for static files.
+# We override this to use the site's domain instead.
+def whitenoise_add_cors_headers(headers, path, url):
+    """Set CORS header for WhiteNoise static files to match site domain."""
+    # Use the same logic as CustomHeaderMiddleware to determine the correct origin
+    protocol = 'https' if not DEBUG else 'http'
+    headers['Access-Control-Allow-Origin'] = f"{protocol}://{SITE_DOMAIN}"
+
+WHITENOISE_ADD_HEADERS_FUNCTION = whitenoise_add_cors_headers
+
 # Cache configuration
 # Using LocMemCache for in-memory caching (works within a single process)
 # For production with multiple processes, consider using Redis or Memcached
