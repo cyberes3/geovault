@@ -3,7 +3,6 @@ import re
 import traceback
 from io import BytesIO
 from pathlib import Path
-from urllib.parse import urlparse
 
 from django import forms
 from django.conf import settings
@@ -16,94 +15,6 @@ from geo_lib.processing.icon_manager import store_icon
 from geo_lib.website.auth import api_or_login_required_401
 
 logger = get_access_logger()
-
-
-def _is_allowed_referer(request):
-    """
-    Check if the request's Referer header is from an allowed domain.
-    
-    Allows:
-    - All requests if hot-linking is enabled in config
-    - Requests with no Referer header AND same-site origin (direct access, bookmarks)
-    - Requests where Referer matches the current request's host (same domain)
-    - Requests where Origin header matches the current request's host (same origin)
-    
-    Blocks:
-    - Requests with Referer from a different domain (hot-linking attempt) if hot-linking is disabled
-    - Cross-site requests (detected via Sec-Fetch-Site header) even without Referer
-    
-    Args:
-        request: Django request object
-        
-    Returns:
-        True if referer is allowed, False if hot-linking is detected
-    """
-    # If hot-linking is allowed in config, allow all requests
-    if settings.ICON_ALLOW_HOTLINKING:
-        return True
-    
-    # Get current request's host (normalized, without port for comparison)
-    current_host = request.get_host().lower()
-    if ':' in current_host:
-        current_host = current_host.split(':')[0]
-    
-    # Check Origin header (more reliable than Referer for same-origin requests)
-    origin = request.META.get('HTTP_ORIGIN', '')
-    if origin:
-        try:
-            origin_parsed = urlparse(origin)
-            origin_host = origin_parsed.netloc.lower()
-            if ':' in origin_host:
-                origin_host = origin_host.split(':')[0]
-            if origin_host == current_host:
-                return True
-        except Exception:
-            pass
-    
-    # Check Sec-Fetch-Site header (modern browsers send this for cross-site requests)
-    # This helps detect hot-linking even when Referer header is missing (e.g., file:// protocol)
-    sec_fetch_site = request.META.get('HTTP_SEC_FETCH_SITE', '').lower()
-    if sec_fetch_site == 'cross-site':
-        # This is a cross-site request - block it as hot-linking
-        logger.debug(f"Hot-linking attempt blocked: Sec-Fetch-Site=cross-site, current_host={current_host}")
-        return False
-    
-    referer = request.META.get('HTTP_REFERER', '')
-    
-    # Allow requests with no referer if they're same-site (not cross-site)
-    # Same-site includes: same-origin, same-site, or none (for direct navigation)
-    # Also allow if the request itself is from the same host (e.g., direct image access from same domain)
-    if not referer:
-        # If Sec-Fetch-Site indicates same-site or none, allow it
-        if sec_fetch_site in ('same-origin', 'same-site', 'none', ''):
-            return True
-        # If no Sec-Fetch-Site header, be permissive for same-host requests
-        # This handles cases where browsers don't send these headers
-        logger.debug(f"Allowing request with no referer: Sec-Fetch-Site={sec_fetch_site}, current_host={current_host}")
-        return True
-    
-    try:
-        # Parse the referer URL
-        referer_parsed = urlparse(referer)
-        referer_host = referer_parsed.netloc.lower()
-        
-        # Remove port numbers for comparison (if present)
-        if ':' in referer_host:
-            referer_host = referer_host.split(':')[0]
-        
-        # Allow if referer host matches current host
-        if referer_host == current_host:
-            return True
-        
-        # Block if referer is from a different domain
-        logger.debug(f"Hot-linking attempt blocked: referer={referer}, referer_host={referer_host}, current_host={current_host}")
-        return False
-        
-    except Exception as e:
-        # If there's any error parsing, be permissive (allow the request)
-        # This prevents blocking legitimate requests due to parsing errors
-        logger.debug(f"Error checking referer: {str(e)}")
-        return True
 
 
 class IconUploadForm(forms.Form):
@@ -218,10 +129,6 @@ def serve_user_icon(request, icon_hash):
         if extension not in valid_extensions:
             raise Http404("Invalid icon extension")
 
-        # Check referer to prevent hot-linking
-        if not _is_allowed_referer(request):
-            return HttpResponse("Hot-linking not allowed", status=403)
-
         # Get storage path
         storage_dir = Path(settings.ICON_STORAGE_DIR)
         icon_path = storage_dir / hash_part[0:2] / hash_part[2:4] / icon_hash
@@ -284,10 +191,6 @@ def serve_system_icon(request, path):
                 raise Http404("Invalid icon path")
         except (OSError, ValueError):
             raise Http404("Invalid icon path")
-        
-        # Check referer to prevent hot-linking
-        if not _is_allowed_referer(request):
-            return HttpResponse("Hot-linking not allowed", status=403)
         
         # Check if file exists
         if not file_path.exists() or not file_path.is_file():
@@ -376,10 +279,6 @@ def recolor_icon(request):
                 'error': 'Invalid icon path',
                 'code': 400
             }, status=400)
-        
-        # Check referer to prevent hot-linking
-        if not _is_allowed_referer(request):
-            return HttpResponse("Hot-linking not allowed", status=403)
         
         # Check if icon exists
         if not icon_path.exists() or not icon_path.is_file():

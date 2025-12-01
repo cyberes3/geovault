@@ -71,10 +71,6 @@ icons:
   # Timeout for fetching remote icons in seconds
   fetch_timeout: 5
 
-  # Allow or disallow hot-linking of hosted icons from external domains
-  # Set to true (default) to allow external websites to link to your icons
-  allow_hotlinking: true
-
   # Maximum size for user-uploaded icons (500KB)
   upload_max_size_bytes: 512000
 
