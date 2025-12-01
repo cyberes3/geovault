@@ -467,6 +467,30 @@
           </div>
         </div>
 
+        <!-- Queue Duplicate Warning -->
+        <div v-if="item.isQueueDuplicate" class="mb-4 p-4 bg-yellow-50 border border-yellow-200 rounded-md">
+          <div class="flex items-start">
+            <div class="flex-shrink-0">
+              <ExclamationTriangleIcon class="h-5 w-5 text-yellow-400" />
+            </div>
+            <div class="ml-3 flex-1">
+              <h3 class="text-sm font-medium text-yellow-800">Duplicate Feature in Import Queue</h3>
+              <div class="mt-2 text-sm text-yellow-700">
+                <p>This feature is identical to one in another item in your import queue.</p>
+                <div class="mt-2" v-if="item.queueDuplicateInfo">
+                  <router-link
+                      :to="{ path: `/import/process/${item.queueDuplicateInfo.queue_item_id}`, query: { featureHash: item.queueDuplicateInfo.hash } }"
+                      class="inline-flex items-center px-3 py-1.5 border border-gray-300 rounded-md text-xs font-medium text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500"
+                  >
+                    <MapIcon class="w-3 h-3 mr-1" />
+                    View in "{{ item.queueDuplicateInfo.queue_item_filename }}"
+                  </router-link>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+
         <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
           <!-- Name Field -->
           <div>
@@ -1008,6 +1032,14 @@ export default {
       this.processing.progress = null;
       this.stopProcessingPolling();
 
+      // Log skipped queue duplicates to console
+      if (data.skipped_queue_duplicates && data.skipped_queue_duplicates.length > 0) {
+        console.log(`Skipped ${data.skipped_queue_duplicates.length} features that duplicate other items in import queue:`);
+        data.skipped_queue_duplicates.forEach(feature => {
+          console.log(`  - ${feature.name} (hash: ${feature.hash}) from "${feature.queue_item_filename}"`);
+        });
+      }
+
       // Check if we're waiting for import completion
       if (this.waitingForImportCompletion) {
         this.waitingForImportCompletion = false;
@@ -1099,6 +1131,10 @@ export default {
       if (data.duplicates) {
         this.duplicates.features = data.duplicates;
         this.markDuplicateFeatures();
+      }
+
+      if (data.queue_duplicates) {
+        this.markQueueDuplicateFeatures(data.queue_duplicates);
       }
 
       this.loading.page = false;
@@ -1787,6 +1823,22 @@ export default {
         }
       });
     },
+    markQueueDuplicateFeatures(queueDuplicates) {
+      // Reset all features to not be queue duplicates
+      this.itemsForUser.forEach((item, index) => {
+        item.isQueueDuplicate = false;
+        item.queueDuplicateInfo = null;
+      });
+
+      // Mark queue duplicate features using the page_index
+      queueDuplicates.forEach(queueDuplicateInfo => {
+        const pageIndex = queueDuplicateInfo.page_index;
+        if (pageIndex >= 0 && pageIndex < this.itemsForUser.length) {
+          this.itemsForUser[pageIndex].isQueueDuplicate = true;
+          this.itemsForUser[pageIndex].queueDuplicateInfo = queueDuplicateInfo;
+        }
+      });
+    },
     closeLogModal() {
       this.dialogs.logs = false;
     },
@@ -2267,6 +2319,19 @@ export default {
         }, 2000);
       }
     },
+    scrollToFeatureByHash(hash) {
+      // Find feature with matching hash in current page
+      const featureIndex = this.itemsForUser.findIndex(item => 
+        item.properties && item.properties.id === hash
+      );
+      
+      if (featureIndex >= 0) {
+        const globalIndex = (this.pagination.currentPage - 1) * this.pagination.pageSize + featureIndex;
+        this.scrollToFeature(globalIndex);
+      } else {
+        console.warn(`Feature with hash ${hash} not found on current page`);
+      }
+    },
     truncateDescription(description) {
       if (!description) return '';
       const maxLength = 100;
@@ -2288,6 +2353,16 @@ export default {
 
     // Fetch available user tags for autocomplete
     await this.fetchUserTags();
+
+    // Check for featureHash query parameter to scroll to a specific feature
+    if (this.$route.query.featureHash) {
+      this.$nextTick(() => {
+        // Wait for page data to load first
+        this.waitForPageLoad().then(() => {
+          this.scrollToFeatureByHash(this.$route.query.featureHash);
+        });
+      });
+    }
   },
   beforeUnmount() {
     // Remove the navigation warning when component is destroyed

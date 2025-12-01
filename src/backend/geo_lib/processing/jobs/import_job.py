@@ -142,7 +142,7 @@ class ImportJob(BaseJob):
         )
 
         # Process features using shared utility
-        features_to_create = process_features_for_import(
+        features_to_create, skipped_queue_duplicates = process_features_for_import(
             import_item, user_id, import_custom_icons, features_to_process
         )
 
@@ -191,7 +191,8 @@ class ImportJob(BaseJob):
                     'message': success_msg,
                     'imported_count': total_imported,
                     'skipped_count': skipped_count,
-                    'duplicates_skipped': duplicates_skipped
+                    'duplicates_skipped': duplicates_skipped,
+                    'skipped_queue_duplicates': skipped_queue_duplicates
                 }
             )
         else:

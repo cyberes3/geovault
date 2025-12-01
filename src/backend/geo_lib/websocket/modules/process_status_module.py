@@ -326,6 +326,16 @@ class ProcessStatusModule(BaseWebSocketModule):
             logger.debug(f"Error calculating bounding box center for feature: {str(e)}")
             return None
 
+    async def _get_other_queue_items(self):
+        """Get other unimported ImportQueue items for the same user."""
+        @sync_to_async
+        def get_items():
+            return list(ImportQueue.objects.filter(
+                user_id=self.import_item.user_id,
+                imported=False
+            ).exclude(id=self.import_item.id).only('id', 'original_filename', 'geofeatures'))
+        return await get_items()
+
     async def _get_paginated_features(self, page: int, page_size: int) -> Dict[str, Any]:
         """Get paginated features for the import item."""
         if self.import_item.imported:
@@ -391,9 +401,11 @@ class ProcessStatusModule(BaseWebSocketModule):
         # Get duplicate information for current page
         duplicates_optimized = []
         duplicate_indices = []
+        queue_duplicates_optimized = []
 
         # Import normalization function for coordinate comparison
         from geo_lib.processing.duplicate_detection import normalize_coordinates
+        from geo_lib.feature_id import generate_feature_hash
         
         # Build a map of normalized coordinates to original indices
         # This allows us to mark ALL features with matching coordinates as duplicates
@@ -450,6 +462,41 @@ class ProcessStatusModule(BaseWebSocketModule):
                                         'page_index': new_idx - start_idx,
                                     })
 
+        # Check for queue-level duplicates (features with same hash in other ImportQueue items)
+        # Query other unimported ImportQueue items for the same user
+        other_queue_items = await self._get_other_queue_items()
+        
+        # Build hash map from other queue items
+        queue_hash_to_item = {}
+        for queue_item in other_queue_items:
+            for feature in queue_item.geofeatures:
+                feature_hash = generate_feature_hash(feature)
+                if feature_hash not in queue_hash_to_item:
+                    queue_hash_to_item[feature_hash] = {
+                        'queue_item_id': queue_item.id,
+                        'queue_item_filename': queue_item.original_filename
+                    }
+        
+        # Check each feature in current item against queue hashes
+        for original_idx, feature in enumerate(self.import_item.geofeatures):
+            feature_hash = generate_feature_hash(feature)
+            if feature_hash in queue_hash_to_item:
+                # This feature is a duplicate of one in another queue item
+                queue_info = queue_hash_to_item[feature_hash]
+                
+                # Convert original index to new sorted index
+                if original_idx in original_to_new_index:
+                    new_idx = original_to_new_index[original_idx]
+                    
+                    # Only include queue duplicate info if it's in the current page
+                    if start_idx <= new_idx < end_idx:
+                        queue_duplicates_optimized.append({
+                            'hash': feature_hash,
+                            'queue_item_id': queue_info['queue_item_id'],
+                            'queue_item_filename': queue_info['queue_item_filename'],
+                            'page_index': new_idx - start_idx,
+                        })
+
         return {
             'data': paginated_features,
             'pagination': {
@@ -461,7 +508,8 @@ class ProcessStatusModule(BaseWebSocketModule):
                 'has_previous': page > 1,
                 'duplicate_indices': duplicate_indices
             },
-            'duplicates': duplicates_optimized
+            'duplicates': duplicates_optimized,
+            'queue_duplicates': queue_duplicates_optimized
         }
 
     async def _get_logs(self, after_id: Optional[int] = None) -> list:

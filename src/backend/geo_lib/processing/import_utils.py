@@ -193,7 +193,9 @@ def broadcast_item_imported(user_id: int, item_id: int):
 def process_single_feature_for_import(
     feature: Dict[str, Any], feature_index: int, import_item: ImportQueue,
     user_id: int, import_custom_icons: bool, existing_hashes: set,
-    current_batch_hashes: set, duplicate_check_lock: threading.Lock
+    current_batch_hashes: set, duplicate_check_lock: threading.Lock,
+    queue_hashes: set, queue_hash_to_item: Dict[str, Dict[str, Any]],
+    skipped_queue_duplicates: List[Dict[str, Any]]
 ) -> Optional[FeatureStore]:
     """
     Process a single feature for import, including validation, tag generation, and FeatureStore creation.
@@ -208,6 +210,9 @@ def process_single_feature_for_import(
         existing_hashes: Set of feature hashes already in the database
         current_batch_hashes: Set of feature hashes in the current batch (for internal duplicate detection)
         duplicate_check_lock: Lock for thread-safe duplicate checking
+        queue_hashes: Set of feature hashes from other ImportQueue items
+        queue_hash_to_item: Map of hash -> queue item info (id, filename)
+        skipped_queue_duplicates: List to append skipped queue duplicates to (thread-safe via lock)
         
     Returns:
         FeatureStore object if successful, None if skipped or failed
@@ -296,6 +301,16 @@ def process_single_feature_for_import(
         # Check if this feature already exists for this user or in current batch (thread-safe)
         with duplicate_check_lock:
             if feature_hash in existing_hashes or feature_hash in current_batch_hashes:
+                # Check if this is a queue duplicate (from another ImportQueue item)
+                if feature_hash in queue_hashes:
+                    feature_name = feature.get('properties', {}).get('name', 'Unnamed')
+                    queue_info = queue_hash_to_item.get(feature_hash, {})
+                    skipped_queue_duplicates.append({
+                        'name': feature_name,
+                        'hash': feature_hash,
+                        'queue_item_id': queue_info.get('queue_item_id'),
+                        'queue_item_filename': queue_info.get('queue_item_filename', 'Unknown')
+                    })
                 # Skip importing duplicate features
                 # Skipping duplicate feature (normal operation)
                 return None
@@ -472,7 +487,7 @@ def process_features_for_import(
     user_id: int,
     import_custom_icons: bool,
     features_to_process: Optional[List[Dict[str, Any]]] = None
-) -> List[FeatureStore]:
+) -> Tuple[List[FeatureStore], List[Dict[str, Any]]]:
     """
     Process features from an import item and return FeatureStore objects ready for creation.
     Shared utility used by both single and bulk import jobs.
@@ -484,7 +499,8 @@ def process_features_for_import(
         features_to_process: Optional list of features to process (defaults to import_item.geofeatures)
         
     Returns:
-        List of FeatureStore objects ready for bulk_create
+        Tuple of (List of FeatureStore objects ready for bulk_create, List of skipped queue duplicates)
+        where skipped_queue_duplicates contains dicts with 'name', 'hash', 'queue_item_id', 'queue_item_filename'
     """
     if features_to_process is None:
         features_to_process = import_item.geofeatures
@@ -493,10 +509,33 @@ def process_features_for_import(
     features_to_create = []
     existing_hashes = set()
     current_batch_hashes = set()
+    skipped_queue_duplicates = []
     
     # Get existing feature hashes for this user to avoid duplicates
     existing_features = FeatureStore.objects.filter(user_id=user_id).values_list('geojson_hash', flat=True)
     existing_hashes.update(existing_features)
+    
+    # Query other unimported ImportQueue items for cross-queue duplicate detection
+    other_queue_items = ImportQueue.objects.filter(
+        user_id=user_id,
+        imported=False
+    ).exclude(id=import_item.id)
+    
+    # Extract feature hashes and build lookup map
+    queue_hashes = set()
+    queue_hash_to_item = {}
+    for queue_item in other_queue_items:
+        for feature in queue_item.geofeatures:
+            feature_hash = generate_feature_hash(feature)
+            queue_hashes.add(feature_hash)
+            if feature_hash not in queue_hash_to_item:
+                queue_hash_to_item[feature_hash] = {
+                    'queue_item_id': queue_item.id,
+                    'queue_item_filename': queue_item.original_filename
+                }
+    
+    # Add queue hashes to existing_hashes for duplicate checking
+    existing_hashes.update(queue_hashes)
     
     # Thread-safe duplicate checking
     duplicate_check_lock = threading.Lock()
@@ -504,10 +543,12 @@ def process_features_for_import(
     def process_feature_with_index(args: Tuple[int, Dict[str, Any]]) -> Optional[FeatureStore]:
         """Wrapper to unpack index and feature for executor.map()"""
         feature_index, feature = args
-        return process_single_feature_for_import(
+        result = process_single_feature_for_import(
             feature, feature_index, import_item, user_id, import_custom_icons,
-            existing_hashes, current_batch_hashes, duplicate_check_lock
+            existing_hashes, current_batch_hashes, duplicate_check_lock,
+            queue_hashes, queue_hash_to_item, skipped_queue_duplicates
         )
+        return result
     
     # Apply bulk operations
     bulk_ops = import_item.bulk_operations or {}
@@ -524,7 +565,7 @@ def process_features_for_import(
                 if feature_store is not None:
                     features_to_create.append(feature_store)
     
-    return features_to_create
+    return features_to_create, skipped_queue_duplicates
 
 
 def bulk_create_features_with_fallback(

@@ -17,6 +17,8 @@ tends to be scattered across numerous files stored in your documents and it isn'
 The goal of this project is to automate as much of the pipeline as possible and focus on the user experience. Many GIS
 platforms end up extremely complicated. GeoVault aims to automate much of that complication.
 
+User Manual is in `docs/`.
+
 Development is done on my personal Git server, [git.evulid.cc](https://git.evulid.cc/cyberes/geovault), and is mirrored
 to [GitHub](https://github.com/Cyberes/geovault).
 

@@ -41,9 +41,15 @@ def generate_feature_hash(geojson_feature: Dict[str, Any]) -> str:
     }
     
     # Remove any existing 'id' from properties to avoid circular dependencies
-    if 'id' in normalized_feature['properties']:
+    # Also remove 'system_tags' since they contain import metadata (source-file, import-year, etc.)
+    # that shouldn't affect feature identity - features should be considered duplicates
+    # if they have the same geometry and user properties, regardless of import metadata
+    if 'id' in normalized_feature['properties'] or 'system_tags' in normalized_feature['properties']:
         normalized_feature['properties'] = normalized_feature['properties'].copy()
-        del normalized_feature['properties']['id']
+        if 'id' in normalized_feature['properties']:
+            del normalized_feature['properties']['id']
+        if 'system_tags' in normalized_feature['properties']:
+            del normalized_feature['properties']['system_tags']
     
     # Convert geometry and properties to JSON strings separately for caching
     geometry_json = json.dumps(normalized_feature['geometry'], sort_keys=True, separators=(',', ':'))

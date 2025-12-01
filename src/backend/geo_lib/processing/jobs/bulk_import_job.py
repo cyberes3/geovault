@@ -206,7 +206,7 @@ class BulkImportJob(BaseJob):
                     return job_error_result(f'Duplicate of "{earlier_duplicates.original_filename}"')
 
             # Process features using shared utility
-            features_to_create = process_features_for_import(
+            features_to_create, skipped_queue_duplicates = process_features_for_import(
                 import_item, user_id, import_custom_icons
             )
 
@@ -228,7 +228,8 @@ class BulkImportJob(BaseJob):
                 
                 return job_success_result(
                     imported=successful_imports,
-                    duplicates_skipped=duplicates_skipped
+                    duplicates_skipped=duplicates_skipped,
+                    skipped_queue_duplicates=skipped_queue_duplicates
                 )
             else:
                 return job_error_result('No features were imported')

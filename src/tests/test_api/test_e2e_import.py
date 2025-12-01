@@ -389,6 +389,138 @@ class TestE2EImport(TransactionTestCase):
         self.assertLess(final_count, initial_count * 2, 
                        "Duplicates should have been detected and not imported twice")
 
+    def test_e2e_cross_queue_duplicate_detection(self):
+        """Test that hash-based duplicate detection works across ImportQueue items during processing."""
+        from geo_lib.feature_id import generate_feature_hash
+        
+        # Create a simple KML with a single point
+        point_kml = """<?xml version="1.0" encoding="UTF-8"?>
+<kml xmlns="http://www.opengis.net/kml/2.2">
+  <Document>
+    <Placemark>
+      <name>Test Point</name>
+      <Point>
+        <coordinates>-122.4194,37.7749,0</coordinates>
+      </Point>
+    </Placemark>
+  </Document>
+</kml>"""
+        
+        # Upload both files at once (or very quickly one after another)
+        # This creates a race condition where both files process simultaneously
+        process_job_id1, item_id1, process_status1 = self._upload_file(
+            point_kml.encode('utf-8'), 'first_item.kml'
+        )
+        process_job_id2, item_id2, process_status2 = self._upload_file(
+            point_kml.encode('utf-8'), 'second_item.kml'
+        )
+        
+        # Wait for both processing jobs to complete
+        self.assertEqual(process_status1['status'], ProcessingStatus.COMPLETED.value,
+                        "First file processing should complete")
+        self.assertEqual(process_status2['status'], ProcessingStatus.COMPLETED.value,
+                        "Second file processing should complete")
+        
+        # Refresh both items from database to get latest state
+        import_item1 = ImportQueue.objects.get(id=item_id1, user=self.user)
+        import_item2 = ImportQueue.objects.get(id=item_id2, user=self.user)
+        
+        # Verify both items were created and have features
+        self.assertGreater(len(import_item1.geofeatures), 0, "First item should have features")
+        self.assertGreater(len(import_item2.geofeatures), 0, "Second item should have features")
+        self.assertFalse(import_item1.imported, "First item should not be imported yet")
+        self.assertFalse(import_item2.imported, "Second item should not be imported yet")
+        
+        # Verify both items have the same feature hash
+        first_feature = import_item1.geofeatures[0]
+        second_feature = import_item2.geofeatures[0]
+        first_feature_hash = generate_feature_hash(first_feature)
+        second_feature_hash = generate_feature_hash(second_feature)
+        self.assertEqual(first_feature_hash, second_feature_hash, 
+                        "Both features should have the same hash")
+        
+        # Check for cross-queue duplicates using the same logic as the websocket module
+        # Build hash map from other queue items for each item
+        queue_duplicates_found_item1 = []
+        queue_duplicates_found_item2 = []
+        
+        # Check if item1's features are duplicates of item2
+        other_queue_items_for_item1 = ImportQueue.objects.filter(
+            user=self.user,
+            imported=False
+        ).exclude(id=item_id1)
+        
+        queue_hash_to_item = {}
+        for queue_item in other_queue_items_for_item1:
+            for feature in queue_item.geofeatures:
+                feature_hash = generate_feature_hash(feature)
+                if feature_hash not in queue_hash_to_item:
+                    queue_hash_to_item[feature_hash] = {
+                        'queue_item_id': queue_item.id,
+                        'queue_item_filename': queue_item.original_filename
+                    }
+        
+        for feature in import_item1.geofeatures:
+            feature_hash = generate_feature_hash(feature)
+            if feature_hash in queue_hash_to_item:
+                queue_info = queue_hash_to_item[feature_hash]
+                queue_duplicates_found_item1.append({
+                    'hash': feature_hash,
+                    'queue_item_id': queue_info['queue_item_id'],
+                    'queue_item_filename': queue_info['queue_item_filename']
+                })
+        
+        # Check if item2's features are duplicates of item1
+        other_queue_items_for_item2 = ImportQueue.objects.filter(
+            user=self.user,
+            imported=False
+        ).exclude(id=item_id2)
+        
+        queue_hash_to_item = {}
+        for queue_item in other_queue_items_for_item2:
+            for feature in queue_item.geofeatures:
+                feature_hash = generate_feature_hash(feature)
+                if feature_hash not in queue_hash_to_item:
+                    queue_hash_to_item[feature_hash] = {
+                        'queue_item_id': queue_item.id,
+                        'queue_item_filename': queue_item.original_filename
+                    }
+        
+        for feature in import_item2.geofeatures:
+            feature_hash = generate_feature_hash(feature)
+            if feature_hash in queue_hash_to_item:
+                queue_info = queue_hash_to_item[feature_hash]
+                queue_duplicates_found_item2.append({
+                    'hash': feature_hash,
+                    'queue_item_id': queue_info['queue_item_id'],
+                    'queue_item_filename': queue_info['queue_item_filename']
+                })
+        
+        # At least one item should have its feature marked as a cross-queue duplicate
+        # Due to race conditions, either item1 or item2 (or both) should detect the duplicate
+        total_duplicates_found = len(queue_duplicates_found_item1) + len(queue_duplicates_found_item2)
+        self.assertGreater(total_duplicates_found, 0,
+                          "At least one item should have its feature detected as a cross-queue duplicate")
+        
+        # Verify the duplicate points to the other item
+        if queue_duplicates_found_item1:
+            dup = queue_duplicates_found_item1[0]
+            self.assertEqual(dup['queue_item_id'], item_id2,
+                            "Item1's duplicate should point to item2")
+            self.assertEqual(dup['queue_item_filename'], 'second_item.kml',
+                            "Item1's duplicate should have correct filename")
+            self.assertEqual(dup['hash'], first_feature_hash,
+                            "Item1's duplicate should have correct hash")
+        
+        if queue_duplicates_found_item2:
+            dup = queue_duplicates_found_item2[0]
+            self.assertEqual(dup['queue_item_id'], item_id1,
+                            "Item2's duplicate should point to item1")
+            self.assertEqual(dup['queue_item_filename'], 'first_item.kml',
+                            "Item2's duplicate should have correct filename")
+            self.assertEqual(dup['hash'], second_feature_hash,
+                            "Item2's duplicate should have correct hash")
+
     def test_e2e_bulk_operations(self):
         """Test applying bulk operations (tags, colors) during import."""
         # Upload a file
