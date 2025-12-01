@@ -521,6 +521,132 @@ class TestE2EImport(TransactionTestCase):
             self.assertEqual(dup['hash'], second_feature_hash,
                             "Item2's duplicate should have correct hash")
 
+    def test_e2e_file_level_duplicate_detection(self):
+        """Test file-level duplicate detection against other items in queue and already-imported files."""
+        # Load test file
+        kml_content = self._load_test_file('Test Items.kml')
+        
+        # ========== Test 1: Duplicate in queue ==========
+        # Upload first file and wait for processing
+        process_job_id1, item_id1, process_status1 = self._upload_file(kml_content, 'Test Items.kml')
+        self.assertEqual(process_status1['status'], ProcessingStatus.COMPLETED.value,
+                        "First file processing should complete")
+        
+        # Verify first item was created
+        import_item1 = ImportQueue.objects.get(id=item_id1, user=self.user)
+        self.assertIsNotNone(import_item1.geojson_hash, "First item should have geojson_hash set")
+        self.assertFalse(import_item1.imported, "First item should not be imported yet")
+        
+        # Upload the same file again with different filename (should be detected as duplicate in queue)
+        process_job_id2, item_id2, process_status2 = self._upload_file(kml_content, 'Test Items Duplicate.kml')
+        self.assertEqual(process_status2['status'], ProcessingStatus.COMPLETED.value,
+                        "Second file processing should complete")
+        
+        # Verify second item was created
+        import_item2 = ImportQueue.objects.get(id=item_id2, user=self.user)
+        self.assertIsNotNone(import_item2.geojson_hash, "Second item should have geojson_hash set")
+        self.assertFalse(import_item2.imported, "Second item should not be imported yet")
+        
+        # Verify both items have the same geojson_hash (file-level duplicate)
+        self.assertEqual(import_item1.geojson_hash, import_item2.geojson_hash,
+                       "Both items should have the same geojson_hash (file-level duplicate)")
+        
+        # The duplicate detection in bulk_import_job checks for items with:
+        # - same geojson_hash
+        # - imported=False (still in queue)
+        # - timestamp__lt (earlier timestamp)
+        # So the later item should be blocked when trying to import if the earlier one is still in queue
+        
+        # Determine which item is earlier based on timestamp
+        if import_item1.timestamp < import_item2.timestamp:
+            # Item1 is earlier, so item2 should be blocked
+            earlier_item = import_item1
+            later_item = import_item2
+            later_item_id = item_id2
+        else:
+            # Item2 is earlier, so item1 should be blocked
+            earlier_item = import_item2
+            later_item = import_item1
+            later_item_id = item_id1
+        
+        # Attempt to import the later file - should be blocked by API endpoint (409 Conflict)
+        # The API endpoint checks for duplicates before starting the import job
+        response = self.client.post(
+            f'/api/item/import/perform/{later_item_id}',
+            data=json.dumps({}),
+            content_type='application/json'
+        )
+        self.assertEqual(response.status_code, 409,
+                        "Import of duplicate file in queue should return 409 Conflict")
+        
+        data = json.loads(response.content)
+        self.assertIn('error', data, "Error response should contain error message")
+        error_message = data.get('error', '')
+        self.assertIn('duplicate', error_message.lower(),
+                     "Error message should mention duplicate")
+        self.assertIn(earlier_item.original_filename, error_message,
+                     "Error message should mention the original filename")
+        
+        # ========== Test 2: Duplicate of imported file ==========
+        # Clean up previous items for this test
+        ImportQueue.objects.filter(user=self.user).delete()
+        FeatureStore.objects.filter(user=self.user).delete()
+        
+        # Upload and import a file
+        process_job_id3, item_id3, process_status3 = self._upload_file(kml_content, 'Test Items Original.kml')
+        self.assertEqual(process_status3['status'], ProcessingStatus.COMPLETED.value,
+                        "Third file processing should complete")
+        
+        # Import the first file
+        import_job_id3, import_status3 = self._import_item(item_id3)
+        self.assertEqual(import_status3['status'], ProcessingStatus.COMPLETED.value,
+                       "Import should succeed")
+        
+        # Verify it's marked as imported
+        import_item3 = ImportQueue.objects.get(id=item_id3, user=self.user)
+        self.assertTrue(import_item3.imported, "Third item should be marked as imported")
+        self.assertIsNotNone(import_item3.geojson_hash, "Third item should have geojson_hash")
+        
+        # Count features before second upload
+        initial_feature_count = FeatureStore.objects.filter(user=self.user).count()
+        self.assertGreater(initial_feature_count, 0, "Should have imported features")
+        
+        # Upload the same file again with different filename (should be detected as duplicate of imported file)
+        process_job_id4, item_id4, process_status4 = self._upload_file(kml_content, 'Test Items Duplicate Imported.kml')
+        self.assertEqual(process_status4['status'], ProcessingStatus.COMPLETED.value,
+                        "Fourth file processing should complete")
+        
+        # Verify fourth item was created
+        import_item4 = ImportQueue.objects.get(id=item_id4, user=self.user)
+        self.assertIsNotNone(import_item4.geojson_hash, "Fourth item should have geojson_hash set")
+        self.assertFalse(import_item4.imported, "Fourth item should not be imported yet")
+        
+        # Verify both items have the same geojson_hash (file-level duplicate)
+        self.assertEqual(import_item3.geojson_hash, import_item4.geojson_hash,
+                       "Both items should have the same geojson_hash (file-level duplicate)")
+        
+        # The duplicate of imported file should NOT be blocked from import by the API
+        # However, if all features are duplicates, the import job will fail
+        # (This is expected behavior - if there's nothing new to import, the import fails)
+        import_job_id4, import_status4 = self._import_item(item_id4)
+        
+        # When all features are duplicates, the import job fails
+        # This is expected - the API allows the import to proceed, but the job fails
+        # because no new features were imported
+        self.assertEqual(import_status4['status'], ProcessingStatus.FAILED.value,
+                        "Import should fail when all features are duplicates")
+        self.assertIn('No features were imported', import_status4.get('message', ''),
+                     "Error message should indicate no features were imported")
+        
+        # Verify the item is NOT marked as imported (since import failed)
+        import_item4.refresh_from_db()
+        self.assertFalse(import_item4.imported, "Fourth item should NOT be marked as imported after failed import")
+        
+        # Verify that no new features were added (all were duplicates and skipped)
+        final_feature_count = FeatureStore.objects.filter(user=self.user).count()
+        self.assertEqual(final_feature_count, initial_feature_count,
+                        "No new features should be added (all were duplicates)")
+
     def test_e2e_bulk_operations(self):
         """Test applying bulk operations (tags, colors) during import."""
         # Upload a file
