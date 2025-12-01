@@ -30,13 +30,14 @@
 
         <!-- Tags Field -->
         <div>
-           <label class="block text-xs font-bold text-gray-500 uppercase mb-1">Tags</label>
-           <TagPicker
-             v-model:tags="formData.tags"
-             :available-tags="availableTags"
-             :system-tags="systemTags"
-             :disabled="isSaving"
-           />
+          <label class="block text-xs font-bold text-gray-500 uppercase mb-1">Tags</label>
+          <TagPicker
+            v-model:tags="formData.tags"
+            :available-tags="availableTags"
+            :system-tags="systemTags"
+            :disabled="isSaving"
+            :show-label="false"
+          />
         </div>
 
         <!-- Description Field -->

@@ -3,7 +3,7 @@
     <div class="p-3 md:p-4 overflow-y-auto">
       <!-- Header -->
       <div class="flex items-start justify-between mb-2 md:mb-4 relative">
-        <div 
+        <div
           class="text-base md:text-lg font-bold text-gray-900 pr-2 flex-1 min-w-0"
           @mouseenter="handleNameHover"
           @mouseleave="handleNameLeave"
@@ -11,11 +11,11 @@
           @touchend="handleNameTouchEnd"
           ref="nameContainer"
         >
-          <div 
+          <div
             class="ticker-container overflow-hidden whitespace-nowrap"
           >
-            <span 
-              ref="nameElement" 
+            <span
+              ref="nameElement"
               class="ticker-content inline-block"
               :class="{ 'ticker-scrolling': shouldScroll }"
             >
@@ -25,53 +25,20 @@
           </div>
         </div>
         <!-- Custom Tooltip (moved outside to avoid overflow clipping) -->
-        <div 
+        <div
           v-if="showTooltip && shouldScroll"
           class="custom-tooltip"
           :style="tooltipStyle"
         >
           {{ getFeatureName(feature) }}
         </div>
-        <div class="flex items-center space-x-1 md:space-x-2 flex-shrink-0">
-          <button
-            v-if="showEditButton"
-            @click="$emit('edit')"
-            class="p-1 text-gray-400 hover:text-blue-500 transition-colors"
-            title="Edit feature"
-          >
-            <PencilSquareIcon class="w-5 h-5" />
-          </button>
-          <button
-            v-if="isLineOrTrack"
-            @click="$emit('show-profile')"
-            class="p-1 text-gray-400 hover:text-blue-500 transition-colors"
-            title="Show elevation profile"
-          >
-            <ChartBarIcon class="w-5 h-5" />
-          </button>
-          <button
-              v-if="showDownloadButton"
-              @click="$emit('download')"
-              class="p-1 text-gray-400 hover:text-blue-500 transition-colors"
-              title="Download KMZ"
-          >
-            <ArrowDownTrayIcon class="w-5 h-5" />
-          </button>
-          <button
-            @click="$emit('zoom')"
-            class="p-1 text-gray-400 hover:text-blue-500 transition-colors"
-            title="Zoom to feature"
-          >
-            <MapPinIcon class="w-5 h-5" />
-          </button>
-          <button
-            @click="$emit('close')"
-            class="p-1 text-gray-400 hover:text-gray-600 transition-colors"
-            title="Close"
-          >
-            <XMarkIcon class="w-5 h-5" style="stroke-width: 2.5" />
-          </button>
-        </div>
+        <button
+          @click="$emit('close')"
+          class="p-1 text-gray-400 hover:text-gray-600 transition-colors flex-shrink-0"
+          title="Close"
+        >
+          <XMarkIcon class="w-6 h-6 md:w-5 md:h-5" style="stroke-width: 2.5" />
+        </button>
       </div>
 
       <!-- Stats Row (Mobile) / Stacked (Desktop) -->
@@ -119,7 +86,7 @@
 
       <!-- System Tags (Fixed Size Box) -->
       <div v-if="getFeatureTags(feature).systemTags.length > 0" class="mb-2 md:mb-3">
-        <div class="text-[10px] md:text-xs text-gray-500 mb-1">System Tags</div>
+<!--        <div class="text-[10px] md:text-xs text-gray-500 mb-1">System Tags</div>-->
         <div class="border border-gray-200 rounded-md bg-gray-50 overflow-hidden">
           <div class="h-20 md:h-24 overflow-y-auto p-2">
             <div class="flex flex-wrap gap-1.5 md:gap-2">
@@ -134,6 +101,41 @@
           </div>
         </div>
       </div>
+    </div>
+
+    <!-- Action Buttons Bar (Bottom) -->
+    <div class="border-t border-gray-200 bg-gray-50 px-2 md:px-3 py-1.5 md:py-2 flex items-center justify-center gap-1.5 md:gap-2 flex-shrink-0">
+      <button
+        v-if="showEditButton"
+        @click="$emit('edit')"
+        class="p-1.5 md:p-2 text-gray-500 bg-white border border-gray-300 rounded-md hover:bg-blue-50 hover:text-blue-600 hover:border-blue-300 transition-all duration-200 shadow-sm hover:shadow"
+        title="Edit feature"
+      >
+        <PencilSquareIcon class="w-6 h-6 md:w-5 md:h-5" />
+      </button>
+      <button
+        v-if="isLineOrTrack"
+        @click="$emit('show-profile')"
+        class="p-1.5 md:p-2 text-gray-500 bg-white border border-gray-300 rounded-md hover:bg-blue-50 hover:text-blue-600 hover:border-blue-300 transition-all duration-200 shadow-sm hover:shadow"
+        title="Show elevation profile"
+      >
+        <ChartBarIcon class="w-6 h-6 md:w-5 md:h-5" />
+      </button>
+      <button
+        v-if="showDownloadButton"
+        @click="$emit('download')"
+        class="p-1.5 md:p-2 text-gray-500 bg-white border border-gray-300 rounded-md hover:bg-blue-50 hover:text-blue-600 hover:border-blue-300 transition-all duration-200 shadow-sm hover:shadow"
+        title="Download KMZ"
+      >
+        <ArrowDownTrayIcon class="w-6 h-6 md:w-5 md:h-5" />
+      </button>
+      <button
+        @click="$emit('zoom')"
+        class="p-1.5 md:p-2 text-gray-500 bg-white border border-gray-300 rounded-md hover:bg-blue-50 hover:text-blue-600 hover:border-blue-300 transition-all duration-200 shadow-sm hover:shadow"
+        title="Zoom to feature"
+      >
+        <MapPinIcon class="w-6 h-6 md:w-5 md:h-5" />
+      </button>
     </div>
   </div>
 </template>
@@ -242,7 +244,7 @@ export default {
             const nameWidth = nameItem.offsetWidth
             const containerWidth = this.$refs.nameContainer.offsetWidth
             this.shouldScroll = nameWidth > containerWidth
-            
+
             // Set CSS variable for animation duration based on text length
             if (this.shouldScroll) {
               const duration = Math.max(8, nameWidth / 30) // ~30px per second (slower)
@@ -308,9 +310,9 @@ export default {
         ? properties.system_tags.filter(tag => tag && tag.trim() !== '')
         : []
       // Sort system tags by priority, user tags alphabetically
-      return { 
-        userTags: sortUserTagsAlphabetically(userTags), 
-        systemTags: sortTagsByPriority(systemTags) 
+      return {
+        userTags: sortUserTagsAlphabetically(userTags),
+        systemTags: sortTagsByPriority(systemTags)
       }
     },
     renderMarkdown(markdown) {
