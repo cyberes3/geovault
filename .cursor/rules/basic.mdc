@@ -1,0 +1,4 @@
+---
+alwaysApply: true
+---
+Always use top-level imports in Python, not local/function level!

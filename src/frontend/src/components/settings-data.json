@@ -9,12 +9,12 @@
       {
         "value": "gps",
         "label": "Use GPS Elevations",
-        "description": "Use elevation data from the original file recored by the GPS device."
+        "description": "Use elevation data from the original track as recored by the GPS device."
       },
       {
         "value": "api",
         "label": "Use API Elevations",
-        "description": "Fetch more accurate elevation data sourced from a global land dataset. Increases processing time and not really needed."
+        "description": "Fetch more accurate elevation data sourced from a global land dataset. Makes processing take longer, increases website load time, and not really needed since GPS is more than enough."
       }
     ]
   },
