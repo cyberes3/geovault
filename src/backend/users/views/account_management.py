@@ -1,4 +1,4 @@
-from django.http import JsonResponse
+from django.http import JsonResponse, HttpResponseRedirect
 from django.views.decorators.http import require_http_methods
 from django.core.cache import cache
 from django.utils import timezone
@@ -6,6 +6,11 @@ from allauth.account.forms import ChangePasswordForm, AddEmailForm
 from allauth.account.models import EmailAddress
 from geo_lib.website.auth import api_or_login_required_401
 import json
+
+from users.constants import (
+    EMAIL_VERIFICATION_CACHE_KEY,
+    EMAIL_VERIFICATION_COOLDOWN_SECONDS,
+)
 
 
 @api_or_login_required_401(allow_api_keys=False)  # Password changes should only be via session
@@ -138,12 +143,14 @@ def get_email_status_api(request):
             # Check if primary email is unverified
             primary_email_data = next((e for e in emails if e['email'] == primary_email), None)
             if primary_email_data and not primary_email_data['verified']:
-                cache_key = f'email_verification_resend_{request.user.id}_{primary_email}'
+                cache_key = EMAIL_VERIFICATION_CACHE_KEY.format(
+                    user_id=request.user.id,
+                    email=primary_email
+                )
                 last_sent_time = cache.get(cache_key)
                 if last_sent_time:
-                    cooldown_seconds = 60
                     elapsed = (timezone.now() - last_sent_time).total_seconds()
-                    remaining = cooldown_seconds - elapsed
+                    remaining = EMAIL_VERIFICATION_COOLDOWN_SECONDS - elapsed
                     if remaining > 0:
                         cooldown_remaining = int(remaining)
                         on_cooldown = True
@@ -189,14 +196,16 @@ def resend_verification_api(request):
             }, status=400)
         
         # Check cooldown: 1 minute between resends
-        cache_key = f'email_verification_resend_{request.user.id}_{email}'
+        cache_key = EMAIL_VERIFICATION_CACHE_KEY.format(
+            user_id=request.user.id,
+            email=email
+        )
         last_sent_time = cache.get(cache_key)
         
         if last_sent_time:
             # Calculate remaining cooldown time
-            cooldown_seconds = 60  # 1 minute
             elapsed = (timezone.now() - last_sent_time).total_seconds()
-            remaining = cooldown_seconds - elapsed
+            remaining = EMAIL_VERIFICATION_COOLDOWN_SECONDS - elapsed
             
             if remaining > 0:
                 return JsonResponse({
@@ -209,11 +218,11 @@ def resend_verification_api(request):
         email_address.send_confirmation(request)
         
         # Store the current time in cache for 1 minute
-        cache.set(cache_key, timezone.now(), timeout=60)
+        cache.set(cache_key, timezone.now(), timeout=EMAIL_VERIFICATION_COOLDOWN_SECONDS)
         
         return JsonResponse({
             'message': f'Verification email sent to {email}. Please check your inbox.',
-            'cooldown_remaining': 60,
+            'cooldown_remaining': EMAIL_VERIFICATION_COOLDOWN_SECONDS,
             'on_cooldown': False
         })
     except json.JSONDecodeError:
@@ -224,4 +233,9 @@ def resend_verification_api(request):
         return JsonResponse({
             'error': f'An error occurred: {str(e)}'
         }, status=500)
+
+
+def block_account_email_view(request):
+    """Redirect /accounts/email/ to the frontend settings page."""
+    return HttpResponseRedirect('/#/settings?tab=account')
 

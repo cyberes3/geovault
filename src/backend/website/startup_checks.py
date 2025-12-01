@@ -9,6 +9,7 @@ This module performs essential checks when the server starts up:
 5. Writable directories (tile cache, icon storage)
 6. Frontend static files are built
 7. togeojson Node.js converter is installed
+8. Site configuration (for email confirmation URLs)
 
 Warning checks (don't fail startup):
 - Configuration file exists
@@ -512,6 +513,63 @@ def check_email_config():
         logger.warning(f"⚠ Could not check email configuration: {e}")
 
 
+def check_site_configuration():
+    """
+    Check if Django Sites framework is properly configured.
+    Verifies that Site object can be created/updated from settings.
+    This is a critical check as it's required for email confirmation URLs.
+    
+    Returns:
+        bool: True if Site configuration is valid, False otherwise
+    """
+    try:
+        from django.contrib.sites.models import Site
+        
+        # Check if required settings exist
+        if not hasattr(settings, 'SITE_DOMAIN') or not hasattr(settings, 'SITE_NAME'):
+            logger.error("✗ Site configuration missing: SITE_DOMAIN and SITE_NAME must be defined in settings")
+            logger.error("  Email confirmation links will not work without proper Site configuration")
+            return False
+        
+        if not hasattr(settings, 'SITE_ID'):
+            logger.error("✗ Site configuration missing: SITE_ID must be defined in settings")
+            return False
+        
+        site_domain = settings.SITE_DOMAIN
+        site_name = settings.SITE_NAME
+        site_id = settings.SITE_ID
+        
+        # Verify we can create/update the Site object
+        # This is the same logic used in NoUsernameAccountAdapter.get_email_confirmation_url()
+        try:
+            site, created = Site.objects.get_or_create(id=site_id)
+            
+            if created:
+                logger.info(f"✓ Created Site object with ID {site_id}")
+            
+            # Update if needed
+            if site.domain != site_domain or site.name != site_name:
+                site.domain = site_domain
+                site.name = site_name
+                site.save()
+                logger.info(f"✓ Updated Site object: {site_name} ({site_domain})")
+            else:
+                logger.info(f"✓ Site configuration is valid: {site_name} ({site_domain})")
+            
+            # Verify we can retrieve it
+            Site.objects.get(id=site_id)
+            
+            return True
+            
+        except Exception as e:
+            logger.error(f"✗ Failed to create/update Site object: {e}")
+            return False
+            
+    except Exception as e:
+        logger.error(f"✗ Site configuration check failed: {e}")
+        return False
+
+
 def run_startup_checks():
     """
     Run all startup checks and exit if any fail.
@@ -526,6 +584,7 @@ def run_startup_checks():
     7. Check frontend files are built
     8. Check togeojson installation
     9. Validate file type max_size values (< 200MB)
+    10. Verify Site configuration (for email confirmation URLs)
     
     Warning checks (don't fail startup):
     - Configuration file
@@ -549,6 +608,7 @@ def run_startup_checks():
         ("Frontend Files", check_frontend_files),
         ("togeojson Installation", check_togeojson_installation),
         ("File Type Max Size", check_file_type_max_size),
+        ("Site Configuration", check_site_configuration),
     ]
     
     failed_checks = []

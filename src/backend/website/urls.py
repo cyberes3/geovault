@@ -20,12 +20,15 @@ from django.urls import path, re_path
 
 from website.views import index
 from website.exception_handler import custom_exception_handler
+from users.views.account_management import block_account_email_view
 
 # Set custom exception handler
 handler500 = custom_exception_handler
 
 urlpatterns = [
     path('', index, name='index'),  # Root route
+    # Block access to /accounts/email/ and redirect to frontend settings
+    path('accounts/email/', block_account_email_view, name='account_email'),
     path('accounts/', include('allauth.urls')),  # Django allauth URLs
     path('admin/', admin.site.urls),
     path('', include("users.urls")),
