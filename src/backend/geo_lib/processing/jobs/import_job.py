@@ -130,15 +130,12 @@ class ImportJob(BaseJob):
         skipped_feature_ids = skipped_feature_ids.union(saved_skipped_ids)
 
         # Filter out skipped features before processing
-        # Use the same ID resolution logic as get_skipped_feature_ids_from_duplicates
-        from geo_lib.feature_id import get_feature_id_from_geojson
-        
         features_to_process = []
         skipped_count = 0
         for feature in import_item.geofeatures:
             # Get feature ID using the same logic as when saving skipped_feature_ids
             # This ensures we match even if properties.feature_hash doesn't exist (falls back to hash)
-            feature_id = get_feature_id_from_geojson(feature)
+            feature_id = feature['properties']['feature_hash']
             if feature_id in skipped_feature_ids:
                 skipped_count += 1
                 continue

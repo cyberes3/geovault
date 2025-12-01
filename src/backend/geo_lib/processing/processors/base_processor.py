@@ -13,6 +13,7 @@ from abc import ABC, abstractmethod
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from typing import Dict, Any, Tuple, Union, List, Optional
 
+from geo_lib.feature_id import generate_feature_hash
 from geo_lib.processing.file_types import FileType, detect_file_type
 from geo_lib.processing.geo_processor import (
     extract_track_created_date,
@@ -266,11 +267,9 @@ class BaseProcessor(ABC):
                     if self._is_cancelled():
                         break
                     
-                    # Generate and set feature ID (get_feature_id_from_geojson handles existing IDs)
-                    from geo_lib.feature_id import get_feature_id_from_geojson
-                    feature_id = get_feature_id_from_geojson(split_feature)
-                    split_feature['properties']['feature_hash'] = feature_id
-                    
+                    # Generate and set feature ID
+                    split_feature['properties']['feature_hash'] = generate_feature_hash(split_feature)
+
                     processed_features.append(split_feature)
                 except Exception:
                     feature_name = split_feature.get('properties', {}).get('name', 'Unnamed')
