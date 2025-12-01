@@ -315,7 +315,7 @@ def process_single_feature_for_import(
             current_batch_hashes.add(feature_hash)
 
         # Update the feature's ID in the GeoJSON data
-        geojson_data['properties']['id'] = feature_hash
+        geojson_data['properties']['feature_hash'] = feature_hash
 
         # Create geometry object for spatial queries
         geometry = None

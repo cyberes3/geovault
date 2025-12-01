@@ -220,7 +220,7 @@ export function useGeoData() {
             const hiddenSet = new Set(this.hiddenFeatureIds.map(id => String(id)))
             newFeatures = newFeatures.filter(feature => {
               const props = feature.get('properties') || {}
-              const featureId = props._id
+              const featureId = props.database_id
               if (!featureId) {
                 return true
               }

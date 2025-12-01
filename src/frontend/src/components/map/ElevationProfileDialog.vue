@@ -446,7 +446,7 @@ export default {
 
       // If using API elevations, fetch them
       if (this.elevationProfileSource === 'api') {
-        const featureId = this.feature.get('properties')?._id || this.feature.get('properties')?.id
+        const featureId = this.feature.get('properties')?.database_id || this.feature.get('properties')?.feature_hash
         if (featureId) {
           const apiCoordinates = await this.fetchElevationsFromAPI(featureId)
           if (apiCoordinates && apiCoordinates.length > 0) {

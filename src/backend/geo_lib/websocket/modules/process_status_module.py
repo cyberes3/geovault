@@ -442,7 +442,7 @@ class ProcessStatusModule(BaseWebSocketModule):
         queue_duplicates_info = []
         for original_idx, feature in enumerate(self.import_item.geofeatures):
             feature_hash = generate_feature_hash(feature)
-            feature_id = feature.get('properties', {}).get('id', feature_hash)
+            feature_id = feature.get('properties', {}).get('feature_hash', feature_hash)
             
             # Check queue duplicates first (takes precedence)
             if feature_hash in queue_hash_to_item:
@@ -508,9 +508,9 @@ class ProcessStatusModule(BaseWebSocketModule):
                                 # Get feature hash for coordinate duplicate
                                 feature = self.import_item.geofeatures[original_idx]
                                 feature_hash = generate_feature_hash(feature)
-                                # Use the feature's properties.id if it exists (should match the hash)
+                                # Use the feature's properties.feature_hash if it exists (should match the hash)
                                 # Otherwise use the generated hash
-                                feature_id = feature.get('properties', {}).get('id', feature_hash)
+                                feature_id = feature.get('properties', {}).get('feature_hash', feature_hash)
                                 
                                 # Add to coord_duplicates if not already present
                                 if feature_id not in coord_duplicates:

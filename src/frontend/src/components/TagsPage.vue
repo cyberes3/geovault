@@ -198,7 +198,7 @@
         <div class="divide-y divide-gray-200">
           <div
               v-for="(feature, index) in getPaginatedFeaturesForTag(tag)"
-              :key="feature.properties._id || index"
+              :key="feature.properties.database_id || index"
               class="px-6 py-4 hover:bg-gray-50 transition-colors feature-row"
           >
             <div class="flex items-start justify-between gap-4">
@@ -226,8 +226,8 @@
                   <XMarkIcon class="w-4 h-4" />
                 </button>
                 <router-link
-                    v-if="feature.properties._id"
-                    :to="{ path: '/map', query: { featureId: feature.properties._id } }"
+                    v-if="feature.properties.database_id"
+                    :to="{ path: '/map', query: { featureId: feature.properties.database_id } }"
                     class="inline-flex items-center px-3 py-1.5 border border-gray-300 rounded-md text-xs font-medium text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 cursor-pointer"
                     @click.stop
                 >
@@ -672,7 +672,7 @@ export default {
         // Prepare bulk update payload
         const updates = [];
         for (const feature of features) {
-          if (!feature.properties._id) {
+          if (!feature.properties.database_id) {
             continue;
           }
 
@@ -691,7 +691,7 @@ export default {
           }
 
           updates.push({
-            feature_id: feature.properties._id,
+            feature_id: feature.properties.database_id,
             tags: currentTags
           });
         }
@@ -785,7 +785,7 @@ export default {
         // Prepare bulk update payload
         const updates = [];
         for (const feature of features) {
-          if (!feature.properties._id) {
+          if (!feature.properties.database_id) {
             continue;
           }
 
@@ -798,7 +798,7 @@ export default {
           const filteredTags = currentTags.filter(t => t !== tag);
 
           updates.push({
-            feature_id: feature.properties._id,
+            feature_id: feature.properties.database_id,
             tags: filteredTags
           });
         }
@@ -846,7 +846,7 @@ export default {
       }
     },
     async removeTagFromFeature(tag, feature) {
-      if (!feature.properties._id) {
+      if (!feature.properties.database_id) {
         return;
       }
 
@@ -874,7 +874,7 @@ export default {
 
         // Update the feature
         const csrfToken = this.getCookie('csrftoken');
-        const response = await fetch(`/api/feature/${feature.properties._id}/update-metadata/`, {
+        const response = await fetch(`/api/feature/${feature.properties.database_id}/update-metadata/`, {
           method: 'PUT',
           headers: {
             'Content-Type': 'application/json',
@@ -886,13 +886,13 @@ export default {
         });
 
         if (!response.ok) {
-          throw new Error(`Failed to update feature ${feature.properties._id}`);
+          throw new Error(`Failed to update feature ${feature.properties.database_id}`);
         }
 
         // Update local state - remove feature from tag's list
         const newTagsData = {...this.tagsData};
         if (newTagsData[tag]) {
-          newTagsData[tag] = newTagsData[tag].filter(f => f.properties._id !== feature.properties._id);
+          newTagsData[tag] = newTagsData[tag].filter(f => f.properties.database_id !== feature.properties.database_id);
           // If no features left with this tag, remove the tag entry
           if (newTagsData[tag].length === 0) {
             delete newTagsData[tag];

@@ -173,18 +173,18 @@
                   <div v-else class="max-h-48 overflow-y-auto border border-gray-200 rounded-md p-2">
                     <div
                       v-for="feature in filteredFeatures"
-                      :key="feature.properties._id"
+                      :key="feature.properties.database_id"
                       class="flex items-center px-3 py-2 hover:bg-gray-50 rounded space-x-3"
                     >
                       <input
                         type="checkbox"
-                        :id="`feature-${feature.properties._id}`"
+                        :id="`feature-${feature.properties.database_id}`"
                         class="checkbox-custom"
                         :checked="isFeatureSelected(feature)"
                         @change="onFeatureCheckboxChange(feature, $event.target.checked)"
                       />
                       <label
-                        :for="`feature-${feature.properties._id}`"
+                        :for="`feature-${feature.properties.database_id}`"
                         class="text-sm text-gray-700 truncate"
                       >
                         {{ feature.properties.name || 'Unnamed Feature' }}
@@ -310,11 +310,11 @@ export default {
       }
     },
     isFeatureSelected(feature) {
-      const featureId = String(feature.properties._id);
+      const featureId = String(feature.properties.database_id);
       return this.formData.feature_ids.includes(featureId);
     },
     onFeatureCheckboxChange(feature, checked) {
-      const featureId = String(feature.properties._id);
+      const featureId = String(feature.properties.database_id);
       const index = this.formData.feature_ids.indexOf(featureId);
       if (checked && index === -1) {
         this.formData.feature_ids.push(featureId);

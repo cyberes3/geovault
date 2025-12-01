@@ -21,7 +21,7 @@ class Properties(BaseModel):
     model_config = ConfigDict(extra='allow')  # Allow additional properties from togeojson
 
     name: str
-    id: Optional[str] = None
+    feature_hash: Optional[str] = None
     description: Optional[str] = None
     created: Optional[datetime] = None
     tags: Optional[List[str]] = Field(default_factory=list)  # User tags only
@@ -108,7 +108,7 @@ def geojson_to_geofeature(geojson: dict) -> Tuple[List[GeoFeatureSupported], Imp
         # Generate hash-based ID for the feature
         feature_dict = f.model_dump()
         feature_hash = generate_feature_hash(feature_dict)
-        f.properties.id = feature_hash
+        f.properties.feature_hash = feature_hash
 
         result.append(f)
 

@@ -557,7 +557,7 @@ def get_skipped_feature_ids_from_duplicates(
         dup_feature = dup_info.get('feature')
         if dup_feature:
             feature_hash = generate_feature_hash(dup_feature)
-            feature_id = dup_feature.get('properties', {}).get('id', feature_hash)
+            feature_id = dup_feature.get('properties', {}).get('feature_hash', feature_hash)
             skipped_feature_ids.add(feature_id)
     
     return skipped_feature_ids

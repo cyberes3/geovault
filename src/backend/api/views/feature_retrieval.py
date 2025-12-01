@@ -35,7 +35,7 @@ def get_feature(request, feature_id):
     # Include database ID in properties for frontend editing (same as _get_features_in_bbox)
     geojson_data = feature.geojson.copy()
     if geojson_data and 'properties' in geojson_data:
-        geojson_data['properties']['_id'] = feature.id
+        geojson_data['properties']['database_id'] = feature.id
 
     # Return the feature data
     return JsonResponse({

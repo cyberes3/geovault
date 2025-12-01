@@ -145,7 +145,7 @@ def _queryset_to_kmz_response(features: QuerySet, name: str) -> HttpResponse:
             # Add id to properties if not present
             if 'properties' not in geojson_data:
                 geojson_data['properties'] = {}
-            geojson_data['properties']['_id'] = feature.id
+            geojson_data['properties']['database_id'] = feature.id
             
             # Pre-process GeoJSON (fix icon paths)
             prepared_geojson = prepare_geojson_for_kmz(geojson_data, str(settings.BASE_DIR), settings.ICON_STORAGE_DIR)

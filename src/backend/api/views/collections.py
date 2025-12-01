@@ -231,7 +231,7 @@ def get_collection_features(request, collection_id):
             # System tags are in system_tags field and not shown to user
             
             # Include database ID in properties
-            properties['_id'] = feature.id
+            properties['database_id'] = feature.id
             
             geojson_feature = {
                 "type": "Feature",

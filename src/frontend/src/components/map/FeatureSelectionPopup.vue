@@ -100,8 +100,8 @@ export default {
       // Generate a unique key for each feature
       const properties = feature.get('properties') || {}
       // Use feature ID if available, otherwise use geometry + index
-      if (properties._id) {
-        return `feature_${properties._id}`
+      if (properties.database_id) {
+        return `feature_${properties.database_id}`
       }
       // Fallback: use geometry type and index
       const geometry = feature.getGeometry()

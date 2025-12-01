@@ -32,7 +32,7 @@ def _create_minimal_feature(feature):
     
     return {
         "properties": {
-            "_id": feature.id,
+            "database_id": feature.id,
             "name": properties.get('name', 'Unnamed Feature'),
             "description": properties.get('description', '')
         },
@@ -288,7 +288,7 @@ def search_features(request):
             geojson_data = feature.geojson
             if geojson_data and 'geometry' in geojson_data:
                 properties = geojson_data.get('properties', {}).copy()
-                properties['_id'] = feature.id
+                properties['database_id'] = feature.id
                 geojson_features.append({
                     "type": "Feature",
                     "geometry": geojson_data.get('geometry'),
@@ -361,7 +361,7 @@ def filter_features_by_tags(request):
             geojson_data = feature.geojson
             if geojson_data and 'geometry' in geojson_data:
                 properties = geojson_data.get('properties', {}).copy()
-                properties['_id'] = feature.id
+                properties['database_id'] = feature.id
                 geojson_features.append({
                     "type": "Feature",
                     "geometry": geojson_data.get('geometry'),
@@ -408,7 +408,7 @@ def get_all_features(request):
             geojson_data = feature.geojson
             if geojson_data and 'geometry' in geojson_data:
                 properties = geojson_data.get('properties', {}).copy()
-                properties['_id'] = feature.id
+                properties['database_id'] = feature.id
                 geojson_features.append({
                     "type": "Feature",
                     "geometry": geojson_data.get('geometry'),

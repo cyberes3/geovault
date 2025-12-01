@@ -1457,8 +1457,8 @@ export default {
     },
     getFeatureId(item, index) {
       // Get feature ID, using global index as fallback for unique identification
-      if (item && item.properties && item.properties.id) {
-        return item.properties.id;
+      if (item && item.properties && item.properties.feature_hash) {
+        return item.properties.feature_hash;
       }
       // Use global index as fallback - this is unique per feature across all pages
       const globalIndex = (this.pagination.currentPage - 1) * this.pagination.pageSize + index;
@@ -1609,20 +1609,20 @@ export default {
       // Prepare a partial update for sending to the backend
       // Backend now expects only properties with id, name, description, created, tags
       const properties = feature.properties ? { ...feature.properties } : {};
-      // Ensure properties.id is set - backend requires it to match features
-      // Preserve existing properties.id if present, otherwise use top-level feature.id
-      if (!properties.id) {
+      // Ensure properties.feature_hash is set - backend requires it to match features
+      // Preserve existing properties.feature_hash if present, otherwise use top-level feature.id
+      if (!properties.feature_hash) {
         if (feature.id) {
-          properties.id = feature.id;
+          properties.feature_hash = feature.id;
         }
-        // Note: If neither properties.id nor feature.id exists, the backend will skip this feature
+        // Note: If neither properties.feature_hash nor feature.id exists, the backend will skip this feature
         // This should not happen for valid features from the import queue
       }
-      // Extract only the allowed fields: id, name, description, created, tags
-      // id is required, others are optional
+      // Extract only the allowed fields: feature_hash, name, description, created, tags
+      // feature_hash is required, others are optional
       const partialUpdate = {
         properties: {
-          id: properties.id
+          feature_hash: properties.feature_hash
         }
       };
       // Add optional fields only if they are defined
@@ -1668,7 +1668,7 @@ export default {
       // Check current page for changes
       this.itemsForUser.forEach((feature, idx) => {
         if (!feature.isDuplicate && hasChanged(feature, this.originalItems[idx])) {
-          // Use _prepareFeatureForBackend to ensure properties.id is set for backend
+          // Use _prepareFeatureForBackend to ensure properties.feature_hash is set for backend
           changedFeatures.push(this._prepareFeatureForBackend(feature));
         }
       });
@@ -1685,7 +1685,7 @@ export default {
               // Compare with original if we have it
               const original = originalForPage[idx];
               if (!original || hasChanged(feature, original)) {
-                // Use _prepareFeatureForBackend to ensure properties.id is set for backend
+                // Use _prepareFeatureForBackend to ensure properties.feature_hash is set for backend
                 changedFeatures.push(this._prepareFeatureForBackend(feature));
               }
             }
@@ -1891,7 +1891,7 @@ export default {
       const coordDuplicates = this.duplicates.features.coord || [];
 
       // Mark hash duplicates (blocked, cannot be unskipped)
-      // The backend sends hashes that match the feature's properties.id
+      // The backend sends hashes that match the feature's properties.feature_hash
       hashDuplicates.forEach(featureHash => {
         this.itemsForUser.forEach((item, index) => {
           const featureId = this.getFeatureId(item, index);
@@ -2082,8 +2082,8 @@ export default {
             // Skip duplicates and skipped items
             // Calculate feature ID manually for cached pages (getFeatureId uses currentPage which won't be correct)
             let featureId;
-            if (item && item.properties && item.properties.id) {
-              featureId = item.properties.id;
+            if (item && item.properties && item.properties.feature_hash) {
+              featureId = item.properties.feature_hash;
             } else {
               const globalIndex = (pageNum - 1) * this.pagination.pageSize + index;
               featureId = `index_${globalIndex}`;
@@ -2453,7 +2453,7 @@ export default {
     scrollToFeatureByHash(hash) {
       // Find feature with matching hash in current page
       const featureIndex = this.itemsForUser.findIndex(item =>
-        item.properties && item.properties.id === hash
+        item.properties && item.properties.feature_hash === hash
       );
 
       if (featureIndex >= 0) {

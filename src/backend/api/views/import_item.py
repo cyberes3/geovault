@@ -269,10 +269,10 @@ def update_import_item(request, item_id, validated_data):
         if not properties:
             continue
 
-        # Extract feature ID for matching (id is not an updatable field)
-        feature_id = properties.get('id')
+        # Extract feature ID for matching (feature_hash is not an updatable field)
+        feature_id = properties.get('feature_hash')
         if not feature_id:
-            logger.warning(f"Skipping feature without ID: {properties.get('name', 'Unnamed')}")
+            logger.warning(f"Skipping feature without feature_hash: {properties.get('name', 'Unnamed')}")
             continue
 
         # Extract only allowed updatable fields (name, description, created, tags)
@@ -293,7 +293,7 @@ def update_import_item(request, item_id, validated_data):
     updated_count = 0
     with transaction.atomic():
         for i, existing_feature in enumerate(queue.geofeatures):
-            feature_id = existing_feature.get('properties', {}).get('id')
+            feature_id = existing_feature.get('properties', {}).get('feature_hash')
             if feature_id and feature_id in updates_by_id:
                 # Create a deep copy of the original feature to merge updates into
                 merged_feature = copy.deepcopy(existing_feature)
@@ -327,7 +327,7 @@ def update_import_item(request, item_id, validated_data):
                     normalized_feature = validate_and_normalize_geojson_feature(
                         merged_feature,
                         preserve_system_tags=original_system_tags,
-                        preserve_id=False
+                        preserve_database_id=False
                     )
                 except GeometryValidationError as e:
                     logger.warning(f"Error validating feature {feature_id} during update: {str(e)}")
@@ -492,8 +492,8 @@ def save_skip_state(request, item_id, validated_data):
                 feature_hash = generate_feature_hash(feature)
                 existing_feature_ids.add(feature_hash)
                 # Also check if feature has an id property
-                if feature.get('properties', {}).get('id'):
-                    existing_feature_ids.add(feature.get('properties', {}).get('id'))
+                if feature.get('properties', {}).get('feature_hash'):
+                    existing_feature_ids.add(feature.get('properties', {}).get('feature_hash'))
             
             # Validate all skipped IDs exist
             invalid_ids = [fid for fid in skipped_feature_ids if fid not in existing_feature_ids]

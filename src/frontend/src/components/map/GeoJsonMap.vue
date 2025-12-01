@@ -113,7 +113,7 @@
             :available-tags="availableTags"
             :feature="selectedFeature"
             :can-hide-feature="isMainMapRoute && !!$store.state.userInfo"
-            :initial-hidden="hiddenFeatureIds.includes(String(selectedFeature?.get('properties')?._id || ''))"
+            :initial-hidden="hiddenFeatureIds.includes(String(selectedFeature?.get('properties')?.database_id || ''))"
             @cancel="handleCancelEdit"
             @deleted="handleFeatureDeleted"
             @saved="handleFeatureSaved"
@@ -390,7 +390,7 @@ export default {
       }
 
       const props = feature.get('properties') || {}
-      const featureId = props._id
+      const featureId = props.database_id
       const featureName = props.name
       const geometryType = feature.getGeometry()?.getType()
       
@@ -415,7 +415,7 @@ export default {
           const allFeatures = this.vectorSource.getFeatures()
           const toRemove = allFeatures.find(f => {
             const p = f.get('properties') || {}
-            return p._id === featureId
+            return p.database_id === featureId
           })
           if (toRemove) {
             this.vectorSource.removeFeature(toRemove)
@@ -425,7 +425,7 @@ export default {
         // Clear selection if this was the selected feature
         if (this.selectedFeature) {
           const propsSelected = this.selectedFeature.get('properties') || {}
-          if (propsSelected._id === featureId) {
+          if (propsSelected.database_id === featureId) {
             this.selectedFeature = null
             this.isEditingFeature = false
           }
@@ -721,9 +721,9 @@ export default {
         // Check if feature already exists (by reference or ID)
         let existingFeature = allFeatures.includes(feature) ? feature : null
         if (!existingFeature) {
-          const featureId = feature.get('properties')?._id
+          const featureId = feature.get('properties')?.database_id
           if (featureId) {
-            existingFeature = allFeatures.find(f => f.get('properties')?._id === featureId)
+                existingFeature = allFeatures.find(f => f.get('properties')?.database_id === featureId)
           }
         }
 
@@ -737,9 +737,9 @@ export default {
             // Feature was likely added between checks, find it again
             existingFeature = allFeatures.includes(feature) ? feature : null
             if (!existingFeature) {
-              const featureId = feature.get('properties')?._id
+              const featureId = feature.get('properties')?.database_id
               if (featureId) {
-                existingFeature = this.vectorSource.getFeatures().find(f => f.get('properties')?._id === featureId)
+                existingFeature = this.vectorSource.getFeatures().find(f => f.get('properties')?.database_id === featureId)
               }
             }
             // Fallback to original feature if still not found
@@ -841,7 +841,7 @@ export default {
         return
       }
       const properties = feature.get('properties') || {}
-      const featureId = properties._id
+      const featureId = properties.database_id
       if (!featureId) {
         return
       }
@@ -1046,7 +1046,7 @@ export default {
       this.isEditingFeature = false
 
       // Get the updated feature from the backend
-      const featureId = this.selectedFeature?.get('properties')?._id
+      const featureId = this.selectedFeature?.get('properties')?.database_id
       if (featureId && this.vectorSource) {
         try {
           // Fetch the updated feature
@@ -1058,7 +1058,7 @@ export default {
               const existingFeatures = this.vectorSource.getFeatures()
               const existingFeature = existingFeatures.find(f => {
                 const props = f.get('properties') || {}
-                return props._id === featureId
+                return props.database_id === featureId
               })
 
               if (existingFeature) {
@@ -1079,7 +1079,7 @@ export default {
                     : {}
 
                 // Add the _id to properties for future updates
-                properties._id = featureId
+                properties.database_id = featureId
                 updatedFeature.set('properties', properties)
 
                 // Preserve geojson_hash if available
@@ -1131,14 +1131,14 @@ export default {
       this.isEditingFeature = false
 
       // Get the deleted feature ID
-      const featureId = this.selectedFeature?.get('properties')?._id
+      const featureId = this.selectedFeature?.get('properties')?.database_id
 
       // Remove the deleted feature from vector source if it exists
       if (featureId && this.vectorSource) {
         const existingFeatures = this.vectorSource.getFeatures()
         const featureToRemove = existingFeatures.find(f => {
           const props = f.get('properties') || {}
-          return props._id === featureId
+          return props.database_id === featureId
         })
 
         if (featureToRemove) {
@@ -1252,7 +1252,7 @@ export default {
               }
 
               const properties = feature.get('properties') || {}
-              const featureId = properties._id
+              const featureId = properties.database_id
 
               // If feature has an ID, check if we've seen this ID before
               if (featureId) {
@@ -1502,7 +1502,7 @@ export default {
             : {}
 
         // Add the _id to properties
-        properties._id = featureId
+        properties.database_id = featureId
         feature.set('properties', properties)
 
         // Preserve geojson_hash if available
@@ -1515,7 +1515,7 @@ export default {
         const existingFeatures = this.vectorSource.getFeatures()
         let featureToZoom = existingFeatures.find(f => {
           const props = f.get('properties') || {}
-          return props._id === featureId
+          return props.database_id === featureId
         })
 
         if (!featureToZoom) {

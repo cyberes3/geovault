@@ -400,7 +400,7 @@ export default {
     featureId() {
       if (!this.feature) return null
       const properties = this.feature.get('properties') || {}
-      return properties._id
+      return properties.database_id
     },
     geometryType() {
       if (!this.feature) return null
@@ -735,7 +735,7 @@ export default {
       try {
         // Get feature ID from original feature properties
         const originalProperties = this.feature.get('properties') || {}
-        const featureId = originalProperties._id
+        const featureId = originalProperties.database_id
         if (!featureId) {
           this.errorMessage = 'Feature ID not found. Cannot update feature.'
           this.isSaving = false
@@ -892,8 +892,8 @@ export default {
           ...formFieldUpdates
         }
 
-        // Remove _id from properties before sending (it's only for frontend use)
-        delete featureData.properties._id
+        // Remove database_id from properties before sending (it's only for frontend use)
+        delete featureData.properties.database_id
 
         // Remove system_tags from properties before sending (backend will preserve originals from DB)
         delete featureData.properties.system_tags
@@ -942,7 +942,7 @@ export default {
                   : {}
 
               // Add the _id to properties
-              properties._id = featureId
+              properties.database_id = featureId
               updatedFeature.set('properties', properties)
 
               // Preserve geojson_hash if available
@@ -979,7 +979,7 @@ export default {
           // Fall back to local update if fetch fails
           const properties = this.feature.get('properties') || {}
           Object.assign(properties, formFieldUpdates)
-          properties._id = featureId
+          properties.database_id = featureId
           this.feature.set('properties', properties)
           this.feature.changed()
         }
@@ -998,7 +998,7 @@ export default {
     async handleDelete() {
       // Get feature ID
       const originalProperties = this.feature.get('properties') || {}
-      const featureId = originalProperties._id
+      const featureId = originalProperties.database_id
       if (!featureId) {
         this.errorMessage = 'Feature ID not found. Cannot delete feature.'
         return

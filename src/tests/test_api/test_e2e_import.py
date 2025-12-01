@@ -419,7 +419,7 @@ class TestE2EImport(TransactionTestCase):
             dup_feature = dup_info.get('feature')
             if dup_feature:
                 feature_hash = generate_feature_hash(dup_feature)
-                feature_id = dup_feature.get('properties', {}).get('id', feature_hash)
+                feature_id = dup_feature.get('properties', {}).get('feature_hash', feature_hash)
                 self.assertIn(feature_id, skipped_ids,
                              f"Duplicate feature {feature_id} should be in skipped_feature_ids")
 

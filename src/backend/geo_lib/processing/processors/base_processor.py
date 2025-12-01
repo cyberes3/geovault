@@ -269,7 +269,7 @@ class BaseProcessor(ABC):
                     # Generate and set feature ID (get_feature_id_from_geojson handles existing IDs)
                     from geo_lib.feature_id import get_feature_id_from_geojson
                     feature_id = get_feature_id_from_geojson(split_feature)
-                    split_feature['properties']['id'] = feature_id
+                    split_feature['properties']['feature_hash'] = feature_id
                     
                     processed_features.append(split_feature)
                 except Exception:

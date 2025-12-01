@@ -40,14 +40,14 @@ def generate_feature_hash(geojson_feature: Dict[str, Any]) -> str:
         'properties': geojson_feature.get('properties', {})
     }
     
-    # Remove any existing 'id' from properties to avoid circular dependencies
+    # Remove any existing 'feature_hash' from properties to avoid circular dependencies
     # Also remove 'system_tags' since they contain import metadata (source-file, import-year, etc.)
     # that shouldn't affect feature identity - features should be considered duplicates
     # if they have the same geometry and user properties, regardless of import metadata
-    if 'id' in normalized_feature['properties'] or 'system_tags' in normalized_feature['properties']:
+    if 'feature_hash' in normalized_feature['properties'] or 'system_tags' in normalized_feature['properties']:
         normalized_feature['properties'] = normalized_feature['properties'].copy()
-        if 'id' in normalized_feature['properties']:
-            del normalized_feature['properties']['id']
+        if 'feature_hash' in normalized_feature['properties']:
+            del normalized_feature['properties']['feature_hash']
         if 'system_tags' in normalized_feature['properties']:
             del normalized_feature['properties']['system_tags']
     
@@ -63,7 +63,7 @@ def get_feature_id_from_geojson(geojson_feature: Dict[str, Any]) -> str:
     """
     Get or generate a feature ID from a GeoJSON feature.
     
-    If the feature already has an 'id' field in properties, return that.
+    If the feature already has a 'feature_hash' field in properties, return that.
     Otherwise, generate a hash-based ID.
     
     Args:
@@ -74,9 +74,9 @@ def get_feature_id_from_geojson(geojson_feature: Dict[str, Any]) -> str:
     """
     properties = geojson_feature.get('properties', {})
     
-    # If there's already an ID in properties, use it
-    # if 'id' in properties and properties['id'] is not None:
-    return str(properties['id'])
+    # If there's already a feature_hash in properties, use it
+    # if 'feature_hash' in properties and properties['feature_hash'] is not None:
+    return str(properties['feature_hash'])
     
     # Otherwise, generate a hash-based ID
     # return generate_feature_hash(geojson_feature)

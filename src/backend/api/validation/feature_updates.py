@@ -44,7 +44,7 @@ class BaseMetadataFields(BaseModel):
 
 class FeatureUpdateProperties(BaseMetadataFields):
     """Pydantic model for updatable feature properties (import_item endpoint)."""
-    id: Optional[str] = Field(default=None, description="Feature ID (used for matching, not updated)")
+    feature_hash: Optional[str] = Field(default=None, description="Feature hash (used for matching, not updated)")
 
 
 class FeatureUpdate(BaseModel):

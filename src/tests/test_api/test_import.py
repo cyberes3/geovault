@@ -824,7 +824,7 @@ class TestImportAPI(TestCase):
             'properties': {'name': 'Test Feature'}
         }
         feature_hash = generate_feature_hash(test_feature)
-        test_feature['properties']['id'] = feature_hash
+        test_feature['properties']['feature_hash'] = feature_hash
         
         # Create a FeatureStore entry with the same hash (hash duplicate)
         feature_store = FeatureStore.objects.create(
@@ -964,7 +964,7 @@ class TestImportAPI(TestCase):
         
         # Verify it was auto-skipped
         feature2_hash = generate_feature_hash(feature2)
-        feature2_id = feature2.get('properties', {}).get('id', feature2_hash)
+        feature2_id = feature2.get('properties', {}).get('feature_hash', feature2_hash)
         self.assertIn(feature2_id, import_queue2.skipped_feature_ids or [],
                      "Cross-queue coordinate duplicate should be auto-skipped")
 
@@ -1028,7 +1028,7 @@ class TestImportAPI(TestCase):
         feature_ids = []
         for feature in features:
             feature_hash = generate_feature_hash(feature)
-            feature['properties']['id'] = feature_hash
+            feature['properties']['feature_hash'] = feature_hash
             feature_ids.append(feature_hash)
         
         import_queue = ImportQueue.objects.create(
@@ -1163,7 +1163,7 @@ class TestImportAPI(TestCase):
         feature_ids = []
         for feature in features:
             feature_hash = generate_feature_hash(feature)
-            feature['properties']['id'] = feature_hash
+            feature['properties']['feature_hash'] = feature_hash
             feature_ids.append(feature_hash)
         
         import_queue = ImportQueue.objects.create(
