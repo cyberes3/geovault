@@ -219,6 +219,19 @@ class ProcessStatusModule(BaseWebSocketModule):
         """Handle item deletion - notify client and close connection."""
         await self.send_to_client('item_deleted', data)
 
+    async def handle_duplicates_updated(self, data: Dict[str, Any]) -> None:
+        """Handle duplicates updated event - refresh page data to show updated duplicate markers."""
+        # Refresh the import item from database to get the latest duplicate_features
+        from api.models import ImportQueue
+        from asgiref.sync import sync_to_async
+        
+        get_item = sync_to_async(ImportQueue.objects.get)
+        self.import_item = await get_item(id=self.import_item.id)
+        
+        # Send updated page data with new duplicates (current page, default page 1)
+        features_data = await self._get_paginated_features(1, 50)
+        await self.send_to_client('page', features_data)
+
     def _get_feature_bounding_box_center(self, feature: Dict[str, Any]) -> Optional[tuple]:
         """
         Calculate the bounding box center (lat, lon) for a feature.
@@ -542,6 +555,11 @@ class ProcessStatusModule(BaseWebSocketModule):
                 "Auto Duplicate Recheck",
                 DatabaseLogLevel.INFO
             )
+            
+            # Send a refresh message to the frontend to update the duplicate markers
+            # Get the current page data with updated duplicates
+            features_data = await self._get_paginated_features(1, 50)
+            await self.send_to_client('page', features_data)
         except Exception:
             logger.error(f"Error auto-rechecking duplicates for item {self.import_item.id}: {traceback.format_exc()}")
             # Don't raise - we don't want to break the initial state send

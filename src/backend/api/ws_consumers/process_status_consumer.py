@@ -189,3 +189,7 @@ class ProcessStatusConsumer(AsyncWebsocketConsumer):
         await self.process_status_module.handle_item_deleted(event['data'])
         # Close the connection since the item no longer exists
         await self.close()
+
+    async def duplicates_updated(self, event):
+        """Handle duplicates updated event."""
+        await self.process_status_module.handle_duplicates_updated(event['data'])

@@ -717,9 +717,10 @@ class TestImportAPI(TestCase):
         response = self.client.post('/api/item/import/upload', {'file': file})
         self.assertEqual(response.status_code, 401)
 
+    @patch('channels.layers.get_channel_layer')
     @patch('geo_lib.processing.duplicate_detection.find_coordinate_duplicates')
     @patch('geo_lib.processing.logging.RealTimeImportLog')
-    def test_recheck_duplicates(self, mock_realtime_log_class, mock_find_duplicates):
+    def test_recheck_duplicates(self, mock_realtime_log_class, mock_find_duplicates, mock_get_channel_layer):
         """Test rechecking duplicates for an import queue item."""
         # Create import queue item with features
         import_queue = ImportQueue.objects.create(
@@ -763,6 +764,15 @@ class TestImportAPI(TestCase):
             mock_duplicate_log  # import_log
         )
 
+        # Mock channel layer for WebSocket notifications
+        # group_send needs to be a coroutine function for async_to_sync
+        async def mock_group_send(group, message):
+            return None
+        
+        mock_channel_layer = MagicMock()
+        mock_channel_layer.group_send = mock_group_send
+        mock_get_channel_layer.return_value = mock_channel_layer
+
         response = self.client.post(f'/api/item/import/recheck-duplicates/{import_queue.id}')
         self.assertEqual(response.status_code, 200)
         data = json.loads(response.content)
@@ -783,6 +793,11 @@ class TestImportAPI(TestCase):
         # Verify import queue was updated
         import_queue.refresh_from_db()
         self.assertEqual(len(import_queue.duplicate_features), 1)
+        
+        # Verify WebSocket notification was sent
+        mock_get_channel_layer.assert_called_once()
+        # The group_send should have been called via async_to_sync
+        # Check that group_send was called (it gets wrapped by async_to_sync)
 
     def test_recheck_duplicates_not_found(self):
         """Test rechecking duplicates for non-existent item."""

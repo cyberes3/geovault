@@ -532,6 +532,22 @@ def recheck_duplicates(request, item_id):
             DatabaseLogLevel.INFO
         )
 
+        # Broadcast a refresh message to any connected WebSocket clients
+        # so they update their duplicate markers
+        from channels.layers import get_channel_layer
+        from asgiref.sync import async_to_sync
+        
+        channel_layer = get_channel_layer()
+        if channel_layer:
+            # Send a message to trigger the process_status module to refresh the page data
+            async_to_sync(channel_layer.group_send)(
+                f"process_status_{request.user.id}_{import_item.id}",
+                {
+                    'type': 'duplicates_updated',
+                    'data': {}
+                }
+            )
+
         return success_response({
             'msg': 'Duplicates rechecked successfully',
             'duplicate_count': duplicate_count

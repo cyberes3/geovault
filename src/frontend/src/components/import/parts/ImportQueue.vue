@@ -428,7 +428,7 @@ export default {
       const csrftoken = getCookie('csrftoken');
 
       try {
-        const response = await axios.post(`/api/item/import/perform/${item.id}`, [], {
+        const response = await axios.post(`/api/item/import/perform/${item.id}`, {}, {
           headers: {
             'X-CSRFToken': csrftoken
           }
