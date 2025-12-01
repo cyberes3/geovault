@@ -13,5 +13,5 @@ python manage.py runserver 0.0.0.0:8000
 # Heplful Reminders
 # https://172.0.2.105:9191/pgadmin4
 # python3 manage.py clear_import_queue --force
-# python manage.py clear_all_data --confirm
-# manage.py drop_all_tables
+# python3 manage.py clear_all_data --confirm
+# python3 manage.py drop_all_tables

@@ -9,7 +9,7 @@
         {% trans "Sign In" %}
     {% endelement %}
         {% setvar link %}
-        <a href="{{ signup_url }}" class="text-[#163D8A] hover:text-[#063288] font-medium">
+        <a href="{{ signup_url }}" class="text-blue-500 hover:text-blue-600 font-medium">
             {% endsetvar %}
             {% setvar end_link %}
             </a>
@@ -31,7 +31,7 @@
                 {% element fields form=form unlabeled=True %}
                 {% endelement %}
             <div class="mb-4">
-                <a href="{% url 'account_reset_password' %}" class="text-sm text-[#163D8A] hover:text-[#063288]">Forgot your password?</a>
+                <a href="{% url 'account_reset_password' %}" class="text-sm text-blue-500 hover:text-blue-600">Forgot your password?</a>
             </div>
                 {{ redirect_field }}
             {% endslot %}

@@ -50,7 +50,7 @@
                   {% if attrs.name %}name="{{ attrs.name }}"{% endif %}
                   {% if attrs.id %}id="{{ attrs.id }}"{% endif %}
                   {% if attrs.placeholder %}placeholder="{{ attrs.placeholder }}"{% endif %}
-                  class="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-[#163D8A] focus:border-[#163D8A] disabled:bg-gray-100 disabled:cursor-not-allowed">{% slot value %}{% endslot %}</textarea>
+                  class="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500 disabled:bg-gray-100 disabled:cursor-not-allowed">{% slot value %}{% endslot %}</textarea>
     {% else %}
         {% if attrs.type != "checkbox" and attrs.type != "radio" %}
             {% if slots.label %}
@@ -70,7 +70,7 @@
                {% if attrs.autocomplete %}autocomplete="{{ attrs.autocomplete }}"{% endif %}
                {% if attrs.value is not None %}value="{{ attrs.value }}"{% endif %}
                type="{{ attrs.type }}"
-               class="{% if attrs.type == 'checkbox' or attrs.type == 'radio' %}h-4 w-4 text-[#163D8A] focus:ring-[#163D8A] border-gray-300 rounded{% else %}w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-[#163D8A] focus:border-[#163D8A] disabled:bg-gray-100 disabled:cursor-not-allowed{% endif %}">
+               class="{% if attrs.type == 'checkbox' or attrs.type == 'radio' %}h-4 w-4 text-blue-500 focus:ring-blue-500 border-gray-300 rounded{% else %}w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500 disabled:bg-gray-100 disabled:cursor-not-allowed{% endif %}">
         {% if attrs.type == "checkbox" or attrs.type == "radio" %}
             {% if slots.label %}
                 <label for="{{ attrs.id }}" class="ml-2 text-sm text-gray-700">

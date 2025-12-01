@@ -11,6 +11,204 @@
         </title>
         <script src="{% static 'js/tailwindcss.js' %}"></script>
         <style>
+            :root {
+                /* Blue Color Scale */
+                --color-blue-50: #F3F6FA;
+                --color-blue-100: #E4EAF5;
+                --color-blue-200: #C4D2ED;
+                --color-blue-300: #99B2E4;
+                --color-blue-400: #6C93DE;
+                --color-blue-500: #163D8A;
+                --color-blue-600: #063288;
+                --color-blue-700: #052055;
+                --color-blue-800: #061D4A;
+                --color-blue-900: #051638;
+
+                /* Red Color Scale */
+                --color-red-50: #FCF2F2;
+                --color-red-100: #F9E1E1;
+                --color-red-200: #F5BCBD;
+                --color-red-300: #F28B8D;
+                --color-red-400: #F45759;
+                --color-red-500: #FF3E41;
+                --color-red-600: #ED0003;
+                --color-red-700: #9E0002;
+                --color-red-800: #760001;
+                --color-red-900: #590001;
+
+                /* Green Color Scale */
+                --color-green-50: #F6FAF4;
+                --color-green-100: #EBF4E6;
+                --color-green-200: #D5E8C9;
+                --color-green-300: #BAD8A5;
+                --color-green-400: #9EC982;
+                --color-green-500: #5B8A3C;
+                --color-green-600: #4D802B;
+                --color-green-700: #2B4619;
+                --color-green-800: #253B16;
+                --color-green-900: #1B2C10;
+
+                /* Yellow Color Scale */
+                --color-yellow-50: #FBF8F3;
+                --color-yellow-100: #F7EFE2;
+                --color-yellow-200: #F1DDBF;
+                --color-yellow-300: #EDC791;
+                --color-yellow-400: #EBB25F;
+                --color-yellow-500: #F4AC45;
+                --color-yellow-600: #EA8A00;
+                --color-yellow-700: #9C5C00;
+                --color-yellow-800: #754500;
+                --color-yellow-900: #583300;
+
+                /* Purple Color Scale */
+                --color-purple-50: #FAF4F9;
+                --color-purple-100: #F4E6F2;
+                --color-purple-200: #E8C8E3;
+                --color-purple-300: #DCA2D3;
+                --color-purple-400: #D179C4;
+                --color-purple-500: #CB48B7;
+                --color-purple-600: #AE1F99;
+                --color-purple-700: #721664;
+                --color-purple-800: #54124A;
+                --color-purple-900: #3F0D37;
+
+                /* Main Color Variables */
+                --main-blue: #163D8A;
+                --main-red: #FF3E41;
+                --main-green: #5B8A3C;
+                --main-yellow: #F4AC45;
+                --main-purple: #CB48B7;
+            }
+
+            /* Tailwind color overrides using CSS variables */
+            /* Using !important to ensure these override Tailwind CDN defaults */
+            .bg-blue-50 { background-color: var(--color-blue-50) !important; }
+            .bg-blue-100 { background-color: var(--color-blue-100) !important; }
+            .bg-blue-200 { background-color: var(--color-blue-200) !important; }
+            .bg-blue-300 { background-color: var(--color-blue-300) !important; }
+            .bg-blue-400 { background-color: var(--color-blue-400) !important; }
+            .bg-blue-500 { background-color: var(--color-blue-500) !important; }
+            .bg-blue-600 { background-color: var(--color-blue-600) !important; }
+            .bg-blue-700 { background-color: var(--color-blue-700) !important; }
+            .bg-blue-800 { background-color: var(--color-blue-800) !important; }
+            .bg-blue-900 { background-color: var(--color-blue-900) !important; }
+
+            .text-blue-50 { color: var(--color-blue-50) !important; }
+            .text-blue-100 { color: var(--color-blue-100) !important; }
+            .text-blue-200 { color: var(--color-blue-200) !important; }
+            .text-blue-300 { color: var(--color-blue-300) !important; }
+            .text-blue-400 { color: var(--color-blue-400) !important; }
+            .text-blue-500 { color: var(--color-blue-500) !important; }
+            .text-blue-600 { color: var(--color-blue-600) !important; }
+            .text-blue-700 { color: var(--color-blue-700) !important; }
+            .text-blue-800 { color: var(--color-blue-800) !important; }
+            .text-blue-900 { color: var(--color-blue-900) !important; }
+
+            .bg-red-50 { background-color: var(--color-red-50) !important; }
+            .bg-red-100 { background-color: var(--color-red-100) !important; }
+            .bg-red-200 { background-color: var(--color-red-200) !important; }
+            .bg-red-300 { background-color: var(--color-red-300) !important; }
+            .bg-red-400 { background-color: var(--color-red-400) !important; }
+            .bg-red-500 { background-color: var(--color-red-500) !important; }
+            .bg-red-600 { background-color: var(--color-red-600) !important; }
+            .bg-red-700 { background-color: var(--color-red-700) !important; }
+            .bg-red-800 { background-color: var(--color-red-800) !important; }
+            .bg-red-900 { background-color: var(--color-red-900) !important; }
+
+            .text-red-50 { color: var(--color-red-50) !important; }
+            .text-red-100 { color: var(--color-red-100) !important; }
+            .text-red-200 { color: var(--color-red-200) !important; }
+            .text-red-300 { color: var(--color-red-300) !important; }
+            .text-red-400 { color: var(--color-red-400) !important; }
+            .text-red-500 { color: var(--color-red-500) !important; }
+            .text-red-600 { color: var(--color-red-600) !important; }
+            .text-red-700 { color: var(--color-red-700) !important; }
+            .text-red-800 { color: var(--color-red-800) !important; }
+            .text-red-900 { color: var(--color-red-900) !important; }
+
+            .bg-green-50 { background-color: var(--color-green-50) !important; }
+            .bg-green-100 { background-color: var(--color-green-100) !important; }
+            .bg-green-200 { background-color: var(--color-green-200) !important; }
+            .bg-green-300 { background-color: var(--color-green-300) !important; }
+            .bg-green-400 { background-color: var(--color-green-400) !important; }
+            .bg-green-500 { background-color: var(--color-green-500) !important; }
+            .bg-green-600 { background-color: var(--color-green-600) !important; }
+            .bg-green-700 { background-color: var(--color-green-700) !important; }
+            .bg-green-800 { background-color: var(--color-green-800) !important; }
+            .bg-green-900 { background-color: var(--color-green-900) !important; }
+
+            .text-green-50 { color: var(--color-green-50) !important; }
+            .text-green-100 { color: var(--color-green-100) !important; }
+            .text-green-200 { color: var(--color-green-200) !important; }
+            .text-green-300 { color: var(--color-green-300) !important; }
+            .text-green-400 { color: var(--color-green-400) !important; }
+            .text-green-500 { color: var(--color-green-500) !important; }
+            .text-green-600 { color: var(--color-green-600) !important; }
+            .text-green-700 { color: var(--color-green-700) !important; }
+            .text-green-800 { color: var(--color-green-800) !important; }
+            .text-green-900 { color: var(--color-green-900) !important; }
+
+            .bg-yellow-50 { background-color: var(--color-yellow-50) !important; }
+            .bg-yellow-100 { background-color: var(--color-yellow-100) !important; }
+            .bg-yellow-200 { background-color: var(--color-yellow-200) !important; }
+            .bg-yellow-300 { background-color: var(--color-yellow-300) !important; }
+            .bg-yellow-400 { background-color: var(--color-yellow-400) !important; }
+            .bg-yellow-500 { background-color: var(--color-yellow-500) !important; }
+            .bg-yellow-600 { background-color: var(--color-yellow-600) !important; }
+            .bg-yellow-700 { background-color: var(--color-yellow-700) !important; }
+            .bg-yellow-800 { background-color: var(--color-yellow-800) !important; }
+            .bg-yellow-900 { background-color: var(--color-yellow-900) !important; }
+
+            .text-yellow-50 { color: var(--color-yellow-50) !important; }
+            .text-yellow-100 { color: var(--color-yellow-100) !important; }
+            .text-yellow-200 { color: var(--color-yellow-200) !important; }
+            .text-yellow-300 { color: var(--color-yellow-300) !important; }
+            .text-yellow-400 { color: var(--color-yellow-400) !important; }
+            .text-yellow-500 { color: var(--color-yellow-500) !important; }
+            .text-yellow-600 { color: var(--color-yellow-600) !important; }
+            .text-yellow-700 { color: var(--color-yellow-700) !important; }
+            .text-yellow-800 { color: var(--color-yellow-800) !important; }
+            .text-yellow-900 { color: var(--color-yellow-900) !important; }
+
+            .bg-purple-50 { background-color: var(--color-purple-50) !important; }
+            .bg-purple-100 { background-color: var(--color-purple-100) !important; }
+            .bg-purple-200 { background-color: var(--color-purple-200) !important; }
+            .bg-purple-300 { background-color: var(--color-purple-300) !important; }
+            .bg-purple-400 { background-color: var(--color-purple-400) !important; }
+            .bg-purple-500 { background-color: var(--color-purple-500) !important; }
+            .bg-purple-600 { background-color: var(--color-purple-600) !important; }
+            .bg-purple-700 { background-color: var(--color-purple-700) !important; }
+            .bg-purple-800 { background-color: var(--color-purple-800) !important; }
+            .bg-purple-900 { background-color: var(--color-purple-900) !important; }
+
+            .text-purple-50 { color: var(--color-purple-50) !important; }
+            .text-purple-100 { color: var(--color-purple-100) !important; }
+            .text-purple-200 { color: var(--color-purple-200) !important; }
+            .text-purple-300 { color: var(--color-purple-300) !important; }
+            .text-purple-400 { color: var(--color-purple-400) !important; }
+            .text-purple-500 { color: var(--color-purple-500) !important; }
+            .text-purple-600 { color: var(--color-purple-600) !important; }
+            .text-purple-700 { color: var(--color-purple-700) !important; }
+            .text-purple-800 { color: var(--color-purple-800) !important; }
+            .text-purple-900 { color: var(--color-purple-900) !important; }
+
+            /* Border and ring colors */
+            .border-blue-500 { border-color: var(--color-blue-500) !important; }
+            .border-blue-600 { border-color: var(--color-blue-600) !important; }
+            .border-red-500 { border-color: var(--color-red-500) !important; }
+            .border-red-600 { border-color: var(--color-red-600) !important; }
+            .border-red-200 { border-color: var(--color-red-200) !important; }
+            .border-yellow-200 { border-color: var(--color-yellow-200) !important; }
+
+            .ring-blue-500 { --tw-ring-color: var(--color-blue-500) !important; }
+            .ring-red-500 { --tw-ring-color: var(--color-red-500) !important; }
+
+            /* Hover states */
+            .hover\:bg-blue-600:hover { background-color: var(--color-blue-600) !important; }
+            .hover\:bg-red-600:hover { background-color: var(--color-red-600) !important; }
+            .hover\:bg-red-700:hover { background-color: var(--color-red-700) !important; }
+            .hover\:text-blue-600:hover { color: var(--color-blue-600) !important; }
+
             /* Style Django form fields */
             input[type="text"],
             input[type="email"],
@@ -38,7 +236,7 @@
             textarea:focus,
             select:focus {
                 outline: none;
-                border-color: #163D8A;
+                border-color: var(--color-blue-500);
                 box-shadow: 0 0 0 3px rgba(22, 61, 138, 0.1);
             }
             
@@ -58,7 +256,7 @@
             
             ul.errorlist li {
                 font-size: 0.875rem;
-                color: #dc2626;
+                color: var(--color-red-600);
                 margin-bottom: 0.25rem;
             }
             
@@ -99,7 +297,7 @@
                     <div class="flex justify-between items-center h-16">
                         <div class="flex items-center">
                             <div class="flex-shrink-0">
-                                <a href="/" class="flex items-center space-x-2 hover:opacity-80 transition-opacity">
+                                <a href="/" class="flex items-center space-x-2 hover:opacity-80">
                                     <img src="/images/logo.svg" alt="GeoVault Logo" class="h-8 w-auto" />
                                     <span class="text-xl font-bold text-gray-900">GeoVault</span>
                                 </a>

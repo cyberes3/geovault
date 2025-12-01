@@ -18,7 +18,7 @@
             <div class="mb-4 sm:mb-6">
                 {% element p %}
                     {% blocktrans with confirmation.email_address.email as email %}
-                        Please confirm that <a href="mailto:{{ email }}" class="text-[#163D8A] hover:text-[#063288] font-medium">{{ email }}</a> is the correct email address for your account.
+                        Please confirm that <a href="mailto:{{ email }}" class="text-blue-500 hover:text-blue-600 font-medium">{{ email }}</a> is the correct email address for your account.
                     {% endblocktrans %}
                 {% endelement %}
             </div>
@@ -38,22 +38,61 @@
                 {% endslot %}
             {% endelement %}
         {% else %}
-            <div class="mb-4 sm:mb-6 p-3 sm:p-4 bg-red-50 border border-red-200 rounded-md">
-                {% element p %}
-                    {% blocktrans with email=confirmation.email_address.email %}
-                        Unable to confirm <span class="font-medium">{{ email }}</span> because it is already confirmed by a different account.
-                    {% endblocktrans %}
-                {% endelement %}
+            <div class="mb-6 sm:mb-8">
+                <!-- Icon and Title -->
+                <div class="flex flex-col items-center mb-6">
+                    <div class="w-16 h-16 sm:w-20 sm:h-20 mb-4 rounded-full bg-red-100 flex items-center justify-center">
+                        <svg class="w-8 h-8 sm:w-10 sm:h-10 text-red-600" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path>
+                        </svg>
+                    </div>
+                    <h2 class="text-xl sm:text-2xl font-semibold text-gray-900 mb-2">Unable to Confirm Email</h2>
+                </div>
+                
+                <!-- Message Box -->
+                <div class="bg-red-50 border-2 border-red-200 rounded-lg p-6 sm:p-8 shadow-sm">
+                    <div class="text-center">
+                        <p class="text-base sm:text-lg text-gray-800 leading-relaxed">
+                            {% blocktrans with email=confirmation.email_address.email %}
+                                Unable to confirm <span class="font-semibold text-gray-900">{{ email }}</span> because it is already confirmed by a different account.
+                            {% endblocktrans %}
+                        </p>
+                    </div>
+                </div>
             </div>
         {% endif %}
     {% else %}
-        <div class="mb-4 sm:mb-6 p-3 sm:p-4 bg-yellow-50 border border-yellow-200 rounded-md">
-            {% url 'account_email' as email_url %}
-            {% element p %}
-                {% blocktrans %}
-                    This email confirmation link expired or is invalid. Please <a href="{{ email_url }}" class="text-[#163D8A] hover:text-[#063288] font-medium">issue a new email confirmation request</a>.
-                {% endblocktrans %}
-            {% endelement %}
+        <div class="mb-6 sm:mb-8">
+            <!-- Icon and Title -->
+            <div class="flex flex-col items-center mb-6">
+                <div class="w-16 h-16 sm:w-20 sm:h-20 mb-4 rounded-full bg-yellow-100 flex items-center justify-center">
+                    <svg class="w-8 h-8 sm:w-10 sm:h-10 text-yellow-600" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"></path>
+                    </svg>
+                </div>
+                <h2 class="text-xl sm:text-2xl font-semibold text-gray-900 mb-2">Link Expired or Invalid</h2>
+                <p class="text-sm sm:text-base text-gray-600 text-center max-w-md">
+                    This email confirmation link has expired or is no longer valid.
+                </p>
+            </div>
+            
+            <!-- Message Box -->
+            <div class="bg-yellow-50 border-2 border-yellow-200 rounded-lg p-6 sm:p-8 shadow-sm">
+                <div class="text-center">
+                    <p class="text-base sm:text-lg text-gray-800 mb-6 leading-relaxed">
+                        {% blocktrans %}
+                            To verify your email address, please request a new confirmation email from your account settings.
+                        {% endblocktrans %}
+                    </p>
+                    <a href="/#/settings?tab=account" 
+                       class="inline-flex items-center justify-center px-6 py-3 bg-blue-500 text-white font-medium rounded-lg hover:bg-blue-600 shadow-md hover:shadow-lg">
+                        <svg class="w-5 h-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14"></path>
+                        </svg>
+                        {% trans "Go to Account Settings" %}
+                    </a>
+                </div>
+            </div>
         </div>
     {% endif %}
 {% endblock inner_content %}
