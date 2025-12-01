@@ -440,14 +440,16 @@ class TestE2EImport(TransactionTestCase):
                         "Both features should have the same hash")
         
         # Check for cross-queue duplicates using the same logic as the websocket module
-        # Build hash map from other queue items for each item
+        # Only newer items should see older items as duplicates
         queue_duplicates_found_item1 = []
         queue_duplicates_found_item2 = []
         
-        # Check if item1's features are duplicates of item2
+        # Check if item1's features are duplicates of older items
+        # Only check against items with timestamp < item1.timestamp
         other_queue_items_for_item1 = ImportQueue.objects.filter(
             user=self.user,
-            imported=False
+            imported=False,
+            timestamp__lt=import_item1.timestamp  # Only older items
         ).exclude(id=item_id1)
         
         queue_hash_to_item = {}
@@ -470,10 +472,12 @@ class TestE2EImport(TransactionTestCase):
                     'queue_item_filename': queue_info['queue_item_filename']
                 })
         
-        # Check if item2's features are duplicates of item1
+        # Check if item2's features are duplicates of older items
+        # Only check against items with timestamp < item2.timestamp
         other_queue_items_for_item2 = ImportQueue.objects.filter(
             user=self.user,
-            imported=False
+            imported=False,
+            timestamp__lt=import_item2.timestamp  # Only older items
         ).exclude(id=item_id2)
         
         queue_hash_to_item = {}
@@ -496,30 +500,41 @@ class TestE2EImport(TransactionTestCase):
                     'queue_item_filename': queue_info['queue_item_filename']
                 })
         
-        # At least one item should have its feature marked as a cross-queue duplicate
-        # Due to race conditions, either item1 or item2 (or both) should detect the duplicate
-        total_duplicates_found = len(queue_duplicates_found_item1) + len(queue_duplicates_found_item2)
-        self.assertGreater(total_duplicates_found, 0,
-                          "At least one item should have its feature detected as a cross-queue duplicate")
+        # Determine which item is older based on timestamp
+        # Only the newer item should be marked as a duplicate of the older one
+        if import_item1.timestamp < import_item2.timestamp:
+            # Item1 is older, so item2 should be marked as duplicate
+            older_item_id = item_id1
+            newer_item_id = item_id2
+            older_filename = 'first_item.kml'
+            newer_filename = 'second_item.kml'
+            older_duplicates = queue_duplicates_found_item1
+            newer_duplicates = queue_duplicates_found_item2
+            newer_feature_hash = second_feature_hash
+        else:
+            # Item2 is older, so item1 should be marked as duplicate
+            older_item_id = item_id2
+            newer_item_id = item_id1
+            older_filename = 'second_item.kml'
+            newer_filename = 'first_item.kml'
+            older_duplicates = queue_duplicates_found_item2
+            newer_duplicates = queue_duplicates_found_item1
+            newer_feature_hash = first_feature_hash
         
-        # Verify the duplicate points to the other item
-        if queue_duplicates_found_item1:
-            dup = queue_duplicates_found_item1[0]
-            self.assertEqual(dup['queue_item_id'], item_id2,
-                            "Item1's duplicate should point to item2")
-            self.assertEqual(dup['queue_item_filename'], 'second_item.kml',
-                            "Item1's duplicate should have correct filename")
-            self.assertEqual(dup['hash'], first_feature_hash,
-                            "Item1's duplicate should have correct hash")
+        # Only the newer item should have its feature marked as a cross-queue duplicate
+        self.assertEqual(len(newer_duplicates), 1,
+                        f"Newer item ({newer_filename}) should have exactly one duplicate detected")
+        self.assertEqual(len(older_duplicates), 0,
+                        f"Older item ({older_filename}) should NOT have any duplicates detected")
         
-        if queue_duplicates_found_item2:
-            dup = queue_duplicates_found_item2[0]
-            self.assertEqual(dup['queue_item_id'], item_id1,
-                            "Item2's duplicate should point to item1")
-            self.assertEqual(dup['queue_item_filename'], 'first_item.kml',
-                            "Item2's duplicate should have correct filename")
-            self.assertEqual(dup['hash'], second_feature_hash,
-                            "Item2's duplicate should have correct hash")
+        # Verify the duplicate points to the older item
+        dup = newer_duplicates[0]
+        self.assertEqual(dup['queue_item_id'], older_item_id,
+                        f"Newer item's duplicate should point to older item ({older_item_id})")
+        self.assertEqual(dup['queue_item_filename'], older_filename,
+                        f"Newer item's duplicate should have correct filename ({older_filename})")
+        self.assertEqual(dup['hash'], newer_feature_hash,
+                        "Newer item's duplicate should have correct hash")
 
     def test_e2e_file_level_duplicate_detection(self):
         """Test file-level duplicate detection against other items in queue and already-imported files."""

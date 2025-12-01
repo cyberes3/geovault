@@ -162,7 +162,6 @@ class ProcessStatusModule(BaseWebSocketModule):
                 'job_details': job_details,
                 'features': features_data,
                 'logs': logs_data,
-                'duplicates': features_data.get('duplicates', []),  # Get duplicates from features_data
                 # Include duplicate status for informational purposes (duplicate_imported allows import)
                 'duplicate_status': duplicate_status,
                 'duplicate_original_filename': duplicate_original_filename
@@ -327,12 +326,13 @@ class ProcessStatusModule(BaseWebSocketModule):
             return None
 
     async def _get_other_queue_items(self):
-        """Get other unimported ImportQueue items for the same user."""
+        """Get other unimported ImportQueue items for the same user that are older (by timestamp)."""
         @sync_to_async
         def get_items():
             return list(ImportQueue.objects.filter(
                 user_id=self.import_item.user_id,
-                imported=False
+                imported=False,
+                timestamp__lt=self.import_item.timestamp  # Only older items
             ).exclude(id=self.import_item.id).only('id', 'original_filename', 'geofeatures'))
         return await get_items()
 
@@ -399,9 +399,10 @@ class ProcessStatusModule(BaseWebSocketModule):
         paginated_features = sorted_features[start_idx:end_idx]
 
         # Get duplicate information for current page
-        duplicates_optimized = []
-        duplicate_indices = []
-        queue_duplicates_optimized = []
+        # New structure: {'hash': [], 'coord': []}
+        hash_duplicates = []  # Feature IDs/hashes for hash-based duplicates
+        coord_duplicates = []  # Feature IDs/hashes for coordinate-based duplicates
+        duplicate_indices = []  # Keep for backward compatibility
 
         # Import normalization function for coordinate comparison
         from geo_lib.processing.duplicate_detection import normalize_coordinates
@@ -447,22 +448,18 @@ class ProcessStatusModule(BaseWebSocketModule):
                                 if new_idx not in duplicate_indices:
                                     duplicate_indices.append(new_idx)
                                 
-                                # Only include duplicate info if it's in the current page
-                                if start_idx <= new_idx < end_idx:
-                                    existing_features_optimized = []
-                                    for existing in dup_info.get('existing_features', []):
-                                        existing_features_optimized.append({
-                                            'id': existing.get('id'),
-                                            'name': existing.get('name'),
-                                            'type': existing.get('type'),
-                                            'timestamp': existing.get('timestamp')
-                                        })
-                                    duplicates_optimized.append({
-                                        'existing_features': existing_features_optimized,
-                                        'page_index': new_idx - start_idx,
-                                    })
+                                # Get feature hash for coordinate duplicate
+                                feature = self.import_item.geofeatures[original_idx]
+                                feature_hash = generate_feature_hash(feature)
+                                # Use the feature's properties.id if it exists (should match the hash)
+                                # Otherwise use the generated hash
+                                feature_id = feature.get('properties', {}).get('id', feature_hash)
+                                
+                                # Add to coord_duplicates if not already present
+                                if feature_id not in coord_duplicates:
+                                    coord_duplicates.append(feature_id)
 
-        # Check for queue-level duplicates (features with same hash in other ImportQueue items)
+        # Check for hash-based duplicates (from FeatureStore and other ImportQueue items)
         # Query other unimported ImportQueue items for the same user
         other_queue_items = await self._get_other_queue_items()
         
@@ -477,25 +474,40 @@ class ProcessStatusModule(BaseWebSocketModule):
                         'queue_item_filename': queue_item.original_filename
                     }
         
-        # Check each feature in current item against queue hashes
+        # Check each feature in current item against queue hashes and FeatureStore
+        # Get existing feature hashes from FeatureStore
+        from api.models import FeatureStore
+        from asgiref.sync import sync_to_async
+        
+        @sync_to_async
+        def get_existing_hashes():
+            return set(FeatureStore.objects.filter(user_id=self.import_item.user_id).values_list('geojson_hash', flat=True))
+        
+        existing_store_hashes = await get_existing_hashes()
+        
+        # Check each feature for hash duplicates
+        # Queue duplicates are tracked separately and excluded from duplicates.hash
+        queue_duplicates_info = []
         for original_idx, feature in enumerate(self.import_item.geofeatures):
             feature_hash = generate_feature_hash(feature)
+            feature_id = feature.get('properties', {}).get('id', feature_hash)
+            
+            # Check queue duplicates first (takes precedence)
             if feature_hash in queue_hash_to_item:
-                # This feature is a duplicate of one in another queue item
                 queue_info = queue_hash_to_item[feature_hash]
-                
-                # Convert original index to new sorted index
                 if original_idx in original_to_new_index:
                     new_idx = original_to_new_index[original_idx]
-                    
-                    # Only include queue duplicate info if it's in the current page
                     if start_idx <= new_idx < end_idx:
-                        queue_duplicates_optimized.append({
-                            'hash': feature_hash,
-                            'queue_item_id': queue_info['queue_item_id'],
-                            'queue_item_filename': queue_info['queue_item_filename'],
+                        queue_duplicates_info.append({
+                            'hash': feature_id,
                             'page_index': new_idx - start_idx,
+                            'queue_item_id': queue_info['queue_item_id'],
+                            'queue_item_filename': queue_info['queue_item_filename']
                         })
+            # Check FeatureStore duplicates (only if not a queue duplicate)
+            elif feature_hash in existing_store_hashes:
+                if feature_id not in hash_duplicates:
+                    hash_duplicates.append(feature_id)
 
         return {
             'data': paginated_features,
@@ -508,8 +520,11 @@ class ProcessStatusModule(BaseWebSocketModule):
                 'has_previous': page > 1,
                 'duplicate_indices': duplicate_indices
             },
-            'duplicates': duplicates_optimized,
-            'queue_duplicates': queue_duplicates_optimized
+            'duplicates': {
+                'hash': hash_duplicates,
+                'coord': coord_duplicates
+            },
+            'queue_duplicates': queue_duplicates_info
         }
 
     async def _get_logs(self, after_id: Optional[int] = None) -> list:

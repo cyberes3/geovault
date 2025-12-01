@@ -25,6 +25,7 @@ from geo_lib.processing.import_utils import (
     job_success_result,
     job_error_result,
 )
+from geo_lib.processing.duplicate_models import SkippedDuplicates, SkippedDuplicateFeature
 
 logger = get_job_logger()
 
@@ -111,6 +112,8 @@ class BulkImportJob(BaseJob):
             successful_imports = 0
             failed_imports = []
             skipped_items = []
+            # Aggregate skipped duplicates across all items
+            all_skipped_duplicates = SkippedDuplicates()
 
             for index, item in enumerate(items):
                 item_progress = (index / total_items) * 100.0
@@ -129,6 +132,13 @@ class BulkImportJob(BaseJob):
                     result = self._import_single_item(item, user_id, import_custom_icons)
                     if result['success']:
                         successful_imports += 1
+                        # Aggregate skipped duplicates from this item
+                        if 'duplicates_skipped' in result and result['duplicates_skipped']:
+                            # result['duplicates_skipped'] is a dict from job_success_result
+                            # Convert back to SkippedDuplicates model to aggregate
+                            item_skipped = SkippedDuplicates.model_validate(result['duplicates_skipped'])
+                            all_skipped_duplicates.hash.extend(item_skipped.hash)
+                            all_skipped_duplicates.coord.extend(item_skipped.coord)
                     else:
                         failed_imports.append({
                             'item_id': item.id,
@@ -156,13 +166,17 @@ class BulkImportJob(BaseJob):
                 completion_msg, 100.0
             )
 
+            # Convert aggregated skipped duplicates to dict for JSON serialization
+            duplicates_skipped_dict = all_skipped_duplicates.model_dump(mode='json') if all_skipped_duplicates else {'hash': [], 'coord': []}
+            
             # Broadcast completion
             self._broadcast_job_completed(
                 user_id, job_id,
                 item_ids=found_ids,
                 successful_count=successful_imports,
                 failed_count=len(failed_imports),
-                failed_items=failed_imports
+                failed_items=failed_imports,
+                duplicates_skipped=duplicates_skipped_dict
             )
 
             logger.info(f"Successfully completed bulk import job {job_id}: {successful_imports} imported, {len(failed_imports)} failed")
@@ -206,8 +220,10 @@ class BulkImportJob(BaseJob):
                     return job_error_result(f'Duplicate of "{earlier_duplicates.original_filename}"')
 
             # Process features using shared utility
-            features_to_create, skipped_queue_duplicates = process_features_for_import(
-                import_item, user_id, import_custom_icons
+            # For ready-to-import table imports, skip both hash and coordinate duplicates automatically
+            # Pass empty set for skipped_feature_ids to enable automatic coordinate duplicate skipping
+            features_to_create, skipped_duplicates = process_features_for_import(
+                import_item, user_id, import_custom_icons, None, set()
             )
 
             # Import to database using shared utility
@@ -226,10 +242,12 @@ class BulkImportJob(BaseJob):
                 else:
                     logger.info(f"Imported {successful_imports} features for user {user_id}")
                 
+                # Convert Pydantic model to dict for JSON serialization
+                # job_success_result expects a dict, so convert the Pydantic model
+                duplicates_skipped_dict = skipped_duplicates.model_dump(mode='json') if skipped_duplicates else {'hash': [], 'coord': []}
                 return job_success_result(
                     imported=successful_imports,
-                    duplicates_skipped=duplicates_skipped,
-                    skipped_queue_duplicates=skipped_queue_duplicates
+                    duplicates_skipped=duplicates_skipped_dict
                 )
             else:
                 return job_error_result('No features were imported')

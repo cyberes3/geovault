@@ -399,7 +399,7 @@
            :class="getItemClasses(item, index)">
         <!-- Button row - always fully visible -->
         <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 mb-4 sm:mb-6 relative z-20">
-          <h3 class="text-base sm:text-lg font-semibold text-gray-900" :class="isItemSkipped(item, index) && !item.isDuplicate ? 'opacity-50' : ''">
+          <h3 class="text-base sm:text-lg font-semibold text-gray-900" :class="isItemSkipped(item, index) && !isItemDuplicate(item) ? 'opacity-50' : ''">
             Feature {{ (pagination.currentPage - 1) * pagination.pageSize + index + 1 }} (of {{ pagination.totalFeatures }})
           </h3>
           <div class="flex flex-wrap items-center gap-2 sm:space-x-2">
@@ -415,10 +415,10 @@
             <!-- Skip/Restore Button -->
             <button
                 v-if="!isImported && !loading.importing"
-                :class="item.isDuplicate ? 'relative z-20 inline-flex items-center px-3 py-1.5 border border-gray-300 shadow-sm text-xs font-medium rounded-md text-gray-400 bg-gray-100 cursor-not-allowed' : (isItemSkipped(item, index) ? 'relative z-20 inline-flex items-center px-3 py-1.5 border border-transparent text-xs font-medium rounded-md text-white bg-green-600 hover:bg-green-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-green-500' : 'relative z-20 inline-flex items-center px-3 py-1.5 border border-gray-300 shadow-sm text-xs font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-gray-500')"
-                @click.stop="item.isDuplicate ? null : toggleSkipItem(index)"
-                :disabled="item.isDuplicate"
-                :title="item.isDuplicate ? 'Cannot skip duplicate items' : (isItemSkipped(item, index) ? 'Restore this item' : 'Skip this item')"
+                :class="isItemDuplicate(item) ? 'relative z-20 inline-flex items-center px-3 py-1.5 border border-gray-300 shadow-sm text-xs font-medium rounded-md text-gray-400 bg-gray-100 cursor-not-allowed' : (isItemSkipped(item, index) ? 'relative z-20 inline-flex items-center px-3 py-1.5 border border-transparent text-xs font-medium rounded-md text-white bg-green-600 hover:bg-green-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-green-500' : 'relative z-20 inline-flex items-center px-3 py-1.5 border border-gray-300 shadow-sm text-xs font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-gray-500')"
+                @click.stop="isItemDuplicate(item) ? null : toggleSkipItem(index)"
+                :disabled="isItemDuplicate(item)"
+                :title="isItemDuplicate(item) ? 'Cannot skip duplicate items' : (isItemSkipped(item, index) ? 'Restore this item' : 'Skip this item')"
                 type="button"
                 style="opacity: 1 !important;"
             >
@@ -442,54 +442,11 @@
         </div>
 
         <!-- Content area - can be greyed out for skipped items -->
-        <div :class="isItemSkipped(item, index) && !item.isDuplicate ? 'opacity-50' : ''">
-        <!-- Duplicate Warning -->
-        <div v-if="item.isDuplicate" class="mb-4 p-4 bg-yellow-50 border border-yellow-200 rounded-md">
-          <div class="flex items-start">
-            <div class="flex-shrink-0">
-              <ExclamationTriangleIcon class="h-5 w-5 text-yellow-400" />
-            </div>
-            <div class="ml-3 flex-1">
-              <h3 class="text-sm font-medium text-yellow-800">Duplicate Feature Detected</h3>
-              <div class="mt-2 text-sm text-yellow-700">
-                <p>This feature has the same coordinates as an existing feature in your feature store.</p>
-                <div class="mt-2" v-if="item.duplicateInfo && item.duplicateInfo.existing_features && item.duplicateInfo.existing_features.length > 0">
-                  <router-link
-                      :to="{ path: '/map', query: { featureId: item.duplicateInfo.existing_features[0].id } }"
-                      class="inline-flex items-center px-3 py-1.5 border border-gray-300 rounded-md text-xs font-medium text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500"
-                  >
-                    <MapIcon class="w-3 h-3 mr-1" />
-                    View Original Feature on Map
-                  </router-link>
-                </div>
-              </div>
-            </div>
-          </div>
-        </div>
-
-        <!-- Queue Duplicate Warning -->
-        <div v-if="item.isQueueDuplicate" class="mb-4 p-4 bg-yellow-50 border border-yellow-200 rounded-md">
-          <div class="flex items-start">
-            <div class="flex-shrink-0">
-              <ExclamationTriangleIcon class="h-5 w-5 text-yellow-400" />
-            </div>
-            <div class="ml-3 flex-1">
-              <h3 class="text-sm font-medium text-yellow-800">Duplicate Feature in Import Queue</h3>
-              <div class="mt-2 text-sm text-yellow-700">
-                <p>This feature is identical to one in another item in your import queue.</p>
-                <div class="mt-2" v-if="item.queueDuplicateInfo">
-                  <router-link
-                      :to="{ path: `/import/process/${item.queueDuplicateInfo.queue_item_id}`, query: { featureHash: item.queueDuplicateInfo.hash } }"
-                      class="inline-flex items-center px-3 py-1.5 border border-gray-300 rounded-md text-xs font-medium text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500"
-                  >
-                    <MapIcon class="w-3 h-3 mr-1" />
-                    View in "{{ item.queueDuplicateInfo.queue_item_filename }}"
-                  </router-link>
-                </div>
-              </div>
-            </div>
-          </div>
-        </div>
+        <div :class="isItemSkipped(item, index) && !isItemDuplicate(item) ? 'opacity-50' : ''">
+        <!-- Duplicate Warnings -->
+        <DuplicateWarning type="hash" :item="item" />
+        <DuplicateWarning type="coord" :item="item" />
+        <DuplicateWarning type="queue" :item="item" />
 
         <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
           <!-- Name Field -->
@@ -498,12 +455,12 @@
             <div class="flex items-center space-x-2">
               <input
                   v-model="item.properties.name"
-                  :class="isImported || item.isDuplicate || isItemSkipped(item, index) || loading.importing ? 'block w-full px-3 py-2 border border-gray-300 rounded-md bg-gray-100 cursor-not-allowed' : 'block w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-blue-500 focus:border-blue-500'"
-                  :disabled="isImported || item.isDuplicate || isItemSkipped(item, index) || loading.importing"
+                  :class="isItemDisabled(item, index) ? 'block w-full px-3 py-2 border border-gray-300 rounded-md bg-gray-100 cursor-not-allowed' : 'block w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-blue-500 focus:border-blue-500'"
+                  :disabled="isItemDisabled(item, index)"
                   :placeholder="originalItems[index].properties.name"
               />
               <button
-                  v-if="!isImported && !item.isDuplicate && !isItemSkipped(item, index) && !loading.importing"
+                  v-if="isItemEditable(item, index)"
                   class="inline-flex items-center px-3 py-2 border border-gray-300 shadow-sm text-sm leading-4 font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500"
                   @click="resetNestedField(index, 'properties', 'name')"
                   title="Reset to original name"
@@ -519,14 +476,14 @@
             <div class="flex items-start space-x-2">
               <textarea
                   v-model="item.properties.description"
-                  :class="isImported || item.isDuplicate || isItemSkipped(item, index) || loading.importing ? 'block w-full px-3 py-2 border border-gray-300 rounded-md bg-gray-100 cursor-not-allowed resize-none' : 'block w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-blue-500 focus:border-blue-500 resize-none'"
-                  :disabled="isImported || item.isDuplicate || isItemSkipped(item, index) || loading.importing"
+                  :class="isItemDisabled(item, index) ? 'block w-full px-3 py-2 border border-gray-300 rounded-md bg-gray-100 cursor-not-allowed resize-none' : 'block w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-blue-500 focus:border-blue-500 resize-none'"
+                  :disabled="isItemDisabled(item, index)"
                   :placeholder="originalItems[index].properties.description"
                   class="text-sm"
                   rows="4"
               ></textarea>
               <button
-                  v-if="!isImported && !item.isDuplicate && !isItemSkipped(item, index) && !loading.importing"
+                  v-if="isItemEditable(item, index)"
                   class="inline-flex items-center px-3 py-2 border border-gray-300 shadow-sm text-sm leading-4 font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 mt-1"
                   @click="resetNestedField(index, 'properties', 'description')"
                   title="Reset to original description"
@@ -541,14 +498,14 @@
             <label class="block text-sm font-medium text-gray-700 mb-2">Created Date</label>
             <div class="flex items-center space-x-2">
               <input
-                  :class="isImported || item.isDuplicate || isItemSkipped(item, index) || loading.importing ? 'block w-full px-3 py-2 border border-gray-300 rounded-md bg-gray-100 cursor-not-allowed' : 'block w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-blue-500 focus:border-blue-500'"
-                  :disabled="isImported || item.isDuplicate || isItemSkipped(item, index) || loading.importing"
+                  :class="isItemDisabled(item, index) ? 'block w-full px-3 py-2 border border-gray-300 rounded-md bg-gray-100 cursor-not-allowed' : 'block w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-blue-500 focus:border-blue-500'"
+                  :disabled="isItemDisabled(item, index)"
                   :value="formatDateForInput(item.properties.created)"
                   type="datetime-local"
                   @change="updateDate(index, $event)"
               />
               <button
-                  v-if="!isImported && !item.isDuplicate && !isItemSkipped(item, index) && !loading.importing"
+                  v-if="isItemEditable(item, index)"
                   class="inline-flex items-center px-3 py-2 border border-gray-300 shadow-sm text-sm leading-4 font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500"
                   @click="resetNestedField(index, 'properties', 'created')"
                   title="Reset to original date"
@@ -564,9 +521,9 @@
               v-model:tags="item.properties.tags"
               :available-tags="availableUserTags"
               :system-tags="getSystemTags(item)"
-              :disabled="isImported || item.isDuplicate || isItemSkipped(item, index) || loading.importing"
+              :disabled="isItemDisabled(item, index)"
             />
-            <div v-if="!isImported && !item.isDuplicate && !isItemSkipped(item, index) && !loading.importing" class="flex items-center space-x-2 mt-3">
+            <div v-if="isItemEditable(item, index)" class="flex items-center space-x-2 mt-3">
               <button
                   v-if="!isItemSkipped(item, index)"
                   class="inline-flex items-center px-3 py-2 border border-gray-300 shadow-sm text-sm font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500"
@@ -673,6 +630,7 @@ import FeatureMapDialog from "@/components/import/parts/FeatureMapDialog.vue";
 import LogViewModal from "@/components/import/parts/LogViewModal.vue";
 import ImportControls from "@/components/import/parts/ImportControls.vue";
 import BulkStylingModal from "@/components/import/parts/BulkStylingModal.vue";
+import DuplicateWarning from "@/components/import/parts/DuplicateWarning.vue";
 import TagPicker from "@/components/TagPicker.vue";
 import { DEFAULT_BULK_OPERATIONS, hasBulkOperationsConfigured, areBulkOperationsEqual, cloneBulkOperations } from "@/utils/bulkOperations.js";
 import { CheckIcon, ExclamationCircleIcon, ArrowTopRightOnSquareIcon, DocumentIcon, ExclamationTriangleIcon, ArrowDownTrayIcon, ArrowUpTrayIcon, XMarkIcon, MapIcon, ArrowPathIcon, MagnifyingGlassIcon, RectangleStackIcon } from '@heroicons/vue/24/outline';
@@ -730,6 +688,7 @@ export default {
     LogViewModal,
     ImportControls,
     BulkStylingModal,
+    DuplicateWarning,
     TagPicker,
     CheckIcon,
     ExclamationCircleIcon,
@@ -855,6 +814,21 @@ export default {
       },
       deep: true,
       immediate: false
+    },
+    '$route.query.featureHash': {
+      handler(newHash) {
+        if (newHash) {
+          this.$nextTick(() => {
+            this.waitForPageLoad().then(() => {
+              // Additional wait for items to be populated
+              this.waitForItems().then(() => {
+                this.scrollToFeatureByHash(newHash);
+              });
+            });
+          });
+        }
+      },
+      immediate: true
     }
   },
   beforeDestroy() {
@@ -1032,12 +1006,28 @@ export default {
       this.processing.progress = null;
       this.stopProcessingPolling();
 
-      // Log skipped queue duplicates to console
-      if (data.skipped_queue_duplicates && data.skipped_queue_duplicates.length > 0) {
-        console.log(`Skipped ${data.skipped_queue_duplicates.length} features that duplicate other items in import queue:`);
-        data.skipped_queue_duplicates.forEach(feature => {
-          console.log(`  - ${feature.name} (hash: ${feature.hash}) from "${feature.queue_item_filename}"`);
-        });
+      // Log skipped duplicates to console (silent, no user notification)
+      if (data.duplicates_skipped) {
+        const hashDups = data.duplicates_skipped.hash || [];
+        const coordDups = data.duplicates_skipped.coord || [];
+        
+        if (hashDups.length > 0) {
+          console.log(`Skipped ${hashDups.length} hash duplicate(s):`);
+          hashDups.forEach(feature => {
+            if (feature.queue_item_filename) {
+              console.log(`  - ${feature.name} (hash: ${feature.hash}) from "${feature.queue_item_filename}"`);
+            } else {
+              console.log(`  - ${feature.name} (hash: ${feature.hash})`);
+            }
+          });
+        }
+        
+        if (coordDups.length > 0) {
+          console.log(`Skipped ${coordDups.length} coordinate duplicate(s):`);
+          coordDups.forEach(feature => {
+            console.log(`  - ${feature.name} (hash: ${feature.hash})`);
+          });
+        }
       }
 
       // Check if we're waiting for import completion
@@ -1129,11 +1119,24 @@ export default {
       }
 
       if (data.duplicates) {
+        // New structure: {hash: [], coord: []}
         this.duplicates.features = data.duplicates;
         this.markDuplicateFeatures();
+        
+        // Default coordinate duplicates to skipped (auto-add to skippedFeatureIds)
+        if (data.duplicates.coord && Array.isArray(data.duplicates.coord)) {
+          data.duplicates.coord.forEach(featureHash => {
+            if (!this.skippedFeatureIds.has(featureHash)) {
+              this.skippedFeatureIds.add(featureHash);
+            }
+          });
+          // Update editCache to persist skipped state
+          this.editCache.skippedFeatureIds = new Set(this.skippedFeatureIds);
+        }
       }
 
-      if (data.queue_duplicates) {
+      // Handle queue duplicates (hash duplicates from other queue items)
+      if (data.queue_duplicates && Array.isArray(data.queue_duplicates)) {
         this.markQueueDuplicateFeatures(data.queue_duplicates);
       }
 
@@ -1411,7 +1414,7 @@ export default {
       // Base classes
       let classes = 'rounded-lg shadow-sm border p-6 relative';
 
-      if (item.isDuplicate) {
+      if (this.isItemDuplicate(item)) {
         classes += ' bg-gray-100 border-gray-300 opacity-75';
       } else if (this.isItemSkipped(item, index)) {
         classes += ' bg-gray-100 border-gray-300';
@@ -1436,6 +1439,18 @@ export default {
       }
       const featureId = this.getFeatureId(item, index);
       return this.skippedFeatureIds.has(featureId);
+    },
+    isItemDuplicate(item) {
+      return !!(item && (item.isDuplicate || item.isQueueDuplicate));
+    },
+    isItemDisabled(item, index) {
+      return this.isImported || 
+             this.isItemDuplicate(item) || 
+             this.isItemSkipped(item, index) || 
+             this.loading.importing;
+    },
+    isItemEditable(item, index) {
+      return !this.isItemDisabled(item, index);
     },
     toggleSkipItem(index) {
       const item = this.itemsForUser[index];
@@ -1810,18 +1825,51 @@ export default {
       // Reset all features to not be duplicates
       this.itemsForUser.forEach((item, index) => {
         item.isDuplicate = false;
+        item.isCoordDuplicate = false;
         item.duplicateInfo = null;
       });
 
-      // Mark duplicate features using the page_index from the new API format
-      // The backend now provides page_index which directly tells us which feature on the current page is a duplicate
-      this.duplicates.features.forEach(duplicateInfo => {
-        const pageIndex = duplicateInfo.page_index;
-        if (pageIndex >= 0 && pageIndex < this.itemsForUser.length) {
-          this.itemsForUser[pageIndex].isDuplicate = true;
-          this.itemsForUser[pageIndex].duplicateInfo = duplicateInfo;
-        }
+      // Handle new structure: {hash: [], coord: []}
+      const hashDuplicates = this.duplicates.features.hash || [];
+      const coordDuplicates = this.duplicates.features.coord || [];
+
+      // Mark hash duplicates (blocked, cannot be unskipped)
+      // The backend sends hashes that match the feature's properties.id
+      hashDuplicates.forEach(featureHash => {
+        this.itemsForUser.forEach((item, index) => {
+          const featureId = this.getFeatureId(item, index);
+          // Compare the hash from backend with the feature's ID
+          if (featureId === featureHash) {
+            item.isDuplicate = true;
+            item.duplicateInfo = { type: 'hash' };
+          }
+        });
       });
+
+      // Mark coordinate duplicates (default skipped, but can be unskipped)
+      coordDuplicates.forEach(featureHash => {
+        this.itemsForUser.forEach((item, index) => {
+          const featureId = this.getFeatureId(item, index);
+          // Compare the hash from backend with the feature's ID
+          if (featureId === featureHash) {
+            item.isCoordDuplicate = true;
+            item.duplicateInfo = { type: 'coord' };
+          }
+        });
+      });
+      
+      // Debug logging to help diagnose issues
+      if (hashDuplicates.length > 0 || coordDuplicates.length > 0) {
+        console.log('Duplicate marking:', {
+          hashDuplicates,
+          coordDuplicates,
+          currentFeatures: this.itemsForUser.map((item, idx) => ({
+            index: idx,
+            id: this.getFeatureId(item, idx),
+            name: item.properties?.name
+          }))
+        });
+      }
     },
     markQueueDuplicateFeatures(queueDuplicates) {
       // Reset all features to not be queue duplicates
@@ -1917,7 +1965,7 @@ export default {
       // Apply to current page items
       this.itemsForUser.forEach((item, index) => {
         // Skip duplicates and skipped items
-        if (item.isDuplicate || this.isItemSkipped(item, index)) {
+        if (this.isItemDuplicate(item) || this.isItemSkipped(item, index)) {
           return;
         }
 
@@ -1983,7 +2031,7 @@ export default {
               const globalIndex = (pageNum - 1) * this.pagination.pageSize + index;
               featureId = `index_${globalIndex}`;
             }
-            if (item.isDuplicate || this.skippedFeatureIds.has(featureId)) {
+            if (this.isItemDuplicate(item) || this.skippedFeatureIds.has(featureId)) {
               return;
             }
 
@@ -2301,6 +2349,32 @@ export default {
         }, 5000);
       });
     },
+    waitForItems() {
+      return new Promise((resolve) => {
+        if (this.itemsForUser && this.itemsForUser.length > 0) {
+          // Wait a bit more for DOM to update
+          this.$nextTick(() => {
+            setTimeout(() => resolve(), 200);
+          });
+          return;
+        }
+
+        const checkInterval = setInterval(() => {
+          if (this.itemsForUser && this.itemsForUser.length > 0) {
+            clearInterval(checkInterval);
+            this.$nextTick(() => {
+              setTimeout(() => resolve(), 200);
+            });
+          }
+        }, 50);
+
+        // Timeout after 5 seconds
+        setTimeout(() => {
+          clearInterval(checkInterval);
+          resolve();
+        }, 5000);
+      });
+    },
     scrollToFeature(globalIndex) {
       // Find the feature element by its data-feature-index attribute
       const featureElement = document.querySelector(`[data-feature-index="${globalIndex}"]`);
@@ -2355,11 +2429,13 @@ export default {
     await this.fetchUserTags();
 
     // Check for featureHash query parameter to scroll to a specific feature
+    // This is handled by the route watcher, but we also check here for initial mount
     if (this.$route.query.featureHash) {
       this.$nextTick(() => {
-        // Wait for page data to load first
         this.waitForPageLoad().then(() => {
-          this.scrollToFeatureByHash(this.$route.query.featureHash);
+          this.waitForItems().then(() => {
+            this.scrollToFeatureByHash(this.$route.query.featureHash);
+          });
         });
       });
     }

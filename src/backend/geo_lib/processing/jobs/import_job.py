@@ -142,8 +142,9 @@ class ImportJob(BaseJob):
         )
 
         # Process features using shared utility
-        features_to_create, skipped_queue_duplicates = process_features_for_import(
-            import_item, user_id, import_custom_icons, features_to_process
+        skipped_feature_ids_set = set(skipped_feature_ids) if skipped_feature_ids else set()
+        features_to_create, skipped_duplicates = process_features_for_import(
+            import_item, user_id, import_custom_icons, features_to_process, skipped_feature_ids_set
         )
 
         # Update progress
@@ -185,14 +186,15 @@ class ImportJob(BaseJob):
             )
 
             # Broadcast completion event to WebSocket
+            # Convert Pydantic model to dict for JSON serialization
+            duplicates_skipped_dict = skipped_duplicates.model_dump(mode='json') if skipped_duplicates else {'hash': [], 'coord': []}
             self._broadcast_to_process_status_module(
                 user_id, item_id, 'item_completed',
                 {
                     'message': success_msg,
                     'imported_count': total_imported,
                     'skipped_count': skipped_count,
-                    'duplicates_skipped': duplicates_skipped,
-                    'skipped_queue_duplicates': skipped_queue_duplicates
+                    'duplicates_skipped': duplicates_skipped_dict
                 }
             )
         else:
