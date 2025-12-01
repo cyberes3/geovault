@@ -574,13 +574,29 @@ class ProcessJob(BaseJob):
                         processing_log.add("Processing cancelled after internal duplicate detection", "ProcessJob", DatabaseLogLevel.WARNING)
                         return import_queue.id
 
-                    # Then check for coordinate duplicates against existing features
-                    processing_log.add("Checking for coordinate duplicates against existing features in your library", "ProcessJob", DatabaseLogLevel.INFO)
+                    # Then check for coordinate duplicates against existing features and queue items
+                    processing_log.add("Checking for coordinate duplicates against existing features in your library and other items in your import queue", "ProcessJob", DatabaseLogLevel.INFO)
                     duplicate_detection_start = time.time()
-                    unique_features, duplicate_features, duplicate_log = find_coordinate_duplicates(unique_internal_features, user_id)
+                    unique_features, duplicate_features, duplicate_log = find_coordinate_duplicates(
+                        unique_internal_features, 
+                        user_id,
+                        exclude_queue_id=import_queue.id,
+                        exclude_timestamp=import_queue.timestamp
+                    )
                     duplicate_detection_duration = time.time() - duplicate_detection_start
                     processing_log.extend(duplicate_log)
                     processing_log.add_timing("Duplicate detection", duplicate_detection_duration, "ProcessJob")
+
+                    # Filter out coordinate duplicates that are also hash duplicates
+                    # Hash duplicates take precedence - if a feature is both, only mark as hash duplicate
+                    from geo_lib.processing.duplicate_detection import filter_hash_duplicates_from_coord_duplicates
+                    
+                    duplicate_features = filter_hash_duplicates_from_coord_duplicates(
+                        duplicate_features,
+                        user_id,
+                        exclude_queue_id=import_queue.id,
+                        exclude_timestamp=import_queue.timestamp
+                    )
 
                     # Check for cancellation after duplicate detection
                     job = self.status_tracker.get_job(job_id)
@@ -672,6 +688,16 @@ class ProcessJob(BaseJob):
                     import_queue.geojson_hash = geojson_hash
                     import_queue.geofeatures = convert_features_to_pydantic(processed_features)
                     import_queue.duplicate_features = convert_features_to_pydantic(duplicate_features)
+                    
+                    # Auto-skip coordinate duplicates by adding their feature IDs to skipped_feature_ids
+                    from geo_lib.processing.duplicate_detection import get_skipped_feature_ids_from_duplicates
+                    
+                    skipped_feature_ids = get_skipped_feature_ids_from_duplicates(
+                        duplicate_features,
+                        import_queue.skipped_feature_ids
+                    )
+                    
+                    import_queue.skipped_feature_ids = list(skipped_feature_ids)
                     import_queue.save()
                 # Advisory lock released here
 

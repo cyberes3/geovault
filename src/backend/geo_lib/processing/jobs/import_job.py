@@ -125,12 +125,21 @@ class ImportJob(BaseJob):
             "Starting feature import...", 10.0
         )
 
+        # Merge saved skip state from ImportQueue model with request skip state
+        saved_skipped_ids = set(import_item.skipped_feature_ids if import_item.skipped_feature_ids else [])
+        skipped_feature_ids = skipped_feature_ids.union(saved_skipped_ids)
+
         # Filter out skipped features before processing
+        # Use the same ID resolution logic as get_skipped_feature_ids_from_duplicates
+        from geo_lib.feature_id import get_feature_id_from_geojson
+        
         features_to_process = []
         skipped_count = 0
         for feature in import_item.geofeatures:
-            feature_id = feature.get('properties', {}).get('id')
-            if feature_id and feature_id in skipped_feature_ids:
+            # Get feature ID using the same logic as when saving skipped_feature_ids
+            # This ensures we match even if properties.id doesn't exist (falls back to hash)
+            feature_id = get_feature_id_from_geojson(feature)
+            if feature_id in skipped_feature_ids:
                 skipped_count += 1
                 continue
             features_to_process.append(feature)

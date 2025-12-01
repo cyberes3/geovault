@@ -118,8 +118,8 @@
               <ExclamationTriangleIcon class="h-8 w-8 text-yellow-400" />
             </div>
             <div class="ml-3">
-              <p class="text-sm font-medium text-yellow-800">Exact Duplicates</p>
-              <p class="text-2xl font-bold text-yellow-900">{{ duplicates.indices.length }}</p>
+              <p class="text-sm font-medium text-yellow-800">Duplicates</p>
+              <p class="text-2xl font-bold text-yellow-900">{{ totalDuplicateCount }}</p>
             </div>
           </div>
         </div>
@@ -127,7 +127,7 @@
     </div>
 
     <!-- Loading State for Initial Page Load and Post-Processing -->
-    <Loader 
+    <Loader
       v-if="(originalFilename == null && !loading.page) || (processing.active && processing.progress === null)"
       :message="loadingMessage"
     />
@@ -205,7 +205,7 @@
     <!-- Import Controls (Top) -->
     <ImportControls
         :current-page="pagination.currentPage"
-        :duplicate-count="duplicates.indices.length"
+        :duplicate-count="totalDuplicateCount"
         :duplicate-original-filename="duplicateOriginalFilename"
         :duplicate-status="duplicateStatus"
         :error-message="msg"
@@ -441,13 +441,15 @@
           </div>
         </div>
 
+        <!-- Duplicate Warnings - outside opacity div so they're always fully visible -->
+        <div class="relative z-10">
+          <DuplicateWarning type="hash" :item="item" />
+          <DuplicateWarning type="coord" :item="item" />
+          <DuplicateWarning type="queue" :item="item" />
+        </div>
+
         <!-- Content area - can be greyed out for skipped items -->
         <div :class="isItemSkipped(item, index) && !isItemDuplicate(item) ? 'opacity-50' : ''">
-        <!-- Duplicate Warnings -->
-        <DuplicateWarning type="hash" :item="item" />
-        <DuplicateWarning type="coord" :item="item" />
-        <DuplicateWarning type="queue" :item="item" />
-
         <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
           <!-- Name Field -->
           <div>
@@ -544,7 +546,7 @@
     <ImportControls
         v-if="!loading.page"
         :current-page="pagination.currentPage"
-        :duplicate-count="duplicates.indices.length"
+        :duplicate-count="totalDuplicateCount"
         :duplicate-original-filename="duplicateOriginalFilename"
         :duplicate-status="duplicateStatus"
         :goto-page-input="pagination.gotoInput"
@@ -653,7 +655,18 @@ export default {
     },
 
     importableCount() {
-      return this.pagination.totalFeatures - this.duplicates.indices.length - this.skippedFeatureIds.size;
+      return this.pagination.totalFeatures - this.totalDuplicateCount - this.skippedFeatureIds.size;
+    },
+
+    totalDuplicateCount() {
+      // Count all duplicates (hash, coordinate, and queue hash duplicates)
+      const hashDups = this.duplicates.features?.hash || [];
+      const coordDups = this.duplicates.features?.coord || [];
+      // Queue duplicates are hash duplicates from other queue items
+      const queueDupIds = (this.duplicates.queue || []).map(q => q.hash).filter(Boolean);
+      // Use a Set to avoid counting the same feature twice if it's both hash and coord duplicate
+      const allDuplicateIds = new Set([...hashDups, ...coordDups, ...queueDupIds]);
+      return allDuplicateIds.size;
     },
 
     showDebugLogs() {
@@ -672,7 +685,7 @@ export default {
 
     loadingMessage() {
       if (this.statusMessage) {
-        return this.statusDetail 
+        return this.statusDetail
           ? `${this.statusMessage} ${this.statusDetail}`
           : this.statusMessage;
       }
@@ -757,7 +770,8 @@ export default {
       // Consolidated: Duplicates
       duplicates: {
         features: [],
-        indices: []
+        indices: [],
+        queue: []  // Store queue duplicates for counting
       },
 
       // Consolidated: Edit cache
@@ -1010,7 +1024,7 @@ export default {
       if (data.duplicates_skipped) {
         const hashDups = data.duplicates_skipped.hash || [];
         const coordDups = data.duplicates_skipped.coord || [];
-        
+
         if (hashDups.length > 0) {
           console.log(`Skipped ${hashDups.length} hash duplicate(s):`);
           hashDups.forEach(feature => {
@@ -1021,7 +1035,7 @@ export default {
             }
           });
         }
-        
+
         if (coordDups.length > 0) {
           console.log(`Skipped ${coordDups.length} coordinate duplicate(s):`);
           coordDups.forEach(feature => {
@@ -1035,15 +1049,15 @@ export default {
         this.waitingForImportCompletion = false;
         this.lockButtons = false;
         this.loading.importing = false;
-        
+
         // Refresh the import queue
         this.$store.dispatch('refreshImportQueue');
-        
+
         // Remove the beforeunload handler before redirecting
         if (this.beforeUnloadHandler) {
           window.removeEventListener('beforeunload', this.beforeUnloadHandler);
         }
-        
+
         // Redirect to import page after successful import
         this.loading.redirecting = true;
         window.alert('Import successful: ' + (data.message || 'Import completed successfully'));
@@ -1063,19 +1077,19 @@ export default {
       this.processing.message = 'Processing failed';
       this.processing.progress = null;
       this.stopProcessingPolling();
-      
+
       // Check if we're waiting for import completion
       if (this.waitingForImportCompletion) {
         this.waitingForImportCompletion = false;
         this.lockButtons = false;
         this.loading.importing = false;
-        
+
         const errorMessage = data.message || data.error_message || PROCESSING_MESSAGES.PROCESSING_FAILED_DEFAULT;
         this.msg = 'Import failed: ' + errorMessage;
         window.alert(this.msg);
         return;
       }
-      
+
       this.msg = data.error_message || PROCESSING_MESSAGES.PROCESSING_FAILED_DEFAULT;
     },
 
@@ -1118,25 +1132,43 @@ export default {
         this.duplicates.indices = data.pagination.duplicate_indices || [];
       }
 
+      // Restore skipped feature IDs from backend
+      if (data.skipped_feature_ids && Array.isArray(data.skipped_feature_ids)) {
+        data.skipped_feature_ids.forEach(featureId => {
+          this.skippedFeatureIds.add(featureId);
+        });
+        // Update editCache to persist skipped state
+        this.editCache.skippedFeatureIds = new Set(this.skippedFeatureIds);
+      }
+
       if (data.duplicates) {
         // New structure: {hash: [], coord: []}
         this.duplicates.features = data.duplicates;
         this.markDuplicateFeatures();
-        
+
         // Default coordinate duplicates to skipped (auto-add to skippedFeatureIds)
+        // Only add if not already in skippedFeatureIds (to avoid overwriting user's un-skip decisions)
         if (data.duplicates.coord && Array.isArray(data.duplicates.coord)) {
+          let hasNewSkips = false;
           data.duplicates.coord.forEach(featureHash => {
             if (!this.skippedFeatureIds.has(featureHash)) {
               this.skippedFeatureIds.add(featureHash);
+              hasNewSkips = true;
             }
           });
-          // Update editCache to persist skipped state
-          this.editCache.skippedFeatureIds = new Set(this.skippedFeatureIds);
+
+          if (hasNewSkips) {
+            // Update editCache to persist skipped state
+            this.editCache.skippedFeatureIds = new Set(this.skippedFeatureIds);
+            // Save to backend if new coordinate duplicates were auto-skipped
+            this.saveSkipStateToBackend();
+          }
         }
       }
 
       // Handle queue duplicates (hash duplicates from other queue items)
       if (data.queue_duplicates && Array.isArray(data.queue_duplicates)) {
+        this.duplicates.queue = data.queue_duplicates;
         this.markQueueDuplicateFeatures(data.queue_duplicates);
       }
 
@@ -1161,7 +1193,6 @@ export default {
 
     handleItemDeleted(data) {
       // Show notification and redirect
-      this.$toast.error('This import item has been deleted');
       this.loading.redirecting = true;
       this.$router.push('/import');
     },
@@ -1444,15 +1475,15 @@ export default {
       return !!(item && (item.isDuplicate || item.isQueueDuplicate));
     },
     isItemDisabled(item, index) {
-      return this.isImported || 
-             this.isItemDuplicate(item) || 
-             this.isItemSkipped(item, index) || 
+      return this.isImported ||
+             this.isItemDuplicate(item) ||
+             this.isItemSkipped(item, index) ||
              this.loading.importing;
     },
     isItemEditable(item, index) {
       return !this.isItemDisabled(item, index);
     },
-    toggleSkipItem(index) {
+    async toggleSkipItem(index) {
       const item = this.itemsForUser[index];
       if (!item) {
         console.warn('toggleSkipItem: item not found at index', index);
@@ -1473,8 +1504,37 @@ export default {
       // Update editCache to persist skipped state
       this.editCache.skippedFeatureIds = new Set(this.skippedFeatureIds);
 
+      // Save skip state to backend
+      await this.saveSkipStateToBackend();
+
       // Force Vue to detect the change since Sets are not reactive
       this.$forceUpdate();
+    },
+    async saveSkipStateToBackend() {
+      if (!this.currentId) {
+        return;
+      }
+
+      try {
+        const csrftoken = getCookie('csrftoken');
+        // Convert skippedFeatureIds Set to array, filtering out index-based IDs (temp IDs)
+        const skippedFeatureIdsArray = Array.from(this.skippedFeatureIds).filter(id => !id.startsWith('index_'));
+
+        const response = await axios.put(`/api/item/import/skip-state/${this.currentId}`, {
+          skipped_feature_ids: skippedFeatureIdsArray
+        }, {
+          headers: {
+            'X-CSRFToken': csrftoken
+          }
+        });
+
+        if (response.status !== 200) {
+          console.error('Failed to save skip state:', response.data);
+        }
+      } catch (error) {
+        console.error('Error saving skip state:', error);
+        // Don't show error to user - skip state is saved locally in editCache
+      }
     },
     // Note: MultiPoint and MultiPolygon features may be displayed during import preview,
     // but KML's MultiGeometry converts to GeometryCollection (not MultiPoint/MultiPolygon).
@@ -1791,18 +1851,15 @@ export default {
         });
 
         if (response.status === 200) {
-          // Show success message
-          this.$toast.success(`Duplicate recheck completed. Found ${response.data.duplicate_count} duplicate(s).`);
-
           // Refresh the page data via WebSocket to get updated duplicates and logs
           this.sendWebSocketMessage('refresh', {});
         } else {
           this.msg = 'Error rechecking duplicates: ' + response.data.msg;
-          this.$toast.error(this.msg);
+          window.alert(this.msg);
         }
       } catch (error) {
         this.msg = 'Error rechecking duplicates: ' + (error.response?.data?.msg || error.message);
-        this.$toast.error(this.msg);
+        window.alert(this.msg);
       } finally {
         this.lockButtons = false;
         this.loading.recheckingDuplicates = false;
@@ -1857,7 +1914,7 @@ export default {
           }
         });
       });
-      
+
       // Debug logging to help diagnose issues
       if (hashDuplicates.length > 0 || coordDuplicates.length > 0) {
         console.log('Duplicate marking:', {
@@ -2395,10 +2452,10 @@ export default {
     },
     scrollToFeatureByHash(hash) {
       // Find feature with matching hash in current page
-      const featureIndex = this.itemsForUser.findIndex(item => 
+      const featureIndex = this.itemsForUser.findIndex(item =>
         item.properties && item.properties.id === hash
       );
-      
+
       if (featureIndex >= 0) {
         const globalIndex = (this.pagination.currentPage - 1) * this.pagination.pageSize + featureIndex;
         this.scrollToFeature(globalIndex);

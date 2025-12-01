@@ -8,6 +8,7 @@ import os
 import subprocess
 import tempfile
 import time
+import traceback
 from abc import ABC, abstractmethod
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from typing import Dict, Any, Tuple, Union, List, Optional
@@ -271,10 +272,10 @@ class BaseProcessor(ABC):
                     split_feature['properties']['id'] = feature_id
                     
                     processed_features.append(split_feature)
-                except Exception as e:
+                except Exception:
                     feature_name = split_feature.get('properties', {}).get('name', 'Unnamed')
                     feature_log.add(f"Failed to process feature '{feature_name}', skipping", 'Feature Processing', DatabaseLogLevel.WARNING)
-                    logger.error(f"Feature processing error for '{feature_name}': {str(e)}")
+                    logger.error(f"Feature processing error for '{feature_name}': {traceback.format_exc()}")
                     skipped_count += 1
             else:
                 feature_log.add(f'Skipping unsupported geometry type: {split_feature["geometry"]["type"]}', 'Feature Processing', DatabaseLogLevel.WARNING)

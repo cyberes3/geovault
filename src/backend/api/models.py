@@ -19,6 +19,7 @@ class ImportQueue(django_models.Model):
     log_id = django_models.UUIDField(default=uuid.uuid4, unique=True, help_text="UUID to group related log entries", null=True)
     replacement = django_models.IntegerField(null=True, blank=True, help_text="ID of the existing feature being updated with this replacement upload")
     bulk_operations = django_models.JSONField(default=dict, null=True, blank=True, help_text="Bulk operations (tags, styling) to apply during import")
+    skipped_feature_ids = django_models.JSONField(default=list, help_text="List of feature IDs that are skipped by the user")
     timestamp = django_models.DateTimeField(auto_now_add=True)
 
     class Meta:

@@ -74,7 +74,7 @@ export default {
         case 'hash':
           return 'This feature is identical to an existing feature in your feature store. Hash duplicates cannot be imported and are automatically skipped.'
         case 'coord':
-          return 'This feature has the same coordinates as an existing feature in your feature store. It is skipped by default, but you can restore it if needed.'
+          return 'This feature has the same coordinates as an existing feature in your feature store or another item in your import queue. It is skipped by default, but you can restore it if needed.'
         case 'queue':
           return 'This feature is identical to one in another item in your import queue and will be automatically skipped during import.'
         default:

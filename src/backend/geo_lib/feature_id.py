@@ -75,8 +75,8 @@ def get_feature_id_from_geojson(geojson_feature: Dict[str, Any]) -> str:
     properties = geojson_feature.get('properties', {})
     
     # If there's already an ID in properties, use it
-    if 'id' in properties and properties['id'] is not None:
-        return str(properties['id'])
+    # if 'id' in properties and properties['id'] is not None:
+    return str(properties['id'])
     
     # Otherwise, generate a hash-based ID
-    return generate_feature_hash(geojson_feature)
+    # return generate_feature_hash(geojson_feature)

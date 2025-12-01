@@ -216,6 +216,13 @@ class ImportToFeaturestorePayload(BaseModel):
     skipped_feature_ids: Optional[List[str]] = Field(default_factory=list, description="Feature IDs to skip during import")
 
 
+class SkipStatePayload(BaseModel):
+    """Pydantic model for save_skip_state request body."""
+    model_config = ConfigDict(extra='forbid')
+
+    skipped_feature_ids: List[str] = Field(default_factory=list, description="List of feature IDs that are skipped")
+
+
 # ============================================================================
 # Validation Functions
 # ============================================================================

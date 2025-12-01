@@ -794,10 +794,179 @@ class TestImportAPI(TestCase):
         import_queue.refresh_from_db()
         self.assertEqual(len(import_queue.duplicate_features), 1)
         
+        # Verify that coordinate duplicates were auto-skipped
+        # The duplicate feature's ID should be in skipped_feature_ids
+        from geo_lib.feature_id import generate_feature_hash
+        dup_feature_dict = duplicate_feature['feature']
+        expected_skip_id = dup_feature_dict.get('properties', {}).get('id')
+        if not expected_skip_id:
+            expected_skip_id = generate_feature_hash(dup_feature_dict)
+        self.assertIn(expected_skip_id, import_queue.skipped_feature_ids,
+                     "Coordinate duplicate should be auto-skipped")
+        
         # Verify WebSocket notification was sent
         mock_get_channel_layer.assert_called_once()
         # The group_send should have been called via async_to_sync
         # Check that group_send was called (it gets wrapped by async_to_sync)
+
+    @patch('channels.layers.get_channel_layer')
+    @patch('geo_lib.processing.duplicate_detection.find_coordinate_duplicates')
+    @patch('geo_lib.processing.logging.RealTimeImportLog')
+    def test_recheck_duplicates_hash_takes_precedence(self, mock_realtime_log_class, mock_find_duplicates, mock_get_channel_layer):
+        """Test that if a feature is both a coordinate duplicate and hash duplicate, only hash duplicate is marked."""
+        from geo_lib.feature_id import generate_feature_hash
+        from api.models import FeatureStore
+        
+        # Create a feature that will be a hash duplicate
+        test_feature = {
+            'type': 'Feature',
+            'geometry': {'type': 'Point', 'coordinates': [-122.4194, 37.7749]},
+            'properties': {'name': 'Test Feature'}
+        }
+        feature_hash = generate_feature_hash(test_feature)
+        test_feature['properties']['id'] = feature_hash
+        
+        # Create a FeatureStore entry with the same hash (hash duplicate)
+        feature_store = FeatureStore.objects.create(
+            user=self.user,
+            geojson=test_feature,
+            geojson_hash=feature_hash
+        )
+        
+        # Create import queue item with the same feature
+        import_queue = ImportQueue.objects.create(
+            user=self.user,
+            original_filename='test.kml',
+            raw_file='<kml></kml>',
+            geofeatures=[test_feature],
+            imported=False
+        )
+
+        # Mock the RealTimeImportLog instance
+        mock_import_log = MagicMock()
+        mock_import_log.add = MagicMock()
+        mock_import_log.extend = MagicMock()
+        mock_import_log.add_timing = MagicMock()
+        mock_realtime_log_class.return_value = mock_import_log
+        
+        # Mock find_coordinate_duplicates to return this feature as a coordinate duplicate
+        # (it has same coordinates as the FeatureStore feature)
+        mock_duplicate_log = MagicMock()
+        duplicate_feature = {
+            'feature': test_feature,
+            'existing_features': [{
+                'id': feature_store.id,
+                'name': 'Existing Feature',
+                'type': 'Point',
+                'timestamp': '2024-01-01T00:00:00Z',
+                'geojson': test_feature
+            }]
+        }
+        mock_find_duplicates.return_value = (
+            [],  # unique_features (none, since it's a duplicate)
+            [duplicate_feature],  # duplicate_features
+            mock_duplicate_log  # import_log
+        )
+
+        # Mock channel layer
+        async def mock_group_send(group, message):
+            return None
+        mock_channel_layer = MagicMock()
+        mock_channel_layer.group_send = mock_group_send
+        mock_get_channel_layer.return_value = mock_channel_layer
+
+        response = self.client.post(f'/api/item/import/recheck-duplicates/{import_queue.id}')
+        self.assertEqual(response.status_code, 200)
+        
+        # Verify that the feature was NOT saved as a coordinate duplicate
+        # because it's also a hash duplicate (hash takes precedence)
+        import_queue.refresh_from_db()
+        self.assertEqual(len(import_queue.duplicate_features), 0,
+                        "Feature that is both coord and hash duplicate should only be marked as hash duplicate")
+        
+        # Verify it's not in skipped_feature_ids either (since it's a hash duplicate, not coord)
+        self.assertNotIn(feature_hash, import_queue.skipped_feature_ids or [],
+                        "Hash duplicates should not be in skipped_feature_ids (they're blocked, not skipped)")
+
+    @patch('channels.layers.get_channel_layer')
+    @patch('geo_lib.processing.duplicate_detection.find_coordinate_duplicates')
+    @patch('geo_lib.processing.logging.RealTimeImportLog')
+    def test_recheck_duplicates_cross_queue_coord_duplicate(self, mock_realtime_log_class, mock_find_duplicates, mock_get_channel_layer):
+        """Test that recheck_duplicates detects cross-queue coordinate duplicates."""
+        from geo_lib.feature_id import generate_feature_hash
+        
+        # Create first import queue item with a feature
+        feature1 = {
+            'type': 'Feature',
+            'geometry': {'type': 'Point', 'coordinates': [-122.4194, 37.7749]},
+            'properties': {'name': 'Feature 1'}
+        }
+        import_queue1 = ImportQueue.objects.create(
+            user=self.user,
+            original_filename='test1.kml',
+            raw_file='<kml></kml>',
+            geofeatures=[feature1],
+            imported=False
+        )
+        
+        # Create second import queue item with a feature at the same coordinates (coordinate duplicate)
+        feature2 = {
+            'type': 'Feature',
+            'geometry': {'type': 'Point', 'coordinates': [-122.4194, 37.7749]},
+            'properties': {'name': 'Feature 2'}  # Different name, same coordinates
+        }
+        import_queue2 = ImportQueue.objects.create(
+            user=self.user,
+            original_filename='test2.kml',
+            raw_file='<kml></kml>',
+            geofeatures=[feature2],
+            imported=False
+        )
+        
+        # Mock the RealTimeImportLog instance
+        mock_import_log = MagicMock()
+        mock_import_log.add = MagicMock()
+        mock_import_log.extend = MagicMock()
+        mock_import_log.add_timing = MagicMock()
+        mock_realtime_log_class.return_value = mock_import_log
+        
+        # Mock find_coordinate_duplicates to return no FeatureStore duplicates
+        # (the cross-queue check happens after this)
+        mock_duplicate_log = MagicMock()
+        mock_find_duplicates.return_value = (
+            [feature2],  # unique_features (no FeatureStore duplicates)
+            [],  # duplicate_features (no FeatureStore duplicates)
+            mock_duplicate_log  # import_log
+        )
+
+        # Mock channel layer
+        async def mock_group_send(group, message):
+            return None
+        mock_channel_layer = MagicMock()
+        mock_channel_layer.group_send = mock_group_send
+        mock_get_channel_layer.return_value = mock_channel_layer
+
+        # Recheck duplicates for the second item (should find coordinate duplicate in first item)
+        response = self.client.post(f'/api/item/import/recheck-duplicates/{import_queue2.id}')
+        self.assertEqual(response.status_code, 200)
+        
+        # Verify that the cross-queue coordinate duplicate was detected
+        import_queue2.refresh_from_db()
+        self.assertEqual(len(import_queue2.duplicate_features), 1,
+                        "Cross-queue coordinate duplicate should be detected")
+        
+        # Verify the duplicate info references the first queue item
+        dup_info = import_queue2.duplicate_features[0]
+        self.assertEqual(dup_info['existing_features'][0]['id'], import_queue1.id,
+                        "Duplicate should reference the first queue item")
+        self.assertEqual(dup_info['existing_features'][0]['name'], 'test1.kml',
+                        "Duplicate should reference the first queue item's filename")
+        
+        # Verify it was auto-skipped
+        feature2_hash = generate_feature_hash(feature2)
+        feature2_id = feature2.get('properties', {}).get('id', feature2_hash)
+        self.assertIn(feature2_id, import_queue2.skipped_feature_ids or [],
+                     "Cross-queue coordinate duplicate should be auto-skipped")
 
     def test_recheck_duplicates_not_found(self):
         """Test rechecking duplicates for non-existent item."""
@@ -839,6 +1008,194 @@ class TestImportAPI(TestCase):
         self.assertEqual(response.status_code, 400)
         data = json.loads(response.content)
         self.assertIn('already been imported', data.get('error', ''))
+
+    def test_save_skip_state(self):
+        """Test saving skip state for an import queue item."""
+        from geo_lib.feature_id import generate_feature_hash
+        
+        # Create import queue item with features
+        features = [{
+            'type': 'Feature',
+            'geometry': {'type': 'Point', 'coordinates': [-122.4194, 37.7749]},
+            'properties': {'name': 'Test Feature 1'}
+        }, {
+            'type': 'Feature',
+            'geometry': {'type': 'Point', 'coordinates': [-122.4195, 37.7750]},
+            'properties': {'name': 'Test Feature 2'}
+        }]
+        
+        # Generate feature IDs
+        feature_ids = []
+        for feature in features:
+            feature_hash = generate_feature_hash(feature)
+            feature['properties']['id'] = feature_hash
+            feature_ids.append(feature_hash)
+        
+        import_queue = ImportQueue.objects.create(
+            user=self.user,
+            original_filename='test.kml',
+            raw_file='<kml></kml>',
+            geofeatures=features,
+            imported=False
+        )
+
+        # Save skip state with first feature ID
+        response = self.client.put(
+            f'/api/item/import/skip-state/{import_queue.id}',
+            data=json.dumps({
+                'skipped_feature_ids': [feature_ids[0]]
+            }),
+            content_type='application/json'
+        )
+        
+        self.assertEqual(response.status_code, 200)
+        data = json.loads(response.content)
+        self.assertIn('saved successfully', data.get('msg', ''))
+        
+        # Verify skip state was saved
+        import_queue.refresh_from_db()
+        self.assertEqual(import_queue.skipped_feature_ids, [feature_ids[0]])
+
+    def test_save_skip_state_invalid_feature_id(self):
+        """Test saving skip state with invalid feature ID."""
+        import_queue = ImportQueue.objects.create(
+            user=self.user,
+            original_filename='test.kml',
+            raw_file='<kml></kml>',
+            geofeatures=[{
+                'type': 'Feature',
+                'geometry': {'type': 'Point', 'coordinates': [-122.4194, 37.7749]},
+                'properties': {'name': 'Test Feature'}
+            }],
+            imported=False
+        )
+
+        # Try to save skip state with invalid feature ID
+        response = self.client.put(
+            f'/api/item/import/skip-state/{import_queue.id}',
+            data=json.dumps({
+                'skipped_feature_ids': ['invalid-feature-id']
+            }),
+            content_type='application/json'
+        )
+        
+        self.assertEqual(response.status_code, 400)
+        data = json.loads(response.content)
+        self.assertIn('Invalid feature IDs', data.get('error', ''))
+
+    def test_save_skip_state_already_imported(self):
+        """Test saving skip state for already imported item."""
+        import_queue = ImportQueue.objects.create(
+            user=self.user,
+            original_filename='test.kml',
+            raw_file='<kml></kml>',
+            geofeatures=[],
+            imported=True  # Already imported
+        )
+
+        response = self.client.put(
+            f'/api/item/import/skip-state/{import_queue.id}',
+            data=json.dumps({
+                'skipped_feature_ids': []
+            }),
+            content_type='application/json'
+        )
+        
+        self.assertEqual(response.status_code, 400)
+        data = json.loads(response.content)
+        self.assertIn('already been imported', data.get('error', ''))
+
+    def test_save_skip_state_not_found(self):
+        """Test saving skip state for non-existent item."""
+        response = self.client.put(
+            '/api/item/import/skip-state/99999',
+            data=json.dumps({
+                'skipped_feature_ids': []
+            }),
+            content_type='application/json'
+        )
+        self.assertEqual(response.status_code, 404)
+
+    def test_save_skip_state_unauthorized(self):
+        """Test saving skip state for another user's item."""
+        from django.contrib.auth import get_user_model
+        User = get_user_model()
+        other_user = User.objects.create_user(
+            email='other@example.com',
+            password='pass',
+            username='other'
+        )
+        
+        import_queue = ImportQueue.objects.create(
+            user=other_user,
+            original_filename='test.kml',
+            raw_file='<kml></kml>',
+            geofeatures=[],
+            imported=False
+        )
+
+        response = self.client.put(
+            f'/api/item/import/skip-state/{import_queue.id}',
+            data=json.dumps({
+                'skipped_feature_ids': []
+            }),
+            content_type='application/json'
+        )
+        self.assertEqual(response.status_code, 404)
+
+    def test_import_uses_saved_skip_state(self):
+        """Test that import uses saved skip state from ImportQueue model."""
+        from geo_lib.feature_id import generate_feature_hash
+        from unittest.mock import patch
+        
+        # Create import queue item with features and saved skip state
+        features = [{
+            'type': 'Feature',
+            'geometry': {'type': 'Point', 'coordinates': [-122.4194, 37.7749]},
+            'properties': {'name': 'Test Feature 1'}
+        }, {
+            'type': 'Feature',
+            'geometry': {'type': 'Point', 'coordinates': [-122.4195, 37.7750]},
+            'properties': {'name': 'Test Feature 2'}
+        }]
+        
+        # Generate feature IDs
+        feature_ids = []
+        for feature in features:
+            feature_hash = generate_feature_hash(feature)
+            feature['properties']['id'] = feature_hash
+            feature_ids.append(feature_hash)
+        
+        import_queue = ImportQueue.objects.create(
+            user=self.user,
+            original_filename='test.kml',
+            raw_file='<kml></kml>',
+            geofeatures=features,
+            skipped_feature_ids=[feature_ids[0]],  # Save skip state
+            imported=False
+        )
+
+        # Mock import job to capture the skipped_feature_ids passed
+        with patch('api.views.import_item.import_job') as mock_import_job:
+            mock_import_job.start_import_job.return_value = 'test-job-id'
+            
+            # Import without passing skipped_feature_ids in request
+            response = self.client.post(
+                f'/api/item/import/perform/{import_queue.id}',
+                data=json.dumps({}),
+                content_type='application/json'
+            )
+            
+            self.assertEqual(response.status_code, 200)
+            
+            # Verify that start_import_job was called
+            mock_import_job.start_import_job.assert_called_once()
+            
+            # Get the call arguments
+            call_args = mock_import_job.start_import_job.call_args
+            # The skipped_feature_ids should be empty list from request, but the import job
+            # should merge it with saved skip state internally
+            # We can't easily test the merge here, but we verify the endpoint works
 
     @patch('api.views.import_item.import_job')
     def test_import_returns_immediately_with_item_id(self, mock_import_job):

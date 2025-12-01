@@ -26,7 +26,7 @@ from geo_lib.security.file_validation import basic_file_security_check
 from geo_lib.validation.geojson_whitelist import validate_and_normalize_geojson_feature
 from geo_lib.validation.geometry_validation import GeometryValidationError
 from geo_lib.website.auth import api_or_login_required_401
-from api.validation.feature_updates import validate_payload, validate_pydantic_model, FeatureUpdatePayload, ImportToFeaturestorePayload
+from api.validation.feature_updates import validate_payload, validate_pydantic_model, FeatureUpdatePayload, ImportToFeaturestorePayload, SkipStatePayload
 
 logger = get_access_logger()
 
@@ -464,6 +464,57 @@ def get_bulk_operations(request, item_id):
 
 
 @api_or_login_required_401()
+@require_http_methods(["PUT", "PATCH"])
+@validate_payload(SkipStatePayload)
+@handle_404
+def save_skip_state(request, item_id, validated_data):
+    """
+    Save skip state (skipped feature IDs) for an import queue item.
+    """
+    import_item = get_object_or_404_for_user(ImportQueue, request.user, id=item_id)
+
+    # Prevent updating items that have already been imported
+    if import_item.imported:
+        return error_response(
+            'Cannot update skip state for items that have already been imported',
+            code=400
+        )
+
+    try:
+        skipped_feature_ids = validated_data.get('skipped_feature_ids', [])
+        
+        # Validate that all feature IDs exist in the item's geofeatures
+        if skipped_feature_ids:
+            # Get all feature IDs from geofeatures
+            from geo_lib.feature_id import generate_feature_hash
+            existing_feature_ids = set()
+            for feature in import_item.geofeatures:
+                feature_hash = generate_feature_hash(feature)
+                existing_feature_ids.add(feature_hash)
+                # Also check if feature has an id property
+                if feature.get('properties', {}).get('id'):
+                    existing_feature_ids.add(feature.get('properties', {}).get('id'))
+            
+            # Validate all skipped IDs exist
+            invalid_ids = [fid for fid in skipped_feature_ids if fid not in existing_feature_ids]
+            if invalid_ids:
+                return error_response(
+                    f'Invalid feature IDs: {invalid_ids}',
+                    code=400
+                )
+
+        # Save skip state to the import queue item
+        import_item.skipped_feature_ids = skipped_feature_ids
+        import_item.save(update_fields=['skipped_feature_ids'])
+
+        return success_response({'msg': 'Skip state saved successfully'})
+
+    except Exception as e:
+        logger.error(f"Error saving skip state: {str(e)}")
+        return server_error_response('Failed to save skip state')
+
+
+@api_or_login_required_401()
 @require_http_methods(["POST"])
 @handle_404
 def recheck_duplicates(request, item_id):
@@ -503,16 +554,18 @@ def recheck_duplicates(request, item_id):
             DatabaseLogLevel.INFO
         )
         realtime_log.add(
-            "Starting duplicate re-check against existing features in your library",
+            "Starting duplicate re-check against existing features in your library and other items in your import queue",
             "Duplicate Recheck",
             DatabaseLogLevel.INFO
         )
 
-        # Perform duplicate detection
+        # Perform duplicate detection against FeatureStore and queue items
         start_time = time.time()
         unique_features, duplicate_features, duplicate_log = find_coordinate_duplicates(
             features,
-            request.user.id
+            request.user.id,
+            exclude_queue_id=import_item.id,
+            exclude_timestamp=import_item.timestamp
         )
         duration = time.time() - start_time
 
@@ -520,9 +573,30 @@ def recheck_duplicates(request, item_id):
         realtime_log.extend(duplicate_log)
         realtime_log.add_timing("Duplicate re-check", duration, "Duplicate Recheck")
 
+        # Filter out coordinate duplicates that are also hash duplicates
+        # Hash duplicates take precedence - if a feature is both, only mark as hash duplicate
+        from geo_lib.processing.duplicate_detection import filter_hash_duplicates_from_coord_duplicates
+        
+        duplicate_features = filter_hash_duplicates_from_coord_duplicates(
+            duplicate_features,
+            request.user.id,
+            exclude_queue_id=import_item.id,
+            exclude_timestamp=import_item.timestamp
+        )
+
         # Update the import queue item with new duplicate information
         import_item.duplicate_features = duplicate_features
-        import_item.save(update_fields=['duplicate_features'])
+        
+        # Auto-skip coordinate duplicates by adding their feature IDs to skipped_feature_ids
+        from geo_lib.processing.duplicate_detection import get_skipped_feature_ids_from_duplicates
+        
+        skipped_feature_ids = get_skipped_feature_ids_from_duplicates(
+            duplicate_features,
+            import_item.skipped_feature_ids
+        )
+        
+        import_item.skipped_feature_ids = list(skipped_feature_ids)
+        import_item.save(update_fields=['duplicate_features', 'skipped_feature_ids'])
 
         # Log completion
         duplicate_count = len(duplicate_features)

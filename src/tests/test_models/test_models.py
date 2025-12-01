@@ -160,6 +160,27 @@ class TestImportQueue(TestCase):
         )
         self.assertEqual(import_queue.bulk_operations, bulk_ops)
 
+    def test_import_queue_skipped_feature_ids(self):
+        """Test storing skipped feature IDs."""
+        skipped_ids = ['hash1', 'hash2', 'hash3']
+        import_queue = ImportQueue.objects.create(
+            user=self.user,
+            original_filename='test.kml',
+            raw_file='<kml></kml>',
+            geofeatures=[],
+            skipped_feature_ids=skipped_ids
+        )
+        self.assertEqual(import_queue.skipped_feature_ids, skipped_ids)
+        
+        # Test default is empty list
+        import_queue2 = ImportQueue.objects.create(
+            user=self.user,
+            original_filename='test2.kml',
+            raw_file='<kml></kml>',
+            geofeatures=[]
+        )
+        self.assertEqual(import_queue2.skipped_feature_ids, [])
+
 
 class TestCollection(TestCase):
     """Test Collection model."""

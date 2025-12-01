@@ -389,6 +389,40 @@ class TestE2EImport(TransactionTestCase):
         self.assertLess(final_count, initial_count * 2, 
                        "Duplicates should have been detected and not imported twice")
 
+    def test_e2e_coordinate_duplicate_auto_skip(self):
+        """Test that coordinate duplicates are automatically skipped by default."""
+        # First, import some features
+        kml_content = self._load_test_file('Test Items.kml')
+        process_job_id, item_id, process_status = self._upload_file(kml_content, 'Test Items.kml')
+        self.assertEqual(process_status['status'], ProcessingStatus.COMPLETED.value)
+        
+        import_job_id, import_status = self._import_item(item_id)
+        self.assertEqual(import_status['status'], ProcessingStatus.COMPLETED.value)
+        
+        # Now upload the same file again (will have coordinate duplicates)
+        process_job_id2, item_id2, process_status2 = self._upload_file(kml_content, 'Test Items Duplicate.kml')
+        self.assertEqual(process_status2['status'], ProcessingStatus.COMPLETED.value)
+        
+        # Check that duplicates were detected
+        import_item = ImportQueue.objects.get(id=item_id2, user=self.user)
+        self.assertGreater(len(import_item.duplicate_features), 0, 
+                          "Should have detected duplicate features")
+        
+        # Verify that coordinate duplicates were auto-skipped
+        from geo_lib.feature_id import generate_feature_hash
+        skipped_ids = import_item.skipped_feature_ids if import_item.skipped_feature_ids else []
+        self.assertGreater(len(skipped_ids), 0,
+                          "Coordinate duplicates should be auto-skipped")
+        
+        # Verify that the skipped IDs match the duplicate features
+        for dup_info in import_item.duplicate_features:
+            dup_feature = dup_info.get('feature')
+            if dup_feature:
+                feature_hash = generate_feature_hash(dup_feature)
+                feature_id = dup_feature.get('properties', {}).get('id', feature_hash)
+                self.assertIn(feature_id, skipped_ids,
+                             f"Duplicate feature {feature_id} should be in skipped_feature_ids")
+
     def test_e2e_cross_queue_duplicate_detection(self):
         """Test that hash-based duplicate detection works across ImportQueue items during processing."""
         from geo_lib.feature_id import generate_feature_hash
