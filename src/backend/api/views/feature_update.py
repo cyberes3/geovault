@@ -99,14 +99,13 @@ def _extract_system_tags(feature: dict) -> list:
     return []
 
 
-def _validate_and_preserve_feature(feature: dict, preserve_database_id: bool = False) -> dict:
+def _validate_and_preserve_feature(feature: dict) -> dict:
     """
-    Validate and normalize a feature, preserving system_tags.
+    Validate and normalize a feature, preserving system_tags and feature_hash.
     
     Args:
         feature: GeoJSON Feature dictionary
-        preserve_database_id: Whether to preserve the 'database_id' property
-        
+
     Returns:
         Validated and normalized feature dictionary
         
@@ -120,7 +119,7 @@ def _validate_and_preserve_feature(feature: dict, preserve_database_id: bool = F
     normalized_feature = validate_and_normalize_geojson_feature(
         feature,
         preserve_system_tags=system_tags,
-        preserve_database_id=preserve_database_id
+        preserve_feature_hash=True
     )
     
     # Ensure system_tags are preserved after normalization
@@ -153,7 +152,7 @@ def _apply_bulk_ops_and_save_feature(feature: FeatureStore, bulk_ops: dict) -> b
     
     # Validate and normalize the updated feature
     try:
-        normalized_feature = _validate_and_preserve_feature(updated_geojson, preserve_database_id=False)
+        normalized_feature = _validate_and_preserve_feature(updated_geojson)
     except GeometryValidationError as e:
         logger.warning(f"Feature validation failed for feature {feature.id} in bulk operations: {str(e)}")
         return False
@@ -247,9 +246,9 @@ def update_feature_metadata(request, feature_id, validated_data):
     for field, value in update_fields.items():
         if field == 'tags':
             # Validate tags
-            is_valid, error_response = _validate_tags(value)
+            is_valid, error_resp = _validate_tags(value)
             if not is_valid:
-                return error_response
+                return error_resp
             
             # Strip system tags from incoming tags (defensive - user shouldn't be able to add them)
             user_tags = filter_protected_tags(value, CONST_INTERNAL_TAGS)
@@ -275,7 +274,7 @@ def update_feature_metadata(request, feature_id, validated_data):
         normalized_feature = validate_and_normalize_geojson_feature(
             merged_feature,
             preserve_system_tags=updated_system_tags,
-            preserve_database_id=False
+            preserve_feature_hash=True
         )
     except GeometryValidationError as e:
         return error_response(f'Feature validation failed: {str(e)}', 400)
@@ -386,7 +385,7 @@ def bulk_update_features_metadata(request, validated_data):
                         normalized_feature = validate_and_normalize_geojson_feature(
                             merged_feature,
                             preserve_system_tags=updated_system_tags,
-                            preserve_database_id=False
+                            preserve_feature_hash=True
                         )
                     except GeometryValidationError as e:
                         errors.append({
@@ -533,7 +532,7 @@ def update_feature(request, feature_id):
     
     # Validate, whitelist, and normalize the feature
     try:
-        feature_data = _validate_and_preserve_feature(feature_data, preserve_database_id=False)
+        feature_data = _validate_and_preserve_feature(feature_data)
     except GeometryValidationError as e:
         return error_response(str(e), 400)
 
@@ -541,11 +540,11 @@ def update_feature(request, feature_id):
     new_properties = feature_data.get('properties', {})
 
     # Validate that system_tags were preserved correctly
-    is_valid, error_response, preserved_system_tags = _validate_and_preserve_system_tags(
+    is_valid, error_resp, preserved_system_tags = _validate_and_preserve_system_tags(
         new_properties, original_system_tags
     )
     if not is_valid:
-        return error_response
+        return error_resp
 
     # Update system tags if created date was changed
     original_created = original_properties.get('created')
@@ -564,9 +563,9 @@ def update_feature(request, feature_id):
         new_tags = []
     
     # Validate tags
-    is_valid, error_response = _validate_tags(new_tags)
+    is_valid, error_resp = _validate_tags(new_tags)
     if not is_valid:
-        return error_response
+        return error_resp
     
     # Filter out any system tags that user might have added
     user_tags = filter_protected_tags(new_tags, CONST_INTERNAL_TAGS)
@@ -840,7 +839,7 @@ def apply_replacement_geometry(request, feature_id, validated_data):
 
     # Validate and normalize the feature (including color/icon validation)
     try:
-        feature_data = _validate_and_preserve_feature(feature_data, preserve_database_id=False)
+        feature_data = _validate_and_preserve_feature(feature_data)
     except GeometryValidationError as e:
         return error_response(f'Feature validation failed: {str(e)}', 400)
 
@@ -951,7 +950,7 @@ def apply_replacement_geometry(request, feature_id, validated_data):
                     try:
                         # Temporarily set system_tags for validation
                         feature_data['properties']['system_tags'] = new_system_tags
-                        feature_data = _validate_and_preserve_feature(feature_data, preserve_database_id=False)
+                        feature_data = _validate_and_preserve_feature(feature_data)
                     except GeometryValidationError as e:
                         logger.error(f"Feature validation failed for feature {feature_id} during tag regeneration in replacement: {str(e)}")
                         # Continue without regenerating tags if validation fails
@@ -1035,7 +1034,7 @@ def regenerate_feature_tags(request, feature_id):
 
     # Validate and normalize the feature after tag regeneration
     try:
-        normalized_feature = _validate_and_preserve_feature(geojson_data, preserve_database_id=False)
+        normalized_feature = _validate_and_preserve_feature(geojson_data)
     except GeometryValidationError as e:
         logger.error(f"Feature validation failed for feature {feature_id} during tag regeneration: {str(e)}")
         return error_response(f'Feature validation failed: {str(e)}', 400)

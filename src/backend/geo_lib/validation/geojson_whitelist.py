@@ -269,7 +269,7 @@ def _normalize_properties(feature: Dict[str, Any]) -> Dict[str, Any]:
 def validate_and_normalize_geojson_feature(
     feature: Dict[str, Any],
     preserve_system_tags: Optional[List[str]] = None,
-    preserve_database_id: Optional[bool] = False
+    preserve_feature_hash: Optional[bool] = False
 ) -> Dict[str, Any]:
     """
     Validate and normalize a GeoJSON Feature by whitelisting keys and normalizing styles.
@@ -280,13 +280,13 @@ def validate_and_normalize_geojson_feature(
     - Performs style normalization (stroke-width, fill, fill-opacity)
     - Validates structure using Pydantic
     
-    Note: `system_tags` and `database_id` are preserved if present in the original properties.
+    Note: `system_tags` and `feature_hash` are preserved if present in the original properties.
     Use preserve_system_tags to explicitly set system_tags after normalization.
     
     Args:
         feature: GeoJSON Feature dictionary
         preserve_system_tags: Optional list of system_tags to preserve (will be added back after normalization)
-        preserve_database_id: If True, preserve the 'database_id' property even if not in whitelist
+        preserve_feature_hash: If True, preserve the 'feature_hash' property even if not in whitelist
         
     Returns:
         Validated and normalized GeoJSON Feature dictionary
@@ -297,9 +297,9 @@ def validate_and_normalize_geojson_feature(
     if not isinstance(feature, dict):
         raise GeometryValidationError('Feature must be a dictionary object')
     
-    # Extract and preserve system_tags and database_id before normalization
+    # Extract and preserve system_tags and feature_hash before normalization
     original_system_tags = feature.get('properties', {}).get('system_tags')
-    original_database_id = feature.get('properties', {}).get('database_id')
+    original_feature_hash = feature.get('properties', {}).get('feature_hash')
     
     # First, whitelist top-level keys
     allowed_top_level = {'type', 'geometry', 'properties'}
@@ -335,6 +335,9 @@ def validate_and_normalize_geojson_feature(
     
     if preserve_database_id and original_database_id is not None:
         normalized_properties['database_id'] = original_database_id
+    
+    if preserve_feature_hash and original_feature_hash is not None:
+        normalized_properties['feature_hash'] = original_feature_hash
     
     # Build final normalized feature
     normalized = {

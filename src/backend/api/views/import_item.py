@@ -323,19 +323,13 @@ def update_import_item(request, item_id, validated_data):
                     merged_feature['geometry'] = existing_feature.get('geometry', {})
 
                 # Run the merged feature through validate_and_normalize_geojson_feature()
-                try:
-                    normalized_feature = validate_and_normalize_geojson_feature(
-                        merged_feature,
-                        preserve_system_tags=original_system_tags,
-                        preserve_database_id=False
-                    )
-                except GeometryValidationError as e:
-                    logger.warning(f"Error validating feature {feature_id} during update: {str(e)}")
-                    continue
+                normalized_feature = validate_and_normalize_geojson_feature(
+                    merged_feature,
+                    preserve_system_tags=original_system_tags,
+                    preserve_feature_hash=True
+                )
 
-                # Ensure system_tags are preserved after normalization
-                normalized_feature['properties']['system_tags'] = original_system_tags
-
+                assert normalized_feature['properties']['system_tags'] == original_system_tags
                 assert normalized_feature['properties']['feature_hash']
 
                 queue.geofeatures[i] = normalized_feature

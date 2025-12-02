@@ -210,8 +210,7 @@ def geojson_property_generation(feature: dict) -> dict:
     try:
         normalized_feature = validate_and_normalize_geojson_feature(
             feature,
-            preserve_system_tags=original_system_tags,
-            preserve_database_id=False
+            preserve_system_tags=original_system_tags
         )
         return normalized_feature.get('properties', {})
     except GeometryValidationError as e:
