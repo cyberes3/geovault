@@ -784,6 +784,8 @@ class TestE2EImport(TransactionTestCase):
 
     def test_e2e_skipped_features(self):
         """Test skipping specific features during import."""
+        from geo_lib.feature_id import generate_feature_hash
+        
         # Upload a file
         kml_content = self._load_test_file('Test Items.kml')
         process_job_id, item_id, process_status = self._upload_file(kml_content, 'Test Items.kml')
@@ -795,14 +797,14 @@ class TestE2EImport(TransactionTestCase):
         self.assertGreater(total_features, 2, "Need at least 3 features for this test")
         
         # Skip the first 2 features
-        skipped_ids = [
-            import_item.geofeatures[0].get('properties', {}).get('id'),
-            import_item.geofeatures[1].get('properties', {}).get('id')
-        ]
-        skipped_ids = [sid for sid in skipped_ids if sid]  # Filter out None values
-        
-        if len(skipped_ids) < 2:
-            self.skipTest("Test features don't have IDs to skip")
+        # Use feature_hash (which is set during processing) or generate it if missing
+        skipped_ids = []
+        for i in range(2):
+            feature = import_item.geofeatures[i]
+            feature_hash = feature['properties']['feature_hash']
+            # if not feature_hash:
+            #     feature_hash = generate_feature_hash(feature)
+            skipped_ids.append(feature_hash)
         
         # Import with skipped features
         import_job_id, import_status = self._import_item(item_id, skipped_feature_ids=skipped_ids)

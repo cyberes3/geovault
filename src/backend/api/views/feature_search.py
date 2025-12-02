@@ -65,185 +65,142 @@ def get_features_by_tag(request):
     Returns separate dictionaries for user_tags and system_tags where keys are tags and values are lists of features with that tag.
     
     Query parameters:
-    - page: page number (default: 1)
     - search: optional search query to filter tags by name
     """
-    try:
-        # Get pagination parameters
-        try:
-            page = int(request.GET.get('page', 1))
-        except (ValueError, TypeError):
-            return JsonResponse({
-                'error': 'Invalid pagination parameter. page must be an integer.',
-                'code': 400
-            }, status=400)
-        
-        # Hardcoded page size
-        page_size = 10
-        
-        # Get search query
-        search_query = request.GET.get('search', '').strip().lower()
-        
-        # Validate and normalize pagination parameters
-        page = max(1, page)
+    # Get search query
+    search_query = request.GET.get('search', '').strip().lower()
 
-        # Step 1: Get all unique tags using PostgreSQL JSON functions (database-side processing)
-        # This is much faster than Python-side iteration - all processing happens in PostgreSQL
-        with connection.cursor() as cursor:
-            # Use PostgreSQL's jsonb_array_elements_text to extract tags from JSON arrays
-            # This processes everything in the database, not in Python
-            user_id = request.user.id
-            table_name = FeatureStore._meta.db_table
-            
-            # Build the CTE query to extract unique tags
-            # We use UNION to combine user_tags and system_tags, then DISTINCT to get unique values
-            # All filtering, sorting, and distinct operations happen in PostgreSQL
-            cte_part = f"""
-                WITH user_tags AS (
-                    SELECT DISTINCT jsonb_array_elements_text(
-                        COALESCE(geojson->'properties'->'tags', '[]'::jsonb)
-                    ) AS tag
-                    FROM {table_name}
-                    WHERE user_id = %s
-                      AND geojson->'properties'->'tags' IS NOT NULL
-                      AND jsonb_typeof(geojson->'properties'->'tags') = 'array'
-                ),
-                system_tags AS (
-                    SELECT DISTINCT jsonb_array_elements_text(
-                        COALESCE(geojson->'properties'->'system_tags', '[]'::jsonb)
-                    ) AS tag
-                    FROM {table_name}
-                    WHERE user_id = %s
-                      AND geojson->'properties'->'system_tags' IS NOT NULL
-                      AND jsonb_typeof(geojson->'properties'->'system_tags') = 'array'
-                ),
-                all_user_tags AS (
-                    SELECT tag, 'user' AS tag_type
-                    FROM user_tags
-                    WHERE tag != '' AND tag IS NOT NULL
-                ),
-                all_system_tags AS (
-                    SELECT tag, 'system' AS tag_type
-                    FROM system_tags
-                    WHERE tag != '' AND tag IS NOT NULL
-                ),
-                combined_tags AS (
-                    SELECT tag, tag_type FROM all_user_tags
-                    UNION ALL
-                    SELECT tag, tag_type FROM all_system_tags
-                ),
-                filtered_tags AS (
-                    SELECT tag, tag_type
-                    FROM combined_tags
-            """
-            
-            # Add search filter if provided (database-side filtering)
-            params = [user_id, user_id]
-            if search_query:
-                cte_part += " WHERE LOWER(tag) LIKE %s"
-                params.append(f'%{search_query}%')
-            
-            cte_part += ") "
-            
-            # Get total count for pagination (database-side count)
-            count_query = cte_part + "SELECT COUNT(*) FROM filtered_tags"
-            cursor.execute(count_query, params)
-            total_tags = cursor.fetchone()[0]
-            total_pages = (total_tags + page_size - 1) // page_size if total_tags > 0 else 0
-            
-            # Build paginated query (LIMIT/OFFSET) - all done in database
-            # Note: We fetch all tags first, then sort by priority in Python
-            # This is necessary because priority sorting requires the get_tag_priority function
-            offset = (page - 1) * page_size
-            paginated_query = cte_part + "SELECT tag, tag_type FROM filtered_tags ORDER BY tag LIMIT %s OFFSET %s"
-            params.extend([page_size, offset])
-            
-            cursor.execute(paginated_query, params)
-            paginated_tags = [{'tag': row[0], 'type': row[1]} for row in cursor.fetchall()]
-            
-            # Separate user tags and system tags
-            user_tags_list = [t for t in paginated_tags if t['type'] == 'user']
-            system_tags_list = [t for t in paginated_tags if t['type'] == 'system']
-            
-            # Sort user tags alphabetically, system tags by priority then alphabetically
-            user_tags_list.sort(key=lambda x: x['tag'].lower())
-            system_tags_list.sort(key=lambda x: (get_tag_priority(x['tag']), x['tag'].lower()))
-            
-            # Combine: user tags first, then system tags
-            paginated_tags = user_tags_list + system_tags_list
+    # Step 1: Get all unique tags using PostgreSQL JSON functions (database-side processing)
+    # This is much faster than Python-side iteration - all processing happens in PostgreSQL
+    with connection.cursor() as cursor:
+        # Use PostgreSQL's jsonb_array_elements_text to extract tags from JSON arrays
+        # This processes everything in the database, not in Python
+        user_id = request.user.id
+        table_name = FeatureStore._meta.db_table
+
+        # Build the CTE query to extract unique tags
+        # We use UNION to combine user_tags and system_tags, then DISTINCT to get unique values
+        # All filtering, sorting, and distinct operations happen in PostgreSQL
+        cte_part = f"""
+            WITH user_tags AS (
+                SELECT DISTINCT jsonb_array_elements_text(
+                    COALESCE(geojson->'properties'->'tags', '[]'::jsonb)
+                ) AS tag
+                FROM {table_name}
+                WHERE user_id = %s
+                  AND geojson->'properties'->'tags' IS NOT NULL
+                  AND jsonb_typeof(geojson->'properties'->'tags') = 'array'
+            ),
+            system_tags AS (
+                SELECT DISTINCT jsonb_array_elements_text(
+                    COALESCE(geojson->'properties'->'system_tags', '[]'::jsonb)
+                ) AS tag
+                FROM {table_name}
+                WHERE user_id = %s
+                  AND geojson->'properties'->'system_tags' IS NOT NULL
+                  AND jsonb_typeof(geojson->'properties'->'system_tags') = 'array'
+            ),
+            all_user_tags AS (
+                SELECT tag, 'user' AS tag_type
+                FROM user_tags
+                WHERE tag != '' AND tag IS NOT NULL
+            ),
+            all_system_tags AS (
+                SELECT tag, 'system' AS tag_type
+                FROM system_tags
+                WHERE tag != '' AND tag IS NOT NULL
+            ),
+            combined_tags AS (
+                SELECT tag, tag_type FROM all_user_tags
+                UNION ALL
+                SELECT tag, tag_type FROM all_system_tags
+            ),
+            filtered_tags AS (
+                SELECT tag, tag_type
+                FROM combined_tags
+        """
+
+        # Add search filter if provided (database-side filtering)
+        params = [user_id, user_id]
+        if search_query:
+            cte_part += " WHERE LOWER(tag) LIKE %s"
+            params.append(f'%{search_query}%')
+
+        cte_part += ") "
         
-        # Step 3: Fetch features only for tags on the current page
-        # This is the key optimization - we only query features for tags we'll return
-        user_tags_to_fetch = [tag_info['tag'] for tag_info in paginated_tags if tag_info['type'] == 'user']
-        system_tags_to_fetch = [tag_info['tag'] for tag_info in paginated_tags if tag_info['type'] == 'system']
+        # Fetch all tags (no pagination)
+        all_tags_query = cte_part + "SELECT tag, tag_type FROM filtered_tags ORDER BY tag"
         
-        # Build dictionaries for features by tag
-        features_by_user_tag = {tag: [] for tag in user_tags_to_fetch}
-        features_by_system_tag = {tag: [] for tag in system_tags_to_fetch}
+        cursor.execute(all_tags_query, params)
+        all_tags = [{'tag': row[0], 'type': row[1]} for row in cursor.fetchall()]
+
+        # Separate user tags and system tags
+        user_tags_list = [t for t in all_tags if t['type'] == 'user']
+        system_tags_list = [t for t in all_tags if t['type'] == 'system']
         
-        # Only query features that have tags on the current page
-        if user_tags_to_fetch or system_tags_to_fetch:
-            # Build query to get features with any of the tags we need
-            tag_query = Q()
-            for tag in user_tags_to_fetch:
-                tag_query |= Q(geojson__properties__tags__contains=[tag])
-            for tag in system_tags_to_fetch:
-                tag_query |= Q(geojson__properties__system_tags__contains=[tag])
+        # Sort user tags alphabetically, system tags by priority then alphabetically
+        user_tags_list.sort(key=lambda x: x['tag'].lower())
+        system_tags_list.sort(key=lambda x: (get_tag_priority(x['tag']), x['tag'].lower()))
+        
+        # Combine: user tags first, then system tags
+        all_tags = user_tags_list + system_tags_list
+    
+    # Step 2: Fetch features for all tags
+    user_tags_to_fetch = [tag_info['tag'] for tag_info in all_tags if tag_info['type'] == 'user']
+    system_tags_to_fetch = [tag_info['tag'] for tag_info in all_tags if tag_info['type'] == 'system']
+
+    # Build dictionaries for features by tag
+    features_by_user_tag = {tag: [] for tag in user_tags_to_fetch}
+    features_by_system_tag = {tag: [] for tag in system_tags_to_fetch}
+    
+    # Query features that have any of the tags
+    if user_tags_to_fetch or system_tags_to_fetch:
+        # Build query to get features with any of the tags we need
+        tag_query = Q()
+        for tag in user_tags_to_fetch:
+            tag_query |= Q(geojson__properties__tags__contains=[tag])
+        for tag in system_tags_to_fetch:
+            tag_query |= Q(geojson__properties__system_tags__contains=[tag])
+
+        # Fetch only needed fields
+        features_to_process = FeatureStore.objects.filter(
+            user=request.user
+        ).filter(tag_query).only('id', 'geojson')
+
+        # Process features and assign to tags
+        for feature in features_to_process.iterator(chunk_size=1000):
+            minimal_feature = _create_minimal_feature(feature)
+            if not minimal_feature:
+                continue
+
+            geojson_data = feature.geojson
+            properties = geojson_data.get('properties', {})
+            feature_user_tags = _normalize_tags(properties.get('tags', []))
+            feature_system_tags = _normalize_tags(properties.get('system_tags', []))
+
+            # Add feature to relevant tags
+            for tag in feature_user_tags:
+                if tag in features_by_user_tag:
+                    features_by_user_tag[tag].append(minimal_feature)
             
-            # Fetch only needed fields
-            features_to_process = FeatureStore.objects.filter(
-                user=request.user
-            ).filter(tag_query).only('id', 'geojson')
-            
-            # Process features and assign to tags
-            for feature in features_to_process.iterator(chunk_size=1000):
-                minimal_feature = _create_minimal_feature(feature)
-                if not minimal_feature:
-                    continue
+            for tag in feature_system_tags:
+                if tag in features_by_system_tag:
+                    features_by_system_tag[tag].append(minimal_feature)
+    
+    # Build response with all tags
+    response_data = {
+        'user_tags': {},
+        'system_tags': {}
+    }
+    
+    # Add features for all tags
+    for tag_info in all_tags:
+        if tag_info['type'] == 'user':
+            response_data['user_tags'][tag_info['tag']] = features_by_user_tag.get(tag_info['tag'], [])
+        else:
+            response_data['system_tags'][tag_info['tag']] = features_by_system_tag.get(tag_info['tag'], [])
 
-                geojson_data = feature.geojson
-                properties = geojson_data.get('properties', {})
-                feature_user_tags = _normalize_tags(properties.get('tags', []))
-                feature_system_tags = _normalize_tags(properties.get('system_tags', []))
-
-                # Add feature to relevant tags (only for tags on current page)
-                for tag in feature_user_tags:
-                    if tag in features_by_user_tag:
-                        features_by_user_tag[tag].append(minimal_feature)
-
-                for tag in feature_system_tags:
-                    if tag in features_by_system_tag:
-                        features_by_system_tag[tag].append(minimal_feature)
-        
-        # Build response with paginated tags
-        response_data = {
-            'user_tags': {},
-            'system_tags': {},
-            'pagination': {
-                'page': page,
-                'page_size': page_size,
-                'total_tags': total_tags,
-                'total_pages': total_pages,
-                'has_next': page < total_pages,
-                'has_previous': page > 1
-            }
-        }
-
-        # Add features for paginated tags
-        for tag_info in paginated_tags:
-            if tag_info['type'] == 'user':
-                response_data['user_tags'][tag_info['tag']] = features_by_user_tag.get(tag_info['tag'], [])
-            else:
-                response_data['system_tags'][tag_info['tag']] = features_by_system_tag.get(tag_info['tag'], [])
-
-        return JsonResponse(response_data)
-
-    except Exception:
-        logger.error(f"Error getting features by tag: {traceback.format_exc()}")
-        return JsonResponse({
-            'error': 'Failed to get features by tag',
-            'code': 500
-        }, status=500)
+    return JsonResponse(response_data)
 
 
 @api_or_login_required_401()
