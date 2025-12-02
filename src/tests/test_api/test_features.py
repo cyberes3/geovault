@@ -457,6 +457,53 @@ class TestFeatureAPI(TestCase):
         data = json.loads(response.content)
         self.assertIn('updated_count', data)
 
+    def test_apply_bulk_operations_to_system_tag(self):
+        """Test applying bulk operations to features by system tag."""
+        # Create a feature with a system tag
+        system_tag_feature_data = {
+            'type': 'Feature',
+            'geometry': {
+                'type': 'Point',
+                'coordinates': [-122.4194, 37.7749, 0.0]
+            },
+            'properties': {
+                'name': 'System Tag Feature',
+                'tags': ['user-tag'],
+                'system_tags': ['elevation:low']
+            }
+        }
+        system_tag_feature = FeatureStore.objects.create(
+            user=self.user,
+            geojson=system_tag_feature_data,
+            geometry=Point(-122.4194, 37.7749, 0.0),
+            geojson_hash=generate_feature_hash(system_tag_feature_data)
+        )
+
+        # Apply bulk operations to the system tag
+        bulk_ops = {
+            'bulk_operations': {
+                'tags': ['bulk-applied-tag'],
+                'pointColor': '#00ff00'
+            }
+        }
+        response = self.client.post(
+            '/api/features/bulk-operations/by-tag/elevation:low/',
+            data=json.dumps(bulk_ops),
+            content_type='application/json'
+        )
+        self.assertEqual(response.status_code, 200)
+        data = json.loads(response.content)
+        self.assertIn('updated_count', data)
+        self.assertEqual(data['updated_count'], 1, 'Should update the feature with the system tag')
+
+        # Verify the bulk operations were applied
+        system_tag_feature.refresh_from_db()
+        updated_properties = system_tag_feature.geojson['properties']
+        self.assertIn('bulk-applied-tag', updated_properties.get('tags', []),
+                     'Bulk operation tag should be added to feature')
+        self.assertEqual(updated_properties.get('marker-color'), '#00FF00',
+                        'Point color should be updated by bulk operation')
+
     def test_apply_bulk_operations_to_tag_invalid(self):
         """Test bulk operations with invalid payload."""
         bulk_ops = {
@@ -470,6 +517,199 @@ class TestFeatureAPI(TestCase):
             content_type='application/json'
         )
         self.assertEqual(response.status_code, 400)
+
+    def test_apply_bulk_operations_to_tag_no_matching_features(self):
+        """Test bulk operations when no features match the tag."""
+        bulk_ops = {
+            'bulk_operations': {
+                'tags': ['bulk-tag'],
+                'pointColor': '#ff0000'
+            }
+        }
+        response = self.client.post(
+            '/api/features/bulk-operations/by-tag/nonexistent-tag/',
+            data=json.dumps(bulk_ops),
+            content_type='application/json'
+        )
+        self.assertEqual(response.status_code, 200)
+        data = json.loads(response.content)
+        self.assertIn('updated_count', data)
+        self.assertEqual(data['updated_count'], 0)
+        self.assertIn('msg', data)
+
+    def test_apply_bulk_operations_to_tag_multiple_features(self):
+        """Test bulk operations applied to multiple features with the same tag."""
+        # Create additional features with the same tag
+        for i in range(3):
+            feature_data = {
+                'type': 'Feature',
+                'geometry': {
+                    'type': 'Point',
+                    'coordinates': [-122.4194 + i * 0.01, 37.7749 + i * 0.01, 0.0]
+                },
+                'properties': {
+                    'name': f'Multi Feature {i}',
+                    'tags': ['multi-test']
+                }
+            }
+            FeatureStore.objects.create(
+                user=self.user,
+                geojson=feature_data,
+                geometry=Point(feature_data['geometry']['coordinates'][0],
+                             feature_data['geometry']['coordinates'][1], 0.0),
+                geojson_hash=generate_feature_hash(feature_data)
+            )
+
+        bulk_ops = {
+            'bulk_operations': {
+                'tags': ['bulk-applied'],
+                'pointColor': '#00ff00'
+            }
+        }
+        response = self.client.post(
+            '/api/features/bulk-operations/by-tag/multi-test/',
+            data=json.dumps(bulk_ops),
+            content_type='application/json'
+        )
+        self.assertEqual(response.status_code, 200)
+        data = json.loads(response.content)
+        self.assertIn('updated_count', data)
+        self.assertEqual(data['updated_count'], 3, 'Should update all 3 features')
+
+        # Verify all features were updated
+        updated_features = FeatureStore.objects.filter(
+            user=self.user,
+            geojson__properties__tags__contains=['multi-test']
+        )
+        for feature in updated_features:
+            feature.refresh_from_db()
+            props = feature.geojson['properties']
+            self.assertIn('bulk-applied', props.get('tags', []))
+            self.assertEqual(props.get('marker-color'), '#00FF00')
+
+    def test_apply_bulk_operations_to_tag_point_icon(self):
+        """Test applying point icon through bulk operations by tag."""
+        bulk_ops = {
+            'bulk_operations': {
+                'pointIcon': 'assets/icons/test.png'
+            }
+        }
+        response = self.client.post(
+            '/api/features/bulk-operations/by-tag/test/',
+            data=json.dumps(bulk_ops),
+            content_type='application/json'
+        )
+        self.assertEqual(response.status_code, 200)
+        data = json.loads(response.content)
+        self.assertIn('updated_count', data)
+        self.assertGreater(data['updated_count'], 0)
+
+        # Verify point feature got the icon
+        self.point_feature.refresh_from_db()
+        props = self.point_feature.geojson['properties']
+        if 'test' in props.get('tags', []):
+            self.assertEqual(props.get('icon'), 'assets/icons/test.png')
+
+    def test_apply_bulk_operations_to_tag_line_color(self):
+        """Test applying line color through bulk operations by tag."""
+        bulk_ops = {
+            'bulk_operations': {
+                'lineColor': '#ff00ff'
+            }
+        }
+        response = self.client.post(
+            '/api/features/bulk-operations/by-tag/test/',
+            data=json.dumps(bulk_ops),
+            content_type='application/json'
+        )
+        self.assertEqual(response.status_code, 200)
+        data = json.loads(response.content)
+        self.assertIn('updated_count', data)
+        self.assertGreater(data['updated_count'], 0)
+
+        # Verify line feature got the color
+        self.linestring_feature.refresh_from_db()
+        props = self.linestring_feature.geojson['properties']
+        if 'test' in props.get('tags', []):
+            self.assertEqual(props.get('stroke'), '#FF00FF')
+
+    def test_apply_bulk_operations_to_tag_polygon_color(self):
+        """Test applying polygon color through bulk operations by tag."""
+        # Create a polygon feature
+        polygon_feature_data = {
+            'type': 'Feature',
+            'geometry': {
+                'type': 'Polygon',
+                'coordinates': [[[-122.4194, 37.7749, 0.0], [-122.4094, 37.7749, 0.0],
+                                [-122.4094, 37.7849, 0.0], [-122.4194, 37.7849, 0.0],
+                                [-122.4194, 37.7749, 0.0]]]
+            },
+            'properties': {
+                'name': 'Test Polygon',
+                'tags': ['test', 'polygon']
+            }
+        }
+        polygon_feature = FeatureStore.objects.create(
+            user=self.user,
+            geojson=polygon_feature_data,
+            geometry=Point(-122.4194, 37.7749, 0.0),
+            geojson_hash=generate_feature_hash(polygon_feature_data)
+        )
+
+        bulk_ops = {
+            'bulk_operations': {
+                'polyColor': '#0000ff'
+            }
+        }
+        response = self.client.post(
+            '/api/features/bulk-operations/by-tag/test/',
+            data=json.dumps(bulk_ops),
+            content_type='application/json'
+        )
+        self.assertEqual(response.status_code, 200)
+        data = json.loads(response.content)
+        self.assertIn('updated_count', data)
+        self.assertGreater(data['updated_count'], 0)
+
+        # Verify polygon feature got the color
+        polygon_feature.refresh_from_db()
+        props = polygon_feature.geojson['properties']
+        self.assertEqual(props.get('stroke'), '#0000FF')
+        self.assertEqual(props.get('fill'), '#0000FF')
+
+    def test_apply_bulk_operations_to_tag_all_operations(self):
+        """Test applying all bulk operation types at once."""
+        bulk_ops = {
+            'bulk_operations': {
+                'tags': ['comprehensive-test'],
+                'pointColor': '#ff0000',
+                'pointIcon': 'assets/icons/test.png',
+                'lineColor': '#00ff00',
+                'polyColor': '#0000ff'
+            }
+        }
+        response = self.client.post(
+            '/api/features/bulk-operations/by-tag/test/',
+            data=json.dumps(bulk_ops),
+            content_type='application/json'
+        )
+        self.assertEqual(response.status_code, 200)
+        data = json.loads(response.content)
+        self.assertIn('updated_count', data)
+        self.assertGreater(data['updated_count'], 0)
+
+        # Verify operations were applied
+        self.point_feature.refresh_from_db()
+        point_props = self.point_feature.geojson['properties']
+        if 'test' in point_props.get('tags', []):
+            self.assertIn('comprehensive-test', point_props.get('tags', []))
+            self.assertEqual(point_props.get('marker-color'), '#FF0000')
+            self.assertEqual(point_props.get('icon'), 'assets/icons/test.png')
+
+        self.linestring_feature.refresh_from_db()
+        line_props = self.linestring_feature.geojson['properties']
+        if 'test' in line_props.get('tags', []):
+            self.assertEqual(line_props.get('stroke'), '#00FF00')
 
     def test_regenerate_feature_tags(self):
         """Test regenerating tags for a feature."""
