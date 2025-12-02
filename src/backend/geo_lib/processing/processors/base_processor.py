@@ -30,6 +30,8 @@ from geo_lib.logging.console import get_job_logger
 from website.settings_utils import get_required_setting
 from geo_lib.types.feature import PointFeature, LineStringFeature, MultiLineStringFeature, PolygonFeature
 from geo_lib.const_strings import CONST_INTERNAL_TAGS, is_protected_tag, filter_protected_tags, prepare_user_tags
+from geo_lib.types.geojson import GeojsonRawProperty
+from django.core.files.uploadedfile import SimpleUploadedFile
 
 logger = get_job_logger()
 
@@ -87,7 +89,6 @@ class BaseProcessor(ABC):
         """
         try:
             # Create a mock uploaded file for validation
-            from django.core.files.uploadedfile import SimpleUploadedFile
 
             # Determine content type based on file type
             file_type = self.detect_file_type()
@@ -118,7 +119,7 @@ class BaseProcessor(ABC):
 
         except Exception as e:
             self.import_log.add(f"File validation error: {str(e)}", "Validation", DatabaseLogLevel.ERROR)
-            logger.error(f"Validation error: {str(e)}")
+            logger.error(f"Validation error: {traceback.format_exc()}")
             return False
 
     @abstractmethod
@@ -182,102 +183,100 @@ class BaseProcessor(ABC):
                 skipped_count += 1
                 continue
                 
-            if split_feature['geometry']['type'] in ['Point', 'MultiPoint', 'LineString', 'MultiLineString', 'Polygon', 'MultiPolygon']:
-                try:
-                    # Extract track created date BEFORE normalization (to ensure coordinateProperties is available)
-                    # Only extract if created date is not already present
-                    track_timestamp = None
-                    original_properties = split_feature.get('properties', {})
-                    if not original_properties.get('created'):
-                        track_timestamp = extract_track_created_date(split_feature)
-                        # Set created date in properties BEFORE normalization so it's preserved
-                        if track_timestamp:
-                            split_feature['properties']['created'] = track_timestamp
-                    
-                    # First, normalize raw togeojson output (converts feature_tags -> tags, etc.)
-                    from geo_lib.types.geojson import GeojsonRawProperty
-                    split_feature['properties'] = GeojsonRawProperty(**split_feature['properties']).model_dump(mode='json', exclude_none=True, by_alias=True)
-                    
-                    # Then validate and normalize properties with styling (uses PropertiesModel)
-                    split_feature['properties'] = geojson_property_generation(split_feature)
+            if split_feature['geometry']['type'] not in ['Point', 'MultiPoint', 'LineString', 'MultiLineString', 'Polygon', 'MultiPolygon']:
+                feature_log.add(f'Skipping unsupported geometry type: {split_feature["geometry"]["type"]}', 'Feature Processing', DatabaseLogLevel.WARNING)
+                skipped_count += 1
 
-                    # Skip tag generation in minimal processing mode
-                    if not self.minimal_processing:
-                        # Generate all auto tags (type, import-year, import-month, geocoding) using generate_auto_tags()
-                        # Check for cancellation before tag generation
-                        if self._is_cancelled():
-                            break
-                        
-                        try:
-                            geometry_type = split_feature['geometry']['type'].lower()
-                            
-                            # Determine the appropriate feature class
-                            feature_class = None
-                            if geometry_type in ['point', 'multipoint']:
-                                feature_class = PointFeature
-                            elif geometry_type == 'linestring':
-                                feature_class = LineStringFeature
-                            elif geometry_type == 'multilinestring':
-                                feature_class = MultiLineStringFeature
-                            elif geometry_type in ['polygon', 'multipolygon']:
-                                feature_class = PolygonFeature
-                            
-                            if feature_class:
-                                # Create feature instance for tag generation
-                                feature_instance = feature_class(**split_feature)
-                                
-                                # Check for cancellation before generating tags
-                                if self._is_cancelled():
-                                    break
-                                
-                                # Generate all auto tags (includes type, import-year, import-month, source-file, and geocoding)
-                                auto_tags = generate_auto_tags(feature_instance, feature_log, filename=self.filename)
-                                
-                                # Check for cancellation after tag generation
-                                if self._is_cancelled():
-                                    break
-                                
-                                # Separate system tags from user tags
-                                existing_tags = split_feature['properties'].get('tags', [])
-                                if not isinstance(existing_tags, list):
-                                    existing_tags = []
-                                
-                                # Strip system tags from existing tags (defensive - in case user added them)
-                                user_tags = filter_protected_tags(existing_tags, CONST_INTERNAL_TAGS)
-                                
-                                # Prepare user tags (lowercase and deduplicate)
-                                user_tags = prepare_user_tags(user_tags)
-                                
-                                # Store system tags separately
-                                split_feature['properties']['system_tags'] = auto_tags
-                                # Store user tags (filtered to remove any system tags)
-                                split_feature['properties']['tags'] = user_tags
-                        except Exception as tag_error:
-                            # Log error but don't fail the feature processing
-                            feature_name = split_feature.get('properties', {}).get('name', 'Unnamed')
-                            feature_log.add(
-                                f"Tag generation failed for feature '{feature_name}': {str(tag_error)}",
-                                "Tag Generation",
-                                DatabaseLogLevel.WARNING
-                            )
-                            logger.warning(f"Tag generation failed for feature '{feature_name}': {tag_error}")
-                    # In minimal processing mode, preserve existing tags from file if any, but don't generate new ones
+            try:
+                # Extract track created date BEFORE normalization (to ensure coordinateProperties is available)
+                # Only extract if created date is not already present
+                original_properties = split_feature.get('properties', {})
+                if not original_properties.get('created'):
+                    track_timestamp = extract_track_created_date(split_feature)
+                    # Set created date in properties BEFORE normalization so it's preserved
+                    if track_timestamp:
+                        split_feature['properties']['created'] = track_timestamp
 
-                    # Check for cancellation before finalizing feature
+                # First, normalize raw togeojson output (converts feature_tags -> tags, etc.)
+                split_feature['properties'] = GeojsonRawProperty(**split_feature['properties']).model_dump(mode='json', exclude_none=True, by_alias=True)
+
+                # Then validate and normalize properties with styling (uses PropertiesModel)
+                split_feature['properties'] = geojson_property_generation(split_feature)
+
+                # Finally, generate the feature hash after all the normalization is complete
+                split_feature['properties']['feature_hash'] = generate_feature_hash(split_feature)
+
+                # Skip tag generation in minimal processing mode
+                if not self.minimal_processing:
+                    # Generate all auto tags (type, import-year, import-month, geocoding) using generate_auto_tags()
+                    # Check for cancellation before tag generation
                     if self._is_cancelled():
                         break
-                    
-                    # Generate and set feature ID
-                    split_feature['properties']['feature_hash'] = generate_feature_hash(split_feature)
 
-                    processed_features.append(split_feature)
-                except Exception:
-                    feature_name = split_feature.get('properties', {}).get('name', 'Unnamed')
-                    feature_log.add(f"Failed to process feature '{feature_name}', skipping", 'Feature Processing', DatabaseLogLevel.WARNING)
-                    logger.error(f"Feature processing error for '{feature_name}': {traceback.format_exc()}")
-                    skipped_count += 1
-            else:
-                feature_log.add(f'Skipping unsupported geometry type: {split_feature["geometry"]["type"]}', 'Feature Processing', DatabaseLogLevel.WARNING)
+                    try:
+                        geometry_type = split_feature['geometry']['type'].lower()
+
+                        # Determine the appropriate feature class
+                        feature_class = None
+                        if geometry_type in ['point', 'multipoint']:
+                            feature_class = PointFeature
+                        elif geometry_type == 'linestring':
+                            feature_class = LineStringFeature
+                        elif geometry_type == 'multilinestring':
+                            feature_class = MultiLineStringFeature
+                        elif geometry_type in ['polygon', 'multipolygon']:
+                            feature_class = PolygonFeature
+                        assert feature_class
+
+                        # Create feature instance for tag generation
+                        feature_instance = feature_class(**split_feature)
+
+                        # Check for cancellation before generating tags
+                        if self._is_cancelled():
+                            break
+
+                        # Generate all auto tags (includes type, import-year, import-month, source-file, and geocoding)
+                        auto_tags = generate_auto_tags(feature_instance, feature_log, filename=self.filename)
+
+                        # Check for cancellation after tag generation
+                        if self._is_cancelled():
+                            break
+
+                        # Separate system tags from user tags
+                        existing_tags = split_feature['properties'].get('tags', [])
+                        if not isinstance(existing_tags, list):
+                            existing_tags = []
+
+                        # Strip system tags from existing tags (defensive - in case user added them)
+                        user_tags = filter_protected_tags(existing_tags, CONST_INTERNAL_TAGS)
+
+                        # Prepare user tags (lowercase and deduplicate)
+                        user_tags = prepare_user_tags(user_tags)
+
+                        # Store system tags separately
+                        split_feature['properties']['system_tags'] = auto_tags
+                        # Store user tags (filtered to remove any system tags)
+                        split_feature['properties']['tags'] = user_tags
+                    except Exception as tag_error:
+                        # Log error but don't fail the feature processing
+                        feature_name = split_feature.get('properties', {}).get('name', 'Unnamed')
+                        feature_log.add(
+                            f"Tag generation failed for feature '{feature_name}': {str(tag_error)}",
+                            "Tag Generation",
+                            DatabaseLogLevel.WARNING
+                        )
+                        logger.warning(f"Tag generation failed for feature '{feature_name}': {traceback.format_exc()}")
+                # In minimal processing mode, preserve existing tags from file if any, but don't generate new ones
+
+                # Check for cancellation before finalizing feature
+                if self._is_cancelled():
+                    break
+
+                processed_features.append(split_feature)
+            except Exception:
+                feature_name = split_feature.get('properties', {}).get('name', 'Unnamed')
+                feature_log.add(f"Failed to process feature '{feature_name}', skipping", 'Feature Processing', DatabaseLogLevel.WARNING)
+                logger.error(f"Feature processing error for '{feature_name}': {traceback.format_exc()}")
                 skipped_count += 1
 
         return processed_features, feature_log, skipped_count, was_split
@@ -393,7 +392,7 @@ class BaseProcessor(ABC):
                         except Exception as e:
                             feature = future_to_feature[future]
                             feature_name = feature.get('properties', {}).get('name', 'Unnamed')
-                            logger.error(f"Error processing feature '{feature_name}': {str(e)}")
+                            logger.error(f"Error processing feature '{feature_name}': {traceback.format_exc()}")
                             feature_log.add(f"Error processing feature '{feature_name}': {str(e)}", "Feature Processing", DatabaseLogLevel.ERROR)
                             skipped_count += 1
                             completed_count += 1
@@ -486,12 +485,8 @@ class BaseProcessor(ABC):
                     self.import_log.add_timing("Elevation data filling", elevation_duration, "Processing")
             except Exception as e:
                 # Log error but don't fail processing
-                import traceback
-                elevation_duration = time.time() - elevation_start
-                error_msg = f"Elevation data filling failed: {str(e)}"
-                self.import_log.add(error_msg, "Elevation Service", DatabaseLogLevel.ERROR)
-                logger.error(f"Elevation data filling failed: {str(e)}")
-                logger.error(f"Elevation data filling error traceback:\n{traceback.format_exc()}")
+                self.import_log.add(f"Elevation data filling failed: {str(e)}", "Elevation Service", DatabaseLogLevel.ERROR)
+                logger.error(f"Elevation data filling error traceback: {traceback.format_exc()}")
             
             # Check for cancellation
             if self._is_cancelled():
@@ -510,7 +505,7 @@ class BaseProcessor(ABC):
             # Don't log error if job was cancelled
             if not self._is_cancelled():
                 self.import_log.add(f"Processing failed: {str(e)}", "Processing", DatabaseLogLevel.ERROR)
-                logger.error(f"Processing error: {str(e)}")
+                logger.error(f"Processing error: {traceback.format_exc()}")
             raise
 
     def _calculate_timeout(self) -> int:
@@ -681,10 +676,8 @@ class BaseProcessor(ABC):
             if "conversion" in str(e).lower() or "timeout" in str(e).lower():
                 raise
             
-            error_msg = f"{file_type_name} conversion failed: {type(e).__name__}"
-            detailed_error = f"{error_msg} for file '{filename}': {str(e)}"
-            logger.error(detailed_error)
-            self.import_log.add(f"{error_msg}: {str(e)}", "File Conversion", DatabaseLogLevel.ERROR)
+            logger.error(f"{error_msg} for file '{filename}': {traceback.format_exc()}")
+            self.import_log.add(f"{file_type_name} conversion failed: {str(e)}", "File Conversion", DatabaseLogLevel.ERROR)
             raise
 
     def get_file_metadata(self) -> Dict[str, Any]:

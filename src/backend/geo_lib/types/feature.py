@@ -21,7 +21,7 @@ class Properties(BaseModel):
     model_config = ConfigDict(extra='allow')  # Allow additional properties from togeojson
 
     name: str
-    feature_hash: Optional[str] = None
+    feature_hash: str
     description: Optional[str] = None
     created: Optional[datetime] = None
     tags: Optional[List[str]] = Field(default_factory=list)  # User tags only
@@ -77,7 +77,7 @@ class PolygonFeature(Feature):
     geometry: PolygonGeometry
 
 
-GeoFeatureSupported = Type[PolygonFeature | LineStringFeature | MultiLineStringFeature | PointFeature]
+GeoFeatureSupported = Type[PointFeature | LineStringFeature | MultiLineStringFeature | PolygonFeature]
 
 
 def geojson_to_geofeature(geojson: dict) -> Tuple[List[GeoFeatureSupported], ImportLog]:

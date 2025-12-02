@@ -336,6 +336,8 @@ def update_import_item(request, item_id, validated_data):
                 # Ensure system_tags are preserved after normalization
                 normalized_feature['properties']['system_tags'] = original_system_tags
 
+                assert normalized_feature['properties']['feature_hash']
+
                 queue.geofeatures[i] = normalized_feature
                 updated_count += 1
 

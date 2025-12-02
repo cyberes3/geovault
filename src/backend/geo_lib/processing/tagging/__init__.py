@@ -7,18 +7,17 @@ and will be automatically discovered and executed.
 """
 from typing import List, Optional
 
-from geo_lib.types.feature import GeoFeatureSupported
+from geo_lib.logging.console import get_job_logger
 from geo_lib.processing.tagging.base import TagGenerator
-
-# Import all tag generator classes
+from geo_lib.processing.tagging.modules.driving_detection import DrivingDetectionTagGenerator
+from geo_lib.processing.tagging.modules.elevation import ElevationTagGenerator
+from geo_lib.processing.tagging.modules.feature_date import FeatureDateTagGenerator, update_feature_date_tags
+from geo_lib.processing.tagging.modules.geocoding import GeocodingTagGenerator
 from geo_lib.processing.tagging.modules.geometry_type import GeometryTypeTagGenerator
 from geo_lib.processing.tagging.modules.import_date import ImportDateTagGenerator
-from geo_lib.processing.tagging.modules.feature_date import FeatureDateTagGenerator, update_feature_date_tags
-from geo_lib.processing.tagging.modules.track_detection import TrackDetectionTagGenerator
-from geo_lib.processing.tagging.modules.driving_detection import DrivingDetectionTagGenerator
 from geo_lib.processing.tagging.modules.source_file import SourceFileTagGenerator
-from geo_lib.processing.tagging.modules.elevation import ElevationTagGenerator
-from geo_lib.processing.tagging.modules.geocoding import GeocodingTagGenerator
+from geo_lib.processing.tagging.modules.track_detection import TrackDetectionTagGenerator
+from geo_lib.types.feature import GeoFeatureSupported
 
 # Export update_feature_date_tags for backward compatibility
 __all__ = ['generate_auto_tags', 'update_feature_date_tags', 'get_internal_tags']
@@ -33,10 +32,10 @@ def _discover_tag_generators():
     This is called once on module import.
     """
     global _tag_generators
-    
+
     if _tag_generators:
         return  # Already discovered
-    
+
     # Register all tag generators
     generators = [
         GeometryTypeTagGenerator(),
@@ -48,9 +47,9 @@ def _discover_tag_generators():
         ElevationTagGenerator(),
         GeocodingTagGenerator(),
     ]
-    
+
     _tag_generators.extend(generators)
-    
+
     # Sort by priority (lower priority numbers execute first)
     _tag_generators.sort(key=lambda g: g.priority)
 
@@ -68,19 +67,19 @@ def get_internal_tags() -> List[str]:
     # Discover generators if not already done
     if not _tag_generators:
         _discover_tag_generators()
-    
+
     # Collect all tag names from all generators
     internal_tags = []
     for generator in _tag_generators:
         internal_tags.extend(generator.tag_names)
-    
+
     return internal_tags
 
 
 def generate_auto_tags(
-    feature: GeoFeatureSupported,
-    import_log=None,
-    filename: Optional[str] = None
+        feature: GeoFeatureSupported,
+        import_log=None,
+        filename: Optional[str] = None
 ) -> List[str]:
     """
     Generate automatic tags for a feature using all registered tag generators.
@@ -99,9 +98,9 @@ def generate_auto_tags(
     # Discover generators if not already done
     if not _tag_generators:
         _discover_tag_generators()
-    
+
     all_tags = []
-    
+
     # Execute all generators in priority order
     for generator in _tag_generators:
         try:
@@ -110,7 +109,6 @@ def generate_auto_tags(
                 all_tags.extend(tags)
         except Exception as e:
             # Log error but continue with other generators
-            from geo_lib.logging.console import get_job_logger
             logger = get_job_logger()
             logger.warning(f"Tag generator {generator.__class__.__name__} failed: {e}")
             if import_log:
@@ -120,11 +118,10 @@ def generate_auto_tags(
                     "Tagging",
                     DatabaseLogLevel.WARNING
                 )
-    
+
     # Ensure all tags are strings
     return [str(tag) for tag in all_tags]
 
 
 # Initialize generators on module import
 _discover_tag_generators()
-

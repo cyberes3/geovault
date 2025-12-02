@@ -133,8 +133,6 @@ class ImportJob(BaseJob):
         features_to_process = []
         skipped_count = 0
         for feature in import_item.geofeatures:
-            # Get feature ID using the same logic as when saving skipped_feature_ids
-            # This ensures we match even if properties.feature_hash doesn't exist (falls back to hash)
             feature_id = feature['properties']['feature_hash']
             if feature_id in skipped_feature_ids:
                 skipped_count += 1

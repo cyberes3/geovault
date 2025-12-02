@@ -10,6 +10,7 @@ from typing import Optional
 
 import markdownify
 
+from geo_lib.feature_id import generate_feature_hash
 from geo_lib.processing.file_types import FileType
 from geo_lib.logging.console import get_job_logger
 
@@ -204,7 +205,7 @@ def geojson_property_generation(feature: dict) -> dict:
     if 'description' in properties and properties['description']:
         properties['description'] = html_to_markdown(properties['description'])
     feature['properties'] = properties
-    
+
     # Validate, whitelist, and normalize the feature
     try:
         normalized_feature = validate_and_normalize_geojson_feature(

@@ -267,6 +267,37 @@ class TestE2EImport(TransactionTestCase):
         self.assertIsNotNone(sample_feature.geojson, "Feature should have geojson")
         self.assertIn('type', sample_feature.geojson, "GeoJSON should have type field")
         self.assertIn('properties', sample_feature.geojson, "GeoJSON should have properties")
+        
+        # Verify feature_hash is present (required field)
+        self.assertIn('feature_hash', sample_feature.geojson['properties'], 
+                     "Feature should have feature_hash in properties")
+        self.assertIsNotNone(sample_feature.geojson['properties']['feature_hash'],
+                           "feature_hash should not be None")
+        self.assertIsInstance(sample_feature.geojson['properties']['feature_hash'], str,
+                            "feature_hash should be a string")
+        self.assertGreater(len(sample_feature.geojson['properties']['feature_hash']), 0,
+                          "feature_hash should not be empty")
+        
+        # Verify system_tags were generated (this is critical - tags should be auto-generated)
+        self.assertIn('system_tags', sample_feature.geojson['properties'],
+                     "Feature should have system_tags generated during processing")
+        system_tags = sample_feature.geojson['properties']['system_tags']
+        self.assertIsInstance(system_tags, list, "system_tags should be a list")
+        self.assertGreater(len(system_tags), 0, 
+                          "system_tags should be generated (type, import-year, import-month, etc.)")
+        
+        # Verify specific system tags that should always be present
+        tag_types = [tag.split(':')[0] for tag in system_tags if ':' in tag]
+        self.assertIn('type', tag_types, "Should have 'type' system tag (point/line/polygon)")
+        self.assertIn('import-year', tag_types, "Should have 'import-year' system tag")
+        self.assertIn('import-month', tag_types, "Should have 'import-month' system tag")
+        
+        # Verify geofeatures in ImportQueue also have feature_hash
+        for idx, feature in enumerate(import_item.geofeatures[:3]):  # Check first 3
+            self.assertIn('feature_hash', feature.get('properties', {}),
+                         f"Feature {idx} in ImportQueue should have feature_hash")
+            self.assertIsNotNone(feature['properties']['feature_hash'],
+                               f"Feature {idx} feature_hash should not be None")
 
     def test_e2e_gpx_import(self):
         """Test complete GPX import flow: upload -> process -> import -> verify DB."""
@@ -312,6 +343,22 @@ class TestE2EImport(TransactionTestCase):
         # Verify import item is marked as imported
         import_item.refresh_from_db()
         self.assertTrue(import_item.imported, "Import item should be marked as imported")
+        
+        # Verify GPX features have proper structure including feature_hash and tags
+        gpx_feature = FeatureStore.objects.filter(user=self.user).first()
+        self.assertIn('feature_hash', gpx_feature.geojson['properties'],
+                     "GPX feature should have feature_hash")
+        self.assertIn('system_tags', gpx_feature.geojson['properties'],
+                     "GPX feature should have system_tags")
+        
+        # GPX tracks should have 'track:yes' tag
+        system_tags = gpx_feature.geojson['properties']['system_tags']
+        if gpx_feature.geojson.get('geometry', {}).get('type') in ['LineString', 'MultiLineString']:
+            tag_names = [tag.split(':')[0] for tag in system_tags if ':' in tag]
+            # Track features should have track tag
+            has_track_tag = any('track' in tag for tag in system_tags)
+            self.assertTrue(has_track_tag or 'type' in tag_names,
+                          "LineString from GPX should have track or type tags")
 
     def test_e2e_kmz_import(self):
         """Test complete KMZ import flow: upload -> process -> import -> verify DB."""
@@ -900,13 +947,19 @@ class TestE2EImport(TransactionTestCase):
         """
         # First create a feature to replace
         from django.contrib.gis.geos import Point
+        from geo_lib.feature_id import generate_feature_hash
+        
+        original_geojson = {
+            'type': 'Feature',
+            'geometry': {'type': 'Point', 'coordinates': [-122.0, 37.0, 0.0]},
+            'properties': {'name': 'Original Feature'}
+        }
+        # Add required feature_hash
+        original_geojson['properties']['feature_hash'] = generate_feature_hash(original_geojson)
+        
         original_feature = FeatureStore.objects.create(
             user=self.user,
-            geojson={
-                'type': 'Feature',
-                'geometry': {'type': 'Point', 'coordinates': [-122.0, 37.0, 0.0]},
-                'properties': {'name': 'Original Feature'}
-            },
+            geojson=original_geojson,
             geometry=Point(-122.0, 37.0, 0.0)
         )
         
