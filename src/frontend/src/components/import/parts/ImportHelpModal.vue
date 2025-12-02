@@ -41,7 +41,7 @@
                   <li><strong>Drag and drop:</strong> Drag files directly from your computer onto the upload area</li>
                   <li><strong>Multiple files:</strong> You can select or drag multiple files at once for batch processing</li>
                 </ul>
-                <div class="mt-3 p-3 bg-blue-50 border border-blue-200 rounded-md">
+                <div class="mt-3 px-2 py-1 bg-blue-50 border border-blue-200 rounded-md">
                   <p class="text-sm"><strong>Supported formats:</strong> KML, KMZ, and GPX files</p>
                   <p class="text-sm"><strong>File size limit:</strong> Maximum 5MB per file</p>
                 </div>
@@ -72,7 +72,7 @@
                       <li><strong>Automatic detection:</strong> The system identifies points in lines and tracks that are missing elevation information</li>
                       <li><strong>Preservation:</strong> Existing elevation data is never overwritten - only missing values are filled</li>
                     </ul>
-                    <div class="mt-2 p-3 bg-blue-50 border border-blue-200 rounded-md">
+                    <div class="mt-2 px-2 py-1 bg-blue-50 border border-blue-200 rounded-md">
                       <p class="text-sm"><strong>Note:</strong> This process only applies to lines and tracks. Points and polygons are not modified. If elevation data filling fails or is disabled, your upload will still proceed successfully - only the elevation data will be missing.</p>
                     </div>
                   </div>
@@ -112,7 +112,7 @@
                     <h5 class="text-base font-semibold text-gray-900 mb-2">7. Storage in Import Queue</h5>
                     <p class="text-sm">
                       Processed features are stored in your import queue, ready for review and final import. You can
-                      see all uploaded files in the \"Ready to Import\" section below.
+                      see all uploaded files in the "Ready to Import" section below.
                     </p>
                   </div>
                 </div>
@@ -123,9 +123,8 @@
             <section>
               <h4 class="text-lg font-semibold text-gray-900 mb-3">Geocoding</h4>
               <div class="space-y-4 text-gray-700">
-                <div class="p-4 bg-yellow-50 border border-yellow-200 rounded-md">
-                  <p class="text-sm font-semibold text-yellow-900 mb-2">⚠️ Administrator Configuration Required</p>
-                  <p class="text-sm">Geocoding must be enabled by your system administrator. If geocoding is not enabled, location-based tags will not be generated.</p>
+                <div class="px-2 py-1 bg-yellow-50 border border-yellow-200 rounded-md">
+                  <p class="text-sm text-yellow-900"><strong>⚠️ Administrator Configuration Required:</strong> Geocoding must be enabled by your system administrator. If not enabled, location-based tags will not be generated.</p>
                 </div>
 
                 <p>When enabled, geocoding automatically adds location-based tags to your features:</p>
@@ -210,7 +209,6 @@
                       <li>Features become part of your permanent library</li>
                       <li>They appear in your feature store and can be viewed on maps</li>
                       <li>They can be searched, filtered, and organized using tags</li>
-                      <li>Imported features cannot be modified directly - you'll need to upload a replacement file if changes are needed</li>
                     </ul>
                   </div>
                 </div>
@@ -223,7 +221,7 @@
               <div class="space-y-2 text-gray-700">
                 <ul class="list-disc list-inside space-y-1 ml-4">
                   <li>Files with identical content or filenames are automatically detected as duplicates</li>
-                  <li>Each file can only be imported once - duplicates are marked but not automatically removed</li>
+                  <li>Each file can only be imported once</li>
                   <li>Large files may take longer to process - you can monitor progress in real-time</li>
                   <li>You can delete files from the import queue if you decide not to import them</li>
                   <li>Processing logs are available for each file to help troubleshoot any issues</li>
