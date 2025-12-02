@@ -46,7 +46,12 @@ export default {
     type: {
       type: String,
       required: true,
-      validator: (value) => ['hash', 'coord', 'queue'].includes(value)
+      validator: (value) => [
+        'feature_store_hash',
+        'feature_store_geometry',
+        'cross_queue_hash',
+        'cross_queue_geometry'
+      ].includes(value)
     },
     item: {
       type: Object,
@@ -56,59 +61,66 @@ export default {
   computed: {
     show() {
       switch (this.type) {
-        case 'hash':
-          return this.item.isDuplicate && this.item.duplicateInfo && this.item.duplicateInfo.type === 'hash'
-        case 'coord':
-          return this.item.isCoordDuplicate
-        case 'queue':
-          return this.item.isQueueDuplicate
+        case 'feature_store_hash':
+          return this.item.isFeatureStoreHashDup
+        case 'feature_store_geometry':
+          return this.item.isFeatureStoreGeometryDup
+        case 'cross_queue_hash':
+          return this.item.isCrossQueueHashDup
+        case 'cross_queue_geometry':
+          return this.item.isCrossQueueGeometryDup
         default:
           return false
       }
     },
     title() {
       switch (this.type) {
-        case 'hash':
-          return 'Exact Duplicate Feature (Blocked)'
-        case 'coord':
-          return 'Coordinate Duplicate (Skipped by Default)'
-        case 'queue':
-          return 'Duplicate Feature in Import Queue'
+        case 'feature_store_hash':
+          return 'Exact Duplicate in Feature Library (Blocked)'
+        case 'feature_store_geometry':
+          return 'Same Location as Feature in Library'
+        case 'cross_queue_hash':
+          return 'Exact Duplicate in Import Queue (Blocked)'
+        case 'cross_queue_geometry':
+          return 'Same Location as Feature in Import Queue'
         default:
           return ''
       }
     },
     message() {
       switch (this.type) {
-        case 'hash':
-          return 'This feature is identical to an existing feature in your feature store. Hash duplicates cannot be imported and are automatically skipped.'
-        case 'coord':
-          return 'This feature has the same coordinates as an existing feature in your feature store or another item in your import queue. It is skipped by default, but you can restore it if needed.'
-        case 'queue':
-          return 'This feature is identical to one in another item in your import queue and will be automatically skipped during import.'
+        case 'feature_store_hash':
+          return 'This feature is identical to an existing feature in your feature library. Hash duplicates cannot be imported and are automatically blocked.'
+        case 'feature_store_geometry':
+          return 'This feature has the same location as an existing feature in your feature library. It is skipped by default, but you can restore it if needed.'
+        case 'cross_queue_hash':
+          return 'This feature is identical to one in another item in your import queue and will be automatically blocked during import.'
+        case 'cross_queue_geometry':
+          return 'This feature has the same location as a feature in another item in your import queue. It is skipped by default, but you can restore it if needed.'
         default:
           return ''
       }
     },
     queueDuplicateInfo() {
-      if (this.type === 'queue') {
-        return this.item.queueDuplicateInfo
-      } else if (this.type === 'coord') {
-        // Coordinate duplicates from queue items also get a link button
-        if (this.item.duplicateInfo && this.item.duplicateInfo.coordQueueInfo) {
-          return this.item.duplicateInfo.coordQueueInfo
+      // For cross-queue types, return queue item info
+      if (this.type === 'cross_queue_hash' || this.type === 'cross_queue_geometry') {
+        if (this.item.duplicateInfo && this.item.duplicateInfo.queue_item_id) {
+          return {
+            queue_item_id: this.item.duplicateInfo.queue_item_id,
+            queue_item_filename: this.item.duplicateInfo.queue_item_filename
+          };
         }
       }
       return null
     },
     featureStoreInfo() {
-      // Check if this hash or coord duplicate has a feature_store_id
-      if (this.type === 'hash' && this.item.duplicateInfo) {
-        return this.item.duplicateInfo.feature_store_id 
-          ? { feature_store_id: this.item.duplicateInfo.feature_store_id }
-          : null;
-      } else if (this.type === 'coord' && this.item.duplicateInfo && this.item.duplicateInfo.coordFeatureStoreInfo) {
-        return this.item.duplicateInfo.coordFeatureStoreInfo;
+      // For feature store types, return feature store ID for map link
+      if (this.type === 'feature_store_hash' || this.type === 'feature_store_geometry') {
+        if (this.item.duplicateInfo && this.item.duplicateInfo.feature_store_id) {
+          return {
+            feature_store_id: this.item.duplicateInfo.feature_store_id
+          };
+        }
       }
       return null;
     },

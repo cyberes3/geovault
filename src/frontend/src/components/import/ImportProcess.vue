@@ -446,9 +446,10 @@
 
         <!-- Duplicate Warnings - outside opacity div so they're always fully visible -->
         <div class="relative z-10">
-          <DuplicateWarning type="hash" :item="item" />
-          <DuplicateWarning type="coord" :item="item" />
-          <DuplicateWarning type="queue" :item="item" />
+          <DuplicateWarning type="feature_store_hash" :item="item" />
+          <DuplicateWarning type="feature_store_geometry" :item="item" />
+          <DuplicateWarning type="cross_queue_hash" :item="item" />
+          <DuplicateWarning type="cross_queue_geometry" :item="item" />
         </div>
 
         <!-- Content area - can be greyed out for skipped or duplicate items -->
@@ -784,11 +785,12 @@ export default {
         gotoInput: null
       },
 
-      // Consolidated: Duplicates
+      // Consolidated: Duplicates (4 types)
       duplicates: {
-        features: [],
-        indices: [],
-        queue: []  // Store queue duplicates for counting
+        featureStoreHash: [],
+        featureStoreGeometry: [],
+        crossQueueHash: [],
+        crossQueueGeometry: []
       },
 
       // Consolidated: Edit cache
@@ -1164,76 +1166,18 @@ export default {
         this.editCache.skippedFeatureIds = new Set(this.skippedFeatureIds);
       }
 
-      // Handle new unified duplicate structure from backend
-      // Backend sends: hash_duplicates and coord_duplicates as arrays of objects
-      // Convert to old format for compatibility with existing code
-      if (data.hash_duplicates && Array.isArray(data.hash_duplicates)) {
-        // Separate hash duplicates into queue and store duplicates
-        const queueDups = data.hash_duplicates.filter(d => d.queue_item_id);
-        const storeDups = data.hash_duplicates.filter(d => !d.queue_item_id);
-        
-        this.duplicates.features = {
-          hash: storeDups.map(d => d.hash),
-          coord: []  // Will be populated below
+      // Handle new duplicate structure from backend
+      // Backend sends: duplicates object with 4 arrays
+      if (data.duplicates) {
+        this.duplicates = {
+          featureStoreHash: data.duplicates.feature_store_hash || [],
+          featureStoreGeometry: data.duplicates.feature_store_geometry || [],
+          crossQueueHash: data.duplicates.cross_queue_hash || [],
+          crossQueueGeometry: data.duplicates.cross_queue_geometry || []
         };
         
-        // Store feature_store_id in duplicateInfo for each hash duplicate from FeatureStore
-        storeDups.forEach(dupInfo => {
-          const pageIndex = dupInfo.page_index;
-          if (pageIndex >= 0 && pageIndex < this.itemsForUser.length) {
-            if (!this.itemsForUser[pageIndex].duplicateInfo) {
-              this.itemsForUser[pageIndex].duplicateInfo = {};
-            }
-            if (dupInfo.feature_store_id) {
-              this.itemsForUser[pageIndex].duplicateInfo.feature_store_id = dupInfo.feature_store_id;
-            }
-          }
-        });
-        
-        // Queue duplicates (hash duplicates from other queue items)
-        this.duplicates.queue = queueDups.map(d => ({
-          hash: d.hash,
-          page_index: d.page_index,
-          queue_item_id: d.queue_item_id,
-          queue_item_filename: d.queue_item_filename
-        }));
-        
+        // Mark all duplicate types on features
         this.markDuplicateFeatures();
-        this.markQueueDuplicateFeatures(this.duplicates.queue);
-      }
-      
-      if (data.coord_duplicates && Array.isArray(data.coord_duplicates)) {
-        // Coord duplicates with optional queue link info
-        const coordHashArray = data.coord_duplicates.map(d => d.hash);
-        this.duplicates.features = this.duplicates.features || { hash: [], coord: [] };
-        this.duplicates.features.coord = coordHashArray;
-        
-        // Note: We do NOT auto-skip coordinate duplicates here
-        // The backend sends skipped_feature_ids which contains the user's saved skip state
-        // (including coordinate duplicates that were auto-skipped on first processing)
-        // This ensures user choices (restore/skip) are persisted across page reloads
-        
-        // Mark coordinate duplicates
-        this.markDuplicateFeatures();
-        
-        // Mark coordinate duplicates with queue or FeatureStore link info
-        const coordWithLinkInfo = data.coord_duplicates.filter(d => d.type === 'queue' || d.type === 'feature_store');
-        if (coordWithLinkInfo.length > 0) {
-          this.markCoordDuplicatesFromQueue(coordWithLinkInfo.map(d => {
-            const info = {
-              page_index: d.page_index,
-              type: d.type
-            };
-            if (d.type === 'queue') {
-              info.queue_item_id = d.queue_item_id;
-              info.queue_item_filename = d.queue_item_filename;
-              info.hash = d.target_hash;
-            } else if (d.type === 'feature_store') {
-              info.feature_store_id = d.feature_store_id;
-            }
-            return info;
-          }));
-        }
       }
 
       this.loading.page = false;
@@ -1536,7 +1480,8 @@ export default {
       return this.skippedFeatureIds.has(featureId);
     },
     isItemDuplicate(item) {
-      return !!(item && (item.isDuplicate || item.isQueueDuplicate));
+      // Hash duplicates (both sources) are always blocked and cannot be skipped/restored
+      return !!(item && (item.isFeatureStoreHashDup || item.isCrossQueueHashDup));
     },
     isItemDisabled(item, index) {
       return this.isImported ||
@@ -1903,10 +1848,9 @@ export default {
 
         // Perform the import - server returns immediately, completion will come via WebSocket
         // No need to send the feature collection, it's already saved
-        // Only send features that the USER explicitly chose to skip
-        const manuallySkipped = Array.from(this.skippedFeatureIds).filter(id => !id.startsWith('index_'));
-        const queueDuplicateHashes = (this.duplicates.queue || []).map(d => d.hash);
-        const skippedFeatureIdsArray = [...manuallySkipped, ...queueDuplicateHashes];
+        // Send skipped_feature_ids which should ONLY contain geometry duplicates
+        // Hash duplicates are always blocked by the backend and should NOT be in this list
+        const skippedFeatureIdsArray = Array.from(this.skippedFeatureIds).filter(id => !id.startsWith('index_'));
 
         // Set flag BEFORE making the request so WebSocket messages are handled correctly
         // (WebSocket events can arrive faster than the axios response)
@@ -1979,97 +1923,66 @@ export default {
       this.dialogs.featureMap.isOpen = false;
     },
     markDuplicateFeatures() {
-      // Reset duplicate flags but preserve duplicateInfo (like feature_store_id)
-      this.itemsForUser.forEach((item, index) => {
-        item.isDuplicate = false;
-        item.isCoordDuplicate = false;
-        // Don't reset duplicateInfo - it may contain feature_store_id or other link info
-        // Just clear the type if it exists
-        if (item.duplicateInfo) {
-          delete item.duplicateInfo.type;
+      // Reset all duplicate flags
+      this.itemsForUser.forEach((item) => {
+        item.isFeatureStoreHashDup = false;
+        item.isFeatureStoreGeometryDup = false;
+        item.isCrossQueueHashDup = false;
+        item.isCrossQueueGeometryDup = false;
+        item.duplicateInfo = {};
+      });
+
+      // Mark feature store hash duplicates
+      (this.duplicates.featureStoreHash || []).forEach(dupInfo => {
+        const pageIndex = dupInfo.page_index;
+        if (pageIndex >= 0 && pageIndex < this.itemsForUser.length) {
+          this.itemsForUser[pageIndex].isFeatureStoreHashDup = true;
+          this.itemsForUser[pageIndex].duplicateInfo = {
+            source: 'feature_store',
+            match_type: 'hash',
+            feature_store_id: dupInfo.feature_store_id
+          };
         }
       });
 
-      // Handle new structure: {hash: [], coord: []}
-      const hashDuplicates = this.duplicates.features.hash || [];
-      const coordDuplicates = this.duplicates.features.coord || [];
-
-      // Mark hash duplicates (blocked, cannot be unskipped)
-      // The backend sends hashes that match the feature's properties.feature_hash
-      hashDuplicates.forEach(featureHash => {
-        this.itemsForUser.forEach((item, index) => {
-          const featureId = this.getFeatureId(item, index);
-          // Compare the hash from backend with the feature's ID
-          if (featureId === featureHash) {
-            item.isDuplicate = true;
-            // Preserve existing duplicateInfo (like feature_store_id) and add type
-            if (!item.duplicateInfo) {
-              item.duplicateInfo = {};
-            }
-            item.duplicateInfo.type = 'hash';
-          }
-        });
-      });
-
-      // Mark coordinate duplicates (default skipped, but can be unskipped)
-      coordDuplicates.forEach(featureHash => {
-        this.itemsForUser.forEach((item, index) => {
-          const featureId = this.getFeatureId(item, index);
-          // Compare the hash from backend with the feature's ID
-          if (featureId === featureHash) {
-            item.isCoordDuplicate = true;
-            // Preserve existing duplicateInfo (like coordFeatureStoreInfo) and add type
-            if (!item.duplicateInfo) {
-              item.duplicateInfo = {};
-            }
-            item.duplicateInfo.type = 'coord';
-          }
-        });
-      });
-    },
-    markQueueDuplicateFeatures(queueDuplicates) {
-      // Reset all features to not be queue duplicates
-      this.itemsForUser.forEach((item, index) => {
-        item.isQueueDuplicate = false;
-        item.queueDuplicateInfo = null;
-      });
-
-      // Mark queue duplicate features using the page_index
-      // Note: We do NOT auto-skip queue duplicates here
-      // The backend sends skipped_feature_ids which contains the user's saved skip state
-      // This ensures user choices (restore/skip) are persisted across page reloads
-      queueDuplicates.forEach(queueDuplicateInfo => {
-        const pageIndex = queueDuplicateInfo.page_index;
+      // Mark feature store geometry duplicates
+      (this.duplicates.featureStoreGeometry || []).forEach(dupInfo => {
+        const pageIndex = dupInfo.page_index;
         if (pageIndex >= 0 && pageIndex < this.itemsForUser.length) {
-          this.itemsForUser[pageIndex].isQueueDuplicate = true;
-          this.itemsForUser[pageIndex].queueDuplicateInfo = queueDuplicateInfo;
+          this.itemsForUser[pageIndex].isFeatureStoreGeometryDup = true;
+          this.itemsForUser[pageIndex].duplicateInfo = {
+            source: 'feature_store',
+            match_type: 'geometry',
+            feature_store_id: dupInfo.feature_store_id
+          };
         }
       });
-    },
-    
-    markCoordDuplicatesFromQueue(coordDuplicatesInfo) {
-      // Mark coordinate duplicate features that are from another queue item or FeatureStore
-      // These should show a button to view in the other queue item or on the map
-      coordDuplicatesInfo.forEach(coordDupInfo => {
-        const pageIndex = coordDupInfo.page_index;
+
+      // Mark cross-queue hash duplicates
+      (this.duplicates.crossQueueHash || []).forEach(dupInfo => {
+        const pageIndex = dupInfo.page_index;
         if (pageIndex >= 0 && pageIndex < this.itemsForUser.length) {
-          // Add link info to the feature so the DuplicateWarning component can show a link
-          if (!this.itemsForUser[pageIndex].duplicateInfo) {
-            this.itemsForUser[pageIndex].duplicateInfo = {};
-          }
-          
-          // Check if it's a queue duplicate or FeatureStore duplicate
-          if (coordDupInfo.type === 'queue') {
-            this.itemsForUser[pageIndex].duplicateInfo.coordQueueInfo = {
-              queue_item_id: coordDupInfo.queue_item_id,
-              queue_item_filename: coordDupInfo.queue_item_filename,
-              hash: coordDupInfo.hash
-            };
-          } else if (coordDupInfo.type === 'feature_store') {
-            this.itemsForUser[pageIndex].duplicateInfo.coordFeatureStoreInfo = {
-              feature_store_id: coordDupInfo.feature_store_id
-            };
-          }
+          this.itemsForUser[pageIndex].isCrossQueueHashDup = true;
+          this.itemsForUser[pageIndex].duplicateInfo = {
+            source: 'cross_queue',
+            match_type: 'hash',
+            queue_item_id: dupInfo.queue_item_id,
+            queue_item_filename: dupInfo.queue_item_filename
+          };
+        }
+      });
+
+      // Mark cross-queue geometry duplicates
+      (this.duplicates.crossQueueGeometry || []).forEach(dupInfo => {
+        const pageIndex = dupInfo.page_index;
+        if (pageIndex >= 0 && pageIndex < this.itemsForUser.length) {
+          this.itemsForUser[pageIndex].isCrossQueueGeometryDup = true;
+          this.itemsForUser[pageIndex].duplicateInfo = {
+            source: 'cross_queue',
+            match_type: 'geometry',
+            queue_item_id: dupInfo.queue_item_id,
+            queue_item_filename: dupInfo.queue_item_filename
+          };
         }
       });
     },

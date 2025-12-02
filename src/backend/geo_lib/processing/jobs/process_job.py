@@ -582,7 +582,11 @@ class ProcessJob(BaseJob):
                     processing_log.add("Starting duplicate detection against existing feature store", "ProcessJob", DatabaseLogLevel.INFO)
 
                     # Import the duplicate detection functions
-                    from geo_lib.processing.duplicate_detection import find_coordinate_duplicates, strip_duplicate_features
+                    from geo_lib.processing.duplicate_detection import (
+                        find_duplicates_for_source,
+                        strip_duplicate_features
+                    )
+                    from geo_lib.processing.duplicate_models import DuplicateSource, DuplicateMatchType
 
                     # First, check for internal duplicates within the file
                     processing_log.add("Checking for internal duplicates within the uploaded file", "ProcessJob", DatabaseLogLevel.INFO)
@@ -596,71 +600,62 @@ class ProcessJob(BaseJob):
                         processing_log.add("Processing cancelled after internal duplicate detection", "ProcessJob", DatabaseLogLevel.WARNING)
                         return import_queue.id
 
-                    # Then check for coordinate duplicates against existing features and queue items
-                    processing_log.add("Checking for coordinate duplicates against existing features in your library and other items in your import queue", "ProcessJob", DatabaseLogLevel.INFO)
+                    # Check for duplicates - 2-pass detection with source priority (feature store first, then cross-queue)
+                    processing_log.add("Checking for duplicates in your library and import queue", "ProcessJob", DatabaseLogLevel.INFO)
                     duplicate_detection_start = time.time()
-                    unique_features, duplicate_features, duplicate_log = find_coordinate_duplicates(
-                        unique_internal_features, 
+                    
+                    # PASS 1: Check feature store (hash + geometry, with hash priority)
+                    processing_log.add("Checking for duplicates in your feature library", "ProcessJob", DatabaseLogLevel.INFO)
+                    remaining_after_fs, feature_store_duplicates, fs_log = find_duplicates_for_source(
+                        unique_internal_features,
                         user_id,
+                        source='feature_store',
+                        exclude_queue_id=None,
+                        exclude_timestamp=None
+                    )
+                    processing_log.extend(fs_log)
+                    
+                    # Split feature store duplicates into hash and geometry for tracking
+                    feature_store_hash_duplicates = [
+                        dup for dup in feature_store_duplicates 
+                        if dup.get('match_type') == DuplicateMatchType.HASH
+                    ]
+                    feature_store_geom_duplicates = [
+                        dup for dup in feature_store_duplicates 
+                        if dup.get('match_type') == DuplicateMatchType.GEOMETRY
+                    ]
+                    
+                    # PASS 2: Check cross-queue (hash + geometry, with hash priority) on remaining features
+                    processing_log.add("Checking for duplicates in other import queue items", "ProcessJob", DatabaseLogLevel.INFO)
+                    remaining_after_cq, cross_queue_duplicates, cq_log = find_duplicates_for_source(
+                        remaining_after_fs,
+                        user_id,
+                        source='cross_queue',
                         exclude_queue_id=import_queue.id,
                         exclude_timestamp=import_queue.timestamp
                     )
+                    processing_log.extend(cq_log)
+                    
+                    # Split cross-queue duplicates into hash and geometry for tracking
+                    cross_queue_hash_duplicates = [
+                        dup for dup in cross_queue_duplicates 
+                        if dup.get('match_type') == DuplicateMatchType.HASH
+                    ]
+                    cross_queue_geom_duplicates = [
+                        dup for dup in cross_queue_duplicates 
+                        if dup.get('match_type') == DuplicateMatchType.GEOMETRY
+                    ]
+                    
+                    # Combine all duplicates in priority order
+                    duplicate_features = (
+                        feature_store_hash_duplicates + 
+                        feature_store_geom_duplicates + 
+                        cross_queue_hash_duplicates + 
+                        cross_queue_geom_duplicates
+                    )
+                    
                     duplicate_detection_duration = time.time() - duplicate_detection_start
-                    processing_log.extend(duplicate_log)
                     processing_log.add_timing("Duplicate detection", duplicate_detection_duration, "ProcessJob")
-
-                    # Check for hash duplicates in FeatureStore
-                    # These are features that match exactly (all properties, not just coordinates)
-                    processing_log.add("Checking for hash duplicates in your feature library", "ProcessJob", DatabaseLogLevel.INFO)
-                    existing_hashes_in_store = set(
-                        FeatureStore.objects.filter(user_id=user_id).values_list('geojson_hash', flat=True)
-                    )
-                    
-                    # Check each unique feature to see if its hash exists in FeatureStore
-                    hash_duplicates_in_store = []
-                    truly_unique_features = []
-                    for feature in unique_features:
-                        # Use stored hash if available (already injected earlier)
-                        feature_hash = feature.get('properties', {}).get('feature_hash')
-                        if not feature_hash:
-                            feature_hash = generate_feature_hash(feature)
-                        if feature_hash in existing_hashes_in_store:
-                            # This feature already exists in FeatureStore as a hash duplicate
-                            # Query FeatureStore to get feature info for linking
-                            from geo_lib.processing.duplicate_detection import _format_existing_feature
-                            
-                            existing_feature = FeatureStore.objects.filter(
-                                user_id=user_id,
-                                geojson_hash=feature_hash
-                            ).values('id', 'geojson', 'timestamp').first()
-                            
-                            existing_features_list = []
-                            if existing_feature:
-                                existing_features_list = [_format_existing_feature(existing_feature)]
-                            
-                            hash_duplicates_in_store.append({
-                                'feature': feature,
-                                'is_hash_duplicate': True,
-                                'existing_features': existing_features_list
-                            })
-                        else:
-                            truly_unique_features.append(feature)
-                    
-                    if hash_duplicates_in_store:
-                        processing_log.add(f"Found {len(hash_duplicates_in_store)} hash duplicate(s) in your feature library", "ProcessJob", DatabaseLogLevel.INFO)
-                        # Add hash duplicates to the front of duplicate_features list
-                        duplicate_features = hash_duplicates_in_store + duplicate_features
-                    
-                    # Filter out coordinate duplicates that are also hash duplicates
-                    # Hash duplicates take precedence - if a feature is both, only mark as hash duplicate
-                    from geo_lib.processing.duplicate_detection import filter_hash_duplicates_from_coord_duplicates
-                    
-                    duplicate_features = filter_hash_duplicates_from_coord_duplicates(
-                        duplicate_features,
-                        user_id,
-                        exclude_queue_id=import_queue.id,
-                        exclude_timestamp=import_queue.timestamp
-                    )
 
                     # Check for cancellation after duplicate detection
                     job = self.status_tracker.get_job(job_id)
@@ -753,15 +748,21 @@ class ProcessJob(BaseJob):
                     import_queue.geofeatures = convert_features_to_pydantic(processed_features)
                     import_queue.duplicate_features = convert_features_to_pydantic(duplicate_features)
                     
-                    # Auto-skip coordinate duplicates by adding their feature IDs to skipped_feature_ids
-                    from geo_lib.processing.duplicate_detection import get_skipped_feature_ids_from_duplicates
+                    # Auto-skip ONLY geometry duplicates by adding their feature IDs to skipped_feature_ids
+                    # Hash duplicates are always blocked and should not be in skipped_feature_ids
+                    existing_skipped = set(import_queue.skipped_feature_ids if import_queue.skipped_feature_ids else [])
                     
-                    skipped_feature_ids = get_skipped_feature_ids_from_duplicates(
-                        duplicate_features,
-                        import_queue.skipped_feature_ids
-                    )
+                    # Only add geometry duplicates to skipped list
+                    for dup in duplicate_features:
+                        if dup.get('match_type') == DuplicateMatchType.GEOMETRY:
+                            dup_feature = dup.get('feature')
+                            if dup_feature:
+                                feature_hash = dup_feature.get('properties', {}).get('feature_hash')
+                                if not feature_hash:
+                                    feature_hash = generate_feature_hash(dup_feature)
+                                existing_skipped.add(feature_hash)
                     
-                    import_queue.skipped_feature_ids = list(skipped_feature_ids)
+                    import_queue.skipped_feature_ids = list(existing_skipped)
                     import_queue.save()
                 # Advisory lock released here
 

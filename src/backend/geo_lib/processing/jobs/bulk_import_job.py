@@ -138,7 +138,7 @@ class BulkImportJob(BaseJob):
                             # Convert back to SkippedDuplicates model to aggregate
                             item_skipped = SkippedDuplicates.model_validate(result['duplicates_skipped'])
                             all_skipped_duplicates.hash.extend(item_skipped.hash)
-                            all_skipped_duplicates.coord.extend(item_skipped.coord)
+                            all_skipped_duplicates.geometry.extend(item_skipped.geometry)
                     else:
                         failed_imports.append({
                             'item_id': item.id,
@@ -167,7 +167,7 @@ class BulkImportJob(BaseJob):
             )
 
             # Convert aggregated skipped duplicates to dict for JSON serialization
-            duplicates_skipped_dict = all_skipped_duplicates.model_dump(mode='json') if all_skipped_duplicates else {'hash': [], 'coord': []}
+            duplicates_skipped_dict = all_skipped_duplicates.model_dump(mode='json') if all_skipped_duplicates else {'hash': [], 'geometry': []}
             
             # Broadcast completion
             self._broadcast_job_completed(
@@ -220,8 +220,8 @@ class BulkImportJob(BaseJob):
                     return job_error_result(f'Duplicate of "{earlier_duplicates.original_filename}"')
 
             # Process features using shared utility
-            # For ready-to-import table imports, skip both hash and coordinate duplicates automatically
-            # Pass empty set for skipped_feature_ids to enable automatic coordinate duplicate skipping
+            # For ready-to-import table imports, skip both hash and geometry duplicates automatically
+            # Pass empty set for skipped_feature_ids to enable automatic geometry duplicate skipping
             features_to_create, skipped_duplicates = process_features_for_import(
                 import_item, user_id, import_custom_icons, None, set()
             )
@@ -244,7 +244,7 @@ class BulkImportJob(BaseJob):
                 
                 # Convert Pydantic model to dict for JSON serialization
                 # job_success_result expects a dict, so convert the Pydantic model
-                duplicates_skipped_dict = skipped_duplicates.model_dump(mode='json') if skipped_duplicates else {'hash': [], 'coord': []}
+                duplicates_skipped_dict = skipped_duplicates.model_dump(mode='json') if skipped_duplicates else {'hash': [], 'geometry': []}
                 return job_success_result(
                     imported=successful_imports,
                     duplicates_skipped=duplicates_skipped_dict

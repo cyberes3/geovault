@@ -198,8 +198,8 @@ def process_single_feature_for_import(
     current_batch_hashes: set, duplicate_check_lock: threading.Lock,
     queue_hash_to_item: Dict[str, Dict[str, Any]],
     skipped_hash_duplicates: List[SkippedDuplicateFeature],
-    skipped_feature_ids: set, coord_duplicate_hashes: set,
-    skipped_coord_duplicates: List[SkippedDuplicateFeature]
+    skipped_feature_ids: set, geometry_duplicate_hashes: set,
+    skipped_geometry_duplicates: List[SkippedDuplicateFeature]
 ) -> Optional[FeatureStore]:
     """
     Process a single feature for import, including validation, tag generation, and FeatureStore creation.
@@ -216,9 +216,9 @@ def process_single_feature_for_import(
         duplicate_check_lock: Lock for thread-safe duplicate checking
         queue_hash_to_item: Map of hash -> queue item info (id, filename)
         skipped_hash_duplicates: List to append skipped hash duplicates to (thread-safe via lock)
-        skipped_feature_ids: Set of feature IDs that should be skipped (coordinate duplicates from user)
-        coord_duplicate_hashes: Set of feature hashes that are coordinate duplicates
-        skipped_coord_duplicates: List to append skipped coordinate duplicates to (thread-safe via lock)
+        skipped_feature_ids: Set of feature IDs that should be skipped (geometry duplicates from user)
+        geometry_duplicate_hashes: Set of feature hashes that are geometry duplicates
+        skipped_geometry_duplicates: List to append skipped geometry duplicates to (thread-safe via lock)
         
     Returns:
         FeatureStore object if successful, None if skipped or failed
@@ -231,7 +231,7 @@ def process_single_feature_for_import(
 
         geometry_type = match_geometry_class(feature['geometry']['type'])
 
-        # Note: Coordinate duplicates are no longer automatically blocked here.
+        # Note: Geometry duplicates are no longer automatically blocked here.
         # They are handled via skipped_feature_ids if the user chooses to skip them.
         # Only hash-based duplicates are automatically blocked.
 
@@ -256,47 +256,43 @@ def process_single_feature_for_import(
         # if not feature_hash:
         #     feature_hash = generate_feature_hash(geojson_data)
 
-        # Check if this is a coordinate duplicate
-        # Only skip if user explicitly added it to skipped_feature_ids
-        # is_coord_duplicate = feature_hash in coord_duplicate_hashes
         feature_name = feature.get('properties', {}).get('name', 'Unnamed')
-        #
-        # if is_coord_duplicate and feature_hash in skipped_feature_ids:
-        #     # User explicitly skipped this coordinate duplicate
-        #     logger.info(f"  -> Skipping coordinate duplicate (in skip list)")
-        #     with duplicate_check_lock:
-        #         skipped_coord_duplicates.append(SkippedDuplicateFeature(
-        #             name=feature_name,
-        #             hash=feature_hash
-        #         ))
-        #     return None
+        
+        # Check if this is a geometry duplicate
+        # Only skip if user explicitly added it to skipped_feature_ids
+        if feature_hash in geometry_duplicate_hashes and feature_hash in skipped_feature_ids:
+            # User explicitly skipped this geometry duplicate
+            logger.info(f"  -> Skipping geometry duplicate (in skip list)")
+            with duplicate_check_lock:
+                skipped_geometry_duplicates.append(SkippedDuplicateFeature(
+                    name=feature_name,
+                    hash=feature_hash
+                ))
+            return None
 
         # Check if this feature already exists for this user or in current batch (thread-safe)
         with duplicate_check_lock:
-            # Check for queue duplicates first (these can be restored by user)
-            # queue_info = queue_hash_to_item.get(feature_hash, {})
-            # if queue_info:
-            #     # This is a queue duplicate - always skip it as per requirement (treat as hash duplicate)
-            #     logger.info(f"  -> Skipping queue duplicate (always blocked)")
-            #     skipped_hash_duplicates.append(SkippedDuplicateFeature(
-            #         name=feature_name,
-            #         hash=feature_hash,
-            #         queue_item_id=queue_info.get('queue_item_id'),
-            #         queue_item_filename=queue_info.get('queue_item_filename', 'Unknown')
-            #     ))
-            #     return None
+            # Check for cross-queue hash duplicates FIRST (always blocked)
+            queue_info = queue_hash_to_item.get(feature_hash, {})
+            if queue_info:
+                # This is a cross-queue hash duplicate - always blocked
+                logger.info(f"  -> Skipping cross-queue hash duplicate (always blocked)")
+                skipped_hash_duplicates.append(SkippedDuplicateFeature(
+                    name=feature_name,
+                    hash=feature_hash,
+                    queue_item_id=queue_info.get('queue_item_id'),
+                    queue_item_filename=queue_info.get('queue_item_filename', 'Unknown')
+                ))
+                return None
 
             # Check for hash duplicates from FeatureStore or current batch (always blocked)
             if feature_hash in existing_hashes or feature_hash in current_batch_hashes:
                 # This is a hash-based duplicate from FeatureStore (blocked automatically)
-                logger.info(f"  -> Skipping hash duplicate from FeatureStore")
+                logger.info(f"  -> Skipping feature store hash duplicate (always blocked)")
                 skipped_hash_duplicates.append(SkippedDuplicateFeature(
                     name=feature_name,
                     hash=feature_hash
                 ))
-
-                # Skip importing duplicate features
-                # Skipping duplicate feature (normal operation)
                 return None
 
             # Add to current batch hashes to prevent duplicates within the same import
@@ -498,10 +494,10 @@ def process_features_for_import(
     existing_hashes = set()
     current_batch_hashes = set()
     skipped_hash_duplicates: List[SkippedDuplicateFeature] = []
-    skipped_coord_duplicates: List[SkippedDuplicateFeature] = []
+    skipped_geometry_duplicates: List[SkippedDuplicateFeature] = []
 
-    # Build set of coordinate duplicate hashes from duplicate_features
-    coord_duplicate_hashes = set()
+    # Build set of geometry duplicate hashes from duplicate_features
+    geometry_duplicate_hashes = set()
     if import_item.duplicate_features:
         for dup_info in import_item.duplicate_features:
             dup_feature = dup_info.get('feature')
@@ -510,7 +506,7 @@ def process_features_for_import(
                 feature_hash = dup_feature['properties']['feature_hash']
                 # if not feature_hash:
                 #     feature_hash = generate_feature_hash(dup_feature)
-                coord_duplicate_hashes.add(feature_hash)
+                geometry_duplicate_hashes.add(feature_hash)
 
     # Get existing feature hashes for this user to avoid duplicates
     existing_features = FeatureStore.objects.filter(user_id=user_id).values_list('geojson_hash', flat=True)
@@ -547,7 +543,7 @@ def process_features_for_import(
             feature, feature_index, import_item, user_id, import_custom_icons,
             existing_hashes, current_batch_hashes, duplicate_check_lock,
             queue_hash_to_item, skipped_hash_duplicates,
-            skipped_feature_ids, coord_duplicate_hashes, skipped_coord_duplicates
+            skipped_feature_ids, geometry_duplicate_hashes, skipped_geometry_duplicates
         )
         return result
 
@@ -566,7 +562,7 @@ def process_features_for_import(
 
     return features_to_create, SkippedDuplicates(
         hash=skipped_hash_duplicates,
-        coord=skipped_coord_duplicates
+        geometry=skipped_geometry_duplicates
     )
 
 

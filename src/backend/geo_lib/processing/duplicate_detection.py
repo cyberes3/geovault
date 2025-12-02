@@ -115,20 +115,22 @@ def coordinates_match(coord1: List, coord2: List, tolerance: float = COORDINATE_
     return norm1 == norm2
 
 
-def find_coordinate_duplicates(
+def find_geometry_duplicates(
     features: List[Dict], 
     user_id: int,
     exclude_queue_id: Optional[int] = None,
-    exclude_timestamp: Optional[datetime] = None
+    exclude_timestamp: Optional[datetime] = None,
+    source_filter: Optional[str] = None
 ) -> Tuple[List[Dict], List[Dict], ImportLog]:
     """
-    Find features that have duplicate coordinates in the existing featurestore and/or import queue.
+    Find features that have duplicate geometry in the existing featurestore and/or import queue.
     
     Args:
         features: List of features to check for duplicates
         user_id: User ID to check duplicates for
         exclude_queue_id: Optional ImportQueue item ID to exclude from cross-queue checks
         exclude_timestamp: Optional timestamp - only check queue items older than this timestamp
+        source_filter: Optional filter to check only specific source: 'feature_store', 'cross_queue', or None (both)
     
     Returns:
         Tuple of (unique_features, duplicate_features_with_originals, log_messages)
@@ -139,7 +141,7 @@ def find_coordinate_duplicates(
         return features, [], import_log
 
     log_msg = f"Checking {len(features)} features against existing features in your library"
-    if exclude_queue_id is not None:
+    if exclude_queue_id is not None and source_filter != 'feature_store':
         log_msg += " and other items in your import queue"
     import_log.add(log_msg, "Duplicate Detection", DatabaseLogLevel.INFO)
 
@@ -147,18 +149,18 @@ def find_coordinate_duplicates(
     batch_threshold = get_required_setting('DUPLICATE_DETECTION_BATCH_THRESHOLD')
     if len(features) > batch_threshold:
         import_log.add("Using optimized batch processing for large file", "Duplicate Detection", DatabaseLogLevel.INFO)
-        return _find_coordinate_duplicates_batched(features, user_id, import_log, exclude_queue_id, exclude_timestamp)
+        return _find_geometry_duplicates_batched(features, user_id, import_log, exclude_queue_id, exclude_timestamp, source_filter)
 
     # For smaller files, use the original approach
     unique_features = []
     duplicate_features = []
     
-    # Build coordinate map from queue items if needed
+    # Build coordinate map from queue items if needed (only if not filtering for feature_store)
     # We only check items with timestamps less than the current item to prevent both files
     # from marking each other as duplicates when processed simultaneously
     # If no timestamp is provided, check all items (for recheck operations)
     queue_coords_map = {}
-    if exclude_queue_id is not None:
+    if source_filter != 'feature_store' and exclude_queue_id is not None:
         other_queue_items = ImportQueue.objects.filter(
             user_id=user_id,
             imported=False
@@ -202,11 +204,13 @@ def find_coordinate_duplicates(
             unique_features.append(feature)
             continue
 
-        # Check for existing features with matching coordinates in FeatureStore
-        existing_features = _find_existing_features_by_coordinates(coordinates, geom_type, user_id)
+        # Check for existing features with matching coordinates in FeatureStore (only if not filtering for cross_queue)
+        existing_features = []
+        if source_filter != 'cross_queue':
+            existing_features = _find_existing_features_by_coordinates(coordinates, geom_type, user_id)
         
-        # Also check queue items if needed
-        if exclude_queue_id is not None:
+        # Also check queue items if needed (only if not filtering for feature_store)
+        if source_filter != 'feature_store' and exclude_queue_id is not None:
             normalized_feature_coords = normalize_coordinates(coordinates)
             coords_key = (geom_type, json.dumps(normalized_feature_coords, sort_keys=True))
             
@@ -222,31 +226,44 @@ def find_coordinate_duplicates(
                 existing_features.append(queue_existing)
 
         if existing_features:
-            # This is a duplicate - add original feature info
-            duplicate_info = {
-                'feature': feature,
-                'existing_features': existing_features
-            }
-            duplicate_features.append(duplicate_info)
-            duplicate_feature_hashes.add(generate_feature_hash(feature))
-
+            from geo_lib.processing.duplicate_models import DuplicateSource, DuplicateMatchType
+            
             # Create log message for the duplicate
             feature_name = feature.get('properties', {}).get('name', 'Unnamed')
             feature_type = feature.get('geometry', {}).get('type', 'Unknown')
             existing_count = len(existing_features)
             
-            # Check if it's from queue or store
+            # Check if it's from queue or store - prioritize feature store
             has_store_dup = any('timestamp' in ef and ef['timestamp'] is not None for ef in existing_features)
             has_queue_dup = any('timestamp' in ef and ef['timestamp'] is None for ef in existing_features)
             
-            if has_store_dup and has_queue_dup:
-                log_msg = f"Coordinate duplicate found: '{feature_name}' ({feature_type}) matches {existing_count} existing feature(s) in your library and import queue"
-            elif has_queue_dup:
-                queue_names = [ef['name'] for ef in existing_features if 'timestamp' in ef and ef['timestamp'] is None]
-                log_msg = f"Coordinate duplicate found in import queue: '{feature_name}' matches feature in '{queue_names[0]}'"
+            # Determine source based on priority rule (feature_store takes priority)
+            if has_store_dup:
+                source = DuplicateSource.FEATURE_STORE
+                # Filter to only feature store existing features
+                store_existing = [ef for ef in existing_features if 'timestamp' in ef and ef['timestamp'] is not None]
+                duplicate_info = {
+                    'feature': feature,
+                    'source': source,
+                    'match_type': DuplicateMatchType.GEOMETRY,
+                    'existing_features': store_existing
+                }
+                log_msg = f"Geometry duplicate found: '{feature_name}' ({feature_type}) matches {len(store_existing)} existing feature(s) in your library"
             else:
-                log_msg = f"Coordinate duplicate found: '{feature_name}' ({feature_type}) matches {existing_count} existing feature(s) in your library"
+                source = DuplicateSource.CROSS_QUEUE
+                # Filter to only cross-queue existing features
+                queue_existing = [ef for ef in existing_features if 'timestamp' in ef and ef['timestamp'] is None]
+                duplicate_info = {
+                    'feature': feature,
+                    'source': source,
+                    'match_type': DuplicateMatchType.GEOMETRY,
+                    'existing_features': queue_existing
+                }
+                queue_names = [ef['name'] for ef in queue_existing]
+                log_msg = f"Geometry duplicate found in import queue: '{feature_name}' matches feature in '{queue_names[0]}'"
             
+            duplicate_features.append(duplicate_info)
+            duplicate_feature_hashes.add(generate_feature_hash(feature))
             import_log.add(log_msg, 'Duplicate Detection', DatabaseLogLevel.INFO)
         else:
             unique_features.append(feature)
@@ -270,12 +287,13 @@ def find_coordinate_duplicates(
     return unique_features, duplicate_features, import_log
 
 
-def _find_coordinate_duplicates_batched(
+def _find_geometry_duplicates_batched(
     features: List[Dict], 
     user_id: int, 
     import_log: ImportLog,
     exclude_queue_id: Optional[int] = None,
-    exclude_timestamp: Optional[datetime] = None
+    exclude_timestamp: Optional[datetime] = None,
+    source_filter: Optional[str] = None
 ) -> Tuple[List[Dict], List[Dict], ImportLog]:
     """
     Optimized duplicate detection for large files using batched database queries.
@@ -326,18 +344,22 @@ def _find_coordinate_duplicates_batched(
                     elif geom_type == 'multipoint':
                         geom_type_name = 'MultiPoint'
                     elif geom_type == 'geometrycollection':
+                        from geo_lib.processing.duplicate_models import DuplicateSource, DuplicateMatchType
+                        
                         # GeometryCollection needs special handling - skip batching for now
                         # and use the regular duplicate detection logic
                         existing_features = _find_geometry_collection_duplicates(coordinates, user_id)
                         if existing_features:
                             duplicate_info = {
                                 'feature': feature,
+                                'source': DuplicateSource.FEATURE_STORE,
+                                'match_type': DuplicateMatchType.GEOMETRY,
                                 'existing_features': existing_features
                             }
                             duplicate_features.append(duplicate_info)
                             feature_name = feature.get('properties', {}).get('name', 'Unnamed')
                             existing_count = len(existing_features)
-                            import_log.add(f"Coordinate duplicate found: '{feature_name}' (GeometryCollection) matches {existing_count} existing feature(s)", 'Duplicate Detection', DatabaseLogLevel.INFO)
+                            import_log.add(f"Geometry duplicate found: '{feature_name}' (GeometryCollection) matches {existing_count} existing feature(s)", 'Duplicate Detection', DatabaseLogLevel.INFO)
                         else:
                             unique_features.append(feature)
                         continue
@@ -359,19 +381,23 @@ def _find_coordinate_duplicates_batched(
             if not batch_geometries:
                 continue
 
-            # Single database query for the entire batch using spatial index
+            # Single database query for the entire batch using spatial index (only if not filtering for cross_queue)
             try:
                 # Extract GEOS objects for spatial query (temporary, not stored in feature dicts)
                 geometries = [geom for _, _, _, geom in batch_geometries]
-                existing_features = FeatureStore.objects.filter(
-                    user_id=user_id,
-                    geometry__in=geometries
-                ).values('id', 'geojson', 'timestamp')
-
+                
                 # Create a lookup map for existing features using normalized coordinates
                 # This handles floating point precision differences better than WKT comparison
                 existing_lookup = {}
-                for existing in existing_features:
+                
+                # Query FeatureStore only if not filtering for cross_queue
+                if source_filter != 'cross_queue':
+                    existing_features = FeatureStore.objects.filter(
+                        user_id=user_id,
+                        geometry__in=geometries
+                    ).values('id', 'geojson', 'timestamp')
+                    
+                    for existing in existing_features:
                     # Format the feature using the helper
                     formatted_existing = _format_existing_feature(existing)
                     existing_geojson = formatted_existing['geojson']
@@ -393,16 +419,20 @@ def _find_coordinate_duplicates_batched(
                     coords_key = json.dumps(normalized_coords, sort_keys=True)
                     
                     if coords_key in existing_lookup:
+                        from geo_lib.processing.duplicate_models import DuplicateSource, DuplicateMatchType
+                        
                         # This is a duplicate from FeatureStore
                         duplicate_info = {
                             'feature': feature,
+                            'source': DuplicateSource.FEATURE_STORE,
+                            'match_type': DuplicateMatchType.GEOMETRY,
                             'existing_features': existing_lookup[coords_key]
                         }
                         duplicate_features.append(duplicate_info)
 
                         feature_name = feature.get('properties', {}).get('name', 'Unnamed')
                         existing_count = len(existing_lookup[coords_key])
-                        import_log.add(f"Coordinate duplicate found: '{feature_name}' ({geom_type}) matches {existing_count} existing feature(s) in your library", 'Duplicate Detection', DatabaseLogLevel.INFO)
+                        import_log.add(f"Geometry duplicate found: '{feature_name}' ({geom_type}) matches {existing_count} existing feature(s) in your library", 'Duplicate Detection', DatabaseLogLevel.INFO)
                     else:
                         unique_features.append(feature)
 
@@ -415,11 +445,11 @@ def _find_coordinate_duplicates_batched(
                 for idx, feature, coordinates in batch_features:
                     unique_features.append(feature)
 
-    # Also check for cross-queue coordinate duplicates if needed
+    # Also check for cross-queue coordinate duplicates if needed (only if not filtering for feature_store)
     # We only check items with timestamps less than the current item to prevent both files
     # from marking each other as duplicates when processed simultaneously
     # If no timestamp is provided, check all items (for recheck operations)
-    if exclude_queue_id is not None:
+    if source_filter != 'feature_store' and exclude_queue_id is not None:
         # Build coordinate map from queue items
         other_queue_items = ImportQueue.objects.filter(
             user_id=user_id,
@@ -452,33 +482,9 @@ def _find_coordinate_duplicates_batched(
                             'feature': queue_feature
                         }
         
-        # Check existing duplicates to see if they also match queue items
-        for dup_info in duplicate_features:
-            feature = dup_info.get('feature')
-            if not feature:
-                continue
-            
-            feature_geom = feature.get('geometry', {})
-            feature_coords = feature_geom.get('coordinates')
-            feature_type = feature_geom.get('type', '').lower()
-            
-            if feature_coords:
-                normalized_feature_coords = normalize_coordinates(feature_coords)
-                coords_key = (feature_type, json.dumps(normalized_feature_coords, sort_keys=True))
-                
-                if coords_key in queue_coords_map:
-                    queue_match = queue_coords_map[coords_key]
-                    queue_existing = {
-                        'id': queue_match['queue_item_id'],
-                        'name': queue_match['queue_item_filename'],
-                        'type': feature_type,
-                        'timestamp': None,
-                        'geojson': queue_match['feature']
-                    }
-                    # Add queue match to existing features
-                    dup_info['existing_features'].append(queue_existing)
-        
         # Check features that weren't already marked as duplicates
+        # Note: We don't add queue matches to feature_store duplicates due to priority rule
+        # Feature_store duplicates take precedence over cross_queue duplicates
         duplicate_feature_hashes = {generate_feature_hash(dup_info['feature']) for dup_info in duplicate_features if dup_info.get('feature')}
         
         for feature in unique_features[:]:  # Use slice copy to modify during iteration
@@ -495,6 +501,8 @@ def _find_coordinate_duplicates_batched(
                 coords_key = (feature_type, json.dumps(normalized_feature_coords, sort_keys=True))
                 
                 if coords_key in queue_coords_map:
+                    from geo_lib.processing.duplicate_models import DuplicateSource, DuplicateMatchType
+                    
                     queue_match = queue_coords_map[coords_key]
                     queue_existing = {
                         'id': queue_match['queue_item_id'],
@@ -506,6 +514,8 @@ def _find_coordinate_duplicates_batched(
                     
                     duplicate_info = {
                         'feature': feature,
+                        'source': DuplicateSource.CROSS_QUEUE,
+                        'match_type': DuplicateMatchType.GEOMETRY,
                         'existing_features': [queue_existing]
                     }
                     duplicate_features.append(duplicate_info)
@@ -513,7 +523,7 @@ def _find_coordinate_duplicates_batched(
                     
                     feature_name = feature.get('properties', {}).get('name', 'Unnamed')
                     import_log.add(
-                        f"Coordinate duplicate found in import queue: '{feature_name}' matches feature in '{queue_match['queue_item_filename']}'",
+                        f"Geometry duplicate found in import queue: '{feature_name}' matches feature in '{queue_match['queue_item_filename']}'",
                         'Duplicate Detection',
                         DatabaseLogLevel.INFO
                     )
@@ -563,14 +573,14 @@ def get_skipped_feature_ids_from_duplicates(
     return skipped_feature_ids
 
 
-def filter_hash_duplicates_from_coord_duplicates(
+def filter_hash_duplicates_from_geometry_duplicates(
     duplicate_features: List[Dict],
     user_id: int,
     exclude_queue_id: Optional[int] = None,
     exclude_timestamp: Optional[datetime] = None
 ) -> List[Dict]:
     """
-    Filter out coordinate duplicates that are also hash duplicates.
+    Filter out geometry duplicates that are also hash duplicates.
     Hash duplicates take precedence - if a feature is both, only mark as hash duplicate.
     
     Args:
@@ -599,11 +609,219 @@ def filter_hash_duplicates_from_coord_duplicates(
     queue_hashes = {generate_feature_hash(f) for item in other_queue_items for f in item.geofeatures}
     hash_duplicate_hashes = existing_store_hashes | queue_hashes
     
-    # Remove coordinate duplicates that are also hash duplicates
+    # Remove geometry duplicates that are also hash duplicates
     return [
         dup_info for dup_info in duplicate_features
         if dup_info.get('feature') and generate_feature_hash(dup_info['feature']) not in hash_duplicate_hashes
     ]
+
+
+def find_hash_duplicates(
+    features: List[Dict],
+    user_id: int,
+    exclude_queue_id: Optional[int] = None,
+    exclude_timestamp: Optional[datetime] = None,
+    source_filter: Optional[str] = None
+) -> Tuple[List[Dict], ImportLog]:
+    """
+    Find features that have duplicate hashes in the existing featurestore and/or import queue.
+    
+    Args:
+        features: List of features to check for hash duplicates
+        user_id: User ID to check duplicates for
+        exclude_queue_id: Optional ImportQueue item ID to exclude from cross-queue checks
+        exclude_timestamp: Optional timestamp - only check queue items older than this timestamp
+        source_filter: Optional filter to check only specific source: 'feature_store', 'cross_queue', or None (both)
+    
+    Returns:
+        Tuple of (hash_duplicate_features, log_messages)
+    """
+    from geo_lib.processing.duplicate_models import DuplicateSource, DuplicateMatchType
+    
+    import_log = ImportLog()
+    
+    if not features:
+        return [], import_log
+    
+    import_log.add(f"Checking {len(features)} features for hash duplicates", "Duplicate Detection", DatabaseLogLevel.INFO)
+    
+    # Get existing feature hashes from FeatureStore (only if not filtering for cross_queue)
+    existing_store_hashes = set()
+    hash_to_store_id = {}
+    if source_filter != 'cross_queue':
+        existing_store_hashes = set(
+            FeatureStore.objects.filter(user_id=user_id).values_list('geojson_hash', flat=True)
+        )
+        
+        # Build hash to feature_store_id mapping for linking
+        for feature in FeatureStore.objects.filter(user_id=user_id, geojson_hash__isnull=False).values('id', 'geojson_hash', 'geojson', 'timestamp'):
+            hash_to_store_id[feature['geojson_hash']] = {
+                'id': feature['id'],
+                'geojson': feature['geojson'],
+                'timestamp': feature['timestamp']
+            }
+    
+    # Get cross-queue hashes if needed (only if not filtering for feature_store)
+    queue_hash_to_item = {}
+    queue_hash_to_feature = {}
+    if source_filter != 'feature_store' and exclude_queue_id is not None:
+        other_queue_items = ImportQueue.objects.filter(
+            user_id=user_id,
+            imported=False
+        ).exclude(id=exclude_queue_id)
+        
+        if exclude_timestamp:
+            other_queue_items = other_queue_items.filter(timestamp__lt=exclude_timestamp)
+        
+        for queue_item in other_queue_items:
+            if not queue_item.geofeatures:
+                continue
+            for feature in queue_item.geofeatures:
+                feature_hash = feature.get('properties', {}).get('feature_hash')
+                if not feature_hash:
+                    feature_hash = generate_feature_hash(feature)
+                if feature_hash not in queue_hash_to_item:
+                    queue_hash_to_item[feature_hash] = {
+                        'queue_item_id': queue_item.id,
+                        'queue_item_filename': queue_item.original_filename
+                    }
+                    queue_hash_to_feature[feature_hash] = feature
+    
+    # Check each feature for hash duplicates
+    hash_duplicates = []
+    
+    for feature in features:
+        feature_hash = feature.get('properties', {}).get('feature_hash')
+        if not feature_hash:
+            feature_hash = generate_feature_hash(feature)
+        
+        feature_name = feature.get('properties', {}).get('name', 'Unnamed')
+        
+        # Check FeatureStore first (higher priority)
+        if feature_hash in existing_store_hashes:
+            existing_features_list = []
+            if feature_hash in hash_to_store_id:
+                store_feature = hash_to_store_id[feature_hash]
+                existing_features_list = [_format_existing_feature(store_feature)]
+            
+            hash_duplicates.append({
+                'feature': feature,
+                'source': DuplicateSource.FEATURE_STORE,
+                'match_type': DuplicateMatchType.HASH,
+                'existing_features': existing_features_list
+            })
+            import_log.add(
+                f"Hash duplicate found in feature store: '{feature_name}' (blocked)",
+                'Duplicate Detection',
+                DatabaseLogLevel.INFO
+            )
+        # Check cross-queue (only if not in FeatureStore)
+        elif feature_hash in queue_hash_to_item:
+            queue_info = queue_hash_to_item[feature_hash]
+            queue_existing = {
+                'id': queue_info['queue_item_id'],
+                'name': queue_info['queue_item_filename'],
+                'type': feature.get('geometry', {}).get('type', 'Unknown'),
+                'timestamp': None,
+                'geojson': queue_hash_to_feature[feature_hash]
+            }
+            
+            hash_duplicates.append({
+                'feature': feature,
+                'source': DuplicateSource.CROSS_QUEUE,
+                'match_type': DuplicateMatchType.HASH,
+                'existing_features': [queue_existing]
+            })
+            import_log.add(
+                f"Hash duplicate found in import queue: '{feature_name}' matches '{queue_info['queue_item_filename']}' (blocked)",
+                'Duplicate Detection',
+                DatabaseLogLevel.INFO
+            )
+    
+    if hash_duplicates:
+        import_log.add(f"Found {len(hash_duplicates)} hash duplicate(s)", "Duplicate Detection", DatabaseLogLevel.INFO)
+    else:
+        import_log.add("No hash duplicates found", "Duplicate Detection", DatabaseLogLevel.INFO)
+    
+    return hash_duplicates, import_log
+
+
+def find_duplicates_for_source(
+    features: List[Dict],
+    user_id: int,
+    source: str,
+    exclude_queue_id: Optional[int] = None,
+    exclude_timestamp: Optional[datetime] = None
+) -> Tuple[List[Dict], List[Dict], ImportLog]:
+    """
+    Find all duplicates (hash + geometry) for a specific source with proper priority.
+    
+    This consolidates hash and geometry checking for a single source, applying the
+    priority rule that hash duplicates take precedence over geometry duplicates.
+    
+    Args:
+        features: List of features to check for duplicates
+        user_id: User ID to check duplicates for
+        source: Source to check - 'feature_store' or 'cross_queue'
+        exclude_queue_id: Optional ImportQueue item ID to exclude from cross-queue checks
+        exclude_timestamp: Optional timestamp - only check queue items older than this timestamp
+    
+    Returns:
+        Tuple of (remaining_features, all_duplicates, import_log)
+        - remaining_features: features that are NOT duplicates in this source
+        - all_duplicates: list of duplicate info dicts (hash + geometry), hash duplicates first
+        - import_log: log messages from detection
+    """
+    import_log = ImportLog()
+    
+    # STEP 1: Find hash duplicates for this source
+    hash_duplicates, hash_log = find_hash_duplicates(
+        features,
+        user_id,
+        exclude_queue_id=exclude_queue_id,
+        exclude_timestamp=exclude_timestamp,
+        source_filter=source
+    )
+    import_log.extend(hash_log)
+    
+    # Build set of features that are hash duplicates
+    hash_dup_hashes = {
+        generate_feature_hash(dup['feature']) 
+        for dup in hash_duplicates if dup.get('feature')
+    }
+    
+    # STEP 2: Find geometry duplicates for this source (on remaining features)
+    remaining_after_hash = [
+        f for f in features 
+        if generate_feature_hash(f) not in hash_dup_hashes
+    ]
+    
+    _, geom_duplicates, geom_log = find_geometry_duplicates(
+        remaining_after_hash,
+        user_id,
+        exclude_queue_id=exclude_queue_id,
+        exclude_timestamp=exclude_timestamp,
+        source_filter=source
+    )
+    import_log.extend(geom_log)
+    
+    # Build set of features that are geometry duplicates
+    geom_dup_hashes = {
+        generate_feature_hash(dup['feature']) 
+        for dup in geom_duplicates if dup.get('feature')
+    }
+    
+    # Combine: hash duplicates first (higher priority), then geometry
+    all_duplicates = hash_duplicates + geom_duplicates
+    
+    # Remaining features: not hash or geometry duplicates
+    all_dup_hashes = hash_dup_hashes | geom_dup_hashes
+    remaining_features = [
+        f for f in features 
+        if generate_feature_hash(f) not in all_dup_hashes
+    ]
+    
+    return remaining_features, all_duplicates, import_log
 
 
 def _find_existing_features_by_coordinates(coordinates: List, geom_type: str, user_id: int) -> List[Dict]:
