@@ -10,7 +10,7 @@ CONST_INTERNAL_TAGS = [
     'feature-year',
     'feature-month',
     'source-file',
-    'is-track',
+    'track',
     'elevation',
     'geocoding'
 ]
