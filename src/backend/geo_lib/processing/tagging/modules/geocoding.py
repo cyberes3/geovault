@@ -68,6 +68,9 @@ class GeocodingTagGenerator(TagGenerator):
     
     priority = 100  # Execute last (geocoding can be slow)
     
+    def __init__(self):
+        super().__init__('geocoding')
+    
     def process(
         self,
         feature: GeoFeatureSupported,

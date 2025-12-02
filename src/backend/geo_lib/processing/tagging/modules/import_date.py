@@ -14,6 +14,9 @@ class ImportDateTagGenerator(TagGenerator):
     
     priority = 20  # Execute after geometry type
     
+    def __init__(self):
+        super().__init__(['import-year', 'import-month'])
+    
     def process(
         self,
         feature: GeoFeatureSupported,

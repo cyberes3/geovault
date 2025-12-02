@@ -23,6 +23,9 @@ class ElevationTagGenerator(TagGenerator):
     
     priority = 60  # Execute after source file, before geocoding
     
+    def __init__(self):
+        super().__init__('elevation')
+    
     def _extract_elevations(self, feature: GeoFeatureSupported) -> List[float]:
         """
         Extract all elevation values from a feature's coordinates.

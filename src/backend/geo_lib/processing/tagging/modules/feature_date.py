@@ -19,6 +19,9 @@ class FeatureDateTagGenerator(TagGenerator):
     
     priority = 30  # Execute after import date
     
+    def __init__(self):
+        super().__init__(['feature-year', 'feature-month'])
+    
     def process(
         self,
         feature: GeoFeatureSupported,

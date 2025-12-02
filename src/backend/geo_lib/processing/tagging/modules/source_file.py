@@ -14,6 +14,9 @@ class SourceFileTagGenerator(TagGenerator):
     
     priority = 50  # Execute after track detection
     
+    def __init__(self):
+        super().__init__('source-file')
+    
     def process(
         self,
         feature: GeoFeatureSupported,

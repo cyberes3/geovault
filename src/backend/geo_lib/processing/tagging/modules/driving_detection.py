@@ -192,6 +192,9 @@ class DrivingDetectionTagGenerator(TagGenerator):
     
     priority = 50  # Execute after track detection (40), before geocoding (60)
     
+    def __init__(self):
+        super().__init__('driving')
+    
     def process(
         self,
         feature: GeoFeatureSupported,

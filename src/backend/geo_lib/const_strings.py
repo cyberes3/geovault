@@ -1,19 +1,11 @@
 from typing import List
+from geo_lib.processing.tagging import get_internal_tags
 
 # System tag prefixes that identify automatically generated tags.
 # These are tags that users should not be allowed to edit.
 # Used by tag generators to create system tags and by validation to filter them out.
-CONST_INTERNAL_TAGS = [
-    'type',
-    'import-year',
-    'import-month',
-    'feature-year',
-    'feature-month',
-    'source-file',
-    'track',
-    'elevation',
-    'geocoding'
-]
+# This list is now dynamically generated from registered tag generators.
+CONST_INTERNAL_TAGS = get_internal_tags()
 
 # Tag priority mapping: prefixes to priority (1-10, with 1 being most important)
 # Tags matching these prefixes get the assigned priority. All other tags get priority 0.

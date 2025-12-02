@@ -13,6 +13,9 @@ class GeometryTypeTagGenerator(TagGenerator):
     
     priority = 10  # Execute early
     
+    def __init__(self):
+        super().__init__('type')
+    
     def process(
         self,
         feature: GeoFeatureSupported,

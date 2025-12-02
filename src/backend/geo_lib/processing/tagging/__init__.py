@@ -21,7 +21,7 @@ from geo_lib.processing.tagging.modules.elevation import ElevationTagGenerator
 from geo_lib.processing.tagging.modules.geocoding import GeocodingTagGenerator
 
 # Export update_feature_date_tags for backward compatibility
-__all__ = ['generate_auto_tags', 'update_feature_date_tags']
+__all__ = ['generate_auto_tags', 'update_feature_date_tags', 'get_internal_tags']
 
 # Registry of tag generators
 _tag_generators: List[TagGenerator] = []
@@ -53,6 +53,28 @@ def _discover_tag_generators():
     
     # Sort by priority (lower priority numbers execute first)
     _tag_generators.sort(key=lambda g: g.priority)
+
+
+def get_internal_tags() -> List[str]:
+    """
+    Get the list of internal/system tag prefixes from registered tag generators.
+    
+    This function dynamically builds the list of internal tags by extracting
+    the tag names from all registered tag generators.
+    
+    Returns:
+        List of internal tag prefix strings (e.g., ['type', 'import-year', 'elevation'])
+    """
+    # Discover generators if not already done
+    if not _tag_generators:
+        _discover_tag_generators()
+    
+    # Collect all tag names from all generators
+    internal_tags = []
+    for generator in _tag_generators:
+        internal_tags.extend(generator.tag_names)
+    
+    return internal_tags
 
 
 def generate_auto_tags(

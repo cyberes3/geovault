@@ -13,6 +13,9 @@ class TrackDetectionTagGenerator(TagGenerator):
     
     priority = 40  # Execute after feature date
     
+    def __init__(self):
+        super().__init__('track')
+    
     def process(
         self,
         feature: GeoFeatureSupported,
