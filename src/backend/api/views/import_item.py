@@ -246,8 +246,8 @@ def delete_import_item(request, id):
 
 @api_or_login_required_401()
 @require_http_methods(["PUT", "PATCH"])
-@validate_payload(FeatureUpdatePayload)
 @handle_404
+@validate_payload(FeatureUpdatePayload)
 def update_import_item(request, item_id, validated_data):
     queue = get_object_or_404_for_user(ImportQueue, request.user, id=item_id)
 
@@ -346,8 +346,8 @@ def update_import_item(request, item_id, validated_data):
 
 @api_or_login_required_401()
 @require_http_methods(["POST"])
-@validate_payload(ImportToFeaturestorePayload, allow_empty=True)
 @handle_404
+@validate_payload(ImportToFeaturestorePayload, allow_empty=True)
 def import_to_featurestore(request, item_id, validated_data):
     """
     Start async import job for importing an import queue item to the feature store.
@@ -461,8 +461,8 @@ def get_bulk_operations(request, item_id):
 
 @api_or_login_required_401()
 @require_http_methods(["PUT", "PATCH"])
-@validate_payload(SkipStatePayload)
 @handle_404
+@validate_payload(SkipStatePayload)
 def save_skip_state(request, item_id, validated_data):
     """
     Save skip state (skipped feature IDs) for an import queue item.

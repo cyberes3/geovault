@@ -12,7 +12,7 @@ Also tests priority rules:
 - Feature Store > Cross-Queue (across sources)
 """
 import pytest
-from django.test import TestCase
+from django.test import TestCase, TransactionTestCase
 from django.contrib.auth import get_user_model
 
 from api.models import FeatureStore, ImportQueue
@@ -1465,7 +1465,7 @@ class TestComplexScenarios(TestCase):
         print("✓ Test 12 passed: Non-duplicate features pass through correctly")
 
 
-class TestSequentialProcessingIntegration(TestCase):
+class TestSequentialProcessingIntegration(TransactionTestCase):
     """Integration tests for sequential processing with RedisProcessingLock."""
     
     def setUp(self):
@@ -1496,6 +1496,9 @@ class TestSequentialProcessingIntegration(TestCase):
         results = []
         errors = []
         
+        # Store user_id to avoid accessing self.user from threads
+        user_id = self.user.id
+        
         def simulate_upload_and_process(worker_id, delay_seconds=0):
             """Simulate file upload and processing with lock."""
             try:
@@ -1503,9 +1506,9 @@ class TestSequentialProcessingIntegration(TestCase):
                 from django.db import close_old_connections
                 close_old_connections()
                 
-                # Create import queue item
+                # Create import queue item using user_id instead of user object
                 queue_item = ImportQueue.objects.create(
-                    user=self.user,
+                    user_id=user_id,
                     original_filename=f'file{worker_id}.kml',
                     raw_file='<kml></kml>',
                     geofeatures=[feature],
@@ -1517,14 +1520,14 @@ class TestSequentialProcessingIntegration(TestCase):
                 
                 # Simulate processing with lock
                 job_id = f"test-job-{worker_id}"
-                with RedisProcessingLock(self.user.id, job_id, status_tracker):
+                with RedisProcessingLock(user_id, job_id, status_tracker):
                     # Small delay to allow potential race condition
                     time.sleep(0.1)
                     
                     # Run duplicate detection
                     remaining, duplicates, log = find_duplicates_for_source(
                         [feature],
-                        self.user.id,
+                        user_id,
                         source='cross_queue',
                         exclude_queue_id=queue_item.id,
                         exclude_timestamp=queue_item.timestamp

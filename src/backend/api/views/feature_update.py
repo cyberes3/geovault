@@ -190,8 +190,8 @@ def _validate_and_preserve_system_tags(properties_dict, original_system_tags):
 
 @api_or_login_required_401()
 @require_http_methods(["PUT"])
-@validate_payload(FeatureMetadataUpdate)
 @handle_404
+@validate_payload(FeatureMetadataUpdate)
 def update_feature_metadata(request, feature_id, validated_data):
     """
     API endpoint to update only the metadata of a specific feature (name, description, tags, created date).
@@ -637,6 +637,10 @@ def update_feature(request, feature_id):
         # The normalization function ensures stroke-width=2 for lines/polygons and proper fill/fill-opacity for polygons
         # Color validation (invalid colors set to default red) is also handled by validate_and_normalize_geojson_feature
 
+        # Ensure feature_hash is present for Pydantic validation
+        # Generate temporary hash if not present (will be regenerated later)
+        feature_data.setdefault('properties', {})['feature_hash'] = generate_feature_hash(feature_data)
+
         # Validate feature structure using the same validation as import conversion
         try:
             geom_type = feature_data.get('geometry', {}).get('type', '').lower()
@@ -671,7 +675,7 @@ def update_feature(request, feature_id):
                 feature_data = json.loads(validated_feature.model_dump_json())
 
         except Exception as e:
-            logger.error(f"Feature validation error for feature {feature_id}: {str(e)}")
+            logger.error(f"Feature validation error for feature {feature_id}: {traceback.format_exc()}")
             return error_response(f'Feature validation failed: {str(e)}', 400)
 
         # Update the feature data
@@ -725,8 +729,8 @@ def update_feature(request, feature_id):
 
 @api_or_login_required_401()
 @require_http_methods(["POST"])
-@validate_payload(ReplacementGeometryPayload)
 @handle_404
+@validate_payload(ReplacementGeometryPayload)
 def apply_replacement_geometry(request, feature_id, validated_data):
     """
     API endpoint to apply replacement geometry from an ImportQueue entry to an existing feature.
@@ -793,6 +797,9 @@ def apply_replacement_geometry(request, feature_id, validated_data):
         'geometry': replacement_geometry,
         'properties': original_properties
     }
+    
+    # Generate temporary feature_hash for the updated feature for validation purposes
+    updated_feature.setdefault('properties', {})['feature_hash'] = generate_feature_hash(updated_feature)
 
     # Validate the updated feature
     try:
@@ -1009,6 +1016,9 @@ def regenerate_feature_tags(request, feature_id):
 
     if feature_class is None:
         return error_response('Could not determine feature class', 400)
+
+    # Ensure feature_hash is present for Pydantic validation
+    geojson_data.setdefault('properties', {})['feature_hash'] = generate_feature_hash(geojson_data)
 
     # Create feature instance
     try:

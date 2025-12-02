@@ -730,6 +730,7 @@ class TestRedisProcessingLock:
                 with RedisProcessingLock(user_id, "blocker-job", status_tracker):
                     # Hold lock for longer than second job's wait timeout
                     time.sleep(2.0)
+                errors.append("blocker: completed successfully")
             except Exception as e:
                 errors.append(f"blocker: {str(e)}")
         

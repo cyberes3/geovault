@@ -333,9 +333,6 @@ def validate_and_normalize_geojson_feature(
         # If not explicitly provided, preserve original if it exists
         normalized_properties['system_tags'] = original_system_tags
     
-    if preserve_database_id and original_database_id is not None:
-        normalized_properties['database_id'] = original_database_id
-    
     if preserve_feature_hash and original_feature_hash is not None:
         normalized_properties['feature_hash'] = original_feature_hash
     

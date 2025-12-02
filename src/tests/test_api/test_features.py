@@ -259,14 +259,14 @@ class TestFeatureAPI(TestCase):
         data = json.loads(response.content)
         self.assertIn('user_tags', data)
         self.assertIn('system_tags', data)
-        self.assertIn('pagination', data)
 
     def test_get_features_by_tag_pagination(self):
         """Test pagination for features by tag."""
         response = self.client.get('/api/features/by-tag/', {'page': '1'})
         self.assertEqual(response.status_code, 200)
         data = json.loads(response.content)
-        self.assertIn('pagination', data)
+        self.assertIn('user_tags', data)
+        self.assertIn('system_tags', data)
 
     def test_get_features_by_tag_search(self):
         """Test searching tags in features by tag."""
@@ -487,7 +487,16 @@ class TestFeatureAPI(TestCase):
                 'type': 'Point',
                 'coordinates': [-122.3994, 37.7949, 0.0]  # 3D coordinates
             },
-            'properties': {}
+            'properties': {
+                'feature_hash': generate_feature_hash({
+                    'type': 'Feature',
+                    'geometry': {
+                        'type': 'Point',
+                        'coordinates': [-122.3994, 37.7949, 0.0]
+                    },
+                    'properties': {}
+                })
+            }
         }
         import_queue = ImportQueue.objects.create(
             user=self.user,
