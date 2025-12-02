@@ -69,14 +69,27 @@
 
     <!-- Pagination Controls -->
     <div v-if="(hasFeatures || isLoadingPage)" class="bg-white rounded-lg shadow-sm border border-gray-200 p-4 sm:p-6">
-      <div class="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
-        <div class="text-sm text-gray-700">
+      <div class="flex flex-col md:flex-row md:items-center md:justify-center gap-4">
+        <div class="text-sm text-gray-700 text-center md:text-left">
           <span v-if="!isLoadingPage">
             Showing features {{ (currentPage - 1) * pageSize + 1 }} - {{ Math.min(currentPage * pageSize, totalFeatures) }} of {{ totalFeatures }}
           </span>
           <span v-else class="text-blue-500 font-medium">Loading...</span>
         </div>
         <div class="flex flex-wrap items-center justify-center md:justify-start gap-2 md:gap-3">
+          <!-- Hide Duplicates Toggle -->
+          <div v-if="hasFeatures && !isLoadingPage" class="flex items-center space-x-2 md:mr-4 md:pr-4 md:border-r border-gray-300 w-full md:w-auto justify-center md:justify-start mb-2 md:mb-0">
+            <ToggleButton
+                :model-value="hideDuplicates"
+                label="Hide duplicates"
+                :disabled="isLoadingPage"
+                size="sm"
+                @update:model-value="$emit('toggle-hide-duplicates', $event)"
+            />
+            <label class="text-sm text-gray-700 cursor-pointer whitespace-nowrap" @click="!isLoadingPage && $emit('toggle-hide-duplicates', !hideDuplicates)">
+              Hide duplicates
+            </label>
+          </div>
           <button
               :disabled="!hasPreviousPage || isLoadingPage || totalPages <= 1"
               class="inline-flex items-center px-3 py-2 border border-gray-300 shadow-sm text-sm font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 disabled:opacity-50 disabled:cursor-not-allowed"
@@ -119,7 +132,7 @@
           </div>
           <button
               :disabled="isLoadingPage || !hasFeatures"
-              class="inline-flex items-center px-3 py-2 border border-gray-300 shadow-sm text-sm font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 disabled:opacity-50 disabled:cursor-not-allowed w-full md:w-auto md:ml-4 md:pl-4 md:border-l"
+              class="inline-flex items-center justify-center px-3 py-2 border border-gray-300 shadow-sm text-sm font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 disabled:opacity-50 disabled:cursor-not-allowed w-full md:w-auto md:ml-4 md:pl-4 md:border-l"
               @click="$emit('show-map-preview')"
               title="Preview all features on current page"
           >
@@ -135,7 +148,7 @@
       <div v-if="isLoadingPage" class="text-center py-4">
         <span class="text-blue-500 font-medium">Loading...</span>
       </div>
-      <div v-else-if="hasFeatures" class="flex items-center space-x-4">
+      <div v-else-if="hasFeatures" class="flex flex-col sm:flex-row items-stretch sm:items-center gap-4 sm:space-x-4">
           <button
               :disabled="lockButtons || isSaving"
               :class="saveStatus === 'success' ? 'w-full sm:w-[160px] inline-flex items-center justify-center px-4 py-2 border border-transparent text-sm font-medium rounded-md text-white bg-green-600 hover:bg-green-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-green-500 transition-colors duration-200' : (saveStatus === 'error' ? 'w-full sm:w-[160px] inline-flex items-center justify-center px-4 py-2 border border-transparent text-sm font-medium rounded-md text-white bg-red-600 hover:bg-red-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-red-500 transition-colors duration-200' : 'w-full sm:w-[160px] inline-flex items-center justify-center px-4 py-2 border border-transparent text-sm font-medium rounded-md text-white bg-green-600 hover:bg-green-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-green-500 disabled:bg-gray-400 disabled:cursor-not-allowed transition-colors duration-200')"
@@ -169,6 +182,7 @@
 
 <script>
 import Loader from "@/components/parts/Loader.vue";
+import ToggleButton from "@/components/parts/ToggleButton.vue";
 import {PROCESSING_MESSAGES} from "@/assets/js/constants/processing-messages.js";
 import { ExclamationTriangleIcon, ClipboardDocumentIcon, ExclamationCircleIcon, DocumentIcon, ChevronLeftIcon, ChevronRightIcon, MapIcon, ArrowDownTrayIcon, ArrowUpTrayIcon, CheckIcon, XMarkIcon } from '@heroicons/vue/24/outline';
 
@@ -176,6 +190,7 @@ export default {
   name: 'ImportControls',
   components: {
     Loader,
+    ToggleButton,
     ExclamationTriangleIcon,
     ClipboardDocumentIcon,
     ExclamationCircleIcon,
@@ -275,6 +290,10 @@ export default {
     saveStatus: {
       type: String,
       default: null
+    },
+    hideDuplicates: {
+      type: Boolean,
+      default: false
     }
   },
   data() {

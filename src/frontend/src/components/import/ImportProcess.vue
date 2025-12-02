@@ -202,36 +202,6 @@
       </div>
     </div>
 
-    <!-- Controls (Top) -->
-    <ImportControls
-        :current-page="pagination.currentPage"
-        :duplicate-count="totalDuplicateCount"
-        :file-duplicate="fileDuplicate"
-        :error-message="msg"
-        :goto-page-input="pagination.gotoInput"
-        :has-features="itemsForUser.length > 0"
-        :has-next-page="pagination.hasNext"
-        :has-previous-page="pagination.hasPrevious"
-        :importable-count="importableCount"
-        :is-imported="isImported"
-        :is-importing="loading.importing"
-        :is-loading-page="loading.page"
-        :is-saving="loading.saving"
-        :lock-buttons="lockButtons"
-        :page-size="pagination.pageSize"
-        :show-action-buttons="false"
-        :show-duplicate-message="true"
-        :show-no-features-message="showNoFeaturesMessage"
-        :total-features="pagination.totalFeatures"
-        :total-pages="pagination.totalPages"
-        @previous-page="previousPage"
-        @next-page="nextPage"
-        @jump-to-page="goToPage"
-        @show-map-preview="showMapPreview"
-        @save-changes="saveChanges"
-        @perform-import="performImport"
-    />
-
     <!-- Global Options -->
     <div v-if="itemsForUser.length > 0 && !loading.page && !processing.active" class="bg-white rounded-lg shadow-sm border border-gray-200 p-4 sm:p-6">
       <h3 class="text-sm font-semibold text-gray-900 mb-3">Global Options</h3>
@@ -278,14 +248,15 @@
 
     <!-- Controls (Top) -->
     <ImportControls
-        v-if="!loading.page"
         :current-page="pagination.currentPage"
         :duplicate-count="totalDuplicateCount"
         :file-duplicate="fileDuplicate"
+        :error-message="msg"
         :goto-page-input="pagination.gotoInput"
         :has-features="itemsForUser.length > 0"
         :has-next-page="pagination.hasNext"
         :has-previous-page="pagination.hasPrevious"
+        :hide-duplicates="hideDuplicates"
         :importable-count="importableCount"
         :is-imported="isImported"
         :is-importing="loading.importing"
@@ -294,8 +265,9 @@
         :lock-buttons="lockButtons"
         :page-size="pagination.pageSize"
         :save-status="saveStatus"
-        :show-duplicate-message="false"
-        :show-no-features-message="false"
+        :show-action-buttons="true"
+        :show-duplicate-message="true"
+        :show-no-features-message="showNoFeaturesMessage"
         :total-features="pagination.totalFeatures"
         :total-pages="pagination.totalPages"
         @previous-page="previousPage"
@@ -304,6 +276,7 @@
         @show-map-preview="showMapPreview"
         @save-changes="saveChanges"
         @perform-import="performImport"
+        @toggle-hide-duplicates="hideDuplicates = $event"
     />
 
     <!-- Loading Skeleton for Pagination Changes -->
@@ -397,20 +370,20 @@
 
     <!-- Feature Items -->
     <div v-else-if="itemsForUser.length > 0 && !loading.page" class="space-y-6">
-      <div v-for="(item, index) in itemsForUser" :key="`item-${index}`"
-           :data-feature-index="(pagination.currentPage - 1) * pagination.pageSize + index"
-           :class="getItemClasses(item, index)">
+      <div v-for="(entry, index) in filteredItemsForUser" :key="`item-${entry.originalIndex}`"
+           :data-feature-index="(pagination.currentPage - 1) * pagination.pageSize + entry.originalIndex"
+           :class="getItemClasses(entry.item, entry.originalIndex)">
         <!-- Button row - always fully visible -->
         <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 mb-4 sm:mb-6 relative z-20">
-          <h3 class="text-base sm:text-lg font-semibold text-gray-900" :class="isItemSkipped(item, index) && !isItemDuplicate(item) ? 'opacity-50' : ''">
-            Feature {{ (pagination.currentPage - 1) * pagination.pageSize + index + 1 }} (of {{ pagination.totalFeatures }})
+          <h3 class="text-base sm:text-lg font-semibold text-gray-900" :class="isItemSkipped(entry.item, entry.originalIndex) && !isItemDuplicate(entry.item) ? 'opacity-50' : ''">
+            Feature {{ (pagination.currentPage - 1) * pagination.pageSize + entry.originalIndex + 1 }} (of {{ pagination.totalFeatures }})
           </h3>
           <div class="flex flex-wrap items-center gap-2 sm:space-x-2">
             <!-- Icon Preview -->
-            <div v-if="getFeatureIconUrl(item)" class="flex items-center justify-center w-8 h-8 p-1 border border-gray-300 rounded bg-white shadow-sm">
+            <div v-if="getFeatureIconUrl(entry.item)" class="flex items-center justify-center w-8 h-8 p-1 border border-gray-300 rounded bg-white shadow-sm">
               <img
-                  :src="getFeatureIconUrl(item)"
-                  :alt="'Custom icon for ' + (item.properties.name || 'feature')"
+                  :src="getFeatureIconUrl(entry.item)"
+                  :alt="'Custom icon for ' + (entry.item.properties.name || 'feature')"
                   class="max-w-full max-h-full object-contain"
                   @error="handleIconError($event)"
               />
@@ -418,57 +391,57 @@
             <!-- Skip/Restore Button -->
             <button
                 v-if="!isImported && !loading.importing"
-                :class="isItemDuplicate(item) ? 'relative z-20 inline-flex items-center px-3 py-1.5 border border-gray-300 shadow-sm text-xs font-medium rounded-md text-gray-400 bg-gray-100 cursor-not-allowed' : (isItemSkipped(item, index) ? 'relative z-20 inline-flex items-center px-3 py-1.5 border border-transparent text-xs font-medium rounded-md text-white bg-green-600 hover:bg-green-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-green-500' : 'relative z-20 inline-flex items-center px-3 py-1.5 border border-gray-300 shadow-sm text-xs font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-gray-500')"
-                @click.stop="isItemDuplicate(item) ? null : toggleSkipItem(index)"
-                :disabled="isItemDuplicate(item)"
-                :title="isItemDuplicate(item) ? 'Cannot skip duplicate items' : (isItemSkipped(item, index) ? 'Restore this item' : 'Skip this item')"
+                :class="isItemDuplicate(entry.item) ? 'relative z-20 inline-flex items-center px-3 py-1.5 border border-gray-300 shadow-sm text-xs font-medium rounded-md text-gray-400 bg-gray-100 cursor-not-allowed' : (isItemSkipped(entry.item, entry.originalIndex) ? 'relative z-20 inline-flex items-center px-3 py-1.5 border border-transparent text-xs font-medium rounded-md text-white bg-green-600 hover:bg-green-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-green-500' : 'relative z-20 inline-flex items-center px-3 py-1.5 border border-gray-300 shadow-sm text-xs font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-gray-500')"
+                @click.stop="isItemDuplicate(entry.item) ? null : toggleSkipItem(entry.originalIndex)"
+                :disabled="isItemDuplicate(entry.item)"
+                :title="isItemDuplicate(entry.item) ? 'Cannot skip duplicate items' : (isItemSkipped(entry.item, entry.originalIndex) ? 'Restore this item' : 'Skip this item')"
                 type="button"
                 style="opacity: 1 !important;"
             >
-              <CheckIcon v-if="isItemSkipped(item, index)" class="w-3 h-3 mr-1" />
+              <CheckIcon v-if="isItemSkipped(entry.item, entry.originalIndex)" class="w-3 h-3 mr-1" />
               <XMarkIcon v-else class="w-3 h-3 mr-1" />
-              {{ isItemSkipped(item, index) ? 'Restore' : 'Skip' }}
+              {{ isItemSkipped(entry.item, entry.originalIndex) ? 'Restore' : 'Skip' }}
             </button>
             <button
-                :class="isItemSkipped(item, index) ? 'inline-flex items-center px-3 py-1.5 border border-gray-300 shadow-sm text-xs font-medium rounded-md text-gray-400 bg-gray-100 cursor-not-allowed' : 'inline-flex items-center px-3 py-1.5 border border-gray-300 shadow-sm text-xs font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500'"
-                :disabled="isItemSkipped(item, index)"
-                @click="showFeatureMap(index)"
+                :class="isItemSkipped(entry.item, entry.originalIndex) ? 'inline-flex items-center px-3 py-1.5 border border-gray-300 shadow-sm text-xs font-medium rounded-md text-gray-400 bg-gray-100 cursor-not-allowed' : 'inline-flex items-center px-3 py-1.5 border border-gray-300 shadow-sm text-xs font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500'"
+                :disabled="isItemSkipped(entry.item, entry.originalIndex)"
+                @click="showFeatureMap(entry.originalIndex)"
                 title="View feature on map"
             >
               <MapIcon class="w-3 h-3 mr-1" />
               View on Map
             </button>
             <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-blue-100 text-blue-700">
-              {{ item.geometry.type }}
+              {{ entry.item.geometry.type }}
             </span>
           </div>
         </div>
 
         <!-- Duplicate Warnings - outside opacity div so they're always fully visible -->
         <div class="relative z-10">
-          <DuplicateWarning type="feature_store_hash" :item="item" />
-          <DuplicateWarning type="feature_store_geometry" :item="item" />
-          <DuplicateWarning type="cross_queue_hash" :item="item" />
-          <DuplicateWarning type="cross_queue_geometry" :item="item" />
+          <DuplicateWarning type="feature_store_hash" :item="entry.item" />
+          <DuplicateWarning type="feature_store_geometry" :item="entry.item" />
+          <DuplicateWarning type="cross_queue_hash" :item="entry.item" />
+          <DuplicateWarning type="cross_queue_geometry" :item="entry.item" />
         </div>
 
         <!-- Content area - can be greyed out for skipped or duplicate items -->
-        <div :class="(isItemSkipped(item, index) && !isItemDuplicate(item)) || isItemDuplicate(item) ? 'opacity-50' : ''">
+        <div :class="(isItemSkipped(entry.item, entry.originalIndex) && !isItemDuplicate(entry.item)) || isItemDuplicate(entry.item) ? 'opacity-50' : ''">
         <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
           <!-- Name Field -->
           <div>
             <label class="block text-sm font-medium text-gray-700 mb-2">Name</label>
             <div class="flex items-center space-x-2">
               <input
-                  v-model="item.properties.name"
-                  :class="isItemDisabled(item, index) ? 'block w-full px-3 py-2 border border-gray-300 rounded-md bg-gray-100 cursor-not-allowed' : 'block w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-blue-500 focus:border-blue-500'"
-                  :disabled="isItemDisabled(item, index)"
-                  :placeholder="originalItems[index].properties.name"
+                  v-model="entry.item.properties.name"
+                  :class="isItemDisabled(entry.item, entry.originalIndex) ? 'block w-full px-3 py-2 border border-gray-300 rounded-md bg-gray-100 cursor-not-allowed' : 'block w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-blue-500 focus:border-blue-500'"
+                  :disabled="isItemDisabled(entry.item, entry.originalIndex)"
+                  :placeholder="originalItems[entry.originalIndex].properties.name"
               />
               <button
-                  :disabled="!isItemEditable(item, index)"
+                  :disabled="!isItemEditable(entry.item, entry.originalIndex)"
                   class="inline-flex items-center px-3 py-2 border border-gray-300 shadow-sm text-sm leading-4 font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:bg-white"
-                  @click="resetNestedField(index, 'properties', 'name')"
+                  @click="resetNestedField(entry.originalIndex, 'properties', 'name')"
                   title="Reset to original name"
               >
                 <ArrowPathIcon class="w-4 h-4" />
@@ -481,17 +454,17 @@
             <label class="block text-sm font-medium text-gray-700 mb-2">Description</label>
             <div class="flex items-start space-x-2">
               <textarea
-                  v-model="item.properties.description"
-                  :class="isItemDisabled(item, index) ? 'block w-full px-3 py-2 border border-gray-300 rounded-md bg-gray-100 cursor-not-allowed resize-none' : 'block w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-blue-500 focus:border-blue-500 resize-none'"
-                  :disabled="isItemDisabled(item, index)"
-                  :placeholder="originalItems[index].properties.description"
+                  v-model="entry.item.properties.description"
+                  :class="isItemDisabled(entry.item, entry.originalIndex) ? 'block w-full px-3 py-2 border border-gray-300 rounded-md bg-gray-100 cursor-not-allowed resize-none' : 'block w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-blue-500 focus:border-blue-500 resize-none'"
+                  :disabled="isItemDisabled(entry.item, entry.originalIndex)"
+                  :placeholder="originalItems[entry.originalIndex].properties.description"
                   class="text-sm"
                   rows="4"
               ></textarea>
               <button
-                  :disabled="!isItemEditable(item, index)"
+                  :disabled="!isItemEditable(entry.item, entry.originalIndex)"
                   class="inline-flex items-center px-3 py-2 border border-gray-300 shadow-sm text-sm leading-4 font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:bg-white mt-1"
-                  @click="resetNestedField(index, 'properties', 'description')"
+                  @click="resetNestedField(entry.originalIndex, 'properties', 'description')"
                   title="Reset to original description"
               >
                 <ArrowPathIcon class="w-4 h-4" />
@@ -504,16 +477,16 @@
             <label class="block text-sm font-medium text-gray-700 mb-2">Created Date</label>
             <div class="flex items-center space-x-2">
               <input
-                  :class="isItemDisabled(item, index) ? 'block w-full px-3 py-2 border border-gray-300 rounded-md bg-gray-100 cursor-not-allowed' : 'block w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-blue-500 focus:border-blue-500'"
-                  :disabled="isItemDisabled(item, index)"
-                  :value="formatDateForInput(item.properties.created)"
+                  :class="isItemDisabled(entry.item, entry.originalIndex) ? 'block w-full px-3 py-2 border border-gray-300 rounded-md bg-gray-100 cursor-not-allowed' : 'block w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-blue-500 focus:border-blue-500'"
+                  :disabled="isItemDisabled(entry.item, entry.originalIndex)"
+                  :value="formatDateForInput(entry.item.properties.created)"
                   type="datetime-local"
-                  @change="updateDate(index, $event)"
+                  @change="updateDate(entry.originalIndex, $event)"
               />
               <button
-                  :disabled="!isItemEditable(item, index)"
+                  :disabled="!isItemEditable(entry.item, entry.originalIndex)"
                   class="inline-flex items-center px-3 py-2 border border-gray-300 shadow-sm text-sm leading-4 font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:bg-white"
-                  @click="resetNestedField(index, 'properties', 'created')"
+                  @click="resetNestedField(entry.originalIndex, 'properties', 'created')"
                   title="Reset to original date"
               >
                 <ArrowPathIcon class="w-4 h-4" />
@@ -524,16 +497,16 @@
           <!-- Tags Section -->
           <div>
             <TagPicker
-              v-model:tags="item.properties.tags"
+              v-model:tags="entry.item.properties.tags"
               :available-tags="availableUserTags"
-              :system-tags="getSystemTags(item)"
-              :disabled="isItemDisabled(item, index)"
+              :system-tags="getSystemTags(entry.item)"
+              :disabled="isItemDisabled(entry.item, entry.originalIndex)"
             />
             <div class="flex items-center space-x-2 mt-3">
               <button
-                  :disabled="!isItemEditable(item, index) || isItemSkipped(item, index)"
+                  :disabled="!isItemEditable(entry.item, entry.originalIndex) || isItemSkipped(entry.item, entry.originalIndex)"
                   class="inline-flex items-center px-3 py-2 border border-gray-300 shadow-sm text-sm font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:bg-white"
-                  @click="resetTags(index)"
+                  @click="resetTags(entry.originalIndex)"
                   title="Reset all tags to original"
               >
                 <ArrowPathIcon class="w-4 h-4 mr-1" />
@@ -556,6 +529,7 @@
         :has-features="itemsForUser.length > 0"
         :has-next-page="pagination.hasNext"
         :has-previous-page="pagination.hasPrevious"
+        :hide-duplicates="hideDuplicates"
         :importable-count="importableCount"
         :is-imported="isImported"
         :is-importing="loading.importing"
@@ -574,6 +548,7 @@
         @show-map-preview="showMapPreview"
         @save-changes="saveChanges"
         @perform-import="performImport"
+        @toggle-hide-duplicates="hideDuplicates = $event"
     />
 
     <div class="hidden">
@@ -710,6 +685,17 @@ export default {
           : this.statusMessage;
       }
       return 'Loading...';
+    },
+
+    filteredItemsForUser() {
+      // Filter out duplicates if hideDuplicates is enabled
+      // Return array of {item, originalIndex} to preserve original index
+      if (this.hideDuplicates) {
+        return this.itemsForUser
+          .map((item, originalIndex) => ({ item, originalIndex }))
+          .filter(({ item }) => !this.isItemDuplicate(item));
+      }
+      return this.itemsForUser.map((item, originalIndex) => ({ item, originalIndex }));
     }
   },
   components: {
@@ -837,7 +823,10 @@ export default {
       searchResults: [],
       totalSearchMatches: 0,
       isSearching: false,
-      searchTimeout: null
+      searchTimeout: null,
+
+      // Duplicate hiding state
+      hideDuplicates: false
     }
   },
   watch: {
