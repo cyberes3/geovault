@@ -3,7 +3,6 @@ Process status WebSocket module.
 Handles real-time status updates for a specific import item.
 """
 from api.models import ImportQueue
-from geo_lib.processing.duplicate_detection import find_coordinate_duplicates
 from geo_lib.processing.logging import RealTimeImportLog, DatabaseLogLevel
 from geo_lib.utils.pydantic_serialization import convert_features_to_pydantic
 from asgiref.sync import sync_to_async

@@ -718,9 +718,9 @@ class TestImportAPI(TestCase):
         self.assertEqual(response.status_code, 401)
 
     @patch('channels.layers.get_channel_layer')
-    @patch('geo_lib.processing.duplicate_detection.find_coordinate_duplicates')
+    @patch('geo_lib.processing.duplicate_detection.find_duplicates_for_source')
     @patch('geo_lib.processing.logging.RealTimeImportLog')
-    def test_recheck_duplicates(self, mock_realtime_log_class, mock_find_duplicates, mock_get_channel_layer):
+    def test_recheck_duplicates(self, mock_realtime_log_class, mock_find_duplicates_for_source, mock_get_channel_layer):
         """Test rechecking duplicates for an import queue item."""
         # Create import queue item with features
         import_queue = ImportQueue.objects.create(
@@ -746,11 +746,14 @@ class TestImportAPI(TestCase):
         mock_import_log.add_timing = MagicMock()
         mock_realtime_log_class.return_value = mock_import_log
         
-        # Mock ImportLog returned by find_coordinate_duplicates
+        # Mock ImportLog returned by find_duplicates_for_source
+        from geo_lib.processing.duplicate_models import DuplicateSource, DuplicateMatchType
         mock_duplicate_log = MagicMock()
         
         duplicate_feature = {
             'feature': import_queue.geofeatures[0],
+            'source': DuplicateSource.FEATURE_STORE,
+            'match_type': DuplicateMatchType.GEOMETRY,
             'existing_features': [{
                 'id': 123,
                 'name': 'Existing Feature',
@@ -758,11 +761,14 @@ class TestImportAPI(TestCase):
                 'timestamp': '2024-01-01T00:00:00Z'
             }]
         }
-        mock_find_duplicates.return_value = (
-            [import_queue.geofeatures[1]],  # unique_features
-            [duplicate_feature],  # duplicate_features
-            mock_duplicate_log  # import_log
-        )
+        
+        # Mock returns: (remaining_features, all_duplicates, import_log)
+        # First call (feature store): returns 1 duplicate from feature store
+        # Second call (cross-queue): returns empty (no cross-queue duplicates)
+        mock_find_duplicates_for_source.side_effect = [
+            ([import_queue.geofeatures[1]], [duplicate_feature], mock_duplicate_log),  # feature store pass
+            ([import_queue.geofeatures[1]], [], mock_duplicate_log),  # cross-queue pass (no duplicates)
+        ]
 
         # Mock channel layer for WebSocket notifications
         # group_send needs to be a coroutine function for async_to_sync
@@ -782,27 +788,27 @@ class TestImportAPI(TestCase):
         # Verify RealTimeImportLog was initialized with correct parameters
         mock_realtime_log_class.assert_called_once_with(user_id=self.user.id, log_id=import_queue.log_id)
         
-        # Verify duplicate detection was called
-        mock_find_duplicates.assert_called_once()
+        # Verify duplicate detection was called twice (feature store + cross-queue)
+        self.assertEqual(mock_find_duplicates_for_source.call_count, 2, "find_duplicates_for_source should be called twice")
         
         # Verify logging methods were called
         self.assertGreater(mock_import_log.add.call_count, 0, "RealTimeImportLog.add should be called")
-        self.assertEqual(mock_import_log.extend.call_count, 1, "RealTimeImportLog.extend should be called once")
+        self.assertEqual(mock_import_log.extend.call_count, 2, "RealTimeImportLog.extend should be called twice (feature store + cross-queue)")
         self.assertEqual(mock_import_log.add_timing.call_count, 1, "RealTimeImportLog.add_timing should be called once")
         
         # Verify import queue was updated
         import_queue.refresh_from_db()
         self.assertEqual(len(import_queue.duplicate_features), 1)
         
-        # Verify that coordinate duplicates were auto-skipped
+        # Verify that geometry duplicates were auto-skipped
         # The duplicate feature's ID should be in skipped_feature_ids
         from geo_lib.feature_id import generate_feature_hash
         dup_feature_dict = duplicate_feature['feature']
-        expected_skip_id = dup_feature_dict.get('properties', {}).get('id')
+        expected_skip_id = dup_feature_dict.get('properties', {}).get('feature_hash')
         if not expected_skip_id:
             expected_skip_id = generate_feature_hash(dup_feature_dict)
         self.assertIn(expected_skip_id, import_queue.skipped_feature_ids,
-                     "Coordinate duplicate should be auto-skipped")
+                     "Geometry duplicate should be auto-skipped")
         
         # Verify WebSocket notification was sent
         mock_get_channel_layer.assert_called_once()
@@ -810,9 +816,9 @@ class TestImportAPI(TestCase):
         # Check that group_send was called (it gets wrapped by async_to_sync)
 
     @patch('channels.layers.get_channel_layer')
-    @patch('geo_lib.processing.duplicate_detection.find_coordinate_duplicates')
+    @patch('geo_lib.processing.duplicate_detection.find_duplicates_for_source')
     @patch('geo_lib.processing.logging.RealTimeImportLog')
-    def test_recheck_duplicates_hash_takes_precedence(self, mock_realtime_log_class, mock_find_duplicates, mock_get_channel_layer):
+    def test_recheck_duplicates_hash_takes_precedence(self, mock_realtime_log_class, mock_find_duplicates_for_source, mock_get_channel_layer):
         """Test that if a feature is both a coordinate duplicate and hash duplicate, only hash duplicate is marked."""
         from geo_lib.feature_id import generate_feature_hash
         from api.models import FeatureStore
@@ -849,11 +855,14 @@ class TestImportAPI(TestCase):
         mock_import_log.add_timing = MagicMock()
         mock_realtime_log_class.return_value = mock_import_log
         
-        # Mock find_coordinate_duplicates to return this feature as a coordinate duplicate
-        # (it has same coordinates as the FeatureStore feature)
+        # Mock find_duplicates_for_source to return this feature as a HASH duplicate
+        # (find_duplicates_for_source handles hash-over-geometry priority internally)
+        from geo_lib.processing.duplicate_models import DuplicateSource, DuplicateMatchType
         mock_duplicate_log = MagicMock()
-        duplicate_feature = {
+        hash_duplicate_feature = {
             'feature': test_feature,
+            'source': DuplicateSource.FEATURE_STORE,
+            'match_type': DuplicateMatchType.HASH,  # Hash duplicate, not geometry
             'existing_features': [{
                 'id': feature_store.id,
                 'name': 'Existing Feature',
@@ -862,11 +871,14 @@ class TestImportAPI(TestCase):
                 'geojson': test_feature
             }]
         }
-        mock_find_duplicates.return_value = (
-            [],  # unique_features (none, since it's a duplicate)
-            [duplicate_feature],  # duplicate_features
-            mock_duplicate_log  # import_log
-        )
+        
+        # Mock returns: (remaining_features, all_duplicates, import_log)
+        # First call (feature store): returns hash duplicate from feature store
+        # Second call (cross-queue): no remaining features to check
+        mock_find_duplicates_for_source.side_effect = [
+            ([], [hash_duplicate_feature], mock_duplicate_log),  # feature store pass - hash duplicate found
+            ([], [], mock_duplicate_log),  # cross-queue pass (no remaining features)
+        ]
 
         # Mock channel layer
         async def mock_group_send(group, message):
@@ -878,22 +890,24 @@ class TestImportAPI(TestCase):
         response = self.client.post(f'/api/item/import/recheck-duplicates/{import_queue.id}')
         self.assertEqual(response.status_code, 200)
         
-        # Verify that the feature was NOT saved as a coordinate duplicate
-        # because it's also a hash duplicate (hash takes precedence)
+        # Verify that the feature WAS saved as a hash duplicate (not geometry)
         import_queue.refresh_from_db()
-        self.assertEqual(len(import_queue.duplicate_features), 0,
-                        "Feature that is both coord and hash duplicate should only be marked as hash duplicate")
+        self.assertEqual(len(import_queue.duplicate_features), 1,
+                        "Feature should be marked as hash duplicate")
+        self.assertEqual(import_queue.duplicate_features[0]['match_type'], DuplicateMatchType.HASH,
+                        "Duplicate should be marked as HASH type, not geometry")
         
-        # Verify it's not in skipped_feature_ids either (since it's a hash duplicate, not coord)
+        # Verify it's not in skipped_feature_ids (hash duplicates are blocked, not skipped)
         self.assertNotIn(feature_hash, import_queue.skipped_feature_ids or [],
                         "Hash duplicates should not be in skipped_feature_ids (they're blocked, not skipped)")
 
     @patch('channels.layers.get_channel_layer')
-    @patch('geo_lib.processing.duplicate_detection.find_coordinate_duplicates')
+    @patch('geo_lib.processing.duplicate_detection.find_duplicates_for_source')
     @patch('geo_lib.processing.logging.RealTimeImportLog')
-    def test_recheck_duplicates_cross_queue_coord_duplicate(self, mock_realtime_log_class, mock_find_duplicates, mock_get_channel_layer):
-        """Test that recheck_duplicates detects cross-queue coordinate duplicates."""
+    def test_recheck_duplicates_cross_queue_coord_duplicate(self, mock_realtime_log_class, mock_find_duplicates_for_source, mock_get_channel_layer):
+        """Test that recheck_duplicates detects cross-queue geometry duplicates."""
         from geo_lib.feature_id import generate_feature_hash
+        from geo_lib.processing.duplicate_models import DuplicateSource, DuplicateMatchType
         
         # Create first import queue item with a feature
         feature1 = {
@@ -909,7 +923,7 @@ class TestImportAPI(TestCase):
             imported=False
         )
         
-        # Create second import queue item with a feature at the same coordinates (coordinate duplicate)
+        # Create second import queue item with a feature at the same coordinates (geometry duplicate)
         feature2 = {
             'type': 'Feature',
             'geometry': {'type': 'Point', 'coordinates': [-122.4194, 37.7749]},
@@ -930,14 +944,28 @@ class TestImportAPI(TestCase):
         mock_import_log.add_timing = MagicMock()
         mock_realtime_log_class.return_value = mock_import_log
         
-        # Mock find_coordinate_duplicates to return no FeatureStore duplicates
-        # (the cross-queue check happens after this)
+        # Mock find_duplicates_for_source to return geometry duplicate in cross-queue
         mock_duplicate_log = MagicMock()
-        mock_find_duplicates.return_value = (
-            [feature2],  # unique_features (no FeatureStore duplicates)
-            [],  # duplicate_features (no FeatureStore duplicates)
-            mock_duplicate_log  # import_log
-        )
+        cross_queue_duplicate = {
+            'feature': feature2,
+            'source': DuplicateSource.CROSS_QUEUE,
+            'match_type': DuplicateMatchType.GEOMETRY,
+            'existing_features': [{
+                'id': import_queue1.id,
+                'name': 'test1.kml',
+                'type': 'Point',
+                'timestamp': None,  # cross-queue doesn't have timestamp
+                'geojson': feature1
+            }]
+        }
+        
+        # Mock returns: (remaining_features, all_duplicates, import_log)
+        # First call (feature store): no duplicates
+        # Second call (cross-queue): returns geometry duplicate from first queue item
+        mock_find_duplicates_for_source.side_effect = [
+            ([feature2], [], mock_duplicate_log),  # feature store pass - no duplicates
+            ([], [cross_queue_duplicate], mock_duplicate_log),  # cross-queue pass - geometry duplicate found
+        ]
 
         # Mock channel layer
         async def mock_group_send(group, message):
@@ -946,14 +974,14 @@ class TestImportAPI(TestCase):
         mock_channel_layer.group_send = mock_group_send
         mock_get_channel_layer.return_value = mock_channel_layer
 
-        # Recheck duplicates for the second item (should find coordinate duplicate in first item)
+        # Recheck duplicates for the second item (should find geometry duplicate in first item)
         response = self.client.post(f'/api/item/import/recheck-duplicates/{import_queue2.id}')
         self.assertEqual(response.status_code, 200)
         
-        # Verify that the cross-queue coordinate duplicate was detected
+        # Verify that the cross-queue geometry duplicate was detected
         import_queue2.refresh_from_db()
         self.assertEqual(len(import_queue2.duplicate_features), 1,
-                        "Cross-queue coordinate duplicate should be detected")
+                        "Cross-queue geometry duplicate should be detected")
         
         # Verify the duplicate info references the first queue item
         dup_info = import_queue2.duplicate_features[0]
@@ -966,7 +994,7 @@ class TestImportAPI(TestCase):
         feature2_hash = generate_feature_hash(feature2)
         feature2_id = feature2.get('properties', {}).get('feature_hash', feature2_hash)
         self.assertIn(feature2_id, import_queue2.skipped_feature_ids or [],
-                     "Cross-queue coordinate duplicate should be auto-skipped")
+                     "Cross-queue geometry duplicate should be auto-skipped")
 
     def test_recheck_duplicates_not_found(self):
         """Test rechecking duplicates for non-existent item."""

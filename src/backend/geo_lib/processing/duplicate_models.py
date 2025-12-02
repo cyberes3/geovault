@@ -48,3 +48,31 @@ class DuplicateInfo(BaseModel):
     match_type: DuplicateMatchType = Field(description="How duplicate was matched: geometry or hash")
     existing_features: Optional[List[dict]] = Field(default=None, description="List of existing features that match this duplicate")
 
+
+def split_duplicates_by_match_type(duplicates: List[dict]) -> tuple[List[dict], List[dict]]:
+    """
+    Split duplicates into hash and geometry lists.
+    
+    This helper function categorizes duplicates based on their match_type,
+    making it easier to handle them separately in the UI or for reporting.
+    
+    Args:
+        duplicates: List of duplicate info dicts with 'match_type' field
+    
+    Returns:
+        Tuple of (hash_duplicates, geometry_duplicates)
+    
+    Example:
+        >>> hash_dups, geom_dups = split_duplicates_by_match_type(all_duplicates)
+        >>> print(f"{len(hash_dups)} hash, {len(geom_dups)} geometry")
+    """
+    hash_duplicates = [
+        dup for dup in duplicates 
+        if dup.get('match_type') == DuplicateMatchType.HASH
+    ]
+    geometry_duplicates = [
+        dup for dup in duplicates 
+        if dup.get('match_type') == DuplicateMatchType.GEOMETRY
+    ]
+    return hash_duplicates, geometry_duplicates
+

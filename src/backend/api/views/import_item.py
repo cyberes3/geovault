@@ -532,7 +532,8 @@ def recheck_duplicates(request, item_id):
         )
 
     try:
-        from geo_lib.processing.duplicate_detection import find_coordinate_duplicates
+        from geo_lib.processing.duplicate_detection import find_duplicates_for_source
+        from geo_lib.processing.duplicate_models import DuplicateMatchType
         from geo_lib.processing.logging import RealTimeImportLog, DatabaseLogLevel
         import time
 
@@ -559,39 +560,50 @@ def recheck_duplicates(request, item_id):
             DatabaseLogLevel.INFO
         )
 
-        # Perform duplicate detection against FeatureStore and queue items
+        # Perform 2-pass duplicate detection (feature store first, then cross-queue)
         start_time = time.time()
-        unique_features, duplicate_features, duplicate_log = find_coordinate_duplicates(
+        
+        # PASS 1: Check feature store (hash + geometry with hash priority)
+        remaining_after_fs, feature_store_duplicates, fs_log = find_duplicates_for_source(
             features,
             request.user.id,
-            exclude_queue_id=import_item.id,
-            exclude_timestamp=import_item.timestamp
+            source='feature_store',
+            exclude_queue_id=None,
+            exclude_timestamp=None
         )
-        duration = time.time() - start_time
-
-        # Extend the real-time log with duplicate detection results
-        realtime_log.extend(duplicate_log)
-        realtime_log.add_timing("Duplicate re-check", duration, "Duplicate Recheck")
-
-        # Filter out coordinate duplicates that are also hash duplicates
-        # Hash duplicates take precedence - if a feature is both, only mark as hash duplicate
-        from geo_lib.processing.duplicate_detection import filter_hash_duplicates_from_coord_duplicates
+        realtime_log.extend(fs_log)
         
-        duplicate_features = filter_hash_duplicates_from_coord_duplicates(
-            duplicate_features,
+        # PASS 2: Check cross-queue (hash + geometry with hash priority) on remaining features
+        remaining_after_cq, cross_queue_duplicates, cq_log = find_duplicates_for_source(
+            remaining_after_fs,
             request.user.id,
+            source='cross_queue',
             exclude_queue_id=import_item.id,
             exclude_timestamp=import_item.timestamp
         )
+        realtime_log.extend(cq_log)
+        
+        # Combine all duplicates in priority order
+        duplicate_features = feature_store_duplicates + cross_queue_duplicates
+        
+        duration = time.time() - start_time
+        realtime_log.add_timing("Duplicate re-check", duration, "Duplicate Recheck")
 
         # Update the import queue item with new duplicate information
         import_item.duplicate_features = duplicate_features
         
-        # Auto-skip coordinate duplicates by adding their feature IDs to skipped_feature_ids
+        # Auto-skip ONLY geometry duplicates by adding their feature IDs to skipped_feature_ids
+        # Hash duplicates are always blocked, not added to skipped_feature_ids
         from geo_lib.processing.duplicate_detection import get_skipped_feature_ids_from_duplicates
         
+        # Filter to only geometry duplicates
+        geometry_duplicates = [
+            dup for dup in duplicate_features 
+            if dup.get('match_type') == DuplicateMatchType.GEOMETRY
+        ]
+        
         skipped_feature_ids = get_skipped_feature_ids_from_duplicates(
-            duplicate_features,
+            geometry_duplicates,
             import_item.skipped_feature_ids
         )
         

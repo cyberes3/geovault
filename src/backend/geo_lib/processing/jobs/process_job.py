@@ -586,7 +586,11 @@ class ProcessJob(BaseJob):
                         find_duplicates_for_source,
                         strip_duplicate_features
                     )
-                    from geo_lib.processing.duplicate_models import DuplicateSource, DuplicateMatchType
+                    from geo_lib.processing.duplicate_models import (
+                        DuplicateSource, 
+                        DuplicateMatchType,
+                        split_duplicates_by_match_type
+                    )
 
                     # First, check for internal duplicates within the file
                     processing_log.add("Checking for internal duplicates within the uploaded file", "ProcessJob", DatabaseLogLevel.INFO)
@@ -616,14 +620,9 @@ class ProcessJob(BaseJob):
                     processing_log.extend(fs_log)
                     
                     # Split feature store duplicates into hash and geometry for tracking
-                    feature_store_hash_duplicates = [
-                        dup for dup in feature_store_duplicates 
-                        if dup.get('match_type') == DuplicateMatchType.HASH
-                    ]
-                    feature_store_geom_duplicates = [
-                        dup for dup in feature_store_duplicates 
-                        if dup.get('match_type') == DuplicateMatchType.GEOMETRY
-                    ]
+                    feature_store_hash_duplicates, feature_store_geom_duplicates = split_duplicates_by_match_type(
+                        feature_store_duplicates
+                    )
                     
                     # PASS 2: Check cross-queue (hash + geometry, with hash priority) on remaining features
                     processing_log.add("Checking for duplicates in other import queue items", "ProcessJob", DatabaseLogLevel.INFO)
@@ -637,14 +636,9 @@ class ProcessJob(BaseJob):
                     processing_log.extend(cq_log)
                     
                     # Split cross-queue duplicates into hash and geometry for tracking
-                    cross_queue_hash_duplicates = [
-                        dup for dup in cross_queue_duplicates 
-                        if dup.get('match_type') == DuplicateMatchType.HASH
-                    ]
-                    cross_queue_geom_duplicates = [
-                        dup for dup in cross_queue_duplicates 
-                        if dup.get('match_type') == DuplicateMatchType.GEOMETRY
-                    ]
+                    cross_queue_hash_duplicates, cross_queue_geom_duplicates = split_duplicates_by_match_type(
+                        cross_queue_duplicates
+                    )
                     
                     # Combine all duplicates in priority order
                     duplicate_features = (

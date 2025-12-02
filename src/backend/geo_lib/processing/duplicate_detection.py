@@ -6,7 +6,7 @@ Handles finding duplicate features within a file and against the existing featur
 import time
 import json
 import traceback
-from typing import List, Dict, Tuple, Any, Optional
+from typing import List, Dict, Tuple, Any, Optional, Literal
 from datetime import datetime
 
 from django.contrib.gis.geos import GEOSGeometry
@@ -120,7 +120,7 @@ def find_geometry_duplicates(
     user_id: int,
     exclude_queue_id: Optional[int] = None,
     exclude_timestamp: Optional[datetime] = None,
-    source_filter: Optional[str] = None
+    source_filter: Optional[Literal['feature_store', 'cross_queue']] = None
 ) -> Tuple[List[Dict], List[Dict], ImportLog]:
     """
     Find features that have duplicate geometry in the existing featurestore and/or import queue.
@@ -398,20 +398,20 @@ def _find_geometry_duplicates_batched(
                     ).values('id', 'geojson', 'timestamp')
                     
                     for existing in existing_features:
-                    # Format the feature using the helper
-                    formatted_existing = _format_existing_feature(existing)
-                    existing_geojson = formatted_existing['geojson']
-                    
-                    # Get coordinates from formatted geojson and normalize them
-                    existing_coords = existing_geojson.get('geometry', {}).get('coordinates', [])
-                    if existing_coords:
-                        normalized_existing_coords = normalize_coordinates(existing_coords)
+                        # Format the feature using the helper
+                        formatted_existing = _format_existing_feature(existing)
+                        existing_geojson = formatted_existing['geojson']
                         
-                        # Use normalized coordinates as key for lookup
-                        coords_key = json.dumps(normalized_existing_coords, sort_keys=True)
-                        if coords_key not in existing_lookup:
-                            existing_lookup[coords_key] = []
-                        existing_lookup[coords_key].append(formatted_existing)
+                        # Get coordinates from formatted geojson and normalize them
+                        existing_coords = existing_geojson.get('geometry', {}).get('coordinates', [])
+                        if existing_coords:
+                            normalized_existing_coords = normalize_coordinates(existing_coords)
+                            
+                            # Use normalized coordinates as key for lookup
+                            coords_key = json.dumps(normalized_existing_coords, sort_keys=True)
+                            if coords_key not in existing_lookup:
+                                existing_lookup[coords_key] = []
+                            existing_lookup[coords_key].append(formatted_existing)
 
                 # Check each feature in the batch using normalized coordinate comparison
                 for idx, feature, normalized_coords, _ in batch_geometries:
@@ -573,55 +573,12 @@ def get_skipped_feature_ids_from_duplicates(
     return skipped_feature_ids
 
 
-def filter_hash_duplicates_from_geometry_duplicates(
-    duplicate_features: List[Dict],
-    user_id: int,
-    exclude_queue_id: Optional[int] = None,
-    exclude_timestamp: Optional[datetime] = None
-) -> List[Dict]:
-    """
-    Filter out geometry duplicates that are also hash duplicates.
-    Hash duplicates take precedence - if a feature is both, only mark as hash duplicate.
-    
-    Args:
-        duplicate_features: List of duplicate feature info dicts
-        user_id: User ID to check duplicates for
-        exclude_queue_id: Optional ImportQueue item ID to exclude from cross-queue checks
-        exclude_timestamp: Optional timestamp - only check queue items older than this timestamp
-    
-    Returns:
-        Filtered list of duplicate features (with hash duplicates removed)
-    """
-    from api.models import FeatureStore, ImportQueue
-    
-    # Get all hash duplicates (FeatureStore + other queue items)
-    existing_store_hashes = set(FeatureStore.objects.filter(user_id=user_id).values_list('geojson_hash', flat=True))
-    
-    other_queue_items = ImportQueue.objects.filter(
-        user_id=user_id,
-        imported=False
-    )
-    if exclude_queue_id is not None:
-        other_queue_items = other_queue_items.exclude(id=exclude_queue_id)
-    if exclude_timestamp:
-        other_queue_items = other_queue_items.filter(timestamp__lt=exclude_timestamp)
-    
-    queue_hashes = {generate_feature_hash(f) for item in other_queue_items for f in item.geofeatures}
-    hash_duplicate_hashes = existing_store_hashes | queue_hashes
-    
-    # Remove geometry duplicates that are also hash duplicates
-    return [
-        dup_info for dup_info in duplicate_features
-        if dup_info.get('feature') and generate_feature_hash(dup_info['feature']) not in hash_duplicate_hashes
-    ]
-
-
 def find_hash_duplicates(
     features: List[Dict],
     user_id: int,
     exclude_queue_id: Optional[int] = None,
     exclude_timestamp: Optional[datetime] = None,
-    source_filter: Optional[str] = None
+    source_filter: Optional[Literal['feature_store', 'cross_queue']] = None
 ) -> Tuple[List[Dict], ImportLog]:
     """
     Find features that have duplicate hashes in the existing featurestore and/or import queue.
@@ -749,7 +706,7 @@ def find_hash_duplicates(
 def find_duplicates_for_source(
     features: List[Dict],
     user_id: int,
-    source: str,
+    source: Literal['feature_store', 'cross_queue'],
     exclude_queue_id: Optional[int] = None,
     exclude_timestamp: Optional[datetime] = None
 ) -> Tuple[List[Dict], List[Dict], ImportLog]:
@@ -771,7 +728,14 @@ def find_duplicates_for_source(
         - remaining_features: features that are NOT duplicates in this source
         - all_duplicates: list of duplicate info dicts (hash + geometry), hash duplicates first
         - import_log: log messages from detection
+        
+    Raises:
+        ValueError: If source is not 'feature_store' or 'cross_queue'
     """
+    # Validate source parameter
+    if source not in ['feature_store', 'cross_queue']:
+        raise ValueError(f"Invalid source: '{source}'. Must be 'feature_store' or 'cross_queue'")
+    
     import_log = ImportLog()
     
     # STEP 1: Find hash duplicates for this source
