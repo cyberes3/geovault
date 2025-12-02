@@ -661,30 +661,32 @@ export default {
     importableCount() {
       // Calculate importable count:
       // Total features - hash duplicates (always blocked) - skipped features
-      const hashDups = this.duplicates.features?.hash || [];
-      const queueDups = this.duplicates.queue || [];
+      const featureStoreHashDups = this.duplicates.featureStoreHash || [];
+      const crossQueueHashDups = this.duplicates.crossQueueHash || [];
       
       // Hash duplicates are always blocked regardless of source (FeatureStore or other queue items)
-      const blockedDuplicatesCount = hashDups.length + queueDups.length;
+      const blockedDuplicatesCount = featureStoreHashDups.length + crossQueueHashDups.length;
       
       const count = this.pagination.totalFeatures - blockedDuplicatesCount - this.skippedFeatureIds.size;
       return Math.max(0, count);
     },
 
     totalDuplicateCount() {
-      // Count all duplicates (hash, queue, and coordinate)
-      const hashDups = this.duplicates.features?.hash || [];
-      const queueDups = this.duplicates.queue || [];
-      const coordDups = this.duplicates.features?.coord || [];
+      // Count all duplicates (hash and geometry from both sources)
+      const featureStoreHashDups = this.duplicates.featureStoreHash || [];
+      const featureStoreGeometryDups = this.duplicates.featureStoreGeometry || [];
+      const crossQueueHashDups = this.duplicates.crossQueueHash || [];
+      const crossQueueGeometryDups = this.duplicates.crossQueueGeometry || [];
       
       // Use a Set to avoid counting the same feature twice
-      // Queue duplicates are objects with .hash property
-      const allHashes = new Set([
-        ...hashDups,
-        ...queueDups.map(d => d.hash),
-        ...coordDups
+      // Each duplicate object has a 'hash' property we can use as a unique identifier
+      const allFeatureHashes = new Set([
+        ...featureStoreHashDups.map(d => d.hash),
+        ...featureStoreGeometryDups.map(d => d.hash),
+        ...crossQueueHashDups.map(d => d.hash),
+        ...crossQueueGeometryDups.map(d => d.hash)
       ]);
-      return allHashes.size;
+      return allFeatureHashes.size;
     },
 
     showDebugLogs() {
