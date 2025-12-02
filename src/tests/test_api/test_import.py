@@ -306,7 +306,7 @@ class TestImportAPI(TestCase):
         geofeatures = [{
             'type': 'Feature',
             'geometry': {'type': 'Point', 'coordinates': [-122.4194, 37.7749]},
-            'properties': {'id': 'test-id', 'name': 'Original'}
+            'properties': {'feature_hash': 'test-id', 'name': 'Original'}
         }]
         import_queue = ImportQueue.objects.create(
             user=self.user,
@@ -318,7 +318,7 @@ class TestImportAPI(TestCase):
 
         update_data = {
             'features': [{
-                'properties': {'id': 'test-id', 'name': 'Updated'}
+                'properties': {'feature_hash': 'test-id', 'name': 'Updated'}
             }]
         }
 
@@ -341,7 +341,7 @@ class TestImportAPI(TestCase):
             imported=True
         )
 
-        update_data = {'features': [{'properties': {'id': 'test-id', 'name': 'Test'}}]}
+        update_data = {'features': [{'properties': {'feature_hash': 'test-id', 'name': 'Test'}}]}
         response = self.client.put(
             f'/api/item/import/update/{import_queue.id}',
             data=json.dumps(update_data),
@@ -375,7 +375,7 @@ class TestImportAPI(TestCase):
             geofeatures=[{
                 'type': 'Feature',
                 'geometry': {'type': 'Point', 'coordinates': [-122.4194, 37.7749]},
-                'properties': {'id': 'test-id', 'name': 'Original'}
+                'properties': {'feature_hash': 'test-id', 'name': 'Original'}
             }],
             imported=False
         )
@@ -415,7 +415,7 @@ class TestImportAPI(TestCase):
         geofeatures = [{
             'type': 'Feature',
             'geometry': {'type': 'Point', 'coordinates': [-122.4194, 37.7749]},
-            'properties': {'id': 'test-id', 'name': 'Original'}
+            'properties': {'feature_hash': 'test-id', 'name': 'Original'}
         }]
         import_queue = ImportQueue.objects.create(
             user=self.user,
@@ -427,7 +427,7 @@ class TestImportAPI(TestCase):
         update_data = {
             'features': [{
                 'properties': {
-                    'id': 'test-id',
+                    'feature_hash': 'test-id',
                     'created': 'not-a-valid-iso-timestamp'
                 }
             }]
@@ -444,7 +444,7 @@ class TestImportAPI(TestCase):
         geofeatures = [{
             'type': 'Feature',
             'geometry': {'type': 'Point', 'coordinates': [-122.4194, 37.7749]},
-            'properties': {'id': 'test-id', 'name': 'Original'}
+            'properties': {'feature_hash': 'test-id', 'name': 'Original'}
         }]
         import_queue = ImportQueue.objects.create(
             user=self.user,
@@ -456,7 +456,7 @@ class TestImportAPI(TestCase):
         update_data = {
             'features': [{
                 'properties': {
-                    'id': 'test-id',
+                    'feature_hash': 'test-id',
                     'created': '2024-01-15T10:30:00Z'
                 }
             }]
@@ -473,7 +473,7 @@ class TestImportAPI(TestCase):
         geofeatures = [{
             'type': 'Feature',
             'geometry': {'type': 'Point', 'coordinates': [-122.4194, 37.7749]},
-            'properties': {'id': 'test-id', 'name': 'Original'}
+            'properties': {'feature_hash': 'test-id', 'name': 'Original'}
         }]
         import_queue = ImportQueue.objects.create(
             user=self.user,
@@ -485,7 +485,7 @@ class TestImportAPI(TestCase):
         update_data = {
             'features': [{
                 'properties': {
-                    'id': 'test-id',
+                    'feature_hash': 'test-id',
                     'name': 'Updated',
                     'invalid_field': 'should be rejected'
                 }
@@ -503,7 +503,7 @@ class TestImportAPI(TestCase):
         geofeatures = [{
             'type': 'Feature',
             'geometry': {'type': 'Point', 'coordinates': [-122.4194, 37.7749]},
-            'properties': {'id': 'test-id', 'name': 'Original'}
+            'properties': {'feature_hash': 'test-id', 'name': 'Original'}
         }]
         import_queue = ImportQueue.objects.create(
             user=self.user,
@@ -515,7 +515,7 @@ class TestImportAPI(TestCase):
         update_data = {
             'features': [{
                 'properties': {
-                    'id': 'test-id',
+                    'feature_hash': 'test-id',
                     'tags': 'not-a-list'
                 }
             }]

@@ -176,7 +176,7 @@ def find_geometry_duplicates(
             # Non-empty geofeatures means the item has finished processing and has features to check
             if not queue_item.geofeatures or len(queue_item.geofeatures) == 0:
                 continue
-            for queue_feature in queue_item.geofeatures:
+            for feature_idx, queue_feature in enumerate(queue_item.geofeatures):
                 queue_geom = queue_feature.get('geometry', {})
                 queue_coords = queue_geom.get('coordinates')
                 queue_type = queue_geom.get('type', '').lower()
@@ -188,7 +188,8 @@ def find_geometry_duplicates(
                         queue_coords_map[coords_key] = {
                             'queue_item_id': queue_item.id,
                             'queue_item_filename': queue_item.original_filename,
-                            'feature': queue_feature
+                            'feature': queue_feature,
+                            'feature_index': feature_idx
                         }
     
     # Track which features we've already found as duplicates
@@ -221,7 +222,8 @@ def find_geometry_duplicates(
                     'name': queue_match['queue_item_filename'],
                     'type': geom_type,
                     'timestamp': None,
-                    'geojson': queue_match['feature']
+                    'geojson': queue_match['feature'],
+                    'feature_index': queue_match.get('feature_index', 0)
                 }
                 existing_features.append(queue_existing)
 
@@ -467,7 +469,7 @@ def _find_geometry_duplicates_batched(
             # Non-empty geofeatures means the item has finished processing and has features to check
             if not queue_item.geofeatures or len(queue_item.geofeatures) == 0:
                 continue
-            for queue_feature in queue_item.geofeatures:
+            for feature_idx, queue_feature in enumerate(queue_item.geofeatures):
                 queue_geom = queue_feature.get('geometry', {})
                 queue_coords = queue_geom.get('coordinates')
                 queue_type = queue_geom.get('type', '').lower()
@@ -479,7 +481,8 @@ def _find_geometry_duplicates_batched(
                         queue_coords_map[coords_key] = {
                             'queue_item_id': queue_item.id,
                             'queue_item_filename': queue_item.original_filename,
-                            'feature': queue_feature
+                            'feature': queue_feature,
+                            'feature_index': feature_idx
                         }
         
         # Check features that weren't already marked as duplicates
@@ -509,7 +512,8 @@ def _find_geometry_duplicates_batched(
                         'name': queue_match['queue_item_filename'],
                         'type': feature_type,
                         'timestamp': None,
-                        'geojson': queue_match['feature']
+                        'geojson': queue_match['feature'],
+                        'feature_index': queue_match.get('feature_index', 0)
                     }
                     
                     duplicate_info = {
@@ -633,14 +637,15 @@ def find_hash_duplicates(
         for queue_item in other_queue_items:
             if not queue_item.geofeatures:
                 continue
-            for feature in queue_item.geofeatures:
+            for feature_idx, feature in enumerate(queue_item.geofeatures):
                 feature_hash = feature.get('properties', {}).get('feature_hash')
                 if not feature_hash:
                     feature_hash = generate_feature_hash(feature)
                 if feature_hash not in queue_hash_to_item:
                     queue_hash_to_item[feature_hash] = {
                         'queue_item_id': queue_item.id,
-                        'queue_item_filename': queue_item.original_filename
+                        'queue_item_filename': queue_item.original_filename,
+                        'feature_index': feature_idx
                     }
                     queue_hash_to_feature[feature_hash] = feature
     
@@ -680,7 +685,8 @@ def find_hash_duplicates(
                 'name': queue_info['queue_item_filename'],
                 'type': feature.get('geometry', {}).get('type', 'Unknown'),
                 'timestamp': None,
-                'geojson': queue_hash_to_feature[feature_hash]
+                'geojson': queue_hash_to_feature[feature_hash],
+                'feature_index': queue_info.get('feature_index', 0)
             }
             
             hash_duplicates.append({

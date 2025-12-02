@@ -866,6 +866,17 @@ export default {
         }
       },
       immediate: true
+    },
+    '$route.query.scrollToIndex': {
+      handler(globalIndex) {
+        if (globalIndex !== undefined && globalIndex !== null) {
+          const index = parseInt(globalIndex);
+          if (!isNaN(index)) {
+            this.scrollToGlobalIndex(index);
+          }
+        }
+      },
+      immediate: true
     }
   },
   beforeDestroy() {
@@ -1966,6 +1977,8 @@ export default {
           this.itemsForUser[pageIndex].duplicateInfo = {
             source: 'cross_queue',
             match_type: 'hash',
+            hash: dupInfo.hash,
+            global_index: dupInfo.global_index,
             queue_item_id: dupInfo.queue_item_id,
             queue_item_filename: dupInfo.queue_item_filename
           };
@@ -1980,6 +1993,8 @@ export default {
           this.itemsForUser[pageIndex].duplicateInfo = {
             source: 'cross_queue',
             match_type: 'geometry',
+            hash: dupInfo.hash,
+            global_index: dupInfo.global_index,
             queue_item_id: dupInfo.queue_item_id,
             queue_item_filename: dupInfo.queue_item_filename
           };
@@ -2507,6 +2522,59 @@ export default {
         console.warn(`Feature with hash ${hash} not found on current page`);
       }
     },
+    async scrollToGlobalIndex(globalIndex) {
+      console.log(`scrollToGlobalIndex called with index: ${globalIndex}`);
+      
+      // Calculate which page the feature is on
+      const targetPage = Math.floor(globalIndex / this.pagination.pageSize) + 1;
+      console.log(`Target page: ${targetPage}, current page: ${this.pagination.currentPage}`);
+      
+      // Navigate to the page if not already there
+      if (this.pagination.currentPage !== targetPage) {
+        console.log(`Navigating to page ${targetPage}`);
+        await this.goToPage(targetPage);
+        await this.waitForPageLoad();
+        await this.waitForItems();
+      }
+      
+      // Wait for DOM to be fully updated
+      await this.$nextTick();
+      
+      // Additional wait to ensure rendering is complete
+      await new Promise(resolve => setTimeout(resolve, 300));
+      
+      // Scroll to the feature with retry logic
+      let attempts = 0;
+      const maxAttempts = 5;
+      const attemptScroll = () => {
+        attempts++;
+        console.log(`Scroll attempt ${attempts} for global index ${globalIndex}`);
+        
+        const element = document.querySelector(`[data-feature-index="${globalIndex}"]`);
+        if (element) {
+          console.log(`Found element for index ${globalIndex}, scrolling`);
+          element.scrollIntoView({
+            behavior: 'smooth',
+            block: 'center'
+          });
+          
+          // Highlight the element
+          element.classList.add('ring-2', 'ring-blue-500', 'ring-offset-2');
+          setTimeout(() => {
+            element.classList.remove('ring-2', 'ring-blue-500', 'ring-offset-2');
+          }, 2000);
+        } else {
+          console.warn(`Element not found for index ${globalIndex} (attempt ${attempts}/${maxAttempts})`);
+          if (attempts < maxAttempts) {
+            setTimeout(attemptScroll, 200);
+          } else {
+            console.error(`Failed to find element after ${maxAttempts} attempts`);
+          }
+        }
+      };
+      
+      attemptScroll();
+    },
     truncateDescription(description) {
       if (!description) return '';
       const maxLength = 100;
@@ -2539,6 +2607,14 @@ export default {
           });
         });
       });
+    }
+    
+    // Check for scrollToIndex query parameter
+    if (this.$route.query.scrollToIndex) {
+      const globalIndex = parseInt(this.$route.query.scrollToIndex);
+      if (!isNaN(globalIndex)) {
+        this.scrollToGlobalIndex(globalIndex);
+      }
     }
   },
   beforeUnmount() {

@@ -390,17 +390,46 @@ class TestE2EImport(TransactionTestCase):
                        "Duplicates should have been detected and not imported twice")
 
     def test_e2e_coordinate_duplicate_auto_skip(self):
-        """Test that coordinate duplicates are automatically skipped by default."""
-        # First, import some features
-        kml_content = self._load_test_file('Test Items.kml')
-        process_job_id, item_id, process_status = self._upload_file(kml_content, 'Test Items.kml')
+        """Test that coordinate (geometry) duplicates are automatically skipped by default.
+        
+        Geometry duplicates have the same coordinates but different properties (name, description, etc).
+        These should be auto-skipped (added to skipped_feature_ids) to prevent clutter.
+        """
+        # First, import a feature at a specific location
+        first_kml = b"""<?xml version="1.0" encoding="UTF-8"?>
+<kml xmlns="http://www.opengis.net/kml/2.2">
+  <Document>
+    <Placemark>
+      <name>Original Feature</name>
+      <description>This is the original feature</description>
+      <Point>
+        <coordinates>-122.4194,37.7749,0</coordinates>
+      </Point>
+    </Placemark>
+  </Document>
+</kml>"""
+        
+        process_job_id, item_id, process_status = self._upload_file(first_kml, 'first.kml')
         self.assertEqual(process_status['status'], ProcessingStatus.COMPLETED.value)
         
         import_job_id, import_status = self._import_item(item_id)
         self.assertEqual(import_status['status'], ProcessingStatus.COMPLETED.value)
         
-        # Now upload the same file again (will have coordinate duplicates)
-        process_job_id2, item_id2, process_status2 = self._upload_file(kml_content, 'Test Items Duplicate.kml')
+        # Now upload a DIFFERENT feature at the SAME coordinates (geometry duplicate, not hash duplicate)
+        second_kml = b"""<?xml version="1.0" encoding="UTF-8"?>
+<kml xmlns="http://www.opengis.net/kml/2.2">
+  <Document>
+    <Placemark>
+      <name>Different Feature</name>
+      <description>This is a different feature at the same location</description>
+      <Point>
+        <coordinates>-122.4194,37.7749,0</coordinates>
+      </Point>
+    </Placemark>
+  </Document>
+</kml>"""
+        
+        process_job_id2, item_id2, process_status2 = self._upload_file(second_kml, 'second.kml')
         self.assertEqual(process_status2['status'], ProcessingStatus.COMPLETED.value)
         
         # Check that duplicates were detected
@@ -408,20 +437,37 @@ class TestE2EImport(TransactionTestCase):
         self.assertGreater(len(import_item.duplicate_features), 0, 
                           "Should have detected duplicate features")
         
-        # Verify that coordinate duplicates were auto-skipped
+        # Verify that duplicates are GEOMETRY duplicates (not hash duplicates)
+        from geo_lib.processing.duplicate_models import DuplicateMatchType, DuplicateSource
         from geo_lib.feature_id import generate_feature_hash
+        
+        # Check that detected duplicates are geometry-based (same location, different properties)
+        geometry_duplicate_count = 0
+        for dup_info in import_item.duplicate_features:
+            if dup_info.get('match_type') == DuplicateMatchType.GEOMETRY:
+                geometry_duplicate_count += 1
+                # Should be from feature store (not cross-queue)
+                self.assertEqual(dup_info.get('source'), DuplicateSource.FEATURE_STORE,
+                               "Geometry duplicate should be from feature store")
+        
+        self.assertGreater(geometry_duplicate_count, 0,
+                          "Should have detected at least one GEOMETRY duplicate")
+        
+        # Verify that geometry duplicates WERE auto-skipped (added to skipped_feature_ids)
         skipped_ids = import_item.skipped_feature_ids if import_item.skipped_feature_ids else []
         self.assertGreater(len(skipped_ids), 0,
-                          "Coordinate duplicates should be auto-skipped")
+                          "Geometry duplicates should be auto-skipped (added to skipped_feature_ids)")
         
-        # Verify that the skipped IDs match the duplicate features
+        # Verify that the skipped IDs match the geometry duplicate features
         for dup_info in import_item.duplicate_features:
-            dup_feature = dup_info.get('feature')
-            if dup_feature:
-                feature_hash = generate_feature_hash(dup_feature)
-                feature_id = dup_feature.get('properties', {}).get('feature_hash', feature_hash)
-                self.assertIn(feature_id, skipped_ids,
-                             f"Duplicate feature {feature_id} should be in skipped_feature_ids")
+            if dup_info.get('match_type') == DuplicateMatchType.GEOMETRY:
+                dup_feature = dup_info.get('feature')
+                if dup_feature:
+                    feature_hash = dup_feature.get('properties', {}).get('feature_hash')
+                    if not feature_hash:
+                        feature_hash = generate_feature_hash(dup_feature)
+                    self.assertIn(feature_hash, skipped_ids,
+                                 f"Geometry duplicate feature {feature_hash} should be in skipped_feature_ids")
 
     def test_e2e_cross_queue_duplicate_detection(self):
         """Test that hash-based duplicate detection works across ImportQueue items during processing."""

@@ -51,15 +51,15 @@ When GeoVault finds duplicates, you'll see clear warnings organized by type:
 
 **"Same Location as Feature in Library"**
 - A different feature already exists at this exact spot on your map
-- It's automatically skipped to avoid confusion
-- A link shows you the existing feature
-- **Note:** You can't restore these—if you need to update the location, edit the existing feature instead
+- It's automatically skipped by default to avoid confusion
+- A link shows you the existing feature on the map
+- **You can restore these** if you want to import them anyway (creates intentional duplicate at same location)
 
 **"Same Location as Feature in Import Queue"**
 - A feature at this exact spot is in another file you uploaded earlier
-- It's automatically skipped to avoid confusion
+- It's automatically skipped by default to avoid confusion
 - A link shows you which file contains the other feature
-- **Note:** You can't restore these either
+- **You can restore these** if you want to import them anyway (creates intentional duplicate at same location)
 
 ## How Duplicate Detection Works
 
@@ -109,19 +109,21 @@ You upload three files: "north_trails.geojson", "south_trails.geojson", and "all
 
 ## Tips and Best Practices
 
-**✓ Review the Warnings**: Always check which features are blocked before importing
+**✓ Review the Warnings**: Always check which features are blocked or skipped before importing
 
 **✓ Use the Links**: Click the links in duplicate warnings to see the existing features and confirm they're actually duplicates
 
+**✓ Restore Geometry Duplicates If Needed**: If you want to intentionally have multiple features at the same location, you can click the "Restore" button on geometry duplicates
+
 **✓ Recheck After Changes**: If you import features from another file, use the "Recheck Duplicates" button to update the duplicate status of files still in your queue
 
-**✓ Edit Instead of Re-import**: To update feature names, descriptions, or properties, edit the existing feature on your map rather than trying to import a new version
+**✓ Edit Instead of Re-import**: To update feature names, descriptions, or properties, edit the existing feature on your map rather than importing a duplicate
 
-**✓ Delete First for Full Replacement**: If you want to completely replace features, delete the old ones from your library first, then import the new file
+**✓ Delete First for Full Replacement**: If you want to completely replace features with updated versions at the same locations, delete the old ones from your library first, then import the new file
 
 **✗ Don't Upload the Same File Twice**: GeoVault will block all features as exact duplicates
 
-**✗ Can't Force Import Duplicates**: If a feature is blocked as a duplicate, there's no override button—this is by design to maintain data quality
+**✗ Can't Force Import Hash Duplicates**: Exact duplicate features (hash-based) are permanently blocked—this is by design to prevent identical copies
 
 ## Technical Note on Priority
 

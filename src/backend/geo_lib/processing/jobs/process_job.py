@@ -17,6 +17,7 @@ from geo_lib.feature_id import generate_feature_hash
 from geo_lib.logging.console import get_job_logger
 from geo_lib.processing.jobs.base_job import BaseJob
 from geo_lib.processing.logging import RealTimeImportLog, DatabaseLogLevel
+from geo_lib.processing.duplicate_models import DuplicateMatchType
 from geo_lib.processing.messages import (
     PROCESSING_FAILED,
     FILE_VALIDATION_FAILED,

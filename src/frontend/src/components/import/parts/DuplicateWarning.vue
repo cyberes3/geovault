@@ -10,7 +10,7 @@
           <p>{{ message }}</p>
           <div v-if="queueDuplicateInfo" class="mt-2">
             <router-link
-              :to="{ path: `/import/process/${queueDuplicateInfo.queue_item_id}`, query: { featureHash: queueDuplicateInfo.hash } }"
+              :to="{ path: `/import/process/${queueDuplicateInfo.queue_item_id}`, query: { scrollToIndex: queueDuplicateInfo.global_index } }"
               class="inline-flex items-center px-3 py-1.5 border border-gray-300 rounded-md text-xs font-medium text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500"
             >
               <MapIcon class="w-3 h-3 mr-1" />
@@ -106,6 +106,8 @@ export default {
       if (this.type === 'cross_queue_hash' || this.type === 'cross_queue_geometry') {
         if (this.item.duplicateInfo && this.item.duplicateInfo.queue_item_id) {
           return {
+            hash: this.item.duplicateInfo.hash,
+            global_index: this.item.duplicateInfo.global_index,
             queue_item_id: this.item.duplicateInfo.queue_item_id,
             queue_item_filename: this.item.duplicateInfo.queue_item_filename
           };

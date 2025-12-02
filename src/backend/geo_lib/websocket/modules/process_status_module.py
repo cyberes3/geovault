@@ -396,6 +396,28 @@ class ProcessStatusModule(BaseWebSocketModule):
         # Get other unimported ImportQueue items for cross-queue checking
         other_queue_items = await self._get_other_queue_items()
         
+        # Build a mapping of queue_item_id to sorted feature indices
+        # This is needed to correctly navigate to features in other queue items
+        queue_item_sorted_indices = {}
+        for queue_item in other_queue_items:
+            if not queue_item.geofeatures:
+                continue
+            # Apply same sorting logic as used for current item
+            features_with_indices = []
+            for idx, feat in enumerate(queue_item.geofeatures):
+                center = self._get_feature_bounding_box_center(feat)
+                if center is not None:
+                    # Sort by (-lat, lon) to get north-to-south, west-to-east ordering
+                    sort_key = (-center[0], center[1])
+                else:
+                    # Features without valid geometry go to the end (high sort key)
+                    sort_key = (float('inf'), float('inf'))
+                features_with_indices.append((feat, idx, sort_key))
+            features_with_indices.sort(key=lambda x: x[2])
+            # Create mapping from original index to sorted index
+            original_to_sorted = {item[1]: sorted_idx for sorted_idx, item in enumerate(features_with_indices)}
+            queue_item_sorted_indices[queue_item.id] = original_to_sorted
+        
         # Get existing feature hashes from FeatureStore
         from api.models import FeatureStore
         from asgiref.sync import sync_to_async
@@ -417,14 +439,15 @@ class ProcessStatusModule(BaseWebSocketModule):
         # Build hash map from other queue items
         queue_hash_to_item = {}
         for queue_item in other_queue_items:
-            for feature in queue_item.geofeatures:
+            for feature_idx, feature in enumerate(queue_item.geofeatures):
                 feature_hash = feature.get('properties', {}).get('feature_hash')
                 if not feature_hash:
                     feature_hash = generate_feature_hash(feature)
                 if feature_hash not in queue_hash_to_item:
                     queue_hash_to_item[feature_hash] = {
                         'queue_item_id': queue_item.id,
-                        'queue_item_filename': queue_item.original_filename
+                        'queue_item_filename': queue_item.original_filename,
+                        'feature_index': feature_idx  # Index in the target queue item
                     }
         
         # Track all hash duplicates (both sources) to exclude from geometry checking
@@ -448,7 +471,8 @@ class ProcessStatusModule(BaseWebSocketModule):
                 if start_idx <= new_idx < end_idx:
                     dup_obj = {
                         'hash': feature_hash,
-                        'page_index': new_idx - start_idx
+                        'page_index': new_idx - start_idx,
+                        'global_index': new_idx  # For cross-queue navigation
                     }
                     if feature_hash in hash_to_store_id:
                         dup_obj['feature_store_id'] = hash_to_store_id[feature_hash]
@@ -458,9 +482,15 @@ class ProcessStatusModule(BaseWebSocketModule):
                 all_hash_duplicate_hashes.add(feature_hash)
                 queue_info = queue_hash_to_item[feature_hash]
                 if start_idx <= new_idx < end_idx:
+                    # Get sorted index for the target queue item
+                    target_queue_id = queue_info['queue_item_id']
+                    original_idx = queue_info['feature_index']
+                    sorted_idx = queue_item_sorted_indices.get(target_queue_id, {}).get(original_idx, original_idx)
+                    
                     cross_queue_hash_duplicates.append({
                         'hash': feature_hash,
                         'page_index': new_idx - start_idx,
+                        'global_index': sorted_idx,  # Sorted index in the TARGET queue item
                         'queue_item_id': queue_info['queue_item_id'],
                         'queue_item_filename': queue_info['queue_item_filename']
                     })
@@ -514,7 +544,8 @@ class ProcessStatusModule(BaseWebSocketModule):
             if start_idx <= new_idx < end_idx:
                 dup_obj = {
                     'hash': feature_hash,
-                    'page_index': new_idx - start_idx
+                    'page_index': new_idx - start_idx,
+                    'global_index': new_idx  # For cross-queue navigation
                 }
                 
                 # Add linking information from existing_features
@@ -529,6 +560,12 @@ class ProcessStatusModule(BaseWebSocketModule):
                         if 'id' in first_existing and 'name' in first_existing:
                             dup_obj['queue_item_id'] = first_existing['id']
                             dup_obj['queue_item_filename'] = first_existing['name']
+                            # Convert original feature_index to sorted index for navigation
+                            if 'feature_index' in first_existing:
+                                target_queue_id = first_existing['id']
+                                original_idx = first_existing['feature_index']
+                                sorted_idx = queue_item_sorted_indices.get(target_queue_id, {}).get(original_idx, original_idx)
+                                dup_obj['global_index'] = sorted_idx
                 
                 # Add to appropriate array based on source
                 if source == DuplicateSource.FEATURE_STORE:
