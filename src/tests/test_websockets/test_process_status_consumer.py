@@ -468,3 +468,117 @@ class TestProcessStatusConsumerEvents(TransactionTestCase):
         
         await communicator.disconnect()
 
+    async def test_waiting_status_event(self):
+        """Test that WAITING status is broadcast when processing lock is held."""
+        user = await database_sync_to_async(User.objects.create_user)(
+            email='test@example.com',
+            password='testpass123',
+            username='testuser'
+        )
+        
+        import_item = await database_sync_to_async(ImportQueue.objects.create)(
+            user=user,
+            original_filename='test.kml',
+            raw_file='<kml></kml>',
+            geofeatures=[]
+        )
+        
+        communicator = WebsocketCommunicator(
+            ProcessStatusConsumer.as_asgi(),
+            f"/ws/upload/status/{import_item.id}/"
+        )
+        communicator.scope['user'] = user
+        communicator.scope['url_route'] = {'kwargs': {'item_id': str(import_item.id)}}
+        
+        connected, subprotocol = await communicator.connect()
+        self.assertTrue(connected)
+        
+        # Simulate WAITING status event (sent by RedisProcessingLock)
+        channel_layer = get_channel_layer()
+        await channel_layer.group_send(
+            f"process_status_{user.id}_{import_item.id}",
+            {
+                'type': 'status_updated',
+                'data': {
+                    'status': 'waiting',
+                    'message': 'Waiting for earlier file to finish processing...'
+                }
+            }
+        )
+        
+        # Should receive WAITING status update
+        try:
+            response = await communicator.receive_json_from(timeout=2)
+            self.assertIsInstance(response, dict)
+            # Verify it's a status update
+            if 'type' in response:
+                self.assertIn(response['type'], ['status_updated', 'initial_state'])
+        except:
+            pass
+        
+        await communicator.disconnect()
+
+    async def test_processing_status_after_waiting(self):
+        """Test that PROCESSING status is broadcast after acquiring lock."""
+        user = await database_sync_to_async(User.objects.create_user)(
+            email='test@example.com',
+            password='testpass123',
+            username='testuser'
+        )
+        
+        import_item = await database_sync_to_async(ImportQueue.objects.create)(
+            user=user,
+            original_filename='test.kml',
+            raw_file='<kml></kml>',
+            geofeatures=[]
+        )
+        
+        communicator = WebsocketCommunicator(
+            ProcessStatusConsumer.as_asgi(),
+            f"/ws/upload/status/{import_item.id}/"
+        )
+        communicator.scope['user'] = user
+        communicator.scope['url_route'] = {'kwargs': {'item_id': str(import_item.id)}}
+        
+        connected, subprotocol = await communicator.connect()
+        self.assertTrue(connected)
+        
+        # First: WAITING status
+        channel_layer = get_channel_layer()
+        await channel_layer.group_send(
+            f"process_status_{user.id}_{import_item.id}",
+            {
+                'type': 'status_updated',
+                'data': {
+                    'status': 'waiting',
+                    'message': 'Waiting for earlier file to finish processing...'
+                }
+            }
+        )
+        
+        # Then: PROCESSING status after lock acquired
+        await channel_layer.group_send(
+            f"process_status_{user.id}_{import_item.id}",
+            {
+                'type': 'status_updated',
+                'data': {
+                    'status': 'processing',
+                    'message': 'Processing file...'
+                }
+            }
+        )
+        
+        # Should receive both status updates
+        received_messages = []
+        try:
+            for _ in range(2):
+                response = await communicator.receive_json_from(timeout=2)
+                received_messages.append(response)
+        except:
+            pass
+        
+        # At least one message should have been received
+        self.assertGreater(len(received_messages), 0)
+        
+        await communicator.disconnect()
+

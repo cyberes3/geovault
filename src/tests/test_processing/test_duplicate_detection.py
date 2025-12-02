@@ -1464,3 +1464,177 @@ class TestComplexScenarios(TestCase):
         
         print("✓ Test 12 passed: Non-duplicate features pass through correctly")
 
+
+class TestSequentialProcessingIntegration(TestCase):
+    """Integration tests for sequential processing with RedisProcessingLock."""
+    
+    def setUp(self):
+        """Set up test fixtures."""
+        self.user = User.objects.create_user(
+            email='sequential@example.com',
+            password='testpass123',
+            username='sequential_user'
+        )
+    
+    def test_concurrent_uploads_with_lock_prevent_race_conditions(self):
+        """Test that RedisProcessingLock prevents duplicate detection race conditions."""
+        from geo_lib.utils.redis_lock import RedisProcessingLock
+        from geo_lib.processing.status_tracker import status_tracker
+        from datetime import datetime, timezone, timedelta
+        import threading
+        import time
+        
+        # Create two identical features
+        feature = {
+            'type': 'Feature',
+            'geometry': {'type': 'Point', 'coordinates': [-122.4194, 37.7749]},
+            'properties': {'name': 'Test Feature', 'description': 'Test'}
+        }
+        feature_hash = generate_feature_hash(feature)
+        feature['properties']['feature_hash'] = feature_hash
+        
+        results = []
+        errors = []
+        
+        def simulate_upload_and_process(worker_id, delay_seconds=0):
+            """Simulate file upload and processing with lock."""
+            try:
+                # Ensure database connection
+                from django.db import close_old_connections
+                close_old_connections()
+                
+                # Create import queue item
+                queue_item = ImportQueue.objects.create(
+                    user=self.user,
+                    original_filename=f'file{worker_id}.kml',
+                    raw_file='<kml></kml>',
+                    geofeatures=[feature],
+                    imported=False
+                )
+                # Set timestamp manually to control ordering
+                queue_item.timestamp = datetime.now(timezone.utc) + timedelta(seconds=delay_seconds)
+                queue_item.save()
+                
+                # Simulate processing with lock
+                job_id = f"test-job-{worker_id}"
+                with RedisProcessingLock(self.user.id, job_id, status_tracker):
+                    # Small delay to allow potential race condition
+                    time.sleep(0.1)
+                    
+                    # Run duplicate detection
+                    remaining, duplicates, log = find_duplicates_for_source(
+                        [feature],
+                        self.user.id,
+                        source='cross_queue',
+                        exclude_queue_id=queue_item.id,
+                        exclude_timestamp=queue_item.timestamp
+                    )
+                    
+                    results.append({
+                        'worker': worker_id,
+                        'duplicates_found': len(duplicates),
+                        'remaining': len(remaining)
+                    })
+            except Exception as e:
+                errors.append(f"worker_{worker_id}: {str(e)}")
+        
+        # Start two threads uploading the same feature
+        # Worker 1 has earlier timestamp (should not see duplicates)
+        # Worker 2 has later timestamp (should see worker 1 as duplicate)
+        thread1 = threading.Thread(target=simulate_upload_and_process, args=(1, 0))
+        thread2 = threading.Thread(target=simulate_upload_and_process, args=(2, 1))
+        
+        thread1.start()
+        thread2.start()
+        
+        thread1.join(timeout=30)
+        thread2.join(timeout=30)
+        
+        # Verify no errors
+        self.assertEqual(len(errors), 0, f"Errors occurred: {errors}")
+        
+        # Verify we have 2 results
+        self.assertEqual(len(results), 2)
+        
+        # Sort by worker ID
+        results.sort(key=lambda x: x['worker'])
+        
+        # Worker 1 (earlier) should not see duplicates
+        self.assertEqual(results[0]['duplicates_found'], 0,
+                        "Worker 1 (earlier timestamp) should not see duplicates")
+        self.assertEqual(results[0]['remaining'], 1,
+                        "Worker 1 should have 1 remaining feature")
+        
+        # Worker 2 (later) should see worker 1 as duplicate
+        self.assertEqual(results[1]['duplicates_found'], 1,
+                        "Worker 2 (later timestamp) should see worker 1 as duplicate")
+        self.assertEqual(results[1]['remaining'], 0,
+                        "Worker 2 should have 0 remaining features")
+        
+        print("✓ Sequential processing test passed: Lock prevents race conditions")
+    
+    def test_timestamp_ordering_enforced_by_sequential_processing(self):
+        """Test that sequential processing enforces timestamp-based duplicate detection."""
+        from datetime import datetime, timezone, timedelta
+        
+        # Create two queue items with different timestamps
+        feature = {
+            'type': 'Feature',
+            'geometry': {'type': 'Point', 'coordinates': [-122.5, 37.8]},
+            'properties': {'name': 'Sequential Test', 'description': 'Test'}
+        }
+        feature_hash = generate_feature_hash(feature)
+        feature['properties']['feature_hash'] = feature_hash
+        
+        base_time = datetime.now(timezone.utc)
+        
+        # Create older queue item
+        older_queue = ImportQueue.objects.create(
+            user=self.user,
+            original_filename='older.kml',
+            raw_file='<kml></kml>',
+            geofeatures=[feature],
+            imported=False
+        )
+        older_queue.timestamp = base_time
+        older_queue.save()
+        
+        # Create newer queue item
+        newer_queue = ImportQueue.objects.create(
+            user=self.user,
+            original_filename='newer.kml',
+            raw_file='<kml></kml>',
+            geofeatures=[feature],
+            imported=False
+        )
+        newer_queue.timestamp = base_time + timedelta(seconds=5)
+        newer_queue.save()
+        
+        # Check duplicates for older file (should see nothing)
+        _, dups_older, _ = find_duplicates_for_source(
+            [feature],
+            self.user.id,
+            source='cross_queue',
+            exclude_queue_id=older_queue.id,
+            exclude_timestamp=older_queue.timestamp
+        )
+        
+        # Check duplicates for newer file (should see older file)
+        _, dups_newer, _ = find_duplicates_for_source(
+            [feature],
+            self.user.id,
+            source='cross_queue',
+            exclude_queue_id=newer_queue.id,
+            exclude_timestamp=newer_queue.timestamp
+        )
+        
+        # Assertions
+        self.assertEqual(len(dups_older), 0,
+                        "Older file should not see newer file as duplicate")
+        self.assertEqual(len(dups_newer), 1,
+                        "Newer file should see older file as duplicate")
+        self.assertEqual(dups_newer[0]['existing_features'][0]['id'], older_queue.id,
+                        "Newer file should reference older queue item")
+        
+        print("✓ Timestamp ordering test passed: Sequential processing enforces correct ordering")
+

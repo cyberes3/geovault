@@ -615,3 +615,240 @@ class TestConcurrentImportProcessing:
             item = ImportQueue.objects.get(id=item_id)
             assert item.imported is True
 
+
+@pytest.mark.django_db(transaction=True)
+class TestRedisProcessingLock:
+    """Test RedisProcessingLock for sequential file processing."""
+    
+    def test_redis_lock_prevents_concurrent_processing(self, user):
+        """Test that RedisProcessingLock serializes processing for same user."""
+        from geo_lib.utils.redis_lock import RedisProcessingLock
+        from geo_lib.processing.status_tracker import status_tracker
+        import time
+        
+        user_id = user.id
+        results = []
+        errors = []
+        
+        def process_with_lock(worker_id):
+            """Simulate file processing with Redis lock."""
+            try:
+                close_old_connections()
+                job_id = f"test-job-{worker_id}"
+                
+                # Acquire lock
+                with RedisProcessingLock(user_id, job_id, status_tracker):
+                    # Record entry time
+                    entry_time = time.time()
+                    results.append({
+                        'worker': worker_id,
+                        'event': 'entered',
+                        'time': entry_time
+                    })
+                    
+                    # Simulate processing
+                    time.sleep(0.5)
+                    
+                    # Record exit time
+                    exit_time = time.time()
+                    results.append({
+                        'worker': worker_id,
+                        'event': 'exited',
+                        'time': exit_time
+                    })
+            except Exception as e:
+                errors.append(f"worker_{worker_id}: {str(e)}")
+        
+        # Start 3 threads trying to process simultaneously
+        threads = []
+        for i in range(1, 4):
+            thread = threading.Thread(target=process_with_lock, args=(i,))
+            threads.append(thread)
+            thread.start()
+        
+        # Wait for all threads
+        for thread in threads:
+            thread.join(timeout=30)  # Allow time for sequential processing
+        
+        # Verify no errors
+        assert len(errors) == 0, f"Errors occurred: {errors}"
+        
+        # Verify we have 6 events (3 enters, 3 exits)
+        assert len(results) == 6, f"Expected 6 events, got {len(results)}"
+        
+        # Verify sequential processing: each worker should fully complete
+        # before the next one starts (no overlapping)
+        enters = [r for r in results if r['event'] == 'entered']
+        exits = [r for r in results if r['event'] == 'exited']
+        
+        # Sort by time
+        enters.sort(key=lambda x: x['time'])
+        exits.sort(key=lambda x: x['time'])
+        
+        # Check that there's no overlap: each exit should come before next enter
+        for i in range(len(exits) - 1):
+            # Exit time of worker i should be before enter time of worker i+1
+            # This proves sequential execution
+            assert exits[i]['time'] <= enters[i+1]['time'], \
+                f"Worker {exits[i]['worker']} overlapped with worker {enters[i+1]['worker']}"
+    
+    def test_redis_lock_released_after_processing(self, user):
+        """Test that Redis lock is properly released after processing."""
+        from geo_lib.utils.redis_lock import RedisProcessingLock
+        from geo_lib.utils.redis_connection import get_redis_connection
+        from geo_lib.processing.status_tracker import status_tracker
+        
+        user_id = user.id
+        job_id = "test-release-job"
+        lock_key = f"processing_lock:user:{user_id}"
+        
+        # Acquire and release lock
+        with RedisProcessingLock(user_id, job_id, status_tracker):
+            # Lock should be held
+            redis_client = get_redis_connection()
+            lock_value = redis_client.get(lock_key)
+            assert lock_value is not None, "Lock should be held inside context"
+        
+        # Lock should be released
+        redis_client = get_redis_connection()
+        lock_value = redis_client.get(lock_key)
+        assert lock_value is None, "Lock should be released after context exit"
+    
+    def test_redis_lock_timeout_handling(self, user):
+        """Test that Redis lock handles timeout gracefully."""
+        from geo_lib.utils.redis_lock import RedisProcessingLock
+        from geo_lib.processing.status_tracker import status_tracker
+        import time
+        
+        user_id = user.id
+        errors = []
+        
+        def hold_lock_indefinitely():
+            """Hold lock for a very long time."""
+            try:
+                close_old_connections()
+                with RedisProcessingLock(user_id, "blocker-job", status_tracker):
+                    # Hold lock for longer than second job's wait timeout
+                    time.sleep(2.0)
+            except Exception as e:
+                errors.append(f"blocker: {str(e)}")
+        
+        def try_acquire_with_short_timeout():
+            """Try to acquire lock with short timeout."""
+            try:
+                close_old_connections()
+                # Patch the wait timeout to be very short for testing
+                from geo_lib.utils import redis_lock
+                original_timeout = redis_lock.RedisProcessingLock.WAIT_TIMEOUT
+                redis_lock.RedisProcessingLock.WAIT_TIMEOUT = 1.0
+                
+                try:
+                    with RedisProcessingLock(user_id, "waiter-job", status_tracker):
+                        pass  # Should timeout before reaching here
+                except TimeoutError as e:
+                    errors.append(f"waiter: timeout as expected: {str(e)}")
+                finally:
+                    # Restore original timeout
+                    redis_lock.RedisProcessingLock.WAIT_TIMEOUT = original_timeout
+            except Exception as e:
+                errors.append(f"waiter: unexpected error: {str(e)}")
+        
+        # Start blocker thread
+        blocker_thread = threading.Thread(target=hold_lock_indefinitely)
+        blocker_thread.start()
+        
+        # Give blocker time to acquire lock
+        time.sleep(0.2)
+        
+        # Try to acquire lock with second thread (should timeout)
+        waiter_thread = threading.Thread(target=try_acquire_with_short_timeout)
+        waiter_thread.start()
+        
+        # Wait for both threads
+        blocker_thread.join(timeout=5)
+        waiter_thread.join(timeout=5)
+        
+        # Should have exactly 2 messages (1 from each thread)
+        assert len(errors) == 2, f"Expected 2 messages, got {len(errors)}: {errors}"
+        
+        # Verify waiter got timeout
+        waiter_messages = [e for e in errors if 'waiter' in e]
+        assert len(waiter_messages) == 1
+        assert 'timeout as expected' in waiter_messages[0].lower()
+    
+    def test_redis_lock_different_users_can_process_concurrently(self, user):
+        """Test that different users can process files concurrently."""
+        from django.contrib.auth import get_user_model
+        from geo_lib.utils.redis_lock import RedisProcessingLock
+        from geo_lib.processing.status_tracker import status_tracker
+        import time
+        
+        User = get_user_model()
+        user2 = User.objects.create_user(
+            email='user2@example.com',
+            password='testpass',
+            username='user2'
+        )
+        
+        results = []
+        errors = []
+        
+        def process_for_user(user_id, worker_id):
+            """Process with lock for specific user."""
+            try:
+                close_old_connections()
+                job_id = f"test-job-{worker_id}"
+                
+                with RedisProcessingLock(user_id, job_id, status_tracker):
+                    entry_time = time.time()
+                    results.append({
+                        'user': user_id,
+                        'worker': worker_id,
+                        'event': 'entered',
+                        'time': entry_time
+                    })
+                    
+                    time.sleep(0.3)
+                    
+                    exit_time = time.time()
+                    results.append({
+                        'user': user_id,
+                        'worker': worker_id,
+                        'event': 'exited',
+                        'time': exit_time
+                    })
+            except Exception as e:
+                errors.append(f"worker_{worker_id}: {str(e)}")
+        
+        # Start threads for both users
+        thread1 = threading.Thread(target=process_for_user, args=(user.id, 1))
+        thread2 = threading.Thread(target=process_for_user, args=(user2.id, 2))
+        
+        thread1.start()
+        thread2.start()
+        
+        thread1.join(timeout=10)
+        thread2.join(timeout=10)
+        
+        # No errors
+        assert len(errors) == 0, f"Errors occurred: {errors}"
+        
+        # Both should have completed
+        assert len(results) == 4
+        
+        # Check that both users' processing overlapped (concurrent)
+        user1_entries = [r for r in results if r['user'] == user.id and r['event'] == 'entered']
+        user1_exits = [r for r in results if r['user'] == user.id and r['event'] == 'exited']
+        user2_entries = [r for r in results if r['user'] == user2.id and r['event'] == 'entered']
+        user2_exits = [r for r in results if r['user'] == user2.id and r['event'] == 'exited']
+        
+        # At least one should have started before the other finished (proving concurrency)
+        user1_enter = user1_entries[0]['time']
+        user1_exit = user1_exits[0]['time']
+        user2_enter = user2_entries[0]['time']
+        user2_exit = user2_exits[0]['time']
+        
+        # Check for overlap: one user should enter before the other exits
+        overlap = (user1_enter < user2_exit and user2_enter < user1_exit)
+        assert overlap, "Different users should be able to process concurrently"
+

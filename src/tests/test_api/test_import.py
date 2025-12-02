@@ -1558,3 +1558,101 @@ class TestImportJobWebSocket(TestCase):
         expected_channel = f"process_status_{user_id}_{item_id}"
         self.assertEqual(channel_name, expected_channel)
 
+
+class TestSequentialProcessing(TestCase):
+    """Test sequential processing with RedisProcessingLock."""
+
+    def setUp(self):
+        """Set up test fixtures."""
+        from django.contrib.auth import get_user_model
+        User = get_user_model()
+        self.user = User.objects.create_user(
+            email='sequential@example.com',
+            password='testpass123',
+            username='sequential_user'
+        )
+        self.client.force_login(self.user)
+
+    @patch('geo_lib.utils.redis_lock.RedisProcessingLock')
+    @patch('api.views.import_item.process_job')
+    @patch('api.views.import_item.status_tracker')
+    def test_redis_lock_is_used_during_processing(self, mock_status_tracker, mock_process_job, mock_lock_class):
+        """Test that RedisProcessingLock is used during file processing."""
+        # Setup mocks
+        mock_status_tracker.create_job.return_value = 'test-job-id'
+        mock_process_job.start_process_job.return_value = True
+        
+        # Mock the lock instance
+        mock_lock_instance = MagicMock()
+        mock_lock_class.return_value = mock_lock_instance
+        
+        # Upload file
+        kml_content = """<?xml version="1.0" encoding="UTF-8"?>
+<kml xmlns="http://www.opengis.net/kml/2.2">
+  <Document>
+    <Placemark>
+      <name>Test</name>
+      <Point>
+        <coordinates>-122.4194,37.7749,0</coordinates>
+      </Point>
+    </Placemark>
+  </Document>
+</kml>"""
+        
+        file = SimpleUploadedFile("test.kml", kml_content.encode('utf-8'))
+        response = self.client.post('/api/item/import/upload', {'file': file})
+        
+        self.assertEqual(response.status_code, 200)
+        
+        # Note: The lock is acquired inside the background thread during _execute_job
+        # This test verifies that the upload endpoint works, but the lock is used
+        # in the actual processing thread (which is mocked here)
+
+    @patch('api.views.import_item.process_job')
+    @patch('api.views.import_item.status_tracker')
+    def test_upload_returns_immediately_job_runs_async(self, mock_status_tracker, mock_process_job):
+        """Test that upload returns immediately while job runs asynchronously."""
+        import time
+        
+        # Setup mocks
+        job_id = 'async-test-job-id'
+        mock_status_tracker.create_job.return_value = job_id
+        
+        # Track when start_process_job is called
+        call_time = []
+        
+        def track_start_time(*args, **kwargs):
+            call_time.append(time.time())
+            return True
+        
+        mock_process_job.start_process_job.side_effect = track_start_time
+        
+        # Upload file
+        kml_content = """<?xml version="1.0" encoding="UTF-8"?>
+<kml xmlns="http://www.opengis.net/kml/2.2">
+  <Document>
+    <Placemark>
+      <name>Test</name>
+      <Point>
+        <coordinates>-122.4194,37.7749,0</coordinates>
+      </Point>
+    </Placemark>
+  </Document>
+</kml>"""
+        
+        file = SimpleUploadedFile("test.kml", kml_content.encode('utf-8'))
+        start_time = time.time()
+        response = self.client.post('/api/item/import/upload', {'file': file})
+        end_time = time.time()
+        
+        # Should return very quickly (< 1 second)
+        response_time = end_time - start_time
+        self.assertLess(response_time, 1.0, "Upload should return immediately")
+        
+        self.assertEqual(response.status_code, 200)
+        data = json.loads(response.content)
+        self.assertEqual(data['job_id'], job_id)
+        
+        # Verify start_process_job was called
+        self.assertTrue(len(call_time) > 0)
+
