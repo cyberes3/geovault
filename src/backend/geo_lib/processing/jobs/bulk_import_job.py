@@ -24,6 +24,8 @@ from geo_lib.processing.import_utils import (
     finalize_import_item,
     job_success_result,
     job_error_result,
+    build_features_to_skip,
+    filter_features_to_process,
 )
 from geo_lib.processing.duplicate_models import SkippedDuplicates, SkippedDuplicateFeature
 
@@ -221,9 +223,18 @@ class BulkImportJob(BaseJob):
 
             # Process features using shared utility
             # For ready-to-import table imports, skip both hash and geometry duplicates automatically
-            # Pass empty set for skipped_feature_ids to enable automatic geometry duplicate skipping
+            # Build sets of features to skip (geometry duplicates + manual skips)
+            # Note: Bulk import doesn't receive user_skipped_feature_ids, only uses saved state
+            geometry_duplicate_hashes, manually_skipped_non_duplicates, all_features_to_skip = build_features_to_skip(
+                import_item, user_skipped_feature_ids=None
+            )
+            
+            # Filter out features to skip before processing
+            # Note: Hash duplicates are always blocked by process_features_for_import, no need to filter here
+            features_to_process, _ = filter_features_to_process(import_item, all_features_to_skip)
+            
             features_to_create, skipped_duplicates = process_features_for_import(
-                import_item, user_id, import_custom_icons, None, set()
+                import_item, user_id, import_custom_icons, features_to_process, geometry_duplicate_hashes
             )
 
             # Import to database using shared utility
@@ -237,10 +248,7 @@ class BulkImportJob(BaseJob):
                 finalize_import_item(import_item, user_id)
 
                 # Build result message and log
-                if duplicates_skipped > 0:
-                    logger.info(f"Imported {successful_imports} features for user {user_id}, skipped {duplicates_skipped} duplicates")
-                else:
-                    logger.info(f"Imported {successful_imports} features for user {user_id}")
+                logger.info(f"Imported {successful_imports} features for user {user_id}")
                 
                 # Convert Pydantic model to dict for JSON serialization
                 # job_success_result expects a dict, so convert the Pydantic model

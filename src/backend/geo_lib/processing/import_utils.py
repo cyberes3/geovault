@@ -21,7 +21,7 @@ from geo_lib.feature_id import generate_feature_hash
 from geo_lib.types.feature import PointFeature, PolygonFeature, LineStringFeature, MultiLineStringFeature
 from geo_lib.logging.console import get_job_logger
 from geo_lib.processing.duplicate_detection import normalize_coordinates
-from geo_lib.processing.duplicate_models import SkippedDuplicates, SkippedDuplicateFeature
+from geo_lib.processing.duplicate_models import SkippedDuplicates, SkippedDuplicateFeature, DuplicateMatchType
 from geo_lib.types.validation import match_geometry_class
 from website.settings_utils import get_required_setting
 from geo_lib.validation.styling_validation import (
@@ -38,23 +38,106 @@ logger = get_job_logger()
 
 
 # ============================================================================
+# Skip Logic Utilities
+# ============================================================================
+
+def build_features_to_skip(
+    import_item: ImportQueue,
+    user_skipped_feature_ids: Optional[List[str]] = None
+) -> Tuple[set, set, set]:
+    """
+    Build sets of features to skip during import.
+    
+    This function handles the logic for determining which features should be skipped,
+    separating geometry duplicates (which are always skipped) from manual user skips
+    (which are only respected for non-duplicates).
+    
+    Args:
+        import_item: The ImportQueue item being imported
+        user_skipped_feature_ids: Optional list of feature IDs skipped by user in current request
+                                  (used by single import, not by bulk import)
+    
+    Returns:
+        Tuple of (geometry_duplicate_hashes, manually_skipped_non_duplicates, all_features_to_skip)
+        - geometry_duplicate_hashes: Set of hashes for geometry duplicates (always skipped)
+        - manually_skipped_non_duplicates: Set of hashes for manually skipped non-duplicates
+        - all_features_to_skip: Combined set of all features to skip
+    """
+    # Build set of geometry duplicate hashes to auto-skip them
+    # This bypasses user skip/restore choices - all geometry duplicates are automatically skipped
+    geometry_duplicate_hashes = set()
+    if import_item.duplicate_features:
+        for dup_info in import_item.duplicate_features:
+            if dup_info.get('match_type') == DuplicateMatchType.GEOMETRY:
+                dup_feature = dup_info.get('feature')
+                if dup_feature:
+                    feature_hash = dup_feature['properties'].get('feature_hash')
+                    if feature_hash:
+                        geometry_duplicate_hashes.add(feature_hash)
+    
+    # Get manually skipped features (from user clicking "Skip" button on non-duplicates)
+    # These are features the user explicitly doesn't want to import
+    user_skipped_ids = set(user_skipped_feature_ids) if user_skipped_feature_ids else set()
+    saved_skipped_ids = set(import_item.skipped_feature_ids if import_item.skipped_feature_ids else [])
+    manually_skipped = user_skipped_ids.union(saved_skipped_ids)
+    
+    # Remove geometry duplicates from manually skipped (we handle those separately)
+    # This allows us to bypass "restore" on geometry duplicates while respecting manual skips
+    manually_skipped_non_duplicates = manually_skipped - geometry_duplicate_hashes
+    
+    # Combine: ALL geometry duplicates + manually skipped non-duplicates
+    all_features_to_skip = geometry_duplicate_hashes.union(manually_skipped_non_duplicates)
+    
+    return geometry_duplicate_hashes, manually_skipped_non_duplicates, all_features_to_skip
+
+
+def filter_features_to_process(
+    import_item: ImportQueue,
+    all_features_to_skip: set
+) -> Tuple[List[Dict[str, Any]], int]:
+    """
+    Filter features to process by removing skipped features.
+    
+    Args:
+        import_item: The ImportQueue item being imported
+        all_features_to_skip: Set of feature hashes to skip
+    
+    Returns:
+        Tuple of (features_to_process, skipped_count)
+        - features_to_process: List of features that should be processed
+        - skipped_count: Number of features that were skipped
+    """
+    features_to_process = []
+    skipped_count = 0
+    
+    for feature in import_item.geofeatures:
+        feature_id = feature['properties']['feature_hash']
+        if feature_id in all_features_to_skip:
+            skipped_count += 1
+            continue
+        features_to_process.append(feature)
+    
+    return features_to_process, skipped_count
+
+
+# ============================================================================
 # Internal Job Result Helpers
 # ============================================================================
 
-def job_success_result(imported: int = 0, duplicates_skipped: int = 0, **kwargs) -> Dict[str, Any]:
+def job_success_result(imported: int = 0, duplicates_skipped = None, **kwargs) -> Dict[str, Any]:
     """
     Create a standardized success result for job operations.
     
     Args:
         imported: Number of features successfully imported
-        duplicates_skipped: Number of duplicate features skipped
+        duplicates_skipped: Either an int count or a dict with skipped duplicate details
         **kwargs: Additional fields to include in the result
         
     Returns:
         Dictionary with success=True and result data
     """
     result = {'success': True, 'imported': imported}
-    if duplicates_skipped > 0:
+    if duplicates_skipped:
         result['duplicates_skipped'] = duplicates_skipped
     result.update(kwargs)
     return result

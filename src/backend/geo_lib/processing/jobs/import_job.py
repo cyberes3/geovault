@@ -14,6 +14,8 @@ from geo_lib.processing.import_utils import (
     process_features_for_import,
     bulk_create_features_with_fallback,
     finalize_import_item,
+    build_features_to_skip,
+    filter_features_to_process,
 )
 from geo_lib.processing.jobs.base_job import BaseJob
 from geo_lib.processing.status_tracker import ProcessingStatus
@@ -125,19 +127,14 @@ class ImportJob(BaseJob):
             "Starting feature import...", 10.0
         )
 
-        # Merge saved skip state from ImportQueue model with request skip state
-        saved_skipped_ids = set(import_item.skipped_feature_ids if import_item.skipped_feature_ids else [])
-        skipped_feature_ids = skipped_feature_ids.union(saved_skipped_ids)
+        # Build sets of features to skip (geometry duplicates + manual skips)
+        geometry_duplicate_hashes, manually_skipped_non_duplicates, all_features_to_skip = build_features_to_skip(
+            import_item, skipped_feature_ids
+        )
 
-        # Filter out skipped features before processing
-        features_to_process = []
-        skipped_count = 0
-        for feature in import_item.geofeatures:
-            feature_id = feature['properties']['feature_hash']
-            if feature_id in skipped_feature_ids:
-                skipped_count += 1
-                continue
-            features_to_process.append(feature)
+        # Filter out features to skip before processing
+        # Note: Hash duplicates are always blocked by process_features_for_import, no need to filter here
+        features_to_process, skipped_count = filter_features_to_process(import_item, all_features_to_skip)
 
         # Update progress
         self.status_tracker.update_job_status(
@@ -146,9 +143,9 @@ class ImportJob(BaseJob):
         )
 
         # Process features using shared utility
-        skipped_feature_ids_set = set(skipped_feature_ids) if skipped_feature_ids else set()
+        # Pass geometry_duplicate_hashes to ensure they're skipped even if processing happens
         features_to_create, skipped_duplicates = process_features_for_import(
-            import_item, user_id, import_custom_icons, features_to_process, skipped_feature_ids_set
+            import_item, user_id, import_custom_icons, features_to_process, geometry_duplicate_hashes
         )
 
         # Update progress

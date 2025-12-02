@@ -166,12 +166,7 @@
           <!-- Filename cell -->
           <td class="block sm:table-cell px-4 py-2 sm:px-6 sm:py-4 sm:whitespace-nowrap">
             <div class="flex items-center">
-              <div class="flex-shrink-0">
-                <div class="w-8 h-8 bg-blue-100 rounded-lg flex items-center justify-center">
-                  <DocumentIcon class="w-4 h-4 text-blue-500" />
-                </div>
-              </div>
-              <div class="ml-4 min-w-0 flex-1">
+              <div class="min-w-0 flex-1">
                 <div class="text-sm font-medium text-gray-900 break-words">
                   <!-- Disable link for duplicates in queue or when this specific item is being imported/deleted -->
                   <router-link v-if="item.file_duplicate?.status !== 'duplicate_in_queue' && !item.deleting && !item.importing"
@@ -272,7 +267,7 @@ import {getCookie} from "@/assets/js/auth.js";
 import {realtimeSocket} from "@/assets/js/websocket/realtimeSocket.js";
 import { toggleSetItem } from "@/assets/js/toggle-utils.js";
 import Loader from "@/components/parts/Loader.vue";
-import { ArrowUpTrayIcon, TrashIcon, DocumentIcon, CheckIcon, ExclamationCircleIcon, DocumentDuplicateIcon, ClockIcon } from '@heroicons/vue/24/outline';
+import { ArrowUpTrayIcon, TrashIcon, CheckIcon, ExclamationCircleIcon, DocumentDuplicateIcon, ClockIcon } from '@heroicons/vue/24/outline';
 import { CheckCircleIcon } from '@heroicons/vue/24/solid';
 
 export default {
@@ -325,7 +320,6 @@ export default {
     Loader,
     ArrowUpTrayIcon,
     TrashIcon,
-    DocumentIcon,
     CheckIcon,
     ExclamationCircleIcon,
     DocumentDuplicateIcon,

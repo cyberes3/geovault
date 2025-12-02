@@ -95,12 +95,17 @@
 
                   <div>
                     <h5 class="text-base font-semibold text-gray-900 mb-2">6. Duplicate Detection</h5>
-                    <p class="text-sm">The system performs comprehensive duplicate detection:</p>
+                    <p class="text-sm">The system performs comprehensive duplicate detection using two methods:</p>
                     <ul class="list-disc list-inside ml-4 mt-1 text-sm">
-                      <li><strong>Internal duplicates:</strong> Checks for duplicate features within the uploaded file itself</li>
-                      <li><strong>Existing duplicates:</strong> Compares features against your existing feature library to identify duplicates</li>
+                      <li><strong>Exact Match (Hash-Based):</strong> Identifies features that are completely identical to ones you already have. These are always blocked and cannot be imported.</li>
+                      <li><strong>Same Location (Geometry-Based):</strong> Identifies features at the exact same coordinates but with different properties. These are blocked by default but can be restored if needed.</li>
                     </ul>
-                    <p class="text-sm mt-2">Duplicate features are marked but not automatically removed - you can review and decide which ones to import during the review process.</p>
+                    <p class="text-sm mt-2">The system checks for duplicates in two places:</p>
+                    <ul class="list-disc list-inside ml-4 mt-1 text-sm">
+                      <li><strong>Your Feature Library:</strong> Features already imported and visible on your map</li>
+                      <li><strong>Your Import Queue:</strong> Files uploaded before the current one to prevent importing the same feature multiple times</li>
+                    </ul>
+                    <p class="text-sm mt-2">Duplicate features are automatically marked and blocked. You can review them during the review process, and geometry duplicates (same location) can be restored if you want to import them anyway.</p>
                   </div>
 
                   <div>
@@ -189,8 +194,13 @@
                   </div>
 
                   <div>
-                    <h5 class="text-base font-semibold text-gray-900 mb-2">Bulk Import</h5>
-                    <p class="text-sm">You can select multiple files and import them all at once using the bulk import button. This is useful when you have many files that don't need individual review.</p>
+                    <h5 class="text-base font-semibold text-gray-900 mb-2">Importing from the Ready to Import Table</h5>
+                    <p class="text-sm">The "Ready to Import" table provides two ways to import your processed files:</p>
+                    <ul class="list-disc list-inside ml-4 mt-1 text-sm">
+                      <li><strong>Individual Import:</strong> Click on any file in the table to open the detailed review page where you can review, edit, and import features one file at a time</li>
+                      <li><strong>Bulk Import:</strong> Select multiple files using the checkboxes and click the "Import" button to import all selected files at once without individual review. This is useful when you have many files that are ready to import as-is</li>
+                    </ul>
+                    <p class="text-sm mt-2">When using bulk import, the system will automatically skip duplicate features (both exact matches and same-location duplicates) that are already in your feature library or in other files being imported in the same batch.</p>
                   </div>
 
                   <div>
