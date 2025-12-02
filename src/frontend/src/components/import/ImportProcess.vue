@@ -663,10 +663,10 @@ export default {
       // Total features - hash duplicates (always blocked) - skipped features
       const featureStoreHashDups = this.duplicates.featureStoreHash || [];
       const crossQueueHashDups = this.duplicates.crossQueueHash || [];
-      
+
       // Hash duplicates are always blocked regardless of source (FeatureStore or other queue items)
       const blockedDuplicatesCount = featureStoreHashDups.length + crossQueueHashDups.length;
-      
+
       const count = this.pagination.totalFeatures - blockedDuplicatesCount - this.skippedFeatureIds.size;
       return Math.max(0, count);
     },
@@ -677,7 +677,7 @@ export default {
       const featureStoreGeometryDups = this.duplicates.featureStoreGeometry || [];
       const crossQueueHashDups = this.duplicates.crossQueueHash || [];
       const crossQueueGeometryDups = this.duplicates.crossQueueGeometry || [];
-      
+
       // Use a Set to avoid counting the same feature twice
       // Each duplicate object has a 'hash' property we can use as a unique identifier
       const allFeatureHashes = new Set([
@@ -1188,7 +1188,7 @@ export default {
           crossQueueHash: data.duplicates.cross_queue_hash || [],
           crossQueueGeometry: data.duplicates.cross_queue_geometry || []
         };
-        
+
         // Mark all duplicate types on features
         this.markDuplicateFeatures();
       }
@@ -2525,12 +2525,10 @@ export default {
       }
     },
     async scrollToGlobalIndex(globalIndex) {
-      console.log(`scrollToGlobalIndex called with index: ${globalIndex}`);
-      
       // Calculate which page the feature is on
       const targetPage = Math.floor(globalIndex / this.pagination.pageSize) + 1;
       console.log(`Target page: ${targetPage}, current page: ${this.pagination.currentPage}`);
-      
+
       // Navigate to the page if not already there
       if (this.pagination.currentPage !== targetPage) {
         console.log(`Navigating to page ${targetPage}`);
@@ -2538,20 +2536,20 @@ export default {
         await this.waitForPageLoad();
         await this.waitForItems();
       }
-      
+
       // Wait for DOM to be fully updated
       await this.$nextTick();
-      
+
       // Additional wait to ensure rendering is complete
       await new Promise(resolve => setTimeout(resolve, 300));
-      
+
       // Scroll to the feature with retry logic
       let attempts = 0;
       const maxAttempts = 5;
       const attemptScroll = () => {
         attempts++;
         console.log(`Scroll attempt ${attempts} for global index ${globalIndex}`);
-        
+
         const element = document.querySelector(`[data-feature-index="${globalIndex}"]`);
         if (element) {
           console.log(`Found element for index ${globalIndex}, scrolling`);
@@ -2559,7 +2557,7 @@ export default {
             behavior: 'smooth',
             block: 'center'
           });
-          
+
           // Highlight the element
           element.classList.add('ring-2', 'ring-blue-500', 'ring-offset-2');
           setTimeout(() => {
@@ -2574,7 +2572,7 @@ export default {
           }
         }
       };
-      
+
       attemptScroll();
     },
     truncateDescription(description) {
@@ -2610,7 +2608,7 @@ export default {
         });
       });
     }
-    
+
     // Check for scrollToIndex query parameter
     if (this.$route.query.scrollToIndex) {
       const globalIndex = parseInt(this.$route.query.scrollToIndex);

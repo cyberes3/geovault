@@ -996,10 +996,148 @@ class TestImportAPI(TestCase):
         self.assertIn(feature2_id, import_queue2.skipped_feature_ids or [],
                      "Cross-queue geometry duplicate should be auto-skipped")
 
+    @patch('channels.layers.get_channel_layer')
+    @patch('geo_lib.processing.duplicate_detection.find_duplicates_for_source')
+    @patch('geo_lib.processing.logging.RealTimeImportLog')
+    def test_recheck_duplicates_cross_queue_hash_is_blocked(self, mock_realtime_log_class, mock_find_duplicates_for_source, mock_get_channel_layer):
+        """Test that cross-queue hash duplicates are BLOCKED (not skipped/restorable)."""
+        from geo_lib.feature_id import generate_feature_hash
+        from geo_lib.processing.duplicate_models import DuplicateSource, DuplicateMatchType
+        
+        # Create feature with hash
+        test_feature = {
+            'type': 'Feature',
+            'geometry': {'type': 'Point', 'coordinates': [-122.4194, 37.7749]},
+            'properties': {'name': 'Test Feature', 'description': 'Test'}
+        }
+        feature_hash = generate_feature_hash(test_feature)
+        test_feature['properties']['feature_hash'] = feature_hash
+        
+        # Create older queue item with exact same feature (hash duplicate)
+        older_queue = ImportQueue.objects.create(
+            user=self.user,
+            original_filename='older.kml',
+            raw_file='<kml></kml>',
+            geofeatures=[test_feature],
+            imported=False
+        )
+        
+        # Create newer queue item
+        newer_queue = ImportQueue.objects.create(
+            user=self.user,
+            original_filename='newer.kml',
+            raw_file='<kml></kml>',
+            geofeatures=[test_feature],  # Same feature
+            imported=False
+        )
+        
+        # Mock RealTimeImportLog
+        mock_import_log = MagicMock()
+        mock_import_log.add = MagicMock()
+        mock_import_log.extend = MagicMock()
+        mock_import_log.add_timing = MagicMock()
+        mock_realtime_log_class.return_value = mock_import_log
+        
+        # Mock find_duplicates_for_source to return cross-queue HASH duplicate
+        mock_duplicate_log = MagicMock()
+        cross_queue_hash_dup = {
+            'feature': test_feature,
+            'source': DuplicateSource.CROSS_QUEUE,
+            'match_type': DuplicateMatchType.HASH,  # HASH, not geometry
+            'existing_features': [{
+                'id': older_queue.id,
+                'name': 'older.kml',
+                'type': 'Point',
+                'timestamp': None,
+                'geojson': test_feature,
+                'feature_index': 0
+            }]
+        }
+        
+        # Mock returns: (remaining, duplicates, log)
+        mock_find_duplicates_for_source.side_effect = [
+            ([test_feature], [], mock_duplicate_log),  # feature store: no dups
+            ([], [cross_queue_hash_dup], mock_duplicate_log),  # cross-queue: hash dup found
+        ]
+        
+        # Mock channel layer
+        async def mock_group_send(group, message):
+            return None
+        mock_channel_layer = MagicMock()
+        mock_channel_layer.group_send = mock_group_send
+        mock_get_channel_layer.return_value = mock_channel_layer
+        
+        # Recheck duplicates for newer item
+        response = self.client.post(f'/api/item/import/recheck-duplicates/{newer_queue.id}')
+        self.assertEqual(response.status_code, 200)
+        
+        # Verify duplicate was detected
+        newer_queue.refresh_from_db()
+        self.assertEqual(len(newer_queue.duplicate_features), 1,
+                        "Cross-queue hash duplicate should be detected")
+        self.assertEqual(newer_queue.duplicate_features[0]['match_type'], DuplicateMatchType.HASH,
+                        "Should be marked as HASH duplicate")
+        
+        # CRITICAL: Hash duplicates should NOT be in skipped_feature_ids
+        # They are BLOCKED (permanent), not SKIPPED (user-restorable)
+        self.assertNotIn(feature_hash, newer_queue.skipped_feature_ids or [],
+                        "Cross-queue HASH duplicates should NOT be in skipped_feature_ids "
+                        "(they are blocked, not user-restorable)")
+
     def test_recheck_duplicates_not_found(self):
         """Test rechecking duplicates for non-existent item."""
         response = self.client.post('/api/item/import/recheck-duplicates/99999')
         self.assertEqual(response.status_code, 404)
+
+    @patch('channels.layers.get_channel_layer')
+    @patch('geo_lib.processing.duplicate_detection.find_duplicates_for_source')
+    @patch('geo_lib.processing.logging.RealTimeImportLog')
+    def test_recheck_duplicates_empty_file(self, mock_realtime_log_class, mock_find_duplicates_for_source, mock_get_channel_layer):
+        """Test rechecking duplicates on empty import queue item (edge case)."""
+        # Create import queue with no features
+        import_queue = ImportQueue.objects.create(
+            user=self.user,
+            original_filename='empty.kml',
+            raw_file='<kml></kml>',
+            geofeatures=[],  # Empty!
+            imported=False
+        )
+        
+        # Mock RealTimeImportLog
+        mock_import_log = MagicMock()
+        mock_import_log.add = MagicMock()
+        mock_import_log.extend = MagicMock()
+        mock_import_log.add_timing = MagicMock()
+        mock_realtime_log_class.return_value = mock_import_log
+        
+        # Mock find_duplicates_for_source to return no duplicates
+        mock_duplicate_log = MagicMock()
+        mock_find_duplicates_for_source.side_effect = [
+            ([], [], mock_duplicate_log),  # feature store: no features to check
+            ([], [], mock_duplicate_log),  # cross-queue: no features to check
+        ]
+        
+        # Mock channel layer
+        async def mock_group_send(group, message):
+            return None
+        mock_channel_layer = MagicMock()
+        mock_channel_layer.group_send = mock_group_send
+        mock_get_channel_layer.return_value = mock_channel_layer
+        
+        # Should handle empty file gracefully
+        response = self.client.post(f'/api/item/import/recheck-duplicates/{import_queue.id}')
+        self.assertEqual(response.status_code, 200)
+        
+        # Verify response
+        data = json.loads(response.content)
+        self.assertEqual(data['duplicate_count'], 0)
+        # Message can be either "No features to check" or "Duplicates rechecked successfully"
+        self.assertIn(data.get('msg', ''), ['No features to check', 'Duplicates rechecked successfully'])
+        
+        # Verify import queue state
+        import_queue.refresh_from_db()
+        self.assertEqual(len(import_queue.duplicate_features), 0)
+        self.assertEqual(len(import_queue.skipped_feature_ids or []), 0)
 
     def test_recheck_duplicates_unauthorized(self):
         """Test rechecking duplicates for another user's item."""
