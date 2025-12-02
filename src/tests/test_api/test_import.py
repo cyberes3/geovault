@@ -527,6 +527,465 @@ class TestImportAPI(TestCase):
         )
         self.assertEqual(response.status_code, 400)
 
+    def test_update_import_item_description(self):
+        """Test updating description field."""
+        geofeatures = [{
+            'type': 'Feature',
+            'geometry': {'type': 'Point', 'coordinates': [-122.4194, 37.7749]},
+            'properties': {'feature_hash': 'test-id', 'name': 'Test Feature', 'description': 'Original description'}
+        }]
+        import_queue = ImportQueue.objects.create(
+            user=self.user,
+            original_filename='test.kml',
+            raw_file='<kml></kml>',
+            geofeatures=geofeatures,
+            imported=False
+        )
+
+        update_data = {
+            'features': [{
+                'properties': {
+                    'feature_hash': 'test-id',
+                    'description': 'Updated description'
+                }
+            }]
+        }
+
+        response = self.client.put(
+            f'/api/item/import/update/{import_queue.id}',
+            data=json.dumps(update_data),
+            content_type='application/json'
+        )
+        self.assertEqual(response.status_code, 200)
+        import_queue.refresh_from_db()
+        self.assertEqual(import_queue.geofeatures[0]['properties']['description'], 'Updated description')
+        # Verify name was not changed
+        self.assertEqual(import_queue.geofeatures[0]['properties']['name'], 'Test Feature')
+
+    def test_update_import_item_tags_valid_list(self):
+        """Test updating tags field with valid list."""
+        geofeatures = [{
+            'type': 'Feature',
+            'geometry': {'type': 'Point', 'coordinates': [-122.4194, 37.7749]},
+            'properties': {'feature_hash': 'test-id', 'name': 'Test Feature', 'tags': ['original-tag']}
+        }]
+        import_queue = ImportQueue.objects.create(
+            user=self.user,
+            original_filename='test.kml',
+            raw_file='<kml></kml>',
+            geofeatures=geofeatures,
+            imported=False
+        )
+
+        update_data = {
+            'features': [{
+                'properties': {
+                    'feature_hash': 'test-id',
+                    'tags': ['new-tag-1', 'new-tag-2', 'NEW-TAG-3']  # Should be lowercased
+                }
+            }]
+        }
+
+        response = self.client.put(
+            f'/api/item/import/update/{import_queue.id}',
+            data=json.dumps(update_data),
+            content_type='application/json'
+        )
+        self.assertEqual(response.status_code, 200)
+        import_queue.refresh_from_db()
+        updated_tags = import_queue.geofeatures[0]['properties']['tags']
+        # Tags should be lowercased and deduplicated
+        self.assertIn('new-tag-1', updated_tags)
+        self.assertIn('new-tag-2', updated_tags)
+        self.assertIn('new-tag-3', updated_tags)  # Should be lowercased
+        # Original tag should be replaced
+        self.assertNotIn('original-tag', updated_tags)
+
+    def test_update_import_item_multiple_fields(self):
+        """Test updating multiple fields at once (name, description, created, tags)."""
+        geofeatures = [{
+            'type': 'Feature',
+            'geometry': {'type': 'Point', 'coordinates': [-122.4194, 37.7749]},
+            'properties': {
+                'feature_hash': 'test-id',
+                'name': 'Original Name',
+                'description': 'Original Description',
+                'created': '2023-01-01T00:00:00Z',
+                'tags': ['original-tag']
+            }
+        }]
+        import_queue = ImportQueue.objects.create(
+            user=self.user,
+            original_filename='test.kml',
+            raw_file='<kml></kml>',
+            geofeatures=geofeatures,
+            imported=False
+        )
+
+        update_data = {
+            'features': [{
+                'properties': {
+                    'feature_hash': 'test-id',
+                    'name': 'Updated Name',
+                    'description': 'Updated Description',
+                    'created': '2024-12-25T15:30:00Z',
+                    'tags': ['new-tag-1', 'new-tag-2']
+                }
+            }]
+        }
+
+        response = self.client.put(
+            f'/api/item/import/update/{import_queue.id}',
+            data=json.dumps(update_data),
+            content_type='application/json'
+        )
+        self.assertEqual(response.status_code, 200)
+        import_queue.refresh_from_db()
+        props = import_queue.geofeatures[0]['properties']
+        self.assertEqual(props['name'], 'Updated Name')
+        self.assertEqual(props['description'], 'Updated Description')
+        self.assertEqual(props['created'], '2024-12-25T15:30:00Z')
+        self.assertIn('new-tag-1', props['tags'])
+        self.assertIn('new-tag-2', props['tags'])
+
+    def test_update_import_item_multiple_features(self):
+        """Test updating multiple features in a single request."""
+        from geo_lib.feature_id import generate_feature_hash
+        
+        feature1 = {
+            'type': 'Feature',
+            'geometry': {'type': 'Point', 'coordinates': [-122.4194, 37.7749]},
+            'properties': {'name': 'Feature 1', 'description': 'Original 1'}
+        }
+        feature1_hash = generate_feature_hash(feature1)
+        feature1['properties']['feature_hash'] = feature1_hash
+
+        feature2 = {
+            'type': 'Feature',
+            'geometry': {'type': 'Point', 'coordinates': [-122.4094, 37.7849]},
+            'properties': {'name': 'Feature 2', 'description': 'Original 2'}
+        }
+        feature2_hash = generate_feature_hash(feature2)
+        feature2['properties']['feature_hash'] = feature2_hash
+
+        feature3 = {
+            'type': 'Feature',
+            'geometry': {'type': 'Point', 'coordinates': [-122.3994, 37.7949]},
+            'properties': {'name': 'Feature 3', 'description': 'Original 3'}
+        }
+        feature3_hash = generate_feature_hash(feature3)
+        feature3['properties']['feature_hash'] = feature3_hash
+
+        geofeatures = [feature1, feature2, feature3]
+        import_queue = ImportQueue.objects.create(
+            user=self.user,
+            original_filename='test.kml',
+            raw_file='<kml></kml>',
+            geofeatures=geofeatures,
+            imported=False
+        )
+
+        # Update first and third features, leave second unchanged
+        update_data = {
+            'features': [
+                {
+                    'properties': {
+                        'feature_hash': feature1_hash,
+                        'name': 'Updated Feature 1',
+                        'description': 'Updated Description 1'
+                    }
+                },
+                {
+                    'properties': {
+                        'feature_hash': feature3_hash,
+                        'name': 'Updated Feature 3',
+                        'tags': ['new-tag-for-3']
+                    }
+                }
+            ]
+        }
+
+        response = self.client.put(
+            f'/api/item/import/update/{import_queue.id}',
+            data=json.dumps(update_data),
+            content_type='application/json'
+        )
+        self.assertEqual(response.status_code, 200)
+        data = json.loads(response.content)
+        self.assertEqual(data['updated_count'], 2)
+
+        import_queue.refresh_from_db()
+        # Verify feature 1 was updated
+        self.assertEqual(import_queue.geofeatures[0]['properties']['name'], 'Updated Feature 1')
+        self.assertEqual(import_queue.geofeatures[0]['properties']['description'], 'Updated Description 1')
+        
+        # Verify feature 2 was NOT updated
+        self.assertEqual(import_queue.geofeatures[1]['properties']['name'], 'Feature 2')
+        self.assertEqual(import_queue.geofeatures[1]['properties']['description'], 'Original 2')
+        
+        # Verify feature 3 was updated
+        self.assertEqual(import_queue.geofeatures[2]['properties']['name'], 'Updated Feature 3')
+        self.assertIn('new-tag-for-3', import_queue.geofeatures[2]['properties']['tags'])
+
+    def test_update_import_item_partial_update(self):
+        """Test that partial updates only change specified fields, leaving others unchanged."""
+        geofeatures = [{
+            'type': 'Feature',
+            'geometry': {'type': 'Point', 'coordinates': [-122.4194, 37.7749]},
+            'properties': {
+                'feature_hash': 'test-id',
+                'name': 'Original Name',
+                'description': 'Original Description',
+                'created': '2023-01-01T00:00:00Z',
+                'tags': ['tag1', 'tag2']
+            }
+        }]
+        import_queue = ImportQueue.objects.create(
+            user=self.user,
+            original_filename='test.kml',
+            raw_file='<kml></kml>',
+            geofeatures=geofeatures,
+            imported=False
+        )
+
+        # Only update name, leave everything else unchanged
+        update_data = {
+            'features': [{
+                'properties': {
+                    'feature_hash': 'test-id',
+                    'name': 'Updated Name Only'
+                }
+            }]
+        }
+
+        response = self.client.put(
+            f'/api/item/import/update/{import_queue.id}',
+            data=json.dumps(update_data),
+            content_type='application/json'
+        )
+        self.assertEqual(response.status_code, 200)
+        import_queue.refresh_from_db()
+        props = import_queue.geofeatures[0]['properties']
+        
+        # Name should be updated
+        self.assertEqual(props['name'], 'Updated Name Only')
+        
+        # Other fields should remain unchanged
+        self.assertEqual(props['description'], 'Original Description')
+        self.assertEqual(props['created'], '2023-01-01T00:00:00Z')
+        self.assertEqual(set(props['tags']), {'tag1', 'tag2'})
+        
+        # Geometry should be preserved
+        self.assertEqual(import_queue.geofeatures[0]['geometry']['type'], 'Point')
+        self.assertEqual(import_queue.geofeatures[0]['geometry']['coordinates'], [-122.4194, 37.7749])
+
+    def test_update_import_item_system_tags_preservation(self):
+        """Test that system_tags are preserved when updating features."""
+        geofeatures = [{
+            'type': 'Feature',
+            'geometry': {'type': 'Point', 'coordinates': [-122.4194, 37.7749]},
+            'properties': {
+                'feature_hash': 'test-id',
+                'name': 'Original Name',
+                'system_tags': ['import-year-2024', 'import-month-12', 'geometry-type-point']
+            }
+        }]
+        import_queue = ImportQueue.objects.create(
+            user=self.user,
+            original_filename='test.kml',
+            raw_file='<kml></kml>',
+            geofeatures=geofeatures,
+            imported=False
+        )
+
+        # Update name and description
+        update_data = {
+            'features': [{
+                'properties': {
+                    'feature_hash': 'test-id',
+                    'name': 'Updated Name',
+                    'description': 'New Description'
+                }
+            }]
+        }
+
+        response = self.client.put(
+            f'/api/item/import/update/{import_queue.id}',
+            data=json.dumps(update_data),
+            content_type='application/json'
+        )
+        self.assertEqual(response.status_code, 200)
+        import_queue.refresh_from_db()
+        props = import_queue.geofeatures[0]['properties']
+        
+        # Verify system_tags were preserved
+        self.assertIn('system_tags', props)
+        self.assertEqual(set(props['system_tags']), {
+            'import-year-2024',
+            'import-month-12',
+            'geometry-type-point'
+        })
+        
+        # Verify updates were applied
+        self.assertEqual(props['name'], 'Updated Name')
+        self.assertEqual(props['description'], 'New Description')
+
+    def test_update_import_item_system_tags_preservation_multiple_features(self):
+        """Test that system_tags are preserved when updating multiple features."""
+        from geo_lib.feature_id import generate_feature_hash
+        
+        feature1 = {
+            'type': 'Feature',
+            'geometry': {'type': 'Point', 'coordinates': [-122.4194, 37.7749]},
+            'properties': {
+                'name': 'Feature 1',
+                'system_tags': ['import-year-2024', 'geometry-type-point']
+            }
+        }
+        feature1_hash = generate_feature_hash(feature1)
+        feature1['properties']['feature_hash'] = feature1_hash
+
+        feature2 = {
+            'type': 'Feature',
+            'geometry': {'type': 'LineString', 'coordinates': [[-122.4194, 37.7749], [-122.4094, 37.7849]]},
+            'properties': {
+                'name': 'Feature 2',
+                'system_tags': ['import-year-2024', 'geometry-type-linestring']
+            }
+        }
+        feature2_hash = generate_feature_hash(feature2)
+        feature2['properties']['feature_hash'] = feature2_hash
+
+        geofeatures = [feature1, feature2]
+        import_queue = ImportQueue.objects.create(
+            user=self.user,
+            original_filename='test.kml',
+            raw_file='<kml></kml>',
+            geofeatures=geofeatures,
+            imported=False
+        )
+
+        # Update both features
+        update_data = {
+            'features': [
+                {
+                    'properties': {
+                        'feature_hash': feature1_hash,
+                        'name': 'Updated Feature 1'
+                    }
+                },
+                {
+                    'properties': {
+                        'feature_hash': feature2_hash,
+                        'name': 'Updated Feature 2',
+                        'description': 'New Description'
+                    }
+                }
+            ]
+        }
+
+        response = self.client.put(
+            f'/api/item/import/update/{import_queue.id}',
+            data=json.dumps(update_data),
+            content_type='application/json'
+        )
+        self.assertEqual(response.status_code, 200)
+        import_queue.refresh_from_db()
+        
+        # Verify feature 1 system_tags preserved
+        props1 = import_queue.geofeatures[0]['properties']
+        self.assertEqual(set(props1['system_tags']), {'import-year-2024', 'geometry-type-point'})
+        self.assertEqual(props1['name'], 'Updated Feature 1')
+        
+        # Verify feature 2 system_tags preserved
+        props2 = import_queue.geofeatures[1]['properties']
+        self.assertEqual(set(props2['system_tags']), {'import-year-2024', 'geometry-type-linestring'})
+        self.assertEqual(props2['name'], 'Updated Feature 2')
+        self.assertEqual(props2['description'], 'New Description')
+
+    def test_update_import_item_system_tags_empty_list(self):
+        """Test that empty system_tags list is preserved."""
+        geofeatures = [{
+            'type': 'Feature',
+            'geometry': {'type': 'Point', 'coordinates': [-122.4194, 37.7749]},
+            'properties': {
+                'feature_hash': 'test-id',
+                'name': 'Original Name',
+                'system_tags': []  # Empty list
+            }
+        }]
+        import_queue = ImportQueue.objects.create(
+            user=self.user,
+            original_filename='test.kml',
+            raw_file='<kml></kml>',
+            geofeatures=geofeatures,
+            imported=False
+        )
+
+        update_data = {
+            'features': [{
+                'properties': {
+                    'feature_hash': 'test-id',
+                    'name': 'Updated Name'
+                }
+            }]
+        }
+
+        response = self.client.put(
+            f'/api/item/import/update/{import_queue.id}',
+            data=json.dumps(update_data),
+            content_type='application/json'
+        )
+        self.assertEqual(response.status_code, 200)
+        import_queue.refresh_from_db()
+        props = import_queue.geofeatures[0]['properties']
+        
+        # Empty system_tags list should be preserved
+        self.assertIn('system_tags', props)
+        self.assertEqual(props['system_tags'], [])
+
+    def test_update_import_item_system_tags_missing_field(self):
+        """Test that missing system_tags field is handled (defaults to empty list)."""
+        geofeatures = [{
+            'type': 'Feature',
+            'geometry': {'type': 'Point', 'coordinates': [-122.4194, 37.7749]},
+            'properties': {
+                'feature_hash': 'test-id',
+                'name': 'Original Name'
+                # No system_tags field
+            }
+        }]
+        import_queue = ImportQueue.objects.create(
+            user=self.user,
+            original_filename='test.kml',
+            raw_file='<kml></kml>',
+            geofeatures=geofeatures,
+            imported=False
+        )
+
+        update_data = {
+            'features': [{
+                'properties': {
+                    'feature_hash': 'test-id',
+                    'name': 'Updated Name'
+                }
+            }]
+        }
+
+        response = self.client.put(
+            f'/api/item/import/update/{import_queue.id}',
+            data=json.dumps(update_data),
+            content_type='application/json'
+        )
+        self.assertEqual(response.status_code, 200)
+        import_queue.refresh_from_db()
+        props = import_queue.geofeatures[0]['properties']
+        
+        # system_tags should be present (empty list or normalized)
+        self.assertIn('system_tags', props)
+        # Should be a list (empty or with values)
+        self.assertIsInstance(props['system_tags'], list)
+
     def test_save_bulk_operations(self):
         """Test saving bulk operations for an import item."""
         import_queue = ImportQueue.objects.create(
