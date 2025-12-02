@@ -139,7 +139,6 @@
                 <PencilIcon class="w-4 h-4" />
               </button>
               <button
-                  v-if="!isSystemTag(tag)"
                   class="p-1.5 text-gray-400 hover:text-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-1 rounded"
                   title="Bulk style features in this tag"
                   type="button"
@@ -905,10 +904,6 @@ export default {
       }
     },
     openBulkOperationsModal(tag) {
-      if (this.isSystemTag(tag)) {
-        alert('Bulk styling is not available for system tags.');
-        return;
-      }
       this.bulkOperationsSelectedTag = tag;
       this.bulkOperationsModalOpen = true;
     },

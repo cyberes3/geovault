@@ -4,6 +4,7 @@ import traceback
 
 from django.conf import settings
 from django.contrib.gis.geos import GEOSGeometry
+from django.db.models import Q
 from django.http import Http404
 from website.settings_utils import get_required_setting
 from django.db import transaction
@@ -463,9 +464,12 @@ def apply_bulk_operations_to_tag(request, tag_name: str):
             return error_response('Tag name is required', 400)
 
         # Only operate on the current user's features
+        # Search in both user tags and system tags
         features_qs = FeatureStore.objects.filter(
-            user=request.user,
-            geojson__properties__tags__contains=[tag_name]
+            user=request.user
+        ).filter(
+            Q(geojson__properties__tags__contains=[tag_name]) |
+            Q(geojson__properties__system_tags__contains=[tag_name])
         ).only('id', 'geojson')
 
         if not features_qs.exists():
