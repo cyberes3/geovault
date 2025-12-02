@@ -45,7 +45,8 @@ class ElevationTagGenerator(TagGenerator):
             # Point coordinates: [lon, lat] or [lon, lat, elevation]
             if len(coords) >= 3:
                 elevation = coords[2]
-                if elevation is not None:
+                # Skip 0.0 values as they represent missing elevation data, not actual sea-level
+                if elevation is not None and elevation != 0.0:
                     elevations.append(float(elevation))
         
         elif geometry_type == 'linestring':
@@ -54,7 +55,8 @@ class ElevationTagGenerator(TagGenerator):
                 # LineString coordinates: [lon, lat] or [lon, lat, elevation]
                 if len(coord) >= 3:
                     elevation = coord[2]
-                    if elevation is not None:
+                    # Skip 0.0 values as they represent missing elevation data, not actual sea-level
+                    if elevation is not None and elevation != 0.0:
                         elevations.append(float(elevation))
         
         elif geometry_type == 'multilinestring':
@@ -64,7 +66,8 @@ class ElevationTagGenerator(TagGenerator):
                     # MultiLineString coordinates: [lon, lat] or [lon, lat, elevation]
                     if len(coord) >= 3:
                         elevation = coord[2]
-                        if elevation is not None:
+                        # Skip 0.0 values as they represent missing elevation data, not actual sea-level
+                        if elevation is not None and elevation != 0.0:
                             elevations.append(float(elevation))
         
         return elevations

@@ -133,10 +133,208 @@ class BaseProcessor(ABC):
         """
         raise NotImplemented
 
-    def _process_single_feature(self, feature: Dict[str, Any]) -> Tuple[List[Dict[str, Any]], ImportLog, int, bool]:
+    def _is_cancelled(self) -> bool:
         """
-        Process a single feature, including splitting complex geometries and geocoding.
-        This is a worker function designed to be called in parallel.
+        Check if the current job has been cancelled.
+        
+        Returns:
+            True if job is cancelled, False otherwise
+        """
+        if self.job_id and self.status_tracker:
+            job = self.status_tracker.get_job(self.job_id)
+            if job and job.status == ProcessingStatus.CANCELLED:
+                return True
+        return False
+
+    def step_4_split_and_validate_features(self, geojson_data: Dict[str, Any]) -> Tuple[List[Dict[str, Any]], ImportLog]:
+        """
+        Step 4: Split complex geometries and validate coordinates.
+        Does NOT generate tags - that happens after elevation filling in step 6.
+        
+        Args:
+            geojson_data: GeoJSON data dictionary
+            
+        Returns:
+            Tuple of (processed_features, processing_log)
+        """
+        features = geojson_data.get('features', [])
+        processed_features = []
+        feature_log = ImportLog()
+        skipped_count = 0
+        geometry_collection_count = 0
+
+        feature_log.add(f"Processing {len(features)} raw features from file", "Feature Processing", DatabaseLogLevel.INFO)
+
+        # Check for cancellation before starting
+        if self._is_cancelled():
+            feature_log.add("Processing cancelled before feature processing started", "Feature Processing", DatabaseLogLevel.WARNING)
+            return processed_features, feature_log
+
+        # Get number of threads from settings
+        num_threads = get_required_setting('IMPORT_PROCESSING_THREADS')
+
+        # Process features in parallel using ThreadPoolExecutor
+        # Use submit() instead of map() to allow cancellation checking between tasks
+        if len(features) > 0:
+            self._executor = ThreadPoolExecutor(max_workers=num_threads)
+            executor_shutdown_called = False
+            try:
+                # Submit all tasks
+                future_to_feature = {
+                    self._executor.submit(self._step_4_process_single_feature, feature): feature 
+                    for feature in features
+                }
+
+                # Collect results as they complete, checking for cancellation
+                completed_count = 0
+                cancelled = False
+                for future in as_completed(future_to_feature):
+                    # Check for cancellation before processing each result
+                    if self._is_cancelled():
+                        if not cancelled:
+                            feature_log.add(f"Processing cancelled after {completed_count} features", "Feature Processing", DatabaseLogLevel.WARNING)
+                            cancelled = True
+                            # Cancel remaining futures (they'll finish but we won't process results)
+                            for remaining_future in future_to_feature:
+                                if not remaining_future.done():
+                                    remaining_future.cancel()
+                            # Shutdown executor without waiting for remaining tasks
+                            self._executor.shutdown(wait=False)
+                            executor_shutdown_called = True
+                            # Break immediately - don't process any more results
+                            break
+
+                    # Only process results if not cancelled
+                    if not cancelled:
+                        try:
+                            result_features, result_log, result_skipped, was_split = future.result()
+                            processed_features.extend(result_features)
+                            feature_log.extend(result_log)
+                            skipped_count += result_skipped
+                            
+                            # Track what type of split occurred by checking the original feature
+                            if was_split:
+                                original_feature = future_to_feature[future]
+                                original_geom_type = original_feature.get('geometry', {}).get('type', '')
+                                if original_geom_type == 'GeometryCollection':
+                                    geometry_collection_count += 1
+                            completed_count += 1
+                        except Exception as e:
+                            feature = future_to_feature[future]
+                            feature_name = feature.get('properties', {}).get('name', 'Unnamed')
+                            logger.error(f"Error processing feature '{feature_name}': {traceback.format_exc()}")
+                            feature_log.add(f"Error processing feature '{feature_name}': {str(e)}", "Feature Processing", DatabaseLogLevel.ERROR)
+                            skipped_count += 1
+                            completed_count += 1
+                    else:
+                        # Cancellation detected - skip processing this result
+                        completed_count += 1
+            finally:
+                # Ensure executor is always properly shut down
+                if not executor_shutdown_called:
+                    # If not already shut down, wait for all tasks to complete
+                    self._executor.shutdown(wait=True)
+                self._executor = None  # Clear reference
+
+        # Log summary
+        if self._is_cancelled():
+            feature_log.add(f"Processing was cancelled. Processed {len(processed_features)} features before cancellation", "Feature Processing", DatabaseLogLevel.WARNING)
+        else:
+            if geometry_collection_count > 0:
+                feature_log.add(f"Split {geometry_collection_count} geometry collection(s) into individual features", "Feature Processing", DatabaseLogLevel.INFO)
+
+            if skipped_count > 0:
+                feature_log.add(f"Skipped {skipped_count} features (invalid geometry or unsupported type)", "Feature Processing", DatabaseLogLevel.INFO)
+
+            feature_log.add(f"Successfully processed {len(processed_features)} features", "Feature Processing", DatabaseLogLevel.INFO)
+
+        return processed_features, feature_log
+
+    def step_6_tag_features(self, processed_features: List[Dict[str, Any]]) -> ImportLog:
+        """
+        Step 6: Generate tags for already-processed (split and validated) features.
+        Tags include: type, import date, source file, elevation, and geocoding.
+        
+        Args:
+            processed_features: List of features that have been split and validated
+            
+        Returns:
+            ImportLog with tagging information
+        """
+        feature_log = ImportLog()
+        
+        if not processed_features or self.minimal_processing:
+            return feature_log
+        
+        # Count features that will be geocoded (points and lines only)
+        geocoding_enabled = get_required_setting('REVERSE_GEOCODING_ENABLED')
+        geocoding_count = 0
+        if geocoding_enabled:
+            for feature in processed_features:
+                geometry_type = feature.get('geometry', {}).get('type', '').lower()
+                if geometry_type in ['point', 'linestring', 'multilinestring']:
+                    geocoding_count += 1
+            if geocoding_count > 0:
+                feature_log.add(f"Geocoding {geocoding_count} feature(s)", "Geocoding", DatabaseLogLevel.INFO)
+
+        # Get number of threads from settings
+        num_threads = get_required_setting('IMPORT_PROCESSING_THREADS')
+
+        # Process features in parallel using ThreadPoolExecutor
+        if len(processed_features) > 0:
+            self._executor = ThreadPoolExecutor(max_workers=num_threads)
+            executor_shutdown_called = False
+            try:
+                # Submit all tasks
+                future_to_feature = {
+                    self._executor.submit(self._step_6_process_single_feature, feature): feature 
+                    for feature in processed_features
+                }
+
+                # Collect results as they complete, checking for cancellation
+                completed_count = 0
+                cancelled = False
+                for future in as_completed(future_to_feature):
+                    # Check for cancellation before processing each result
+                    if self._is_cancelled():
+                        if not cancelled:
+                            feature_log.add(f"Tagging cancelled after {completed_count} features", "Feature Tagging", DatabaseLogLevel.WARNING)
+                            cancelled = True
+                            # Cancel remaining futures
+                            for remaining_future in future_to_feature:
+                                if not remaining_future.done():
+                                    remaining_future.cancel()
+                            # Shutdown executor without waiting for remaining tasks
+                            self._executor.shutdown(wait=False)
+                            executor_shutdown_called = True
+                            break
+
+                    # Only process results if not cancelled
+                    if not cancelled:
+                        try:
+                            result_log = future.result()
+                            feature_log.extend(result_log)
+                            completed_count += 1
+                        except Exception as e:
+                            feature = future_to_feature[future]
+                            feature_name = feature.get('properties', {}).get('name', 'Unnamed')
+                            logger.error(f"Error tagging feature '{feature_name}': {traceback.format_exc()}")
+                            feature_log.add(f"Error tagging feature '{feature_name}': {str(e)}", "Feature Tagging", DatabaseLogLevel.ERROR)
+                            completed_count += 1
+                    else:
+                        completed_count += 1
+            finally:
+                # Ensure executor is always properly shut down
+                if not executor_shutdown_called:
+                    self._executor.shutdown(wait=True)
+                self._executor = None  # Clear reference
+
+        return feature_log
+
+    def _step_4_process_single_feature(self, feature: Dict[str, Any]) -> Tuple[List[Dict[str, Any]], ImportLog, int, bool]:
+        """
+        Worker for step 4: Split and validate a single feature.
+        Does NOT generate tags - that happens in step 6.
         
         Args:
             feature: Single feature dictionary from GeoJSON
@@ -186,6 +384,7 @@ class BaseProcessor(ABC):
             if split_feature['geometry']['type'] not in ['Point', 'MultiPoint', 'LineString', 'MultiLineString', 'Polygon', 'MultiPolygon']:
                 feature_log.add(f'Skipping unsupported geometry type: {split_feature["geometry"]["type"]}', 'Feature Processing', DatabaseLogLevel.WARNING)
                 skipped_count += 1
+                continue
 
             try:
                 # Extract track created date BEFORE normalization (to ensure coordinateProperties is available)
@@ -206,68 +405,6 @@ class BaseProcessor(ABC):
                 # Finally, generate the feature hash after all the normalization is complete
                 split_feature['properties']['feature_hash'] = generate_feature_hash(split_feature)
 
-                # Skip tag generation in minimal processing mode
-                if not self.minimal_processing:
-                    # Generate all auto tags (type, import-year, import-month, geocoding) using generate_auto_tags()
-                    # Check for cancellation before tag generation
-                    if self._is_cancelled():
-                        break
-
-                    try:
-                        geometry_type = split_feature['geometry']['type'].lower()
-
-                        # Determine the appropriate feature class
-                        feature_class = None
-                        if geometry_type in ['point', 'multipoint']:
-                            feature_class = PointFeature
-                        elif geometry_type == 'linestring':
-                            feature_class = LineStringFeature
-                        elif geometry_type == 'multilinestring':
-                            feature_class = MultiLineStringFeature
-                        elif geometry_type in ['polygon', 'multipolygon']:
-                            feature_class = PolygonFeature
-                        assert feature_class
-
-                        # Create feature instance for tag generation
-                        feature_instance = feature_class(**split_feature)
-
-                        # Check for cancellation before generating tags
-                        if self._is_cancelled():
-                            break
-
-                        # Generate all auto tags (includes type, import-year, import-month, source-file, and geocoding)
-                        auto_tags = generate_auto_tags(feature_instance, feature_log, filename=self.filename)
-
-                        # Check for cancellation after tag generation
-                        if self._is_cancelled():
-                            break
-
-                        # Separate system tags from user tags
-                        existing_tags = split_feature['properties'].get('tags', [])
-                        if not isinstance(existing_tags, list):
-                            existing_tags = []
-
-                        # Strip system tags from existing tags (defensive - in case user added them)
-                        user_tags = filter_protected_tags(existing_tags, CONST_INTERNAL_TAGS)
-
-                        # Prepare user tags (lowercase and deduplicate)
-                        user_tags = prepare_user_tags(user_tags)
-
-                        # Store system tags separately
-                        split_feature['properties']['system_tags'] = auto_tags
-                        # Store user tags (filtered to remove any system tags)
-                        split_feature['properties']['tags'] = user_tags
-                    except Exception as tag_error:
-                        # Log error but don't fail the feature processing
-                        feature_name = split_feature.get('properties', {}).get('name', 'Unnamed')
-                        feature_log.add(
-                            f"Tag generation failed for feature '{feature_name}': {str(tag_error)}",
-                            "Tag Generation",
-                            DatabaseLogLevel.WARNING
-                        )
-                        logger.warning(f"Tag generation failed for feature '{feature_name}': {traceback.format_exc()}")
-                # In minimal processing mode, preserve existing tags from file if any, but don't generate new ones
-
                 # Check for cancellation before finalizing feature
                 if self._is_cancelled():
                     break
@@ -281,144 +418,80 @@ class BaseProcessor(ABC):
 
         return processed_features, feature_log, skipped_count, was_split
 
-    def _is_cancelled(self) -> bool:
+    def _step_6_process_single_feature(self, feature: Dict[str, Any]) -> ImportLog:
         """
-        Check if the current job has been cancelled.
-        
-        Returns:
-            True if job is cancelled, False otherwise
-        """
-        if self.job_id and self.status_tracker:
-            job = self.status_tracker.get_job(self.job_id)
-            if job and job.status == ProcessingStatus.CANCELLED:
-                return True
-        return False
-
-    def process_features(self, geojson_data: Dict[str, Any]) -> Tuple[list, ImportLog]:
-        """
-        Process features from GeoJSON data.
-        Common feature processing logic used by all file types.
-        Uses parallel processing via ThreadPoolExecutor for improved performance.
-        Supports cancellation checking during processing.
+        Worker for step 6: Generate tags for a single feature.
         
         Args:
-            geojson_data: GeoJSON data dictionary
+            feature: Single feature dictionary that has been split and validated
             
         Returns:
-            Tuple of (processed_features, processing_log)
+            ImportLog with tagging information
         """
-        features = geojson_data.get('features', [])
-        file_type = self.detect_file_type()
-
-        # Process features using the logic that was in process_togeojson_features
-        processed_features = []
         feature_log = ImportLog()
-
-        skipped_count = 0
-        geometry_collection_count = 0
-
-        feature_log.add(f"Processing {len(features)} raw features from file", "Feature Processing", DatabaseLogLevel.INFO)
-
-        # Check for cancellation before starting
+        
+        # Check for cancellation at the very start
         if self._is_cancelled():
-            feature_log.add("Processing cancelled before feature processing started", "Feature Processing", DatabaseLogLevel.WARNING)
-            return processed_features, feature_log
+            return feature_log
 
-        # Count features that will be geocoded (points and lines only)
-        from django.conf import settings
-        geocoding_enabled = get_required_setting('REVERSE_GEOCODING_ENABLED')
-        geocoding_count = 0
-        if geocoding_enabled:
-            for feature in features:
-                split_features = split_complex_geometries(feature)
-                for split_feature in split_features:
-                    geometry_type = split_feature.get('geometry', {}).get('type', '').lower()
-                    if geometry_type in ['point', 'linestring', 'multilinestring']:
-                        geocoding_count += 1
-            if geocoding_count > 0:
-                feature_log.add(f"Geocoding {geocoding_count} feature(s)", "Geocoding", DatabaseLogLevel.INFO)
+        try:
+            geometry_type = feature['geometry']['type'].lower()
 
-        # Get number of threads from settings
-        num_threads = get_required_setting('IMPORT_PROCESSING_THREADS')
+            # Determine the appropriate feature class
+            feature_class = None
+            if geometry_type in ['point', 'multipoint']:
+                feature_class = PointFeature
+            elif geometry_type == 'linestring':
+                feature_class = LineStringFeature
+            elif geometry_type == 'multilinestring':
+                feature_class = MultiLineStringFeature
+            elif geometry_type in ['polygon', 'multipolygon']:
+                feature_class = PolygonFeature
+            else:
+                # Unsupported geometry type, skip tagging
+                return feature_log
+            assert feature_class
 
-        # Process features in parallel using ThreadPoolExecutor
-        # Use submit() instead of map() to allow cancellation checking between tasks
-        if len(features) > 0:
-            self._executor = ThreadPoolExecutor(max_workers=num_threads)
-            executor_shutdown_called = False
-            try:
-                # Submit all tasks
-                future_to_feature = {
-                    self._executor.submit(self._process_single_feature, feature): feature 
-                    for feature in features
-                }
+            # Create feature instance for tag generation
+            feature_instance = feature_class(**feature)
 
-                # Collect results as they complete, checking for cancellation
-                completed_count = 0
-                cancelled = False
-                for future in as_completed(future_to_feature):
-                    # Check for cancellation before processing each result
-                    if self._is_cancelled():
-                        if not cancelled:
-                            feature_log.add(f"Processing cancelled after {completed_count} features", "Feature Processing", DatabaseLogLevel.WARNING)
-                            cancelled = True
-                            # Cancel remaining futures (they'll finish but we won't process results)
-                            for remaining_future in future_to_feature:
-                                if not remaining_future.done():
-                                    remaining_future.cancel()
-                            # Shutdown executor without waiting for remaining tasks
-                            self._executor.shutdown(wait=False)
-                            executor_shutdown_called = True
-                            # Break immediately - don't process any more results
-                            break
+            # Check for cancellation before generating tags
+            if self._is_cancelled():
+                return feature_log
 
-                    # Only process results if not cancelled
-                    if not cancelled:
-                        try:
-                            result_features, result_log, result_skipped, was_split = future.result()
-                            processed_features.extend(result_features)
-                            feature_log.extend(result_log)
-                            skipped_count += result_skipped
-                            
-                            # Track what type of split occurred by checking the original feature
-                            if was_split:
-                                original_feature = future_to_feature[future]
-                                original_geom_type = original_feature.get('geometry', {}).get('type', '')
-                                if original_geom_type == 'GeometryCollection':
-                                    geometry_collection_count += 1
-                                # MultiPoint and MultiPolygon should not appear (they should be GeometryCollection)
-                                # If they do, split_complex_geometries() will assert/error
-                            completed_count += 1
-                        except Exception as e:
-                            feature = future_to_feature[future]
-                            feature_name = feature.get('properties', {}).get('name', 'Unnamed')
-                            logger.error(f"Error processing feature '{feature_name}': {traceback.format_exc()}")
-                            feature_log.add(f"Error processing feature '{feature_name}': {str(e)}", "Feature Processing", DatabaseLogLevel.ERROR)
-                            skipped_count += 1
-                            completed_count += 1
-                    else:
-                        # Cancellation detected - skip processing this result
-                        completed_count += 1
-            finally:
-                # Ensure executor is always properly shut down
-                if not executor_shutdown_called:
-                    # If not already shut down, wait for all tasks to complete
-                    self._executor.shutdown(wait=True)
-                self._executor = None  # Clear reference
+            # Generate all auto tags (includes type, import-year, import-month, source-file, elevation, and geocoding)
+            auto_tags = generate_auto_tags(feature_instance, feature_log, filename=self.filename)
 
-        # Log summary
-        if self._is_cancelled():
-            feature_log.add(f"Processing was cancelled. Processed {len(processed_features)} features before cancellation", "Feature Processing", DatabaseLogLevel.WARNING)
-        else:
-            if geometry_collection_count > 0:
-                feature_log.add(f"Split {geometry_collection_count} geometry collection(s) into individual features", "Feature Processing", DatabaseLogLevel.INFO)
+            # Check for cancellation after tag generation
+            if self._is_cancelled():
+                return feature_log
 
-            if skipped_count > 0:
-                feature_log.add(f"Skipped {skipped_count} features (invalid geometry or unsupported type)", "Feature Processing", DatabaseLogLevel.INFO)
+            # Separate system tags from user tags
+            existing_tags = feature.get('properties', {}).get('tags', [])
+            if not isinstance(existing_tags, list):
+                existing_tags = []
 
-            feature_log.add(f"Successfully processed {len(processed_features)} features", "Feature Processing", DatabaseLogLevel.INFO)
+            # Strip system tags from existing tags (defensive - in case user added them)
+            user_tags = filter_protected_tags(existing_tags, CONST_INTERNAL_TAGS)
 
-        return processed_features, feature_log
+            # Prepare user tags (lowercase and deduplicate)
+            user_tags = prepare_user_tags(user_tags)
+
+            # Store system tags separately
+            feature['properties']['system_tags'] = auto_tags
+            # Store user tags (filtered to remove any system tags)
+            feature['properties']['tags'] = user_tags
+        except Exception as tag_error:
+            # Log error but don't fail the feature processing
+            feature_name = feature.get('properties', {}).get('name', 'Unnamed')
+            feature_log.add(
+                f"Tag generation failed for feature '{feature_name}': {str(tag_error)}",
+                "Tag Generation",
+                DatabaseLogLevel.WARNING
+            )
+            logger.warning(f"Tag generation failed for feature '{feature_name}': {traceback.format_exc()}")
+
+        return feature_log
 
     def process(self) -> Tuple[Dict[str, Any], ImportLog]:
         """
@@ -461,36 +534,48 @@ class BaseProcessor(ABC):
                 self.import_log.add("Processing cancelled during GeoJSON conversion", "Processing", DatabaseLogLevel.WARNING)
                 return {'type': 'FeatureCollection', 'features': []}, self.import_log
 
-            # Step 4: Process features (splitting, validation, tagging)
+            # Step 4: Split and validate features (without tagging)
             feature_processing_start = time.time()
-            self.processed_features, processing_log = self.process_features(self.geojson_data)
+            self.processed_features, processing_log = self.step_4_split_and_validate_features(self.geojson_data)
             feature_processing_duration = time.time() - feature_processing_start
             # Extend processing log first, then add timing so logs appear in correct order
             self.import_log.extend(processing_log)
-            self.import_log.add_timing("Feature processing", feature_processing_duration, "Processing")
+            self.import_log.add_timing("Feature splitting and validation", feature_processing_duration, "Processing")
 
-            # Step 5: Fill missing elevation data (on processed features)
-            # We do this AFTER feature processing so that:
-            # 1. Coordinates have been validated (skips invalid/garbage coords that would crash the API)
-            # 2. Complex geometries (GeometryCollection) have been split into simple ones
+            # Check for cancellation
+            if self._is_cancelled():
+                self.import_log.add("Processing cancelled during feature splitting", "Processing", DatabaseLogLevel.WARNING)
+                return {'type': 'FeatureCollection', 'features': []}, self.import_log
+
+            # Step 5: Fill missing elevation data
+            # Done BEFORE tagging (step 6) so elevation tags use real data, not 0.0 placeholders
+            # Done AFTER splitting/validation (step 4) so coordinates are valid and geometries are simple
             elevation_start = time.time()
             try:
-                from django.conf import settings
                 if get_required_setting('ELEVATION_API_ENABLED') and self.processed_features:
-                    # Wrap processed features in a temporary structure for the service
-                    # The service modifies features in-place
                     temp_geojson = {'type': 'FeatureCollection', 'features': self.processed_features}
                     fill_missing_elevations(temp_geojson, self.import_log)
                     elevation_duration = time.time() - elevation_start
                     self.import_log.add_timing("Elevation data filling", elevation_duration, "Processing")
             except Exception as e:
-                # Log error but don't fail processing
                 self.import_log.add(f"Elevation data filling failed: {str(e)}", "Elevation Service", DatabaseLogLevel.ERROR)
                 logger.error(f"Elevation data filling error traceback: {traceback.format_exc()}")
             
             # Check for cancellation
             if self._is_cancelled():
                 self.import_log.add("Processing cancelled during elevation data filling", "Processing", DatabaseLogLevel.WARNING)
+                return {'type': 'FeatureCollection', 'features': []}, self.import_log
+
+            # Step 6: Generate tags (elevation tags now use real data from step 5)
+            tagging_start = time.time()
+            tagging_log = self.step_6_tag_features(self.processed_features)
+            tagging_duration = time.time() - tagging_start
+            self.import_log.extend(tagging_log)
+            self.import_log.add_timing("Feature tagging", tagging_duration, "Processing")
+
+            # Check for cancellation
+            if self._is_cancelled():
+                self.import_log.add("Processing cancelled during feature tagging", "Processing", DatabaseLogLevel.WARNING)
                 return {'type': 'FeatureCollection', 'features': []}, self.import_log
 
             # Create final GeoJSON structure

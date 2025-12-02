@@ -459,12 +459,13 @@ class TestFeatureAPI(TestCase):
 
     def test_apply_bulk_operations_to_system_tag(self):
         """Test applying bulk operations to features by system tag."""
-        # Create a feature with a system tag
+        # Create a feature with a system tag (using type:point instead of elevation:low)
+        # Note: elevation:low is no longer generated for 0.0 elevations (treated as missing data)
         system_tag_feature_data = {
             'type': 'Feature',
             'geometry': {
                 'type': 'Point',
-                'coordinates': [-122.4194, 37.7749, 0.0]
+                'coordinates': [-122.4194, 37.7749, 10.0]  # Low elevation (< 100 feet)
             },
             'properties': {
                 'name': 'System Tag Feature',
@@ -475,7 +476,7 @@ class TestFeatureAPI(TestCase):
         system_tag_feature = FeatureStore.objects.create(
             user=self.user,
             geojson=system_tag_feature_data,
-            geometry=Point(-122.4194, 37.7749, 0.0),
+            geometry=Point(-122.4194, 37.7749, 10.0),
             geojson_hash=generate_feature_hash(system_tag_feature_data)
         )
 

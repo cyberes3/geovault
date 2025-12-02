@@ -585,12 +585,17 @@ class TestBoundaryConditions:
             pass
 
     def test_zero_elevation(self, user):
-        """Test that zero elevation is handled correctly."""
+        """Test that zero elevation is handled correctly.
+        
+        Note: 0.0 elevation is now treated as missing data by the elevation tagger,
+        not as actual sea-level elevation. This is because many file formats use 0.0
+        as a placeholder for missing elevation data.
+        """
         feature_data = {
             'type': 'Feature',
             'geometry': {
                 'type': 'Point',
-                'coordinates': [-122.4194, 37.7749, 0.0]  # Zero elevation
+                'coordinates': [-122.4194, 37.7749, 0.0]  # Zero elevation (treated as missing)
             },
             'properties': {'name': 'Sea Level Point'}
         }
@@ -603,6 +608,7 @@ class TestBoundaryConditions:
         )
         
         assert feature.id is not None
+        # Zero elevation is stored but treated as missing data by elevation tagger
         assert feature.geometry.z == 0.0
 
     def test_negative_elevation(self, user):
