@@ -61,7 +61,9 @@
         type="text"
         :disabled="disabled"
         @input="onTagInput"
-        @keydown.enter.prevent="addTagFromInput"
+        @keydown.enter.prevent="handleEnterKey"
+        @keydown.arrow-down.prevent="navigateSuggestionsDown"
+        @keydown.arrow-up.prevent="navigateSuggestionsUp"
         @keydown.escape="hideSuggestions"
         @focus="showSuggestionsOnFocus"
         @blur="handleTagInputBlur"
@@ -83,14 +85,18 @@
       <!-- Autocomplete Suggestions -->
       <div
         v-if="showTagSuggestions && filteredTagSuggestions.length > 0"
-        class="absolute z-50 w-full mt-1 bg-white border border-gray-300 rounded-md shadow-lg max-h-48 overflow-auto"
+        ref="suggestionsContainer"
+        class="absolute z-50 w-full bg-white border border-gray-300 rounded-md shadow-lg max-h-48 overflow-auto"
       >
         <button
           v-for="(suggestion, index) in filteredTagSuggestions"
           :key="index"
           type="button"
           @mousedown.prevent="selectTagSuggestion(suggestion)"
-          class="w-full text-left px-3 py-2 text-sm text-gray-700 hover:bg-blue-50 focus:bg-blue-50 focus:outline-none"
+          :class="[
+            'w-full text-left px-3 py-2 text-sm text-gray-700 hover:bg-blue-50 focus:bg-blue-50 focus:outline-none',
+            index === selectedSuggestionIndex ? 'bg-blue-100' : ''
+          ]"
         >
           {{ suggestion }}
         </button>
@@ -159,7 +165,8 @@ export default {
       hasSystemTagsOverflow: false,
       systemTagError: '',
       systemTagErrorNoSystemTagsStr: 'System tags cannot be added as user tags.',
-      fetchedAvailableTags: []
+      fetchedAvailableTags: [],
+      selectedSuggestionIndex: -1
     }
   },
   computed: {
@@ -236,6 +243,18 @@ export default {
         })
       },
       immediate: true
+    },
+    filteredTagSuggestions() {
+      // Reset selected index when suggestions change
+      if (this.selectedSuggestionIndex >= this.filteredTagSuggestions.length) {
+        this.selectedSuggestionIndex = -1
+      }
+    },
+    showTagSuggestions(newVal) {
+      // Reset selected index when suggestions are hidden
+      if (!newVal) {
+        this.selectedSuggestionIndex = -1
+      }
     }
   },
   methods: {
@@ -305,6 +324,8 @@ export default {
     onTagInput() {
       // Clear error when user starts typing
       this.systemTagError = ''
+      // Reset selected index when user types
+      this.selectedSuggestionIndex = -1
       // Convert to lowercase as user types
       this.tagInput = this.tagInput.toLowerCase()
       if (this.tagInput.trim()) {
@@ -326,6 +347,7 @@ export default {
     },
     hideSuggestions() {
       this.showTagSuggestions = false
+      this.selectedSuggestionIndex = -1
     },
     handleTagInputBlur(event) {
       // Use setTimeout to allow click events on suggestions to fire first
@@ -368,6 +390,8 @@ export default {
     },
     selectTagSuggestion(tag) {
       if (this.validateAndAddTag(tag)) {
+        // Reset selected index
+        this.selectedSuggestionIndex = -1
         // Refocus the input after a short delay to allow the blur event to complete
         setTimeout(() => {
           if (this.$refs.tagInputContainer) {
@@ -379,9 +403,62 @@ export default {
         }, 100)
       }
     },
+    handleEnterKey() {
+      // If a suggestion is highlighted, select it
+      if (this.selectedSuggestionIndex >= 0 && this.selectedSuggestionIndex < this.filteredTagSuggestions.length) {
+        const selectedTag = this.filteredTagSuggestions[this.selectedSuggestionIndex]
+        this.selectTagSuggestion(selectedTag)
+      } else {
+        // Otherwise, add tag from input (existing behavior)
+        this.addTagFromInput()
+      }
+    },
     addTagFromInput() {
       const trimmedInput = this.tagInput.trim().toLowerCase()
       this.validateAndAddTag(trimmedInput)
+    },
+    navigateSuggestionsDown() {
+      if (!this.showTagSuggestions || this.filteredTagSuggestions.length === 0) {
+        return
+      }
+      
+      if (this.selectedSuggestionIndex === -1) {
+        // Start from first suggestion
+        this.selectedSuggestionIndex = 0
+      } else if (this.selectedSuggestionIndex < this.filteredTagSuggestions.length - 1) {
+        this.selectedSuggestionIndex++
+      }
+      // If at last suggestion, do nothing (no wrapping)
+      
+      this.scrollSuggestionIntoView()
+    },
+    navigateSuggestionsUp() {
+      if (!this.showTagSuggestions || this.filteredTagSuggestions.length === 0) {
+        return
+      }
+      
+      if (this.selectedSuggestionIndex === -1) {
+        // Start from last suggestion
+        this.selectedSuggestionIndex = this.filteredTagSuggestions.length - 1
+      } else if (this.selectedSuggestionIndex > 0) {
+        this.selectedSuggestionIndex--
+      }
+      // If at first suggestion, do nothing (no wrapping)
+      
+      this.scrollSuggestionIntoView()
+    },
+    scrollSuggestionIntoView() {
+      this.$nextTick(() => {
+        if (this.selectedSuggestionIndex >= 0 && this.$refs.suggestionsContainer) {
+          const buttons = this.$refs.suggestionsContainer.querySelectorAll('button')
+          if (buttons[this.selectedSuggestionIndex]) {
+            buttons[this.selectedSuggestionIndex].scrollIntoView({
+              behavior: 'smooth',
+              block: 'nearest'
+            })
+          }
+        }
+      })
     },
     removeTag(index) {
       const newTags = [...this.localTags]
