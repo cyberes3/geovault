@@ -109,6 +109,15 @@ import { isSystemTag, sortTagsByPriority, sortUserTagsAlphabetically } from '@/u
 import { XMarkIcon, CheckIcon } from '@heroicons/vue/24/outline'
 import { APIHOST } from '@/config.js'
 
+// Shared cache for all TagPicker instances to avoid duplicate API calls
+// Cache expires after 5 seconds to ensure fresh data
+const tagCache = {
+  tags: null,
+  timestamp: null,
+  fetchPromise: null,
+  CACHE_TTL: 5000 // 5 seconds
+}
+
 export default {
   name: 'TagPicker',
   components: {
@@ -231,25 +240,65 @@ export default {
   },
   methods: {
     async fetchAvailableTags() {
-      // Fetch latest user tags every time the component is mounted
-      try {
-        const response = await fetch(`${APIHOST}/api/features/user-tags/`, {
-          credentials: 'include'
-        })
-        const data = await response.json()
+      // Check if cache is still valid
+      const now = Date.now()
+      const isCacheValid = tagCache.tags !== null &&
+                          tagCache.timestamp !== null &&
+                          (now - tagCache.timestamp) < tagCache.CACHE_TTL
 
-        if (response.ok && Array.isArray(data)) {
-          // Sort user tags alphabetically
-          this.fetchedAvailableTags = sortUserTagsAlphabetically(data)
-        } else {
-          // Fallback to existing props if the request fails
-          // eslint-disable-next-line no-console
-          console.error('Failed to fetch user tags:', data.error || 'Unknown error')
+      if (isCacheValid) {
+        // Use cached tags immediately
+        this.fetchedAvailableTags = tagCache.tags
+        return
+      }
+
+      // If there's already a fetch in progress, wait for it
+      if (tagCache.fetchPromise) {
+        try {
+          const tags = await tagCache.fetchPromise
+          this.fetchedAvailableTags = tags
+        } catch (error) {
+          // If the shared fetch fails, fall back to props
           this.fetchedAvailableTags = []
         }
+        return
+      }
+
+      // Start a new fetch and cache it
+      tagCache.fetchPromise = (async () => {
+        try {
+          const response = await fetch(`${APIHOST}/api/features/user-tags/`, {
+            credentials: 'include'
+          })
+          const data = await response.json()
+
+          if (response.ok && Array.isArray(data)) {
+            // Sort user tags alphabetically
+            const sortedTags = sortUserTagsAlphabetically(data)
+            // Update cache
+            tagCache.tags = sortedTags
+            tagCache.timestamp = Date.now()
+            tagCache.fetchPromise = null
+            return sortedTags
+          } else {
+            // eslint-disable-next-line no-console
+            console.error('Failed to fetch user tags:', data.error || 'Unknown error')
+            tagCache.fetchPromise = null
+            return []
+          }
+        } catch (error) {
+          // eslint-disable-next-line no-console
+          console.error('Error fetching user tags:', error)
+          tagCache.fetchPromise = null
+          return []
+        }
+      })()
+
+      // Wait for the fetch to complete
+      try {
+        const tags = await tagCache.fetchPromise
+        this.fetchedAvailableTags = tags
       } catch (error) {
-        // eslint-disable-next-line no-console
-        console.error('Error fetching user tags:', error)
         this.fetchedAvailableTags = []
       }
     },
@@ -271,7 +320,7 @@ export default {
       }
     },
     showSuggestionsOnFocus() {
-      if (this.tagInput.trim() || this.availableTags.length > 0) {
+      if (this.tagInput.trim() || this.effectiveAvailableTags.length > 0) {
         this.showTagSuggestions = true
       }
     },
