@@ -2,16 +2,18 @@
 Extended tests for file upload edge cases and error handling.
 """
 import zipfile
+import json
+import time
 from io import BytesIO
-from unittest.mock import patch, MagicMock
-from django.test import TestCase
+from django.test import TestCase, TransactionTestCase
 from django.core.files.uploadedfile import SimpleUploadedFile
 
 from api.models import ImportQueue
+from geo_lib.processing.status_tracker import status_tracker, ProcessingStatus
 
 
-class TestLargeFileUploads(TestCase):
-    """Test handling of large file uploads."""
+class TestLargeFileUploads(TransactionTestCase):
+    """Test handling of large file uploads with real backend processing."""
 
     def setUp(self):
         """Set up test fixtures."""
@@ -24,12 +26,25 @@ class TestLargeFileUploads(TestCase):
         )
         self.client.force_login(self.user)
 
-    @patch('api.views.import_item.process_job')
-    @patch('api.views.import_item.status_tracker')
-    def test_upload_large_kml_file(self, mock_status_tracker, mock_process_job):
-        """Test uploading a large KML file."""
-        mock_status_tracker.create_job.return_value = 'test-job-id'
-        mock_process_job.start_process_job.return_value = True
+    def _wait_for_job_completion(self, job_id: str, timeout: float = 60.0) -> dict:
+        """Wait for job to complete with timeout."""
+        start_time = time.time()
+        while time.time() - start_time < timeout:
+            job_status = status_tracker.get_job_status(job_id)
+            if not job_status:
+                raise ValueError(f"Job {job_id} not found")
+            
+            status = job_status.get('status')
+            if status in [ProcessingStatus.COMPLETED.value, ProcessingStatus.FAILED.value, 
+                         ProcessingStatus.COMPLETED, ProcessingStatus.FAILED]:
+                return job_status
+            
+            time.sleep(0.5)
+        
+        raise TimeoutError(f"Job {job_id} did not complete within {timeout} seconds")
+
+    def test_upload_large_kml_file(self):
+        """Test uploading a large KML file with real processing."""
 
         # Create a large KML file (with many placemarks)
         kml_content = """<?xml version="1.0" encoding="UTF-8"?>
@@ -59,12 +74,8 @@ class TestLargeFileUploads(TestCase):
         # Should handle large file
         self.assertEqual(response.status_code, 200)
 
-    @patch('api.views.import_item.process_job')
-    @patch('api.views.import_item.status_tracker')
-    def test_upload_very_large_coordinates(self, mock_status_tracker, mock_process_job):
+    def test_upload_very_large_coordinates(self):
         """Test uploading file with very long coordinate lists."""
-        mock_status_tracker.create_job.return_value = 'test-job-id'
-        mock_process_job.start_process_job.return_value = True
 
         # Create GPX with many track points
         gpx_content = """<?xml version="1.0" encoding="UTF-8"?>
@@ -91,7 +102,7 @@ class TestLargeFileUploads(TestCase):
         self.assertEqual(response.status_code, 200)
 
 
-class TestCorruptedFiles(TestCase):
+class TestCorruptedFiles(TransactionTestCase):
     """Test handling of corrupted or malformed files."""
 
     def setUp(self):
@@ -105,12 +116,8 @@ class TestCorruptedFiles(TestCase):
         )
         self.client.force_login(self.user)
 
-    @patch('api.views.import_item.process_job')
-    @patch('api.views.import_item.status_tracker')
-    def test_upload_truncated_kml(self, mock_status_tracker, mock_process_job):
+    def test_upload_truncated_kml(self):
         """Test uploading truncated KML file."""
-        mock_status_tracker.create_job.return_value = 'test-job-id'
-        mock_process_job.start_process_job.return_value = True
 
         # Truncated KML (missing closing tags)
         truncated_kml = """<?xml version="1.0" encoding="UTF-8"?>
@@ -125,12 +132,8 @@ class TestCorruptedFiles(TestCase):
         # Should accept upload, error will be caught during processing
         self.assertIn(response.status_code, [200, 400])
 
-    @patch('api.views.import_item.process_job')
-    @patch('api.views.import_item.status_tracker')
-    def test_upload_invalid_xml(self, mock_status_tracker, mock_process_job):
+    def test_upload_invalid_xml(self):
         """Test uploading file with invalid XML."""
-        mock_status_tracker.create_job.return_value = 'test-job-id'
-        mock_process_job.start_process_job.return_value = True
 
         invalid_xml = """<?xml version="1.0" encoding="UTF-8"?>
 <kml xmlns="http://www.opengis.net/kml/2.2">
@@ -150,12 +153,8 @@ class TestCorruptedFiles(TestCase):
         # Should accept upload, validation happens during processing
         self.assertIn(response.status_code, [200, 400])
 
-    @patch('api.views.import_item.process_job')
-    @patch('api.views.import_item.status_tracker')
-    def test_upload_binary_garbage(self, mock_status_tracker, mock_process_job):
+    def test_upload_binary_garbage(self):
         """Test uploading binary garbage as KML."""
-        mock_status_tracker.create_job.return_value = 'test-job-id'
-        mock_process_job.start_process_job.return_value = True
 
         # Random binary data
         binary_data = bytes([i % 256 for i in range(1000)])
@@ -167,7 +166,7 @@ class TestCorruptedFiles(TestCase):
         self.assertIn(response.status_code, [200, 400, 500])
 
 
-class TestCorruptedKMZ(TestCase):
+class TestCorruptedKMZ(TransactionTestCase):
     """Test handling of corrupted KMZ files."""
 
     def setUp(self):
@@ -181,12 +180,8 @@ class TestCorruptedKMZ(TestCase):
         )
         self.client.force_login(self.user)
 
-    @patch('api.views.import_item.process_job')
-    @patch('api.views.import_item.status_tracker')
-    def test_upload_corrupted_zip(self, mock_status_tracker, mock_process_job):
+    def test_upload_corrupted_zip(self):
         """Test uploading corrupted ZIP file as KMZ."""
-        mock_status_tracker.create_job.return_value = 'test-job-id'
-        mock_process_job.start_process_job.return_value = True
 
         # Create corrupted ZIP data
         corrupted_zip = b'PK\x03\x04' + bytes([0xFF] * 100)
@@ -197,12 +192,8 @@ class TestCorruptedKMZ(TestCase):
         # Should handle gracefully
         self.assertIn(response.status_code, [200, 400, 500])
 
-    @patch('api.views.import_item.process_job')
-    @patch('api.views.import_item.status_tracker')
-    def test_upload_kmz_missing_doc_kml(self, mock_status_tracker, mock_process_job):
+    def test_upload_kmz_missing_doc_kml(self):
         """Test uploading KMZ without doc.kml file."""
-        mock_status_tracker.create_job.return_value = 'test-job-id'
-        mock_process_job.start_process_job.return_value = True
 
         # Create ZIP without doc.kml
         zip_buffer = BytesIO()
@@ -216,12 +207,8 @@ class TestCorruptedKMZ(TestCase):
         # Should handle missing doc.kml
         self.assertIn(response.status_code, [200, 400, 500])
 
-    @patch('api.views.import_item.process_job')
-    @patch('api.views.import_item.status_tracker')
-    def test_upload_kmz_with_nested_folders(self, mock_status_tracker, mock_process_job):
+    def test_upload_kmz_with_nested_folders(self):
         """Test uploading KMZ with nested folder structure."""
-        mock_status_tracker.create_job.return_value = 'test-job-id'
-        mock_process_job.start_process_job.return_value = True
 
         kml_content = """<?xml version="1.0" encoding="UTF-8"?>
 <kml xmlns="http://www.opengis.net/kml/2.2">
@@ -249,7 +236,7 @@ class TestCorruptedKMZ(TestCase):
         self.assertEqual(response.status_code, 200)
 
 
-class TestInvalidCoordinates(TestCase):
+class TestInvalidCoordinates(TransactionTestCase):
     """Test handling of invalid coordinates in files."""
 
     def setUp(self):
@@ -263,12 +250,8 @@ class TestInvalidCoordinates(TestCase):
         )
         self.client.force_login(self.user)
 
-    @patch('api.views.import_item.process_job')
-    @patch('api.views.import_item.status_tracker')
-    def test_upload_kml_with_invalid_latitude(self, mock_status_tracker, mock_process_job):
+    def test_upload_kml_with_invalid_latitude(self):
         """Test KML with latitude > 90 or < -90."""
-        mock_status_tracker.create_job.return_value = 'test-job-id'
-        mock_process_job.start_process_job.return_value = True
 
         kml_content = """<?xml version="1.0" encoding="UTF-8"?>
 <kml xmlns="http://www.opengis.net/kml/2.2">
@@ -288,12 +271,8 @@ class TestInvalidCoordinates(TestCase):
         # Should accept, validation happens during processing
         self.assertEqual(response.status_code, 200)
 
-    @patch('api.views.import_item.process_job')
-    @patch('api.views.import_item.status_tracker')
-    def test_upload_kml_with_invalid_longitude(self, mock_status_tracker, mock_process_job):
+    def test_upload_kml_with_invalid_longitude(self):
         """Test KML with longitude > 180 or < -180."""
-        mock_status_tracker.create_job.return_value = 'test-job-id'
-        mock_process_job.start_process_job.return_value = True
 
         kml_content = """<?xml version="1.0" encoding="UTF-8"?>
 <kml xmlns="http://www.opengis.net/kml/2.2">
@@ -312,12 +291,8 @@ class TestInvalidCoordinates(TestCase):
         
         self.assertEqual(response.status_code, 200)
 
-    @patch('api.views.import_item.process_job')
-    @patch('api.views.import_item.status_tracker')
-    def test_upload_kml_with_non_numeric_coordinates(self, mock_status_tracker, mock_process_job):
+    def test_upload_kml_with_non_numeric_coordinates(self):
         """Test KML with non-numeric coordinates."""
-        mock_status_tracker.create_job.return_value = 'test-job-id'
-        mock_process_job.start_process_job.return_value = True
 
         kml_content = """<?xml version="1.0" encoding="UTF-8"?>
 <kml xmlns="http://www.opengis.net/kml/2.2">
@@ -337,7 +312,7 @@ class TestInvalidCoordinates(TestCase):
         self.assertEqual(response.status_code, 200)
 
 
-class TestEmptyFiles(TestCase):
+class TestEmptyFiles(TransactionTestCase):
     """Test handling of empty or minimal files."""
 
     def setUp(self):
@@ -351,12 +326,8 @@ class TestEmptyFiles(TestCase):
         )
         self.client.force_login(self.user)
 
-    @patch('api.views.import_item.process_job')
-    @patch('api.views.import_item.status_tracker')
-    def test_upload_completely_empty_file(self, mock_status_tracker, mock_process_job):
+    def test_upload_completely_empty_file(self):
         """Test uploading completely empty file."""
-        mock_status_tracker.create_job.return_value = 'test-job-id'
-        mock_process_job.start_process_job.return_value = True
 
         file = SimpleUploadedFile("empty.kml", b'')
         response = self.client.post('/api/item/import/upload', {'file': file})
@@ -364,12 +335,8 @@ class TestEmptyFiles(TestCase):
         # Should reject or handle gracefully
         self.assertIn(response.status_code, [200, 400])
 
-    @patch('api.views.import_item.process_job')
-    @patch('api.views.import_item.status_tracker')
-    def test_upload_kml_with_no_features(self, mock_status_tracker, mock_process_job):
+    def test_upload_kml_with_no_features(self):
         """Test uploading valid KML with no features."""
-        mock_status_tracker.create_job.return_value = 'test-job-id'
-        mock_process_job.start_process_job.return_value = True
 
         kml_content = """<?xml version="1.0" encoding="UTF-8"?>
 <kml xmlns="http://www.opengis.net/kml/2.2">
@@ -383,12 +350,8 @@ class TestEmptyFiles(TestCase):
         # Should accept - empty file is valid
         self.assertEqual(response.status_code, 200)
 
-    @patch('api.views.import_item.process_job')
-    @patch('api.views.import_item.status_tracker')
-    def test_upload_gpx_with_no_tracks(self, mock_status_tracker, mock_process_job):
+    def test_upload_gpx_with_no_tracks(self):
         """Test uploading GPX with no tracks or waypoints."""
-        mock_status_tracker.create_job.return_value = 'test-job-id'
-        mock_process_job.start_process_job.return_value = True
 
         gpx_content = """<?xml version="1.0" encoding="UTF-8"?>
 <gpx version="1.1" creator="Test">
@@ -401,7 +364,7 @@ class TestEmptyFiles(TestCase):
         self.assertEqual(response.status_code, 200)
 
 
-class TestSpecialCharactersInFiles(TestCase):
+class TestSpecialCharactersInFiles(TransactionTestCase):
     """Test handling of special characters in file content."""
 
     def setUp(self):
@@ -415,12 +378,8 @@ class TestSpecialCharactersInFiles(TestCase):
         )
         self.client.force_login(self.user)
 
-    @patch('api.views.import_item.process_job')
-    @patch('api.views.import_item.status_tracker')
-    def test_upload_kml_with_emoji(self, mock_status_tracker, mock_process_job):
+    def test_upload_kml_with_emoji(self):
         """Test KML with emoji in names."""
-        mock_status_tracker.create_job.return_value = 'test-job-id'
-        mock_process_job.start_process_job.return_value = True
 
         kml_content = """<?xml version="1.0" encoding="UTF-8"?>
 <kml xmlns="http://www.opengis.net/kml/2.2">
@@ -440,12 +399,8 @@ class TestSpecialCharactersInFiles(TestCase):
         # Should handle emoji
         self.assertEqual(response.status_code, 200)
 
-    @patch('api.views.import_item.process_job')
-    @patch('api.views.import_item.status_tracker')
-    def test_upload_kml_with_cdata(self, mock_status_tracker, mock_process_job):
+    def test_upload_kml_with_cdata(self):
         """Test KML with CDATA sections."""
-        mock_status_tracker.create_job.return_value = 'test-job-id'
-        mock_process_job.start_process_job.return_value = True
 
         kml_content = """<?xml version="1.0" encoding="UTF-8"?>
 <kml xmlns="http://www.opengis.net/kml/2.2">
@@ -466,12 +421,8 @@ class TestSpecialCharactersInFiles(TestCase):
         # Should handle CDATA properly
         self.assertEqual(response.status_code, 200)
 
-    @patch('api.views.import_item.process_job')
-    @patch('api.views.import_item.status_tracker')
-    def test_upload_kml_with_html_entities(self, mock_status_tracker, mock_process_job):
+    def test_upload_kml_with_html_entities(self):
         """Test KML with HTML entities."""
-        mock_status_tracker.create_job.return_value = 'test-job-id'
-        mock_process_job.start_process_job.return_value = True
 
         kml_content = """<?xml version="1.0" encoding="UTF-8"?>
 <kml xmlns="http://www.opengis.net/kml/2.2">

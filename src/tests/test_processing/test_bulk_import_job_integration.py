@@ -7,7 +7,6 @@ progress tracking, aggregated results, and WebSocket broadcasts.
 import pytest
 from django.test import TransactionTestCase
 from django.contrib.auth import get_user_model
-from unittest.mock import patch, MagicMock
 import time
 
 from api.models import ImportQueue, FeatureStore
@@ -60,8 +59,7 @@ class TestBulkImportJobIntegration(TransactionTestCase):
         
         raise TimeoutError(f"Job {job_id} did not complete within {timeout} seconds")
 
-    @patch('geo_lib.processing.import_utils.broadcast_item_imported')
-    def test_bulk_import_single_item_success(self, mock_broadcast):
+    def test_bulk_import_single_item_success(self):
         """Test bulk import with just one item."""
         # Create single import item
         item1 = ImportQueue.objects.create(
@@ -98,8 +96,7 @@ class TestBulkImportJobIntegration(TransactionTestCase):
         
         print("✓ Test passed: bulk_import_single_item_success")
 
-    @patch('geo_lib.processing.import_utils.broadcast_item_imported')
-    def test_bulk_import_multiple_items_all_success(self, mock_broadcast):
+    def test_bulk_import_multiple_items_all_success(self):
         """Test bulk import with multiple items, all succeed."""
         # Create 3 import items
         item1 = ImportQueue.objects.create(
@@ -260,8 +257,7 @@ class TestBulkImportJobIntegration(TransactionTestCase):
         
         print("✓ Test passed: bulk_import_missing_items")
 
-    @patch('geo_lib.processing.import_utils.broadcast_item_imported')
-    def test_bulk_import_progress_tracking(self, mock_broadcast):
+    def test_bulk_import_progress_tracking(self):
         """Test that progress updates work for each item."""
         # Create 3 items
         items = []
@@ -316,8 +312,7 @@ class TestBulkImportJobIntegration(TransactionTestCase):
         
         print("✓ Test passed: bulk_import_progress_tracking")
 
-    @patch('geo_lib.processing.import_utils.broadcast_item_imported')
-    def test_bulk_import_aggregates_results(self, mock_broadcast):
+    def test_bulk_import_aggregates_results(self):
         """Test that results are aggregated across all items."""
         # Create items with various features
         item1 = ImportQueue.objects.create(
@@ -363,8 +358,7 @@ class TestBulkImportJobIntegration(TransactionTestCase):
         
         print("✓ Test passed: bulk_import_aggregates_results")
 
-    @patch('geo_lib.processing.import_utils.broadcast_item_imported')
-    def test_bulk_import_sequential_processing(self, mock_broadcast):
+    def test_bulk_import_sequential_processing(self):
         """Test that items are processed sequentially, not in parallel."""
         # Create multiple items
         items = []

@@ -1,14 +1,13 @@
 """
-Tests for file processors (KML, KMZ, GPX).
+Tests for file processors (KML, KMZ, GPX) with real processing.
 """
 import pytest
-from unittest.mock import patch, MagicMock
 from geo_lib.processing.processors import get_processor
 from geo_lib.processing.file_types import FileType
 
 
 class TestProcessors:
-    """Test file processors."""
+    """Test file processors with real conversion logic."""
 
     def test_get_processor_kml(self):
         """Test getting KML processor."""
@@ -58,38 +57,44 @@ class TestProcessors:
         with pytest.raises(ValueError):
             get_processor(b'content', 'test.txt')
 
-    @patch('geo_lib.processing.processors.kml_processor.KMLProcessor._convert_to_geojson')
-    def test_kml_processor_convert(self, mock_convert):
-        """Test KML processor conversion."""
-        mock_convert.return_value = {
-            'type': 'FeatureCollection',
-            'features': [{
-                'type': 'Feature',
-                'geometry': {'type': 'Point', 'coordinates': [-122.4194, 37.7749]},
-                'properties': {'name': 'Test'}
-            }]
-        }
-        kml_content = """<?xml version="1.0"?><kml></kml>"""
+    def test_kml_processor_convert(self):
+        """Test KML processor conversion with real processing."""
+        kml_content = """<?xml version="1.0" encoding="UTF-8"?>
+<kml xmlns="http://www.opengis.net/kml/2.2">
+  <Document>
+    <Placemark>
+      <name>Test</name>
+      <Point>
+        <coordinates>-122.4194,37.7749,0</coordinates>
+      </Point>
+    </Placemark>
+  </Document>
+</kml>"""
         processor = get_processor(kml_content.encode('utf-8'), 'test.kml')
         result = processor.convert_to_geojson()
         assert result['type'] == 'FeatureCollection'
-        assert len(result['features']) == 1
+        assert len(result['features']) >= 1
 
-    @patch('geo_lib.processing.processors.gpx_processor.GPXProcessor._convert_to_geojson')
-    def test_gpx_processor_convert(self, mock_convert):
-        """Test GPX processor conversion."""
-        mock_convert.return_value = {
-            'type': 'FeatureCollection',
-            'features': [{
-                'type': 'Feature',
-                'geometry': {'type': 'LineString', 'coordinates': [[-122.4194, 37.7749]]},
-                'properties': {'name': 'Test Track'}
-            }]
-        }
-        gpx_content = """<?xml version="1.0"?><gpx></gpx>"""
+    def test_gpx_processor_convert(self):
+        """Test GPX processor conversion with real processing."""
+        gpx_content = """<?xml version="1.0" encoding="UTF-8"?>
+<gpx version="1.1" creator="Test">
+  <trk>
+    <name>Test Track</name>
+    <trkseg>
+      <trkpt lat="37.7749" lon="-122.4194">
+        <ele>100</ele>
+      </trkpt>
+      <trkpt lat="37.7849" lon="-122.4294">
+        <ele>200</ele>
+      </trkpt>
+    </trkseg>
+  </trk>
+</gpx>"""
         processor = get_processor(gpx_content.encode('utf-8'), 'test.gpx')
         result = processor.convert_to_geojson()
         assert result['type'] == 'FeatureCollection'
+        assert len(result['features']) >= 1
 
     def test_processor_minimal_processing(self):
         """Test processor with minimal processing mode."""

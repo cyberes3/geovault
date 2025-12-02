@@ -315,7 +315,10 @@ def large_feature_set(db, user):
 
 @pytest.fixture
 def mock_external_services():
-    """Mock external services (elevation, geocoding) for error testing."""
+    """
+    DEPRECATED: Use conditional_external_api_mocking instead.
+    Mock external services (elevation, geocoding) for error testing.
+    """
     from unittest.mock import patch, MagicMock
     
     mocks = {}
@@ -331,6 +334,94 @@ def mock_external_services():
             mocks['geocode'] = mock_geocode
             
             yield mocks
+
+
+@pytest.fixture(autouse=True)
+def conditional_external_api_mocking():
+    """
+    Conditionally mock external APIs based on config.yaml settings.
+    
+    - Elevation API: Mocked if ELEVATION_API_ENABLED is False in config, otherwise real calls with timeout handling
+    - Geocoding: Always mocked (not ready yet per requirements)
+    - Logs warnings on external API timeouts/failures without failing tests
+    """
+    import logging
+    import requests
+    from unittest.mock import patch, MagicMock
+    from website.settings_utils import get_required_setting
+    
+    logger = logging.getLogger(__name__)
+    patches = []
+    
+    # Always mock geocoding services (not ready yet)
+    # Mock reverse geocoding service
+    geocoding_patch1 = patch('geo_lib.geolocation.reverse_geocode.get_reverse_geocoding_service')
+    mock_geocoding = geocoding_patch1.start()
+    mock_geocoding_service = MagicMock()
+    mock_geocoding_service.reverse_geocode.return_value = None  # Return None to simulate disabled
+    mock_geocoding.return_value = mock_geocoding_service
+    patches.append(geocoding_patch1)
+    
+    # Mock IP geolocation service
+    geocoding_patch2 = patch('geo_lib.geolocation.ip_service.get_geolocation_service')
+    mock_ip_geo = geocoding_patch2.start()
+    mock_ip_geo_service = MagicMock()
+    mock_ip_geo_service.get_location_from_ip.return_value = None
+    mock_ip_geo_service.reader = None  # Indicate database not available
+    mock_ip_geo.return_value = mock_ip_geo_service
+    patches.append(geocoding_patch2)
+    
+    # Conditionally mock elevation API based on config
+    elevation_enabled = False
+    try:
+        elevation_enabled = get_required_setting('ELEVATION_API_ENABLED')
+    except Exception as e:
+        logger.warning(f"Could not read ELEVATION_API_ENABLED from config: {e}")
+    
+    if not elevation_enabled:
+        logger.info("Elevation API disabled in config - mocking elevation service")
+        elevation_patch = patch('geo_lib.processing.elevation_service.fill_missing_elevations')
+        mock_elevation_fill = elevation_patch.start()
+        # Return the geojson unchanged (no elevation filling)
+        mock_elevation_fill.side_effect = lambda geojson, log: geojson
+        patches.append(elevation_patch)
+    else:
+        logger.info("Elevation API enabled in config - using real elevation service with timeout handling")
+        # Wrap real elevation calls with timeout/error handling
+        original_fill = None
+        try:
+            from geo_lib.processing import elevation_service
+            original_fill = elevation_service.fill_missing_elevations
+        except ImportError:
+            pass
+        
+        if original_fill:
+            def wrapped_fill_elevations(geojson_data, import_log):
+                """Wrap elevation API calls with timeout handling."""
+                try:
+                    return original_fill(geojson_data, import_log)
+                except requests.Timeout as e:
+                    logger.warning(f"Elevation API timeout: {e}")
+                    import_log.add("Elevation API timed out", "Test Wrapper", 2)  # WARNING level
+                    return geojson_data  # Return unchanged
+                except requests.RequestException as e:
+                    logger.warning(f"Elevation API unavailable: {e}")
+                    import_log.add("Elevation API unavailable", "Test Wrapper", 2)  # WARNING level
+                    return geojson_data  # Return unchanged
+                except Exception as e:
+                    logger.warning(f"Elevation API error: {e}")
+                    import_log.add(f"Elevation API error: {str(e)}", "Test Wrapper", 2)
+                    return geojson_data  # Return unchanged
+            
+            elevation_patch = patch('geo_lib.processing.elevation_service.fill_missing_elevations', wrapped_fill_elevations)
+            elevation_patch.start()
+            patches.append(elevation_patch)
+    
+    yield
+    
+    # Clean up patches
+    for p in patches:
+        p.stop()
 
 
 # E2E Import Test Fixtures

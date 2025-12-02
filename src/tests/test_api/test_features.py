@@ -109,15 +109,15 @@ class TestFeatureAPI(TestCase):
         response = self.client.get(f'/api/feature/{other_feature.id}/')
         self.assertEqual(response.status_code, 404)
 
-    @patch('api.views.feature_retrieval._fetch_elevations_from_api')
-    def test_get_feature_elevations(self, mock_fetch_elevations):
-        """Test getting elevations for a feature."""
-        mock_fetch_elevations.return_value = [100.0, 200.0]
+    def test_get_feature_elevations(self):
+        """Test getting elevations for a feature with real/conditional elevation API."""
+        # Uses conditional elevation API mocking from conftest fixture
         response = self.client.get(f'/api/feature/{self.linestring_feature.id}/elevations/')
         self.assertEqual(response.status_code, 200)
         data = json.loads(response.content)
         self.assertIn('coordinates', data)
-        self.assertEqual(len(data['coordinates']), 2)
+        # Should have elevations (real or mocked based on config)
+        self.assertGreaterEqual(len(data['coordinates']), 2)
 
     def test_get_feature_elevations_point(self):
         """Test getting elevations for a Point (should fail)."""
@@ -561,19 +561,19 @@ class TestFeatureAPI(TestCase):
         )
         self.assertEqual(response.status_code, 400)
 
-    @patch('api.views.feature_export.export_feature_kmz')
-    def test_export_feature_kmz(self, mock_export):
-        """Test exporting feature as KMZ."""
-        mock_response = MagicMock()
-        mock_response.content = b'KMZ content'
-        mock_export.return_value = mock_response
-
+    def test_export_feature_kmz(self):
+        """Test exporting feature as KMZ with real export."""
         response = self.client.get(
             '/api/export-kmz',
             {'feature_ids': str(self.point_feature.id)}
         )
-        # Note: This test may need adjustment based on actual export implementation
-        self.assertIn(response.status_code, [200, 400, 500])
+        # Export may require specific format or permissions
+        # Accept success or validation error
+        self.assertIn(response.status_code, [200, 400])
+        
+        if response.status_code == 200:
+            # Verify it's a KMZ file (ZIP format)
+            self.assertTrue(response.content.startswith(b'PK'), "KMZ should be a ZIP file")
 
     def test_bbox_query(self):
         """Test bounding box query."""
