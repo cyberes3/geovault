@@ -107,6 +107,7 @@
 <script>
 import { isSystemTag, sortTagsByPriority, sortUserTagsAlphabetically } from '@/utils/tagUtils'
 import { XMarkIcon, CheckIcon } from '@heroicons/vue/24/outline'
+import { APIHOST } from '@/config.js'
 
 export default {
   name: 'TagPicker',
@@ -148,7 +149,8 @@ export default {
       hasTagsOverflow: false,
       hasSystemTagsOverflow: false,
       systemTagError: '',
-      systemTagErrorNoSystemTagsStr: 'System tags cannot be added as user tags.'
+      systemTagErrorNoSystemTagsStr: 'System tags cannot be added as user tags.',
+      fetchedAvailableTags: []
     }
   },
   computed: {
@@ -160,13 +162,17 @@ export default {
         this.$emit('update:tags', value)
       }
     },
+    effectiveAvailableTags() {
+      // Prefer freshly fetched tags when available, fall back to prop otherwise
+      return this.fetchedAvailableTags.length > 0 ? this.fetchedAvailableTags : this.availableTags
+    },
     sortedSystemTags() {
       // Sort system tags by priority (ascending: 1 first, then 2, ..., then 0), then alphabetically
       return sortTagsByPriority(this.systemTags)
     },
     filteredTagSuggestions() {
       // Filter out system tags from suggestions
-      const userTags = this.availableTags.filter(tag => !isSystemTag(tag))
+      const userTags = this.effectiveAvailableTags.filter(tag => !isSystemTag(tag))
 
       let suggestions;
       if (!this.tagInput.trim()) {
@@ -185,6 +191,7 @@ export default {
     }
   },
   mounted() {
+    this.fetchAvailableTags()
     // Add scroll listener for tags container
     this.$nextTick(() => {
       if (this.$refs.tagsContainer) {
@@ -223,6 +230,29 @@ export default {
     }
   },
   methods: {
+    async fetchAvailableTags() {
+      // Fetch latest user tags every time the component is mounted
+      try {
+        const response = await fetch(`${APIHOST}/api/features/user-tags/`, {
+          credentials: 'include'
+        })
+        const data = await response.json()
+
+        if (response.ok && Array.isArray(data)) {
+          // Sort user tags alphabetically
+          this.fetchedAvailableTags = sortUserTagsAlphabetically(data)
+        } else {
+          // Fallback to existing props if the request fails
+          // eslint-disable-next-line no-console
+          console.error('Failed to fetch user tags:', data.error || 'Unknown error')
+          this.fetchedAvailableTags = []
+        }
+      } catch (error) {
+        // eslint-disable-next-line no-console
+        console.error('Error fetching user tags:', error)
+        this.fetchedAvailableTags = []
+      }
+    },
     onTagInput() {
       // Clear error when user starts typing
       this.systemTagError = ''

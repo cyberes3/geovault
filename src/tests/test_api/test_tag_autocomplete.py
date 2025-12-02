@@ -6,6 +6,9 @@ These tests ensure:
 2. System tags never appear in user tag autocomplete suggestions
 3. The API respects the 10-tag limit for pagination
 4. Tag filtering and search work correctly
+
+Also covers the lightweight /api/features/user-tags/ endpoint used for
+TagPicker autocomplete.
 """
 import json
 from django.test import TestCase
@@ -13,6 +16,84 @@ from django.contrib.gis.geos import Point
 
 from api.models import FeatureStore
 from geo_lib.feature_id import generate_feature_hash
+
+
+class TestUserTagsEndpoint(TestCase):
+    """Tests for the lightweight /api/features/user-tags/ endpoint."""
+
+    def setUp(self):
+        from django.contrib.auth import get_user_model
+
+        User = get_user_model()
+        self.user = User.objects.create_user(
+            email='user-tags@example.com',
+            password='testpass123',
+            username='user-tags',
+        )
+        self.client.force_login(self.user)
+
+        # Create features with overlapping user tags and system tags
+        feature_defs = [
+            {
+                'name': 'Feature 1',
+                'tags': ['alpha', 'beta', 'gamma'],
+                'system_tags': ['type:point', 'elevation:high'],
+            },
+            {
+                'name': 'Feature 2',
+                'tags': ['beta', 'delta'],
+                'system_tags': ['type:linestring'],
+            },
+            {
+                'name': 'Feature 3',
+                'tags': ['epsilon', 'alpha'],
+                'system_tags': ['import-year:2025'],
+            },
+        ]
+
+        for f in feature_defs:
+            feature_data = {
+                'type': 'Feature',
+                'geometry': {
+                    'type': 'Point',
+                    'coordinates': [-122.4194, 37.7749, 0.0],
+                },
+                'properties': {
+                    'name': f['name'],
+                    'tags': f['tags'],
+                    'system_tags': f['system_tags'],
+                },
+            }
+            FeatureStore.objects.create(
+                user=self.user,
+                geojson=feature_data,
+                geometry=Point(-122.4194, 37.7749, 0.0),
+                geojson_hash=generate_feature_hash(feature_data),
+            )
+
+    def test_user_tags_endpoint_returns_unique_sorted_tags(self):
+        """The /api/features/user-tags/ endpoint should return unique, sorted user tags."""
+        response = self.client.get('/api/features/user-tags/')
+        self.assertEqual(response.status_code, 200)
+
+        tags = json.loads(response.content)
+        self.assertIsInstance(tags, list)
+
+        # Combined, de-duplicated expected tags from fixtures
+        expected_tags = ['alpha', 'beta', 'delta', 'epsilon', 'gamma']
+
+        # Ensure tags match expected (order should be alphabetical)
+        self.assertEqual(tags, sorted(expected_tags))
+
+        # Ensure no system tags slipped into the list
+        forbidden_system_tags = [
+            'type:point',
+            'elevation:high',
+            'type:linestring',
+            'import-year:2025',
+        ]
+        for tag in forbidden_system_tags:
+            self.assertNotIn(tag, tags)
 
 
 class TestTagSeparation(TestCase):

@@ -205,6 +205,42 @@ def get_features_by_tag(request):
 
 @api_or_login_required_401()
 @require_http_methods(["GET"])
+def get_user_tags(request):
+    """
+    Lightweight endpoint to return a sorted list of unique user tags for the
+    authenticated user.
+
+    This is optimized for tag autocomplete use-cases and intentionally avoids
+    returning any feature data or system tags.
+    """
+    user_id = request.user.id
+    table_name = FeatureStore._meta.db_table
+
+    # Use PostgreSQL JSONB functions to efficiently extract distinct user tags
+    # for this user only. All work (distinct, filtering, sorting) happens
+    # in the database for performance.
+    with connection.cursor() as cursor:
+        query = f"""
+            SELECT DISTINCT t.tag
+            FROM {table_name} f
+            CROSS JOIN LATERAL jsonb_array_elements_text(f.geojson->'properties'->'tags') AS t(tag)
+            WHERE f.user_id = %s
+              AND jsonb_typeof(f.geojson->'properties'->'tags') = 'array'
+              AND t.tag <> ''
+        """
+        cursor.execute(query, [user_id])
+        # Sort in Python to avoid "ORDER BY expression must appear in select list" error
+        # when using DISTINCT. This is fast enough for the number of tags a user typically has.
+        tags = sorted(
+            [row[0] for row in cursor.fetchall()],
+            key=str.lower
+        )
+
+    return JsonResponse(tags, safe=False)
+
+
+@api_or_login_required_401()
+@require_http_methods(["GET"])
 def search_features(request):
     """
     API endpoint to search features by name, description, or tags.

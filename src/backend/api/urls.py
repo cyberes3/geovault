@@ -5,7 +5,13 @@ from api.views.config import get_config
 from api.views.health import health_check
 from api.views.feature_delete import delete_feature
 from api.views.feature_retrieval import get_feature, get_feature_elevations
-from api.views.feature_search import get_features_by_tag, search_features, filter_features_by_tags, get_all_features
+from api.views.feature_search import (
+    get_features_by_tag,
+    get_user_tags,
+    search_features,
+    filter_features_by_tags,
+    get_all_features,
+)
 from api.views.feature_update import update_feature, update_feature_metadata, bulk_update_features_metadata, apply_replacement_geometry, regenerate_feature_tags, apply_bulk_operations_to_tag
 from api.views.geolocation_api import get_user_location, get_location_by_ip
 from api.views.icon_management import serve_user_icon, serve_system_icon, upload_icon, recolor_icon, serve_icon_registry
@@ -39,6 +45,7 @@ urlpatterns = [
     # GeoJSON API endpoints
     path('geojson/', get_geojson_data),
     path('features/by-tag/', get_features_by_tag),
+    path('features/user-tags/', get_user_tags),
     path('features/search/', search_features),
     path('features/filter-by-tags/', filter_features_by_tags),
     path('features/all/', get_all_features),
