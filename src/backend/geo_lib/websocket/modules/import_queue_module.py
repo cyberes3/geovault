@@ -122,8 +122,8 @@ class ImportQueueModule(BaseWebSocketModule):
                 item['feature_count'] = count
                 item['processing_failed'] = False
 
-            # Check for duplicate status
-            item['duplicate_status'] = None
+            # Check for file-level duplicate status
+            file_duplicate_status = None
             if item.get('geojson_hash'):
                 geojson_hash = item['geojson_hash']
                 items_with_same_hash = hash_to_items.get(geojson_hash, [])
@@ -135,9 +135,14 @@ class ImportQueueModule(BaseWebSocketModule):
                 ]
 
                 if earlier_items:
-                    item['duplicate_status'] = 'duplicate_in_queue'
+                    file_duplicate_status = 'duplicate_in_queue'
                 elif geojson_hash in imported_hashes:
-                    item['duplicate_status'] = 'duplicate_imported'
+                    file_duplicate_status = 'duplicate_imported'
+            
+            item['file_duplicate'] = {
+                'status': file_duplicate_status,
+                'original_filename': None  # We don't track the original filename in the queue list
+            }
 
             # Remove keys from response as they're not needed by frontend
             del item['geofeatures']

@@ -281,17 +281,17 @@ export default {
         }
         return null
       }
-      
+
       if (this.collectionName) {
         return { type: 'collection', name: this.collectionName, isPublicShare: false }
       }
-      
+
       // Check for tag in URL query
       const tag = this.$route.query.tag
       if (tag) {
         return { type: 'tag', name: Array.isArray(tag) ? tag[0] : tag, isPublicShare: false }
       }
-      
+
       return null
     },
     // Get allowed options based on mode (public share or authenticated)
@@ -393,7 +393,7 @@ export default {
       const featureId = props.database_id
       const featureName = props.name
       const geometryType = feature.getGeometry()?.getType()
-      
+
       if (!featureId) {
         return
       }
@@ -583,11 +583,11 @@ export default {
           // Get user tags and system tags separately
           const userTags = data.user_tags ? Object.keys(data.user_tags) : []
           const systemTags = data.system_tags ? Object.keys(data.system_tags) : []
-          
+
           // Sort user tags alphabetically, system tags by priority
           const sortedUserTags = sortUserTagsAlphabetically(userTags)
           const sortedSystemTags = sortTagsByPriority(systemTags)
-          
+
           // Combine: user tags first, then system tags
           this.availableTags = [...sortedUserTags, ...sortedSystemTags]
         } else {
@@ -1557,6 +1557,26 @@ export default {
         this.vectorSource.clear()
       }
 
+      // Reset map zoom to default view
+      if (this.map) {
+        const view = this.map.getView()
+        if (view && this.userLocation && this.userLocation.latitude && this.userLocation.longitude) {
+          // Reset to user's location at default zoom
+          view.animate({
+            center: fromLonLat([this.userLocation.longitude, this.userLocation.latitude]),
+            zoom: 8,
+            duration: 0 // Instant reset, no animation
+          })
+        } else {
+          // If no user location, reset to world view
+          view.animate({
+            center: [0, 0],
+            zoom: 2,
+            duration: 0
+          })
+        }
+      }
+
       // Reset feature-related state
       this.featuresInExtent = []
       this.featureTimestamps = {}
@@ -1702,6 +1722,15 @@ export default {
     },
     '$route'(to, from) {
       // Watch for route changes, especially share ID and collection changes
+
+      // Handle featureId query parameter changes (for "View on Map" links)
+      const newFeatureId = to.query.featureId
+      const oldFeatureId = from?.query?.featureId
+
+      if (newFeatureId && newFeatureId !== oldFeatureId) {
+        // FeatureId parameter added or changed, zoom to the feature
+        this.handleUrlFeatureId()
+      }
 
       // Handle collection query parameter changes
       const newCollectionId = to.query.collection
@@ -1933,7 +1962,7 @@ export default {
     } catch (error) {
       console.error('Error flushing pending hidden features:', error)
     }
-    
+
     // Always run lightweight cleanup before component is destroyed
     this.cleanupOnNavigateAway()
   }

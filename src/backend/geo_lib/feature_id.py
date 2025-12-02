@@ -18,6 +18,15 @@ def _hash_geometry_and_properties(geometry_json: str, properties_json: str) -> s
     return hashlib.sha256(combined_data.encode('utf-8')).hexdigest()
 
 
+def _strip_none_values(obj: Any) -> Any:
+    """Recursively remove None values from dictionaries to match Pydantic serialization."""
+    if isinstance(obj, dict):
+        return {k: _strip_none_values(v) for k, v in obj.items() if v is not None}
+    elif isinstance(obj, list):
+        return [_strip_none_values(v) for v in obj]
+    return obj
+
+
 def generate_feature_hash(geojson_feature: Dict[str, Any]) -> str:
     """
     Generate a consistent hash-based ID for a GeoJSON feature.
@@ -50,6 +59,11 @@ def generate_feature_hash(geojson_feature: Dict[str, Any]) -> str:
             del normalized_feature['properties']['feature_hash']
         if 'system_tags' in normalized_feature['properties']:
             del normalized_feature['properties']['system_tags']
+
+    # Strip None values to match Pydantic's exclude_none=True behavior
+    # This ensures hashes calculated on raw data match hashes calculated on Pydantic-serialized data (from DB)
+    normalized_feature['properties'] = _strip_none_values(normalized_feature['properties'])
+    normalized_feature['geometry'] = _strip_none_values(normalized_feature['geometry'])
 
     # Convert geometry and properties to JSON strings separately for caching
     geometry_json = json.dumps(normalized_feature['geometry'], sort_keys=True, separators=(',', ':'))

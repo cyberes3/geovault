@@ -61,8 +61,10 @@ class ProcessStatusModule(BaseWebSocketModule):
             # Check for file-level duplicates using raw file content hash
             # Only block duplicates that are still in the queue (not yet imported)
             # Allow re-importing files that were previously imported (but mark them as duplicates)
-            duplicate_status = None
-            duplicate_original_filename = None
+            file_duplicate = {
+                'status': None,
+                'original_filename': None
+            }
 
             if self.import_item.geojson_hash:
                 # Check for earlier files with same raw file hash still in queue (not imported)
@@ -75,8 +77,8 @@ class ProcessStatusModule(BaseWebSocketModule):
                 duplicate_in_queue = await duplicate_in_queue_query()
 
                 if duplicate_in_queue:
-                    duplicate_status = 'duplicate_in_queue'
-                    duplicate_original_filename = duplicate_in_queue.original_filename
+                    file_duplicate['status'] = 'duplicate_in_queue'
+                    file_duplicate['original_filename'] = duplicate_in_queue.original_filename
                 else:
                     # Check for already-imported files with same raw file hash
                     duplicate_imported_query = sync_to_async(ImportQueue.objects.filter(
@@ -87,45 +89,27 @@ class ProcessStatusModule(BaseWebSocketModule):
                     duplicate_imported = await duplicate_imported_query()
 
                     if duplicate_imported:
-                        duplicate_status = 'duplicate_imported'
-                        duplicate_original_filename = duplicate_imported.original_filename
+                        file_duplicate['status'] = 'duplicate_imported'
+                        file_duplicate['original_filename'] = duplicate_imported.original_filename
                         
-                        # If this file is a duplicate_imported but has no duplicate_features,
-                        # it means the original file was imported AFTER this one was uploaded.
-                        # Automatically recheck duplicates to mark the features properly.
-                        if not self.import_item.duplicate_features or len(self.import_item.duplicate_features) == 0:
-                            # Send a status message to the frontend before starting the recheck
-                            await self.send_to_client('status', {
-                                'message': 'Rechecking duplicates...',
-                                'detail': 'File is a duplicate of an imported file. Checking individual features for duplicates.'
-                            })
-                            
-                            # Log to processing log for user visibility
-                            if self.import_item.log_id:
-                                from geo_lib.processing.logging import RealTimeImportLog, DatabaseLogLevel
-                                
-                                realtime_log = RealTimeImportLog(user_id=self.user.id, log_id=self.import_item.log_id)
-                                await realtime_log.add_async(
-                                    f"File is a duplicate of imported file, but features were not checked. Automatically rechecking duplicates now.",
-                                    "Duplicate Detection",
-                                    DatabaseLogLevel.INFO
-                                )
-                            
-                            await self._auto_recheck_duplicates()
+                        # Note: Auto-recheck was removed when we switched to sequential processing
+                        # With Redis locks ensuring sequential per-user processing, the race condition
+                        # that required auto-recheck no longer exists. Duplicate detection now always
+                        # runs after all previous files are fully processed.
 
             # Only block if it's a duplicate in the queue
             # Allow duplicates of already-imported files to proceed (they'll be marked as duplicates)
-            if duplicate_status == 'duplicate_in_queue':
+            if file_duplicate['status'] == 'duplicate_in_queue':
                 # Send an error to the client via this websocket channel and do not proceed
                 message = (
-                    "This upload is a duplicate of '" + duplicate_original_filename
-                    if duplicate_original_filename else
+                    "This upload is a duplicate of '" + file_duplicate['original_filename']
+                    if file_duplicate['original_filename'] else
                     "This upload is a duplicate."
                 )
                 await self.send_to_client('error', {
                     'code': 409,
                     'message': message,
-                    'duplicate_status': duplicate_status,
+                    'file_duplicate': file_duplicate,
                     'item_id': self.import_item.id
                 })
                 return
@@ -162,9 +146,8 @@ class ProcessStatusModule(BaseWebSocketModule):
                 'job_details': job_details,
                 'features': features_data,
                 'logs': logs_data,
-                # Include duplicate status for informational purposes (duplicate_imported allows import)
-                'duplicate_status': duplicate_status,
-                'duplicate_original_filename': duplicate_original_filename
+                # Include file duplicate info for informational purposes (duplicate_imported allows import)
+                'file_duplicate': file_duplicate
             }
 
             await self.send_to_client('initial_state', initial_state)
@@ -399,10 +382,11 @@ class ProcessStatusModule(BaseWebSocketModule):
         paginated_features = sorted_features[start_idx:end_idx]
 
         # Get duplicate information for current page
-        # New structure: {'hash': [], 'coord': []}
-        hash_duplicates = []  # Feature IDs/hashes for hash-based duplicates
-        coord_duplicates = []  # Feature IDs/hashes for coordinate-based duplicates
+        # New structure: objects with hash, page_index, and link info
+        hash_duplicates = []  # Hash duplicate objects
+        coord_duplicates = []  # Coordinate duplicate objects
         duplicate_indices = []  # Keep for backward compatibility
+        coord_duplicate_hashes_for_skipping = []  # For skipped_feature_ids
 
         # Import normalization function for coordinate comparison
         from geo_lib.processing.duplicate_detection import normalize_coordinates
@@ -417,7 +401,10 @@ class ProcessStatusModule(BaseWebSocketModule):
         queue_hash_to_item = {}
         for queue_item in other_queue_items:
             for feature in queue_item.geofeatures:
-                feature_hash = generate_feature_hash(feature)
+                # Use stored hash if available (preserves original hash from processing)
+                feature_hash = feature.get('properties', {}).get('feature_hash')
+                if not feature_hash:
+                    feature_hash = generate_feature_hash(feature)
                 if feature_hash not in queue_hash_to_item:
                     queue_hash_to_item[feature_hash] = {
                         'queue_item_id': queue_item.id,
@@ -437,31 +424,63 @@ class ProcessStatusModule(BaseWebSocketModule):
         # Build set of hash duplicate hashes to filter coordinate duplicates
         hash_duplicate_hashes = set()
         
+        # Build a map of hash -> feature_store_id for hash duplicates
+        # Query FeatureStore to get IDs for all hash duplicates
+        @sync_to_async
+        def get_hash_to_id_map():
+            hash_to_id = {}
+            for hash_value in existing_store_hashes:
+                # Get the first FeatureStore entry with this hash
+                feature = FeatureStore.objects.filter(
+                    user_id=self.import_item.user_id,
+                    geojson_hash=hash_value
+                ).values('id', 'geojson_hash').first()
+                if feature:
+                    hash_to_id[hash_value] = feature['id']
+            return hash_to_id
+        
+        hash_to_store_id = await get_hash_to_id_map()
+        
+        # Also check duplicate_features_list for any additional mappings
+        duplicate_features_list = self.import_item.duplicate_features if self.import_item.duplicate_features else []
+        
         # Check each feature for hash duplicates
-        # Queue duplicates are tracked separately and excluded from duplicates.hash
-        queue_duplicates_info = []
         for original_idx, feature in enumerate(self.import_item.geofeatures):
-            feature_hash = generate_feature_hash(feature)
-            feature_id = feature.get('properties', {}).get('feature_hash', feature_hash)
+            # Use stored hash if available (preserves original hash from processing)
+            # This avoids mismatches due to Pydantic serialization changes
+            feature_hash = feature.get('properties', {}).get('feature_hash')
+            if not feature_hash:
+                feature_hash = generate_feature_hash(feature)
             
-            # Check queue duplicates first (takes precedence)
-            if feature_hash in queue_hash_to_item:
+            # Convert to sorted index for page display
+            if original_idx not in original_to_new_index:
+                continue
+            new_idx = original_to_new_index[original_idx]
+            
+            # Check FeatureStore duplicates first (takes precedence - show map link)
+            if feature_hash in existing_store_hashes:
+                hash_duplicate_hashes.add(feature_hash)
+                if start_idx <= new_idx < end_idx:
+                    dup_obj = {
+                        'hash': feature_hash,
+                        'page_index': new_idx - start_idx
+                    }
+                    # Add feature store ID if available for map link
+                    if feature_hash in hash_to_store_id:
+                        dup_obj['feature_store_id'] = hash_to_store_id[feature_hash]
+                    hash_duplicates.append(dup_obj)
+            # Check queue duplicates (only if not in FeatureStore)
+            elif feature_hash in queue_hash_to_item:
                 hash_duplicate_hashes.add(feature_hash)
                 queue_info = queue_hash_to_item[feature_hash]
-                if original_idx in original_to_new_index:
-                    new_idx = original_to_new_index[original_idx]
-                    if start_idx <= new_idx < end_idx:
-                        queue_duplicates_info.append({
-                            'hash': feature_id,
-                            'page_index': new_idx - start_idx,
-                            'queue_item_id': queue_info['queue_item_id'],
-                            'queue_item_filename': queue_info['queue_item_filename']
-                        })
-            # Check FeatureStore duplicates (only if not a queue duplicate)
-            elif feature_hash in existing_store_hashes:
-                hash_duplicate_hashes.add(feature_hash)
-                if feature_id not in hash_duplicates:
-                    hash_duplicates.append(feature_id)
+                if start_idx <= new_idx < end_idx:
+                    hash_duplicates.append({
+                        'hash': feature_hash,
+                        'page_index': new_idx - start_idx,
+                        'target_hash': feature_hash,  # For hash duplicates, target = current hash
+                        'queue_item_id': queue_info['queue_item_id'],
+                        'queue_item_filename': queue_info['queue_item_filename']
+                    })
         
         # Build a map of normalized coordinates to original indices
         # This allows us to mark ALL features with matching coordinates as duplicates
@@ -482,10 +501,12 @@ class ProcessStatusModule(BaseWebSocketModule):
         # Convert original indices to new sorted indices
         # Note: Filtering of hash duplicates from coordinate duplicates is done during processing,
         # so duplicate_features only contains pure coordinate duplicates
-        duplicate_features_list = self.import_item.duplicate_features if self.import_item.duplicate_features else []
+        # duplicate_features_list was already built above for hash_to_store_id map
         
         for dup_info in duplicate_features_list:
             dup_feature = dup_info.get('feature')
+            existing_features = dup_info.get('existing_features', [])
+            
             if dup_feature:
                 dup_geom = dup_feature.get('geometry', {})
                 dup_coords = dup_geom.get('coordinates')
@@ -495,6 +516,42 @@ class ProcessStatusModule(BaseWebSocketModule):
                     # Normalize duplicate feature coordinates for comparison
                     normalized_dup_coords = normalize_coordinates(dup_coords)
                     coords_key = (dup_type, json.dumps(normalized_dup_coords, sort_keys=True))
+                    
+                    # Check if this coord duplicate is from another queue item or FeatureStore
+                    # Prioritize FeatureStore over queue items (more useful to link to map)
+                    link_info = None
+                    feature_store_link = None
+                    queue_link = None
+                    
+                    for existing in existing_features:
+                        if 'id' in existing and 'name' in existing:
+                            # Check if this is a queue item (no timestamp) or FeatureStore (has timestamp)
+                            if existing.get('timestamp') is None:
+                                # This is from another ImportQueue item
+                                if not queue_link:  # Only save first queue match
+                                    existing_geojson = existing.get('geojson')
+                                    if existing_geojson:
+                                        # Use stored hash if available
+                                        target_feature_hash = existing_geojson.get('properties', {}).get('feature_hash')
+                                        if not target_feature_hash:
+                                            target_feature_hash = generate_feature_hash(existing_geojson)
+                                        
+                                        queue_link = {
+                                            'type': 'queue',
+                                            'target_hash': target_feature_hash,
+                                            'queue_item_id': existing['id'],
+                                            'queue_item_filename': existing['name']
+                                        }
+                            elif existing.get('timestamp') is not None:
+                                # This is from FeatureStore - add link to map
+                                if not feature_store_link:  # Only save first FeatureStore match
+                                    feature_store_link = {
+                                        'type': 'feature_store',
+                                        'feature_store_id': existing['id']
+                                    }
+                    
+                    # Prioritize FeatureStore link over queue link
+                    link_info = feature_store_link if feature_store_link else queue_link
                     
                     # Mark ALL features with matching coordinates as duplicates
                     if coords_key in coords_to_original_indices:
@@ -507,20 +564,35 @@ class ProcessStatusModule(BaseWebSocketModule):
                                 
                                 # Get feature hash for coordinate duplicate
                                 feature = self.import_item.geofeatures[original_idx]
-                                feature_hash = generate_feature_hash(feature)
-                                # Use the feature's properties.feature_hash if it exists (should match the hash)
-                                # Otherwise use the generated hash
-                                feature_id = feature.get('properties', {}).get('feature_hash', feature_hash)
+                                # Use stored hash if available (preserves original hash from processing)
+                                feature_hash = feature.get('properties', {}).get('feature_hash')
+                                if not feature_hash:
+                                    feature_hash = generate_feature_hash(feature)
                                 
-                                # Add to coord_duplicates if not already present
-                                if feature_id not in coord_duplicates:
-                                    coord_duplicates.append(feature_id)
+                                # Track this coordinate duplicate hash for skipped_feature_ids
+                                coord_duplicate_hashes_for_skipping.append(feature_hash)
+                                
+                                # Add to coord_duplicates if on current page
+                                if start_idx <= new_idx < end_idx:
+                                    coord_dup_obj = {
+                                        'hash': feature_hash,
+                                        'page_index': new_idx - start_idx
+                                    }
+                                    # Add link info if available
+                                    if link_info:
+                                        coord_dup_obj.update(link_info)
+                                    coord_duplicates.append(coord_dup_obj)
 
         # Note: Cross-queue coordinate duplicates are detected during processing and stored in duplicate_features
         # We don't need to detect them here again - they're already filtered to exclude hash duplicates
-
-        # Get skipped feature IDs from the ImportQueue model
-        skipped_feature_ids = self.import_item.skipped_feature_ids if self.import_item.skipped_feature_ids else []
+        
+        # Filter skipped_feature_ids to only include coordinate duplicates (not hash or queue duplicates)
+        # Hash duplicates are always blocked, queue duplicates should not be in skipped list initially
+        original_skipped_feature_ids = self.import_item.skipped_feature_ids if self.import_item.skipped_feature_ids else []
+        filtered_skipped_ids = [
+            fid for fid in original_skipped_feature_ids 
+            if fid in coord_duplicate_hashes_for_skipping
+        ]
 
         return {
             'data': paginated_features,
@@ -533,12 +605,9 @@ class ProcessStatusModule(BaseWebSocketModule):
                 'has_previous': page > 1,
                 'duplicate_indices': duplicate_indices
             },
-            'duplicates': {
-                'hash': hash_duplicates,
-                'coord': coord_duplicates
-            },
-            'queue_duplicates': queue_duplicates_info,
-            'skipped_feature_ids': skipped_feature_ids
+            'hash_duplicates': hash_duplicates,  # Array of objects with hash, page_index, and optional link info
+            'coord_duplicates': coord_duplicates,  # Array of objects with hash, page_index, and optional link info
+            'skipped_feature_ids': filtered_skipped_ids  # Only coordinate duplicates that are auto-skipped
         }
 
     async def _get_logs(self, after_id: Optional[int] = None) -> list:
@@ -571,99 +640,6 @@ class ProcessStatusModule(BaseWebSocketModule):
             logger.error(f"Error fetching logs: {str(e)}")
             return []
 
-    async def _auto_recheck_duplicates(self) -> None:
-        """
-        Automatically recheck duplicates for this import item.
-        This is called when a file has duplicate_imported status but no duplicate_features,
-        which happens when the original file was imported after this one was uploaded.
-        """
-        try:
-            # Get the features from the import item
-            features = self.import_item.geofeatures
-            if not features:
-                logger.info(f"No features to check for item {self.import_item.id}")
-                return
-            
-            # Create a real-time log for this operation
-            realtime_log = RealTimeImportLog(user_id=self.user.id, log_id=self.import_item.log_id)
-            
-            # Log the start of the auto-recheck
-            await realtime_log.add_async(
-                "Automatically rechecking duplicates (file was imported after this upload)",
-                "Auto Duplicate Recheck",
-                DatabaseLogLevel.INFO
-            )
-
-            def run_duplicate_detection():
-                rd_start_time = time.time()
-                rd_unique_features, rd_duplicate_features, rd_duplicate_log = find_coordinate_duplicates(
-                    features,
-                    self.user.id,
-                    exclude_queue_id=self.import_item.id,
-                    exclude_timestamp=self.import_item.timestamp
-                )
-                rd_duration = time.time() - rd_start_time
-                return rd_unique_features, rd_duplicate_features, rd_duplicate_log, rd_duration
-            
-            # Run in executor to avoid blocking the event loop
-            loop = asyncio.get_event_loop()
-            unique_features, duplicate_features, duplicate_log, duration = await loop.run_in_executor(
-                None, run_duplicate_detection
-            )
-            
-            # Extend the real-time log with duplicate detection results
-            await realtime_log.extend_async(duplicate_log)
-            await realtime_log.add_timing_async("Auto duplicate recheck", duration, "Auto Duplicate Recheck")
-            
-            # Update the import queue item with new duplicate information
-            def save_duplicates():
-                from geo_lib.feature_id import generate_feature_hash
-                from api.models import FeatureStore
-                
-                item = ImportQueue.objects.get(id=self.import_item.id)
-                
-                # Filter out coordinate duplicates that are also hash duplicates
-                # Hash duplicates take precedence - if a feature is both, only mark as hash duplicate
-                from geo_lib.processing.duplicate_detection import filter_hash_duplicates_from_coord_duplicates
-                
-                filtered_duplicate_features = filter_hash_duplicates_from_coord_duplicates(
-                    duplicate_features,
-                    self.user.id,
-                    exclude_queue_id=item.id,
-                    exclude_timestamp=item.timestamp
-                )
-                
-                item.duplicate_features = convert_features_to_pydantic(filtered_duplicate_features)
-                
-                # Auto-skip coordinate duplicates by adding their feature IDs to skipped_feature_ids
-                from geo_lib.processing.duplicate_detection import get_skipped_feature_ids_from_duplicates
-                
-                skipped_feature_ids = get_skipped_feature_ids_from_duplicates(
-                    filtered_duplicate_features,
-                    item.skipped_feature_ids
-                )
-                
-                item.skipped_feature_ids = list(skipped_feature_ids)
-                item.save(update_fields=['duplicate_features', 'skipped_feature_ids'])
-                return len(filtered_duplicate_features)
-            
-            duplicate_count = await sync_to_async(save_duplicates)()
-            
-            # Refresh our local copy
-            get_item = sync_to_async(ImportQueue.objects.get)
-            self.import_item = await get_item(id=self.import_item.id)
-            
-            # Log completion
-            await realtime_log.add_async(
-                f"Auto duplicate recheck completed. Found {duplicate_count} duplicate(s)",
-                "Auto Duplicate Recheck",
-                DatabaseLogLevel.INFO
-            )
-            
-            # Send a refresh message to the frontend to update the duplicate markers
-            # Get the current page data with updated duplicates
-            features_data = await self._get_paginated_features(1, 50)
-            await self.send_to_client('page', features_data)
-        except Exception:
-            logger.error(f"Error auto-rechecking duplicates for item {self.import_item.id}: {traceback.format_exc()}")
-            # Don't raise - we don't want to break the initial state send
+    # _auto_recheck_duplicates method removed - no longer needed with sequential processing
+    # With Redis locks ensuring per-user sequential processing, the race condition that
+    # required auto-recheck no longer exists.

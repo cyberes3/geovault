@@ -17,6 +17,15 @@
               View in "{{ queueDuplicateInfo.queue_item_filename }}"
             </router-link>
           </div>
+          <div v-if="featureStoreInfo" class="mt-2">
+            <router-link
+              :to="{ path: '/map', query: { featureId: featureStoreInfo.feature_store_id } }"
+              class="inline-flex items-center px-3 py-1.5 border border-gray-300 rounded-md text-xs font-medium text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500"
+            >
+              <MapIcon class="w-3 h-3 mr-1" />
+              View on Map
+            </router-link>
+          </div>
         </div>
       </div>
     </div>
@@ -82,7 +91,26 @@ export default {
       }
     },
     queueDuplicateInfo() {
-      return this.type === 'queue' ? this.item.queueDuplicateInfo : null
+      if (this.type === 'queue') {
+        return this.item.queueDuplicateInfo
+      } else if (this.type === 'coord') {
+        // Coordinate duplicates from queue items also get a link button
+        if (this.item.duplicateInfo && this.item.duplicateInfo.coordQueueInfo) {
+          return this.item.duplicateInfo.coordQueueInfo
+        }
+      }
+      return null
+    },
+    featureStoreInfo() {
+      // Check if this hash or coord duplicate has a feature_store_id
+      if (this.type === 'hash' && this.item.duplicateInfo) {
+        return this.item.duplicateInfo.feature_store_id 
+          ? { feature_store_id: this.item.duplicateInfo.feature_store_id }
+          : null;
+      } else if (this.type === 'coord' && this.item.duplicateInfo && this.item.duplicateInfo.coordFeatureStoreInfo) {
+        return this.item.duplicateInfo.coordFeatureStoreInfo;
+      }
+      return null;
     },
     containerClasses() {
       return 'mb-4 p-4 rounded-md bg-yellow-100 border border-yellow-300'

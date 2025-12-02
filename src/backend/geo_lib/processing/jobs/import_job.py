@@ -205,8 +205,6 @@ class ImportJob(BaseJob):
             )
         else:
             # No features were successfully imported
-            logger.warning(f"Import failed for user {user_id}: No features were imported from '{import_item.original_filename}'")
-
             # Determine reason for failure
             if len(features_to_create) == 0:
                 if total_processed == 0:

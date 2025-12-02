@@ -9,7 +9,10 @@ export class ImportQueueItem {
     feature_count: number;
     imported: boolean;
     processing_failed: boolean;
-    duplicate_status: string | null;
+    file_duplicate: {
+        status: string | null;
+        originalFilename: string | null;
+    } | null;
     deleting?: boolean;
     deleteProgress?: number;
     deleteError?: string;
@@ -25,7 +28,10 @@ export class ImportQueueItem {
         this.feature_count = data.feature_count;
         this.imported = data.imported || false;
         this.processing_failed = data.processing_failed || false;
-        this.duplicate_status = data.duplicate_status || null;
+        this.file_duplicate = data.file_duplicate || {
+            status: null,
+            originalFilename: null
+        };
         this.deleting = data.deleting || false;
         this.deleteProgress = data.deleteProgress || 0;
         this.deleteError = data.deleteError || null;

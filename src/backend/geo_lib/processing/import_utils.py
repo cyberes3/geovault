@@ -22,6 +22,7 @@ from geo_lib.types.feature import PointFeature, PolygonFeature, LineStringFeatur
 from geo_lib.logging.console import get_job_logger
 from geo_lib.processing.duplicate_detection import normalize_coordinates
 from geo_lib.processing.duplicate_models import SkippedDuplicates, SkippedDuplicateFeature
+from geo_lib.types.validation import match_geometry_class
 from website.settings_utils import get_required_setting
 from geo_lib.validation.styling_validation import (
     is_valid_hex_color,
@@ -87,7 +88,7 @@ def strip_icon_properties(feature: dict) -> dict:
     """
     if not isinstance(feature, dict) or 'properties' not in feature:
         return feature
-    
+
     # Common property names that might contain icon hrefs
     icon_property_names = [
         'marker-symbol',
@@ -99,12 +100,12 @@ def strip_icon_properties(feature: dict) -> dict:
         'symbol',
         'styleUrl',  # KML style URLs might reference icons
     ]
-    
+
     # Remove icon properties
     for prop_name in icon_property_names:
         if prop_name in feature['properties']:
             del feature['properties'][prop_name]
-    
+
     # Also check nested structures (e.g., style objects)
     def remove_icons_from_dict(d):
         if not isinstance(d, dict):
@@ -118,9 +119,9 @@ def strip_icon_properties(feature: dict) -> dict:
                 for item in value:
                     if isinstance(item, dict):
                         remove_icons_from_dict(item)
-    
+
     remove_icons_from_dict(feature['properties'])
-    
+
     return feature
 
 
@@ -142,7 +143,7 @@ def validate_bulk_operations_payload(bulk_ops: Dict[str, Any]) -> Tuple[bool, Op
     """
     if not isinstance(bulk_ops, dict):
         return False, "bulk_operations must be a JSON object"
-    
+
     # Use Pydantic validation
     try:
         validated_dict = validate_pydantic_model(BulkOperationsPayload, bulk_ops)
@@ -228,26 +229,7 @@ def process_single_feature_for_import(
             logger.warning(f"Skipping feature {feature_index} due to missing or empty geometry: {feature.get('properties', {}).get('name', 'Unnamed')}")
             return None
 
-        geometry_type = feature['geometry']['type'].lower()
-        match geometry_type:
-            case 'point':
-                c = PointFeature
-            case 'multipoint':
-                c = PointFeature
-            case 'linestring':
-                c = LineStringFeature
-            case 'multilinestring':
-                c = MultiLineStringFeature
-            case 'polygon':
-                c = PolygonFeature
-            case 'multipolygon':
-                c = PolygonFeature
-            case _:
-                feature_name = feature.get('properties', {}).get('name', 'Unnamed')
-                logger.warning(f"Skipping feature {feature_index} '{feature_name}' due to unsupported geometry type: {geometry_type}")
-                return None
-
-        assert c is not None
+        geometry_type = match_geometry_class(feature['geometry']['type'])
 
         # Note: Coordinate duplicates are no longer automatically blocked here.
         # They are handled via skipped_feature_ids if the user chooses to skip them.
@@ -257,7 +239,7 @@ def process_single_feature_for_import(
         if not import_custom_icons:
             feature = strip_icon_properties(feature.copy())
 
-        feature_instance = c(**feature)
+        feature_instance = geometry_type(**feature)
         # Tags are already generated during processing step, just use existing tags
         existing_tags = feature_instance.properties.tags or []
         # Prepare tags before storing (lowercase and deduplicate)
@@ -268,45 +250,51 @@ def process_single_feature_for_import(
         geojson_data = json.loads(feature_instance.model_dump_json())
 
         # Generate hash-based ID for the feature
-        feature_hash = generate_feature_hash(geojson_data)
+        # Use stored hash from properties if available (calculated on raw data during processing)
+        # This ensures consistency with duplicate detection in ProcessJob
+        feature_hash = feature['properties']['feature_hash']
+        # if not feature_hash:
+        #     feature_hash = generate_feature_hash(geojson_data)
 
         # Check if this is a coordinate duplicate
-        # For ready-to-import imports (skipped_feature_ids empty), skip coordinate duplicates automatically
-        # For import process page, only skip if in skipped_feature_ids
-        is_coord_duplicate = feature_hash in coord_duplicate_hashes
-        if is_coord_duplicate:
-            # Skip if: (1) ready-to-import import (no skipped_feature_ids), or (2) user explicitly skipped it
-            if not skipped_feature_ids or feature_hash in skipped_feature_ids:
-                with duplicate_check_lock:
-                    feature_name = feature.get('properties', {}).get('name', 'Unnamed')
-                    skipped_coord_duplicates.append(SkippedDuplicateFeature(
-                        name=feature_name,
-                        hash=feature_hash
-                    ))
-                return None
+        # Only skip if user explicitly added it to skipped_feature_ids
+        # is_coord_duplicate = feature_hash in coord_duplicate_hashes
+        feature_name = feature.get('properties', {}).get('name', 'Unnamed')
+        #
+        # if is_coord_duplicate and feature_hash in skipped_feature_ids:
+        #     # User explicitly skipped this coordinate duplicate
+        #     logger.info(f"  -> Skipping coordinate duplicate (in skip list)")
+        #     with duplicate_check_lock:
+        #         skipped_coord_duplicates.append(SkippedDuplicateFeature(
+        #             name=feature_name,
+        #             hash=feature_hash
+        #         ))
+        #     return None
 
         # Check if this feature already exists for this user or in current batch (thread-safe)
         with duplicate_check_lock:
+            # Check for queue duplicates first (these can be restored by user)
+            # queue_info = queue_hash_to_item.get(feature_hash, {})
+            # if queue_info:
+            #     # This is a queue duplicate - always skip it as per requirement (treat as hash duplicate)
+            #     logger.info(f"  -> Skipping queue duplicate (always blocked)")
+            #     skipped_hash_duplicates.append(SkippedDuplicateFeature(
+            #         name=feature_name,
+            #         hash=feature_hash,
+            #         queue_item_id=queue_info.get('queue_item_id'),
+            #         queue_item_filename=queue_info.get('queue_item_filename', 'Unknown')
+            #     ))
+            #     return None
+
+            # Check for hash duplicates from FeatureStore or current batch (always blocked)
             if feature_hash in existing_hashes or feature_hash in current_batch_hashes:
-                # This is a hash-based duplicate (blocked automatically)
-                feature_name = feature.get('properties', {}).get('name', 'Unnamed')
-                
-                # Check if this is a queue duplicate (from another ImportQueue item)
-                queue_info = queue_hash_to_item.get(feature_hash, {})
-                if queue_info:
-                    skipped_hash_duplicates.append(SkippedDuplicateFeature(
-                        name=feature_name,
-                        hash=feature_hash,
-                        queue_item_id=queue_info.get('queue_item_id'),
-                        queue_item_filename=queue_info.get('queue_item_filename', 'Unknown')
-                    ))
-                else:
-                    # Duplicate from FeatureStore
-                    skipped_hash_duplicates.append(SkippedDuplicateFeature(
-                        name=feature_name,
-                        hash=feature_hash
-                    ))
-                
+                # This is a hash-based duplicate from FeatureStore (blocked automatically)
+                logger.info(f"  -> Skipping hash duplicate from FeatureStore")
+                skipped_hash_duplicates.append(SkippedDuplicateFeature(
+                    name=feature_name,
+                    hash=feature_hash
+                ))
+
                 # Skip importing duplicate features
                 # Skipping duplicate feature (normal operation)
                 return None
@@ -408,7 +396,7 @@ def apply_bulk_operations(features: List[Dict[str, Any]], bulk_ops: Dict[str, An
         if bulk_ops.get('tags') and len(bulk_ops['tags']) > 0:
             if 'tags' not in modified_feature['properties']:
                 modified_feature['properties']['tags'] = []
-            
+
             # Merge tags, avoiding duplicates
             existing_tags = set(tag.lower() for tag in modified_feature['properties']['tags'])
             for tag in bulk_ops['tags']:
@@ -422,7 +410,7 @@ def apply_bulk_operations(features: List[Dict[str, Any]], bulk_ops: Dict[str, An
         # Apply point styling (only if value is not None)
         # Applies to both Point and MultiPoint
         DEFAULT_COLOR = '#ff0000'
-        
+
         if geometry_type in ('Point', 'MultiPoint'):
             if bulk_ops.get('pointColor') is not None:
                 color = bulk_ops['pointColor']
@@ -433,7 +421,7 @@ def apply_bulk_operations(features: List[Dict[str, Any]], bulk_ops: Dict[str, An
                 else:
                     # Invalid color - set to default red
                     modified_feature['properties']['marker-color'] = DEFAULT_COLOR
-            
+
             if bulk_ops.get('pointIcon') is not None:
                 icon_value = bulk_ops['pointIcon']
                 if is_valid_icon_url(icon_value):
@@ -501,30 +489,33 @@ def process_features_for_import(
     """
     if features_to_process is None:
         features_to_process = import_item.geofeatures
-    
+
     if skipped_feature_ids is None:
         skipped_feature_ids = set()
-    
+
     # Setup duplicate detection
     features_to_create = []
     existing_hashes = set()
     current_batch_hashes = set()
     skipped_hash_duplicates: List[SkippedDuplicateFeature] = []
     skipped_coord_duplicates: List[SkippedDuplicateFeature] = []
-    
+
     # Build set of coordinate duplicate hashes from duplicate_features
     coord_duplicate_hashes = set()
     if import_item.duplicate_features:
         for dup_info in import_item.duplicate_features:
             dup_feature = dup_info.get('feature')
             if dup_feature:
-                feature_hash = generate_feature_hash(dup_feature)
+                # Use stored hash if available (preserves original hash from processing)
+                feature_hash = dup_feature['properties']['feature_hash']
+                # if not feature_hash:
+                #     feature_hash = generate_feature_hash(dup_feature)
                 coord_duplicate_hashes.add(feature_hash)
-    
+
     # Get existing feature hashes for this user to avoid duplicates
     existing_features = FeatureStore.objects.filter(user_id=user_id).values_list('geojson_hash', flat=True)
     existing_hashes.update(existing_features)
-    
+
     # Query other unimported ImportQueue items for cross-queue duplicate detection
     # Only check against older items (by timestamp) - newer items should be marked as duplicates of older ones
     other_queue_items = ImportQueue.objects.filter(
@@ -532,24 +523,23 @@ def process_features_for_import(
         imported=False,
         timestamp__lt=import_item.timestamp  # Only older items
     ).exclude(id=import_item.id)
-    
+
     # Extract feature hashes and build lookup map
     queue_hash_to_item = {}
     for queue_item in other_queue_items:
         for feature in queue_item.geofeatures:
-            feature_hash = generate_feature_hash(feature)
+            # Use stored hash if available (preserves original hash from processing)
+            feature_hash = feature.get('properties', {}).get('feature_hash')
+            if not feature_hash:
+                feature_hash = generate_feature_hash(feature)
             if feature_hash not in queue_hash_to_item:
                 queue_hash_to_item[feature_hash] = {
                     'queue_item_id': queue_item.id,
                     'queue_item_filename': queue_item.original_filename
                 }
-    
-    # Add queue hashes to existing_hashes for duplicate checking
-    existing_hashes.update(queue_hash_to_item.keys())
-    
-    # Thread-safe duplicate checking
+
     duplicate_check_lock = threading.Lock()
-    
+
     def process_feature_with_index(args: Tuple[int, Dict[str, Any]]) -> Optional[FeatureStore]:
         """Wrapper to unpack index and feature for executor.map()"""
         feature_index, feature = args
@@ -560,22 +550,20 @@ def process_features_for_import(
             skipped_feature_ids, coord_duplicate_hashes, skipped_coord_duplicates
         )
         return result
-    
+
     # Apply bulk operations
     bulk_ops = import_item.bulk_operations or {}
     if bulk_ops:
         features_to_process = apply_bulk_operations(features_to_process, bulk_ops)
-    
+
     # Process features in parallel
-    num_threads = get_required_setting('IMPORT_PROCESSING_THREADS')
-    
     if len(features_to_process) > 0:
-        with ThreadPoolExecutor(max_workers=num_threads) as executor:
+        with ThreadPoolExecutor(max_workers=get_required_setting('IMPORT_PROCESSING_THREADS')) as executor:
             results = executor.map(process_feature_with_index, enumerate(features_to_process))
             for feature_store in results:
                 if feature_store is not None:
                     features_to_create.append(feature_store)
-    
+
     return features_to_create, SkippedDuplicates(
         hash=skipped_hash_duplicates,
         coord=skipped_coord_duplicates
@@ -599,10 +587,10 @@ def bulk_create_features_with_fallback(
     """
     successful_imports = 0
     duplicates_skipped = 0
-    
+
     if not features_to_create:
         return 0, 0
-    
+
     try:
         bulk_batch_size = get_required_setting('BULK_CREATE_BATCH_SIZE')
         FeatureStore.objects.bulk_create(features_to_create, batch_size=bulk_batch_size)
@@ -610,7 +598,7 @@ def bulk_create_features_with_fallback(
     except Exception as e:
         logger.warning(f"Bulk import failed for user {user_id}, falling back to individual imports: {str(e)}")
         logger.error(f"Bulk import error traceback: {traceback.format_exc()}")
-        
+
         # Fallback to individual creation if bulk fails
         for feature in features_to_create:
             try:
@@ -626,7 +614,7 @@ def bulk_create_features_with_fallback(
                     logger.error(f"Unexpected integrity error for user {user_id}: {traceback.format_exc()}")
             except Exception:
                 logger.error(f"Error creating individual feature for user {user_id}: {traceback.format_exc()}")
-    
+
     return successful_imports, duplicates_skipped
 
 
@@ -640,17 +628,17 @@ def finalize_import_item(import_item: ImportQueue, user_id: int) -> None:
         user_id: User ID for broadcasting
     """
     import_item.imported = True
-    
+
     # Delete logs before clearing the log_id
     if import_item.log_id:
         delete_logs_by_log_id(str(import_item.log_id))
-    
+
     # Erase unneeded data
     import_item.geofeatures = []
     import_item.log_id = None
-    
+
     import_item.save()
-    
+
     # Broadcast WebSocket event
     broadcast_item_imported(user_id, import_item.id)
 

@@ -202,12 +202,11 @@
       </div>
     </div>
 
-    <!-- Import Controls (Top) -->
+    <!-- Controls (Top) -->
     <ImportControls
         :current-page="pagination.currentPage"
         :duplicate-count="totalDuplicateCount"
-        :duplicate-original-filename="duplicateOriginalFilename"
-        :duplicate-status="duplicateStatus"
+        :file-duplicate="fileDuplicate"
         :error-message="msg"
         :goto-page-input="pagination.gotoInput"
         :has-features="itemsForUser.length > 0"
@@ -277,31 +276,35 @@
       </div>
     </div>
 
-    <!-- Action Buttons (Top) -->
-    <div v-if="itemsForUser.length > 0 && !loading.page && !processing.active && !isImported" class="bg-white rounded-lg shadow-sm border border-gray-200 p-4 sm:p-6">
-      <div class="flex flex-col sm:flex-row sm:items-center space-y-3 sm:space-y-0 sm:space-x-4">
-        <button
-            :disabled="lockButtons || loading.saving"
-            class="w-full sm:w-auto inline-flex items-center justify-center px-4 py-2 border border-transparent text-sm font-medium rounded-md text-white bg-green-600 hover:bg-green-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-green-500 disabled:bg-gray-400 disabled:cursor-not-allowed transition-colors duration-200"
-            @click="saveChanges"
-            title="Save all changes"
-        >
-          <Loader v-if="loading.saving" size="sm" layout="inline" :showMessage="false" color="white" />
-          <ArrowDownTrayIcon v-else class="w-4 h-4 mr-2" />
-          {{ loading.saving ? 'Saving...' : 'Save Changes' }}
-        </button>
-        <button
-            :disabled="lockButtons || loading.importing || importableCount === 0"
-            class="w-full sm:w-auto inline-flex items-center justify-center px-4 py-2 border border-transparent text-sm font-medium rounded-md text-white bg-blue-500 hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 disabled:bg-gray-400 disabled:cursor-not-allowed transition-colors duration-200"
-            @click="performImport"
-            title="Import all features"
-        >
-          <Loader v-if="loading.importing" size="sm" layout="inline" :showMessage="false" color="white" />
-          <ArrowUpTrayIcon v-else class="w-4 h-4 mr-2" />
-          {{ loading.importing ? 'Importing...' : `Import ${importableCount} Features` }}
-        </button>
-      </div>
-    </div>
+    <!-- Controls (Top) -->
+    <ImportControls
+        v-if="!loading.page"
+        :current-page="pagination.currentPage"
+        :duplicate-count="totalDuplicateCount"
+        :file-duplicate="fileDuplicate"
+        :goto-page-input="pagination.gotoInput"
+        :has-features="itemsForUser.length > 0"
+        :has-next-page="pagination.hasNext"
+        :has-previous-page="pagination.hasPrevious"
+        :importable-count="importableCount"
+        :is-imported="isImported"
+        :is-importing="loading.importing"
+        :is-loading-page="loading.page"
+        :is-saving="loading.saving"
+        :lock-buttons="lockButtons"
+        :page-size="pagination.pageSize"
+        :save-status="saveStatus"
+        :show-duplicate-message="false"
+        :show-no-features-message="false"
+        :total-features="pagination.totalFeatures"
+        :total-pages="pagination.totalPages"
+        @previous-page="previousPage"
+        @next-page="nextPage"
+        @jump-to-page="goToPage"
+        @show-map-preview="showMapPreview"
+        @save-changes="saveChanges"
+        @perform-import="performImport"
+    />
 
     <!-- Loading Skeleton for Pagination Changes -->
     <div v-if="loading.page" class="space-y-6">
@@ -448,8 +451,8 @@
           <DuplicateWarning type="queue" :item="item" />
         </div>
 
-        <!-- Content area - can be greyed out for skipped items -->
-        <div :class="isItemSkipped(item, index) && !isItemDuplicate(item) ? 'opacity-50' : ''">
+        <!-- Content area - can be greyed out for skipped or duplicate items -->
+        <div :class="(isItemSkipped(item, index) && !isItemDuplicate(item)) || isItemDuplicate(item) ? 'opacity-50' : ''">
         <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
           <!-- Name Field -->
           <div>
@@ -462,8 +465,8 @@
                   :placeholder="originalItems[index].properties.name"
               />
               <button
-                  v-if="isItemEditable(item, index)"
-                  class="inline-flex items-center px-3 py-2 border border-gray-300 shadow-sm text-sm leading-4 font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500"
+                  :disabled="!isItemEditable(item, index)"
+                  class="inline-flex items-center px-3 py-2 border border-gray-300 shadow-sm text-sm leading-4 font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:bg-white"
                   @click="resetNestedField(index, 'properties', 'name')"
                   title="Reset to original name"
               >
@@ -485,8 +488,8 @@
                   rows="4"
               ></textarea>
               <button
-                  v-if="isItemEditable(item, index)"
-                  class="inline-flex items-center px-3 py-2 border border-gray-300 shadow-sm text-sm leading-4 font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 mt-1"
+                  :disabled="!isItemEditable(item, index)"
+                  class="inline-flex items-center px-3 py-2 border border-gray-300 shadow-sm text-sm leading-4 font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:bg-white mt-1"
                   @click="resetNestedField(index, 'properties', 'description')"
                   title="Reset to original description"
               >
@@ -507,8 +510,8 @@
                   @change="updateDate(index, $event)"
               />
               <button
-                  v-if="isItemEditable(item, index)"
-                  class="inline-flex items-center px-3 py-2 border border-gray-300 shadow-sm text-sm leading-4 font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500"
+                  :disabled="!isItemEditable(item, index)"
+                  class="inline-flex items-center px-3 py-2 border border-gray-300 shadow-sm text-sm leading-4 font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:bg-white"
                   @click="resetNestedField(index, 'properties', 'created')"
                   title="Reset to original date"
               >
@@ -525,10 +528,10 @@
               :system-tags="getSystemTags(item)"
               :disabled="isItemDisabled(item, index)"
             />
-            <div v-if="isItemEditable(item, index)" class="flex items-center space-x-2 mt-3">
+            <div class="flex items-center space-x-2 mt-3">
               <button
-                  v-if="!isItemSkipped(item, index)"
-                  class="inline-flex items-center px-3 py-2 border border-gray-300 shadow-sm text-sm font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500"
+                  :disabled="!isItemEditable(item, index) || isItemSkipped(item, index)"
+                  class="inline-flex items-center px-3 py-2 border border-gray-300 shadow-sm text-sm font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:bg-white"
                   @click="resetTags(index)"
                   title="Reset all tags to original"
               >
@@ -542,13 +545,12 @@
       </div>
     </div>
 
-    <!-- Import Controls (Bottom) -->
+    <!-- Controls (Bottom) -->
     <ImportControls
         v-if="!loading.page"
         :current-page="pagination.currentPage"
         :duplicate-count="totalDuplicateCount"
-        :duplicate-original-filename="duplicateOriginalFilename"
-        :duplicate-status="duplicateStatus"
+        :file-duplicate="fileDuplicate"
         :goto-page-input="pagination.gotoInput"
         :has-features="itemsForUser.length > 0"
         :has-next-page="pagination.hasNext"
@@ -560,6 +562,7 @@
         :is-saving="loading.saving"
         :lock-buttons="lockButtons"
         :page-size="pagination.pageSize"
+        :save-status="saveStatus"
         :show-duplicate-message="false"
         :show-no-features-message="false"
         :total-features="pagination.totalFeatures"
@@ -655,18 +658,32 @@ export default {
     },
 
     importableCount() {
-      return this.pagination.totalFeatures - this.totalDuplicateCount - this.skippedFeatureIds.size;
+      // Calculate importable count:
+      // Total features - hash duplicates (always blocked) - skipped features
+      const hashDups = this.duplicates.features?.hash || [];
+      const queueDups = this.duplicates.queue || [];
+      
+      // Hash duplicates are always blocked regardless of source (FeatureStore or other queue items)
+      const blockedDuplicatesCount = hashDups.length + queueDups.length;
+      
+      const count = this.pagination.totalFeatures - blockedDuplicatesCount - this.skippedFeatureIds.size;
+      return Math.max(0, count);
     },
 
     totalDuplicateCount() {
-      // Count all duplicates (hash, coordinate, and queue hash duplicates)
+      // Count all duplicates (hash, queue, and coordinate)
       const hashDups = this.duplicates.features?.hash || [];
+      const queueDups = this.duplicates.queue || [];
       const coordDups = this.duplicates.features?.coord || [];
-      // Queue duplicates are hash duplicates from other queue items
-      const queueDupIds = (this.duplicates.queue || []).map(q => q.hash).filter(Boolean);
-      // Use a Set to avoid counting the same feature twice if it's both hash and coord duplicate
-      const allDuplicateIds = new Set([...hashDups, ...coordDups, ...queueDupIds]);
-      return allDuplicateIds.size;
+      
+      // Use a Set to avoid counting the same feature twice
+      // Queue duplicates are objects with .hash property
+      const allHashes = new Set([
+        ...hashDups,
+        ...queueDups.map(d => d.hash),
+        ...coordDups
+      ]);
+      return allHashes.size;
     },
 
     showDebugLogs() {
@@ -787,12 +804,16 @@ export default {
       // Misc state
       lockButtons: false,
       isImported: false,
-      duplicateStatus: null,
-      duplicateOriginalFilename: null,
+      fileDuplicate: {
+        status: null,
+        originalFilename: null
+      },
       importCustomIcons: true,
       statusMessage: null,
       statusDetail: null,
       waitingForImportCompletion: false,
+      saveStatus: null, // null | 'success' | 'error'
+      saveStatusTimeout: null,
 
       // WebSocket connection
       ws: null,
@@ -943,8 +964,10 @@ export default {
       this.uploadTimestamp = data.timestamp || null;
       this.isImported = data.imported;
       this.processing.active = data.processing;
-      this.duplicateStatus = data.duplicate_status || null;
-      this.duplicateOriginalFilename = data.duplicate_original_filename || null;
+      this.fileDuplicate = data.file_duplicate || {
+        status: null,
+        originalFilename: null
+      };
 
       // Clear status message now that initial state is loaded
       this.statusMessage = null;
@@ -1141,35 +1164,76 @@ export default {
         this.editCache.skippedFeatureIds = new Set(this.skippedFeatureIds);
       }
 
-      if (data.duplicates) {
-        // New structure: {hash: [], coord: []}
-        this.duplicates.features = data.duplicates;
-        this.markDuplicateFeatures();
-
-        // Default coordinate duplicates to skipped (auto-add to skippedFeatureIds)
-        // Only add if not already in skippedFeatureIds (to avoid overwriting user's un-skip decisions)
-        if (data.duplicates.coord && Array.isArray(data.duplicates.coord)) {
-          let hasNewSkips = false;
-          data.duplicates.coord.forEach(featureHash => {
-            if (!this.skippedFeatureIds.has(featureHash)) {
-              this.skippedFeatureIds.add(featureHash);
-              hasNewSkips = true;
+      // Handle new unified duplicate structure from backend
+      // Backend sends: hash_duplicates and coord_duplicates as arrays of objects
+      // Convert to old format for compatibility with existing code
+      if (data.hash_duplicates && Array.isArray(data.hash_duplicates)) {
+        // Separate hash duplicates into queue and store duplicates
+        const queueDups = data.hash_duplicates.filter(d => d.queue_item_id);
+        const storeDups = data.hash_duplicates.filter(d => !d.queue_item_id);
+        
+        this.duplicates.features = {
+          hash: storeDups.map(d => d.hash),
+          coord: []  // Will be populated below
+        };
+        
+        // Store feature_store_id in duplicateInfo for each hash duplicate from FeatureStore
+        storeDups.forEach(dupInfo => {
+          const pageIndex = dupInfo.page_index;
+          if (pageIndex >= 0 && pageIndex < this.itemsForUser.length) {
+            if (!this.itemsForUser[pageIndex].duplicateInfo) {
+              this.itemsForUser[pageIndex].duplicateInfo = {};
             }
-          });
-
-          if (hasNewSkips) {
-            // Update editCache to persist skipped state
-            this.editCache.skippedFeatureIds = new Set(this.skippedFeatureIds);
-            // Save to backend if new coordinate duplicates were auto-skipped
-            this.saveSkipStateToBackend();
+            if (dupInfo.feature_store_id) {
+              this.itemsForUser[pageIndex].duplicateInfo.feature_store_id = dupInfo.feature_store_id;
+            }
           }
-        }
+        });
+        
+        // Queue duplicates (hash duplicates from other queue items)
+        this.duplicates.queue = queueDups.map(d => ({
+          hash: d.hash,
+          page_index: d.page_index,
+          queue_item_id: d.queue_item_id,
+          queue_item_filename: d.queue_item_filename
+        }));
+        
+        this.markDuplicateFeatures();
+        this.markQueueDuplicateFeatures(this.duplicates.queue);
       }
-
-      // Handle queue duplicates (hash duplicates from other queue items)
-      if (data.queue_duplicates && Array.isArray(data.queue_duplicates)) {
-        this.duplicates.queue = data.queue_duplicates;
-        this.markQueueDuplicateFeatures(data.queue_duplicates);
+      
+      if (data.coord_duplicates && Array.isArray(data.coord_duplicates)) {
+        // Coord duplicates with optional queue link info
+        const coordHashArray = data.coord_duplicates.map(d => d.hash);
+        this.duplicates.features = this.duplicates.features || { hash: [], coord: [] };
+        this.duplicates.features.coord = coordHashArray;
+        
+        // Note: We do NOT auto-skip coordinate duplicates here
+        // The backend sends skipped_feature_ids which contains the user's saved skip state
+        // (including coordinate duplicates that were auto-skipped on first processing)
+        // This ensures user choices (restore/skip) are persisted across page reloads
+        
+        // Mark coordinate duplicates
+        this.markDuplicateFeatures();
+        
+        // Mark coordinate duplicates with queue or FeatureStore link info
+        const coordWithLinkInfo = data.coord_duplicates.filter(d => d.type === 'queue' || d.type === 'feature_store');
+        if (coordWithLinkInfo.length > 0) {
+          this.markCoordDuplicatesFromQueue(coordWithLinkInfo.map(d => {
+            const info = {
+              page_index: d.page_index,
+              type: d.type
+            };
+            if (d.type === 'queue') {
+              info.queue_item_id = d.queue_item_id;
+              info.queue_item_filename = d.queue_item_filename;
+              info.hash = d.target_hash;
+            } else if (d.type === 'feature_store') {
+              info.feature_store_id = d.feature_store_id;
+            }
+            return info;
+          }));
+        }
       }
 
       this.loading.page = false;
@@ -1203,7 +1267,7 @@ export default {
         console.log('Item not found (404) - redirecting to import queue');
         this.loading.redirecting = true;
         this.$router.replace('/import');
-      } else if (data.code === 409 && data.duplicate_status === 'duplicate_in_queue') {
+      } else if (data.code === 409 && data.file_duplicate && data.file_duplicate.status === 'duplicate_in_queue') {
         // Handle duplicate file error with alert popup
         window.alert(data.message || 'This upload is a duplicate and cannot be loaded.');
         // When user closes the alert, redirect to import page
@@ -1446,7 +1510,7 @@ export default {
       let classes = 'rounded-lg shadow-sm border p-6 relative';
 
       if (this.isItemDuplicate(item)) {
-        classes += ' bg-gray-100 border-gray-300 opacity-75';
+        classes += ' bg-gray-100 border-gray-300';
       } else if (this.isItemSkipped(item, index)) {
         classes += ' bg-gray-100 border-gray-300';
       } else {
@@ -1501,11 +1565,14 @@ export default {
         this.skippedFeatureIds.add(featureId);
       }
 
+      // Trigger reactivity by creating a new Set (Vue doesn't detect Set modifications)
+      this.skippedFeatureIds = new Set(this.skippedFeatureIds);
+
       // Update editCache to persist skipped state
       this.editCache.skippedFeatureIds = new Set(this.skippedFeatureIds);
 
-      // Save skip state to backend
-      await this.saveSkipStateToBackend();
+      // Skip state will be saved to backend when user clicks "Save Changes"
+      // No immediate API call needed here
 
       // Force Vue to detect the change since Sets are not reactive
       this.$forceUpdate();
@@ -1515,25 +1582,20 @@ export default {
         return;
       }
 
-      try {
-        const csrftoken = getCookie('csrftoken');
-        // Convert skippedFeatureIds Set to array, filtering out index-based IDs (temp IDs)
-        const skippedFeatureIdsArray = Array.from(this.skippedFeatureIds).filter(id => !id.startsWith('index_'));
+      const csrftoken = getCookie('csrftoken');
+      // Convert skippedFeatureIds Set to array, filtering out index-based IDs (temp IDs)
+      const skippedFeatureIdsArray = Array.from(this.skippedFeatureIds).filter(id => !id.startsWith('index_'));
 
-        const response = await axios.put(`/api/item/import/skip-state/${this.currentId}`, {
-          skipped_feature_ids: skippedFeatureIdsArray
-        }, {
-          headers: {
-            'X-CSRFToken': csrftoken
-          }
-        });
-
-        if (response.status !== 200) {
-          console.error('Failed to save skip state:', response.data);
+      const response = await axios.put(`/api/item/import/skip-state/${this.currentId}`, {
+        skipped_feature_ids: skippedFeatureIdsArray
+      }, {
+        headers: {
+          'X-CSRFToken': csrftoken
         }
-      } catch (error) {
-        console.error('Error saving skip state:', error);
-        // Don't show error to user - skip state is saved locally in editCache
+      });
+
+      if (response.status !== 200) {
+        throw new Error(response.data?.msg || 'Failed to save skip state');
       }
     },
     // Note: MultiPoint and MultiPolygon features may be displayed during import preview,
@@ -1726,8 +1788,11 @@ export default {
         await this.saveBulkOperations(this.bulkOperations);
       }
 
+      // Always save skip state, even if no other changes
+      await this.saveSkipStateToBackend();
+
       if (changedFeatures.length === 0 && !hasBulkOpsChanges) {
-        // No changes to save
+        // No feature changes to save, but skip state was saved above
         return {success: true, changedCount: 0};
       }
 
@@ -1778,14 +1843,41 @@ export default {
       this.lockButtons = true;
       this.loading.saving = true;
 
+      // Clear any existing save status timeout
+      if (this.saveStatusTimeout) {
+        clearTimeout(this.saveStatusTimeout);
+        this.saveStatusTimeout = null;
+      }
+      this.saveStatus = null;
+
       try {
         await this._saveChangesInternal();
-      } catch (error) {
-        this.msg = 'Error saving changes: ' + (error.response?.data?.error || error.response?.data?.msg || error.message);
-        window.alert(this.msg);
-      } finally {
+
+        // Unlock buttons and stop showing saving state
         this.lockButtons = false;
         this.loading.saving = false;
+
+        // Show success state for 2 seconds
+        this.saveStatus = 'success';
+        this.saveStatusTimeout = setTimeout(() => {
+          this.saveStatus = null;
+          this.saveStatusTimeout = null;
+        }, 2000);
+
+      } catch (error) {
+        const errorMsg = 'Error saving changes: ' + (error.response?.data?.error || error.response?.data?.msg || error.message);
+
+        // Keep loading state to false but keep buttons locked
+        this.loading.saving = false;
+        // Keep lockButtons = true to disable save and import buttons permanently
+
+        // Show error state permanently (no timeout)
+        this.saveStatus = 'error';
+
+        // Show popup with error message
+        window.alert(errorMsg + '\n\nPlease reload the page to try again.');
+
+        console.error("Failed to save: " + error)
       }
     },
     async performImport() {
@@ -1802,14 +1894,24 @@ export default {
         } catch (saveError) {
           this.msg = 'Error saving changes before import: ' + (saveError.response?.data?.msg || saveError.message);
           window.alert(this.msg);
+          // Reset state before returning
+          this.lockButtons = false;
+          this.loading.importing = false;
+          this.waitingForImportCompletion = false;
           return; // Don't proceed with import if save fails
         }
 
         // Perform the import - server returns immediately, completion will come via WebSocket
         // No need to send the feature collection, it's already saved
-        // Convert skippedFeatureIds Set to array for JSON serialization
-        // Filter out index-based IDs (temp IDs) - only send actual feature IDs to backend
-        const skippedFeatureIdsArray = Array.from(this.skippedFeatureIds).filter(id => !id.startsWith('index_'));
+        // Only send features that the USER explicitly chose to skip
+        const manuallySkipped = Array.from(this.skippedFeatureIds).filter(id => !id.startsWith('index_'));
+        const queueDuplicateHashes = (this.duplicates.queue || []).map(d => d.hash);
+        const skippedFeatureIdsArray = [...manuallySkipped, ...queueDuplicateHashes];
+
+        // Set flag BEFORE making the request so WebSocket messages are handled correctly
+        // (WebSocket events can arrive faster than the axios response)
+        this.waitingForImportCompletion = true;
+
         const response = await axios.post('/api/item/import/perform/' + this.currentId, {
           import_custom_icons: this.importCustomIcons,
           skipped_feature_ids: skippedFeatureIdsArray
@@ -1819,16 +1921,14 @@ export default {
           }
         });
 
-        if (response.status === 200) {
-          // Job started successfully - now wait for WebSocket completion event
-          this.waitingForImportCompletion = true;
-          // Keep buttons locked and loading state active until WebSocket event arrives
-        } else {
+        if (response.status !== 200) {
           this.msg = 'Error performing import: ' + response.data.msg;
           window.alert(this.msg);
           this.lockButtons = false;
           this.loading.importing = false;
+          this.waitingForImportCompletion = false;
         }
+        // If status is 200, keep buttons locked and wait for WebSocket event
       } catch (error) {
         this.msg = 'Error performing import: ' + (error.response?.data?.msg || error.message);
         window.alert(this.msg);
@@ -1879,11 +1979,15 @@ export default {
       this.dialogs.featureMap.isOpen = false;
     },
     markDuplicateFeatures() {
-      // Reset all features to not be duplicates
+      // Reset duplicate flags but preserve duplicateInfo (like feature_store_id)
       this.itemsForUser.forEach((item, index) => {
         item.isDuplicate = false;
         item.isCoordDuplicate = false;
-        item.duplicateInfo = null;
+        // Don't reset duplicateInfo - it may contain feature_store_id or other link info
+        // Just clear the type if it exists
+        if (item.duplicateInfo) {
+          delete item.duplicateInfo.type;
+        }
       });
 
       // Handle new structure: {hash: [], coord: []}
@@ -1898,7 +2002,11 @@ export default {
           // Compare the hash from backend with the feature's ID
           if (featureId === featureHash) {
             item.isDuplicate = true;
-            item.duplicateInfo = { type: 'hash' };
+            // Preserve existing duplicateInfo (like feature_store_id) and add type
+            if (!item.duplicateInfo) {
+              item.duplicateInfo = {};
+            }
+            item.duplicateInfo.type = 'hash';
           }
         });
       });
@@ -1910,23 +2018,14 @@ export default {
           // Compare the hash from backend with the feature's ID
           if (featureId === featureHash) {
             item.isCoordDuplicate = true;
-            item.duplicateInfo = { type: 'coord' };
+            // Preserve existing duplicateInfo (like coordFeatureStoreInfo) and add type
+            if (!item.duplicateInfo) {
+              item.duplicateInfo = {};
+            }
+            item.duplicateInfo.type = 'coord';
           }
         });
       });
-
-      // Debug logging to help diagnose issues
-      if (hashDuplicates.length > 0 || coordDuplicates.length > 0) {
-        console.log('Duplicate marking:', {
-          hashDuplicates,
-          coordDuplicates,
-          currentFeatures: this.itemsForUser.map((item, idx) => ({
-            index: idx,
-            id: this.getFeatureId(item, idx),
-            name: item.properties?.name
-          }))
-        });
-      }
     },
     markQueueDuplicateFeatures(queueDuplicates) {
       // Reset all features to not be queue duplicates
@@ -1936,11 +2035,41 @@ export default {
       });
 
       // Mark queue duplicate features using the page_index
+      // Note: We do NOT auto-skip queue duplicates here
+      // The backend sends skipped_feature_ids which contains the user's saved skip state
+      // This ensures user choices (restore/skip) are persisted across page reloads
       queueDuplicates.forEach(queueDuplicateInfo => {
         const pageIndex = queueDuplicateInfo.page_index;
         if (pageIndex >= 0 && pageIndex < this.itemsForUser.length) {
           this.itemsForUser[pageIndex].isQueueDuplicate = true;
           this.itemsForUser[pageIndex].queueDuplicateInfo = queueDuplicateInfo;
+        }
+      });
+    },
+    
+    markCoordDuplicatesFromQueue(coordDuplicatesInfo) {
+      // Mark coordinate duplicate features that are from another queue item or FeatureStore
+      // These should show a button to view in the other queue item or on the map
+      coordDuplicatesInfo.forEach(coordDupInfo => {
+        const pageIndex = coordDupInfo.page_index;
+        if (pageIndex >= 0 && pageIndex < this.itemsForUser.length) {
+          // Add link info to the feature so the DuplicateWarning component can show a link
+          if (!this.itemsForUser[pageIndex].duplicateInfo) {
+            this.itemsForUser[pageIndex].duplicateInfo = {};
+          }
+          
+          // Check if it's a queue duplicate or FeatureStore duplicate
+          if (coordDupInfo.type === 'queue') {
+            this.itemsForUser[pageIndex].duplicateInfo.coordQueueInfo = {
+              queue_item_id: coordDupInfo.queue_item_id,
+              queue_item_filename: coordDupInfo.queue_item_filename,
+              hash: coordDupInfo.hash
+            };
+          } else if (coordDupInfo.type === 'feature_store') {
+            this.itemsForUser[pageIndex].duplicateInfo.coordFeatureStoreInfo = {
+              feature_store_id: coordDupInfo.feature_store_id
+            };
+          }
         }
       });
     },
@@ -2204,9 +2333,11 @@ export default {
         indices: []
       };
 
-      // Reset duplicate status
-      this.duplicateStatus = null;
-      this.duplicateOriginalFilename = null;
+      // Reset file duplicate status
+      this.fileDuplicate = {
+        status: null,
+        originalFilename: null
+      };
 
       // Reset edit cache
       this.editCache = {

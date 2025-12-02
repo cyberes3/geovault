@@ -52,10 +52,10 @@
       </thead>
       <tbody class="bg-white sm:divide-y sm:divide-gray-200">
         <!-- Loading placeholders -->
-        <tr 
-          v-for="n in 3" 
-          v-if="combinedLoading" 
-          :key="`loading-${n}`" 
+        <tr
+          v-for="n in 3"
+          v-if="combinedLoading"
+          :key="`loading-${n}`"
           class="block sm:table-row mb-4 sm:mb-0 border border-gray-200 sm:border-0 rounded-lg sm:rounded-none shadow-sm sm:shadow-none bg-white animate-pulse"
         >
           <td class="block sm:table-cell px-4 py-3 sm:px-6 sm:py-4 sm:whitespace-nowrap border-b border-gray-100 sm:border-0 bg-gray-50 sm:bg-transparent">
@@ -108,9 +108,9 @@
         </tr>
 
         <!-- Actual data rows -->
-        <tr 
-          v-for="(item, index) in filteredImportQueue" 
-          :key="`item-${index}`" 
+        <tr
+          v-for="(item, index) in filteredImportQueue"
+          :key="`item-${index}`"
           :class="[
             'block sm:table-row mb-4 sm:mb-0 border border-gray-200 sm:border-0 rounded-xl sm:rounded-none shadow-sm sm:shadow-none transition-shadow duration-200',
             (item.deleting || item.importing) ? 'opacity-60 bg-gray-50' : 'bg-white sm:hover:bg-gray-50 sm:hover:shadow-md'
@@ -132,27 +132,31 @@
                   <Loader size="sm" layout="inline" :showMessage="false" />
                   <span class="ml-1">Deleting</span>
                 </span>
-                <span v-else-if="item.importing" class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-blue-100 text-blue-700">
+                <span v-else-if="item.importing" class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-blue-200 text-blue-800">
                   <Loader size="sm" layout="inline" :showMessage="false" />
                   <span class="ml-1">Importing</span>
                 </span>
-                <span v-else-if="item.imported" class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-800">
+                <span v-else-if="item.imported" class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-green-200 text-green-900">
                   <CheckIcon class="w-3 h-3 mr-1" />
                   Imported
                 </span>
-                <span v-else-if="item.processing_failed" class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-red-100 text-red-800">
+                <span v-else-if="item.processing_failed" class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-red-200 text-red-900">
                   <ExclamationCircleIcon class="w-3 h-3 mr-1" />
                   Failed
                 </span>
-                <span v-else-if="item.processing === true || (item.processing === false && item.feature_count === -1)" class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-yellow-100 text-yellow-800">
+                <span v-else-if="item.waiting" class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-indigo-200 text-indigo-900">
+                  <ClockIcon class="w-3 h-3 mr-1" />
+                  Waiting in Queue
+                </span>
+                <span v-else-if="item.processing === true || (item.processing === false && item.feature_count === -1)" class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-yellow-200 text-yellow-900">
                   <Loader size="sm" layout="inline" :showMessage="false" />
                   <span class="ml-1">Processing</span>
                 </span>
-                <span v-else-if="item.duplicate_status === 'duplicate_in_queue' || item.duplicate_status === 'duplicate_imported'" class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-purple-100 text-purple-800">
+                <span v-else-if="item.file_duplicate?.status === 'duplicate_in_queue' || item.file_duplicate?.status === 'duplicate_imported'" class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-purple-200 text-purple-900">
                   <DocumentDuplicateIcon class="w-3 h-3 mr-1" />
                   Duplicate
                 </span>
-                <span v-else class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-blue-100 text-blue-700">
+                <span v-else class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-blue-200 text-blue-800">
                   <CheckCircleIcon class="w-3 h-3 mr-1" />
                   Ready
                 </span>
@@ -170,8 +174,8 @@
               <div class="ml-4 min-w-0 flex-1">
                 <div class="text-sm font-medium text-gray-900 break-words">
                   <!-- Disable link for duplicates in queue or when this specific item is being imported/deleted -->
-                  <router-link v-if="item.duplicate_status !== 'duplicate_in_queue' && !item.deleting && !item.importing" 
-                     :to="`/import/process/${item.id}`" 
+                  <router-link v-if="item.file_duplicate?.status !== 'duplicate_in_queue' && !item.deleting && !item.importing"
+                     :to="`/import/process/${item.id}`"
                      class="text-blue-500 hover:text-blue-700">
                     {{ item.original_filename }}
                   </router-link>
@@ -194,35 +198,39 @@
           </td>
           <!-- Status cell (desktop only - mobile shown in checkbox row) -->
           <td class="hidden sm:table-cell px-6 py-4 whitespace-nowrap text-center">
-            <span v-if="item.deleting" class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-orange-100 text-orange-800">
+            <span v-if="item.deleting" class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-orange-200 text-orange-900">
               <Loader size="sm" layout="inline" :showMessage="false" />
               <span class="ml-1">Deleting</span>
             </span>
-            <span v-else-if="item.importing" class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-blue-100 text-blue-700">
+            <span v-else-if="item.importing" class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-blue-200 text-blue-800">
               <Loader size="sm" layout="inline" :showMessage="false" />
               <span class="ml-1">Importing</span>
             </span>
-            <span v-else-if="item.imported" class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-800">
+            <span v-else-if="item.imported" class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-green-200 text-green-900">
               <CheckIcon class="w-3 h-3 mr-1" />
               Imported
             </span>
-            <span v-else-if="item.processing_failed" class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-red-100 text-red-800">
+            <span v-else-if="item.processing_failed" class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-red-200 text-red-900">
               <ExclamationCircleIcon class="w-3 h-3 mr-1" />
               Processing Failed
             </span>
-            <span v-else-if="item.processing === true || (item.processing === false && item.feature_count === -1)" class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-yellow-100 text-yellow-800">
+            <span v-else-if="item.waiting" class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-indigo-200 text-indigo-900">
+              <ClockIcon class="w-3 h-3 mr-1" />
+              Waiting in Queue
+            </span>
+            <span v-else-if="item.processing === true || (item.processing === false && item.feature_count === -1)" class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-yellow-200 text-yellow-900">
               <Loader size="sm" layout="inline" :showMessage="false" />
               <span class="ml-1">Processing</span>
             </span>
-            <span v-else-if="item.deleting" class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-orange-100 text-orange-800">
+            <span v-else-if="item.deleting" class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-orange-200 text-orange-900">
               <Loader size="sm" layout="inline" :showMessage="false" />
               <span class="ml-1">Deleting</span>
             </span>
-            <span v-else-if="item.duplicate_status === 'duplicate_in_queue' || item.duplicate_status === 'duplicate_imported'" class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-purple-100 text-purple-800">
+            <span v-else-if="item.file_duplicate?.status === 'duplicate_in_queue' || item.file_duplicate?.status === 'duplicate_imported'" class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-purple-200 text-purple-900">
               <DocumentDuplicateIcon class="w-3 h-3 mr-1" />
               Duplicate
             </span>
-            <span v-else class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-blue-100 text-blue-700">
+            <span v-else class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-blue-200 text-blue-800">
               <CheckCircleIcon class="w-3 h-3 mr-1" />
               Ready
             </span>
@@ -231,9 +239,8 @@
           <td class="block sm:table-cell px-4 py-3 sm:px-6 sm:py-4 sm:whitespace-nowrap sm:text-center text-sm font-medium border-t border-gray-100 sm:border-0">
             <div class="flex flex-col sm:flex-row items-stretch sm:items-center justify-stretch sm:justify-center space-y-2 sm:space-y-0 sm:space-x-2">
               <button
-                v-if="!item.imported && !item.processing_failed && !(item.processing === true || (item.processing === false && item.feature_count === -1)) && item.duplicate_status !== 'duplicate_in_queue'"
-                :disabled="item.deleting || item.importing"
-                class="w-full sm:w-auto inline-flex items-center justify-center px-4 py-2 border border-transparent text-sm font-medium rounded-md text-white bg-green-600 hover:bg-green-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-green-500 transition-colors duration-200 disabled:opacity-50 disabled:cursor-not-allowed disabled:bg-gray-400 disabled:hover:bg-gray-400"
+                :disabled="item.imported || item.processing_failed || (item.processing === true || (item.processing === false && item.feature_count === -1)) || item.file_duplicate?.status === 'duplicate_in_queue' || item.deleting || item.importing"
+                class="w-full sm:w-auto inline-flex items-center justify-center px-3 py-1.5 border border-transparent text-sm font-medium rounded-md text-white bg-green-500 hover:bg-green-600 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-green-400 transition-colors duration-200 disabled:opacity-50 disabled:cursor-not-allowed disabled:bg-gray-300 disabled:hover:bg-gray-300"
                 @click="importItem(item, index)"
                 title="Import this item"
               >
@@ -242,7 +249,7 @@
               </button>
               <button
                 :disabled="item.deleting || item.importing"
-                class="w-full sm:w-auto inline-flex items-center justify-center px-4 py-2 border border-transparent text-sm font-medium rounded-md text-white bg-red-600 hover:bg-red-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-red-500 transition-colors duration-200 disabled:opacity-50 disabled:cursor-not-allowed disabled:bg-gray-400 disabled:hover:bg-gray-400"
+                class="w-full sm:w-auto inline-flex items-center justify-center px-3 py-1.5 border border-red-200 text-sm font-medium rounded-md text-red-700 bg-red-50 hover:bg-red-100 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-red-300 transition-colors duration-200 disabled:opacity-50 disabled:cursor-not-allowed disabled:bg-gray-100 disabled:hover:bg-gray-100"
                 @click="deleteItem(item, index)"
                 title="Delete this item"
               >
@@ -265,7 +272,7 @@ import {getCookie} from "@/assets/js/auth.js";
 import {realtimeSocket} from "@/assets/js/websocket/realtimeSocket.js";
 import { toggleSetItem } from "@/assets/js/toggle-utils.js";
 import Loader from "@/components/parts/Loader.vue";
-import { ArrowUpTrayIcon, TrashIcon, DocumentIcon, CheckIcon, ExclamationCircleIcon, DocumentDuplicateIcon } from '@heroicons/vue/24/outline';
+import { ArrowUpTrayIcon, TrashIcon, DocumentIcon, CheckIcon, ExclamationCircleIcon, DocumentDuplicateIcon, ClockIcon } from '@heroicons/vue/24/outline';
 import { CheckCircleIcon } from '@heroicons/vue/24/solid';
 
 export default {
@@ -299,7 +306,7 @@ export default {
       let count = 0;
       this.selectedItems.forEach(itemId => {
         const item = this.filteredImportQueue.find(i => i.id === itemId);
-        if (item && !item.imported && !item.processing_failed && !(item.processing === true || (item.processing === false && item.feature_count === -1)) && item.duplicate_status !== 'duplicate_in_queue') {
+        if (item && !item.imported && !item.processing_failed && !(item.processing === true || (item.processing === false && item.feature_count === -1)) && item.file_duplicate?.status !== 'duplicate_in_queue') {
           count++;
         }
       });
@@ -322,7 +329,8 @@ export default {
     CheckIcon,
     ExclamationCircleIcon,
     DocumentDuplicateIcon,
-    CheckCircleIcon
+    CheckCircleIcon,
+    ClockIcon
   },
   data() {
     return {
@@ -412,7 +420,7 @@ export default {
       }
     },
     async importItem(item, index) {
-      if (item.imported || item.processing_failed || (item.processing === true || (item.processing === false && item.feature_count === -1)) || item.duplicate_status === 'duplicate_in_queue') {
+      if (item.imported || item.processing_failed || (item.processing === true || (item.processing === false && item.feature_count === -1)) || item.file_duplicate?.status === 'duplicate_in_queue') {
         return;
       }
 
@@ -454,7 +462,7 @@ export default {
       if (window.confirm(`Delete "${item.original_filename}" (#${item.id})`)) {
         // Mark item as deleting
         this.deletingItems.add(item.id);
-        
+
         // Force reactivity update
         this.$forceUpdate();
 
@@ -546,7 +554,7 @@ export default {
 
       this.selectedItems.forEach(itemId => {
         const item = this.filteredImportQueue.find(i => i.id === itemId);
-        if (item && !item.imported && !item.processing_failed && !(item.processing === true || (item.processing === false && item.feature_count === -1)) && item.duplicate_status !== 'duplicate_in_queue') {
+        if (item && !item.imported && !item.processing_failed && !(item.processing === true || (item.processing === false && item.feature_count === -1)) && item.file_duplicate?.status !== 'duplicate_in_queue') {
           validItems.push(itemId);
         } else {
           invalidItems.push(itemId);
@@ -682,7 +690,7 @@ export default {
     setupBulkJobHandlers() {
       // Clear any existing handlers
       this.cleanupBulkJobHandlers();
-      
+
       // Define handlers
       const bulkImportJobStarted = (data) => {
         this.bulkImportJobId = data.job_id;
@@ -700,32 +708,32 @@ export default {
       const bulkImportCompleted = (data) => {
         this.isBulkImporting = false;
         this.bulkImportJobId = null;
-        
+
         // Remove all items from importingItems
         const itemIds = data.item_ids || [];
         itemIds.forEach(itemId => {
           this.importingItems.delete(itemId);
         });
-        
+
         // Refresh the queue to update status icons
         this.$store.dispatch('refreshImportQueue');
-        
+
         this.$forceUpdate();
       };
 
       const bulkImportFailed = (data) => {
         this.isBulkImporting = false;
         this.bulkImportJobId = null;
-        
+
         // Remove all items from importingItems
         const itemIds = data.item_ids || [];
         itemIds.forEach(itemId => {
           this.importingItems.delete(itemId);
         });
-        
+
         // Refresh the queue to update status icons
         this.$store.dispatch('refreshImportQueue');
-        
+
         this.$forceUpdate();
       };
 
@@ -745,32 +753,32 @@ export default {
       const bulkDeleteCompleted = (data) => {
         this.isBulkDeleting = false;
         this.bulkDeleteJobId = null;
-        
+
         // Remove all items from deletingItems
         const itemIds = data.item_ids || [];
         itemIds.forEach(itemId => {
           this.deletingItems.delete(itemId);
         });
-        
+
         // Refresh the queue to update status icons
         this.$store.dispatch('refreshImportQueue');
-        
+
         this.$forceUpdate();
       };
 
       const bulkDeleteFailed = (data) => {
         this.isBulkDeleting = false;
         this.bulkDeleteJobId = null;
-        
+
         // Remove all items from deletingItems
         const itemIds = data.item_ids || [];
         itemIds.forEach(itemId => {
           this.deletingItems.delete(itemId);
         });
-        
+
         // Refresh the queue to update status icons
         this.$store.dispatch('refreshImportQueue');
-        
+
         this.$forceUpdate();
       };
 
@@ -840,7 +848,7 @@ export default {
   beforeDestroy() {
     // Unsubscribe from bulk job events
     this.cleanupBulkJobHandlers();
-    
+
     // Clear deleted items when component is destroyed (user navigates away)
     this.clearDeletedItems();
     // Clear selected items when component is destroyed
