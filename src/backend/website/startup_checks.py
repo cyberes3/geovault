@@ -570,31 +570,48 @@ def check_site_configuration():
         return False
 
 
-def cleanup_redis_locks():
+def cleanup_redis_queues():
     """
-    Clean up any stale Redis processing locks on startup.
+    Clean up Redis processing queues and old locks on startup.
     
-    This prevents deadlocks caused by locks that weren't properly released
-    (e.g., from server crashes, force kills, or development restarts).
+    This clears any stale queues from previous server instances and removes
+    old processing locks (for migration from lock-based to queue-based system).
     """
     try:
         from geo_lib.utils.redis_connection import get_redis_connection
         redis_client = get_redis_connection()
         
-        # Find all processing lock keys
+        # Find all processing queue keys
+        queue_keys = redis_client.keys('processing_queue:user:*')
+        
+        # Find all old processing lock keys (for migration)
         lock_keys = redis_client.keys('processing_lock:*')
         
-        if lock_keys:
-            # Delete all processing locks
-            deleted_count = redis_client.delete(*lock_keys)
-            logger.info(f"✓ Cleaned up {deleted_count} stale Redis processing lock(s)")
+        total_deleted = 0
+        
+        if queue_keys:
+            # Delete all processing queues
+            deleted_count = redis_client.delete(*queue_keys)
+            total_deleted += deleted_count
+            logger.info(f"✓ Cleaned up {deleted_count} stale Redis processing queue(s)")
         else:
-            logger.info("✓ No stale Redis processing locks found")
+            logger.info("✓ No stale Redis processing queues found")
+        
+        if lock_keys:
+            # Delete all old processing locks (migration cleanup)
+            deleted_count = redis_client.delete(*lock_keys)
+            total_deleted += deleted_count
+            logger.info(f"✓ Cleaned up {deleted_count} old Redis processing lock(s)")
+        else:
+            logger.info("✓ No old Redis processing locks found")
+        
+        if total_deleted == 0:
+            logger.info("✓ Redis is clean (no stale queues or locks)")
         
         return True
     except Exception as e:
-        logger.warning(f"⚠ Failed to cleanup Redis locks: {e}")
-        # This is not critical - locks will expire naturally (5 min timeout)
+        logger.warning(f"⚠ Failed to cleanup Redis queues: {e}")
+        # This is not critical
         return True
 
 
@@ -654,9 +671,9 @@ def run_startup_checks():
     check_maxmind_database()
     check_email_config()
     
-    # Cleanup stale Redis locks (non-critical)
-    logger.info("Cleaning up stale Redis locks...")
-    cleanup_redis_locks()
+    # Cleanup stale Redis queues and locks (non-critical)
+    logger.info("Cleaning up stale Redis queues...")
+    cleanup_redis_queues()
     
     if failed_checks:
         logger.error("=" * 60)

@@ -1514,7 +1514,7 @@ class TestImportJobWebSocket(TestCase):
 
 
 class TestSequentialProcessing(TestCase):
-    """Test sequential processing with RedisProcessingLock."""
+    """Test sequential processing with Redis queue."""
 
     def setUp(self):
         """Set up test fixtures."""
@@ -1527,18 +1527,13 @@ class TestSequentialProcessing(TestCase):
         )
         self.client.force_login(self.user)
 
-    @patch('geo_lib.utils.redis_lock.RedisProcessingLock')
     @patch('api.views.import_item.process_job')
     @patch('api.views.import_item.status_tracker')
-    def test_redis_lock_is_used_during_processing(self, mock_status_tracker, mock_process_job, mock_lock_class):
-        """Test that RedisProcessingLock is used during file processing."""
+    def test_redis_queue_is_used_for_processing(self, mock_status_tracker, mock_process_job):
+        """Test that files are enqueued to Redis queue for processing."""
         # Setup mocks
         mock_status_tracker.create_job.return_value = 'test-job-id'
-        mock_process_job.start_process_job.return_value = True
-        
-        # Mock the lock instance
-        mock_lock_instance = MagicMock()
-        mock_lock_class.return_value = mock_lock_instance
+        mock_process_job.enqueue_job.return_value = True
         
         # Upload file
         kml_content = """<?xml version="1.0" encoding="UTF-8"?>
@@ -1558,9 +1553,8 @@ class TestSequentialProcessing(TestCase):
         
         self.assertEqual(response.status_code, 200)
         
-        # Note: The lock is acquired inside the background thread during _execute_job
-        # This test verifies that the upload endpoint works, but the lock is used
-        # in the actual processing thread (which is mocked here)
+        # Verify enqueue_job was called instead of start_process_job
+        mock_process_job.enqueue_job.assert_called_once()
 
     @patch('api.views.import_item.process_job')
     @patch('api.views.import_item.status_tracker')

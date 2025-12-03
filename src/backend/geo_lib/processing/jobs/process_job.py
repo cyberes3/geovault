@@ -37,15 +37,15 @@ logger = get_job_logger()
 class ProcessJob(BaseJob):
     """
     Handles asynchronous file processing (converting to geojson).
-    Refactored from AsyncFileProcessor to use the new job system.
+    Uses Redis queue for sequential processing per user.
     """
 
     def get_job_type(self) -> str:
         return "process"
 
-    def start_process_job(self, job_id: str, file_data: bytes, filename: str, user_id: int, replacement_feature_id: Optional[int] = None) -> bool:
+    def enqueue_job(self, job_id: str, file_data: bytes, filename: str, user_id: int, replacement_feature_id: Optional[int] = None) -> bool:
         """
-        Start processing a file in a background thread.
+        Enqueue a file processing job to the Redis queue.
         
         Args:
             job_id: Unique job identifier
@@ -55,7 +55,7 @@ class ProcessJob(BaseJob):
             replacement_feature_id: Optional ID of the feature being updated (for replacement uploads)
             
         Returns:
-            True if processing started successfully, False otherwise
+            True if enqueued successfully, False otherwise
         """
         # Create initial ImportQueue entry so it shows up in the UI
         try:
@@ -68,8 +68,74 @@ class ProcessJob(BaseJob):
             logger.error(f"Failed to create initial import queue entry for job {job_id}: {str(e)}")
             return False
 
-        # Start the job
-        return self.start_job(job_id, file_data=file_data, filename=filename, user_id=user_id)
+        # Enqueue job to Redis
+        from geo_lib.processing.redis_queue import get_processing_queue
+        from geo_lib.processing.queue_worker import start_worker_for_user
+        from geo_lib.processing.status_tracker import ProcessingStatus
+        
+        try:
+            queue = get_processing_queue(user_id)
+            job_data = {
+                'job_id': job_id,
+                'import_queue_id': import_queue_id,
+                'filename': filename,
+                'user_id': user_id,
+                'file_data': file_data,
+                'timestamp': time.time(),
+                'replacement_feature_id': replacement_feature_id
+            }
+            
+            success = queue.enqueue(job_data)
+            if not success:
+                logger.error(f"Failed to enqueue job {job_id} for user {user_id}")
+                return False
+            
+            # Update job status to WAITING (will be set to PROCESSING when worker picks it up)
+            self.status_tracker.update_job_status(
+                job_id, 
+                ProcessingStatus.WAITING,
+                "Waiting in queue for processing"
+            )
+            
+            # Broadcast status update to frontend
+            self._broadcast_job_status_updated(
+                user_id, 
+                job_id, 
+                'waiting', 
+                0.0, 
+                "Waiting in queue for processing",
+                import_queue_id=import_queue_id
+            )
+            
+            # Start worker for this user if not already running
+            start_worker_for_user(user_id, self)
+            
+            return True
+            
+        except Exception as e:
+            logger.error(f"Failed to enqueue job {job_id}: {e}")
+            return False
+    
+    def process_from_queue(self, job_data: Dict[str, Any]):
+        """
+        Process a job that was dequeued from Redis.
+        Called by the queue worker thread.
+        
+        Args:
+            job_data: Dictionary containing job information
+        """
+        job_id = job_data['job_id']
+        file_data = job_data['file_data']
+        filename = job_data['filename']
+        user_id = job_data['user_id']
+        
+        # Execute the job directly (no threading, worker handles that)
+        kwargs = {
+            'file_data': file_data,
+            'filename': filename,
+            'user_id': user_id
+        }
+        self._execute_job(job_id, kwargs)
 
     def _mark_import_queue_as_failed(self, import_queue_id: int, error_message: str):
         """
@@ -155,294 +221,290 @@ class ProcessJob(BaseJob):
         # Track overall processing time
         overall_start_time = time.time()
 
-        # Acquire per-user processing lock to ensure sequential processing
-        # This prevents race conditions in duplicate detection
-        from geo_lib.utils.redis_lock import RedisProcessingLock
-        
+        # Queue worker ensures sequential processing, no lock needed
         try:
-            with RedisProcessingLock(user_id, job_id, self.status_tracker):
-                # Update status to processing
+            # Update status to processing
+            self.status_tracker.update_job_status(
+                job_id, ProcessingStatus.PROCESSING,
+                "Starting file validation and processing...", 12.0
+            )
+
+            # Broadcast high-level status to realtime channel (processing started)
+            self._broadcast_to_import_queue_module(user_id, 'status_updated', {
+                'id': import_queue_id,
+                'status': 'processing',
+                'progress': 12.0,
+                'message': 'Processing started'
+            })
+
+            # Broadcast detailed status to process status channel
+            self._broadcast_to_process_status_module(user_id, import_queue_id, 'status_updated', {
+                'status': 'processing',
+                'progress': 12.0,
+                'message': 'Starting file validation and processing...'
+            })
+
+            # Validate file
+            self.status_tracker.update_job_status(
+            job_id, ProcessingStatus.PROCESSING,
+            "Validating file format and security...", 24.0
+            )
+
+            # Broadcast WebSocket event for status update
+            self._broadcast_to_process_status_module(user_id, import_queue_id, 'status_updated', {
+            'status': 'processing',
+            'progress': 24.0,
+            'message': 'Validating file format and security...'
+            })
+            realtime_log.add("Validating file format and security", "ProcessJob", DatabaseLogLevel.INFO)
+    
+            # Create a mock uploaded file for validation
+            from django.core.files.uploadedfile import SimpleUploadedFile
+            uploaded_file = SimpleUploadedFile(
+                name=filename,
+                content=file_data,
+                content_type='application/zip' if filename.lower().endswith('.kmz') else 'text/xml'
+            )
+    
+            # Validate file with timing
+            validator = SecureFileValidator()
+            validation_start = time.time()
+            is_valid, validation_message = validator.validate_file(uploaded_file)
+            validation_duration = time.time() - validation_start
+            realtime_log.add_timing("File validation", validation_duration, "ProcessJob")
+    
+            if not is_valid:
+                error_msg = f"{FILE_VALIDATION_FAILED}: {validation_message}"
+                realtime_log.add(error_msg, "ProcessJob", DatabaseLogLevel.ERROR)
+    
+                # Mark ImportQueue item as unparsable and save error information
+                self._mark_import_queue_as_failed(import_queue_id, validation_message)
+    
                 self.status_tracker.update_job_status(
-                    job_id, ProcessingStatus.PROCESSING,
-                    "Starting file validation and processing...", 12.0
+                    job_id, ProcessingStatus.FAILED,
+                    error_msg,
+                    error_message=validation_message
                 )
     
-                # Broadcast high-level status to realtime channel (processing started)
+                # Broadcast high-level status to realtime channel (processing failed)
                 self._broadcast_to_import_queue_module(user_id, 'status_updated', {
                     'id': import_queue_id,
-                    'status': 'processing',
-                    'progress': 12.0,
-                    'message': 'Processing started'
+                    'status': 'failed',
+                    'progress': 0.0,
+                    'message': PROCESSING_FAILED
                 })
     
-                # Broadcast detailed status to process status channel
-                self._broadcast_to_process_status_module(user_id, import_queue_id, 'status_updated', {
-                    'status': 'processing',
-                    'progress': 12.0,
-                    'message': 'Starting file validation and processing...'
-                })
-    
-                # Validate file
-                self.status_tracker.update_job_status(
-                    job_id, ProcessingStatus.PROCESSING,
-                    "Validating file format and security...", 24.0
-                )
-    
-                # Broadcast WebSocket event for status update
-                self._broadcast_to_process_status_module(user_id, import_queue_id, 'status_updated', {
-                    'status': 'processing',
-                    'progress': 24.0,
-                    'message': 'Validating file format and security...'
-                })
-                realtime_log.add("Validating file format and security", "ProcessJob", DatabaseLogLevel.INFO)
-    
-                # Create a mock uploaded file for validation
-                from django.core.files.uploadedfile import SimpleUploadedFile
-                uploaded_file = SimpleUploadedFile(
-                    name=filename,
-                    content=file_data,
-                    content_type='application/zip' if filename.lower().endswith('.kmz') else 'text/xml'
-                )
-    
-                # Validate file with timing
-                validator = SecureFileValidator()
-                validation_start = time.time()
-                is_valid, validation_message = validator.validate_file(uploaded_file)
-                validation_duration = time.time() - validation_start
-                realtime_log.add_timing("File validation", validation_duration, "ProcessJob")
-    
-                if not is_valid:
-                    error_msg = f"{FILE_VALIDATION_FAILED}: {validation_message}"
-                    realtime_log.add(error_msg, "ProcessJob", DatabaseLogLevel.ERROR)
-    
-                    # Mark ImportQueue item as unparsable and save error information
-                    self._mark_import_queue_as_failed(import_queue_id, validation_message)
-    
-                    self.status_tracker.update_job_status(
-                        job_id, ProcessingStatus.FAILED,
-                        error_msg,
-                        error_message=validation_message
-                    )
-    
-                    # Broadcast high-level status to realtime channel (processing failed)
-                    self._broadcast_to_import_queue_module(user_id, 'status_updated', {
-                        'id': import_queue_id,
-                        'status': 'failed',
-                        'progress': 0.0,
-                        'message': PROCESSING_FAILED
-                    })
-    
-                    # Broadcast detailed failure to process status channel
-                    self._broadcast_to_process_status_module(user_id, import_queue_id, 'item_failed', {
-                        'job_id': job_id,
-                        'error_message': error_msg
-                    })
-                    return
-    
-                realtime_log.add("File validation passed successfully", "ProcessJob", DatabaseLogLevel.INFO)
-    
-                # Check if job was cancelled after validation
-                job = self.status_tracker.get_job(job_id)
-                if job and job.status == ProcessingStatus.CANCELLED:
-                    return
-    
-                # Update progress (different percentages for fast vs normal path)
-                if is_replacement:
-                    # Fast path: validation 20%, conversion 60%
-                    validation_progress = 20.0
-                    conversion_progress = 60.0
-                else:
-                    # Normal path: validation 36%, conversion 48%
-                    validation_progress = 36.0
-                    conversion_progress = 48.0
-    
-                self.status_tracker.update_job_status(
-                    job_id, ProcessingStatus.PROCESSING,
-                    "File validation passed, starting conversion...", validation_progress
-                )
-    
-                # Broadcast WebSocket event for status update
-                self._broadcast_to_process_status_module(user_id, import_queue_id, 'status_updated', {
-                    'status': 'processing',
-                    'progress': validation_progress,
-                    'message': 'File validation passed, starting conversion...'
-                })
-    
-                # Process file to GeoJSON
-                self.status_tracker.update_job_status(
-                    job_id, ProcessingStatus.PROCESSING,
-                    "Converting to GeoJSON format...", conversion_progress
-                )
-    
-                # Broadcast WebSocket event for status update
-                self._broadcast_to_process_status_module(user_id, import_queue_id, 'status_updated', {
-                    'status': 'processing',
-                    'progress': conversion_progress,
-                    'message': 'Converting to GeoJSON format...'
-                })
-                realtime_log.add("Starting GeoJSON conversion", "ProcessJob", DatabaseLogLevel.INFO)
-    
-                # Check if job was cancelled before conversion
-                job = self.status_tracker.get_job(job_id)
-                if job and job.status == ProcessingStatus.CANCELLED:
-                    return
-    
-                # Get file size for logging
-                file_size_mb = len(file_data) / (1024 * 1024)
-                realtime_log.add(f"Processing {file_size_mb:.1f}MB file", "ProcessJob", DatabaseLogLevel.INFO)
-    
-                # Convert to GeoJSON with timing using new processor API
-                # Use minimal processing for replacement uploads (skip tags, geocoding)
-                conversion_start = time.time()
-                logger.info(f"Starting GeoJSON conversion for job {job_id}: file '{filename}' ({file_size_mb:.2f} MB), replacement={is_replacement}")
-                processor = get_processor(
-                    file_data,
-                    filename,
-                    job_id=job_id,
-                    status_tracker=self.status_tracker,
-                    minimal_processing=is_replacement
-                )
-                geojson_data, processing_log = processor.process()
-    
-                if not geojson_data or 'features' not in geojson_data:
-                    raise FileValidationError("Processor returned invalid GeoJSON data")
-    
-                logger.info(f"GeoJSON conversion completed for job {job_id} in {time.time() - conversion_start:.2f}s")
-                conversion_duration = time.time() - conversion_start
-                realtime_log.add_timing("GeoJSON conversion", conversion_duration, "ProcessJob")
-    
-                # Check if job was cancelled during processing
-                job = self.status_tracker.get_job(job_id)
-                if job and job.status == ProcessingStatus.CANCELLED:
-                    logger.info(f"Job {job_id} was cancelled during GeoJSON conversion/processing")
-                    return
-    
-                # Apply user setting: overwrite single track name with filename if enabled
-                try:
-                    user_settings_obj = UserSettings.objects.filter(user_id=user_id).first()
-                    if user_settings_obj and user_settings_obj.settings:
-                        import_settings = user_settings_obj.settings.get('import', {})
-                        overwrite_enabled = import_settings.get('overwrite_single_track_name_with_filename', False)
-    
-                        if overwrite_enabled:
-                            features = geojson_data.get('features', [])
-                            # Check if there's exactly one feature
-                            if len(features) == 1:
-                                feature = features[0]
-                                geometry = feature.get('geometry', {})
-                                geometry_type = geometry.get('type', '').lower() if geometry else ''
-                                properties = feature.get('properties', {})
-    
-                                # Check if it's a track (LineString or MultiLineString)
-                                is_track_geometry = geometry_type in ['linestring', 'multilinestring']
-    
-                                # Check if it has the track:yes tag
-                                system_tags = properties.get('system_tags', [])
-                                is_track_tagged = 'track:yes' in system_tags if isinstance(system_tags, list) else False
-    
-                                if is_track_geometry and is_track_tagged:
-                                    # Extract filename without extension
-                                    filename_without_ext = os.path.splitext(filename)[0]
-                                    # Overwrite the name property
-                                    properties['name'] = filename_without_ext
-                                    feature['properties'] = properties
-                                    logger.info(f"Overwrote single track name with filename '{filename_without_ext}' for job {job_id}")
-                except Exception as e:
-                    # Log error but don't fail the job if setting check fails
-                    logger.warning(f"Error checking/applying overwrite_single_track_name_with_filename setting for job {job_id}: {str(e)}")
-    
-                # Add processing log messages to real-time log
-                realtime_log.extend(processing_log)
-    
-                # Prepare GeoJSON string and size for database storage
-                import json
-                geojson_str = json.dumps(geojson_data)
-                geojson_size_mb = len(geojson_str) / (1024 * 1024)
-    
-                # Update progress
-                self.status_tracker.update_job_status(
-                    job_id, ProcessingStatus.PROCESSING,
-                    "Processing features...", 60.0
-                )
-    
-                # Broadcast WebSocket event for status update
-                self._broadcast_to_process_status_module(user_id, import_queue_id, 'status_updated', {
-                    'status': 'processing',
-                    'progress': 60.0,
-                    'message': 'Processing features...'
-                })
-                realtime_log.add("Processing features", "ProcessJob", DatabaseLogLevel.INFO)
-    
-                # Process features and update import queue entry
-                self.status_tracker.update_job_status(
-                    job_id, ProcessingStatus.PROCESSING,
-                    "Updating database entry...", 72.0
-                )
-    
-                # Broadcast WebSocket event for status update
-                self._broadcast_to_process_status_module(user_id, import_queue_id, 'status_updated', {
-                    'status': 'processing',
-                    'progress': 72.0,
-                    'message': 'Updating database entry...'
-                })
-                realtime_log.add("Updating database entry", "ProcessJob", DatabaseLogLevel.INFO)
-    
-                # Count features for logging
-                feature_count = len(geojson_data.get('features', []))
-                realtime_log.add(f"Found {feature_count} features to process", "ProcessJob", DatabaseLogLevel.INFO)
-    
-                # Check if job was cancelled before database update
-                job = self.status_tracker.get_job(job_id)
-                if job and job.status == ProcessingStatus.CANCELLED:
-                    return
-    
-                # Update existing import queue entry with timing
-                feature_processing_start = time.time()
-                import_queue_id = self._update_import_queue_entry(
-                    geojson_data, realtime_log, filename, user_id, job_id, geojson_str, geojson_size_mb, file_data
-                )
-                feature_processing_duration = time.time() - feature_processing_start
-                realtime_log.add_timing("Feature processing and database update", feature_processing_duration, "ProcessJob")
-    
-                # Mark as completed
-                overall_duration = time.time() - overall_start_time
-                realtime_log.add_timing("Total file processing", overall_duration, "ProcessJob")
-    
-                completion_msg = f"File processing completed! Processed {feature_count} features in {overall_duration:.1f}s"
-                self.status_tracker.update_job_status(
-                    job_id, ProcessingStatus.COMPLETED,
-                    completion_msg, 100.0
-                )
-    
-                # Broadcast high-level status to realtime channel (processing completed)
-                self._broadcast_to_import_queue_module(user_id, 'status_updated', {
-                    'id': import_queue_id,
-                    'status': 'completed',
-                    'progress': 100.0,
-                    'message': 'Processing completed'
-                })
-    
-                # Broadcast detailed completion to process status channel
-                self._broadcast_to_process_status_module(user_id, import_queue_id, 'item_completed', {
+                # Broadcast detailed failure to process status channel
+                self._broadcast_to_process_status_module(user_id, import_queue_id, 'item_failed', {
                     'job_id': job_id,
-                    'message': completion_msg
+                    'error_message': error_msg
                 })
-                realtime_log.add(completion_msg, "ProcessJob", DatabaseLogLevel.INFO)
+                return
     
-                # Set result data
-                self.status_tracker.set_job_result(
-                    job_id,
-                    {'geojson_data': geojson_data, 'processing_log': realtime_log},
-                    import_queue_id
-                )
+            realtime_log.add("File validation passed successfully", "ProcessJob", DatabaseLogLevel.INFO)
     
-                # Log completion with features and time
-                logger.info(f"Job {job_id} completed: {feature_count} features processed in {overall_duration:.1f}s")
+            # Check if job was cancelled after validation
+            job = self.status_tracker.get_job(job_id)
+            if job and job.status == ProcessingStatus.CANCELLED:
+                return
+    
+            # Update progress (different percentages for fast vs normal path)
+            if is_replacement:
+                # Fast path: validation 20%, conversion 60%
+                validation_progress = 20.0
+                conversion_progress = 60.0
+            else:
+                # Normal path: validation 36%, conversion 48%
+                validation_progress = 36.0
+                conversion_progress = 48.0
+    
+            self.status_tracker.update_job_status(
+                job_id, ProcessingStatus.PROCESSING,
+                "File validation passed, starting conversion...", validation_progress
+            )
+    
+            # Broadcast WebSocket event for status update
+            self._broadcast_to_process_status_module(user_id, import_queue_id, 'status_updated', {
+                'status': 'processing',
+                'progress': validation_progress,
+                'message': 'File validation passed, starting conversion...'
+            })
+    
+            # Process file to GeoJSON
+            self.status_tracker.update_job_status(
+                job_id, ProcessingStatus.PROCESSING,
+                "Converting to GeoJSON format...", conversion_progress
+            )
+    
+            # Broadcast WebSocket event for status update
+            self._broadcast_to_process_status_module(user_id, import_queue_id, 'status_updated', {
+                'status': 'processing',
+                'progress': conversion_progress,
+                'message': 'Converting to GeoJSON format...'
+            })
+            realtime_log.add("Starting GeoJSON conversion", "ProcessJob", DatabaseLogLevel.INFO)
+    
+            # Check if job was cancelled before conversion
+            job = self.status_tracker.get_job(job_id)
+            if job and job.status == ProcessingStatus.CANCELLED:
+                return
+    
+            # Get file size for logging
+            file_size_mb = len(file_data) / (1024 * 1024)
+            realtime_log.add(f"Processing {file_size_mb:.1f}MB file", "ProcessJob", DatabaseLogLevel.INFO)
+    
+            # Convert to GeoJSON with timing using new processor API
+            # Use minimal processing for replacement uploads (skip tags, geocoding)
+            conversion_start = time.time()
+            logger.info(f"Starting GeoJSON conversion for job {job_id}: file '{filename}' ({file_size_mb:.2f} MB), replacement={is_replacement}")
+            processor = get_processor(
+                file_data,
+                filename,
+                job_id=job_id,
+                status_tracker=self.status_tracker,
+                minimal_processing=is_replacement
+            )
+            geojson_data, processing_log = processor.process()
+    
+            if not geojson_data or 'features' not in geojson_data:
+                raise FileValidationError("Processor returned invalid GeoJSON data")
+    
+            logger.info(f"GeoJSON conversion completed for job {job_id} in {time.time() - conversion_start:.2f}s")
+            conversion_duration = time.time() - conversion_start
+            realtime_log.add_timing("GeoJSON conversion", conversion_duration, "ProcessJob")
+    
+            # Check if job was cancelled during processing
+            job = self.status_tracker.get_job(job_id)
+            if job and job.status == ProcessingStatus.CANCELLED:
+                logger.info(f"Job {job_id} was cancelled during GeoJSON conversion/processing")
+                return
+    
+            # Apply user setting: overwrite single track name with filename if enabled
+            try:
+                user_settings_obj = UserSettings.objects.filter(user_id=user_id).first()
+                if user_settings_obj and user_settings_obj.settings:
+                    import_settings = user_settings_obj.settings.get('import', {})
+                    overwrite_enabled = import_settings.get('overwrite_single_track_name_with_filename', False)
+    
+                    if overwrite_enabled:
+                        features = geojson_data.get('features', [])
+                        # Check if there's exactly one feature
+                        if len(features) == 1:
+                            feature = features[0]
+                            geometry = feature.get('geometry', {})
+                            geometry_type = geometry.get('type', '').lower() if geometry else ''
+                            properties = feature.get('properties', {})
+    
+                            # Check if it's a track (LineString or MultiLineString)
+                            is_track_geometry = geometry_type in ['linestring', 'multilinestring']
+    
+                            # Check if it has the track:yes tag
+                            system_tags = properties.get('system_tags', [])
+                            is_track_tagged = 'track:yes' in system_tags if isinstance(system_tags, list) else False
+    
+                            if is_track_geometry and is_track_tagged:
+                                # Extract filename without extension
+                                filename_without_ext = os.path.splitext(filename)[0]
+                                # Overwrite the name property
+                                properties['name'] = filename_without_ext
+                                feature['properties'] = properties
+                                logger.info(f"Overwrote single track name with filename '{filename_without_ext}' for job {job_id}")
+            except Exception as e:
+                # Log error but don't fail the job if setting check fails
+                logger.warning(f"Error checking/applying overwrite_single_track_name_with_filename setting for job {job_id}: {str(e)}")
+    
+            # Add processing log messages to real-time log
+            realtime_log.extend(processing_log)
+    
+            # Prepare GeoJSON string and size for database storage
+            import json
+            geojson_str = json.dumps(geojson_data)
+            geojson_size_mb = len(geojson_str) / (1024 * 1024)
+    
+            # Update progress
+            self.status_tracker.update_job_status(
+                job_id, ProcessingStatus.PROCESSING,
+                "Processing features...", 60.0
+            )
+    
+            # Broadcast WebSocket event for status update
+            self._broadcast_to_process_status_module(user_id, import_queue_id, 'status_updated', {
+                'status': 'processing',
+                'progress': 60.0,
+                'message': 'Processing features...'
+            })
+            realtime_log.add("Processing features", "ProcessJob", DatabaseLogLevel.INFO)
+    
+            # Process features and update import queue entry
+            self.status_tracker.update_job_status(
+                job_id, ProcessingStatus.PROCESSING,
+                "Updating database entry...", 72.0
+            )
+    
+            # Broadcast WebSocket event for status update
+            self._broadcast_to_process_status_module(user_id, import_queue_id, 'status_updated', {
+                'status': 'processing',
+                'progress': 72.0,
+                'message': 'Updating database entry...'
+            })
+            realtime_log.add("Updating database entry", "ProcessJob", DatabaseLogLevel.INFO)
+    
+            # Count features for logging
+            feature_count = len(geojson_data.get('features', []))
+            realtime_log.add(f"Found {feature_count} features to process", "ProcessJob", DatabaseLogLevel.INFO)
+    
+            # Check if job was cancelled before database update
+            job = self.status_tracker.get_job(job_id)
+            if job and job.status == ProcessingStatus.CANCELLED:
+                return
+    
+            # Update existing import queue entry with timing
+            feature_processing_start = time.time()
+            import_queue_id = self._update_import_queue_entry(
+                geojson_data, realtime_log, filename, user_id, job_id, geojson_str, geojson_size_mb, file_data
+            )
+            feature_processing_duration = time.time() - feature_processing_start
+            realtime_log.add_timing("Feature processing and database update", feature_processing_duration, "ProcessJob")
+    
+            # Mark as completed
+            overall_duration = time.time() - overall_start_time
+            realtime_log.add_timing("Total file processing", overall_duration, "ProcessJob")
+    
+            completion_msg = f"File processing completed! Processed {feature_count} features in {overall_duration:.1f}s"
+            self.status_tracker.update_job_status(
+                job_id, ProcessingStatus.COMPLETED,
+                completion_msg, 100.0
+            )
+    
+            # Broadcast high-level status to realtime channel (processing completed)
+            self._broadcast_to_import_queue_module(user_id, 'status_updated', {
+                'id': import_queue_id,
+                'status': 'completed',
+                'progress': 100.0,
+                'message': 'Processing completed'
+            })
+    
+            # Broadcast detailed completion to process status channel
+            self._broadcast_to_process_status_module(user_id, import_queue_id, 'item_completed', {
+                'job_id': job_id,
+                'message': completion_msg
+            })
+            realtime_log.add(completion_msg, "ProcessJob", DatabaseLogLevel.INFO)
+    
+            # Set result data
+            self.status_tracker.set_job_result(
+                job_id,
+                {'geojson_data': geojson_data, 'processing_log': realtime_log},
+                import_queue_id
+            )
+    
+            # Log completion with features and time
+            logger.info(f"Job {job_id} completed: {feature_count} features processed in {overall_duration:.1f}s")
     
         except TimeoutError as e:
-            # Redis lock timeout - another file is stuck processing
+            # Timeout during processing (e.g., subprocess timeout)
             error_msg = str(e)
-            logger.error(f"Processing lock timeout for job {job_id}: {error_msg}")
+            logger.error(f"Processing timeout for job {job_id}: {error_msg}")
             realtime_log.add(error_msg, "ProcessJob", DatabaseLogLevel.ERROR)
             self._handle_processing_error(job_id, user_id, error_msg, error_msg, realtime_log)
             

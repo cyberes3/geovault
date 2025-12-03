@@ -32,6 +32,7 @@ class DatamanageConfig(AppConfig):
           (In production, ready() is only called once per process anyway)
         """
         import logging
+        import atexit
         apps_logger = logging.getLogger('api.apps')
         
         # Skip if we're in the reloader process (development only)
@@ -61,3 +62,11 @@ class DatamanageConfig(AppConfig):
         except Exception as e:
             # Log but don't fail app initialization if service fails to start
             apps_logger.error(f"Failed to start replacement cleanup service: {e}", exc_info=True)
+        
+        # Register queue worker cleanup on shutdown
+        try:
+            from geo_lib.processing.queue_worker import stop_all_workers
+            atexit.register(stop_all_workers)
+            apps_logger.info("Registered queue worker cleanup handler")
+        except Exception as e:
+            apps_logger.error(f"Failed to register queue worker cleanup handler: {e}", exc_info=True)

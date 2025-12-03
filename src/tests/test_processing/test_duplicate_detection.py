@@ -1466,7 +1466,11 @@ class TestComplexScenarios(TestCase):
 
 
 class TestSequentialProcessingIntegration(TransactionTestCase):
-    """Integration tests for sequential processing with RedisProcessingLock."""
+    """Integration tests for sequential processing with Redis queue.
+    
+    Note: Sequential processing is now handled by the queue worker system.
+    See test_sequential_processing.py for queue-specific tests.
+    """
     
     def setUp(self):
         """Set up test fixtures."""
@@ -1476,9 +1480,11 @@ class TestSequentialProcessingIntegration(TransactionTestCase):
             username='sequential_user'
         )
     
+    @pytest.mark.skip(reason="Redis lock replaced with queue system - see test_sequential_processing.py")
     def test_concurrent_uploads_with_lock_prevent_race_conditions(self):
-        """Test that RedisProcessingLock prevents duplicate detection race conditions."""
-        from geo_lib.utils.redis_lock import RedisProcessingLock
+        """Test that sequential processing prevents duplicate detection race conditions."""
+        # This test is deprecated - queue worker ensures sequential processing
+        from geo_lib.processing.redis_queue import get_processing_queue
         from geo_lib.processing.status_tracker import status_tracker
         from datetime import datetime, timezone, timedelta
         import threading

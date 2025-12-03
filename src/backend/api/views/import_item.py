@@ -75,14 +75,14 @@ def upload_item(request):
             # Create a processing job
             job_id = status_tracker.create_job(file_name, request.user.id)
 
-            # Start background processing
-            if process_job.start_process_job(job_id, file_data, file_name, request.user.id, replacement_feature_id=replacement_feature_id):
+            # Enqueue job to Redis queue for sequential processing
+            if process_job.enqueue_job(job_id, file_data, file_name, request.user.id, replacement_feature_id=replacement_feature_id):
                 return success_response({
-                    'msg': 'File uploaded successfully, processing started',
+                    'msg': 'File uploaded successfully, processing queued',
                     'job_id': job_id
                 })
             else:
-                return server_error_response('Failed to start file processing')
+                return server_error_response('Failed to enqueue file processing')
         else:
             # Try to get filename even if form validation failed
             filename = "unknown file"

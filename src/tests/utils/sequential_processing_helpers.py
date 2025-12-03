@@ -1,16 +1,14 @@
 """
-Helper utilities for testing sequential processing with RedisProcessingLock.
+Helper utilities for testing sequential processing with Redis queue.
 
 This module provides utilities for:
 - Waiting for job completion in tests
-- Acquiring Redis locks in tests
-- Mocking Redis lock behavior
+- Working with Redis queues in tests
 """
 
 import time
 from contextlib import contextmanager
 from typing import Optional
-from unittest.mock import MagicMock, patch
 
 from geo_lib.processing.status_tracker import ProcessingStatus, status_tracker
 
@@ -86,60 +84,29 @@ def wait_for_job_status(job_id: str, expected_status: ProcessingStatus,
 
 
 @contextmanager
-def with_redis_lock(user_id: int, job_id: Optional[str] = None):
+def with_queue_worker(user_id: int):
     """
-    Context manager for acquiring Redis lock in tests.
+    Context manager for working with queue worker in tests.
     
-    This uses the real RedisProcessingLock, so it requires Redis to be available.
-    Use this for integration tests that need to verify lock behavior.
+    This requires Redis to be available.
+    Use this for integration tests that need to verify queue behavior.
     
     Args:
-        user_id: User ID to create lock for
-        job_id: Optional job ID for status updates
+        user_id: User ID to create worker for
     
     Example:
-        with with_redis_lock(user.id):
-            # Code here runs with lock held
+        with with_queue_worker(user.id):
+            # Queue worker is available for this user
             pass
     """
-    from geo_lib.utils.redis_lock import RedisProcessingLock
+    from geo_lib.processing.queue_worker import WorkerRegistry, stop_all_workers
     
-    lock = RedisProcessingLock(user_id, job_id, status_tracker)
-    with lock:
-        yield lock
-
-
-@contextmanager
-def mock_redis_lock(acquired: bool = True, wait_time: float = 0.0):
-    """
-    Mock RedisProcessingLock for unit tests that don't need real Redis.
-    
-    Args:
-        acquired: Whether the lock should be successfully acquired (default: True)
-        wait_time: Simulated wait time before acquiring lock (default: 0)
-    
-    Example:
-        with mock_redis_lock():
-            # Code using RedisProcessingLock will use the mock
-            process_job.start_process_job(...)
-    """
-    mock_lock_instance = MagicMock()
-    
-    def mock_enter(self):
-        if wait_time > 0:
-            time.sleep(wait_time)
-        if not acquired:
-            raise TimeoutError("Mock lock timeout")
-        return self
-    
-    def mock_exit(self, exc_type, exc_val, exc_tb):
-        return False
-    
-    mock_lock_instance.__enter__ = mock_enter
-    mock_lock_instance.__exit__ = mock_exit
-    
-    with patch('geo_lib.utils.redis_lock.RedisProcessingLock', return_value=mock_lock_instance):
-        yield mock_lock_instance
+    try:
+        yield
+    finally:
+        # Cleanup workers after test
+        stop_all_workers()
+        time.sleep(0.5)  # Give workers time to stop
 
 
 def ensure_job_thread_completes(job_id: str, timeout: float = 5.0):
