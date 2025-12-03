@@ -14,25 +14,11 @@
           <p class="text-gray-600">Manage your geospatial data imports and view processing history.</p>
         </div>
         <div class="flex flex-col sm:flex-row space-y-2 sm:space-y-0 sm:space-x-3 mt-4 sm:mt-0">
-          <button
-            @click="refreshTables"
-            :disabled="isRefreshing"
-            class="w-full sm:w-auto inline-flex items-center justify-center px-3 py-2 border border-gray-300 text-sm font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 transition-colors duration-200 disabled:opacity-50 disabled:cursor-not-allowed"
-            title="Refresh import queue and history"
-          >
-            <Loader v-if="isRefreshing" size="sm" layout="inline" :showMessage="false" />
-            <svg v-else class="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"></path>
-            </svg>
-            {{ isRefreshing ? 'Refreshing...' : 'Refresh' }}
-          </button>
           <router-link
             to="/import/upload"
             class="w-full sm:w-auto inline-flex items-center justify-center px-4 py-2 border border-transparent text-sm font-medium rounded-md text-white bg-blue-500 hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 transition-colors duration-200"
           >
-            <svg class="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6v6m0 0v6m0-6h6m-6 0H6"></path>
-            </svg>
+            <ArrowUpTrayIcon class="w-4 h-4 mr-2" />
             Upload Files
           </router-link>
         </div>
@@ -105,6 +91,7 @@ import {mapState} from "vuex"
 import {IMPORT_HISTORY_URL} from "@/assets/js/import/url.js";
 import ImportQueue from "@/components/import/parts/ImportQueue.vue";
 import Loader from "@/components/parts/Loader.vue";
+import { ArrowUpTrayIcon } from '@heroicons/vue/24/outline';
 
 export default {
   computed: {
@@ -116,7 +103,7 @@ export default {
       return !this.importHistoryLoaded && this.importHistory.length === 0;
     }
   },
-  components: {ImportQueue: ImportQueue, Loader},
+  components: {ImportQueue: ImportQueue, Loader, ArrowUpTrayIcon},
   data() {
     return {
       importQueueIsLoading: true,

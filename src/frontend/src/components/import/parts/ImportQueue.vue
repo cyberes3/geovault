@@ -93,14 +93,6 @@
             <p class="text-gray-500 mb-6 max-w-sm">
               Get started by uploading your first geospatial data file. Supported formats include KMZ/KML and GeoJSON.
             </p>
-            <router-link
-              v-if="!isOnUploadPage"
-              to="/import/upload"
-              class="inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md text-white bg-blue-500 hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 transition-colors duration-200"
-            >
-              <ArrowUpTrayIcon class="w-4 h-4 mr-2" />
-              Upload A File
-            </router-link>
           </div>
         </div>
 
@@ -237,10 +229,6 @@ export default {
         }
       });
       return count;
-    },
-    isOnUploadPage() {
-      // Check if we're on the /import/upload page
-      return this.$route.path === '/import/upload';
     },
     isAnyOperationInProgress() {
       // Check if any bulk import or delete operation is in progress
