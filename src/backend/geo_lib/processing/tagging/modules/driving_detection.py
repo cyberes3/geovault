@@ -205,7 +205,7 @@ class DrivingDetectionTagGenerator(TagGenerator):
         Detect if feature is a track with driving speeds and generate driving:yes tag.
         
         Checks if moving average speed is between 15-120 mph.
-        Only processes tracks with timestamps (GPX tracks/routes).
+        Only processes tracks with timestamps (GPX tracks/routes) and at least 10 points.
         
         Args:
             feature: The feature to generate tags for
@@ -226,8 +226,8 @@ class DrivingDetectionTagGenerator(TagGenerator):
         # Extract coordinates and timestamps
         coordinates, timestamps = extract_coordinates_and_timestamps(feature)
         
-        # Need at least 2 points with timestamps to calculate speed
-        if len(coordinates) < 2 or len(timestamps) < 2:
+        # Need at least 10 points with timestamps to calculate reliable speed
+        if len(coordinates) < 10 or len(timestamps) < 10:
             return tags
         
         # Calculate moving average speed

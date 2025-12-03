@@ -332,7 +332,7 @@ class TestCollectionsAPI(TestCase):
         collection = Collection.objects.create(
             user=self.user,
             name='Empty Collection',
-            tags=['test'],
+            tags=[],  # No tags to avoid matching existing features
             feature_ids=[]
         )
 
@@ -395,7 +395,7 @@ class TestCollectionsAPI(TestCase):
             },
             'properties': {
                 'name': 'Test Line',
-                'tags': ['test']
+                'tags': ['line-feature']  # Different tag to avoid matching setup feature
             }
         }
         line_feature = FeatureStore.objects.create(
@@ -408,7 +408,7 @@ class TestCollectionsAPI(TestCase):
         collection = Collection.objects.create(
             user=self.user,
             name='Line Collection',
-            tags=['test'],
+            tags=[],  # No tags to avoid matching other features
             feature_ids=[line_feature.id]
         )
 
@@ -446,7 +446,7 @@ class TestCollectionsAPI(TestCase):
             },
             'properties': {
                 'name': 'Test Polygon',
-                'tags': ['test']
+                'tags': ['polygon-feature']  # Different tag to avoid matching setup feature
             }
         }
         polygon_feature = FeatureStore.objects.create(
@@ -459,7 +459,7 @@ class TestCollectionsAPI(TestCase):
         collection = Collection.objects.create(
             user=self.user,
             name='Polygon Collection',
-            tags=['test'],
+            tags=[],  # No tags to avoid matching other features
             feature_ids=[polygon_feature.id]
         )
 

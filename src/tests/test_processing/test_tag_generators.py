@@ -400,16 +400,33 @@ class TestDrivingDetectionTagGenerator:
     """Test the driving detection tag generator."""
     
     def test_track_with_driving_keyword(self):
-        """Test that tracks with 'driving' in name are tagged."""
+        """Test that tracks with driving speed (30 mph average) are tagged."""
         generator = DrivingDetectionTagGenerator()
-        coordinates = [[-122.4194 + i * 0.001, 37.7749 + i * 0.001] for i in range(15)]
+        # Create coordinates spaced to simulate ~30 mph driving
+        # Each point is about 400m apart, with 30 second intervals
+        # 400m / 30s = 13.33 m/s = 29.8 mph
+        coordinates = [[-122.4194 + i * 0.0036, 37.7749 + i * 0.0036] for i in range(15)]
+        # Generate timestamps 30 seconds apart: 08:00:00, 08:00:30, 08:01:00, etc.
+        timestamps = []
+        for i in range(15):
+            seconds = i * 30
+            minutes = seconds // 60
+            secs = seconds % 60
+            timestamps.append(f'2024-09-02T08:{minutes:02d}:{secs:02d}Z')
+        
         feature = LineStringFeature(
             type='Feature',
             geometry={
                 'type': 'LineString',
                 'coordinates': coordinates
             },
-            properties={'name': 'Morning Driving Route', 'feature_hash': 'test'}
+            properties={
+                'name': 'Morning Driving Route',
+                'feature_hash': 'test',
+                'coordinateProperties': {
+                    'times': timestamps
+                }
+            }
         )
         
         tags = generator.process(feature)
@@ -417,16 +434,33 @@ class TestDrivingDetectionTagGenerator:
         assert 'driving:yes' in tags
     
     def test_track_with_drive_keyword(self):
-        """Test that tracks with 'drive' in name are tagged."""
+        """Test that tracks with driving speed (45 mph average) are tagged."""
         generator = DrivingDetectionTagGenerator()
-        coordinates = [[-122.4194 + i * 0.001, 37.7749 + i * 0.001] for i in range(15)]
+        # Create coordinates spaced to simulate ~45 mph driving
+        # Each point is about 600m apart, with 30 second intervals
+        # 600m / 30s = 20 m/s = 44.7 mph
+        coordinates = [[-122.4194 + i * 0.0054, 37.7749 + i * 0.0054] for i in range(15)]
+        # Generate timestamps 30 seconds apart: 08:00:00, 08:00:30, 08:01:00, etc.
+        timestamps = []
+        for i in range(15):
+            seconds = i * 30
+            minutes = seconds // 60
+            secs = seconds % 60
+            timestamps.append(f'2024-09-02T08:{minutes:02d}:{secs:02d}Z')
+        
         feature = LineStringFeature(
             type='Feature',
             geometry={
                 'type': 'LineString',
                 'coordinates': coordinates
             },
-            properties={'name': 'Scenic Drive', 'feature_hash': 'test'}
+            properties={
+                'name': 'Scenic Drive',
+                'feature_hash': 'test',
+                'coordinateProperties': {
+                    'times': timestamps
+                }
+            }
         )
         
         tags = generator.process(feature)
@@ -451,15 +485,25 @@ class TestDrivingDetectionTagGenerator:
         assert tags == []
     
     def test_short_line_not_processed(self):
-        """Test that short lines are not processed for driving detection."""
+        """Test that short lines (< 10 points) are not processed for driving detection."""
         generator = DrivingDetectionTagGenerator()
+        # Only 5 points with timestamps
+        coordinates = [[-122.4194 + i * 0.0036, 37.7749 + i * 0.0036] for i in range(5)]
+        timestamps = [f'2024-09-02T08:00:{i*30:02d}Z' for i in range(5)]
+        
         feature = LineStringFeature(
             type='Feature',
             geometry={
                 'type': 'LineString',
-                'coordinates': [[-122.4194, 37.7749], [-122.4195, 37.7750]]
+                'coordinates': coordinates
             },
-            properties={'name': 'Driving', 'feature_hash': 'test'}
+            properties={
+                'name': 'Driving',
+                'feature_hash': 'test',
+                'coordinateProperties': {
+                    'times': timestamps
+                }
+            }
         )
         
         tags = generator.process(feature)
@@ -666,16 +710,20 @@ class TestGeocodingTagGenerator:
         
         assert tags == []
     
-    @patch('geo_lib.processing.tagging.modules.geocoding.reverse_geocode_feature')
+    @patch('geo_lib.processing.tagging.modules.geocoding.get_reverse_geocoding_service')
     @patch('geo_lib.processing.tagging.modules.geocoding.get_required_setting')
-    def test_geocoding_for_point(self, mock_setting, mock_geocode):
+    def test_geocoding_for_point(self, mock_setting, mock_get_service):
         """Test that geocoding tags are generated for points."""
         mock_setting.return_value = True
-        mock_geocode.return_value = {
-            'city': 'San Francisco',
-            'state': 'California',
-            'country': 'United States'
-        }
+        
+        # Mock the geocoding service
+        mock_service = Mock()
+        mock_service.get_location_tags.return_value = [
+            'geo-city:San Francisco',
+            'geo-state:California',
+            'geo-country:United States'
+        ]
+        mock_get_service.return_value = mock_service
         
         generator = GeocodingTagGenerator()
         feature = PointFeature(
@@ -691,15 +739,19 @@ class TestGeocodingTagGenerator:
         assert 'geo-state:California' in tags
         assert 'geo-country:United States' in tags
     
-    @patch('geo_lib.processing.tagging.modules.geocoding.reverse_geocode_feature')
+    @patch('geo_lib.processing.tagging.modules.geocoding.get_reverse_geocoding_service')
     @patch('geo_lib.processing.tagging.modules.geocoding.get_required_setting')
-    def test_geocoding_for_linestring(self, mock_setting, mock_geocode):
+    def test_geocoding_for_linestring(self, mock_setting, mock_get_service):
         """Test that geocoding tags are generated for linestrings."""
         mock_setting.return_value = True
-        mock_geocode.return_value = {
-            'state': 'California',
-            'country': 'United States'
-        }
+        
+        # Mock the geocoding service
+        mock_service = Mock()
+        mock_service.get_location_tags.return_value = [
+            'geo-state:California',
+            'geo-country:United States'
+        ]
+        mock_get_service.return_value = mock_service
         
         generator = GeocodingTagGenerator()
         feature = LineStringFeature(
@@ -742,12 +794,16 @@ class TestGeocodingTagGenerator:
         
         assert tags == []
     
-    @patch('geo_lib.processing.tagging.modules.geocoding.reverse_geocode_feature')
+    @patch('geo_lib.processing.tagging.modules.geocoding.get_reverse_geocoding_service')
     @patch('geo_lib.processing.tagging.modules.geocoding.get_required_setting')
-    def test_geocoding_with_none_result(self, mock_setting, mock_geocode):
-        """Test that no tags are generated when geocoding returns None."""
+    def test_geocoding_with_none_result(self, mock_setting, mock_get_service):
+        """Test that no tags are generated when geocoding returns empty list."""
         mock_setting.return_value = True
-        mock_geocode.return_value = None
+        
+        # Mock the geocoding service to return empty list
+        mock_service = Mock()
+        mock_service.get_location_tags.return_value = []
+        mock_get_service.return_value = mock_service
         
         generator = GeocodingTagGenerator()
         feature = PointFeature(
