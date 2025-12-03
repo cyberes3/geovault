@@ -8,7 +8,7 @@ import {Circle, Fill, Stroke, Style} from 'ol/style';
 import {getLength} from 'ol/sphere';
 import {getCenter} from 'ol/extent';
 import {Point} from 'ol/geom';
-import {getIconUrl, createIconStyle, getDefaultIconStyle} from './iconUtils';
+import {getIconUrl, createIconStyle, getDefaultIconStyle, isSystemIcon, detectPrimaryColor, getZoomFromResolution, resolveIconUrl, preloadIconImage} from './iconUtils';
 
 /**
  * Convert hex color to CSS color string
@@ -33,20 +33,6 @@ export function applyFillOpacity(hexColor: string, opacity: number): string {
     const g = parseInt(hex.slice(2, 4), 16);
     const b = parseInt(hex.slice(4, 6), 16);
     return `rgba(${r}, ${g}, ${b}, ${opacity})`;
-}
-
-/**
- * Calculate zoom level from resolution (Web Mercator)
- * Uses equator approximation for simplicity
- * @param resolution - Map resolution in meters per pixel
- * @returns Zoom level
- */
-function getZoomFromResolution(resolution: number): number {
-    if (resolution <= 0) return 10; // Default to base zoom if invalid
-    // Web Mercator resolution formula: resolution = 156543.03392 / 2^zoom
-    // Solving for zoom: zoom = log2(156543.03392 / resolution)
-    const baseResolution = 156543.03392;
-    return Math.log2(baseResolution / resolution);
 }
 
 /**
@@ -225,6 +211,7 @@ export function createDefaultStyle(textStyle?: any): Style {
 /**
  * Get icon-only style for a feature (no text labels)
  * Used for rendering icons on a separate layer without decluttering
+ * At zoom level 8 or below, replaces image-based icons with colored default points
  * @param feature - OpenLayers feature
  * @param resolution - Map resolution (meters per pixel)
  * @returns OpenLayers Style object with only icon/image, or null to hide feature
@@ -243,6 +230,51 @@ export function getFeatureIconStyle(feature: any, resolution?: number): Style | 
         // Check for icon URL first
         const iconUrl = getIconUrl(properties);
         if (iconUrl) {
+            // Check if icon URL changed and clear detected color if so
+            const storedIconUrl = feature.get('_iconUrlForColorDetection');
+            if (storedIconUrl !== iconUrl) {
+                feature.set('_iconUrlForColorDetection', iconUrl);
+                feature.set('_detectedIconColor', null);
+                feature.set('_colorDetectionInProgress', false);
+            }
+            
+            // At zoom level 8 or below, replace image-based icons (not system icons) with colored default points
+            const isLowZoom = resolution !== undefined && resolution > 0 && getZoomFromResolution(resolution) <= 8;
+            
+            if (isLowZoom && !isSystemIcon(iconUrl)) {
+                // Preload the original icon image so it's ready when user zooms in
+                preloadIconImage(iconUrl, feature, properties);
+                
+                // Check if we already have a detected color stored
+                const detectedColor = feature.get('_detectedIconColor');
+                if (detectedColor) {
+                    return getDefaultIconStyle(properties, resolution, detectedColor);
+                }
+                
+                // Start color detection if not already in progress
+                if (!feature.get('_colorDetectionInProgress')) {
+                    feature.set('_colorDetectionInProgress', true);
+                    const resolvedUrl = resolveIconUrl(iconUrl);
+                    const fallbackColor = properties['marker-color'] || '#ff0000';
+                    
+                    detectPrimaryColor(resolvedUrl)
+                        .then(color => {
+                            feature.set('_detectedIconColor', color);
+                            feature.set('_colorDetectionInProgress', false);
+                            feature.changed();
+                        })
+                        .catch(() => {
+                            feature.set('_detectedIconColor', fallbackColor);
+                            feature.set('_colorDetectionInProgress', false);
+                            feature.changed();
+                        });
+                }
+                
+                // Don't render until color detection is complete
+                return null;
+            }
+            
+            // At higher zoom or for system icons, use the image icon
             const icon = createIconStyle(iconUrl, feature, properties, 20, resolution);
             if (icon) {
                 return new Style({
