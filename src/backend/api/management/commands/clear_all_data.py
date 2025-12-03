@@ -1,5 +1,6 @@
 from django.core.management.base import BaseCommand, CommandError
 from django.db import transaction
+from django.contrib.auth import get_user_model
 from api.models import ImportQueue, FeatureStore, DatabaseLogging, TagShare, CollectionShare, Collection
 
 
@@ -16,6 +17,11 @@ class Command(BaseCommand):
             '--confirm',
             action='store_true',
             help='Skip confirmation prompt (useful for scripts)',
+        )
+        parser.add_argument(
+            '--user',
+            type=str,
+            help='Email address of the user whose data should be cleared. If not provided, clears data for all users.',
         )
         parser.add_argument(
             '--import-queue-only',
@@ -51,12 +57,25 @@ class Command(BaseCommand):
     def handle(self, *args, **options):
         dry_run = options['dry_run']
         confirm = options['confirm']
+        user_email = options.get('user')
         import_queue_only = options['import_queue_only']
         feature_store_only = options['feature_store_only']
         logs_only = options['logs_only']
         tag_shares_only = options['tag_shares_only']
         collection_shares_only = options['collection_shares_only']
         collections_only = options['collections_only']
+
+        # Get user object if email is provided
+        user_obj = None
+        if user_email:
+            User = get_user_model()
+            try:
+                user_obj = User.objects.get(email=user_email)
+                self.stdout.write(self.style.WARNING(f'Filtering data for user: {user_email}'))
+            except User.DoesNotExist:
+                raise CommandError(f'User with email "{user_email}" does not exist')
+            except User.MultipleObjectsReturned:
+                raise CommandError(f'Multiple users found with email "{user_email}"')
 
         # Determine what to clear
         # If any "only" flag is set, only clear that specific table
@@ -74,13 +93,20 @@ class Command(BaseCommand):
         if dry_run:
             self.stdout.write(self.style.WARNING('DRY RUN MODE - No changes will be made'))
 
-        # Get counts
-        import_queue_count = ImportQueue.objects.count() if clear_import_queue else 0
-        feature_store_count = FeatureStore.objects.count() if clear_feature_store else 0
-        logs_count = DatabaseLogging.objects.count() if clear_logs else 0
-        tag_shares_count = TagShare.objects.count() if clear_tag_shares else 0
-        collection_shares_count = CollectionShare.objects.count() if clear_collection_shares else 0
-        collections_count = Collection.objects.count() if clear_collections else 0
+        # Get counts (filter by user if specified)
+        import_queue_qs = ImportQueue.objects.filter(user=user_obj) if user_obj else ImportQueue.objects.all()
+        feature_store_qs = FeatureStore.objects.filter(user=user_obj) if user_obj else FeatureStore.objects.all()
+        logs_qs = DatabaseLogging.objects.filter(user=user_obj) if user_obj else DatabaseLogging.objects.all()
+        tag_shares_qs = TagShare.objects.filter(user=user_obj) if user_obj else TagShare.objects.all()
+        collection_shares_qs = CollectionShare.objects.filter(user=user_obj) if user_obj else CollectionShare.objects.all()
+        collections_qs = Collection.objects.filter(user=user_obj) if user_obj else Collection.objects.all()
+
+        import_queue_count = import_queue_qs.count() if clear_import_queue else 0
+        feature_store_count = feature_store_qs.count() if clear_feature_store else 0
+        logs_count = logs_qs.count() if clear_logs else 0
+        tag_shares_count = tag_shares_qs.count() if clear_tag_shares else 0
+        collection_shares_count = collection_shares_qs.count() if clear_collection_shares else 0
+        collections_count = collections_qs.count() if clear_collections else 0
 
         total_count = (import_queue_count + feature_store_count + logs_count + 
                       tag_shares_count + collection_shares_count + collections_count)
@@ -128,42 +154,42 @@ class Command(BaseCommand):
             deleted_counts = {}
             
             if clear_logs and logs_count > 0:
-                deleted_count, _ = DatabaseLogging.objects.all().delete()
+                deleted_count, _ = logs_qs.delete()
                 deleted_counts['logs'] = deleted_count
                 self.stdout.write(
                     self.style.SUCCESS(f'Deleted {deleted_count} items from database logs')
                 )
 
             if clear_collection_shares and collection_shares_count > 0:
-                deleted_count, _ = CollectionShare.objects.all().delete()
+                deleted_count, _ = collection_shares_qs.delete()
                 deleted_counts['collection_shares'] = deleted_count
                 self.stdout.write(
                     self.style.SUCCESS(f'Deleted {deleted_count} items from collection shares')
                 )
 
             if clear_collections and collections_count > 0:
-                deleted_count, _ = Collection.objects.all().delete()
+                deleted_count, _ = collections_qs.delete()
                 deleted_counts['collections'] = deleted_count
                 self.stdout.write(
                     self.style.SUCCESS(f'Deleted {deleted_count} items from collections')
                 )
 
             if clear_tag_shares and tag_shares_count > 0:
-                deleted_count, _ = TagShare.objects.all().delete()
+                deleted_count, _ = tag_shares_qs.delete()
                 deleted_counts['tag_shares'] = deleted_count
                 self.stdout.write(
                     self.style.SUCCESS(f'Deleted {deleted_count} items from tag shares')
                 )
 
             if clear_import_queue and import_queue_count > 0:
-                deleted_count, _ = ImportQueue.objects.all().delete()
+                deleted_count, _ = import_queue_qs.delete()
                 deleted_counts['import_queue'] = deleted_count
                 self.stdout.write(
                     self.style.SUCCESS(f'Deleted {deleted_count} items from import queue')
                 )
 
             if clear_feature_store and feature_store_count > 0:
-                deleted_count, _ = FeatureStore.objects.all().delete()
+                deleted_count, _ = feature_store_qs.delete()
                 deleted_counts['feature_store'] = deleted_count
                 self.stdout.write(
                     self.style.SUCCESS(f'Deleted {deleted_count} items from feature store')
