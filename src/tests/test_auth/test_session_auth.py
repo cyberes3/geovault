@@ -5,7 +5,7 @@ from django.test import TestCase
 from django.contrib.auth import get_user_model
 
 from api.models import FeatureStore
-from geo_lib.feature_id import generate_feature_hash
+from geo_lib.feature_id import generate_geojson_hash
 
 User = get_user_model()
 
@@ -75,7 +75,7 @@ class TestSessionAuth(TestCase):
         other_feature = FeatureStore.objects.create(
             user=other_user,
             geojson=self.feature_data,
-            geojson_hash=generate_feature_hash(self.feature_data)
+            geojson_hash=generate_geojson_hash(self.feature_data)
         )
 
         # Try to access other user's feature
@@ -104,4 +104,3 @@ class TestSessionAuth(TestCase):
         self.client.logout()
         response = self.client.get('/api/features/all/')
         self.assertEqual(response.status_code, 401)
-

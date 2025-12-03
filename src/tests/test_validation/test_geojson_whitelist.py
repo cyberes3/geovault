@@ -375,8 +375,8 @@ class TestGeoJSONWhitelist:
         assert result['properties']['fill'] == '#FFFF00'
         assert result['properties']['fill-opacity'] == 0.1
 
-    def test_feature_hash_stripped_by_default(self):
-        """Test that feature_hash is stripped by default."""
+    def test_geojson_hash_stripped_by_default(self):
+        """Test that geojson_hash is stripped by default."""
         feature = {
             'type': 'Feature',
             'geometry': {
@@ -385,15 +385,15 @@ class TestGeoJSONWhitelist:
             },
             'properties': {
                 'name': 'Test',
-                'feature_hash': 'abc123def456',
+                'geojson_hash': 'abc123def456',
                 'tags': []
             }
         }
         result = validate_and_normalize_geojson_feature(feature)
-        assert 'feature_hash' not in result['properties']
+        assert 'geojson_hash' not in result['properties']
 
-    def test_feature_hash_preservation(self):
-        """Test that feature_hash can be preserved when requested."""
+    def test_geojson_hash_preservation(self):
+        """Test that geojson_hash can be preserved when requested."""
         feature = {
             'type': 'Feature',
             'geometry': {
@@ -402,18 +402,18 @@ class TestGeoJSONWhitelist:
             },
             'properties': {
                 'name': 'Test',
-                'feature_hash': 'abc123def456',
+                'geojson_hash': 'abc123def456',
                 'tags': []
             }
         }
         result = validate_and_normalize_geojson_feature(
             feature,
-            preserve_feature_hash=True
+            preserve_geojson_hash=True
         )
-        assert result['properties']['feature_hash'] == 'abc123def456'
+        assert result['properties']['geojson_hash'] == 'abc123def456'
 
-    def test_feature_hash_preservation_with_none(self):
-        """Test that feature_hash preservation does nothing if hash is not present."""
+    def test_geojson_hash_preservation_with_none(self):
+        """Test that geojson_hash preservation does nothing if hash is not present."""
         feature = {
             'type': 'Feature',
             'geometry': {
@@ -427,8 +427,7 @@ class TestGeoJSONWhitelist:
         }
         result = validate_and_normalize_geojson_feature(
             feature,
-            preserve_feature_hash=True
+            preserve_geojson_hash=True
         )
-        assert 'feature_hash' not in result['properties']
-
+        assert 'geojson_hash' not in result['properties']
 

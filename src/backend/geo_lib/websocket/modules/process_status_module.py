@@ -65,11 +65,11 @@ class ProcessStatusModule(BaseWebSocketModule):
                 'original_filename': None
             }
 
-            if self.import_item.geojson_hash:
+            if self.import_item.file_hash:
                 # Check for earlier files with same raw file hash still in queue (not imported)
                 duplicate_in_queue_query = sync_to_async(ImportQueue.objects.filter(
                     user_id=self.user.id,
-                    geojson_hash=self.import_item.geojson_hash,
+                    file_hash=self.import_item.file_hash,
                     imported=False,
                     timestamp__lt=self.import_item.timestamp
                 ).order_by('timestamp').first)
@@ -82,7 +82,7 @@ class ProcessStatusModule(BaseWebSocketModule):
                     # Check for already-imported files with same raw file hash
                     duplicate_imported_query = sync_to_async(ImportQueue.objects.filter(
                         user_id=self.user.id,
-                        geojson_hash=self.import_item.geojson_hash,
+                        file_hash=self.import_item.file_hash,
                         imported=True
                     ).order_by('timestamp').first)
                     duplicate_imported = await duplicate_imported_query()
@@ -390,7 +390,7 @@ class ProcessStatusModule(BaseWebSocketModule):
 
         # Import necessary functions
         from geo_lib.processing.duplicate_detection import normalize_coordinates
-        from geo_lib.feature_id import generate_feature_hash
+        from geo_lib.feature_id import generate_geojson_hash
         from geo_lib.processing.duplicate_models import DuplicateSource, DuplicateMatchType
         
         # Get other unimported ImportQueue items for cross-queue checking
@@ -440,11 +440,11 @@ class ProcessStatusModule(BaseWebSocketModule):
         queue_hash_to_item = {}
         for queue_item in other_queue_items:
             for feature_idx, feature in enumerate(queue_item.geofeatures):
-                feature_hash = feature.get('properties', {}).get('feature_hash')
-                if not feature_hash:
-                    feature_hash = generate_feature_hash(feature)
-                if feature_hash not in queue_hash_to_item:
-                    queue_hash_to_item[feature_hash] = {
+                geojson_hash = feature.get('properties', {}).get('geojson_hash')
+                if not geojson_hash:
+                    geojson_hash = generate_geojson_hash(feature)
+                if geojson_hash not in queue_hash_to_item:
+                    queue_hash_to_item[geojson_hash] = {
                         'queue_item_id': queue_item.id,
                         'queue_item_filename': queue_item.original_filename,
                         'feature_index': feature_idx  # Index in the target queue item
@@ -456,9 +456,9 @@ class ProcessStatusModule(BaseWebSocketModule):
         # Check each feature for hash duplicates
         # Priority rule: feature_store takes precedence over cross_queue
         for original_idx, feature in enumerate(self.import_item.geofeatures):
-            feature_hash = feature.get('properties', {}).get('feature_hash')
-            if not feature_hash:
-                feature_hash = generate_feature_hash(feature)
+            geojson_hash = feature.get('properties', {}).get('geojson_hash')
+            if not geojson_hash:
+                geojson_hash = generate_geojson_hash(feature)
             
             # Convert to sorted index for page display
             if original_idx not in original_to_new_index:
@@ -466,21 +466,21 @@ class ProcessStatusModule(BaseWebSocketModule):
             new_idx = original_to_new_index[original_idx]
             
             # Check FeatureStore hash duplicates first (takes precedence)
-            if feature_hash in existing_store_hashes:
-                all_hash_duplicate_hashes.add(feature_hash)
+            if geojson_hash in existing_store_hashes:
+                all_hash_duplicate_hashes.add(geojson_hash)
                 if start_idx <= new_idx < end_idx:
                     dup_obj = {
-                        'hash': feature_hash,
+                        'hash': geojson_hash,
                         'page_index': new_idx - start_idx,
                         'global_index': new_idx  # For cross-queue navigation
                     }
-                    if feature_hash in hash_to_store_id:
-                        dup_obj['feature_store_id'] = hash_to_store_id[feature_hash]
+                    if geojson_hash in hash_to_store_id:
+                        dup_obj['feature_store_id'] = hash_to_store_id[geojson_hash]
                     feature_store_hash_duplicates.append(dup_obj)
             # Check cross-queue hash duplicates (only if not in FeatureStore)
-            elif feature_hash in queue_hash_to_item:
-                all_hash_duplicate_hashes.add(feature_hash)
-                queue_info = queue_hash_to_item[feature_hash]
+            elif geojson_hash in queue_hash_to_item:
+                all_hash_duplicate_hashes.add(geojson_hash)
+                queue_info = queue_hash_to_item[geojson_hash]
                 if start_idx <= new_idx < end_idx:
                     # Get sorted index for the target queue item
                     target_queue_id = queue_info['queue_item_id']
@@ -488,7 +488,7 @@ class ProcessStatusModule(BaseWebSocketModule):
                     sorted_idx = queue_item_sorted_indices.get(target_queue_id, {}).get(original_idx, original_idx)
                     
                     cross_queue_hash_duplicates.append({
-                        'hash': feature_hash,
+                        'hash': geojson_hash,
                         'page_index': new_idx - start_idx,
                         'global_index': sorted_idx,  # Sorted index in the TARGET queue item
                         'queue_item_id': queue_info['queue_item_id'],
@@ -510,12 +510,12 @@ class ProcessStatusModule(BaseWebSocketModule):
                 continue
             
             # Get feature hash
-            feature_hash = dup_feature.get('properties', {}).get('feature_hash')
-            if not feature_hash:
-                feature_hash = generate_feature_hash(dup_feature)
+            dup_geojson_hash = dup_feature.get('properties', {}).get('geojson_hash')
+            if not dup_geojson_hash:
+                dup_geojson_hash = generate_geojson_hash(dup_feature)
             
             # Skip if this is a hash duplicate (already processed above)
-            if feature_hash in all_hash_duplicate_hashes:
+            if dup_geojson_hash in all_hash_duplicate_hashes:
                 continue
             
             # Only process geometry duplicates here
@@ -525,10 +525,10 @@ class ProcessStatusModule(BaseWebSocketModule):
             # Find the feature in geofeatures to get its index
             feature_idx = None
             for idx, feat in enumerate(self.import_item.geofeatures):
-                feat_hash = feat.get('properties', {}).get('feature_hash')
-                if not feat_hash:
-                    feat_hash = generate_feature_hash(feat)
-                if feat_hash == feature_hash:
+                feat_geojson_hash = feat.get('properties', {}).get('geojson_hash')
+                if not feat_geojson_hash:
+                    feat_geojson_hash = generate_geojson_hash(feat)
+                if feat_geojson_hash == dup_geojson_hash:
                     feature_idx = idx
                     break
             
@@ -538,12 +538,12 @@ class ProcessStatusModule(BaseWebSocketModule):
             new_idx = original_to_new_index[feature_idx]
             
             # Track for skipped_feature_ids
-            geometry_duplicate_hashes_for_skipping.append(feature_hash)
+            geometry_duplicate_hashes_for_skipping.append(dup_geojson_hash)
             
             # Only add to arrays if on current page
             if start_idx <= new_idx < end_idx:
                 dup_obj = {
-                    'hash': feature_hash,
+                    'hash': dup_geojson_hash,
                     'page_index': new_idx - start_idx,
                     'global_index': new_idx  # For cross-queue navigation
                 }

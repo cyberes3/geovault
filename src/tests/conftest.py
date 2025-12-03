@@ -293,7 +293,7 @@ def large_feature_set(db, user):
             }
         }
         
-        from geo_lib.feature_id import generate_feature_hash
+        from geo_lib.feature_id import generate_geojson_hash
         
         feature = FeatureStore(
             user=user,
@@ -303,7 +303,7 @@ def large_feature_set(db, user):
                 feature_data['geometry']['coordinates'][1],
                 0.0
             ),
-            geojson_hash=generate_feature_hash(feature_data)
+            geojson_hash=generate_geojson_hash(feature_data)
         )
         features.append(feature)
     
@@ -428,8 +428,8 @@ def conditional_external_api_mocking():
 
 @pytest.fixture
 def test_files_dir():
-    """Get path to test files directory."""
-    return Path(__file__).parent / 'test files'
+    """Get path to files directory."""
+    return Path(__file__).parent / 'files'
 
 
 @pytest.fixture
@@ -550,6 +550,5 @@ def wait_for_import(wait_for_job_completion):
         return job_status
     
     return _wait
-
 
 

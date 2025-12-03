@@ -15,7 +15,7 @@ from api.models import FeatureStore, ImportQueue
 from api.utils.authorization import get_object_or_404_for_user
 from api.utils.responses import error_response, success_response, not_found_response, handle_404
 from geo_lib.const_strings import CONST_INTERNAL_TAGS, filter_protected_tags, is_protected_tag, prepare_user_tags
-from geo_lib.feature_id import generate_feature_hash
+from geo_lib.feature_id import generate_geojson_hash
 from geo_lib.logging.console import get_access_logger
 from geo_lib.processing.tagging import update_feature_date_tags
 from geo_lib.processing.import_utils import (
@@ -102,7 +102,7 @@ def _extract_system_tags(feature: dict) -> list:
 
 def _validate_and_preserve_feature(feature: dict) -> dict:
     """
-    Validate and normalize a feature, preserving system_tags and feature_hash.
+    Validate and normalize a feature, preserving system_tags and geojson_hash.
     
     Args:
         feature: GeoJSON Feature dictionary
@@ -120,7 +120,7 @@ def _validate_and_preserve_feature(feature: dict) -> dict:
     normalized_feature = validate_and_normalize_geojson_feature(
         feature,
         preserve_system_tags=system_tags,
-        preserve_feature_hash=True
+        preserve_geojson_hash=True
     )
     
     # Ensure system_tags are preserved after normalization
@@ -160,7 +160,7 @@ def _apply_bulk_ops_and_save_feature(feature: FeatureStore, bulk_ops: dict) -> b
     
     # Update feature geojson and hash (geometry is unchanged by styling)
     feature.geojson = normalized_feature
-    feature.geojson_hash = generate_feature_hash(normalized_feature)
+    feature.geojson_hash = generate_geojson_hash(normalized_feature)
     feature.save(update_fields=['geojson', 'geojson_hash'])
     
     return True
@@ -275,7 +275,7 @@ def update_feature_metadata(request, feature_id, validated_data):
         normalized_feature = validate_and_normalize_geojson_feature(
             merged_feature,
             preserve_system_tags=updated_system_tags,
-            preserve_feature_hash=True
+            preserve_geojson_hash=True
         )
     except GeometryValidationError as e:
         return error_response(f'Feature validation failed: {str(e)}', 400)
@@ -386,7 +386,7 @@ def bulk_update_features_metadata(request, validated_data):
                         normalized_feature = validate_and_normalize_geojson_feature(
                             merged_feature,
                             preserve_system_tags=updated_system_tags,
-                            preserve_feature_hash=True
+                            preserve_geojson_hash=True
                         )
                     except GeometryValidationError as e:
                         errors.append({
@@ -641,9 +641,9 @@ def update_feature(request, feature_id):
     # The normalization function ensures stroke-width=2 for lines/polygons and proper fill/fill-opacity for polygons
     # Color validation (invalid colors set to default red) is also handled by validate_and_normalize_geojson_feature
 
-    # Ensure feature_hash is present for Pydantic validation
+    # Ensure geojson_hash is present for Pydantic validation
     # Generate temporary hash if not present (will be regenerated later)
-    feature_data.setdefault('properties', {})['feature_hash'] = generate_feature_hash(feature_data)
+    feature_data.setdefault('properties', {})['geojson_hash'] = generate_geojson_hash(feature_data)
 
     # Validate feature structure using the same validation as import conversion
     try:
@@ -686,7 +686,7 @@ def update_feature(request, feature_id):
     feature.geojson = feature_data
 
     # Regenerate the hash for the updated feature
-    feature.geojson_hash = generate_feature_hash(feature_data)
+    feature.geojson_hash = generate_geojson_hash(feature_data)
 
     # Update the geometry field if coordinates changed
     try:
@@ -802,8 +802,8 @@ def apply_replacement_geometry(request, feature_id, validated_data):
         'properties': original_properties
     }
     
-    # Generate temporary feature_hash for the updated feature for validation purposes
-    updated_feature.setdefault('properties', {})['feature_hash'] = generate_feature_hash(updated_feature)
+    # Generate temporary geojson_hash for the updated feature for validation purposes
+    updated_feature.setdefault('properties', {})['geojson_hash'] = generate_geojson_hash(updated_feature)
 
     # Validate the updated feature
     try:
@@ -858,7 +858,7 @@ def apply_replacement_geometry(request, feature_id, validated_data):
     feature.geojson = feature_data
 
     # Regenerate the hash for the updated feature
-    feature.geojson_hash = generate_feature_hash(feature_data)
+    feature.geojson_hash = generate_geojson_hash(feature_data)
 
     # Update the geometry field if coordinates changed
     try:
@@ -1021,8 +1021,8 @@ def regenerate_feature_tags(request, feature_id):
     if feature_class is None:
         return error_response('Could not determine feature class', 400)
 
-    # Ensure feature_hash is present for Pydantic validation
-    geojson_data.setdefault('properties', {})['feature_hash'] = generate_feature_hash(geojson_data)
+    # Ensure geojson_hash is present for Pydantic validation
+    geojson_data.setdefault('properties', {})['geojson_hash'] = generate_geojson_hash(geojson_data)
 
     # Create feature instance
     try:

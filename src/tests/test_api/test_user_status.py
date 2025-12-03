@@ -6,7 +6,7 @@ from django.test import TestCase
 from django.contrib.gis.geos import Point
 
 from api.models import FeatureStore, ImportQueue
-from geo_lib.feature_id import generate_feature_hash
+from geo_lib.feature_id import generate_geojson_hash
 
 
 class TestUserStatusEndpoint(TestCase):
@@ -113,7 +113,7 @@ class TestFeatureCountCalculation(TestCase):
                 geometry=Point(feature_data['geometry']['coordinates'][0],
                              feature_data['geometry']['coordinates'][1],
                              0.0),
-                geojson_hash=generate_feature_hash(feature_data)
+                geojson_hash=generate_geojson_hash(feature_data)
             )
         
         response = self.client.get('/api/user/status/')
@@ -149,7 +149,7 @@ class TestFeatureCountCalculation(TestCase):
                 geometry=Point(feature_data['geometry']['coordinates'][0],
                              feature_data['geometry']['coordinates'][1],
                              0.0),
-                geojson_hash=generate_feature_hash(feature_data)
+                geojson_hash=generate_geojson_hash(feature_data)
             )
         
         # Create features for other user
@@ -170,7 +170,7 @@ class TestFeatureCountCalculation(TestCase):
                 geometry=Point(feature_data['geometry']['coordinates'][0],
                              feature_data['geometry']['coordinates'][1],
                              0.0),
-                geojson_hash=generate_feature_hash(feature_data)
+                geojson_hash=generate_geojson_hash(feature_data)
             )
         
         response = self.client.get('/api/user/status/')
@@ -295,7 +295,7 @@ class TestUserStorageEndpoint(TestCase):
             user=self.user,
             geojson=feature_data,
             geometry=Point(-122.4194, 37.7749, 0.0),
-            geojson_hash=generate_feature_hash(feature_data)
+            geojson_hash=generate_geojson_hash(feature_data)
         )
         
         response = self.client.get('/api/user/storage/')
@@ -357,7 +357,7 @@ class TestUserStorageEndpoint(TestCase):
             user=self.user,
             geojson=my_feature_data,
             geometry=Point(-122.4194, 37.7749, 0.0),
-            geojson_hash=generate_feature_hash(my_feature_data)
+            geojson_hash=generate_geojson_hash(my_feature_data)
         )
         
         # Create feature for other user
@@ -376,7 +376,7 @@ class TestUserStorageEndpoint(TestCase):
             user=other_user,
             geojson=other_feature_data,
             geometry=Point(-122.4094, 37.7849, 0.0),
-            geojson_hash=generate_feature_hash(other_feature_data)
+            geojson_hash=generate_geojson_hash(other_feature_data)
         )
         
         response = self.client.get('/api/user/storage/')
@@ -401,4 +401,3 @@ class TestUserStorageEndpoint(TestCase):
         
         # Should be zero or very small
         self.assertGreaterEqual(data['storage_bytes'], 0)
-

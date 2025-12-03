@@ -359,7 +359,7 @@ class TestImportAPI(TransactionTestCase):
         geofeatures = [{
             'type': 'Feature',
             'geometry': {'type': 'Point', 'coordinates': [-122.4194, 37.7749]},
-            'properties': {'feature_hash': 'test-id', 'name': 'Original'}
+            'properties': {'geojson_hash': 'test-id', 'name': 'Original'}
         }]
         import_queue = ImportQueue.objects.create(
             user=self.user,
@@ -371,7 +371,7 @@ class TestImportAPI(TransactionTestCase):
 
         update_data = {
             'features': [{
-                'properties': {'feature_hash': 'test-id', 'name': 'Updated'}
+                'properties': {'geojson_hash': 'test-id', 'name': 'Updated'}
             }]
         }
 
@@ -394,7 +394,7 @@ class TestImportAPI(TransactionTestCase):
             imported=True
         )
 
-        update_data = {'features': [{'properties': {'feature_hash': 'test-id', 'name': 'Test'}}]}
+        update_data = {'features': [{'properties': {'geojson_hash': 'test-id', 'name': 'Test'}}]}
         response = self.client.put(
             f'/api/item/import/update/{import_queue.id}',
             data=json.dumps(update_data),
@@ -428,7 +428,7 @@ class TestImportAPI(TransactionTestCase):
             geofeatures=[{
                 'type': 'Feature',
                 'geometry': {'type': 'Point', 'coordinates': [-122.4194, 37.7749]},
-                'properties': {'feature_hash': 'test-id', 'name': 'Original'}
+                'properties': {'geojson_hash': 'test-id', 'name': 'Original'}
             }],
             imported=False
         )
@@ -468,7 +468,7 @@ class TestImportAPI(TransactionTestCase):
         geofeatures = [{
             'type': 'Feature',
             'geometry': {'type': 'Point', 'coordinates': [-122.4194, 37.7749]},
-            'properties': {'feature_hash': 'test-id', 'name': 'Original'}
+            'properties': {'geojson_hash': 'test-id', 'name': 'Original'}
         }]
         import_queue = ImportQueue.objects.create(
             user=self.user,
@@ -480,7 +480,7 @@ class TestImportAPI(TransactionTestCase):
         update_data = {
             'features': [{
                 'properties': {
-                    'feature_hash': 'test-id',
+                    'geojson_hash': 'test-id',
                     'created': 'not-a-valid-iso-timestamp'
                 }
             }]
@@ -497,7 +497,7 @@ class TestImportAPI(TransactionTestCase):
         geofeatures = [{
             'type': 'Feature',
             'geometry': {'type': 'Point', 'coordinates': [-122.4194, 37.7749]},
-            'properties': {'feature_hash': 'test-id', 'name': 'Original'}
+            'properties': {'geojson_hash': 'test-id', 'name': 'Original'}
         }]
         import_queue = ImportQueue.objects.create(
             user=self.user,
@@ -509,7 +509,7 @@ class TestImportAPI(TransactionTestCase):
         update_data = {
             'features': [{
                 'properties': {
-                    'feature_hash': 'test-id',
+                    'geojson_hash': 'test-id',
                     'created': '2024-01-15T10:30:00Z'
                 }
             }]
@@ -526,7 +526,7 @@ class TestImportAPI(TransactionTestCase):
         geofeatures = [{
             'type': 'Feature',
             'geometry': {'type': 'Point', 'coordinates': [-122.4194, 37.7749]},
-            'properties': {'feature_hash': 'test-id', 'name': 'Original'}
+            'properties': {'geojson_hash': 'test-id', 'name': 'Original'}
         }]
         import_queue = ImportQueue.objects.create(
             user=self.user,
@@ -538,7 +538,7 @@ class TestImportAPI(TransactionTestCase):
         update_data = {
             'features': [{
                 'properties': {
-                    'feature_hash': 'test-id',
+                    'geojson_hash': 'test-id',
                     'name': 'Updated',
                     'invalid_field': 'should be rejected'
                 }
@@ -556,7 +556,7 @@ class TestImportAPI(TransactionTestCase):
         geofeatures = [{
             'type': 'Feature',
             'geometry': {'type': 'Point', 'coordinates': [-122.4194, 37.7749]},
-            'properties': {'feature_hash': 'test-id', 'name': 'Original'}
+            'properties': {'geojson_hash': 'test-id', 'name': 'Original'}
         }]
         import_queue = ImportQueue.objects.create(
             user=self.user,
@@ -568,7 +568,7 @@ class TestImportAPI(TransactionTestCase):
         update_data = {
             'features': [{
                 'properties': {
-                    'feature_hash': 'test-id',
+                    'geojson_hash': 'test-id',
                     'tags': 'not-a-list'
                 }
             }]
@@ -585,7 +585,7 @@ class TestImportAPI(TransactionTestCase):
         geofeatures = [{
             'type': 'Feature',
             'geometry': {'type': 'Point', 'coordinates': [-122.4194, 37.7749]},
-            'properties': {'feature_hash': 'test-id', 'name': 'Test Feature', 'description': 'Original description'}
+            'properties': {'geojson_hash': 'test-id', 'name': 'Test Feature', 'description': 'Original description'}
         }]
         import_queue = ImportQueue.objects.create(
             user=self.user,
@@ -598,7 +598,7 @@ class TestImportAPI(TransactionTestCase):
         update_data = {
             'features': [{
                 'properties': {
-                    'feature_hash': 'test-id',
+                    'geojson_hash': 'test-id',
                     'description': 'Updated description'
                 }
             }]
@@ -620,7 +620,7 @@ class TestImportAPI(TransactionTestCase):
         geofeatures = [{
             'type': 'Feature',
             'geometry': {'type': 'Point', 'coordinates': [-122.4194, 37.7749]},
-            'properties': {'feature_hash': 'test-id', 'name': 'Test Feature', 'tags': ['original-tag']}
+            'properties': {'geojson_hash': 'test-id', 'name': 'Test Feature', 'tags': ['original-tag']}
         }]
         import_queue = ImportQueue.objects.create(
             user=self.user,
@@ -633,7 +633,7 @@ class TestImportAPI(TransactionTestCase):
         update_data = {
             'features': [{
                 'properties': {
-                    'feature_hash': 'test-id',
+                    'geojson_hash': 'test-id',
                     'tags': ['new-tag-1', 'new-tag-2', 'NEW-TAG-3']  # Should be lowercased
                 }
             }]
@@ -660,7 +660,7 @@ class TestImportAPI(TransactionTestCase):
             'type': 'Feature',
             'geometry': {'type': 'Point', 'coordinates': [-122.4194, 37.7749]},
             'properties': {
-                'feature_hash': 'test-id',
+                'geojson_hash': 'test-id',
                 'name': 'Original Name',
                 'description': 'Original Description',
                 'created': '2023-01-01T00:00:00Z',
@@ -678,7 +678,7 @@ class TestImportAPI(TransactionTestCase):
         update_data = {
             'features': [{
                 'properties': {
-                    'feature_hash': 'test-id',
+                    'geojson_hash': 'test-id',
                     'name': 'Updated Name',
                     'description': 'Updated Description',
                     'created': '2024-12-25T15:30:00Z',
@@ -703,31 +703,31 @@ class TestImportAPI(TransactionTestCase):
 
     def test_update_import_item_multiple_features(self):
         """Test updating multiple features in a single request."""
-        from geo_lib.feature_id import generate_feature_hash
+        from geo_lib.feature_id import generate_geojson_hash
         
         feature1 = {
             'type': 'Feature',
             'geometry': {'type': 'Point', 'coordinates': [-122.4194, 37.7749]},
             'properties': {'name': 'Feature 1', 'description': 'Original 1'}
         }
-        feature1_hash = generate_feature_hash(feature1)
-        feature1['properties']['feature_hash'] = feature1_hash
+        feature1_hash = generate_geojson_hash(feature1)
+        feature1['properties']['geojson_hash'] = feature1_hash
 
         feature2 = {
             'type': 'Feature',
             'geometry': {'type': 'Point', 'coordinates': [-122.4094, 37.7849]},
             'properties': {'name': 'Feature 2', 'description': 'Original 2'}
         }
-        feature2_hash = generate_feature_hash(feature2)
-        feature2['properties']['feature_hash'] = feature2_hash
+        feature2_hash = generate_geojson_hash(feature2)
+        feature2['properties']['geojson_hash'] = feature2_hash
 
         feature3 = {
             'type': 'Feature',
             'geometry': {'type': 'Point', 'coordinates': [-122.3994, 37.7949]},
             'properties': {'name': 'Feature 3', 'description': 'Original 3'}
         }
-        feature3_hash = generate_feature_hash(feature3)
-        feature3['properties']['feature_hash'] = feature3_hash
+        feature3_hash = generate_geojson_hash(feature3)
+        feature3['properties']['geojson_hash'] = feature3_hash
 
         geofeatures = [feature1, feature2, feature3]
         import_queue = ImportQueue.objects.create(
@@ -743,14 +743,14 @@ class TestImportAPI(TransactionTestCase):
             'features': [
                 {
                     'properties': {
-                        'feature_hash': feature1_hash,
+                        'geojson_hash': feature1_hash,
                         'name': 'Updated Feature 1',
                         'description': 'Updated Description 1'
                     }
                 },
                 {
                     'properties': {
-                        'feature_hash': feature3_hash,
+                        'geojson_hash': feature3_hash,
                         'name': 'Updated Feature 3',
                         'tags': ['new-tag-for-3']
                     }
@@ -786,7 +786,7 @@ class TestImportAPI(TransactionTestCase):
             'type': 'Feature',
             'geometry': {'type': 'Point', 'coordinates': [-122.4194, 37.7749]},
             'properties': {
-                'feature_hash': 'test-id',
+                'geojson_hash': 'test-id',
                 'name': 'Original Name',
                 'description': 'Original Description',
                 'created': '2023-01-01T00:00:00Z',
@@ -805,7 +805,7 @@ class TestImportAPI(TransactionTestCase):
         update_data = {
             'features': [{
                 'properties': {
-                    'feature_hash': 'test-id',
+                    'geojson_hash': 'test-id',
                     'name': 'Updated Name Only'
                 }
             }]
@@ -838,7 +838,7 @@ class TestImportAPI(TransactionTestCase):
             'type': 'Feature',
             'geometry': {'type': 'Point', 'coordinates': [-122.4194, 37.7749]},
             'properties': {
-                'feature_hash': 'test-id',
+                'geojson_hash': 'test-id',
                 'name': 'Original Name',
                 'system_tags': ['import-year-2024', 'import-month-12', 'geometry-type-point']
             }
@@ -855,7 +855,7 @@ class TestImportAPI(TransactionTestCase):
         update_data = {
             'features': [{
                 'properties': {
-                    'feature_hash': 'test-id',
+                    'geojson_hash': 'test-id',
                     'name': 'Updated Name',
                     'description': 'New Description'
                 }
@@ -885,7 +885,7 @@ class TestImportAPI(TransactionTestCase):
 
     def test_update_import_item_system_tags_preservation_multiple_features(self):
         """Test that system_tags are preserved when updating multiple features."""
-        from geo_lib.feature_id import generate_feature_hash
+        from geo_lib.feature_id import generate_geojson_hash
         
         feature1 = {
             'type': 'Feature',
@@ -895,8 +895,8 @@ class TestImportAPI(TransactionTestCase):
                 'system_tags': ['import-year-2024', 'geometry-type-point']
             }
         }
-        feature1_hash = generate_feature_hash(feature1)
-        feature1['properties']['feature_hash'] = feature1_hash
+        feature1_hash = generate_geojson_hash(feature1)
+        feature1['properties']['geojson_hash'] = feature1_hash
 
         feature2 = {
             'type': 'Feature',
@@ -906,8 +906,8 @@ class TestImportAPI(TransactionTestCase):
                 'system_tags': ['import-year-2024', 'geometry-type-linestring']
             }
         }
-        feature2_hash = generate_feature_hash(feature2)
-        feature2['properties']['feature_hash'] = feature2_hash
+        feature2_hash = generate_geojson_hash(feature2)
+        feature2['properties']['geojson_hash'] = feature2_hash
 
         geofeatures = [feature1, feature2]
         import_queue = ImportQueue.objects.create(
@@ -923,13 +923,13 @@ class TestImportAPI(TransactionTestCase):
             'features': [
                 {
                     'properties': {
-                        'feature_hash': feature1_hash,
+                        'geojson_hash': feature1_hash,
                         'name': 'Updated Feature 1'
                     }
                 },
                 {
                     'properties': {
-                        'feature_hash': feature2_hash,
+                        'geojson_hash': feature2_hash,
                         'name': 'Updated Feature 2',
                         'description': 'New Description'
                     }
@@ -962,7 +962,7 @@ class TestImportAPI(TransactionTestCase):
             'type': 'Feature',
             'geometry': {'type': 'Point', 'coordinates': [-122.4194, 37.7749]},
             'properties': {
-                'feature_hash': 'test-id',
+                'geojson_hash': 'test-id',
                 'name': 'Original Name',
                 'system_tags': []  # Empty list
             }
@@ -978,7 +978,7 @@ class TestImportAPI(TransactionTestCase):
         update_data = {
             'features': [{
                 'properties': {
-                    'feature_hash': 'test-id',
+                    'geojson_hash': 'test-id',
                     'name': 'Updated Name'
                 }
             }]
@@ -1003,7 +1003,7 @@ class TestImportAPI(TransactionTestCase):
             'type': 'Feature',
             'geometry': {'type': 'Point', 'coordinates': [-122.4194, 37.7749]},
             'properties': {
-                'feature_hash': 'test-id',
+                'geojson_hash': 'test-id',
                 'name': 'Original Name'
                 # No system_tags field
             }
@@ -1019,7 +1019,7 @@ class TestImportAPI(TransactionTestCase):
         update_data = {
             'features': [{
                 'properties': {
-                    'feature_hash': 'test-id',
+                    'geojson_hash': 'test-id',
                     'name': 'Updated Name'
                 }
             }]
@@ -1127,14 +1127,14 @@ class TestImportAPI(TransactionTestCase):
 
     def test_import_to_featurestore(self):
         """Test importing to featurestore with real import job."""
-        from geo_lib.feature_id import generate_feature_hash
+        from geo_lib.feature_id import generate_geojson_hash
         
         feature = {
             'type': 'Feature',
             'geometry': {'type': 'Point', 'coordinates': [-122.4194, 37.7749, 0.0]},
             'properties': {'name': 'Test'}
         }
-        feature['properties']['feature_hash'] = generate_feature_hash(feature)
+        feature['properties']['geojson_hash'] = generate_geojson_hash(feature)
         
         import_queue = ImportQueue.objects.create(
             user=self.user,
@@ -1241,7 +1241,7 @@ class TestImportAPI(TransactionTestCase):
 
     def test_recheck_duplicates(self):
         """Test rechecking duplicates for an import queue item with real duplicate detection."""
-        from geo_lib.feature_id import generate_feature_hash
+        from geo_lib.feature_id import generate_geojson_hash
         from django.contrib.gis.geos import Point
         
         # Create an existing feature in the feature store
@@ -1254,7 +1254,7 @@ class TestImportAPI(TransactionTestCase):
             user=self.user,
             geojson=existing_feature_data,
             geometry=Point(-122.4194, 37.7749, 0.0),
-            geojson_hash=generate_feature_hash(existing_feature_data)
+            geojson_hash=generate_geojson_hash(existing_feature_data)
         )
         
         # Create import queue item with a duplicate and non-duplicate feature
@@ -1263,14 +1263,14 @@ class TestImportAPI(TransactionTestCase):
             'geometry': {'type': 'Point', 'coordinates': [-122.4194, 37.7749, 0.0]},
             'properties': {'name': 'Duplicate Feature'}
         }
-        feature1['properties']['feature_hash'] = generate_feature_hash(feature1)
+        feature1['properties']['geojson_hash'] = generate_geojson_hash(feature1)
         
         feature2 = {
             'type': 'Feature',
             'geometry': {'type': 'Point', 'coordinates': [-122.5, 37.8, 0.0]},
             'properties': {'name': 'Unique Feature'}
         }
-        feature2['properties']['feature_hash'] = generate_feature_hash(feature2)
+        feature2['properties']['geojson_hash'] = generate_geojson_hash(feature2)
         
         import_queue = ImportQueue.objects.create(
             user=self.user,
@@ -1297,7 +1297,7 @@ class TestImportAPI(TransactionTestCase):
 
     def test_recheck_duplicates_hash_takes_precedence(self):
         """Test that hash duplicates take precedence over geometry duplicates with real duplicate detection."""
-        from geo_lib.feature_id import generate_feature_hash
+        from geo_lib.feature_id import generate_geojson_hash
         from api.models import FeatureStore
         from django.contrib.gis.geos import Point
         
@@ -1307,8 +1307,8 @@ class TestImportAPI(TransactionTestCase):
             'geometry': {'type': 'Point', 'coordinates': [-122.4194, 37.7749, 0.0]},
             'properties': {'name': 'Test Feature'}
         }
-        feature_hash = generate_feature_hash(test_feature)
-        test_feature['properties']['feature_hash'] = feature_hash
+        feature_hash = generate_geojson_hash(test_feature)
+        test_feature['properties']['geojson_hash'] = feature_hash
         
         # Create a FeatureStore entry with the same hash (hash duplicate)
         feature_store = FeatureStore.objects.create(
@@ -1340,7 +1340,7 @@ class TestImportAPI(TransactionTestCase):
 
     def test_recheck_duplicates_cross_queue_coord_duplicate(self):
         """Test cross-queue geometry duplicate detection with real processing."""
-        from geo_lib.feature_id import generate_feature_hash
+        from geo_lib.feature_id import generate_geojson_hash
         
         # Create first import queue item with a feature
         feature1 = {
@@ -1348,7 +1348,7 @@ class TestImportAPI(TransactionTestCase):
             'geometry': {'type': 'Point', 'coordinates': [-122.4194, 37.7749, 0.0]},
             'properties': {'name': 'Feature 1'}
         }
-        feature1['properties']['feature_hash'] = generate_feature_hash(feature1)
+        feature1['properties']['geojson_hash'] = generate_geojson_hash(feature1)
         
         import_queue1 = ImportQueue.objects.create(
             user=self.user,
@@ -1364,7 +1364,7 @@ class TestImportAPI(TransactionTestCase):
             'geometry': {'type': 'Point', 'coordinates': [-122.4194, 37.7749, 0.0]},
             'properties': {'name': 'Feature 2'}  # Different name, same coordinates
         }
-        feature2['properties']['feature_hash'] = generate_feature_hash(feature2)
+        feature2['properties']['geojson_hash'] = generate_geojson_hash(feature2)
         
         import_queue2 = ImportQueue.objects.create(
             user=self.user,
@@ -1382,14 +1382,14 @@ class TestImportAPI(TransactionTestCase):
         import_queue2.refresh_from_db()
         # Real duplicate detection may or may not find cross-queue duplicates depending on implementation
         # This test verifies the endpoint works without errors
-        feature2_hash = generate_feature_hash(feature2)
-        feature2_id = feature2.get('properties', {}).get('feature_hash', feature2_hash)
+        feature2_hash = generate_geojson_hash(feature2)
+        feature2_id = feature2.get('properties', {}).get('geojson_hash', feature2_hash)
         self.assertIn(feature2_id, import_queue2.skipped_feature_ids or [],
                      "Cross-queue geometry duplicate should be auto-skipped")
 
     def test_recheck_duplicates_cross_queue_hash_is_blocked(self):
         """Test that cross-queue hash duplicates are BLOCKED (not skipped/restorable)."""
-        from geo_lib.feature_id import generate_feature_hash
+        from geo_lib.feature_id import generate_geojson_hash
         from geo_lib.processing.duplicate_models import DuplicateSource, DuplicateMatchType
         
         # Create feature with hash
@@ -1398,8 +1398,8 @@ class TestImportAPI(TransactionTestCase):
             'geometry': {'type': 'Point', 'coordinates': [-122.4194, 37.7749]},
             'properties': {'name': 'Test Feature', 'description': 'Test'}
         }
-        feature_hash = generate_feature_hash(test_feature)
-        test_feature['properties']['feature_hash'] = feature_hash
+        feature_hash = generate_geojson_hash(test_feature)
+        test_feature['properties']['geojson_hash'] = feature_hash
         
         # Create older queue item with exact same feature (hash duplicate)
         older_queue = ImportQueue.objects.create(
@@ -1609,4 +1609,3 @@ class TestSequentialProcessing(TestCase):
         
         # Verify start_process_job was called
         self.assertTrue(len(call_time) > 0)
-

@@ -27,7 +27,7 @@ def _strip_none_values(obj: Any) -> Any:
     return obj
 
 
-def generate_feature_hash(geojson_feature: Dict[str, Any]) -> str:
+def generate_geojson_hash(geojson_feature: Dict[str, Any]) -> str:
     """
     Generate a consistent hash-based ID for a GeoJSON feature.
     
@@ -49,14 +49,14 @@ def generate_feature_hash(geojson_feature: Dict[str, Any]) -> str:
         'properties': geojson_feature.get('properties', {})
     }
 
-    # Remove any existing 'feature_hash' from properties to avoid circular dependencies
+    # Remove any existing 'geojson_hash' from properties to avoid circular dependencies
     # Also remove 'system_tags' since they contain import metadata (source-file, import-year, etc.)
     # that shouldn't affect feature identity - features should be considered duplicates
     # if they have the same geometry and user properties, regardless of import metadata
-    if 'feature_hash' in normalized_feature['properties'] or 'system_tags' in normalized_feature['properties']:
+    if 'geojson_hash' in normalized_feature['properties'] or 'system_tags' in normalized_feature['properties']:
         normalized_feature['properties'] = normalized_feature['properties'].copy()
-        if 'feature_hash' in normalized_feature['properties']:
-            del normalized_feature['properties']['feature_hash']
+        if 'geojson_hash' in normalized_feature['properties']:
+            del normalized_feature['properties']['geojson_hash']
         if 'system_tags' in normalized_feature['properties']:
             del normalized_feature['properties']['system_tags']
 

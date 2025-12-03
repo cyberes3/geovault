@@ -14,7 +14,7 @@ from api.models import ImportQueue, FeatureStore
 from geo_lib.processing.jobs.import_job import ImportJob
 from geo_lib.processing.jobs.bulk_import_job import BulkImportJob
 from geo_lib.processing.status_tracker import status_tracker, ProcessingStatus
-from geo_lib.feature_id import generate_feature_hash
+from geo_lib.feature_id import generate_geojson_hash
 from geo_lib.processing.duplicate_models import DuplicateMatchType, DuplicateSource
 
 User = get_user_model()
@@ -57,8 +57,8 @@ class TestImportEdgeCases(TransactionTestCase):
                 'geometry': {'type': 'Point', 'coordinates': [-122.0 + (i % 10) * 0.01, 37.7 + (i // 10) * 0.01]},
                 'properties': {'name': f'Large Batch Feature {i}'}
             }
-            hash_val = generate_feature_hash(feature)
-            feature['properties']['feature_hash'] = hash_val
+            hash_val = generate_geojson_hash(feature)
+            feature['properties']['geojson_hash'] = hash_val
             features.append(feature)
         
         # Create import item with all features
@@ -104,8 +104,8 @@ class TestImportEdgeCases(TransactionTestCase):
             'geometry': {'type': 'Point', 'coordinates': [-122.1, 37.7]},
             'properties': {'name': 'Valid Feature'}
         }
-        valid_hash = generate_feature_hash(valid_feature)
-        valid_feature['properties']['feature_hash'] = valid_hash
+        valid_hash = generate_geojson_hash(valid_feature)
+        valid_feature['properties']['geojson_hash'] = valid_hash
         
         # Create feature without hash (invalid) - this will cause an error
         invalid_feature = {
@@ -121,8 +121,8 @@ class TestImportEdgeCases(TransactionTestCase):
             'geometry': {'type': 'Point', 'coordinates': [-122.3, 37.9]},
             'properties': {'name': 'Valid Feature 2'}
         }
-        valid_hash2 = generate_feature_hash(valid_feature2)
-        valid_feature2['properties']['feature_hash'] = valid_hash2
+        valid_hash2 = generate_geojson_hash(valid_feature2)
+        valid_feature2['properties']['geojson_hash'] = valid_hash2
         
         # Create import item with mixed features
         import_item = ImportQueue.objects.create(
@@ -163,24 +163,24 @@ class TestImportEdgeCases(TransactionTestCase):
             'geometry': {'type': 'Point', 'coordinates': [-122.1, 37.7]},
             'properties': {'name': 'Feature 1'}
         }
-        hash1 = generate_feature_hash(feature1)
-        feature1['properties']['feature_hash'] = hash1
+        hash1 = generate_geojson_hash(feature1)
+        feature1['properties']['geojson_hash'] = hash1
         
         feature2 = {
             'type': 'Feature',
             'geometry': {'type': 'Point', 'coordinates': [-122.2, 37.8]},
             'properties': {'name': 'Feature 2'}
         }
-        hash2 = generate_feature_hash(feature2)
-        feature2['properties']['feature_hash'] = hash2
+        hash2 = generate_geojson_hash(feature2)
+        feature2['properties']['geojson_hash'] = hash2
         
         feature3 = {
             'type': 'Feature',
             'geometry': {'type': 'Point', 'coordinates': [-122.3, 37.9]},
             'properties': {'name': 'Feature 3'}
         }
-        hash3 = generate_feature_hash(feature3)
-        feature3['properties']['feature_hash'] = hash3
+        hash3 = generate_geojson_hash(feature3)
+        feature3['properties']['geojson_hash'] = hash3
         
         # Create feature that already exists (hash duplicate)
         from django.contrib.gis.geos import Point
@@ -242,8 +242,8 @@ class TestImportEdgeCases(TransactionTestCase):
                 'geometry': {'type': 'Point', 'coordinates': [-122.0 + i*0.1, 37.7 + i*0.1]},
                 'properties': {'name': f'Bulk Op Feature {i}'}
             }
-            hash_val = generate_feature_hash(feature)
-            feature['properties']['feature_hash'] = hash_val
+            hash_val = generate_geojson_hash(feature)
+            feature['properties']['geojson_hash'] = hash_val
             features.append(feature)
         
         # Create import item
@@ -295,8 +295,8 @@ class TestImportEdgeCases(TransactionTestCase):
             'geometry': {'type': 'Point', 'coordinates': [-122.1, 37.7]},
             'properties': {'name': 'Concurrent Feature'}
         }
-        hash_val = generate_feature_hash(feature)
-        feature['properties']['feature_hash'] = hash_val
+        hash_val = generate_geojson_hash(feature)
+        feature['properties']['geojson_hash'] = hash_val
         
         # Create import items for both users
         import_item1 = ImportQueue.objects.create(
@@ -388,8 +388,8 @@ class TestBulkImportEdgeCases(TransactionTestCase):
                 'geometry': {'type': 'Point', 'coordinates': [-122.0 + i*0.1, 37.7 + i*0.1]},
                 'properties': {'name': f'Bulk Item {i} Feature'}
             }
-            hash_val = generate_feature_hash(feature)
-            feature['properties']['feature_hash'] = hash_val
+            hash_val = generate_geojson_hash(feature)
+            feature['properties']['geojson_hash'] = hash_val
             
             item = ImportQueue.objects.create(
                 user=self.user,
@@ -423,4 +423,3 @@ class TestBulkImportEdgeCases(TransactionTestCase):
         self.assertEqual(features_count, 10)
         
         print("✓ Test passed: bulk_import_large_batch")
-

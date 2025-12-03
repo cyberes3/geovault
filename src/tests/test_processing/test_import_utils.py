@@ -11,7 +11,7 @@ from django.contrib.auth import get_user_model
 from api.models import ImportQueue
 from geo_lib.processing.import_utils import build_features_to_skip, filter_features_to_process
 from geo_lib.processing.duplicate_models import DuplicateMatchType, DuplicateSource
-from geo_lib.feature_id import generate_feature_hash
+from geo_lib.feature_id import generate_geojson_hash
 
 User = get_user_model()
 
@@ -32,24 +32,24 @@ class TestBuildFeaturesToSkip(TestCase):
             'geometry': {'type': 'Point', 'coordinates': [-122.1, 37.7]},
             'properties': {'name': 'Feature 1'}
         }
-        self.hash1 = generate_feature_hash(self.feature1)
-        self.feature1['properties']['feature_hash'] = self.hash1
+        self.hash1 = generate_geojson_hash(self.feature1)
+        self.feature1['properties']['geojson_hash'] = self.hash1
         
         self.feature2 = {
             'type': 'Feature',
             'geometry': {'type': 'Point', 'coordinates': [-122.2, 37.8]},
             'properties': {'name': 'Feature 2'}
         }
-        self.hash2 = generate_feature_hash(self.feature2)
-        self.feature2['properties']['feature_hash'] = self.hash2
+        self.hash2 = generate_geojson_hash(self.feature2)
+        self.feature2['properties']['geojson_hash'] = self.hash2
         
         self.feature3 = {
             'type': 'Feature',
             'geometry': {'type': 'Point', 'coordinates': [-122.3, 37.9]},
             'properties': {'name': 'Feature 3'}
         }
-        self.hash3 = generate_feature_hash(self.feature3)
-        self.feature3['properties']['feature_hash'] = self.hash3
+        self.hash3 = generate_geojson_hash(self.feature3)
+        self.feature3['properties']['geojson_hash'] = self.hash3
 
     def test_build_features_to_skip_with_geometry_duplicates(self):
         """Test building skip sets with only geometry duplicates."""
@@ -218,8 +218,8 @@ class TestFilterFeaturesToProcess(TestCase):
                 'geometry': {'type': 'Point', 'coordinates': [-122.0 + i*0.1, 37.7 + i*0.1]},
                 'properties': {'name': f'Feature {i}'}
             }
-            hash_val = generate_feature_hash(feature)
-            feature['properties']['feature_hash'] = hash_val
+            hash_val = generate_geojson_hash(feature)
+            feature['properties']['geojson_hash'] = hash_val
             self.features.append(feature)
             self.hashes.append(hash_val)
 
@@ -291,4 +291,3 @@ class TestFilterFeaturesToProcess(TestCase):
         self.assertEqual(skipped_count, 5)
         
         print("✓ Test passed: filter_features_to_process with all skips")
-

@@ -8,7 +8,7 @@ from django.test import TestCase
 from django.contrib.gis.geos import Point
 
 from api.models import FeatureStore, ImportQueue
-from geo_lib.feature_id import generate_feature_hash
+from geo_lib.feature_id import generate_geojson_hash
 
 
 class TestFeatureAPI(TestCase):
@@ -42,7 +42,7 @@ class TestFeatureAPI(TestCase):
             user=self.user,
             geojson=self.point_feature_data,
             geometry=Point(-122.4194, 37.7749, 0.0),  # 3D Point with Z=0.0
-            geojson_hash=generate_feature_hash(self.point_feature_data)
+            geojson_hash=generate_geojson_hash(self.point_feature_data)
         )
 
         self.linestring_feature_data = {
@@ -61,7 +61,7 @@ class TestFeatureAPI(TestCase):
             user=self.user,
             geojson=self.linestring_feature_data,
             geometry=Point(-122.4194, 37.7749, 0.0),  # 3D Point with Z=0.0  # Simplified for test
-            geojson_hash=generate_feature_hash(self.linestring_feature_data)
+            geojson_hash=generate_geojson_hash(self.linestring_feature_data)
         )
 
     def test_get_feature(self):
@@ -104,7 +104,7 @@ class TestFeatureAPI(TestCase):
             user=other_user,
             geojson=other_feature_data,
             geometry=Point(-122.4094, 37.7849, 0.0),  # 3D Point with Z=0.0
-            geojson_hash=generate_feature_hash(other_feature_data)
+            geojson_hash=generate_geojson_hash(other_feature_data)
         )
         response = self.client.get(f'/api/feature/{other_feature.id}/')
         self.assertEqual(response.status_code, 404)
@@ -643,7 +643,7 @@ class TestFeatureAPI(TestCase):
             user=self.user,
             geojson=system_tag_feature_data,
             geometry=Point(-122.4194, 37.7749, 10.0),
-            geojson_hash=generate_feature_hash(system_tag_feature_data)
+            geojson_hash=generate_geojson_hash(system_tag_feature_data)
         )
 
         # Apply bulk operations to the system tag
@@ -724,7 +724,7 @@ class TestFeatureAPI(TestCase):
                 geojson=feature_data,
                 geometry=Point(feature_data['geometry']['coordinates'][0],
                              feature_data['geometry']['coordinates'][1], 0.0),
-                geojson_hash=generate_feature_hash(feature_data)
+                geojson_hash=generate_geojson_hash(feature_data)
             )
 
         bulk_ops = {
@@ -820,7 +820,7 @@ class TestFeatureAPI(TestCase):
             user=self.user,
             geojson=polygon_feature_data,
             geometry=Point(-122.4194, 37.7749, 0.0),
-            geojson_hash=generate_feature_hash(polygon_feature_data)
+            geojson_hash=generate_geojson_hash(polygon_feature_data)
         )
 
         bulk_ops = {
@@ -895,7 +895,7 @@ class TestFeatureAPI(TestCase):
                 'coordinates': [-122.3994, 37.7949, 0.0]  # 3D coordinates
             },
             'properties': {
-                'feature_hash': generate_feature_hash({
+                'feature_hash': generate_geojson_hash({
                     'type': 'Feature',
                     'geometry': {
                         'type': 'Point',
@@ -1045,7 +1045,7 @@ class TestFeatureEdgeCases(TestCase):
             user=self.user,
             geojson=feature_data,
             geometry=Point(-122.4194, 37.7749, 0.0),
-            geojson_hash=generate_feature_hash(feature_data)
+            geojson_hash=generate_geojson_hash(feature_data)
         )
         
         # Update with empty tags
@@ -1080,7 +1080,7 @@ class TestFeatureEdgeCases(TestCase):
             user=self.user,
             geojson=feature_data,
             geometry=Point(-122.4194, 37.7749, 0.0),
-            geojson_hash=generate_feature_hash(feature_data)
+            geojson_hash=generate_geojson_hash(feature_data)
         )
         
         # Update with null name
@@ -1115,7 +1115,7 @@ class TestFeatureEdgeCases(TestCase):
             user=self.user,
             geojson=feature_data,
             geometry=Point(-122.4194, 37.7749, 0.0),
-            geojson_hash=generate_feature_hash(feature_data)
+            geojson_hash=generate_geojson_hash(feature_data)
         )
         
         # Update with null description
@@ -1150,7 +1150,7 @@ class TestFeatureEdgeCases(TestCase):
             user=self.user,
             geojson=feature_data,
             geometry=Point(-122.4194, 37.7749, 0.0),
-            geojson_hash=generate_feature_hash(feature_data)
+            geojson_hash=generate_geojson_hash(feature_data)
         )
         
         # Update to clear tags
@@ -1187,4 +1187,3 @@ class TestFeatureEdgeCases(TestCase):
         )
         # Should handle empty array gracefully
         self.assertIn(response.status_code, [200, 400])
-

@@ -244,6 +244,5 @@ class TestAdvisoryLockIntegration:
             assert results[0] != results[1]  # One saved, one found duplicate
             
             # Verify only one entry exists in database
-            count = ImportQueue.objects.filter(user_id=user_id, geojson_hash=test_hash).count()
+            count = ImportQueue.objects.filter(user_id=user_id, file_hash=test_hash).count()
             assert count == 1
-

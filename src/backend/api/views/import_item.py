@@ -269,10 +269,10 @@ def update_import_item(request, item_id, validated_data):
         if not properties:
             continue
 
-        # Extract feature ID for matching (feature_hash is not an updatable field)
-        feature_id = properties.get('feature_hash')
+        # Extract feature ID for matching (geojson_hash is not an updatable field)
+        feature_id = properties.get('geojson_hash')
         if not feature_id:
-            logger.warning(f"Skipping feature without feature_hash: {properties.get('name', 'Unnamed')}")
+            logger.warning(f"Skipping feature without geojson_hash: {properties.get('name', 'Unnamed')}")
             continue
 
         # Extract only allowed updatable fields (name, description, created, tags)
@@ -293,7 +293,7 @@ def update_import_item(request, item_id, validated_data):
     updated_count = 0
     with transaction.atomic():
         for i, existing_feature in enumerate(queue.geofeatures):
-            feature_id = existing_feature.get('properties', {}).get('feature_hash')
+            feature_id = existing_feature.get('properties', {}).get('geojson_hash')
             if feature_id and feature_id in updates_by_id:
                 # Create a deep copy of the original feature to merge updates into
                 merged_feature = copy.deepcopy(existing_feature)
@@ -326,11 +326,11 @@ def update_import_item(request, item_id, validated_data):
                 normalized_feature = validate_and_normalize_geojson_feature(
                     merged_feature,
                     preserve_system_tags=original_system_tags,
-                    preserve_feature_hash=True
+                    preserve_geojson_hash=True
                 )
 
                 assert normalized_feature['properties']['system_tags'] == original_system_tags
-                assert normalized_feature['properties']['feature_hash']
+                assert normalized_feature['properties']['geojson_hash']
 
                 queue.geofeatures[i] = normalized_feature
                 updated_count += 1
@@ -369,11 +369,11 @@ def import_to_featurestore(request, item_id, validated_data):
     # Check for file-level duplicates before importing
     # Only block duplicates that are still in the queue (not yet imported)
     # Allow re-importing files that were previously imported
-    if import_item.geojson_hash:
+    if import_item.file_hash:
         # Check if there are other items in queue with same hash (uploaded earlier)
         earlier_duplicates = ImportQueue.objects.filter(
             user=request.user,
-            geojson_hash=import_item.geojson_hash,
+            file_hash=import_item.file_hash,
             imported=False,
             timestamp__lt=import_item.timestamp
         ).order_by('timestamp').first()
@@ -482,14 +482,14 @@ def save_skip_state(request, item_id, validated_data):
         # Validate that all feature IDs exist in the item's geofeatures
         if skipped_feature_ids:
             # Get all feature IDs from geofeatures
-            from geo_lib.feature_id import generate_feature_hash
+            from geo_lib.feature_id import generate_geojson_hash
             existing_feature_ids = set()
             for feature in import_item.geofeatures:
-                feature_hash = generate_feature_hash(feature)
-                existing_feature_ids.add(feature_hash)
+                geojson_hash = generate_geojson_hash(feature)
+                existing_feature_ids.add(geojson_hash)
                 # Also check if feature has an id property
-                if feature.get('properties', {}).get('feature_hash'):
-                    existing_feature_ids.add(feature.get('properties', {}).get('feature_hash'))
+                if feature.get('properties', {}).get('geojson_hash'):
+                    existing_feature_ids.add(feature.get('properties', {}).get('geojson_hash'))
             
             # Validate all skipped IDs exist
             invalid_ids = [fid for fid in skipped_feature_ids if fid not in existing_feature_ids]

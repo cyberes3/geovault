@@ -17,7 +17,7 @@ from channels.layers import get_channel_layer
 
 from api.models import ImportQueue, FeatureStore, DatabaseLogging
 from geo_lib.const_strings import prepare_user_tags
-from geo_lib.feature_id import generate_feature_hash
+from geo_lib.feature_id import generate_geojson_hash
 from geo_lib.types.feature import PointFeature, PolygonFeature, LineStringFeature, MultiLineStringFeature
 from geo_lib.logging.console import get_job_logger
 from geo_lib.processing.duplicate_detection import normalize_coordinates
@@ -71,9 +71,9 @@ def build_features_to_skip(
             if dup_info.get('match_type') == DuplicateMatchType.GEOMETRY:
                 dup_feature = dup_info.get('feature')
                 if dup_feature:
-                    feature_hash = dup_feature['properties'].get('feature_hash')
-                    if feature_hash:
-                        geometry_duplicate_hashes.add(feature_hash)
+                    geojson_hash = dup_feature['properties'].get('geojson_hash')
+                    if geojson_hash:
+                        geometry_duplicate_hashes.add(geojson_hash)
     
     # Get manually skipped features (from user clicking "Skip" button on non-duplicates)
     # These are features the user explicitly doesn't want to import
@@ -111,7 +111,7 @@ def filter_features_to_process(
     skipped_count = 0
     
     for feature in import_item.geofeatures:
-        feature_id = feature['properties']['feature_hash']
+        feature_id = feature['properties'].get('geojson_hash')
         if feature_id in all_features_to_skip:
             skipped_count += 1
             continue
@@ -335,54 +335,54 @@ def process_single_feature_for_import(
         # Generate hash-based ID for the feature
         # Use stored hash from properties if available (calculated on raw data during processing)
         # This ensures consistency with duplicate detection in ProcessJob
-        feature_hash = feature['properties']['feature_hash']
-        # if not feature_hash:
-        #     feature_hash = generate_feature_hash(geojson_data)
+        geojson_hash = feature['properties']['geojson_hash']
+        # if not geojson_hash:
+        #     geojson_hash = generate_geojson_hash(geojson_data)
 
         feature_name = feature.get('properties', {}).get('name', 'Unnamed')
         
         # Check if this is a geometry duplicate
         # Only skip if user explicitly added it to skipped_feature_ids
-        if feature_hash in geometry_duplicate_hashes and feature_hash in skipped_feature_ids:
+        if geojson_hash in geometry_duplicate_hashes and geojson_hash in skipped_feature_ids:
             # User explicitly skipped this geometry duplicate
             logger.info(f"  -> Skipping geometry duplicate (in skip list)")
             with duplicate_check_lock:
                 skipped_geometry_duplicates.append(SkippedDuplicateFeature(
                     name=feature_name,
-                    hash=feature_hash
+                    hash=geojson_hash
                 ))
             return None
 
         # Check if this feature already exists for this user or in current batch (thread-safe)
         with duplicate_check_lock:
             # Check for cross-queue hash duplicates FIRST (always blocked)
-            queue_info = queue_hash_to_item.get(feature_hash, {})
+            queue_info = queue_hash_to_item.get(geojson_hash, {})
             if queue_info:
                 # This is a cross-queue hash duplicate - always blocked
                 logger.info(f"  -> Skipping cross-queue hash duplicate (always blocked)")
                 skipped_hash_duplicates.append(SkippedDuplicateFeature(
                     name=feature_name,
-                    hash=feature_hash,
+                    hash=geojson_hash,
                     queue_item_id=queue_info.get('queue_item_id'),
                     queue_item_filename=queue_info.get('queue_item_filename', 'Unknown')
                 ))
                 return None
 
             # Check for hash duplicates from FeatureStore or current batch (always blocked)
-            if feature_hash in existing_hashes or feature_hash in current_batch_hashes:
+            if geojson_hash in existing_hashes or geojson_hash in current_batch_hashes:
                 # This is a hash-based duplicate from FeatureStore (blocked automatically)
                 logger.info(f"  -> Skipping feature store hash duplicate (always blocked)")
                 skipped_hash_duplicates.append(SkippedDuplicateFeature(
                     name=feature_name,
-                    hash=feature_hash
+                    hash=geojson_hash
                 ))
                 return None
 
             # Add to current batch hashes to prevent duplicates within the same import
-            current_batch_hashes.add(feature_hash)
+            current_batch_hashes.add(geojson_hash)
 
         # Update the feature's ID in the GeoJSON data
-        geojson_data['properties']['feature_hash'] = feature_hash
+        geojson_data['properties']['geojson_hash'] = geojson_hash
 
         # Create geometry object for spatial queries
         geometry = None
@@ -430,7 +430,7 @@ def process_single_feature_for_import(
         # Create FeatureStore object
         return FeatureStore(
             geojson=geojson_data,
-            geojson_hash=feature_hash,
+            geojson_hash=geojson_hash,
             geometry=geometry,
             source=import_item,
             user_id=user_id
@@ -586,10 +586,8 @@ def process_features_for_import(
             dup_feature = dup_info.get('feature')
             if dup_feature:
                 # Use stored hash if available (preserves original hash from processing)
-                feature_hash = dup_feature['properties']['feature_hash']
-                # if not feature_hash:
-                #     feature_hash = generate_feature_hash(dup_feature)
-                geometry_duplicate_hashes.add(feature_hash)
+                geojson_hash = dup_feature['properties'].get('geojson_hash')
+                geometry_duplicate_hashes.add(geojson_hash)
 
     # Get existing feature hashes for this user to avoid duplicates
     existing_features = FeatureStore.objects.filter(user_id=user_id).values_list('geojson_hash', flat=True)
@@ -608,11 +606,11 @@ def process_features_for_import(
     for queue_item in other_queue_items:
         for feature in queue_item.geofeatures:
             # Use stored hash if available (preserves original hash from processing)
-            feature_hash = feature.get('properties', {}).get('feature_hash')
-            if not feature_hash:
-                feature_hash = generate_feature_hash(feature)
-            if feature_hash not in queue_hash_to_item:
-                queue_hash_to_item[feature_hash] = {
+            geojson_hash = feature.get('properties', {}).get('geojson_hash')
+            if not geojson_hash:
+                geojson_hash = generate_geojson_hash(feature)
+            if geojson_hash not in queue_hash_to_item:
+                queue_hash_to_item[geojson_hash] = {
                     'queue_item_id': queue_item.id,
                     'queue_item_filename': queue_item.original_filename
                 }
@@ -720,4 +718,3 @@ def finalize_import_item(import_item: ImportQueue, user_id: int) -> None:
 
     # Broadcast WebSocket event
     broadcast_item_imported(user_id, import_item.id)
-

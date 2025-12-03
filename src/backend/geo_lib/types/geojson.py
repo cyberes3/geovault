@@ -9,7 +9,7 @@ class GeojsonRawProperty(BaseModel):
     # A class to whitelist these properties.
     # Core properties
     name: str = "Unnamed Feature"  # Default name for features without explicit names
-    feature_hash: Optional[str] = None
+    geojson_hash: Optional[str] = None
     description: Optional[str] = None
     created: Optional[datetime] = None
     tags: List[str] = Field(default_factory=list, alias='feature_tags')  # kml2geojson calls this field `feature_tags`

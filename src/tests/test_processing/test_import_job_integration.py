@@ -11,7 +11,7 @@ from django.contrib.auth import get_user_model
 from api.models import ImportQueue, FeatureStore
 from geo_lib.processing.jobs.import_job import ImportJob
 from geo_lib.processing.status_tracker import status_tracker, ProcessingStatus, ProcessingStatusTracker
-from geo_lib.feature_id import generate_feature_hash
+from geo_lib.feature_id import generate_geojson_hash
 
 User = get_user_model()
 
@@ -36,24 +36,24 @@ class TestImportJobEndToEnd(TransactionTestCase):
             'geometry': {'type': 'Point', 'coordinates': [-122.1, 37.7]},
             'properties': {'name': 'Feature 1', 'description': 'First feature'}
         }
-        self.hash1 = generate_feature_hash(self.feature1)
-        self.feature1['properties']['feature_hash'] = self.hash1
+        self.hash1 = generate_geojson_hash(self.feature1)
+        self.feature1['properties']['geojson_hash'] = self.hash1
         
         self.feature2 = {
             'type': 'Feature',
             'geometry': {'type': 'Point', 'coordinates': [-122.2, 37.8]},
             'properties': {'name': 'Feature 2', 'description': 'Second feature'}
         }
-        self.hash2 = generate_feature_hash(self.feature2)
-        self.feature2['properties']['feature_hash'] = self.hash2
+        self.hash2 = generate_geojson_hash(self.feature2)
+        self.feature2['properties']['geojson_hash'] = self.hash2
         
         self.feature3 = {
             'type': 'Feature',
             'geometry': {'type': 'Point', 'coordinates': [-122.3, 37.9]},
             'properties': {'name': 'Feature 3', 'description': 'Third feature'}
         }
-        self.hash3 = generate_feature_hash(self.feature3)
-        self.feature3['properties']['feature_hash'] = self.hash3
+        self.hash3 = generate_geojson_hash(self.feature3)
+        self.feature3['properties']['geojson_hash'] = self.hash3
         
     def _wait_for_job_completion(self, job_id: str, timeout: float = 30.0) -> dict:
         """Wait for job to complete with timeout."""
@@ -329,8 +329,8 @@ class TestImportJobWithManualSkips(TransactionTestCase):
                 'geometry': {'type': 'Point', 'coordinates': [-122.0 + i*0.1, 37.7 + i*0.1]},
                 'properties': {'name': f'Feature {i}'}
             }
-            hash_val = generate_feature_hash(feature)
-            feature['properties']['feature_hash'] = hash_val
+            hash_val = generate_geojson_hash(feature)
+            feature['properties']['geojson_hash'] = hash_val
             self.features.append(feature)
             self.hashes.append(hash_val)
     
@@ -418,4 +418,3 @@ class TestImportJobWithManualSkips(TransactionTestCase):
         self.assertEqual(features.count(), 1)
         
         print("✓ Test passed: manual_skip_via_parameter")
-

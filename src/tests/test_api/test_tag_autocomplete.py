@@ -15,7 +15,7 @@ from django.test import TestCase
 from django.contrib.gis.geos import Point
 
 from api.models import FeatureStore
-from geo_lib.feature_id import generate_feature_hash
+from geo_lib.feature_id import generate_geojson_hash
 
 
 class TestUserTagsEndpoint(TestCase):
@@ -68,7 +68,7 @@ class TestUserTagsEndpoint(TestCase):
                 user=self.user,
                 geojson=feature_data,
                 geometry=Point(-122.4194, 37.7749, 0.0),
-                geojson_hash=generate_feature_hash(feature_data),
+                geojson_hash=generate_geojson_hash(feature_data),
             )
 
     def test_user_tags_endpoint_returns_unique_sorted_tags(self):
@@ -129,7 +129,7 @@ class TestTagSeparation(TestCase):
             user=self.user,
             geojson=feature_data,
             geometry=Point(-122.4194, 37.7749, 0.0),
-            geojson_hash=generate_feature_hash(feature_data)
+            geojson_hash=generate_geojson_hash(feature_data)
         )
 
         # Fetch tags via API
@@ -198,7 +198,7 @@ class TestTagSeparation(TestCase):
             user=self.user,
             geojson=feature_data,
             geometry=Point(-122.4194, 37.7749, 0.0),
-            geojson_hash=generate_feature_hash(feature_data)
+            geojson_hash=generate_geojson_hash(feature_data)
         )
 
         # Fetch tags via API
@@ -262,7 +262,7 @@ class TestTagSeparation(TestCase):
                 geometry=Point(feature_data['geometry']['coordinates'][0],
                              feature_data['geometry']['coordinates'][1],
                              0.0),
-                geojson_hash=generate_feature_hash(feature_data)
+                geojson_hash=generate_geojson_hash(feature_data)
             )
 
         # Fetch tags via API
@@ -307,7 +307,7 @@ class TestTagSeparation(TestCase):
             user=self.user,
             geojson=feature_data,
             geometry=Point(-122.4194, 37.7749, 0.0),
-            geojson_hash=generate_feature_hash(feature_data)
+            geojson_hash=generate_geojson_hash(feature_data)
         )
 
         # Fetch tags via API
@@ -362,7 +362,7 @@ class TestAllTagsReturned(TestCase):
             user=self.user,
             geojson=feature_data,
             geometry=Point(-122.4194, 37.7749, 0.0),
-            geojson_hash=generate_feature_hash(feature_data)
+            geojson_hash=generate_geojson_hash(feature_data)
         )
 
         # Fetch tags via API
@@ -402,7 +402,7 @@ class TestAllTagsReturned(TestCase):
                 geometry=Point(feature_data['geometry']['coordinates'][0],
                              feature_data['geometry']['coordinates'][1],
                              0.0),
-                geojson_hash=generate_feature_hash(feature_data)
+                geojson_hash=generate_geojson_hash(feature_data)
             )
 
         # Fetch tags via API
@@ -439,7 +439,7 @@ class TestAllTagsReturned(TestCase):
             user=self.user,
             geojson=feature_data,
             geometry=Point(-122.4194, 37.7749, 0.0),
-            geojson_hash=generate_feature_hash(feature_data)
+            geojson_hash=generate_geojson_hash(feature_data)
         )
 
         # Fetch tags via API
@@ -492,7 +492,7 @@ class TestTagSearch(TestCase):
             user=self.user,
             geojson=feature_data,
             geometry=Point(-122.4194, 37.7749, 0.0),
-            geojson_hash=generate_feature_hash(feature_data)
+            geojson_hash=generate_geojson_hash(feature_data)
         )
 
     def test_search_filters_user_tags(self):
@@ -626,7 +626,7 @@ class TestTagAutocompleteIntegration(TestCase):
                 user=self.user,
                 geojson=feature_data,
                 geometry=Point(-122.4194 + i * 0.01, 37.7749 + i * 0.01, 0.0),
-                geojson_hash=generate_feature_hash(feature_data)
+                geojson_hash=generate_geojson_hash(feature_data)
             )
 
         # Fetch tags for autocomplete
@@ -682,7 +682,7 @@ class TestTagAutocompleteIntegration(TestCase):
             user=self.user,
             geojson=feature_data,
             geometry=Point(-116.0, 36.0, 100.0),
-            geojson_hash=generate_feature_hash(feature_data)
+            geojson_hash=generate_geojson_hash(feature_data)
         )
 
         # Fetch tags for autocomplete (simulating tag picker)
@@ -706,4 +706,3 @@ class TestTagAutocompleteIntegration(TestCase):
         system_tag_names = list(data['system_tags'].keys())
         self.assertIn('driving:yes', system_tag_names,
                      "'driving:yes' should be in system_tags, not user_tags")
-

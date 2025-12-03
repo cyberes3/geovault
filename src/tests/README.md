@@ -6,57 +6,57 @@ When doing AI programming its really really nice to have comprehensive tests.
 
 ### Run all tests
 ```shell
-./run_tests.sh
+./run-tests.sh
 ```
 
 ### Run all tests with verbose output
 ```shell
-./run_tests.sh -v
+./run-tests.sh -v
 ```
 
 ### Run a specific test folder
 ```shell
 # Run all API tests
-./run_tests.sh test_api
+./run-tests.sh test_api
 
 # Run all validation tests
-./run_tests.sh test_validation
+./run-tests.sh test_validation
 
 # Run all processing tests
-./run_tests.sh test_processing
+./run-tests.sh test_processing
 ```
 
 ### Run a specific test file
 ```shell
 # Run the E2E import tests
-./run_tests.sh test_api/test_e2e_import.py
+./run-tests.sh test_api/test_e2e_import.py
 
 # Run the features tests
-./run_tests.sh test_api/test_features.py
+./run-tests.sh test_api/test_features.py
 
 # Run with verbose output
-./run_tests.sh test_api/test_e2e_import.py -v
+./run-tests.sh test_api/test_e2e_import.py -v
 ```
 
 ### Run a specific test class or test function
 ```shell
 # Run a specific test class
-./run_tests.sh test_api/test_e2e_import.py::TestE2EImport
+./run-tests.sh test_api/test_e2e_import.py::TestE2EImport
 
 # Run a specific test function
-./run_tests.sh test_api/test_e2e_import.py::TestE2EImport::test_e2e_kml_import
+./run-tests.sh test_api/test_e2e_import.py::TestE2EImport::test_e2e_kml_import
 
 # Run multiple specific tests
-./run_tests.sh test_api/test_e2e_import.py::TestE2EImport::test_e2e_kml_import test_api/test_e2e_import.py::TestE2EImport::test_e2e_gpx_import
+./run-tests.sh test_api/test_e2e_import.py::TestE2EImport::test_e2e_kml_import test_api/test_e2e_import.py::TestE2EImport::test_e2e_gpx_import
 ```
 
 ### Run tests matching a keyword
 ```shell
 # Run all tests with "duplicate" in their name
-./run_tests.sh -k duplicate
+./run-tests.sh -k duplicate
 
 # Run all tests with "icon" in their name
-./run_tests.sh -k icon
+./run-tests.sh -k icon
 ```
 
 ## Test Organization

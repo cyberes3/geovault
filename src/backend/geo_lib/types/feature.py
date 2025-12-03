@@ -6,7 +6,7 @@ from typing import Union
 
 from pydantic import BaseModel, Field, ConfigDict, field_validator
 
-from geo_lib.feature_id import generate_feature_hash
+from geo_lib.feature_id import generate_geojson_hash
 from geo_lib.processing.logging import ImportLog, DatabaseLogLevel
 
 
@@ -21,7 +21,7 @@ class Properties(BaseModel):
     model_config = ConfigDict(extra='allow')  # Allow additional properties from togeojson
 
     name: str
-    feature_hash: str
+    geojson_hash: str
     description: Optional[str] = None
     created: Optional[datetime] = None
     tags: Optional[List[str]] = Field(default_factory=list)  # User tags only
@@ -107,8 +107,8 @@ def geojson_to_geofeature(geojson: dict) -> Tuple[List[GeoFeatureSupported], Imp
 
         # Generate hash-based ID for the feature
         feature_dict = f.model_dump()
-        feature_hash = generate_feature_hash(feature_dict)
-        f.properties.feature_hash = feature_hash
+        geojson_hash = generate_geojson_hash(feature_dict)
+        f.properties.geojson_hash = geojson_hash
 
         result.append(f)
 

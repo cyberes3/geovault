@@ -15,7 +15,7 @@ class ImportQueue(django_models.Model):
     duplicate_features = django_models.JSONField(default=list, help_text="Features that are duplicates of existing features in the feature store")
     original_filename = django_models.TextField()
     raw_file = django_models.TextField(help_text="Raw file content (KML, KMZ, GPX, etc.)")
-    geojson_hash = django_models.CharField(max_length=64, null=True, blank=True, help_text="SHA-256 hash of the raw file content for duplicate detection")
+    file_hash = django_models.CharField(max_length=64, null=True, blank=True, help_text="SHA-256 hash of the raw uploaded file content (entire file, not individual features)")
     log_id = django_models.UUIDField(default=uuid.uuid4, unique=True, help_text="UUID to group related log entries", null=True)
     replacement = django_models.IntegerField(null=True, blank=True, help_text="ID of the existing feature being updated with this replacement upload")
     bulk_operations = django_models.JSONField(default=dict, null=True, blank=True, help_text="Bulk operations (tags, styling) to apply during import")
@@ -27,7 +27,7 @@ class ImportQueue(django_models.Model):
             # Compound index for user-specific import queue queries
             django_models.Index(fields=['user', 'imported', 'timestamp'], name='import_user_imported_time'),
             # Index for file hash lookups (raw file content hash for duplicate detection)
-            django_models.Index(fields=['user', 'geojson_hash'], name='import_user_geojson_hash'),
+            django_models.Index(fields=['user', 'file_hash'], name='import_user_file_hash'),
             # Index for log grouping
             django_models.Index(fields=['log_id', 'timestamp'], name='import_log_id_time'),
         ]
@@ -38,7 +38,7 @@ class FeatureStore(models.Model):
     user = models.ForeignKey(get_user_model(), on_delete=models.CASCADE)
     source = models.ForeignKey(ImportQueue, on_delete=models.SET_NULL, null=True)
     geojson = models.JSONField(null=False)
-    geojson_hash = models.CharField(max_length=64, null=True, blank=True, help_text="SHA-256 hash of the feature's GeoJSON content")
+    geojson_hash = models.CharField(max_length=64, null=True, blank=True, help_text="SHA-256 hash of this individual feature's GeoJSON content")
     geometry = models.GeometryField(null=True, blank=True, dim=3)  # Spatial field for efficient queries, supports 3D
     timestamp = models.DateTimeField(auto_now_add=True)
 

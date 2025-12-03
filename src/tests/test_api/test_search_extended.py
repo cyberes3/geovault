@@ -6,7 +6,7 @@ from django.test import TestCase
 from django.contrib.gis.geos import Point
 
 from api.models import FeatureStore
-from geo_lib.feature_id import generate_feature_hash
+from geo_lib.feature_id import generate_geojson_hash
 
 
 class TestSearchWithSpecialCharacters(TestCase):
@@ -52,7 +52,7 @@ class TestSearchWithSpecialCharacters(TestCase):
                 geometry=Point(feature_data['geometry']['coordinates'][0],
                              feature_data['geometry']['coordinates'][1],
                              0.0),
-                geojson_hash=generate_feature_hash(feature_data)
+                geojson_hash=generate_geojson_hash(feature_data)
             )
 
     def test_search_with_at_sign(self):
@@ -140,7 +140,7 @@ class TestSearchWithUnicode(TestCase):
                 geometry=Point(feature_data['geometry']['coordinates'][0],
                              feature_data['geometry']['coordinates'][1],
                              0.0),
-                geojson_hash=generate_feature_hash(feature_data)
+                geojson_hash=generate_geojson_hash(feature_data)
             )
 
     def test_search_chinese(self):
@@ -204,7 +204,7 @@ class TestSearchCaseSensitivity(TestCase):
             user=self.user,
             geojson=feature_data,
             geometry=Point(-122.4194, 37.7749, 0.0),
-            geojson_hash=generate_feature_hash(feature_data)
+            geojson_hash=generate_geojson_hash(feature_data)
         )
 
     def test_search_lowercase(self):
@@ -261,7 +261,7 @@ class TestSearchEmptyResults(TestCase):
             user=self.user,
             geojson=feature_data,
             geometry=Point(-122.4194, 37.7749, 0.0),
-            geojson_hash=generate_feature_hash(feature_data)
+            geojson_hash=generate_geojson_hash(feature_data)
         )
 
     def test_search_no_matches(self):
@@ -317,7 +317,7 @@ class TestSearchPagination(TestCase):
                 geometry=Point(feature_data['geometry']['coordinates'][0],
                              feature_data['geometry']['coordinates'][1],
                              0.0),
-                geojson_hash=generate_feature_hash(feature_data)
+                geojson_hash=generate_geojson_hash(feature_data)
             )
 
     def test_search_with_page_parameter(self):
@@ -389,7 +389,7 @@ class TestFeaturesByTagSearch(TestCase):
                 geometry=Point(feature_data['geometry']['coordinates'][0],
                              feature_data['geometry']['coordinates'][1],
                              0.0),
-                geojson_hash=generate_feature_hash(feature_data)
+                geojson_hash=generate_geojson_hash(feature_data)
             )
 
     def test_get_features_by_tag_with_search(self):
@@ -448,7 +448,7 @@ class TestSystemTagsVsUserTags(TestCase):
             user=self.user,
             geojson=feature_data,
             geometry=Point(-122.4194, 37.7749, 0.0),
-            geojson_hash=generate_feature_hash(feature_data)
+            geojson_hash=generate_geojson_hash(feature_data)
         )
 
     def test_get_features_by_tag_separates_tag_types(self):
@@ -476,4 +476,3 @@ class TestSystemTagsVsUserTags(TestCase):
         data = json.loads(response.content)
         # Should find features with system tags
         self.assertIsInstance(data, dict)
-

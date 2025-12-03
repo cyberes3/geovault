@@ -12,7 +12,7 @@ import time
 from api.models import ImportQueue, FeatureStore
 from geo_lib.processing.jobs.bulk_import_job import BulkImportJob
 from geo_lib.processing.status_tracker import status_tracker, ProcessingStatus
-from geo_lib.feature_id import generate_feature_hash
+from geo_lib.feature_id import generate_geojson_hash
 
 User = get_user_model()
 
@@ -37,8 +37,8 @@ class TestBulkImportJobIntegration(TransactionTestCase):
                 'geometry': {'type': 'Point', 'coordinates': [-122.0 + i*0.1, 37.7 + i*0.1]},
                 'properties': {'name': f'Feature {i}'}
             }
-            hash_val = generate_feature_hash(feature)
-            feature['properties']['feature_hash'] = hash_val
+            hash_val = generate_geojson_hash(feature)
+            feature['properties']['geojson_hash'] = hash_val
             self.features.append(feature)
             self.hashes.append(hash_val)
     
@@ -418,4 +418,3 @@ class TestBulkImportJobIntegration(TransactionTestCase):
         # We just verify all were created successfully
         
         print("✓ Test passed: bulk_import_sequential_processing")
-

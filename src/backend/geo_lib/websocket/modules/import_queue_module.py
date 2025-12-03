@@ -51,7 +51,7 @@ class ImportQueueModule(BaseWebSocketModule):
             imported=False,
             replacement__isnull=True
         ).order_by('-timestamp').values(
-            'id', 'geofeatures', 'original_filename', 'geojson_hash',
+            'id', 'geofeatures', 'original_filename', 'file_hash',
             'log_id', 'timestamp', 'imported', 'unparsable'
         )
 
@@ -68,12 +68,12 @@ class ImportQueueModule(BaseWebSocketModule):
         hash_to_items = {}
         queue_hashes = set()
         for item in data:
-            if item.get('geojson_hash'):
-                geojson_hash = item['geojson_hash']
-                queue_hashes.add(geojson_hash)
-                if geojson_hash not in hash_to_items:
-                    hash_to_items[geojson_hash] = []
-                hash_to_items[geojson_hash].append(item)
+            if item.get('file_hash'):
+                file_hash = item['file_hash']
+                queue_hashes.add(file_hash)
+                if file_hash not in hash_to_items:
+                    hash_to_items[file_hash] = []
+                hash_to_items[file_hash].append(item)
 
         # Check for imported files with same hash
         # Get all imported items for this user that have a hash matching any item in the queue
@@ -82,12 +82,12 @@ class ImportQueueModule(BaseWebSocketModule):
             imported_items = ImportQueue.objects.filter(
                 user=self.user,
                 imported=True,
-                geojson_hash__in=list(queue_hashes),
-                geojson_hash__isnull=False
-            ).values('geojson_hash', 'original_filename').distinct()
+                file_hash__in=list(queue_hashes),
+                file_hash__isnull=False
+            ).values('file_hash', 'original_filename').distinct()
 
-            for imported_item in imported_items:
-                imported_hashes[imported_item['geojson_hash']] = imported_item['original_filename']
+            for imported_item in already_imported_items:
+                imported_hashes[imported_item['file_hash']] = imported_item['original_filename']
 
         # Process each item
         for i, item in enumerate(data):
@@ -124,9 +124,9 @@ class ImportQueueModule(BaseWebSocketModule):
 
             # Check for file-level duplicate status
             file_duplicate_status = None
-            if item.get('geojson_hash'):
-                geojson_hash = item['geojson_hash']
-                items_with_same_hash = hash_to_items.get(geojson_hash, [])
+            if item.get('file_hash'):
+                file_hash = item['file_hash']
+                items_with_same_hash = hash_to_items.get(file_hash, [])
 
                 # Check if there are other items in queue with same hash (uploaded earlier)
                 earlier_items = [
@@ -136,7 +136,7 @@ class ImportQueueModule(BaseWebSocketModule):
 
                 if earlier_items:
                     file_duplicate_status = 'duplicate_in_queue'
-                elif geojson_hash in imported_hashes:
+                elif file_hash in imported_hashes:
                     file_duplicate_status = 'duplicate_imported'
             
             item['file_duplicate'] = {
@@ -147,7 +147,7 @@ class ImportQueueModule(BaseWebSocketModule):
             # Remove keys from response as they're not needed by frontend
             del item['geofeatures']
             del item['log_id']
-            del item['geojson_hash']
+            del item['file_hash']
             del item['unparsable']
 
         return data

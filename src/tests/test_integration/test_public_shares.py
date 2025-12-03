@@ -7,7 +7,7 @@ from django.test import TestCase
 from django.contrib.gis.geos import Point
 
 from api.models import FeatureStore, TagShare, CollectionShare, Collection
-from geo_lib.feature_id import generate_feature_hash
+from geo_lib.feature_id import generate_geojson_hash
 
 
 class TestPublicShareWorkflow(TestCase):
@@ -42,7 +42,7 @@ class TestPublicShareWorkflow(TestCase):
                 geometry=Point(feature_data['geometry']['coordinates'][0],
                              feature_data['geometry']['coordinates'][1],
                              0.0),
-                geojson_hash=generate_feature_hash(feature_data)
+                geojson_hash=generate_geojson_hash(feature_data)
             )
 
     def test_complete_tag_share_workflow(self):
@@ -164,7 +164,7 @@ class TestPublicShareDownloads(TestCase):
             user=self.user,
             geojson=self.feature_data,
             geometry=Point(-122.4194, 37.7749, 0.0),
-            geojson_hash=generate_feature_hash(self.feature_data)
+            geojson_hash=generate_geojson_hash(self.feature_data)
         )
 
     def test_download_single_feature_from_share(self):
@@ -270,7 +270,7 @@ class TestPublicShareWithTags(TestCase):
             user=self.user,
             geojson=feature_data,
             geometry=Point(-122.4194, 37.7749, 0.0),
-            geojson_hash=generate_feature_hash(feature_data)
+            geojson_hash=generate_geojson_hash(feature_data)
         )
         
         # Create collection
@@ -354,7 +354,7 @@ class TestPublicShareAccessCount(TestCase):
             user=self.user,
             geojson=feature_data,
             geometry=Point(-122.4194, 37.7749, 0.0),
-            geojson_hash=generate_feature_hash(feature_data)
+            geojson_hash=generate_geojson_hash(feature_data)
         )
 
     def test_access_count_increments_on_feature_access(self):
@@ -452,7 +452,7 @@ class TestPublicShareSecurity(TestCase):
             user=self.user1,
             geojson=feature_data,
             geometry=Point(-122.4194, 37.7749, 0.0),
-            geojson_hash=generate_feature_hash(feature_data)
+            geojson_hash=generate_geojson_hash(feature_data)
         )
 
     def test_cannot_access_other_users_private_features(self):
@@ -514,4 +514,3 @@ class TestPublicShareSecurity(TestCase):
         if data['data']['features']:
             feature = data['data']['features'][0]
             # Implementation determines if _id is present
-

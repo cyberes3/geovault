@@ -11,7 +11,7 @@ from django.contrib.gis.geos import Point
 import requests
 
 from api.models import FeatureStore, ImportQueue
-from geo_lib.feature_id import generate_feature_hash
+from geo_lib.feature_id import generate_geojson_hash
 
 User = get_user_model()
 
@@ -38,7 +38,7 @@ class TestElevationServiceFailures:
             user=user,
             geojson=feature_data,
             geometry=Point(-122.4194, 37.7749, 0.0),
-            geojson_hash=generate_feature_hash(feature_data)
+            geojson_hash=generate_geojson_hash(feature_data)
         )
         
         assert feature.id is not None
@@ -64,7 +64,7 @@ class TestElevationServiceFailures:
             user=user,
             geojson=feature_data,
             geometry=Point(-122.4194, 37.7749, 0.0),  # Simplified for test
-            geojson_hash=generate_feature_hash(feature_data)
+            geojson_hash=generate_geojson_hash(feature_data)
         )
         
         assert feature.id is not None
@@ -105,7 +105,7 @@ class TestGeocodingServiceFailures:
                 user=user,
                 geojson=feature_data,
                 geometry=Point(-122.4194, 37.7749, 0.0),
-                geojson_hash=generate_feature_hash(feature_data)
+                geojson_hash=generate_geojson_hash(feature_data)
             )
             
             assert feature.id is not None
@@ -150,7 +150,7 @@ class TestGeocodingServiceFailures:
                         feature_data['geometry']['coordinates'][1],
                         0.0
                     ),
-                    geojson_hash=generate_feature_hash(feature_data)
+                    geojson_hash=generate_geojson_hash(feature_data)
                 )
                 assert feature.id is not None
 
@@ -177,7 +177,7 @@ class TestGeocodingServiceFailures:
                 user=user,
                 geojson=feature_data,
                 geometry=Point(-122.4194, 37.7749, 0.0),
-                geojson_hash=generate_feature_hash(feature_data)
+                geojson_hash=generate_geojson_hash(feature_data)
             )
             
             assert feature.id is not None
@@ -210,7 +210,7 @@ class TestIconDownloadFailures:
                 user=user,
                 geojson=feature_data,
                 geometry=Point(-122.4194, 37.7749, 0.0),
-                geojson_hash=generate_feature_hash(feature_data)
+                geojson_hash=generate_geojson_hash(feature_data)
             )
             
             assert feature.id is not None
@@ -241,7 +241,7 @@ class TestIconDownloadFailures:
                 user=user,
                 geojson=feature_data,
                 geometry=Point(-122.4194, 37.7749, 0.0),
-                geojson_hash=generate_feature_hash(feature_data)
+                geojson_hash=generate_geojson_hash(feature_data)
             )
             
             assert feature.id is not None
@@ -272,7 +272,7 @@ class TestIconDownloadFailures:
                 user=user,
                 geojson=feature_data,
                 geometry=Point(-122.4194, 37.7749, 0.0),
-                geojson_hash=generate_feature_hash(feature_data)
+                geojson_hash=generate_geojson_hash(feature_data)
             )
             
             assert feature.id is not None
@@ -384,7 +384,7 @@ class TestFileProcessingErrors:
                 user=user,
                 geojson=feature_data,
                 geometry=Point(-122.4194, 37.7749, 0.0),  # Simplified for test
-                geojson_hash=generate_feature_hash(feature_data)
+                geojson_hash=generate_geojson_hash(feature_data)
             )
             assert feature.id is not None
         except Exception as e:
@@ -431,7 +431,7 @@ class TestNetworkFailureRecovery:
                 user=user,
                 geojson=feature_data,
                 geometry=Point(-122.4194, 37.7749, 0.0),
-                geojson_hash=generate_feature_hash(feature_data)
+                geojson_hash=generate_geojson_hash(feature_data)
             )
             
             assert feature.id is not None
@@ -461,8 +461,7 @@ class TestNetworkFailureRecovery:
                 user=user,
                 geojson=feature_data,
                 geometry=Point(-122.4194, 37.7749, 0.0),
-                geojson_hash=generate_feature_hash(feature_data)
+                geojson_hash=generate_geojson_hash(feature_data)
             )
             
             assert feature.id is not None
-

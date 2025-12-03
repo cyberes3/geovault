@@ -7,7 +7,7 @@ from django.test import TestCase
 from django.contrib.gis.geos import Point
 
 from api.models import TagShare, CollectionShare, Collection, FeatureStore
-from geo_lib.feature_id import generate_feature_hash
+from geo_lib.feature_id import generate_geojson_hash
 
 
 class TestSharingAPI(TestCase):
@@ -40,7 +40,7 @@ class TestSharingAPI(TestCase):
             user=self.user,
             geojson=self.feature_data,
             geometry=Point(-122.4194, 37.7749, 0.0),  # 3D Point with Z=0.0
-            geojson_hash=generate_feature_hash(self.feature_data)
+            geojson_hash=generate_geojson_hash(self.feature_data)
         )
 
     def test_create_tag_share(self):
@@ -346,4 +346,3 @@ class TestSharingAPI(TestCase):
             content_type='application/json'
         )
         self.assertEqual(response.status_code, 401)
-

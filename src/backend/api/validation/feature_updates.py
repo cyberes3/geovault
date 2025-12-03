@@ -44,7 +44,7 @@ class BaseMetadataFields(BaseModel):
 
 class FeatureUpdateProperties(BaseMetadataFields):
     """Pydantic model for updatable feature properties (import_item endpoint)."""
-    feature_hash: Optional[str] = Field(default=None, description="Feature hash (used for matching, not updated)")
+    geojson_hash: Optional[str] = Field(default=None, description="GeoJSON hash (used for matching, not updated)")
 
 
 class FeatureUpdate(BaseModel):
@@ -321,4 +321,3 @@ def validate_payload(model_class: Type[BaseModel], allow_empty: bool = False):
         
         return wrapper
     return decorator
-

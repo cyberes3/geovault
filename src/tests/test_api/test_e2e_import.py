@@ -1,6 +1,6 @@
 """
 End-to-end tests for the complete import flow.
-Tests file upload -> async processing -> import to FeatureStore using real test files.
+Tests file upload -> async processing -> import to FeatureStore using real files.
 """
 import json
 import time
@@ -16,7 +16,7 @@ from geo_lib.processing.status_tracker import status_tracker, ProcessingStatus
 
 class TestE2EImport(TransactionTestCase):
     """
-    End-to-end import flow tests using real test files.
+    End-to-end import flow tests using real files.
     
     Uses TransactionTestCase instead of TestCase because:
     1. Async jobs run in separate threads
@@ -35,8 +35,8 @@ class TestE2EImport(TransactionTestCase):
         )
         self.client.force_login(self.user)
         
-        # Store test files directory
-        self.test_files_dir = Path(__file__).parent.parent / 'test files'
+        # Store files directory
+        self.test_files_dir = Path(__file__).parent.parent / 'files'
 
     def tearDown(self):
         """Clean up after tests."""
@@ -76,7 +76,7 @@ class TestE2EImport(TransactionTestCase):
         raise TimeoutError(f"Job {job_id} did not complete within {timeout} seconds")
 
     def _load_test_file(self, filename: str) -> bytes:
-        """Load a test file from the test files directory."""
+        """Load a test file from the files directory."""
         file_path = self.test_files_dir / filename
         with open(file_path, 'rb') as f:
             return f.read()
@@ -267,15 +267,15 @@ class TestE2EImport(TransactionTestCase):
         self.assertIn('type', sample_feature.geojson, "GeoJSON should have type field")
         self.assertIn('properties', sample_feature.geojson, "GeoJSON should have properties")
         
-        # Verify feature_hash is present (required field)
-        self.assertIn('feature_hash', sample_feature.geojson['properties'], 
-                     "Feature should have feature_hash in properties")
-        self.assertIsNotNone(sample_feature.geojson['properties']['feature_hash'],
-                           "feature_hash should not be None")
-        self.assertIsInstance(sample_feature.geojson['properties']['feature_hash'], str,
-                            "feature_hash should be a string")
-        self.assertGreater(len(sample_feature.geojson['properties']['feature_hash']), 0,
-                          "feature_hash should not be empty")
+        # Verify geojson_hash is present (required field)
+        self.assertIn('geojson_hash', sample_feature.geojson['properties'], 
+                     "Feature should have geojson_hash in properties")
+        self.assertIsNotNone(sample_feature.geojson['properties']['geojson_hash'],
+                           "geojson_hash should not be None")
+        self.assertIsInstance(sample_feature.geojson['properties']['geojson_hash'], str,
+                            "geojson_hash should be a string")
+        self.assertGreater(len(sample_feature.geojson['properties']['geojson_hash']), 0,
+                          "geojson_hash should not be empty")
         
         # Verify system_tags were generated (this is critical - tags should be auto-generated)
         self.assertIn('system_tags', sample_feature.geojson['properties'],
@@ -291,12 +291,12 @@ class TestE2EImport(TransactionTestCase):
         self.assertIn('import-year', tag_types, "Should have 'import-year' system tag")
         self.assertIn('import-month', tag_types, "Should have 'import-month' system tag")
         
-        # Verify geofeatures in ImportQueue also have feature_hash
+        # Verify geofeatures in ImportQueue also have geojson_hash
         for idx, feature in enumerate(import_item.geofeatures[:3]):  # Check first 3
-            self.assertIn('feature_hash', feature.get('properties', {}),
-                         f"Feature {idx} in ImportQueue should have feature_hash")
-            self.assertIsNotNone(feature['properties']['feature_hash'],
-                               f"Feature {idx} feature_hash should not be None")
+            self.assertIn('geojson_hash', feature.get('properties', {}),
+                         f"Feature {idx} in ImportQueue should have geojson_hash")
+            self.assertIsNotNone(feature['properties']['geojson_hash'],
+                               f"Feature {idx} geojson_hash should not be None")
 
     def test_e2e_gpx_import(self):
         """Test complete GPX import flow: upload -> process -> import -> verify DB."""
@@ -343,10 +343,10 @@ class TestE2EImport(TransactionTestCase):
         import_item.refresh_from_db()
         self.assertTrue(import_item.imported, "Import item should be marked as imported")
         
-        # Verify GPX features have proper structure including feature_hash and tags
+        # Verify GPX features have proper structure including geojson_hash and tags
         gpx_feature = FeatureStore.objects.filter(user=self.user).first()
-        self.assertIn('feature_hash', gpx_feature.geojson['properties'],
-                     "GPX feature should have feature_hash")
+        self.assertIn('geojson_hash', gpx_feature.geojson['properties'],
+                     "GPX feature should have geojson_hash")
         self.assertIn('system_tags', gpx_feature.geojson['properties'],
                      "GPX feature should have system_tags")
         
@@ -485,7 +485,7 @@ class TestE2EImport(TransactionTestCase):
         
         # Verify that duplicates are GEOMETRY duplicates (not hash duplicates)
         from geo_lib.processing.duplicate_models import DuplicateMatchType, DuplicateSource
-        from geo_lib.feature_id import generate_feature_hash
+        from geo_lib.feature_id import generate_geojson_hash
         
         # Check that detected duplicates are geometry-based (same location, different properties)
         geometry_duplicate_count = 0
@@ -509,15 +509,15 @@ class TestE2EImport(TransactionTestCase):
             if dup_info.get('match_type') == DuplicateMatchType.GEOMETRY:
                 dup_feature = dup_info.get('feature')
                 if dup_feature:
-                    feature_hash = dup_feature.get('properties', {}).get('feature_hash')
-                    if not feature_hash:
-                        feature_hash = generate_feature_hash(dup_feature)
-                    self.assertIn(feature_hash, skipped_ids,
-                                 f"Geometry duplicate feature {feature_hash} should be in skipped_feature_ids")
+                    geojson_hash = dup_feature.get('properties', {}).get('geojson_hash')
+                    if not geojson_hash:
+                        geojson_hash = generate_geojson_hash(dup_feature)
+                    self.assertIn(geojson_hash, skipped_ids,
+                                 f"Geometry duplicate feature {geojson_hash} should be in skipped_feature_ids")
 
     def test_e2e_cross_queue_duplicate_detection(self):
         """Test that hash-based duplicate detection works across ImportQueue items during processing."""
-        from geo_lib.feature_id import generate_feature_hash
+        from geo_lib.feature_id import generate_geojson_hash
         
         # Create a simple KML with a single point
         point_kml = """<?xml version="1.0" encoding="UTF-8"?>
@@ -560,8 +560,8 @@ class TestE2EImport(TransactionTestCase):
         # Verify both items have the same feature hash
         first_feature = import_item1.geofeatures[0]
         second_feature = import_item2.geofeatures[0]
-        first_feature_hash = generate_feature_hash(first_feature)
-        second_feature_hash = generate_feature_hash(second_feature)
+        first_feature_hash = generate_geojson_hash(first_feature)
+        second_feature_hash = generate_geojson_hash(second_feature)
         self.assertEqual(first_feature_hash, second_feature_hash, 
                         "Both features should have the same hash")
         
@@ -581,7 +581,7 @@ class TestE2EImport(TransactionTestCase):
         queue_hash_to_item = {}
         for queue_item in other_queue_items_for_item1:
             for feature in queue_item.geofeatures:
-                feature_hash = generate_feature_hash(feature)
+                feature_hash = generate_geojson_hash(feature)
                 if feature_hash not in queue_hash_to_item:
                     queue_hash_to_item[feature_hash] = {
                         'queue_item_id': queue_item.id,
@@ -589,7 +589,7 @@ class TestE2EImport(TransactionTestCase):
                     }
         
         for feature in import_item1.geofeatures:
-            feature_hash = generate_feature_hash(feature)
+            feature_hash = generate_geojson_hash(feature)
             if feature_hash in queue_hash_to_item:
                 queue_info = queue_hash_to_item[feature_hash]
                 queue_duplicates_found_item1.append({
@@ -609,7 +609,7 @@ class TestE2EImport(TransactionTestCase):
         queue_hash_to_item = {}
         for queue_item in other_queue_items_for_item2:
             for feature in queue_item.geofeatures:
-                feature_hash = generate_feature_hash(feature)
+                feature_hash = generate_geojson_hash(feature)
                 if feature_hash not in queue_hash_to_item:
                     queue_hash_to_item[feature_hash] = {
                         'queue_item_id': queue_item.id,
@@ -617,7 +617,7 @@ class TestE2EImport(TransactionTestCase):
                     }
         
         for feature in import_item2.geofeatures:
-            feature_hash = generate_feature_hash(feature)
+            feature_hash = generate_geojson_hash(feature)
             if feature_hash in queue_hash_to_item:
                 queue_info = queue_hash_to_item[feature_hash]
                 queue_duplicates_found_item2.append({
@@ -675,7 +675,7 @@ class TestE2EImport(TransactionTestCase):
         
         # Verify first item was created
         import_item1 = ImportQueue.objects.get(id=item_id1, user=self.user)
-        self.assertIsNotNone(import_item1.geojson_hash, "First item should have geojson_hash set")
+        self.assertIsNotNone(import_item1.file_hash, "First item should have file_hash set")
         self.assertFalse(import_item1.imported, "First item should not be imported yet")
         
         # Upload the same file again with different filename (should be detected as duplicate in queue)
@@ -685,11 +685,11 @@ class TestE2EImport(TransactionTestCase):
         
         # Verify second item was created
         import_item2 = ImportQueue.objects.get(id=item_id2, user=self.user)
-        self.assertIsNotNone(import_item2.geojson_hash, "Second item should have geojson_hash set")
+        self.assertIsNotNone(import_item2.file_hash, "Second item should have file_hash set")
         self.assertFalse(import_item2.imported, "Second item should not be imported yet")
         
         # Verify both items have the same geojson_hash (file-level duplicate)
-        self.assertEqual(import_item1.geojson_hash, import_item2.geojson_hash,
+        self.assertEqual(import_item1.file_hash, import_item2.file_hash,
                        "Both items should have the same geojson_hash (file-level duplicate)")
         
         # The duplicate detection in bulk_import_job checks for items with:
@@ -746,7 +746,7 @@ class TestE2EImport(TransactionTestCase):
         # Verify it's marked as imported
         import_item3 = ImportQueue.objects.get(id=item_id3, user=self.user)
         self.assertTrue(import_item3.imported, "Third item should be marked as imported")
-        self.assertIsNotNone(import_item3.geojson_hash, "Third item should have geojson_hash")
+        self.assertIsNotNone(import_item3.file_hash, "Third item should have file_hash")
         
         # Count features before second upload
         initial_feature_count = FeatureStore.objects.filter(user=self.user).count()
@@ -759,11 +759,11 @@ class TestE2EImport(TransactionTestCase):
         
         # Verify fourth item was created
         import_item4 = ImportQueue.objects.get(id=item_id4, user=self.user)
-        self.assertIsNotNone(import_item4.geojson_hash, "Fourth item should have geojson_hash set")
+        self.assertIsNotNone(import_item4.file_hash, "Fourth item should have file_hash set")
         self.assertFalse(import_item4.imported, "Fourth item should not be imported yet")
         
         # Verify both items have the same geojson_hash (file-level duplicate)
-        self.assertEqual(import_item3.geojson_hash, import_item4.geojson_hash,
+        self.assertEqual(import_item3.file_hash, import_item4.file_hash,
                        "Both items should have the same geojson_hash (file-level duplicate)")
         
         # The duplicate of imported file should NOT be blocked from import by the API
@@ -830,7 +830,7 @@ class TestE2EImport(TransactionTestCase):
 
     def test_e2e_skipped_features(self):
         """Test skipping specific features during import."""
-        from geo_lib.feature_id import generate_feature_hash
+        from geo_lib.feature_id import generate_geojson_hash
         
         # Upload a file
         kml_content = self._load_test_file('Test Items.kml')
@@ -843,14 +843,14 @@ class TestE2EImport(TransactionTestCase):
         self.assertGreater(total_features, 2, "Need at least 3 features for this test")
         
         # Skip the first 2 features
-        # Use feature_hash (which is set during processing) or generate it if missing
+        # Use geojson_hash (which is set during processing) or generate it if missing
         skipped_ids = []
         for i in range(2):
             feature = import_item.geofeatures[i]
-            feature_hash = feature['properties']['feature_hash']
-            # if not feature_hash:
-            #     feature_hash = generate_feature_hash(feature)
-            skipped_ids.append(feature_hash)
+            geojson_hash = feature['properties']['geojson_hash']
+            # if not geojson_hash:
+            #     geojson_hash = generate_geojson_hash(feature)
+            skipped_ids.append(geojson_hash)
         
         # Import with skipped features
         import_job_id, import_status = self._import_item(item_id, skipped_feature_ids=skipped_ids)
@@ -946,15 +946,15 @@ class TestE2EImport(TransactionTestCase):
         """
         # First create a feature to replace
         from django.contrib.gis.geos import Point
-        from geo_lib.feature_id import generate_feature_hash
+        from geo_lib.feature_id import generate_geojson_hash
         
         original_geojson = {
             'type': 'Feature',
             'geometry': {'type': 'Point', 'coordinates': [-122.0, 37.0, 0.0]},
             'properties': {'name': 'Original Feature'}
         }
-        # Add required feature_hash
-        original_geojson['properties']['feature_hash'] = generate_feature_hash(original_geojson)
+        # Add required geojson_hash
+        original_geojson['properties']['geojson_hash'] = generate_geojson_hash(original_geojson)
         
         original_feature = FeatureStore.objects.create(
             user=self.user,
@@ -1318,7 +1318,6 @@ class TestE2EImport(TransactionTestCase):
         
         # Real WebSocket broadcasts happen - verification done by WebSocket consumer tests
         # This test verifies the failure workflow works correctly
-
 
 
 

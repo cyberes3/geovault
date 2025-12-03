@@ -11,7 +11,7 @@ from django.contrib.gis.geos import Point
 from django.test import Client
 
 from api.models import FeatureStore, Collection, ImportQueue
-from geo_lib.feature_id import generate_feature_hash
+from geo_lib.feature_id import generate_geojson_hash
 
 User = get_user_model()
 
@@ -50,7 +50,7 @@ class TestBulkOperationsPerformance:
                     feature_data['geometry']['coordinates'][1],
                     0.0
                 ),
-                geojson_hash=generate_feature_hash(feature_data)
+                geojson_hash=generate_geojson_hash(feature_data)
             )
         
         elapsed = time.perf_counter() - start_time
@@ -88,7 +88,7 @@ class TestBulkOperationsPerformance:
                     feature_data['geometry']['coordinates'][1],
                     0.0
                 ),
-                geojson_hash=generate_feature_hash(feature_data)
+                geojson_hash=generate_geojson_hash(feature_data)
             ))
         
         start_time = time.perf_counter()
@@ -131,7 +131,7 @@ class TestBulkOperationsPerformance:
                     feature_data['geometry']['coordinates'][1],
                     0.0
                 ),
-                geojson_hash=generate_feature_hash(feature_data)
+                geojson_hash=generate_geojson_hash(feature_data)
             )
             features.append(feature)
         
@@ -163,7 +163,7 @@ class TestBulkOperationsPerformance:
                 },
                 'properties': {'name': f'Existing {i}'}
             }
-            feature_hash = generate_feature_hash(feature_data)
+            feature_hash = generate_geojson_hash(feature_data)
             existing_hashes.add(feature_hash)
             FeatureStore.objects.create(
                 user=user,
@@ -194,7 +194,7 @@ class TestBulkOperationsPerformance:
         
         duplicates_found = 0
         for feature_data in new_features:
-            feature_hash = generate_feature_hash(feature_data)
+            feature_hash = generate_geojson_hash(feature_data)
             if feature_hash in existing_hashes:
                 duplicates_found += 1
         
@@ -234,7 +234,7 @@ class TestBulkOperationsPerformance:
                     feature_data['geometry']['coordinates'][1],
                     0.0
                 ),
-                geojson_hash=generate_feature_hash(feature_data)
+                geojson_hash=generate_geojson_hash(feature_data)
             )
             feature_ids.append(feature.id)
         
@@ -278,7 +278,7 @@ class TestQueryPerformance:
                     feature_data['geometry']['coordinates'][1],
                     0.0
                 ),
-                geojson_hash=generate_feature_hash(feature_data)
+                geojson_hash=generate_geojson_hash(feature_data)
             )
         
         # Test query performance
@@ -314,7 +314,7 @@ class TestQueryPerformance:
                     feature_data['geometry']['coordinates'][1],
                     0.0
                 ),
-                geojson_hash=generate_feature_hash(feature_data)
+                geojson_hash=generate_geojson_hash(feature_data)
             ))
         
         FeatureStore.objects.bulk_create(features_to_create, batch_size=100)
@@ -351,7 +351,7 @@ class TestQueryPerformance:
                 user=user,
                 geojson=feature_data,
                 geometry=Point(lon, lat, 0.0),
-                geojson_hash=generate_feature_hash(feature_data)
+                geojson_hash=generate_geojson_hash(feature_data)
             )
             
             # Count features within target bbox
@@ -405,7 +405,7 @@ class TestQueryPerformance:
                     feature_data['geometry']['coordinates'][1],
                     0.0
                 ),
-                geojson_hash=generate_feature_hash(feature_data)
+                geojson_hash=generate_geojson_hash(feature_data)
             )
         
         # Test tag search performance
@@ -521,5 +521,4 @@ class TestImportPerformance:
         
         assert elapsed < 30.0, f"Large import took too long: {elapsed:.2f}s"
         assert len(import_item.geofeatures) == 1000
-
 

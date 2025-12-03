@@ -13,7 +13,7 @@ from abc import ABC, abstractmethod
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from typing import Dict, Any, Tuple, Union, List, Optional
 
-from geo_lib.feature_id import generate_feature_hash
+from geo_lib.feature_id import generate_geojson_hash
 from geo_lib.processing.file_types import FileType, detect_file_type
 from geo_lib.processing.geo_processor import (
     extract_track_created_date,
@@ -402,8 +402,8 @@ class BaseProcessor(ABC):
                 # Then validate and normalize properties with styling (uses PropertiesModel)
                 split_feature['properties'] = geojson_property_generation(split_feature)
 
-                # Finally, generate the feature hash after all the normalization is complete
-                split_feature['properties']['feature_hash'] = generate_feature_hash(split_feature)
+                # Finally, generate the geojson hash after all the normalization is complete
+                split_feature['properties']['geojson_hash'] = generate_geojson_hash(split_feature)
 
                 # Check for cancellation before finalizing feature
                 if self._is_cancelled():

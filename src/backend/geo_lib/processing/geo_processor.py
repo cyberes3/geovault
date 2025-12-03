@@ -10,7 +10,7 @@ from typing import Optional
 
 import markdownify
 
-from geo_lib.feature_id import generate_feature_hash
+from geo_lib.feature_id import generate_geojson_hash
 from geo_lib.processing.file_types import FileType
 from geo_lib.logging.console import get_job_logger
 

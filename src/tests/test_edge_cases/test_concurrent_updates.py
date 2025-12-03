@@ -8,7 +8,7 @@ from django.test import TransactionTestCase
 from django.contrib.gis.geos import Point
 
 from api.models import FeatureStore, Collection
-from geo_lib.feature_id import generate_feature_hash
+from geo_lib.feature_id import generate_geojson_hash
 
 
 class TestConcurrentFeatureEdits(TransactionTestCase):
@@ -40,7 +40,7 @@ class TestConcurrentFeatureEdits(TransactionTestCase):
             user=self.user,
             geojson=self.feature_data,
             geometry=Point(-122.4194, 37.7749, 0.0),
-            geojson_hash=generate_feature_hash(self.feature_data)
+            geojson_hash=generate_geojson_hash(self.feature_data)
         )
 
     def test_concurrent_metadata_updates(self):
@@ -258,7 +258,7 @@ class TestConcurrentBulkOperations(TransactionTestCase):
                 geometry=Point(feature_data['geometry']['coordinates'][0],
                              feature_data['geometry']['coordinates'][1],
                              0.0),
-                geojson_hash=generate_feature_hash(feature_data)
+                geojson_hash=generate_geojson_hash(feature_data)
             )
             self.features.append(feature)
 
@@ -375,7 +375,7 @@ class TestConcurrentFeatureCreation(TransactionTestCase):
                 user=self.user,
                 geojson=feature_data,
                 geometry=Point(-122.4194, 37.7749, 0.0),
-                geojson_hash=generate_feature_hash(feature_data)
+                geojson_hash=generate_geojson_hash(feature_data)
             )
             
             # Try to create duplicate
@@ -383,7 +383,7 @@ class TestConcurrentFeatureCreation(TransactionTestCase):
                 user=self.user,
                 geojson=feature_data,
                 geometry=Point(-122.4194, 37.7749, 0.0),
-                geojson_hash=generate_feature_hash(feature_data)
+                geojson_hash=generate_geojson_hash(feature_data)
             )
             
             # Should not reach here
@@ -421,7 +421,7 @@ class TestConcurrentDelete(TransactionTestCase):
             user=self.user,
             geojson=feature_data,
             geometry=Point(-122.4194, 37.7749, 0.0),
-            geojson_hash=generate_feature_hash(feature_data)
+            geojson_hash=generate_geojson_hash(feature_data)
         )
 
     def test_concurrent_feature_delete(self):
@@ -494,7 +494,7 @@ class TestReadWriteConsistency(TransactionTestCase):
             user=self.user,
             geojson=feature_data,
             geometry=Point(-122.4194, 37.7749, 0.0),
-            geojson_hash=generate_feature_hash(feature_data)
+            geojson_hash=generate_geojson_hash(feature_data)
         )
 
     def test_read_after_write_consistency(self):
@@ -522,5 +522,4 @@ class TestReadWriteConsistency(TransactionTestCase):
         
         # Should see the update
         self.assertEqual(data['feature']['geojson']['properties']['name'], 'Updated Name')
-
 

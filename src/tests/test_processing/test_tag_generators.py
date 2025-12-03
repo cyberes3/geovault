@@ -29,7 +29,7 @@ class TestGeometryTypeTagGenerator:
         feature = PointFeature(
             type='Feature',
             geometry={'type': 'Point', 'coordinates': [-122.4194, 37.7749]},
-            properties={'name': 'Test Point', 'feature_hash': 'test'}
+            properties={'name': 'Test Point', 'geojson_hash': 'test'}
         )
         
         tags = generator.process(feature)
@@ -45,7 +45,7 @@ class TestGeometryTypeTagGenerator:
                 'type': 'LineString',
                 'coordinates': [[-122.4194, 37.7749], [-122.4195, 37.7750]]
             },
-            properties={'name': 'Test Line', 'feature_hash': 'test'}
+            properties={'name': 'Test Line', 'geojson_hash': 'test'}
         )
         
         tags = generator.process(feature)
@@ -66,7 +66,7 @@ class TestGeometryTypeTagGenerator:
                     [-122.4194, 37.7749]
                 ]]
             },
-            properties={'name': 'Test Polygon', 'feature_hash': 'test'}
+            properties={'name': 'Test Polygon', 'geojson_hash': 'test'}
         )
         
         tags = generator.process(feature)
@@ -88,7 +88,7 @@ class TestImportDateTagGenerator:
         feature = PointFeature(
             type='Feature',
             geometry={'type': 'Point', 'coordinates': [-122.4194, 37.7749]},
-            properties={'name': 'Test Point', 'feature_hash': 'test'}
+            properties={'name': 'Test Point', 'geojson_hash': 'test'}
         )
         
         tags = generator.process(feature)
@@ -106,7 +106,7 @@ class TestImportDateTagGenerator:
         feature = PointFeature(
             type='Feature',
             geometry={'type': 'Point', 'coordinates': [-122.4194, 37.7749]},
-            properties={'name': 'Test Point', 'feature_hash': 'test'}
+            properties={'name': 'Test Point', 'geojson_hash': 'test'}
         )
         
         tags = generator.process(feature)
@@ -125,7 +125,7 @@ class TestFeatureDateTagGenerator:
             type='Feature',
             geometry={'type': 'Point', 'coordinates': [-122.4194, 37.7749]},
             properties={
-                'name': 'Test Point', 'feature_hash': 'test',
+                'name': 'Test Point', 'geojson_hash': 'test',
                 'created': '2023-06-15T10:30:00Z'
             }
         )
@@ -141,7 +141,7 @@ class TestFeatureDateTagGenerator:
         feature = PointFeature(
             type='Feature',
             geometry={'type': 'Point', 'coordinates': [-122.4194, 37.7749]},
-            properties={'name': 'Test Point', 'feature_hash': 'test'}
+            properties={'name': 'Test Point', 'geojson_hash': 'test'}
         )
         
         tags = generator.process(feature)
@@ -155,7 +155,7 @@ class TestFeatureDateTagGenerator:
             type='Feature',
             geometry={'type': 'Point', 'coordinates': [-122.4194, 37.7749]},
             properties={
-                'name': 'Test Point', 'feature_hash': 'test',
+                'name': 'Test Point', 'geojson_hash': 'test',
                 'created': 'invalid-date'
             }
         )
@@ -183,7 +183,7 @@ class TestTrackDetectionTagGenerator:
             },
             properties={
                 'name': 'GPS Track',
-                'feature_hash': 'test123',
+                'geojson_hash': 'test123',
                 'coordinateProperties': {
                     'times': [
                         '2024-09-02T08:00:00Z',
@@ -208,7 +208,7 @@ class TestTrackDetectionTagGenerator:
                 'coordinates': [[-122.4194, 37.7749], [-122.4195, 37.7750]]
             },
             properties={
-                'name': 'GPS Route', 'feature_hash': 'test',
+                'name': 'GPS Route', 'geojson_hash': 'test',
                 'time': '2024-09-02T08:00:00Z'
             }
         )
@@ -231,7 +231,7 @@ class TestTrackDetectionTagGenerator:
                 ]
             },
             properties={
-                'name': 'Mountain Hike Track', 'feature_hash': 'test',
+                'name': 'Mountain Hike Track', 'geojson_hash': 'test',
                 'coordinateProperties': {
                     'times': [
                         '2024-09-02T08:00:00Z',
@@ -258,7 +258,7 @@ class TestTrackDetectionTagGenerator:
                 'coordinates': coordinates
             },
             properties={
-                'name': 'Buffalo_Peaks_20249092', 'feature_hash': 'test',
+                'name': 'Buffalo_Peaks_20249092', 'geojson_hash': 'test',
                 'description': 'CalTopo Export - planning route'
             }
         )
@@ -279,7 +279,7 @@ class TestTrackDetectionTagGenerator:
                 'coordinates': [[-122.4194, 37.7749], [-122.4195, 37.7750]]
             },
             properties={
-                'name': 'Test Line', 'feature_hash': 'test',
+                'name': 'Test Line', 'geojson_hash': 'test',
                 'coordinateProperties': {
                     'times': []
                 }
@@ -300,7 +300,7 @@ class TestTrackDetectionTagGenerator:
                 'coordinates': [[-122.4194, 37.7749], [-122.4195, 37.7750]]
             },
             properties={
-                'name': 'Test Line', 'feature_hash': 'test',
+                'name': 'Test Line', 'geojson_hash': 'test',
                 'coordinateProperties': {
                     'times': None
                 }
@@ -320,7 +320,7 @@ class TestTrackDetectionTagGenerator:
                 'type': 'LineString',
                 'coordinates': [[-122.4194, 37.7749], [-122.4195, 37.7750]]
             },
-            properties={'name': 'Test Line', 'feature_hash': 'test'}
+            properties={'name': 'Test Line', 'geojson_hash': 'test'}
         )
         
         tags = generator.process(feature)
@@ -340,7 +340,7 @@ class TestTrackDetectionTagGenerator:
                 ]
             },
             properties={
-                'name': 'Multi Track', 'feature_hash': 'test',
+                'name': 'Multi Track', 'geojson_hash': 'test',
                 'coordinateProperties': {
                     'times': [
                         '2024-09-02T08:00:00Z',
@@ -362,7 +362,7 @@ class TestTrackDetectionTagGenerator:
         feature = PointFeature(
             type='Feature',
             geometry={'type': 'Point', 'coordinates': [-122.4194, 37.7749]},
-            properties={'name': 'Test Point', 'feature_hash': 'test'}
+            properties={'name': 'Test Point', 'geojson_hash': 'test'}
         )
         
         tags = generator.process(feature)
@@ -422,7 +422,7 @@ class TestDrivingDetectionTagGenerator:
             },
             properties={
                 'name': 'Morning Driving Route',
-                'feature_hash': 'test',
+                'geojson_hash': 'test',
                 'coordinateProperties': {
                     'times': timestamps
                 }
@@ -456,7 +456,7 @@ class TestDrivingDetectionTagGenerator:
             },
             properties={
                 'name': 'Scenic Drive',
-                'feature_hash': 'test',
+                'geojson_hash': 'test',
                 'coordinateProperties': {
                     'times': timestamps
                 }
@@ -477,7 +477,7 @@ class TestDrivingDetectionTagGenerator:
                 'type': 'LineString',
                 'coordinates': coordinates
             },
-            properties={'name': 'Hiking Trail', 'feature_hash': 'test'}
+            properties={'name': 'Hiking Trail', 'geojson_hash': 'test'}
         )
         
         tags = generator.process(feature)
@@ -499,7 +499,7 @@ class TestDrivingDetectionTagGenerator:
             },
             properties={
                 'name': 'Driving',
-                'feature_hash': 'test',
+                'geojson_hash': 'test',
                 'coordinateProperties': {
                     'times': timestamps
                 }
@@ -520,7 +520,7 @@ class TestSourceFileTagGenerator:
         feature = PointFeature(
             type='Feature',
             geometry={'type': 'Point', 'coordinates': [-122.4194, 37.7749]},
-            properties={'name': 'Test Point', 'feature_hash': 'test'}
+            properties={'name': 'Test Point', 'geojson_hash': 'test'}
         )
         
         tags = generator.process(feature, filename='my_map.kml')
@@ -533,7 +533,7 @@ class TestSourceFileTagGenerator:
         feature = PointFeature(
             type='Feature',
             geometry={'type': 'Point', 'coordinates': [-122.4194, 37.7749]},
-            properties={'name': 'Test Point', 'feature_hash': 'test'}
+            properties={'name': 'Test Point', 'geojson_hash': 'test'}
         )
         
         tags = generator.process(feature)
@@ -546,7 +546,7 @@ class TestSourceFileTagGenerator:
         feature = PointFeature(
             type='Feature',
             geometry={'type': 'Point', 'coordinates': [-122.4194, 37.7749]},
-            properties={'name': 'Test Point', 'feature_hash': 'test'}
+            properties={'name': 'Test Point', 'geojson_hash': 'test'}
         )
         
         tags = generator.process(feature, filename='')
@@ -564,7 +564,7 @@ class TestElevationTagGenerator:
         feature = PointFeature(
             type='Feature',
             geometry={'type': 'Point', 'coordinates': [-122.4194, 37.7749, 3000.0]},
-            properties={'name': 'Mountain Peak', 'feature_hash': 'test'}
+            properties={'name': 'Mountain Peak', 'geojson_hash': 'test'}
         )
         
         tags = generator.process(feature)
@@ -578,7 +578,7 @@ class TestElevationTagGenerator:
         feature = PointFeature(
             type='Feature',
             geometry={'type': 'Point', 'coordinates': [-122.4194, 37.7749, 10.0]},
-            properties={'name': 'Sea Level Point', 'feature_hash': 'test'}
+            properties={'name': 'Sea Level Point', 'geojson_hash': 'test'}
         )
         
         tags = generator.process(feature)
@@ -591,7 +591,7 @@ class TestElevationTagGenerator:
         feature = PointFeature(
             type='Feature',
             geometry={'type': 'Point', 'coordinates': [-122.4194, 37.7749, 0.0]},
-            properties={'name': 'Unknown Elevation', 'feature_hash': 'test'}
+            properties={'name': 'Unknown Elevation', 'geojson_hash': 'test'}
         )
         
         tags = generator.process(feature)
@@ -605,7 +605,7 @@ class TestElevationTagGenerator:
         feature = PointFeature(
             type='Feature',
             geometry={'type': 'Point', 'coordinates': [-122.4194, 37.7749, 500.0]},
-            properties={'name': 'Medium Elevation', 'feature_hash': 'test'}
+            properties={'name': 'Medium Elevation', 'geojson_hash': 'test'}
         )
         
         tags = generator.process(feature)
@@ -618,7 +618,7 @@ class TestElevationTagGenerator:
         feature = PointFeature(
             type='Feature',
             geometry={'type': 'Point', 'coordinates': [-122.4194, 37.7749]},
-            properties={'name': 'No Elevation', 'feature_hash': 'test'}
+            properties={'name': 'No Elevation', 'geojson_hash': 'test'}
         )
         
         tags = generator.process(feature)
@@ -639,7 +639,7 @@ class TestElevationTagGenerator:
                     [-122.4196, 37.7751, 2500.0]
                 ]
             },
-            properties={'name': 'Mountain Trail', 'feature_hash': 'test'}
+            properties={'name': 'Mountain Trail', 'geojson_hash': 'test'}
         )
         
         tags = generator.process(feature)
@@ -660,7 +660,7 @@ class TestElevationTagGenerator:
                     [-122.4196, 37.7751, 0.0]
                 ]
             },
-            properties={'name': 'Mixed Elevation', 'feature_hash': 'test'}
+            properties={'name': 'Mixed Elevation', 'geojson_hash': 'test'}
         )
         
         tags = generator.process(feature)
@@ -683,7 +683,7 @@ class TestElevationTagGenerator:
                     [-122.4194, 37.7749, 3000.0]
                 ]]
             },
-            properties={'name': 'Test Polygon', 'feature_hash': 'test'}
+            properties={'name': 'Test Polygon', 'geojson_hash': 'test'}
         )
         
         tags = generator.process(feature)
@@ -703,7 +703,7 @@ class TestGeocodingTagGenerator:
         feature = PointFeature(
             type='Feature',
             geometry={'type': 'Point', 'coordinates': [-122.4194, 37.7749]},
-            properties={'name': 'Test Point', 'feature_hash': 'test'}
+            properties={'name': 'Test Point', 'geojson_hash': 'test'}
         )
         
         tags = generator.process(feature)
@@ -729,7 +729,7 @@ class TestGeocodingTagGenerator:
         feature = PointFeature(
             type='Feature',
             geometry={'type': 'Point', 'coordinates': [-122.4194, 37.7749]},
-            properties={'name': 'Test Point', 'feature_hash': 'test'}
+            properties={'name': 'Test Point', 'geojson_hash': 'test'}
         )
         import_log = ImportLog()
         
@@ -760,7 +760,7 @@ class TestGeocodingTagGenerator:
                 'type': 'LineString',
                 'coordinates': [[-122.4194, 37.7749], [-122.4195, 37.7750]]
             },
-            properties={'name': 'Test Line', 'feature_hash': 'test'}
+            properties={'name': 'Test Line', 'geojson_hash': 'test'}
         )
         import_log = ImportLog()
         
@@ -786,7 +786,7 @@ class TestGeocodingTagGenerator:
                     [-122.4194, 37.7749]
                 ]]
             },
-            properties={'name': 'Test Polygon', 'feature_hash': 'test'}
+            properties={'name': 'Test Polygon', 'geojson_hash': 'test'}
         )
         import_log = ImportLog()
         
@@ -809,11 +809,10 @@ class TestGeocodingTagGenerator:
         feature = PointFeature(
             type='Feature',
             geometry={'type': 'Point', 'coordinates': [-122.4194, 37.7749]},
-            properties={'name': 'Test Point', 'feature_hash': 'test'}
+            properties={'name': 'Test Point', 'geojson_hash': 'test'}
         )
         import_log = ImportLog()
         
         tags = generator.process(feature, import_log=import_log)
         
         assert tags == []
-

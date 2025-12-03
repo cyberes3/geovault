@@ -17,7 +17,7 @@ from api.models import ImportQueue, FeatureStore
 from geo_lib.processing.jobs.import_job import ImportJob
 from geo_lib.processing.jobs.bulk_import_job import BulkImportJob
 from geo_lib.processing.duplicate_models import DuplicateMatchType, DuplicateSource
-from geo_lib.feature_id import generate_feature_hash
+from geo_lib.feature_id import generate_geojson_hash
 from geo_lib.processing.import_utils import process_features_for_import
 
 User = get_user_model()
@@ -51,8 +51,8 @@ class TestSingleImportWithDuplicates(TestCase):
     def test_single_import_auto_skips_geometry_duplicates(self):
         """Test that single import automatically skips ALL geometry duplicates."""
         # Create geometry duplicate in feature store
-        base_hash = generate_feature_hash(self.base_feature)
-        self.base_feature['properties']['feature_hash'] = base_hash
+        base_hash = generate_geojson_hash(self.base_feature)
+        self.base_feature['properties']['geojson_hash'] = base_hash
         
         coords = self.base_feature['geometry']['coordinates']
         FeatureStore.objects.create(
@@ -63,8 +63,8 @@ class TestSingleImportWithDuplicates(TestCase):
         )
         
         # Create import queue item with geometry duplicate
-        geom_dup_hash = generate_feature_hash(self.geom_duplicate)
-        self.geom_duplicate['properties']['feature_hash'] = geom_dup_hash
+        geom_dup_hash = generate_geojson_hash(self.geom_duplicate)
+        self.geom_duplicate['properties']['geojson_hash'] = geom_dup_hash
         
         import_item = ImportQueue.objects.create(
             user=self.user,
@@ -88,9 +88,9 @@ class TestSingleImportWithDuplicates(TestCase):
                 if dup_info.get('match_type') == DuplicateMatchType.GEOMETRY:
                     dup_feature = dup_info.get('feature')
                     if dup_feature:
-                        feature_hash = dup_feature['properties'].get('feature_hash')
-                        if feature_hash:
-                            geometry_duplicate_hashes.add(feature_hash)
+                        geojson_hash = dup_feature['properties'].get('geojson_hash')
+                        if geojson_hash:
+                            geometry_duplicate_hashes.add(geojson_hash)
         
         # Process with geometry duplicate hashes (as ImportJob now does)
         features_to_create, skipped = process_features_for_import(
@@ -107,8 +107,8 @@ class TestSingleImportWithDuplicates(TestCase):
     def test_single_import_bypasses_skip_restore_state(self):
         """Test that single import bypasses user skip/restore state for geometry duplicates."""
         # Create geometry duplicate in feature store
-        base_hash = generate_feature_hash(self.base_feature)
-        self.base_feature['properties']['feature_hash'] = base_hash
+        base_hash = generate_geojson_hash(self.base_feature)
+        self.base_feature['properties']['geojson_hash'] = base_hash
         
         coords = self.base_feature['geometry']['coordinates']
         FeatureStore.objects.create(
@@ -119,8 +119,8 @@ class TestSingleImportWithDuplicates(TestCase):
         )
         
         # Create import queue item with geometry duplicate
-        geom_dup_hash = generate_feature_hash(self.geom_duplicate)
-        self.geom_duplicate['properties']['feature_hash'] = geom_dup_hash
+        geom_dup_hash = generate_geojson_hash(self.geom_duplicate)
+        self.geom_duplicate['properties']['geojson_hash'] = geom_dup_hash
         
         import_item = ImportQueue.objects.create(
             user=self.user,
@@ -144,9 +144,9 @@ class TestSingleImportWithDuplicates(TestCase):
                 if dup_info.get('match_type') == DuplicateMatchType.GEOMETRY:
                     dup_feature = dup_info.get('feature')
                     if dup_feature:
-                        feature_hash = dup_feature['properties'].get('feature_hash')
-                        if feature_hash:
-                            geometry_duplicate_hashes.add(feature_hash)
+                        geojson_hash = dup_feature['properties'].get('geojson_hash')
+                        if geojson_hash:
+                            geometry_duplicate_hashes.add(geojson_hash)
         
         features_to_create, skipped = process_features_for_import(
             import_item, self.user.id, True, None, geometry_duplicate_hashes
@@ -161,8 +161,8 @@ class TestSingleImportWithDuplicates(TestCase):
     def test_single_import_always_blocks_hash_duplicates(self):
         """Test that single import always blocks hash duplicates regardless of skipped_feature_ids."""
         # Create hash duplicate in feature store
-        base_hash = generate_feature_hash(self.base_feature)
-        self.base_feature['properties']['feature_hash'] = base_hash
+        base_hash = generate_geojson_hash(self.base_feature)
+        self.base_feature['properties']['geojson_hash'] = base_hash
         
         coords = self.base_feature['geometry']['coordinates']
         FeatureStore.objects.create(
@@ -226,8 +226,8 @@ class TestBulkImportWithDuplicates(TestCase):
     def test_bulk_import_auto_skips_geometry_duplicates(self):
         """Test that bulk import automatically skips ALL geometry duplicates."""
         # Create geometry duplicate in feature store
-        base_hash = generate_feature_hash(self.base_feature)
-        self.base_feature['properties']['feature_hash'] = base_hash
+        base_hash = generate_geojson_hash(self.base_feature)
+        self.base_feature['properties']['geojson_hash'] = base_hash
         
         coords = self.base_feature['geometry']['coordinates']
         FeatureStore.objects.create(
@@ -238,8 +238,8 @@ class TestBulkImportWithDuplicates(TestCase):
         )
         
         # Create import queue item with geometry duplicate
-        geom_dup_hash = generate_feature_hash(self.geom_duplicate)
-        self.geom_duplicate['properties']['feature_hash'] = geom_dup_hash
+        geom_dup_hash = generate_geojson_hash(self.geom_duplicate)
+        self.geom_duplicate['properties']['geojson_hash'] = geom_dup_hash
         
         import_item = ImportQueue.objects.create(
             user=self.user,
@@ -264,9 +264,9 @@ class TestBulkImportWithDuplicates(TestCase):
                 if dup_info.get('match_type') == DuplicateMatchType.GEOMETRY:
                     dup_feature = dup_info.get('feature')
                     if dup_feature:
-                        feature_hash = dup_feature['properties'].get('feature_hash')
-                        if feature_hash:
-                            geometry_duplicate_hashes.add(feature_hash)
+                        geojson_hash = dup_feature['properties'].get('geojson_hash')
+                        if geojson_hash:
+                            geometry_duplicate_hashes.add(geojson_hash)
         
         # Process features with geometry duplicate hashes (as bulk import does)
         features_to_create, skipped = process_features_for_import(
@@ -286,8 +286,8 @@ class TestBulkImportWithDuplicates(TestCase):
     def test_bulk_import_bypasses_skip_restore_state(self):
         """Test that bulk import bypasses user skip/restore state for geometry duplicates."""
         # Create geometry duplicate in feature store
-        base_hash = generate_feature_hash(self.base_feature)
-        self.base_feature['properties']['feature_hash'] = base_hash
+        base_hash = generate_geojson_hash(self.base_feature)
+        self.base_feature['properties']['geojson_hash'] = base_hash
         
         coords = self.base_feature['geometry']['coordinates']
         FeatureStore.objects.create(
@@ -298,8 +298,8 @@ class TestBulkImportWithDuplicates(TestCase):
         )
         
         # Create import queue item with geometry duplicate
-        geom_dup_hash = generate_feature_hash(self.geom_duplicate)
-        self.geom_duplicate['properties']['feature_hash'] = geom_dup_hash
+        geom_dup_hash = generate_geojson_hash(self.geom_duplicate)
+        self.geom_duplicate['properties']['geojson_hash'] = geom_dup_hash
         
         import_item = ImportQueue.objects.create(
             user=self.user,
@@ -323,9 +323,9 @@ class TestBulkImportWithDuplicates(TestCase):
                 if dup_info.get('match_type') == DuplicateMatchType.GEOMETRY:
                     dup_feature = dup_info.get('feature')
                     if dup_feature:
-                        feature_hash = dup_feature['properties'].get('feature_hash')
-                        if feature_hash:
-                            geometry_duplicate_hashes.add(feature_hash)
+                        geojson_hash = dup_feature['properties'].get('geojson_hash')
+                        if geojson_hash:
+                            geometry_duplicate_hashes.add(geojson_hash)
         
         features_to_create, skipped = process_features_for_import(
             import_item, self.user.id, True, None, geometry_duplicate_hashes
@@ -340,8 +340,8 @@ class TestBulkImportWithDuplicates(TestCase):
     def test_bulk_import_always_blocks_hash_duplicates(self):
         """Test that bulk import always blocks hash duplicates."""
         # Create hash duplicate in feature store
-        base_hash = generate_feature_hash(self.base_feature)
-        self.base_feature['properties']['feature_hash'] = base_hash
+        base_hash = generate_geojson_hash(self.base_feature)
+        self.base_feature['properties']['geojson_hash'] = base_hash
         
         coords = self.base_feature['geometry']['coordinates']
         FeatureStore.objects.create(
@@ -395,8 +395,8 @@ class TestCrossQueueDuplicatesInImport(TestCase):
         """Test that bulk import skips cross-queue geometry duplicates."""
         # Create older queue item with a feature
         older_feature = self.feature.copy()
-        older_hash = generate_feature_hash(older_feature)
-        older_feature['properties']['feature_hash'] = older_hash
+        older_hash = generate_geojson_hash(older_feature)
+        older_feature['properties']['geojson_hash'] = older_hash
         
         older_queue = ImportQueue.objects.create(
             user=self.user,
@@ -412,8 +412,8 @@ class TestCrossQueueDuplicatesInImport(TestCase):
             'geometry': {'type': 'Point', 'coordinates': [-122.5, 37.8]},
             'properties': {'name': 'Different Name', 'description': 'Different'}
         }
-        newer_hash = generate_feature_hash(newer_feature)
-        newer_feature['properties']['feature_hash'] = newer_hash
+        newer_hash = generate_geojson_hash(newer_feature)
+        newer_feature['properties']['geojson_hash'] = newer_hash
         
         newer_queue = ImportQueue.objects.create(
             user=self.user,
@@ -436,9 +436,9 @@ class TestCrossQueueDuplicatesInImport(TestCase):
                 if dup_info.get('match_type') == DuplicateMatchType.GEOMETRY:
                     dup_feature = dup_info.get('feature')
                     if dup_feature:
-                        feature_hash = dup_feature['properties'].get('feature_hash')
-                        if feature_hash:
-                            geometry_duplicate_hashes.add(feature_hash)
+                        geojson_hash = dup_feature['properties'].get('geojson_hash')
+                        if geojson_hash:
+                            geometry_duplicate_hashes.add(geojson_hash)
         
         features_to_create, skipped = process_features_for_import(
             newer_queue, self.user.id, True, None, geometry_duplicate_hashes
@@ -455,8 +455,8 @@ class TestCrossQueueDuplicatesInImport(TestCase):
     def test_bulk_import_blocks_cross_queue_hash_duplicates(self):
         """Test that bulk import blocks cross-queue hash duplicates."""
         # Create older queue item with a feature
-        feature_hash = generate_feature_hash(self.feature)
-        self.feature['properties']['feature_hash'] = feature_hash
+        feature_hash = generate_geojson_hash(self.feature)
+        self.feature['properties']['geojson_hash'] = feature_hash
         
         older_queue = ImportQueue.objects.create(
             user=self.user,
@@ -509,24 +509,24 @@ class TestManualSkipBehavior(TestCase):
             'geometry': {'type': 'Point', 'coordinates': [-122.1, 37.7]},
             'properties': {'name': 'Feature 1'}
         }
-        hash1 = generate_feature_hash(feature1)
-        feature1['properties']['feature_hash'] = hash1
+        hash1 = generate_geojson_hash(feature1)
+        feature1['properties']['geojson_hash'] = hash1
         
         feature2 = {
             'type': 'Feature',
             'geometry': {'type': 'Point', 'coordinates': [-122.2, 37.8]},
             'properties': {'name': 'Feature 2'}
         }
-        hash2 = generate_feature_hash(feature2)
-        feature2['properties']['feature_hash'] = hash2
+        hash2 = generate_geojson_hash(feature2)
+        feature2['properties']['geojson_hash'] = hash2
         
         feature3 = {
             'type': 'Feature',
             'geometry': {'type': 'Point', 'coordinates': [-122.3, 37.9]},
             'properties': {'name': 'Feature 3'}
         }
-        hash3 = generate_feature_hash(feature3)
-        feature3['properties']['feature_hash'] = hash3
+        hash3 = generate_geojson_hash(feature3)
+        feature3['properties']['geojson_hash'] = hash3
         
         # Create import queue item with user manually skipping feature2
         import_item = ImportQueue.objects.create(
@@ -547,7 +547,7 @@ class TestManualSkipBehavior(TestCase):
         # Filter features like ImportJob does
         features_to_process = []
         for feature in import_item.geofeatures:
-            feature_id = feature['properties']['feature_hash']
+            feature_id = feature['properties']['geojson_hash']
             if feature_id not in all_features_to_skip:
                 features_to_process.append(feature)
         
@@ -572,24 +572,24 @@ class TestManualSkipBehavior(TestCase):
             'geometry': {'type': 'Point', 'coordinates': [-122.4, 38.0]},
             'properties': {'name': 'Bulk Feature 1'}
         }
-        hash1 = generate_feature_hash(feature1)
-        feature1['properties']['feature_hash'] = hash1
+        hash1 = generate_geojson_hash(feature1)
+        feature1['properties']['geojson_hash'] = hash1
         
         feature2 = {
             'type': 'Feature',
             'geometry': {'type': 'Point', 'coordinates': [-122.5, 38.1]},
             'properties': {'name': 'Bulk Feature 2'}
         }
-        hash2 = generate_feature_hash(feature2)
-        feature2['properties']['feature_hash'] = hash2
+        hash2 = generate_geojson_hash(feature2)
+        feature2['properties']['geojson_hash'] = hash2
         
         feature3 = {
             'type': 'Feature',
             'geometry': {'type': 'Point', 'coordinates': [-122.6, 38.2]},
             'properties': {'name': 'Bulk Feature 3'}
         }
-        hash3 = generate_feature_hash(feature3)
-        feature3['properties']['feature_hash'] = hash3
+        hash3 = generate_geojson_hash(feature3)
+        feature3['properties']['geojson_hash'] = hash3
         
         # Create import queue item with user manually skipping feature2
         import_item = ImportQueue.objects.create(
@@ -610,7 +610,7 @@ class TestManualSkipBehavior(TestCase):
         # Filter features like BulkImportJob does
         features_to_process = []
         for feature in import_item.geofeatures:
-            feature_id = feature['properties']['feature_hash']
+            feature_id = feature['properties']['geojson_hash']
             if feature_id not in all_features_to_skip:
                 features_to_process.append(feature)
         
@@ -635,8 +635,8 @@ class TestManualSkipBehavior(TestCase):
             'geometry': {'type': 'Point', 'coordinates': [-122.7, 38.3]},
             'properties': {'name': 'Base Feature'}
         }
-        base_hash = generate_feature_hash(base_feature)
-        base_feature['properties']['feature_hash'] = base_hash
+        base_hash = generate_geojson_hash(base_feature)
+        base_feature['properties']['geojson_hash'] = base_hash
         
         coords = base_feature['geometry']['coordinates']
         FeatureStore.objects.create(
@@ -652,8 +652,8 @@ class TestManualSkipBehavior(TestCase):
             'geometry': {'type': 'Point', 'coordinates': [-122.7, 38.3]},
             'properties': {'name': 'Geometry Duplicate'}
         }
-        geom_dup_hash = generate_feature_hash(geom_dup)
-        geom_dup['properties']['feature_hash'] = geom_dup_hash
+        geom_dup_hash = generate_geojson_hash(geom_dup)
+        geom_dup['properties']['geojson_hash'] = geom_dup_hash
         
         # User tries to "restore" the geometry duplicate (skipped_feature_ids is empty)
         import_item = ImportQueue.objects.create(
@@ -678,9 +678,9 @@ class TestManualSkipBehavior(TestCase):
                 if dup_info.get('match_type') == DuplicateMatchType.GEOMETRY:
                     dup_feature = dup_info.get('feature')
                     if dup_feature:
-                        feature_hash = dup_feature['properties'].get('feature_hash')
-                        if feature_hash:
-                            geometry_duplicate_hashes.add(feature_hash)
+                        geojson_hash = dup_feature['properties'].get('geojson_hash')
+                        if geojson_hash:
+                            geometry_duplicate_hashes.add(geojson_hash)
         
         saved_skipped_ids = set(import_item.skipped_feature_ids)
         manually_skipped_non_duplicates = saved_skipped_ids - geometry_duplicate_hashes
@@ -716,8 +716,8 @@ class TestMixedDuplicatesInImport(TestCase):
             'geometry': {'type': 'Point', 'coordinates': [-122.1, 37.7]},
             'properties': {'name': 'Hash Dup', 'description': 'Exact match'}
         }
-        hash1 = generate_feature_hash(feature1)
-        feature1['properties']['feature_hash'] = hash1
+        hash1 = generate_geojson_hash(feature1)
+        feature1['properties']['geojson_hash'] = hash1
         
         FeatureStore.objects.create(
             user=self.user,
@@ -732,7 +732,7 @@ class TestMixedDuplicatesInImport(TestCase):
             'geometry': {'type': 'Point', 'coordinates': [-122.2, 37.8]},
             'properties': {'name': 'Store Feature', 'description': 'Store'}
         }
-        hash2_store = generate_feature_hash(feature2_in_store)
+        hash2_store = generate_geojson_hash(feature2_in_store)
         
         FeatureStore.objects.create(
             user=self.user,
@@ -746,8 +746,8 @@ class TestMixedDuplicatesInImport(TestCase):
             'geometry': {'type': 'Point', 'coordinates': [-122.2, 37.8]},
             'properties': {'name': 'Geom Dup', 'description': 'Different'}
         }
-        hash2 = generate_feature_hash(feature2)
-        feature2['properties']['feature_hash'] = hash2
+        hash2 = generate_geojson_hash(feature2)
+        feature2['properties']['geojson_hash'] = hash2
         
         # Feature 3: Unique (should be imported)
         feature3 = {
@@ -755,8 +755,8 @@ class TestMixedDuplicatesInImport(TestCase):
             'geometry': {'type': 'Point', 'coordinates': [-122.3, 37.9]},
             'properties': {'name': 'Unique', 'description': 'Not duplicate'}
         }
-        hash3 = generate_feature_hash(feature3)
-        feature3['properties']['feature_hash'] = hash3
+        hash3 = generate_geojson_hash(feature3)
+        feature3['properties']['geojson_hash'] = hash3
         
         # Create import queue item with all three features
         import_item = ImportQueue.objects.create(
@@ -788,9 +788,9 @@ class TestMixedDuplicatesInImport(TestCase):
                 if dup_info.get('match_type') == DuplicateMatchType.GEOMETRY:
                     dup_feature = dup_info.get('feature')
                     if dup_feature:
-                        feature_hash = dup_feature['properties'].get('feature_hash')
-                        if feature_hash:
-                            geometry_duplicate_hashes.add(feature_hash)
+                        geojson_hash = dup_feature['properties'].get('geojson_hash')
+                        if geojson_hash:
+                            geometry_duplicate_hashes.add(geojson_hash)
         
         features_to_create, skipped = process_features_for_import(
             import_item, self.user.id, True, None, geometry_duplicate_hashes
@@ -807,4 +807,3 @@ class TestMixedDuplicatesInImport(TestCase):
         self.assertEqual(len(skipped.geometry), 1, "Should have 1 geometry duplicate")
         
         print("✓ Test passed: Bulk import handles mixed duplicates correctly")
-

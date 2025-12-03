@@ -15,7 +15,7 @@ from api.models import ImportQueue, FeatureStore
 from geo_lib.processing.jobs.import_job import ImportJob
 from geo_lib.processing.jobs.bulk_import_job import BulkImportJob
 from geo_lib.processing.status_tracker import status_tracker, ProcessingStatus
-from geo_lib.feature_id import generate_feature_hash
+from geo_lib.feature_id import generate_geojson_hash
 
 User = get_user_model()
 
@@ -37,16 +37,16 @@ class TestImportErrorHandling(TransactionTestCase):
             'geometry': {'type': 'Point', 'coordinates': [-122.1, 37.7]},
             'properties': {'name': 'Feature 1'}
         }
-        self.hash1 = generate_feature_hash(self.feature1)
-        self.feature1['properties']['feature_hash'] = self.hash1
+        self.hash1 = generate_geojson_hash(self.feature1)
+        self.feature1['properties']['geojson_hash'] = self.hash1
         
         self.feature2 = {
             'type': 'Feature',
             'geometry': {'type': 'Point', 'coordinates': [-122.2, 37.8]},
             'properties': {'name': 'Feature 2'}
         }
-        self.hash2 = generate_feature_hash(self.feature2)
-        self.feature2['properties']['feature_hash'] = self.hash2
+        self.hash2 = generate_geojson_hash(self.feature2)
+        self.feature2['properties']['geojson_hash'] = self.hash2
     
     def _wait_for_job_completion(self, job_id: str, timeout: float = 30.0) -> dict:
         """Wait for job to complete with timeout."""
@@ -333,8 +333,8 @@ class TestBulkImportErrorHandling(TransactionTestCase):
             'geometry': {'type': 'Point', 'coordinates': [-122.1, 37.7]},
             'properties': {'name': 'Feature 1'}
         }
-        self.hash1 = generate_feature_hash(self.feature1)
-        self.feature1['properties']['feature_hash'] = self.hash1
+        self.hash1 = generate_geojson_hash(self.feature1)
+        self.feature1['properties']['geojson_hash'] = self.hash1
     
     def _wait_for_job_completion(self, job_id: str, timeout: float = 30.0) -> dict:
         """Wait for job to complete with timeout."""
@@ -395,4 +395,3 @@ class TestBulkImportErrorHandling(TransactionTestCase):
         self.assertIn('1 failed', job_status['message'])
         
         print("✓ Test passed: bulk_import_file_level_duplicate")
-

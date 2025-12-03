@@ -210,10 +210,10 @@ class BulkImportJob(BaseJob):
                 return job_error_result('Item already imported')
 
             # Check for file-level duplicates before importing
-            if import_item.geojson_hash:
+            if import_item.file_hash:
                 earlier_duplicates = ImportQueue.objects.filter(
                     user_id=user_id,
-                    geojson_hash=import_item.geojson_hash,
+                    file_hash=import_item.file_hash,
                     imported=False,
                     timestamp__lt=import_item.timestamp
                 ).order_by('timestamp').first()
@@ -263,4 +263,3 @@ class BulkImportJob(BaseJob):
         except Exception as e:
             logger.error(f"Error importing item {import_item.id}: {str(e)}")
             return job_error_result(str(e))
-

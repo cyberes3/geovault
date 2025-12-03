@@ -13,7 +13,7 @@ from django.contrib.gis.geos import GEOSGeometry
 
 from api.models import FeatureStore, ImportQueue
 from website.settings_utils import get_required_setting
-from geo_lib.feature_id import generate_feature_hash
+from geo_lib.feature_id import generate_geojson_hash
 from geo_lib.processing.logging import ImportLog, DatabaseLogLevel
 from geo_lib.logging.console import get_job_logger
 
@@ -74,9 +74,9 @@ def strip_duplicate_features(features) -> Tuple[List[Any], int, ImportLog]:
 
     for i, feature in enumerate(features):
         # Generate hash for this feature
-        feature_hash = generate_feature_hash(feature)
+        geojson_hash = generate_geojson_hash(feature)
 
-        if feature_hash in seen_hashes:
+        if geojson_hash in seen_hashes:
             # This is a duplicate
             duplicate_feature_count += 1
             feature_name = feature.get('properties', {}).get('name', 'Unnamed')
@@ -84,7 +84,7 @@ def strip_duplicate_features(features) -> Tuple[List[Any], int, ImportLog]:
             import_log.add(f"Duplicate within file: '{feature_name}' ({feature_type})", 'Duplicate Detection', DatabaseLogLevel.INFO)
         else:
             # This is a unique feature
-            seen_hashes.add(feature_hash)
+            seen_hashes.add(geojson_hash)
             unique_features.append(feature)
 
     if duplicate_feature_count > 0:
@@ -193,7 +193,7 @@ def find_geometry_duplicates(
                         }
     
     # Track which features we've already found as duplicates
-    duplicate_feature_hashes = set()
+    duplicate_geojson_hashes = set()
     
     for i, feature in enumerate(features):
         geometry = feature.get('geometry', {})
@@ -265,7 +265,7 @@ def find_geometry_duplicates(
                 log_msg = f"Geometry duplicate found in import queue: '{feature_name}' matches feature in '{queue_names[0]}'"
             
             duplicate_features.append(duplicate_info)
-            duplicate_feature_hashes.add(generate_feature_hash(feature))
+            duplicate_geojson_hashes.add(generate_geojson_hash(feature))
             import_log.add(log_msg, 'Duplicate Detection', DatabaseLogLevel.INFO)
         else:
             unique_features.append(feature)
@@ -488,11 +488,11 @@ def _find_geometry_duplicates_batched(
         # Check features that weren't already marked as duplicates
         # Note: We don't add queue matches to feature_store duplicates due to priority rule
         # Feature_store duplicates take precedence over cross_queue duplicates
-        duplicate_feature_hashes = {generate_feature_hash(dup_info['feature']) for dup_info in duplicate_features if dup_info.get('feature')}
+        duplicate_geojson_hashes = {generate_geojson_hash(dup_info['feature']) for dup_info in duplicate_features if dup_info.get('feature')}
         
         for feature in unique_features[:]:  # Use slice copy to modify during iteration
-            feature_hash = generate_feature_hash(feature)
-            if feature_hash in duplicate_feature_hashes:
+            geojson_hash = generate_geojson_hash(feature)
+            if geojson_hash in duplicate_geojson_hashes:
                 continue
             
             feature_geom = feature.get('geometry', {})
@@ -570,8 +570,8 @@ def get_skipped_feature_ids_from_duplicates(
     for dup_info in duplicate_features:
         dup_feature = dup_info.get('feature')
         if dup_feature:
-            feature_hash = generate_feature_hash(dup_feature)
-            feature_id = dup_feature.get('properties', {}).get('feature_hash', feature_hash)
+            geojson_hash = generate_geojson_hash(dup_feature)
+            feature_id = dup_feature.get('properties', {}).get('geojson_hash', geojson_hash)
             skipped_feature_ids.add(feature_id)
     
     return skipped_feature_ids
@@ -638,32 +638,32 @@ def find_hash_duplicates(
             if not queue_item.geofeatures:
                 continue
             for feature_idx, feature in enumerate(queue_item.geofeatures):
-                feature_hash = feature.get('properties', {}).get('feature_hash')
-                if not feature_hash:
-                    feature_hash = generate_feature_hash(feature)
-                if feature_hash not in queue_hash_to_item:
-                    queue_hash_to_item[feature_hash] = {
+                geojson_hash = feature.get('properties', {}).get('geojson_hash')
+                if not geojson_hash:
+                    geojson_hash = generate_geojson_hash(feature)
+                if geojson_hash not in queue_hash_to_item:
+                    queue_hash_to_item[geojson_hash] = {
                         'queue_item_id': queue_item.id,
                         'queue_item_filename': queue_item.original_filename,
                         'feature_index': feature_idx
                     }
-                    queue_hash_to_feature[feature_hash] = feature
+                    queue_hash_to_feature[geojson_hash] = feature
     
     # Check each feature for hash duplicates
     hash_duplicates = []
     
     for feature in features:
-        feature_hash = feature.get('properties', {}).get('feature_hash')
-        if not feature_hash:
-            feature_hash = generate_feature_hash(feature)
+        geojson_hash = feature.get('properties', {}).get('geojson_hash')
+        if not geojson_hash:
+            geojson_hash = generate_geojson_hash(feature)
         
         feature_name = feature.get('properties', {}).get('name', 'Unnamed')
         
         # Check FeatureStore first (higher priority)
-        if feature_hash in existing_store_hashes:
+        if geojson_hash in existing_store_hashes:
             existing_features_list = []
-            if feature_hash in hash_to_store_id:
-                store_feature = hash_to_store_id[feature_hash]
+            if geojson_hash in hash_to_store_id:
+                store_feature = hash_to_store_id[geojson_hash]
                 existing_features_list = [_format_existing_feature(store_feature)]
             
             hash_duplicates.append({
@@ -678,14 +678,14 @@ def find_hash_duplicates(
                 DatabaseLogLevel.INFO
             )
         # Check cross-queue (only if not in FeatureStore)
-        elif feature_hash in queue_hash_to_item:
-            queue_info = queue_hash_to_item[feature_hash]
+        elif geojson_hash in queue_hash_to_item:
+            queue_info = queue_hash_to_item[geojson_hash]
             queue_existing = {
                 'id': queue_info['queue_item_id'],
                 'name': queue_info['queue_item_filename'],
                 'type': feature.get('geometry', {}).get('type', 'Unknown'),
                 'timestamp': None,
-                'geojson': queue_hash_to_feature[feature_hash],
+                'geojson': queue_hash_to_feature[geojson_hash],
                 'feature_index': queue_info.get('feature_index', 0)
             }
             
@@ -756,14 +756,14 @@ def find_duplicates_for_source(
     
     # Build set of features that are hash duplicates
     hash_dup_hashes = {
-        generate_feature_hash(dup['feature']) 
+        generate_geojson_hash(dup['feature']) 
         for dup in hash_duplicates if dup.get('feature')
     }
     
     # STEP 2: Find geometry duplicates for this source (on remaining features)
     remaining_after_hash = [
         f for f in features 
-        if generate_feature_hash(f) not in hash_dup_hashes
+        if generate_geojson_hash(f) not in hash_dup_hashes
     ]
     
     _, geom_duplicates, geom_log = find_geometry_duplicates(
@@ -777,7 +777,7 @@ def find_duplicates_for_source(
     
     # Build set of features that are geometry duplicates
     geom_dup_hashes = {
-        generate_feature_hash(dup['feature']) 
+        generate_geojson_hash(dup['feature']) 
         for dup in geom_duplicates if dup.get('feature')
     }
     
@@ -788,7 +788,7 @@ def find_duplicates_for_source(
     all_dup_hashes = hash_dup_hashes | geom_dup_hashes
     remaining_features = [
         f for f in features 
-        if generate_feature_hash(f) not in all_dup_hashes
+        if generate_geojson_hash(f) not in all_dup_hashes
     ]
     
     return remaining_features, all_duplicates, import_log
@@ -881,4 +881,3 @@ def _find_geometry_collection_duplicates(geometries: List, user_id: int) -> List
         logger.error(f"Error finding geometry collection duplicates: {type(e).__name__}: {str(e)}")
         logger.error(f"Geometry collection error traceback: {traceback.format_exc()}")
         return []
-

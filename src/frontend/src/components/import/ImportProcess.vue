@@ -1467,8 +1467,8 @@ export default {
     },
     getFeatureId(item, index) {
       // Get feature ID, using global index as fallback for unique identification
-      if (item && item.properties && item.properties.feature_hash) {
-        return item.properties.feature_hash;
+      if (item && item.properties && item.properties.geojson_hash) {
+        return item.properties.geojson_hash;
       }
       // Use global index as fallback - this is unique per feature across all pages
       const globalIndex = (this.pagination.currentPage - 1) * this.pagination.pageSize + index;
@@ -1618,20 +1618,20 @@ export default {
       // Prepare a partial update for sending to the backend
       // Backend now expects only properties with id, name, description, created, tags
       const properties = feature.properties ? { ...feature.properties } : {};
-      // Ensure properties.feature_hash is set - backend requires it to match features
-      // Preserve existing properties.feature_hash if present, otherwise use top-level feature.id
-      if (!properties.feature_hash) {
+      // Ensure properties.geojson_hash is set - backend requires it to match features
+      // Preserve existing properties.geojson_hash if present, otherwise use top-level feature.id
+      if (!properties.geojson_hash) {
         if (feature.id) {
-          properties.feature_hash = feature.id;
+          properties.geojson_hash = feature.id;
         }
-        // Note: If neither properties.feature_hash nor feature.id exists, the backend will skip this feature
+        // Note: If neither properties.geojson_hash nor feature.id exists, the backend will skip this feature
         // This should not happen for valid features from the import queue
       }
-      // Extract only the allowed fields: feature_hash, name, description, created, tags
-      // feature_hash is required, others are optional
+      // Extract only the allowed fields: geojson_hash, name, description, created, tags
+      // geojson_hash is required, others are optional
       const partialUpdate = {
         properties: {
-          feature_hash: properties.feature_hash
+          geojson_hash: properties.geojson_hash
         }
       };
       // Add optional fields only if they are defined
@@ -1677,7 +1677,7 @@ export default {
       // Check current page for changes
       this.itemsForUser.forEach((feature, idx) => {
         if (!feature.isDuplicate && hasChanged(feature, this.originalItems[idx])) {
-          // Use _prepareFeatureForBackend to ensure properties.feature_hash is set for backend
+          // Use _prepareFeatureForBackend to ensure properties.geojson_hash is set for backend
           changedFeatures.push(this._prepareFeatureForBackend(feature));
         }
       });
@@ -1694,7 +1694,7 @@ export default {
               // Compare with original if we have it
               const original = originalForPage[idx];
               if (!original || hasChanged(feature, original)) {
-                // Use _prepareFeatureForBackend to ensure properties.feature_hash is set for backend
+                // Use _prepareFeatureForBackend to ensure properties.geojson_hash is set for backend
                 changedFeatures.push(this._prepareFeatureForBackend(feature));
               }
             }
@@ -2130,8 +2130,8 @@ export default {
             // Skip duplicates and skipped items
             // Calculate feature ID manually for cached pages (getFeatureId uses currentPage which won't be correct)
             let featureId;
-            if (item && item.properties && item.properties.feature_hash) {
-              featureId = item.properties.feature_hash;
+            if (item && item.properties && item.properties.geojson_hash) {
+              featureId = item.properties.geojson_hash;
             } else {
               const globalIndex = (pageNum - 1) * this.pagination.pageSize + index;
               featureId = `index_${globalIndex}`;
@@ -2503,7 +2503,7 @@ export default {
     scrollToFeatureByHash(hash) {
       // Find feature with matching hash in current page
       const featureIndex = this.itemsForUser.findIndex(item =>
-        item.properties && item.properties.feature_hash === hash
+        item.properties && item.properties.geojson_hash === hash
       );
 
       if (featureIndex >= 0) {

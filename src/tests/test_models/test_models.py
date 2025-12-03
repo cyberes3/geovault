@@ -12,7 +12,7 @@ from api.models import (
     UserSettings, DatabaseLogging
 )
 from users.models import ApiKey, UserProfile
-from geo_lib.feature_id import generate_feature_hash
+from geo_lib.feature_id import generate_geojson_hash
 
 User = get_user_model()
 
@@ -44,7 +44,7 @@ class TestFeatureStore(TestCase):
             user=self.user,
             geojson=feature_data,
             geometry=Point(-122.4194, 37.7749, 0.0),  # 3D Point with Z=0.0
-            geojson_hash=generate_feature_hash(feature_data)
+            geojson_hash=generate_geojson_hash(feature_data)
         )
         self.assertIsNotNone(feature.id)
         self.assertEqual(feature.user, self.user)
@@ -61,7 +61,7 @@ class TestFeatureStore(TestCase):
             user=self.user,
             geojson=feature_data,
             geometry=Point(-122.4194, 37.7749, 0.0),  # 3D Point with Z=0.0
-            geojson_hash=generate_feature_hash(feature_data)
+            geojson_hash=generate_geojson_hash(feature_data)
         )
         self.assertIsNotNone(feature.geojson_hash)
         self.assertEqual(len(feature.geojson_hash), 64)  # SHA-256 hex
@@ -77,7 +77,7 @@ class TestFeatureStore(TestCase):
             user=self.user,
             geojson=feature_data,
             geometry=Point(-122.4194, 37.7749, 0.0),  # 3D Point with Z=0.0
-            geojson_hash=generate_feature_hash(feature_data)
+            geojson_hash=generate_geojson_hash(feature_data)
         )
         self.assertIsNotNone(feature.geometry)
         self.assertEqual(feature.geometry.x, -122.4194)
@@ -94,7 +94,7 @@ class TestFeatureStore(TestCase):
             user=self.user,
             geojson=feature_data,
             geometry=Point(-122.4194, 37.7749, 0.0),  # 3D Point with Z=0.0
-            geojson_hash=generate_feature_hash(feature_data)
+            geojson_hash=generate_geojson_hash(feature_data)
         )
         self.assertIsNotNone(feature.timestamp)
 
@@ -442,4 +442,3 @@ class TestDatabaseLogging(TestCase):
         self.assertEqual(log_entry.text, 'Test log message')
         self.assertEqual(log_entry.source, 'test')
         self.assertEqual(log_entry.attributes, {'key': 'value'})
-

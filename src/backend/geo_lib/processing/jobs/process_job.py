@@ -13,7 +13,7 @@ from django.contrib.auth.models import User
 from django.db import transaction
 
 from api.models import ImportQueue, UserSettings, FeatureStore
-from geo_lib.feature_id import generate_feature_hash
+from geo_lib.feature_id import generate_geojson_hash
 from geo_lib.logging.console import get_job_logger
 from geo_lib.processing.jobs.base_job import BaseJob
 from geo_lib.processing.logging import RealTimeImportLog, DatabaseLogLevel
@@ -524,14 +524,14 @@ class ProcessJob(BaseJob):
             # Features are already processed by the processor, so we use them directly
             processed_features = features
             
-            # Pre-calculate and inject feature hash into properties
+            # Pre-calculate and inject geojson_hash into properties
             # This ensures that the hash used for duplicate detection is preserved
             # and not affected by Pydantic serialization differences later
             for feature in processed_features:
-                feature_hash = generate_feature_hash(feature)
+                geojson_hash = generate_geojson_hash(feature)
                 if 'properties' not in feature or feature['properties'] is None:
                     feature['properties'] = {}
-                feature['properties']['feature_hash'] = feature_hash
+                feature['properties']['geojson_hash'] = geojson_hash
 
             # Log feature type breakdown
             feature_types = {}
@@ -545,8 +545,7 @@ class ProcessJob(BaseJob):
             processing_log.add("Preparing to save processed data to database", "ProcessJob", DatabaseLogLevel.INFO)
 
             # Store the raw file hash for duplicate detection
-            # Note: field is named geojson_hash for historical reasons, but stores raw file hash
-            geojson_hash = file_hash
+            file_hash_value = file_hash
 
             # Check if this is a replacement upload - skip duplicate detection for fast path
             is_replacement = import_queue.replacement is not None
@@ -724,7 +723,7 @@ class ProcessJob(BaseJob):
                     # This ensures the hash from the first file is saved before the second file checks
                     duplicate_imported_file = ImportQueue.objects.filter(
                         user_id=user_id,
-                        geojson_hash=file_hash,
+                        file_hash=file_hash,
                         imported=True
                     ).exclude(id=import_queue.id).first()
                     
@@ -739,7 +738,7 @@ class ProcessJob(BaseJob):
                         # The WebSocket module will detect this and auto-recheck duplicates
                     
                     # Save the hash and all other data
-                    import_queue.geojson_hash = geojson_hash
+                    import_queue.file_hash = file_hash_value
                     import_queue.geofeatures = convert_features_to_pydantic(processed_features)
                     import_queue.duplicate_features = convert_features_to_pydantic(duplicate_features)
                     
@@ -752,10 +751,10 @@ class ProcessJob(BaseJob):
                         if dup.get('match_type') == DuplicateMatchType.GEOMETRY:
                             dup_feature = dup.get('feature')
                             if dup_feature:
-                                feature_hash = dup_feature.get('properties', {}).get('feature_hash')
-                                if not feature_hash:
-                                    feature_hash = generate_feature_hash(dup_feature)
-                                existing_skipped.add(feature_hash)
+                                geojson_hash = dup_feature.get('properties', {}).get('geojson_hash')
+                                if not geojson_hash:
+                                    geojson_hash = generate_geojson_hash(dup_feature)
+                                existing_skipped.add(geojson_hash)
                     
                     import_queue.skipped_feature_ids = list(existing_skipped)
                     import_queue.save()

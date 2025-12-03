@@ -7,7 +7,7 @@ from django.test import TestCase
 from django.contrib.gis.geos import Point
 
 from api.models import Collection, FeatureStore
-from geo_lib.feature_id import generate_feature_hash
+from geo_lib.feature_id import generate_geojson_hash
 
 
 class TestCollectionsAPI(TestCase):
@@ -40,7 +40,7 @@ class TestCollectionsAPI(TestCase):
             user=self.user,
             geojson=self.feature_data,
             geometry=Point(-122.4194, 37.7749, 0.0),  # 3D Point with Z=0.0
-            geojson_hash=generate_feature_hash(self.feature_data)
+            geojson_hash=generate_geojson_hash(self.feature_data)
         )
 
     def test_create_collection(self):
@@ -402,7 +402,7 @@ class TestCollectionsAPI(TestCase):
             user=self.user,
             geojson=line_feature_data,
             geometry=Point(-122.4194, 37.7749, 0.0),
-            geojson_hash=generate_feature_hash(line_feature_data)
+            geojson_hash=generate_geojson_hash(line_feature_data)
         )
 
         collection = Collection.objects.create(
@@ -453,7 +453,7 @@ class TestCollectionsAPI(TestCase):
             user=self.user,
             geojson=polygon_feature_data,
             geometry=Point(-122.4194, 37.7749, 0.0),
-            geojson_hash=generate_feature_hash(polygon_feature_data)
+            geojson_hash=generate_geojson_hash(polygon_feature_data)
         )
 
         collection = Collection.objects.create(
@@ -504,7 +504,7 @@ class TestCollectionsAPI(TestCase):
             user=self.user,
             geojson=line_feature_data,
             geometry=Point(-122.4194, 37.7749, 0.0),
-            geojson_hash=generate_feature_hash(line_feature_data)
+            geojson_hash=generate_geojson_hash(line_feature_data)
         )
 
         polygon_feature_data = {
@@ -524,7 +524,7 @@ class TestCollectionsAPI(TestCase):
             user=self.user,
             geojson=polygon_feature_data,
             geometry=Point(-122.4194, 37.7749, 0.0),
-            geojson_hash=generate_feature_hash(polygon_feature_data)
+            geojson_hash=generate_geojson_hash(polygon_feature_data)
         )
 
         collection = Collection.objects.create(
@@ -588,7 +588,7 @@ class TestCollectionsAPI(TestCase):
             user=self.user,
             geojson=feature1_data,
             geometry=Point(-122.4194, 37.7749, 0.0),
-            geojson_hash=generate_feature_hash(feature1_data)
+            geojson_hash=generate_geojson_hash(feature1_data)
         )
 
         feature2_data = {
@@ -606,7 +606,7 @@ class TestCollectionsAPI(TestCase):
             user=self.user,
             geojson=feature2_data,
             geometry=Point(-122.4094, 37.7849, 0.0),
-            geojson_hash=generate_feature_hash(feature2_data)
+            geojson_hash=generate_geojson_hash(feature2_data)
         )
 
         # Collection matches by tags, not feature_ids
@@ -673,7 +673,7 @@ class TestCollectionsAPI(TestCase):
             user=self.user,
             geojson=feature2_data,
             geometry=Point(-122.4094, 37.7849, 0.0),  # 3D Point with Z=0.0
-            geojson_hash=generate_feature_hash(feature2_data)
+            geojson_hash=generate_geojson_hash(feature2_data)
         )
 
         collection = Collection.objects.create(
@@ -789,7 +789,7 @@ class TestCollectionEdgeCases(TestCase):
             user=self.user,
             geojson=feature_data,
             geometry=Point(-122.4194, 37.7749, 0.0),
-            geojson_hash=generate_feature_hash(feature_data)
+            geojson_hash=generate_geojson_hash(feature_data)
         )
         
         collection = Collection.objects.create(
@@ -828,4 +828,3 @@ class TestCollectionEdgeCases(TestCase):
         # Should return empty or zero count
         self.assertIn('feature_count', data)
         self.assertEqual(data['feature_count'], 0)
-

@@ -11,7 +11,7 @@ from django.contrib.gis.geos import Point
 from lxml import etree
 
 from api.models import FeatureStore, Collection, TagShare, CollectionShare
-from geo_lib.feature_id import generate_feature_hash
+from geo_lib.feature_id import generate_geojson_hash
 
 
 def extract_kmz_content(kmz_bytes):
@@ -97,7 +97,7 @@ class TestSingleFeatureExport(TestCase):
             user=self.user,
             geojson=self.feature_data,
             geometry=Point(-122.4194, 37.7749, 0.0),
-            geojson_hash=generate_feature_hash(self.feature_data)
+            geojson_hash=generate_geojson_hash(self.feature_data)
         )
 
     def test_export_single_feature_authenticated(self):
@@ -159,7 +159,7 @@ class TestSingleFeatureExport(TestCase):
             user=other_user,
             geojson=other_feature_data,
             geometry=Point(-122.4094, 37.7849, 0.0),
-            geojson_hash=generate_feature_hash(other_feature_data)
+            geojson_hash=generate_geojson_hash(other_feature_data)
         )
         
         response = self.client.get(f'/api/export-kmz?feature={other_feature.id}')
@@ -210,7 +210,7 @@ class TestBulkExport(TestCase):
                 geometry=Point(feature_data['geometry']['coordinates'][0],
                              feature_data['geometry']['coordinates'][1],
                              0.0),
-                geojson_hash=generate_feature_hash(feature_data)
+                geojson_hash=generate_geojson_hash(feature_data)
             )
 
     def test_export_all_features(self):
@@ -341,7 +341,7 @@ class TestPublicShareExport(TestCase):
             user=self.user,
             geojson=self.feature_data,
             geometry=Point(-122.4194, 37.7749, 0.0),
-            geojson_hash=generate_feature_hash(self.feature_data)
+            geojson_hash=generate_geojson_hash(self.feature_data)
         )
 
     def test_export_single_feature_from_tag_share(self):
@@ -430,7 +430,7 @@ class TestPublicShareExport(TestCase):
             user=self.user,
             geojson=other_feature_data,
             geometry=Point(-122.4094, 37.7849, 0.0),
-            geojson_hash=generate_feature_hash(other_feature_data)
+            geojson_hash=generate_geojson_hash(other_feature_data)
         )
         
         share = TagShare.objects.create(
@@ -476,7 +476,7 @@ class TestFilenameSanitization(TestCase):
             user=self.user,
             geojson=feature_data,
             geometry=Point(-122.4194, 37.7749, 0.0),
-            geojson_hash=generate_feature_hash(feature_data)
+            geojson_hash=generate_geojson_hash(feature_data)
         )
         
         response = self.client.get(f'/api/export-kmz?feature={feature.id}')
@@ -504,7 +504,7 @@ class TestFilenameSanitization(TestCase):
             user=self.user,
             geojson=feature_data,
             geometry=Point(-122.4194, 37.7749, 0.0),
-            geojson_hash=generate_feature_hash(feature_data)
+            geojson_hash=generate_geojson_hash(feature_data)
         )
         
         response = self.client.get(f'/api/export-kmz?feature={feature.id}')
@@ -528,7 +528,7 @@ class TestFilenameSanitization(TestCase):
             user=self.user,
             geojson=feature_data,
             geometry=Point(-122.4194, 37.7749, 0.0),
-            geojson_hash=generate_feature_hash(feature_data)
+            geojson_hash=generate_geojson_hash(feature_data)
         )
         
         response = self.client.get(f'/api/export-kmz?feature={feature.id}')
@@ -552,7 +552,7 @@ class TestFilenameSanitization(TestCase):
             user=self.user,
             geojson=feature_data,
             geometry=Point(-122.4194, 37.7749, 0.0),
-            geojson_hash=generate_feature_hash(feature_data)
+            geojson_hash=generate_geojson_hash(feature_data)
         )
         
         response = self.client.get(f'/api/export-kmz?feature={feature.id}')
@@ -612,7 +612,7 @@ class TestExportInvalidParameters(TestCase):
             user=self.user,
             geojson=feature_data,
             geometry=Point(-122.4194, 37.7749, 0.0),
-            geojson_hash=generate_feature_hash(feature_data)
+            geojson_hash=generate_geojson_hash(feature_data)
         )
         
         # Create share for different user
@@ -631,7 +631,7 @@ class TestExportInvalidParameters(TestCase):
             user=other_user,
             geojson=other_feature_data,
             geometry=Point(-122.4094, 37.7849, 0.0),
-            geojson_hash=generate_feature_hash(other_feature_data)
+            geojson_hash=generate_geojson_hash(other_feature_data)
         )
         
         share = TagShare.objects.create(
@@ -681,7 +681,7 @@ class TestIconEmbedding(TestCase):
             user=self.user,
             geojson=feature_data,
             geometry=Point(-122.4194, 37.7749, 0.0),
-            geojson_hash=generate_feature_hash(feature_data)
+            geojson_hash=generate_geojson_hash(feature_data)
         )
         
         response = self.client.get(f'/api/export-kmz?feature={feature.id}')
@@ -739,7 +739,7 @@ class TestIconEmbedding(TestCase):
                 geometry=Point(feature_data['geometry']['coordinates'][0],
                              feature_data['geometry']['coordinates'][1],
                              0.0),
-                geojson_hash=generate_feature_hash(feature_data)
+                geojson_hash=generate_geojson_hash(feature_data)
             )
         
         response = self.client.get('/api/export-kmz?all=true')
@@ -777,7 +777,7 @@ class TestIconEmbedding(TestCase):
             user=self.user,
             geojson=feature_data,
             geometry=Point(-122.4194, 37.7749, 0.0),
-            geojson_hash=generate_feature_hash(feature_data)
+            geojson_hash=generate_geojson_hash(feature_data)
         )
         
         response = self.client.get(f'/api/export-kmz?feature={feature.id}')
@@ -793,5 +793,4 @@ class TestIconEmbedding(TestCase):
         placemarks = get_kml_placemarks(kml_root)
         self.assertEqual(len(placemarks), 1)
         self.assertEqual(get_placemark_name(placemarks[0]), 'No Icon Test')
-
 

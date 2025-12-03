@@ -22,7 +22,7 @@ from geo_lib.processing.duplicate_detection import (
     find_geometry_duplicates
 )
 from geo_lib.processing.duplicate_models import DuplicateSource, DuplicateMatchType
-from geo_lib.feature_id import generate_feature_hash
+from geo_lib.feature_id import generate_geojson_hash
 
 
 User = get_user_model()
@@ -62,8 +62,8 @@ class TestDuplicateDetectionIndividual(TestCase):
     def test_feature_store_hash_duplicate_only(self):
         """Test 1: Feature store hash duplicate detection."""
         # Create a feature in the store with exact same hash
-        feature_hash = generate_feature_hash(self.point_feature)
-        self.point_feature['properties']['feature_hash'] = feature_hash
+        feature_hash = generate_geojson_hash(self.point_feature)
+        self.point_feature['properties']['geojson_hash'] = feature_hash
         
         store_feature = FeatureStore.objects.create(
             user=self.user,
@@ -94,8 +94,8 @@ class TestDuplicateDetectionIndividual(TestCase):
         from django.contrib.gis.geos import Point
         
         # Create a feature with same coordinates but different properties
-        feature_hash = generate_feature_hash(self.point_feature)
-        self.point_feature['properties']['feature_hash'] = feature_hash
+        feature_hash = generate_geojson_hash(self.point_feature)
+        self.point_feature['properties']['geojson_hash'] = feature_hash
         
         # Create geometry object from coordinates (with Z dimension)
         coords = self.point_feature['geometry']['coordinates']
@@ -129,8 +129,8 @@ class TestDuplicateDetectionIndividual(TestCase):
     def test_cross_queue_hash_duplicate_only(self):
         """Test 3: Cross-queue hash duplicate detection."""
         # Create an older import queue item with a feature
-        feature_hash = generate_feature_hash(self.point_feature)
-        self.point_feature['properties']['feature_hash'] = feature_hash
+        feature_hash = generate_geojson_hash(self.point_feature)
+        self.point_feature['properties']['geojson_hash'] = feature_hash
         
         older_queue = ImportQueue.objects.create(
             user=self.user,
@@ -170,8 +170,8 @@ class TestDuplicateDetectionIndividual(TestCase):
     def test_cross_queue_geometry_duplicate_only(self):
         """Test 4: Cross-queue geometry duplicate detection."""
         # Create an older import queue item with a feature
-        feature_hash = generate_feature_hash(self.point_feature)
-        self.point_feature['properties']['feature_hash'] = feature_hash
+        feature_hash = generate_geojson_hash(self.point_feature)
+        self.point_feature['properties']['geojson_hash'] = feature_hash
         
         older_queue = ImportQueue.objects.create(
             user=self.user,
@@ -235,8 +235,8 @@ class TestDuplicatePriorityRules(TestCase):
     def test_hash_over_geometry_same_source_feature_store(self):
         """Test 5: Hash takes precedence over geometry in feature store."""
         # Create exact hash duplicate in feature store
-        feature_hash = generate_feature_hash(self.point_feature)
-        self.point_feature['properties']['feature_hash'] = feature_hash
+        feature_hash = generate_geojson_hash(self.point_feature)
+        self.point_feature['properties']['geojson_hash'] = feature_hash
         
         FeatureStore.objects.create(
             user=self.user,
@@ -263,8 +263,8 @@ class TestDuplicatePriorityRules(TestCase):
     def test_hash_over_geometry_same_source_cross_queue(self):
         """Test 6: Hash takes precedence over geometry in cross-queue."""
         # Create older queue item with exact same feature
-        feature_hash = generate_feature_hash(self.point_feature)
-        self.point_feature['properties']['feature_hash'] = feature_hash
+        feature_hash = generate_geojson_hash(self.point_feature)
+        self.point_feature['properties']['geojson_hash'] = feature_hash
         
         older_queue = ImportQueue.objects.create(
             user=self.user,
@@ -300,8 +300,8 @@ class TestDuplicatePriorityRules(TestCase):
 
     def test_feature_store_over_cross_queue_both_hash(self):
         """Test 7: Feature store hash takes precedence over cross-queue hash."""
-        feature_hash = generate_feature_hash(self.point_feature)
-        self.point_feature['properties']['feature_hash'] = feature_hash
+        feature_hash = generate_geojson_hash(self.point_feature)
+        self.point_feature['properties']['geojson_hash'] = feature_hash
         
         # Create in BOTH feature store and queue
         FeatureStore.objects.create(
@@ -357,8 +357,8 @@ class TestDuplicatePriorityRules(TestCase):
         from django.contrib.gis.geos import Point
         
         # Feature store has geometry match
-        feature_hash1 = generate_feature_hash(self.point_feature)
-        self.point_feature['properties']['feature_hash'] = feature_hash1
+        feature_hash1 = generate_geojson_hash(self.point_feature)
+        self.point_feature['properties']['geojson_hash'] = feature_hash1
         
         # Create geometry object (with Z dimension)
         coords = self.point_feature['geometry']['coordinates']
@@ -373,8 +373,8 @@ class TestDuplicatePriorityRules(TestCase):
         
         # Cross-queue also has geometry match (same coordinates, different name)
         older_feature = self.same_coords_different_props.copy()
-        feature_hash2 = generate_feature_hash(older_feature)
-        older_feature['properties']['feature_hash'] = feature_hash2
+        feature_hash2 = generate_geojson_hash(older_feature)
+        older_feature['properties']['geojson_hash'] = feature_hash2
         
         older_queue = ImportQueue.objects.create(
             user=self.user,
@@ -429,8 +429,8 @@ class TestDuplicatePriorityRules(TestCase):
     def test_feature_store_hash_over_cross_queue_geometry(self):
         """Test 9: Feature store hash takes precedence over cross-queue geometry."""
         # Feature store has exact hash match
-        feature_hash = generate_feature_hash(self.point_feature)
-        self.point_feature['properties']['feature_hash'] = feature_hash
+        feature_hash = generate_geojson_hash(self.point_feature)
+        self.point_feature['properties']['geojson_hash'] = feature_hash
         
         FeatureStore.objects.create(
             user=self.user,
@@ -440,7 +440,7 @@ class TestDuplicatePriorityRules(TestCase):
         
         # Cross-queue has geometry match (same coordinates, different properties)
         queue_feature = self.same_coords_different_props.copy()
-        queue_feature['properties']['feature_hash'] = generate_feature_hash(queue_feature)
+        queue_feature['properties']['geojson_hash'] = generate_geojson_hash(queue_feature)
         
         older_queue = ImportQueue.objects.create(
             user=self.user,
@@ -490,8 +490,8 @@ class TestDuplicatePriorityRules(TestCase):
         
         # Feature store has geometry match only
         fs_feature = self.point_feature.copy()
-        fs_hash = generate_feature_hash(fs_feature)
-        fs_feature['properties']['feature_hash'] = fs_hash
+        fs_hash = generate_geojson_hash(fs_feature)
+        fs_feature['properties']['geojson_hash'] = fs_hash
         
         # Create geometry object (with Z dimension)
         coords = fs_feature['geometry']['coordinates']
@@ -506,8 +506,8 @@ class TestDuplicatePriorityRules(TestCase):
         
         # Cross-queue has exact hash match with different feature
         queue_feature = self.same_coords_different_props.copy()
-        queue_hash = generate_feature_hash(queue_feature)
-        queue_feature['properties']['feature_hash'] = queue_hash
+        queue_hash = generate_geojson_hash(queue_feature)
+        queue_feature['properties']['geojson_hash'] = queue_hash
         
         older_queue = ImportQueue.objects.create(
             user=self.user,
@@ -646,10 +646,10 @@ class TestCrossQueueNavigation(TestCase):
             'properties': {'name': 'Feature 2', 'description': 'Second'}
         }
         
-        hash1 = generate_feature_hash(feature1)
-        hash2 = generate_feature_hash(feature2)
-        feature1['properties']['feature_hash'] = hash1
-        feature2['properties']['feature_hash'] = hash2
+        hash1 = generate_geojson_hash(feature1)
+        hash2 = generate_geojson_hash(feature2)
+        feature1['properties']['geojson_hash'] = hash1
+        feature2['properties']['geojson_hash'] = hash2
         
         older_queue = ImportQueue.objects.create(
             user=self.user,
@@ -709,8 +709,8 @@ class TestSourceIsolation(TestCase):
             'geometry': {'type': 'Point', 'coordinates': [-122.1, 37.7]},
             'properties': {'name': 'Store Feature'}
         }
-        store_hash = generate_feature_hash(feature_in_store)
-        feature_in_store['properties']['feature_hash'] = store_hash
+        store_hash = generate_geojson_hash(feature_in_store)
+        feature_in_store['properties']['geojson_hash'] = store_hash
         
         coords = feature_in_store['geometry']['coordinates']
         FeatureStore.objects.create(
@@ -726,8 +726,8 @@ class TestSourceIsolation(TestCase):
             'geometry': {'type': 'Point', 'coordinates': [-122.1, 37.7]},  # Same coords
             'properties': {'name': 'Queue Feature', 'description': 'Different'}
         }
-        queue_hash = generate_feature_hash(feature_in_queue)
-        feature_in_queue['properties']['feature_hash'] = queue_hash
+        queue_hash = generate_geojson_hash(feature_in_queue)
+        feature_in_queue['properties']['geojson_hash'] = queue_hash
         
         queue_item = ImportQueue.objects.create(
             user=self.user,
@@ -783,8 +783,8 @@ class TestSourceIsolation(TestCase):
             'geometry': {'type': 'Point', 'coordinates': [-122.2, 37.8]},
             'properties': {'name': 'Store Feature'}
         }
-        store_hash = generate_feature_hash(feature_in_store)
-        feature_in_store['properties']['feature_hash'] = store_hash
+        store_hash = generate_geojson_hash(feature_in_store)
+        feature_in_store['properties']['geojson_hash'] = store_hash
         
         coords = feature_in_store['geometry']['coordinates']
         FeatureStore.objects.create(
@@ -800,8 +800,8 @@ class TestSourceIsolation(TestCase):
             'geometry': {'type': 'Point', 'coordinates': [-122.2, 37.8]},  # Same coords
             'properties': {'name': 'Queue Feature', 'description': 'Different'}
         }
-        queue_hash = generate_feature_hash(feature_in_queue)
-        feature_in_queue['properties']['feature_hash'] = queue_hash
+        queue_hash = generate_geojson_hash(feature_in_queue)
+        feature_in_queue['properties']['geojson_hash'] = queue_hash
         
         older_queue = ImportQueue.objects.create(
             user=self.user,
@@ -869,8 +869,8 @@ class TestTimestampOrdering(TestCase):
             'geometry': {'type': 'Point', 'coordinates': [-122.4194, 37.7749]},
             'properties': {'name': 'Test Feature', 'description': 'Test'}
         }
-        feature_hash = generate_feature_hash(feature)
-        feature['properties']['feature_hash'] = feature_hash
+        feature_hash = generate_geojson_hash(feature)
+        feature['properties']['geojson_hash'] = feature_hash
         
         # Create first queue item (slightly older timestamp)
         base_time = datetime.now(timezone.utc)
@@ -943,8 +943,8 @@ class TestTimestampOrdering(TestCase):
             'geometry': {'type': 'Point', 'coordinates': [-122.5, 37.8]},
             'properties': {'name': 'Sequential Test', 'description': 'Test'}
         }
-        feature_hash = generate_feature_hash(feature)
-        feature['properties']['feature_hash'] = feature_hash
+        feature_hash = generate_geojson_hash(feature)
+        feature['properties']['geojson_hash'] = feature_hash
         
         base_time = datetime.now(timezone.utc)
         
@@ -1032,8 +1032,8 @@ class TestIntegration(TestCase):
             'geometry': {'type': 'Point', 'coordinates': [-122.1, 37.7]},
             'properties': {'name': 'FS Hash Match', 'description': 'Will be hash duplicate'}
         }
-        fs_hash = generate_feature_hash(fs_hash_feature)
-        fs_hash_feature['properties']['feature_hash'] = fs_hash
+        fs_hash = generate_geojson_hash(fs_hash_feature)
+        fs_hash_feature['properties']['geojson_hash'] = fs_hash
         
         FeatureStore.objects.create(
             user=self.user,
@@ -1047,7 +1047,7 @@ class TestIntegration(TestCase):
             'geometry': {'type': 'Point', 'coordinates': [-122.2, 37.8]},
             'properties': {'name': 'FS Geom Match', 'description': 'Different props'}
         }
-        fs_geom_hash = generate_feature_hash(fs_geom_feature)
+        fs_geom_hash = generate_geojson_hash(fs_geom_feature)
         
         FeatureStore.objects.create(
             user=self.user,
@@ -1062,16 +1062,16 @@ class TestIntegration(TestCase):
             'geometry': {'type': 'Point', 'coordinates': [-122.3, 37.9]},
             'properties': {'name': 'CQ Hash Match', 'description': 'Queue hash'}
         }
-        cq_hash = generate_feature_hash(cq_hash_feature)
-        cq_hash_feature['properties']['feature_hash'] = cq_hash
+        cq_hash = generate_geojson_hash(cq_hash_feature)
+        cq_hash_feature['properties']['geojson_hash'] = cq_hash
         
         cq_geom_feature = {
             'type': 'Feature',
             'geometry': {'type': 'Point', 'coordinates': [-122.4, 38.0]},
             'properties': {'name': 'CQ Geom Match', 'description': 'Queue geom'}
         }
-        cq_geom_hash = generate_feature_hash(cq_geom_feature)
-        cq_geom_feature['properties']['feature_hash'] = cq_geom_hash
+        cq_geom_hash = generate_geojson_hash(cq_geom_feature)
+        cq_geom_feature['properties']['geojson_hash'] = cq_geom_hash
         
         older_queue = ImportQueue.objects.create(
             user=self.user,
@@ -1205,8 +1205,8 @@ class TestIntegration(TestCase):
             'geometry': {'type': 'Point', 'coordinates': [-122.1, 37.7]},
             'properties': {'name': 'Hash Dup', 'description': 'Exact match'}
         }
-        hash_dup_hash = generate_feature_hash(hash_dup_feature)
-        hash_dup_feature['properties']['feature_hash'] = hash_dup_hash
+        hash_dup_hash = generate_geojson_hash(hash_dup_feature)
+        hash_dup_feature['properties']['geojson_hash'] = hash_dup_hash
         
         FeatureStore.objects.create(
             user=self.user,
@@ -1220,7 +1220,7 @@ class TestIntegration(TestCase):
             'geometry': {'type': 'Point', 'coordinates': [-122.2, 37.8]},
             'properties': {'name': 'Store Geom', 'description': 'Store'}
         }
-        store_geom_hash = generate_feature_hash(geom_dup_in_store)
+        store_geom_hash = generate_geojson_hash(geom_dup_in_store)
         
         FeatureStore.objects.create(
             user=self.user,
@@ -1234,8 +1234,8 @@ class TestIntegration(TestCase):
             'geometry': {'type': 'Point', 'coordinates': [-122.2, 37.8]},
             'properties': {'name': 'Geom Dup', 'description': 'Different'}
         }
-        geom_dup_hash = generate_feature_hash(geom_dup_feature)
-        geom_dup_feature['properties']['feature_hash'] = geom_dup_hash
+        geom_dup_hash = generate_geojson_hash(geom_dup_feature)
+        geom_dup_feature['properties']['geojson_hash'] = geom_dup_hash
         
         test_features = [hash_dup_feature, geom_dup_feature]
         
@@ -1258,9 +1258,9 @@ class TestIntegration(TestCase):
         
         # Only geometry duplicates go in skipped_feature_ids
         for dup in fs_geom_dups:
-            dup_hash = dup['feature'].get('properties', {}).get('feature_hash')
+            dup_hash = dup['feature'].get('properties', {}).get('geojson_hash')
             if not dup_hash:
-                dup_hash = generate_feature_hash(dup['feature'])
+                dup_hash = generate_geojson_hash(dup['feature'])
             skipped_feature_ids.append(dup_hash)
         
         # ASSERTIONS
@@ -1299,8 +1299,8 @@ class TestComplexScenarios(TestCase):
             'geometry': {'type': 'Point', 'coordinates': [-122.4194, 37.7749]},
             'properties': {'name': 'Feature 1', 'description': 'First'}
         }
-        hash1 = generate_feature_hash(feature1)
-        feature1['properties']['feature_hash'] = hash1
+        hash1 = generate_geojson_hash(feature1)
+        feature1['properties']['geojson_hash'] = hash1
         
         coords1 = feature1['geometry']['coordinates']
         FeatureStore.objects.create(
@@ -1316,7 +1316,7 @@ class TestComplexScenarios(TestCase):
             'geometry': {'type': 'Point', 'coordinates': [-122.5194, 37.8749]},
             'properties': {'name': 'Store Feature', 'description': 'In store'}
         }
-        hash2_store = generate_feature_hash(feature2_in_store)
+        hash2_store = generate_geojson_hash(feature2_in_store)
         
         coords2 = feature2_in_store['geometry']['coordinates']
         FeatureStore.objects.create(
@@ -1338,8 +1338,8 @@ class TestComplexScenarios(TestCase):
             'geometry': {'type': 'Point', 'coordinates': [-122.6194, 37.9749]},
             'properties': {'name': 'Feature 3', 'description': 'Third'}
         }
-        hash3 = generate_feature_hash(feature3)
-        feature3['properties']['feature_hash'] = hash3
+        hash3 = generate_geojson_hash(feature3)
+        feature3['properties']['geojson_hash'] = hash3
         
         older_queue = ImportQueue.objects.create(
             user=self.user,
@@ -1490,8 +1490,8 @@ class TestSequentialProcessingIntegration(TransactionTestCase):
             'geometry': {'type': 'Point', 'coordinates': [-122.4194, 37.7749]},
             'properties': {'name': 'Test Feature', 'description': 'Test'}
         }
-        feature_hash = generate_feature_hash(feature)
-        feature['properties']['feature_hash'] = feature_hash
+        feature_hash = generate_geojson_hash(feature)
+        feature['properties']['geojson_hash'] = feature_hash
         
         results = []
         errors = []
@@ -1586,8 +1586,8 @@ class TestSequentialProcessingIntegration(TransactionTestCase):
             'geometry': {'type': 'Point', 'coordinates': [-122.5, 37.8]},
             'properties': {'name': 'Sequential Test', 'description': 'Test'}
         }
-        feature_hash = generate_feature_hash(feature)
-        feature['properties']['feature_hash'] = feature_hash
+        feature_hash = generate_geojson_hash(feature)
+        feature['properties']['geojson_hash'] = feature_hash
         
         base_time = datetime.now(timezone.utc)
         
@@ -1640,4 +1640,3 @@ class TestSequentialProcessingIntegration(TransactionTestCase):
                         "Newer file should reference older queue item")
         
         print("✓ Timestamp ordering test passed: Sequential processing enforces correct ordering")
-

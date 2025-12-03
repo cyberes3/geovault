@@ -12,7 +12,7 @@ from django.contrib.gis.geos import Point
 from django.db import transaction, IntegrityError, DatabaseError
 
 from api.models import FeatureStore, ImportQueue, Collection
-from geo_lib.feature_id import generate_feature_hash
+from geo_lib.feature_id import generate_geojson_hash
 from geo_lib.utils.advisory_locks import advisory_lock
 
 User = get_user_model()
@@ -43,7 +43,7 @@ class TestTransactionRollback:
                     user=user,
                     geojson=feature_data,
                     geometry=Point(-122.4194, 37.7749, 0.0),
-                    geojson_hash=generate_feature_hash(feature_data)
+                    geojson_hash=generate_geojson_hash(feature_data)
                 )
                 
                 # Force an error to trigger rollback
@@ -70,7 +70,7 @@ class TestTransactionRollback:
             user=user,
             geojson=feature_data,
             geometry=Point(-122.4194, 37.7749, 0.0),
-            geojson_hash=generate_feature_hash(feature_data)
+            geojson_hash=generate_geojson_hash(feature_data)
         )
         
         # Try to update with valid and invalid feature IDs
@@ -105,7 +105,7 @@ class TestTransactionRollback:
                 user=user,
                 geojson=feature_data,
                 geometry=Point(-122.4194 + i * 0.01, 37.7749, 0.0),
-                geojson_hash=generate_feature_hash(feature_data)
+                geojson_hash=generate_geojson_hash(feature_data)
             )
             features.append(feature)
         
@@ -152,7 +152,7 @@ class TestTransactionRollback:
                     user=user,
                     geojson=feature1_data,
                     geometry=Point(-122.4194, 37.7749, 0.0),
-                    geojson_hash=generate_feature_hash(feature1_data)
+                    geojson_hash=generate_geojson_hash(feature1_data)
                 )
                 
                 # Create second feature successfully
@@ -168,7 +168,7 @@ class TestTransactionRollback:
                     user=user,
                     geojson=feature2_data,
                     geometry=Point(-122.4094, 37.7749, 0.0),
-                    geojson_hash=generate_feature_hash(feature2_data)
+                    geojson_hash=generate_geojson_hash(feature2_data)
                 )
                 
                 # Mark import as imported
@@ -208,7 +208,7 @@ class TestTransactionRollback:
                         user=user,
                         geojson=feature_data,
                         geometry=Point(-122.4194, 37.7749, 0.0),
-                        geojson_hash=generate_feature_hash(feature_data)
+                        geojson_hash=generate_geojson_hash(feature_data)
                     )
                 
                 # Add feature to collection (outer transaction)
@@ -305,7 +305,7 @@ class TestDatabaseConstraintViolations:
             },
             'properties': {'name': 'Test Feature'}
         }
-        feature_hash = generate_feature_hash(feature_data)
+        feature_hash = generate_geojson_hash(feature_data)
         
         feature1 = FeatureStore.objects.create(
             user=user,
@@ -352,7 +352,7 @@ class TestDatabaseConstraintViolations:
                     user_id=999999,  # Non-existent user
                     geojson=feature_data,
                     geometry=Point(-122.4194, 37.7749, 0.0),
-                    geojson_hash=generate_feature_hash(feature_data)
+                    geojson_hash=generate_geojson_hash(feature_data)
                 )
 
 
@@ -377,7 +377,7 @@ class TestPartialUpdateRollback:
                 user=user,
                 geojson=feature_data,
                 geometry=Point(-122.4194 + i * 0.01, 37.7749, 0.0),
-                geojson_hash=generate_feature_hash(feature_data)
+                geojson_hash=generate_geojson_hash(feature_data)
             )
             features.append(feature)
         
@@ -401,4 +401,3 @@ class TestPartialUpdateRollback:
             assert feature.geojson['properties']['name'] == original_names[i]
             assert 'original' in feature.geojson['properties']['tags']
             assert 'updated' not in feature.geojson['properties']['tags']
-

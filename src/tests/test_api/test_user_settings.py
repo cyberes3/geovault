@@ -6,7 +6,7 @@ from django.test import TestCase
 from django.contrib.gis.geos import Point
 
 from api.models import UserSettings, FeatureStore
-from geo_lib.feature_id import generate_feature_hash
+from geo_lib.feature_id import generate_geojson_hash
 
 
 class TestUserSettingsAPI(TestCase):
@@ -38,7 +38,7 @@ class TestUserSettingsAPI(TestCase):
             user=self.user,
             geojson=self.feature_data,
             geometry=Point(-122.4194, 37.7749, 0.0),  # 3D Point with Z=0.0
-            geojson_hash=generate_feature_hash(self.feature_data)
+            geojson_hash=generate_geojson_hash(self.feature_data)
         )
 
     def test_get_user_settings(self):
@@ -193,4 +193,3 @@ class TestUserSettingsAPI(TestCase):
         self.client.logout()
         response = self.client.get('/api/user/settings/')
         self.assertEqual(response.status_code, 401)
-

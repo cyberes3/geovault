@@ -10,7 +10,7 @@ from django.contrib.auth import get_user_model
 from django.contrib.gis.geos import Point, LineString, Polygon
 
 from api.models import FeatureStore, ImportQueue, Collection, UserSettings
-from geo_lib.feature_id import generate_feature_hash
+from geo_lib.feature_id import generate_geojson_hash
 from geo_lib.processing.import_utils import validate_bulk_operations_payload, apply_bulk_operations
 from geo_lib.validation.geometry_validation import (
     validate_geometry,
@@ -43,7 +43,7 @@ class TestEmptyArrays:
             user=user,
             geojson=feature_data,
             geometry=Point(-122.4194, 37.7749, 0.0),
-            geojson_hash=generate_feature_hash(feature_data)
+            geojson_hash=generate_geojson_hash(feature_data)
         )
         
         assert feature.id is not None
@@ -191,7 +191,7 @@ class TestNullValues:
             user=user,
             geojson=feature_data,
             geometry=Point(-122.4194, 37.7749, 0.0),
-            geojson_hash=generate_feature_hash(feature_data)
+            geojson_hash=generate_geojson_hash(feature_data)
         )
         
         assert feature.id is not None
@@ -215,7 +215,7 @@ class TestNullValues:
             user=user,
             geojson=feature_data,
             geometry=Point(-122.4194, 37.7749, 0.0),
-            geojson_hash=generate_feature_hash(feature_data)
+            geojson_hash=generate_geojson_hash(feature_data)
         )
         
         assert feature.id is not None
@@ -299,7 +299,7 @@ class TestNullValues:
                 user=user,
                 geojson=feature_data,
                 geometry=Point(-122.4194, 37.7749, 0.0),
-                geojson_hash=generate_feature_hash(feature_data)
+                geojson_hash=generate_geojson_hash(feature_data)
             )
             # If successful, properties should be handled appropriately
             assert feature.id is not None
@@ -328,7 +328,7 @@ class TestBoundaryConditions:
             user=user,
             geojson=feature_data_west,
             geometry=Point(-180.0, 37.7749, 0.0),
-            geojson_hash=generate_feature_hash(feature_data_west)
+            geojson_hash=generate_geojson_hash(feature_data_west)
         )
         
         assert feature_west.id is not None
@@ -347,7 +347,7 @@ class TestBoundaryConditions:
             user=user,
             geojson=feature_data_east,
             geometry=Point(180.0, 37.7749, 0.0),
-            geojson_hash=generate_feature_hash(feature_data_east)
+            geojson_hash=generate_geojson_hash(feature_data_east)
         )
         
         assert feature_east.id is not None
@@ -368,7 +368,7 @@ class TestBoundaryConditions:
             user=user,
             geojson=feature_data_north,
             geometry=Point(0.0, 90.0, 0.0),
-            geojson_hash=generate_feature_hash(feature_data_north)
+            geojson_hash=generate_geojson_hash(feature_data_north)
         )
         
         assert feature_north.id is not None
@@ -387,7 +387,7 @@ class TestBoundaryConditions:
             user=user,
             geojson=feature_data_south,
             geometry=Point(0.0, -90.0, 0.0),
-            geojson_hash=generate_feature_hash(feature_data_south)
+            geojson_hash=generate_geojson_hash(feature_data_south)
         )
         
         assert feature_south.id is not None
@@ -449,7 +449,7 @@ class TestBoundaryConditions:
             user=user,
             geojson=feature_data,
             geometry=Point(-122.4194, 37.7749, 0.0),  # Simplified
-            geojson_hash=generate_feature_hash(feature_data)
+            geojson_hash=generate_geojson_hash(feature_data)
         )
         
         assert feature.id is not None
@@ -518,7 +518,7 @@ class TestBoundaryConditions:
                 user=user,
                 geojson=feature_data,
                 geometry=Point(-122.4194, 37.7749, 0.0),
-                geojson_hash=generate_feature_hash(feature_data)
+                geojson_hash=generate_geojson_hash(feature_data)
             )
             assert feature.id is not None
         except (ValueError, OverflowError):
@@ -547,7 +547,7 @@ class TestBoundaryConditions:
                 user=user,
                 geojson=feature_data,
                 geometry=Point(-122.4194, 37.7749, 0.0),
-                geojson_hash=generate_feature_hash(feature_data)
+                geojson_hash=generate_geojson_hash(feature_data)
             )
             assert feature.id is not None
         except (ValueError, OverflowError):
@@ -576,7 +576,7 @@ class TestBoundaryConditions:
                 user=user,
                 geojson=feature_data,
                 geometry=Point(-122.4194, 37.7749, 0.0),
-                geojson_hash=generate_feature_hash(feature_data)
+                geojson_hash=generate_geojson_hash(feature_data)
             )
             assert feature.id is not None
             assert len(feature.geojson['properties']['tags']) == 1000
@@ -604,7 +604,7 @@ class TestBoundaryConditions:
             user=user,
             geojson=feature_data,
             geometry=Point(-122.4194, 37.7749, 0.0),
-            geojson_hash=generate_feature_hash(feature_data)
+            geojson_hash=generate_geojson_hash(feature_data)
         )
         
         assert feature.id is not None
@@ -626,7 +626,7 @@ class TestBoundaryConditions:
             user=user,
             geojson=feature_data,
             geometry=Point(-122.4194, 37.7749, -100.0),
-            geojson_hash=generate_feature_hash(feature_data)
+            geojson_hash=generate_geojson_hash(feature_data)
         )
         
         assert feature.id is not None
@@ -647,7 +647,7 @@ class TestBoundaryConditions:
             user=user,
             geojson=feature_data,
             geometry=Point(-122.4194, 37.7749, 10000.0),
-            geojson_hash=generate_feature_hash(feature_data)
+            geojson_hash=generate_geojson_hash(feature_data)
         )
         
         assert feature.id is not None
@@ -676,7 +676,7 @@ class TestSpecialCharactersAndEncoding:
             user=user,
             geojson=feature_data,
             geometry=Point(-122.4194, 37.7749, 0.0),
-            geojson_hash=generate_feature_hash(feature_data)
+            geojson_hash=generate_geojson_hash(feature_data)
         )
         
         assert feature.id is not None
@@ -696,4 +696,3 @@ class TestSpecialCharactersAndEncoding:
         assert collection.id is not None
         assert '&' in collection.name
         assert '\n' in collection.description
-
