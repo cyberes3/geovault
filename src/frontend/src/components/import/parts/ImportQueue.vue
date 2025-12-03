@@ -129,7 +129,7 @@
               <!-- Mobile-only status badge next to checkbox -->
               <div class="sm:hidden">
                 <span v-if="item.deleting" class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-orange-100 text-orange-800">
-                  <Loader size="sm" layout="inline" :showMessage="false" />
+                  <Loader size="sm" layout="inline" :showMessage="false" color="#9a3412" />
                   <span class="ml-1">Deleting</span>
                 </span>
                 <span v-else-if="item.importing" class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-blue-200 text-blue-800">
@@ -197,7 +197,7 @@
           <!-- Status cell (desktop only - mobile shown in checkbox row) -->
           <td class="hidden sm:table-cell px-6 py-4 whitespace-nowrap text-center">
             <span v-if="item.deleting" class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-orange-200 text-orange-900">
-              <Loader size="sm" layout="inline" :showMessage="false" />
+              <Loader size="sm" layout="inline" :showMessage="false" color="#9a3412" />
               <span class="ml-1">Deleting</span>
             </span>
             <span v-else-if="item.importing" class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-blue-200 text-blue-800">
@@ -221,7 +221,7 @@
               <span class="ml-1">Processing</span>
             </span>
             <span v-else-if="item.deleting" class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-orange-200 text-orange-900">
-              <Loader size="sm" layout="inline" :showMessage="false" />
+              <Loader size="sm" layout="inline" :showMessage="false" color="#9a3412" />
               <span class="ml-1">Deleting</span>
             </span>
             <span v-else-if="item.file_duplicate?.status === 'duplicate_in_queue' || item.file_duplicate?.status === 'duplicate_imported'" class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-purple-200 text-purple-900">
