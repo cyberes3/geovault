@@ -29,7 +29,7 @@ class TestGeometryTypeTagGenerator:
         feature = PointFeature(
             type='Feature',
             geometry={'type': 'Point', 'coordinates': [-122.4194, 37.7749]},
-            properties={'name': 'Test Point'}
+            properties={'name': 'Test Point', 'feature_hash': 'test'}
         )
         
         tags = generator.process(feature)
@@ -45,7 +45,7 @@ class TestGeometryTypeTagGenerator:
                 'type': 'LineString',
                 'coordinates': [[-122.4194, 37.7749], [-122.4195, 37.7750]]
             },
-            properties={'name': 'Test Line'}
+            properties={'name': 'Test Line', 'feature_hash': 'test'}
         )
         
         tags = generator.process(feature)
@@ -66,7 +66,7 @@ class TestGeometryTypeTagGenerator:
                     [-122.4194, 37.7749]
                 ]]
             },
-            properties={'name': 'Test Polygon'}
+            properties={'name': 'Test Polygon', 'feature_hash': 'test'}
         )
         
         tags = generator.process(feature)
@@ -88,7 +88,7 @@ class TestImportDateTagGenerator:
         feature = PointFeature(
             type='Feature',
             geometry={'type': 'Point', 'coordinates': [-122.4194, 37.7749]},
-            properties={'name': 'Test Point'}
+            properties={'name': 'Test Point', 'feature_hash': 'test'}
         )
         
         tags = generator.process(feature)
@@ -106,7 +106,7 @@ class TestImportDateTagGenerator:
         feature = PointFeature(
             type='Feature',
             geometry={'type': 'Point', 'coordinates': [-122.4194, 37.7749]},
-            properties={'name': 'Test Point'}
+            properties={'name': 'Test Point', 'feature_hash': 'test'}
         )
         
         tags = generator.process(feature)
@@ -125,7 +125,7 @@ class TestFeatureDateTagGenerator:
             type='Feature',
             geometry={'type': 'Point', 'coordinates': [-122.4194, 37.7749]},
             properties={
-                'name': 'Test Point',
+                'name': 'Test Point', 'feature_hash': 'test',
                 'created': '2023-06-15T10:30:00Z'
             }
         )
@@ -141,7 +141,7 @@ class TestFeatureDateTagGenerator:
         feature = PointFeature(
             type='Feature',
             geometry={'type': 'Point', 'coordinates': [-122.4194, 37.7749]},
-            properties={'name': 'Test Point'}
+            properties={'name': 'Test Point', 'feature_hash': 'test'}
         )
         
         tags = generator.process(feature)
@@ -155,7 +155,7 @@ class TestFeatureDateTagGenerator:
             type='Feature',
             geometry={'type': 'Point', 'coordinates': [-122.4194, 37.7749]},
             properties={
-                'name': 'Test Point',
+                'name': 'Test Point', 'feature_hash': 'test',
                 'created': 'invalid-date'
             }
         )
@@ -168,26 +168,38 @@ class TestFeatureDateTagGenerator:
 class TestTrackDetectionTagGenerator:
     """Test the track detection tag generator."""
     
-    def test_linestring_with_many_points_is_track(self):
-        """Test that linestrings with many points are detected as tracks."""
+    def test_gpx_track_with_timestamps(self):
+        """Test that GPX tracks with coordinateProperties.times are detected as tracks."""
         generator = TrackDetectionTagGenerator()
-        # Create a linestring with 15 points (threshold is 10)
-        coordinates = [[-122.4194 + i * 0.001, 37.7749 + i * 0.001] for i in range(15)]
         feature = LineStringFeature(
             type='Feature',
             geometry={
                 'type': 'LineString',
-                'coordinates': coordinates
+                'coordinates': [
+                    [-122.4194, 37.7749, 100.0],
+                    [-122.4195, 37.7750, 105.0],
+                    [-122.4196, 37.7751, 110.0]
+                ]
             },
-            properties={'name': 'Test Track'}
+            properties={
+                'name': 'GPS Track',
+                'feature_hash': 'test123',
+                'coordinateProperties': {
+                    'times': [
+                        '2024-09-02T08:00:00Z',
+                        '2024-09-02T08:00:05Z',
+                        '2024-09-02T08:00:10Z'
+                    ]
+                }
+            }
         )
         
         tags = generator.process(feature)
         
-        assert 'is-track:yes' in tags
+        assert 'track:yes' in tags
     
-    def test_linestring_with_few_points_not_track(self):
-        """Test that linestrings with few points are not detected as tracks."""
+    def test_gpx_route_with_time_property(self):
+        """Test that GPX routes with time property are detected as tracks."""
         generator = TrackDetectionTagGenerator()
         feature = LineStringFeature(
             type='Feature',
@@ -195,12 +207,154 @@ class TestTrackDetectionTagGenerator:
                 'type': 'LineString',
                 'coordinates': [[-122.4194, 37.7749], [-122.4195, 37.7750]]
             },
-            properties={'name': 'Test Line'}
+            properties={
+                'name': 'GPS Route', 'feature_hash': 'test',
+                'time': '2024-09-02T08:00:00Z'
+            }
+        )
+        
+        tags = generator.process(feature)
+        
+        assert 'track:yes' in tags
+    
+    def test_kml_gx_track_with_timestamps(self):
+        """Test that KML gx:Track elements (converted with coordinateProperties) are detected."""
+        generator = TrackDetectionTagGenerator()
+        feature = LineStringFeature(
+            type='Feature',
+            geometry={
+                'type': 'LineString',
+                'coordinates': [
+                    [-105.5, 39.1, 2800.0],
+                    [-105.501, 39.102, 2850.0],
+                    [-105.502, 39.104, 2900.0]
+                ]
+            },
+            properties={
+                'name': 'Mountain Hike Track', 'feature_hash': 'test',
+                'coordinateProperties': {
+                    'times': [
+                        '2024-09-02T08:00:00Z',
+                        '2024-09-02T08:05:00Z',
+                        '2024-09-02T08:10:00Z'
+                    ]
+                }
+            }
+        )
+        
+        tags = generator.process(feature)
+        
+        assert 'track:yes' in tags
+    
+    def test_plain_kml_linestring_without_timestamps(self):
+        """Test that plain KML LineStrings without timestamps are NOT marked as tracks."""
+        generator = TrackDetectionTagGenerator()
+        # This represents a CalTopo export or manually drawn route
+        coordinates = [[-106.097 + i * 0.001, 39.025 + i * 0.001, 3200.0] for i in range(100)]
+        feature = LineStringFeature(
+            type='Feature',
+            geometry={
+                'type': 'LineString',
+                'coordinates': coordinates
+            },
+            properties={
+                'name': 'Buffalo_Peaks_20249092', 'feature_hash': 'test',
+                'description': 'CalTopo Export - planning route'
+            }
+        )
+        
+        tags = generator.process(feature)
+        
+        # Should NOT be marked as track - this is the key test case
+        assert tags == []
+        assert 'track:yes' not in tags
+    
+    def test_linestring_with_empty_times_array(self):
+        """Test that LineStrings with empty times array are not marked as tracks."""
+        generator = TrackDetectionTagGenerator()
+        feature = LineStringFeature(
+            type='Feature',
+            geometry={
+                'type': 'LineString',
+                'coordinates': [[-122.4194, 37.7749], [-122.4195, 37.7750]]
+            },
+            properties={
+                'name': 'Test Line', 'feature_hash': 'test',
+                'coordinateProperties': {
+                    'times': []
+                }
+            }
         )
         
         tags = generator.process(feature)
         
         assert tags == []
+    
+    def test_linestring_with_none_times(self):
+        """Test that LineStrings with None times are not marked as tracks."""
+        generator = TrackDetectionTagGenerator()
+        feature = LineStringFeature(
+            type='Feature',
+            geometry={
+                'type': 'LineString',
+                'coordinates': [[-122.4194, 37.7749], [-122.4195, 37.7750]]
+            },
+            properties={
+                'name': 'Test Line', 'feature_hash': 'test',
+                'coordinateProperties': {
+                    'times': None
+                }
+            }
+        )
+        
+        tags = generator.process(feature)
+        
+        assert tags == []
+    
+    def test_linestring_without_coordinate_properties(self):
+        """Test that LineStrings without coordinateProperties are not marked as tracks."""
+        generator = TrackDetectionTagGenerator()
+        feature = LineStringFeature(
+            type='Feature',
+            geometry={
+                'type': 'LineString',
+                'coordinates': [[-122.4194, 37.7749], [-122.4195, 37.7750]]
+            },
+            properties={'name': 'Test Line', 'feature_hash': 'test'}
+        )
+        
+        tags = generator.process(feature)
+        
+        assert tags == []
+    
+    def test_multilinestring_with_timestamps(self):
+        """Test that MultiLineStrings with timestamps are detected as tracks."""
+        generator = TrackDetectionTagGenerator()
+        feature = MultiLineStringFeature(
+            type='Feature',
+            geometry={
+                'type': 'MultiLineString',
+                'coordinates': [
+                    [[-122.4194, 37.7749], [-122.4195, 37.7750]],
+                    [[-122.4196, 37.7751], [-122.4197, 37.7752]]
+                ]
+            },
+            properties={
+                'name': 'Multi Track', 'feature_hash': 'test',
+                'coordinateProperties': {
+                    'times': [
+                        '2024-09-02T08:00:00Z',
+                        '2024-09-02T08:00:05Z',
+                        '2024-09-02T08:00:10Z',
+                        '2024-09-02T08:00:15Z'
+                    ]
+                }
+            }
+        )
+        
+        tags = generator.process(feature)
+        
+        assert 'track:yes' in tags
     
     def test_point_not_processed(self):
         """Test that points are not processed for track detection."""
@@ -208,7 +362,33 @@ class TestTrackDetectionTagGenerator:
         feature = PointFeature(
             type='Feature',
             geometry={'type': 'Point', 'coordinates': [-122.4194, 37.7749]},
-            properties={'name': 'Test Point'}
+            properties={'name': 'Test Point', 'feature_hash': 'test'}
+        )
+        
+        tags = generator.process(feature)
+        
+        assert tags == []
+    
+    def test_polygon_not_processed(self):
+        """Test that polygons are not processed for track detection."""
+        generator = TrackDetectionTagGenerator()
+        feature = PolygonFeature(
+            type='Feature',
+            geometry={
+                'type': 'Polygon',
+                'coordinates': [[
+                    [-122.4194, 37.7749],
+                    [-122.4195, 37.7750],
+                    [-122.4196, 37.7749],
+                    [-122.4194, 37.7749]
+                ]]
+            },
+            properties={
+                'name': 'Test Polygon', 'feature_hash': 'test',
+                'coordinateProperties': {
+                    'times': ['2024-09-02T08:00:00Z']
+                }
+            }
         )
         
         tags = generator.process(feature)
@@ -229,7 +409,7 @@ class TestDrivingDetectionTagGenerator:
                 'type': 'LineString',
                 'coordinates': coordinates
             },
-            properties={'name': 'Morning Driving Route'}
+            properties={'name': 'Morning Driving Route', 'feature_hash': 'test'}
         )
         
         tags = generator.process(feature)
@@ -246,7 +426,7 @@ class TestDrivingDetectionTagGenerator:
                 'type': 'LineString',
                 'coordinates': coordinates
             },
-            properties={'name': 'Scenic Drive'}
+            properties={'name': 'Scenic Drive', 'feature_hash': 'test'}
         )
         
         tags = generator.process(feature)
@@ -263,7 +443,7 @@ class TestDrivingDetectionTagGenerator:
                 'type': 'LineString',
                 'coordinates': coordinates
             },
-            properties={'name': 'Hiking Trail'}
+            properties={'name': 'Hiking Trail', 'feature_hash': 'test'}
         )
         
         tags = generator.process(feature)
@@ -279,7 +459,7 @@ class TestDrivingDetectionTagGenerator:
                 'type': 'LineString',
                 'coordinates': [[-122.4194, 37.7749], [-122.4195, 37.7750]]
             },
-            properties={'name': 'Driving'}
+            properties={'name': 'Driving', 'feature_hash': 'test'}
         )
         
         tags = generator.process(feature)
@@ -296,7 +476,7 @@ class TestSourceFileTagGenerator:
         feature = PointFeature(
             type='Feature',
             geometry={'type': 'Point', 'coordinates': [-122.4194, 37.7749]},
-            properties={'name': 'Test Point'}
+            properties={'name': 'Test Point', 'feature_hash': 'test'}
         )
         
         tags = generator.process(feature, filename='my_map.kml')
@@ -309,7 +489,7 @@ class TestSourceFileTagGenerator:
         feature = PointFeature(
             type='Feature',
             geometry={'type': 'Point', 'coordinates': [-122.4194, 37.7749]},
-            properties={'name': 'Test Point'}
+            properties={'name': 'Test Point', 'feature_hash': 'test'}
         )
         
         tags = generator.process(feature)
@@ -322,7 +502,7 @@ class TestSourceFileTagGenerator:
         feature = PointFeature(
             type='Feature',
             geometry={'type': 'Point', 'coordinates': [-122.4194, 37.7749]},
-            properties={'name': 'Test Point'}
+            properties={'name': 'Test Point', 'feature_hash': 'test'}
         )
         
         tags = generator.process(feature, filename='')
@@ -340,7 +520,7 @@ class TestElevationTagGenerator:
         feature = PointFeature(
             type='Feature',
             geometry={'type': 'Point', 'coordinates': [-122.4194, 37.7749, 3000.0]},
-            properties={'name': 'Mountain Peak'}
+            properties={'name': 'Mountain Peak', 'feature_hash': 'test'}
         )
         
         tags = generator.process(feature)
@@ -354,7 +534,7 @@ class TestElevationTagGenerator:
         feature = PointFeature(
             type='Feature',
             geometry={'type': 'Point', 'coordinates': [-122.4194, 37.7749, 10.0]},
-            properties={'name': 'Sea Level Point'}
+            properties={'name': 'Sea Level Point', 'feature_hash': 'test'}
         )
         
         tags = generator.process(feature)
@@ -367,7 +547,7 @@ class TestElevationTagGenerator:
         feature = PointFeature(
             type='Feature',
             geometry={'type': 'Point', 'coordinates': [-122.4194, 37.7749, 0.0]},
-            properties={'name': 'Unknown Elevation'}
+            properties={'name': 'Unknown Elevation', 'feature_hash': 'test'}
         )
         
         tags = generator.process(feature)
@@ -381,7 +561,7 @@ class TestElevationTagGenerator:
         feature = PointFeature(
             type='Feature',
             geometry={'type': 'Point', 'coordinates': [-122.4194, 37.7749, 500.0]},
-            properties={'name': 'Medium Elevation'}
+            properties={'name': 'Medium Elevation', 'feature_hash': 'test'}
         )
         
         tags = generator.process(feature)
@@ -394,7 +574,7 @@ class TestElevationTagGenerator:
         feature = PointFeature(
             type='Feature',
             geometry={'type': 'Point', 'coordinates': [-122.4194, 37.7749]},
-            properties={'name': 'No Elevation'}
+            properties={'name': 'No Elevation', 'feature_hash': 'test'}
         )
         
         tags = generator.process(feature)
@@ -415,7 +595,7 @@ class TestElevationTagGenerator:
                     [-122.4196, 37.7751, 2500.0]
                 ]
             },
-            properties={'name': 'Mountain Trail'}
+            properties={'name': 'Mountain Trail', 'feature_hash': 'test'}
         )
         
         tags = generator.process(feature)
@@ -436,7 +616,7 @@ class TestElevationTagGenerator:
                     [-122.4196, 37.7751, 0.0]
                 ]
             },
-            properties={'name': 'Mixed Elevation'}
+            properties={'name': 'Mixed Elevation', 'feature_hash': 'test'}
         )
         
         tags = generator.process(feature)
@@ -459,7 +639,7 @@ class TestElevationTagGenerator:
                     [-122.4194, 37.7749, 3000.0]
                 ]]
             },
-            properties={'name': 'Test Polygon'}
+            properties={'name': 'Test Polygon', 'feature_hash': 'test'}
         )
         
         tags = generator.process(feature)
@@ -479,7 +659,7 @@ class TestGeocodingTagGenerator:
         feature = PointFeature(
             type='Feature',
             geometry={'type': 'Point', 'coordinates': [-122.4194, 37.7749]},
-            properties={'name': 'Test Point'}
+            properties={'name': 'Test Point', 'feature_hash': 'test'}
         )
         
         tags = generator.process(feature)
@@ -501,7 +681,7 @@ class TestGeocodingTagGenerator:
         feature = PointFeature(
             type='Feature',
             geometry={'type': 'Point', 'coordinates': [-122.4194, 37.7749]},
-            properties={'name': 'Test Point'}
+            properties={'name': 'Test Point', 'feature_hash': 'test'}
         )
         import_log = ImportLog()
         
@@ -528,7 +708,7 @@ class TestGeocodingTagGenerator:
                 'type': 'LineString',
                 'coordinates': [[-122.4194, 37.7749], [-122.4195, 37.7750]]
             },
-            properties={'name': 'Test Line'}
+            properties={'name': 'Test Line', 'feature_hash': 'test'}
         )
         import_log = ImportLog()
         
@@ -554,7 +734,7 @@ class TestGeocodingTagGenerator:
                     [-122.4194, 37.7749]
                 ]]
             },
-            properties={'name': 'Test Polygon'}
+            properties={'name': 'Test Polygon', 'feature_hash': 'test'}
         )
         import_log = ImportLog()
         
@@ -573,7 +753,7 @@ class TestGeocodingTagGenerator:
         feature = PointFeature(
             type='Feature',
             geometry={'type': 'Point', 'coordinates': [-122.4194, 37.7749]},
-            properties={'name': 'Test Point'}
+            properties={'name': 'Test Point', 'feature_hash': 'test'}
         )
         import_log = ImportLog()
         
