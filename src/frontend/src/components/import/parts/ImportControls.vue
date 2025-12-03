@@ -132,7 +132,7 @@
           </div>
           <button
               :disabled="isLoadingPage || !hasFeatures"
-              class="inline-flex items-center justify-center px-3 py-2 border border-gray-300 shadow-sm text-sm font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 disabled:opacity-50 disabled:cursor-not-allowed w-full md:w-auto md:ml-4 md:pl-4 md:border-l"
+              class="inline-flex items-center justify-center px-3 py-2 border border-blue-200 text-sm font-medium rounded-md text-blue-700 bg-blue-50 hover:bg-blue-100 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-300 disabled:bg-gray-100 disabled:hover:bg-gray-100 disabled:cursor-not-allowed w-full md:w-auto md:ml-4 md:pl-4 md:border-l"
               @click="$emit('show-map-preview')"
               title="Preview all features on current page"
           >
