@@ -254,8 +254,8 @@
         :error-message="msg"
         :goto-page-input="pagination.gotoInput"
         :has-features="itemsForUser.length > 0"
-        :has-next-page="pagination.hasNext"
-        :has-previous-page="pagination.hasPrevious"
+        :has-next-page="adjustedHasNext"
+        :has-previous-page="adjustedHasPrevious"
         :hide-duplicates="hideDuplicates"
         :importable-count="importableCount"
         :is-imported="isImported"
@@ -269,7 +269,7 @@
         :show-duplicate-message="true"
         :show-no-features-message="showNoFeaturesMessage"
         :total-features="pagination.totalFeatures"
-        :total-pages="pagination.totalPages"
+        :total-pages="adjustedTotalPages"
         @previous-page="previousPage"
         @next-page="nextPage"
         @jump-to-page="goToPage"
@@ -364,6 +364,37 @@
             </div>
             <p class="text-sm text-gray-500 mt-2">{{ Math.round(processing.progress) }}% complete</p>
           </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Empty state when all items on page are duplicates and hidden -->
+    <div v-else-if="showEmptyPageMessage" class="bg-white rounded-lg shadow-sm border border-gray-200 p-12 text-center">
+      <div class="flex flex-col items-center">
+        <ExclamationTriangleIcon class="h-12 w-12 text-yellow-400 mb-4" />
+        <h3 class="text-lg font-medium text-gray-900 mb-2">All items on this page are duplicates</h3>
+        <p class="text-gray-500 mb-6 max-w-md">
+          All {{ itemsForUser.length }} feature{{ itemsForUser.length === 1 ? '' : 's' }} on this page 
+          {{ itemsForUser.length === 1 ? 'is' : 'are' }} duplicate{{ itemsForUser.length === 1 ? '' : 's' }} and hidden by your filter.
+          Try navigating to another page or disable "Hide duplicates" to see all features.
+        </p>
+        <div class="flex gap-3">
+          <button
+            v-if="adjustedHasPrevious"
+            @click="previousPage"
+            class="inline-flex items-center px-4 py-2 border border-gray-300 shadow-sm text-sm font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500"
+          >
+            <ChevronLeftIcon class="w-4 h-4 mr-1" />
+            Previous Page
+          </button>
+          <button
+            v-if="adjustedHasNext"
+            @click="nextPage"
+            class="inline-flex items-center px-4 py-2 border border-gray-300 shadow-sm text-sm font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500"
+          >
+            Next Page
+            <ChevronRightIcon class="w-4 h-4 ml-1" />
+          </button>
         </div>
       </div>
     </div>
@@ -527,8 +558,8 @@
         :file-duplicate="fileDuplicate"
         :goto-page-input="pagination.gotoInput"
         :has-features="itemsForUser.length > 0"
-        :has-next-page="pagination.hasNext"
-        :has-previous-page="pagination.hasPrevious"
+        :has-next-page="adjustedHasNext"
+        :has-previous-page="adjustedHasPrevious"
         :hide-duplicates="hideDuplicates"
         :importable-count="importableCount"
         :is-imported="isImported"
@@ -541,7 +572,7 @@
         :show-duplicate-message="false"
         :show-no-features-message="false"
         :total-features="pagination.totalFeatures"
-        :total-pages="pagination.totalPages"
+        :total-pages="adjustedTotalPages"
         @previous-page="previousPage"
         @next-page="nextPage"
         @jump-to-page="goToPage"
@@ -614,7 +645,7 @@ import BulkStylingModal from "@/components/import/parts/BulkStylingModal.vue";
 import DuplicateWarning from "@/components/import/parts/DuplicateWarning.vue";
 import TagPicker from "@/components/TagPicker.vue";
 import { DEFAULT_BULK_OPERATIONS, hasBulkOperationsConfigured, areBulkOperationsEqual, cloneBulkOperations } from "@/utils/bulkOperations.js";
-import { CheckIcon, ExclamationCircleIcon, ArrowTopRightOnSquareIcon, DocumentIcon, ExclamationTriangleIcon, ArrowDownTrayIcon, ArrowUpTrayIcon, XMarkIcon, MapIcon, ArrowPathIcon, MagnifyingGlassIcon, RectangleStackIcon } from '@heroicons/vue/24/outline';
+import { CheckIcon, ExclamationCircleIcon, ArrowTopRightOnSquareIcon, DocumentIcon, ExclamationTriangleIcon, ArrowDownTrayIcon, ArrowUpTrayIcon, XMarkIcon, MapIcon, ArrowPathIcon, MagnifyingGlassIcon, RectangleStackIcon, ChevronLeftIcon, ChevronRightIcon } from '@heroicons/vue/24/outline';
 
 export default {
   computed: {
@@ -625,7 +656,7 @@ export default {
     isValidPageNumber() {
       return this.pagination.gotoInput &&
           this.pagination.gotoInput >= 1 &&
-          this.pagination.gotoInput <= this.pagination.totalPages &&
+          this.pagination.gotoInput <= this.adjustedTotalPages &&
           this.pagination.gotoInput !== this.pagination.currentPage;
     },
 
@@ -696,6 +727,43 @@ export default {
           .filter(({ item }) => !this.isItemDuplicate(item));
       }
       return this.itemsForUser.map((item, originalIndex) => ({ item, originalIndex }));
+    },
+
+    // Computed properties to adjust pagination when hiding duplicates
+    adjustedTotalPages() {
+      if (!this.hideDuplicates) {
+        return this.pagination.totalPages;
+      }
+      // When hiding duplicates, calculate pages based on non-duplicate count
+      const totalFeatures = this.pagination.totalFeatures;
+      const duplicateCount = this.totalDuplicateCount;
+      const nonDuplicateCount = totalFeatures - duplicateCount;
+      
+      return Math.max(1, Math.ceil(nonDuplicateCount / this.pagination.pageSize));
+    },
+
+    adjustedHasNext() {
+      if (!this.hideDuplicates) {
+        return this.pagination.hasNext;
+      }
+      // When hiding duplicates, check if we're on the last adjusted page
+      return this.pagination.currentPage < this.adjustedTotalPages;
+    },
+
+    adjustedHasPrevious() {
+      if (!this.hideDuplicates) {
+        return this.pagination.hasPrevious;
+      }
+      // Previous page logic remains the same
+      return this.pagination.currentPage > 1;
+    },
+
+    showEmptyPageMessage() {
+      // Show a message when hiding duplicates results in an empty page
+      return this.hideDuplicates && 
+             this.itemsForUser.length > 0 && 
+             this.filteredItemsForUser.length === 0 &&
+             !this.loading.page;
     }
   },
   components: {
@@ -1482,8 +1550,13 @@ export default {
       return this.skippedFeatureIds.has(featureId);
     },
     isItemDuplicate(item) {
-      // Hash duplicates (both sources) are always blocked and cannot be skipped/restored
-      return !!(item && (item.isFeatureStoreHashDup || item.isCrossQueueHashDup));
+      // Check if item is any type of duplicate (hash or geometry, from any source)
+      return !!(item && (
+        item.isFeatureStoreHashDup || 
+        item.isCrossQueueHashDup ||
+        item.isFeatureStoreGeometryDup ||
+        item.isCrossQueueGeometryDup
+      ));
     },
     isItemDisabled(item, index) {
       return this.isImported ||
