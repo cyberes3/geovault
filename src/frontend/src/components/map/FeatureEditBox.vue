@@ -898,6 +898,18 @@ export default {
         // Remove system_tags from properties before sending (backend will preserve originals from DB)
         delete featureData.properties.system_tags
 
+        // Remove internal OpenLayers properties (icon caching, etc.)
+        delete featureData.properties._iconSrc
+        delete featureData.properties._iconFailed
+        delete featureData.properties._iconScale
+
+        // Remove nested properties object (artifact of how we store properties in OpenLayers)
+        // When we do feature.set('properties', {...}), writeFeatureObject serializes it as a nested object
+        delete featureData.properties.properties
+
+        // Remove geojson_hash (internal tracking property)
+        delete featureData.properties.geojson_hash
+
         // Send update request
         const response = await fetch(`${APIHOST}/api/feature/${featureId}/update/`, {
           method: 'PUT',

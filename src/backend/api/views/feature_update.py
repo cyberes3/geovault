@@ -637,90 +637,90 @@ def update_feature(request, feature_id):
                         new_properties[prop_name] = ''
                 logger.warning(f"Attempted to set external icon URL for feature {feature_id}, removed (only built-in and uploaded icons allowed)")
 
-        # Note: stroke-width, fill, and fill-opacity normalization is now handled by validate_and_normalize_geojson_feature
-        # The normalization function ensures stroke-width=2 for lines/polygons and proper fill/fill-opacity for polygons
-        # Color validation (invalid colors set to default red) is also handled by validate_and_normalize_geojson_feature
+    # Note: stroke-width, fill, and fill-opacity normalization is now handled by validate_and_normalize_geojson_feature
+    # The normalization function ensures stroke-width=2 for lines/polygons and proper fill/fill-opacity for polygons
+    # Color validation (invalid colors set to default red) is also handled by validate_and_normalize_geojson_feature
 
-        # Ensure feature_hash is present for Pydantic validation
-        # Generate temporary hash if not present (will be regenerated later)
-        feature_data.setdefault('properties', {})['feature_hash'] = generate_feature_hash(feature_data)
+    # Ensure feature_hash is present for Pydantic validation
+    # Generate temporary hash if not present (will be regenerated later)
+    feature_data.setdefault('properties', {})['feature_hash'] = generate_feature_hash(feature_data)
 
-        # Validate feature structure using the same validation as import conversion
-        try:
-            geom_type = feature_data.get('geometry', {}).get('type', '').lower()
-            feature_class = None
+    # Validate feature structure using the same validation as import conversion
+    try:
+        geom_type = feature_data.get('geometry', {}).get('type', '').lower()
+        feature_class = None
 
-            # GeometryCollection is not supported by the feature classes, but we allow it
-            if geom_type == 'geometrycollection':
-                # For GeometryCollection, we do basic validation but skip feature class validation
-                geom_data = feature_data.get('geometry', {})
-                if not geom_data.get('geometries') or not isinstance(geom_data.get('geometries'), list):
-                    return error_response('GeometryCollection must have a geometries array', 400)
-                # Skip feature class validation for GeometryCollection
-                feature_class = None
-            else:
-                match geom_type:
-                    case 'point' | 'multipoint':
-                        feature_class = PointFeature
-                    case 'linestring':
-                        feature_class = LineStringFeature
-                    case 'multilinestring':
-                        feature_class = MultiLineStringFeature
-                    case 'polygon' | 'multipolygon':
-                        feature_class = PolygonFeature
-                    case _:
-                        return error_response(f'Unsupported geometry type: {geom_type}', 400)
-
-            # Validate by instantiating the feature class (this will raise ValidationError if invalid)
-            # Skip for GeometryCollection as it's not supported by feature classes
-            if feature_class is not None:
-                validated_feature = feature_class(**feature_data)
-                # Convert back to dict for storage (this ensures proper structure)
-                feature_data = json.loads(validated_feature.model_dump_json())
-
-        except Exception as e:
-            logger.error(f"Feature validation error for feature {feature_id}: {traceback.format_exc()}")
-            return error_response(f'Feature validation failed: {str(e)}', 400)
-
-        # Update the feature data
-        feature.geojson = feature_data
-
-        # Regenerate the hash for the updated feature
-        feature.geojson_hash = generate_feature_hash(feature_data)
-
-        # Update the geometry field if coordinates changed
-        try:
+        # GeometryCollection is not supported by the feature classes, but we allow it
+        if geom_type == 'geometrycollection':
+            # For GeometryCollection, we do basic validation but skip feature class validation
             geom_data = feature_data.get('geometry', {})
-            if geom_data and geom_data.get('type'):
-                # Handle GeometryCollection separately (not supported by GEOSGeometry)
-                if geom_data['type'] == 'GeometryCollection':
-                    # For GeometryCollection, we can't use GEOSGeometry, so skip geometry field update
-                    # The geometry will be stored in the geojson field
-                    pass
-                elif geom_data.get('coordinates'):
-                    # Ensure coordinates have 3 dimensions for consistency
-                    coords = geom_data['coordinates']
-                    if geom_data['type'] == 'Point':
-                        if len(coords) == 2:
-                            coords = [coords[0], coords[1], 0.0]
-                    elif geom_data['type'] == 'LineString':
-                        geom_data['coordinates'] = [
-                            [coord[0], coord[1], coord[2] if len(coord) > 2 else 0.0]
-                            for coord in coords
-                        ]
-                    elif geom_data['type'] == 'Polygon':
-                        geom_data['coordinates'] = [
-                            [
-                                [coord[0], coord[1], coord[2] if len(coord) > 2 else 0.0]
-                                for coord in ring
-                            ]
-                            for ring in coords
-                        ]
+            if not geom_data.get('geometries') or not isinstance(geom_data.get('geometries'), list):
+                return error_response('GeometryCollection must have a geometries array', 400)
+            # Skip feature class validation for GeometryCollection
+            feature_class = None
+        else:
+            match geom_type:
+                case 'point' | 'multipoint':
+                    feature_class = PointFeature
+                case 'linestring':
+                    feature_class = LineStringFeature
+                case 'multilinestring':
+                    feature_class = MultiLineStringFeature
+                case 'polygon' | 'multipolygon':
+                    feature_class = PolygonFeature
+                case _:
+                    return error_response(f'Unsupported geometry type: {geom_type}', 400)
 
-                    feature.geometry = GEOSGeometry(json.dumps(geom_data))
-        except Exception as e:
-            logger.warning(f"Error updating geometry for feature {feature_id}: {e}")
-            # Continue without updating geometry if there's an error
+        # Validate by instantiating the feature class (this will raise ValidationError if invalid)
+        # Skip for GeometryCollection as it's not supported by feature classes
+        if feature_class is not None:
+            validated_feature = feature_class(**feature_data)
+            # Convert back to dict for storage (this ensures proper structure)
+            feature_data = json.loads(validated_feature.model_dump_json())
+
+    except Exception as e:
+        logger.error(f"Feature validation error for feature {feature_id}: {traceback.format_exc()}")
+        return error_response(f'Feature validation failed: {str(e)}', 400)
+
+    # Update the feature data
+    feature.geojson = feature_data
+
+    # Regenerate the hash for the updated feature
+    feature.geojson_hash = generate_feature_hash(feature_data)
+
+    # Update the geometry field if coordinates changed
+    try:
+        geom_data = feature_data.get('geometry', {})
+        if geom_data and geom_data.get('type'):
+            # Handle GeometryCollection separately (not supported by GEOSGeometry)
+            if geom_data['type'] == 'GeometryCollection':
+                # For GeometryCollection, we can't use GEOSGeometry, so skip geometry field update
+                # The geometry will be stored in the geojson field
+                pass
+            elif geom_data.get('coordinates'):
+                # Ensure coordinates have 3 dimensions for consistency
+                coords = geom_data['coordinates']
+                if geom_data['type'] == 'Point':
+                    if len(coords) == 2:
+                        coords = [coords[0], coords[1], 0.0]
+                elif geom_data['type'] == 'LineString':
+                    geom_data['coordinates'] = [
+                        [coord[0], coord[1], coord[2] if len(coord) > 2 else 0.0]
+                        for coord in coords
+                    ]
+                elif geom_data['type'] == 'Polygon':
+                    geom_data['coordinates'] = [
+                        [
+                            [coord[0], coord[1], coord[2] if len(coord) > 2 else 0.0]
+                            for coord in ring
+                        ]
+                        for ring in coords
+                    ]
+
+                feature.geometry = GEOSGeometry(json.dumps(geom_data))
+    except Exception as e:
+        logger.warning(f"Error updating geometry for feature {feature_id}: {e}")
+        # Continue without updating geometry if there's an error
 
     # Save the updated feature
     feature.save()

@@ -425,6 +425,23 @@ def _fix_nested_caltopo_url(url: str) -> str:
         return url
 
 
+def _is_caltopo_url(url: str) -> bool:
+    """
+    Check if a URL is from CalTopo.
+    
+    Args:
+        url: Icon URL to check
+        
+    Returns:
+        True if this is a CalTopo icon URL, False otherwise
+    """
+    try:
+        parsed = urlparse(url)
+        return 'caltopo.com' in parsed.netloc.lower() if parsed.netloc else False
+    except Exception:
+        return False
+
+
 def _is_caltopo_point_icon(url: str) -> bool:
     """
     Check if a CalTopo URL is the default point icon.
@@ -442,7 +459,7 @@ def _is_caltopo_point_icon(url: str) -> bool:
         parsed = urlparse(url)
 
         # Check if it's a CalTopo URL
-        if 'caltopo.com' not in parsed.netloc.lower():
+        if not _is_caltopo_url(url):
             return False
 
         # Check if path is /icon.png
@@ -540,25 +557,29 @@ def _process_single_icon_href(
     # Fix nested CalTopo URLs first
     href = _fix_nested_caltopo_url(href)
 
+    # Check if this is a CalTopo URL
+    is_caltopo = _is_caltopo_url(href)
+    
     # Extract color from CalTopo URL (works on both nested and fixed URLs)
     caltopo_color = _extract_color_from_caltopo_url(href)
 
-    # Check if this is a CalTopo point icon - if so, skip fetching and just use the color
-    parsed = urlparse(href)
-    is_caltopo = 'caltopo.com' in parsed.netloc.lower() if parsed.netloc else False
-    if is_caltopo and caltopo_color and _is_caltopo_point_icon(href):
-        return None, caltopo_color  # Point icons use default marker, no need to fetch
+    # Check if this is a CalTopo point icon - if so, skip fetching and just use the color (or default)
+    if is_caltopo and _is_caltopo_point_icon(href):
+        # Point icons use default marker, no need to fetch
+        # CalTopo defaults to black (#000000) when no color is specified
+        return None, caltopo_color if caltopo_color else '#000000'
 
     # Check href mapping if available
     if href_mapping and href in href_mapping:
         mapped_href = _fix_nested_caltopo_url(href_mapping[href])
         mapped_color = _extract_color_from_caltopo_url(mapped_href)
-        mapped_parsed = urlparse(mapped_href)
-        mapped_is_caltopo = 'caltopo.com' in mapped_parsed.netloc.lower() if mapped_parsed.netloc else False
+        mapped_is_caltopo = _is_caltopo_url(mapped_href)
 
-        # If mapped href is a point icon with color, return it
-        if mapped_is_caltopo and mapped_color and _is_caltopo_point_icon(mapped_href):
-            return None, mapped_color
+        # If mapped href is a point icon, return the color (or default to black)
+        if mapped_is_caltopo and _is_caltopo_point_icon(mapped_href):
+            # Use mapped color if available, otherwise use original color, otherwise default to black
+            color = mapped_color if mapped_color else (caltopo_color if caltopo_color else '#000000')
+            return None, color
 
         # Use mapped href, prefer mapped color over original
         return mapped_href, mapped_color if mapped_color else caltopo_color
@@ -644,8 +665,7 @@ def _process_properties_icons(
             continue
 
         # Check if this is a CalTopo URL before processing
-        parsed = urlparse(href)
-        is_caltopo = 'caltopo.com' in parsed.netloc.lower() if parsed.netloc else False
+        is_caltopo = _is_caltopo_url(href)
 
         # Process the href
         new_href, extracted_color = _process_single_icon_href(

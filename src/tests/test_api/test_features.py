@@ -227,6 +227,172 @@ class TestFeatureAPI(TestCase):
         )
         self.assertEqual(response.status_code, 200)
 
+    def test_update_feature_remove_icon(self):
+        """Test removing an icon from a point feature."""
+        # First, add an icon to the feature
+        feature_with_icon = {
+            'type': 'Feature',
+            'geometry': {
+                'type': 'Point',
+                'coordinates': [-122.4194, 37.7749, 0.0]
+            },
+            'properties': {
+                'name': 'Test Point',
+                'icon': '/api/icons/system/caltopo/flag-1.png',
+                'marker-color': '#ff0000',
+                'tags': ['test']
+            }
+        }
+        
+        response = self.client.put(
+            f'/api/feature/{self.point_feature.id}/update/',
+            data=json.dumps(feature_with_icon),
+            content_type='application/json'
+        )
+        self.assertEqual(response.status_code, 200)
+        
+        # Verify icon was added
+        self.point_feature.refresh_from_db()
+        self.assertEqual(
+            self.point_feature.geojson['properties']['icon'],
+            '/api/icons/system/caltopo/flag-1.png'
+        )
+        
+        # Now remove the icon
+        feature_without_icon = {
+            'type': 'Feature',
+            'geometry': {
+                'type': 'Point',
+                'coordinates': [-122.4194, 37.7749, 0.0]
+            },
+            'properties': {
+                'name': 'Test Point',
+                'icon': '',  # Empty string to remove icon
+                'icon-href': '',
+                'iconUrl': '',
+                'icon_url': '',
+                'marker-icon': '',
+                'marker-symbol': '',
+                'symbol': '',
+                'marker-color': '#0000ff',
+                'tags': ['test']
+            }
+        }
+        
+        response = self.client.put(
+            f'/api/feature/{self.point_feature.id}/update/',
+            data=json.dumps(feature_without_icon),
+            content_type='application/json'
+        )
+        self.assertEqual(response.status_code, 200)
+        
+        # Verify icon was removed
+        self.point_feature.refresh_from_db()
+        properties = self.point_feature.geojson['properties']
+        
+        # All icon properties should be empty or not present
+        icon_properties = ['icon', 'icon-href', 'iconUrl', 'icon_url', 'marker-icon', 'marker-symbol', 'symbol']
+        for prop in icon_properties:
+            if prop in properties:
+                self.assertEqual(properties[prop], '', f'Property {prop} should be empty string')
+        
+        # Marker color should be preserved/updated (colors are normalized to uppercase)
+        self.assertEqual(properties['marker-color'], '#0000FF')
+
+    def test_update_feature_remove_icon_with_user_icon(self):
+        """Test removing a user-uploaded icon from a point feature."""
+        # First, add a user icon to the feature
+        feature_with_user_icon = {
+            'type': 'Feature',
+            'geometry': {
+                'type': 'Point',
+                'coordinates': [-122.4194, 37.7749, 0.0]
+            },
+            'properties': {
+                'name': 'Test Point',
+                'icon': '/api/icons/user/abc123.png',
+                'tags': ['test']
+            }
+        }
+        
+        response = self.client.put(
+            f'/api/feature/{self.point_feature.id}/update/',
+            data=json.dumps(feature_with_user_icon),
+            content_type='application/json'
+        )
+        self.assertEqual(response.status_code, 200)
+        
+        # Verify user icon was added
+        self.point_feature.refresh_from_db()
+        self.assertEqual(
+            self.point_feature.geojson['properties']['icon'],
+            '/api/icons/user/abc123.png'
+        )
+        
+        # Now remove the icon
+        feature_without_icon = {
+            'type': 'Feature',
+            'geometry': {
+                'type': 'Point',
+                'coordinates': [-122.4194, 37.7749, 0.0]
+            },
+            'properties': {
+                'name': 'Test Point',
+                'icon': '',  # Empty string to remove icon
+                'marker-color': '#00ff00',
+                'tags': ['test']
+            }
+        }
+        
+        response = self.client.put(
+            f'/api/feature/{self.point_feature.id}/update/',
+            data=json.dumps(feature_without_icon),
+            content_type='application/json'
+        )
+        self.assertEqual(response.status_code, 200)
+        
+        # Verify icon was removed
+        self.point_feature.refresh_from_db()
+        properties = self.point_feature.geojson['properties']
+        
+        # Icon property should be empty or not present
+        if 'icon' in properties:
+            self.assertEqual(properties['icon'], '')
+        
+        # Marker color should be set (colors are normalized to uppercase)
+        self.assertEqual(properties['marker-color'], '#00FF00')
+
+    def test_update_feature_icon_prevents_external_urls(self):
+        """Test that external icon URLs are rejected."""
+        # Try to set an external icon URL
+        feature_with_external_icon = {
+            'type': 'Feature',
+            'geometry': {
+                'type': 'Point',
+                'coordinates': [-122.4194, 37.7749, 0.0]
+            },
+            'properties': {
+                'name': 'Test Point',
+                'icon': 'https://evil.com/malicious.png',
+                'tags': ['test']
+            }
+        }
+        
+        response = self.client.put(
+            f'/api/feature/{self.point_feature.id}/update/',
+            data=json.dumps(feature_with_external_icon),
+            content_type='application/json'
+        )
+        self.assertEqual(response.status_code, 200)
+        
+        # Verify external icon was rejected (should be empty)
+        self.point_feature.refresh_from_db()
+        properties = self.point_feature.geojson['properties']
+        
+        if 'icon' in properties:
+            # External URL should have been rejected and set to empty
+            self.assertEqual(properties['icon'], '')
+
     def test_delete_feature(self):
         """Test deleting a feature."""
         feature_id = self.point_feature.id
