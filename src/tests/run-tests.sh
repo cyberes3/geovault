@@ -2,10 +2,10 @@
 # Simple entrypoint script to run all GeoVault backend tests using pytest
 #
 # Usage:
-#   ./run_tests.sh              # Run all tests
-#   ./run_tests.sh -v           # Run with verbose output
-#   ./run_tests.sh test_api     # Run only API tests
-#   ./run_tests.sh test_validation/test_geojson_whitelist.py  # Run specific test file
+#   ./run-tests.sh              # Run all tests
+#   ./run-tests.sh -v           # Run with verbose output
+#   ./run-tests.sh test_api     # Run only API tests
+#   ./run-tests.sh test_validation/test_geojson_whitelist.py  # Run specific test file
 
 # Get the directory where this script is located
 SCRIPT_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"

@@ -132,17 +132,117 @@ class TestRealtimeConsumerModules(TransactionTestCase):
             'data': {}
         })
         
-        # Should not crash - module should handle it
-        # We might receive a response or not depending on implementation
-        try:
-            response = await communicator.receive_json_from(timeout=1)
-            # If we get a response, it should be valid JSON
-            self.assertIsInstance(response, dict)
-        except:
-            # No response is also acceptable
-            pass
+        # Should receive a response without errors
+        response = await communicator.receive_json_from(timeout=2)
+        self.assertIsInstance(response, dict)
+        self.assertEqual(response.get('module'), 'import_queue')
+        self.assertIn('type', response)
         
         await communicator.disconnect()
+
+    async def test_import_queue_data_with_file_hashes(self):
+        """Test that get_import_queue_data correctly handles duplicate file hash detection.
+        
+        This test would have caught the NameError bug where 'already_imported_items'
+        was used instead of 'imported_items'.
+        """
+        from api.models import ImportQueue
+        from geo_lib.websocket.modules.import_queue_module import ImportQueueModule
+        
+        user = await database_sync_to_async(User.objects.create_user)(
+            email='test@example.com',
+            password='testpass123',
+            username='testuser'
+        )
+        
+        # Create ImportQueue items with file_hashes to test duplicate detection
+        # This triggers the code path that had the NameError bug
+        queue_item = await database_sync_to_async(ImportQueue.objects.create)(
+            user=user,
+            imported=False,
+            file_hash='test_hash_123',
+            original_filename='test_queue.geojson',
+            geofeatures=[{'type': 'Feature', 'properties': {'name': 'Test'}}]
+        )
+        
+        imported_item = await database_sync_to_async(ImportQueue.objects.create)(
+            user=user,
+            imported=True,
+            file_hash='test_hash_123',  # Same hash as queue_item
+            original_filename='test_imported.geojson',
+            geofeatures=[]
+        )
+        
+        # Create a mock consumer to instantiate the module
+        mock_consumer = MagicMock()
+        mock_consumer.user = user
+        mock_consumer.room_group_name = f"realtime_{user.id}"
+        
+        module = ImportQueueModule(mock_consumer)
+        
+        # Actually call get_import_queue_data - this would have caught the NameError bug
+        queue_data = await module.get_import_queue_data()
+        
+        # Verify the data structure
+        self.assertIsInstance(queue_data, list)
+        
+        # Verify queue item is in the data
+        queue_item_ids = [item['id'] for item in queue_data]
+        self.assertIn(queue_item.id, queue_item_ids)
+        
+        # Verify imported item is NOT in the queue data (it's imported)
+        self.assertNotIn(imported_item.id, queue_item_ids)
+        
+        # Verify duplicate detection worked - find the queue item
+        queue_item_data = next((item for item in queue_data if item['id'] == queue_item.id), None)
+        self.assertIsNotNone(queue_item_data)
+        
+        # Verify file_duplicate information is present (tests the duplicate detection code path)
+        # This would have caught the NameError bug where 'already_imported_items' was used
+        self.assertIn('file_duplicate', queue_item_data)
+        self.assertIsInstance(queue_item_data['file_duplicate'], dict)
+        self.assertIn('status', queue_item_data['file_duplicate'])
+        
+        # The queue item should be marked as duplicate_imported since imported_item has same hash
+        self.assertEqual(queue_item_data['file_duplicate']['status'], 'duplicate_imported')
+
+    async def test_import_queue_data_without_file_hashes(self):
+        """Test that get_import_queue_data works when items have no file_hashes.
+        
+        This tests the edge case where queue_hashes is empty, ensuring the code
+        doesn't break when there are no hashes to check.
+        """
+        from api.models import ImportQueue
+        from geo_lib.websocket.modules.import_queue_module import ImportQueueModule
+        
+        user = await database_sync_to_async(User.objects.create_user)(
+            email='test2@example.com',
+            password='testpass123',
+            username='testuser2'
+        )
+        
+        # Create ImportQueue item without file_hash
+        queue_item = await database_sync_to_async(ImportQueue.objects.create)(
+            user=user,
+            imported=False,
+            file_hash=None,  # No file hash
+            original_filename='test_no_hash.geojson',
+            geofeatures=[{'type': 'Feature', 'properties': {'name': 'Test'}}]
+        )
+        
+        # Create a mock consumer to instantiate the module
+        mock_consumer = MagicMock()
+        mock_consumer.user = user
+        mock_consumer.room_group_name = f"realtime_{user.id}"
+        
+        module = ImportQueueModule(mock_consumer)
+        
+        # This should work without errors even when queue_hashes is empty
+        queue_data = await module.get_import_queue_data()
+        
+        self.assertIsInstance(queue_data, list)
+        queue_item_ids = [item['id'] for item in queue_data]
+        self.assertIn(queue_item.id, queue_item_ids)
 
     async def test_unknown_module(self):
         """Test handling of unknown module."""

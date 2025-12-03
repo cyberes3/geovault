@@ -76,7 +76,7 @@ class TestImportErrorHandling(TransactionTestCase):
             duplicate_features=[],
             skipped_feature_ids=[],
             imported=False,
-            geojson_hash='same_hash_123'
+            file_hash='same_hash_123'
         )
         
         # Create second import item with same hash (but later timestamp)
@@ -88,7 +88,7 @@ class TestImportErrorHandling(TransactionTestCase):
             duplicate_features=[],
             skipped_feature_ids=[],
             imported=False,
-            geojson_hash='same_hash_123'  # Same hash
+            file_hash='same_hash_123'  # Same hash
         )
         
         # Try to import the second item via bulk import (should fail due to file-level duplicate)
@@ -363,7 +363,7 @@ class TestBulkImportErrorHandling(TransactionTestCase):
             duplicate_features=[],
             skipped_feature_ids=[],
             imported=False,
-            geojson_hash='same_hash'
+            file_hash='same_hash'
         )
         
         # Create second item with same hash
@@ -375,7 +375,7 @@ class TestBulkImportErrorHandling(TransactionTestCase):
             duplicate_features=[],
             skipped_feature_ids=[],
             imported=False,
-            geojson_hash='same_hash'
+            file_hash='same_hash'
         )
         
         # Try bulk import - second should fail

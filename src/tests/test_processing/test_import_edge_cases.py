@@ -146,12 +146,12 @@ class TestImportEdgeCases(TransactionTestCase):
         # Wait for completion
         job_status = self._wait_for_job_completion(job_id)
         
-        # Verify job failed due to invalid feature (missing feature_hash)
-        self.assertEqual(job_status['status'], ProcessingStatus.FAILED.value)
+        # Verify job completed (invalid features are skipped, not causing job failure)
+        self.assertEqual(job_status['status'], ProcessingStatus.COMPLETED.value)
         
-        # Verify no features were created (job failed before processing)
+        # Verify only valid features were created (invalid feature was skipped)
         features_count = FeatureStore.objects.filter(user=self.user).count()
-        self.assertEqual(features_count, 0)
+        self.assertEqual(features_count, 2, "Should have created 2 valid features, skipping the invalid one")
         
         print("✓ Test passed: mixed_valid_invalid_features")
 

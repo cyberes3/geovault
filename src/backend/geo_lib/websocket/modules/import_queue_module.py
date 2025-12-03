@@ -86,7 +86,7 @@ class ImportQueueModule(BaseWebSocketModule):
                 file_hash__isnull=False
             ).values('file_hash', 'original_filename').distinct()
 
-            for imported_item in already_imported_items:
+            for imported_item in imported_items:
                 imported_hashes[imported_item['file_hash']] = imported_item['original_filename']
 
         # Process each item

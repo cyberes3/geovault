@@ -384,7 +384,7 @@ class TestTrackDetectionTagGenerator:
                 ]]
             },
             properties={
-                'name': 'Test Polygon', 'feature_hash': 'test',
+                'name': 'Test Polygon', 'geojson_hash': 'test',
                 'coordinateProperties': {
                     'times': ['2024-09-02T08:00:00Z']
                 }
