@@ -441,6 +441,13 @@ class TestSequentialProcessing(TransactionTestCase):
         """
         # This test simulates what the frontend receives
         def slow_execute(job_id, kwargs):
+            # Call the original method to set status to PROCESSING, but catch it early
+            # We'll manually set the status and then sleep
+            from geo_lib.processing.status_tracker import ProcessingStatus
+            self.process_job.status_tracker.update_job_status(
+                job_id, ProcessingStatus.PROCESSING,
+                "Processing...", 50.0
+            )
             # Slow processing to keep jobs in different states
             time.sleep(0.5)
         
@@ -454,8 +461,9 @@ class TestSequentialProcessing(TransactionTestCase):
                     job_id, f'display test {i}'.encode(), f'display{i}.kml', self.user.id
                 )
             
-            # Give time for statuses to be set
-            time.sleep(0.2)
+            # Give time for worker to start and process first job
+            # Worker needs time to: start thread, dequeue job, call _execute_job (which sets PROCESSING)
+            time.sleep(0.5)
             
             # Check statuses (simulating what frontend would see)
             jobs_status = []

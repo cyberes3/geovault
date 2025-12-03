@@ -166,8 +166,8 @@ export default {
         // Update store directly with settings from response (no need to fetch again)
         if (this.$store && response && response.settings) {
           this.$store.commit('userSettings', response.settings);
-          // Reload settings from store to ensure UI is in sync
-          this.loadSettingsFromStore();
+          // Settings are already updated in settingsValues from response above
+          // No need to reload from store as it's redundant
         }
         
         // Hide checkmark after 3 seconds

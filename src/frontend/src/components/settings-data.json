@@ -28,6 +28,14 @@
     "options": []
   },
   {
+    "key": "map.replace_icons_low_zoom",
+    "title": "Replace Icons with Points at Low Zoom",
+    "type": "toggle",
+    "section": "map",
+    "defaultValue": true,
+    "description": "Replace custom icons with colored default points when zoomed out. This helps make features more visible when you're zoomed out."
+  },
+  {
     "key": "import.overwrite_single_track_name_with_filename",
     "title": "Overwrite Single Track Name with Filename",
     "type": "checkbox",

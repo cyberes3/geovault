@@ -82,13 +82,14 @@ def get_features_by_tag(request):
     # 4. Return pre-grouped results
     with connection.cursor() as cursor:
         # Build parameters list
-        params = [user_id, user_id]
-        
-        # Add search filter condition if provided
-        search_condition = ""
+        # Order: user_id (first CTE), [search (first CTE)], user_id (second CTE), [search (second CTE)]
         if search_query:
             search_condition = "AND LOWER(tag) LIKE %s"
-            params.append(f'%{search_query}%')
+            search_param = f'%{search_query}%'
+            params = [user_id, search_param, user_id, search_param]
+        else:
+            search_condition = ""
+            params = [user_id, user_id]
         
         # Single optimized CTE query that does all processing in PostgreSQL
         query = f"""

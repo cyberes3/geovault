@@ -214,9 +214,10 @@ export function createDefaultStyle(textStyle?: any): Style {
  * At zoom level 8 or below, replaces image-based icons with colored default points
  * @param feature - OpenLayers feature
  * @param resolution - Map resolution (meters per pixel)
+ * @param replaceIconsLowZoom - Whether to replace icons with default points at low zoom (default: true)
  * @returns OpenLayers Style object with only icon/image, or null to hide feature
  */
-export function getFeatureIconStyle(feature: any, resolution?: number): Style | null {
+export function getFeatureIconStyle(feature: any, resolution?: number, replaceIconsLowZoom: boolean = true): Style | null {
     const properties = feature.get('properties') || {};
     const geometryType = feature.getGeometry().getType();
 
@@ -239,9 +240,10 @@ export function getFeatureIconStyle(feature: any, resolution?: number): Style | 
             }
             
             // At zoom level 8 or below, replace image-based icons (not system icons) with colored default points
+            // Only if the setting is enabled
             const isLowZoom = resolution !== undefined && resolution > 0 && getZoomFromResolution(resolution) <= 8;
             
-            if (isLowZoom && !isSystemIcon(iconUrl)) {
+            if (isLowZoom && replaceIconsLowZoom && !isSystemIcon(iconUrl)) {
                 // Preload the original icon image so it's ready when user zooms in
                 preloadIconImage(iconUrl, feature, properties);
                 

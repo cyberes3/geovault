@@ -6,6 +6,7 @@ Settings are structured as nested JSON objects.
 """
 
 from enum import Enum
+from functools import lru_cache
 from typing import Any, Dict, Optional
 
 from pydantic import BaseModel, Field, ValidationError, ConfigDict, field_validator, model_serializer
@@ -37,6 +38,11 @@ class MapSettings(BaseModel):
         description="Default basemap tile source ID"
     )
     
+    replace_icons_low_zoom: Optional[bool] = Field(
+        default=True,
+        description="Replace custom icons with colored default points when zoomed out to improve visibility"
+    )
+    
     @field_validator('default_basemap')
     @classmethod
     def validate_default_basemap(cls, v):
@@ -44,12 +50,8 @@ class MapSettings(BaseModel):
         if v is None:
             return 'osm'  # Default fallback
         
-        # Import here to avoid circular dependencies
-        from geo_lib.tile_sources import get_all_tile_sources
-        
-        # Get all available tile source IDs
-        all_sources = get_all_tile_sources()
-        available_ids = set(all_sources.keys())
+        # Get cached tile source IDs
+        available_ids = _get_cached_tile_source_ids()
         
         # If the provided value is not in available sources, default to 'osm'
         if v not in available_ids:
@@ -96,6 +98,23 @@ class UserSettingsModel(BaseModel):
     map: Optional[MapSettings] = Field(default_factory=MapSettings)
     import_: Optional[ImportSettings] = Field(default_factory=ImportSettings, alias='import')
     account: Optional[AccountSettings] = Field(default_factory=AccountSettings)
+
+
+@lru_cache(maxsize=1)
+def _get_cached_tile_source_ids():
+    """
+    Get cached set of available tile source IDs.
+    Tile sources don't change at runtime, so we cache the result.
+    
+    Returns:
+        set: Set of available tile source ID strings
+    """
+    # Import here to avoid circular dependencies
+    from geo_lib.tile_sources import get_all_tile_sources
+    
+    # Get all available tile source IDs
+    all_sources = get_all_tile_sources()
+    return set(all_sources.keys())
 
 
 def validate_settings(settings: Dict[str, Any]) -> tuple[bool, Optional[str], Optional[Dict[str, Any]], Optional[Dict[str, Any]]]:

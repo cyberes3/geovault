@@ -1,7 +1,7 @@
 <template>
   <div class="space-y-4">
-    <!-- Title label - only show for non-checkbox types -->
-    <div v-if="setting.type !== 'checkbox'" class="flex items-center gap-2">
+    <!-- Title label - only show for non-checkbox and non-toggle types -->
+    <div v-if="setting.type !== 'checkbox' && setting.type !== 'toggle'" class="flex items-center gap-2">
       <label class="block text-sm font-medium text-gray-700">
         {{ setting.title }}
       </label>
@@ -35,6 +35,44 @@
           <p v-if="option.description" class="text-sm text-gray-500 mt-1">
             {{ option.description }}
           </p>
+        </div>
+      </div>
+    </div>
+
+    <!-- Toggle type -->
+    <div v-else-if="setting.type === 'toggle'" class="flex items-start gap-3">
+      <div class="flex-1 min-w-0">
+        <div class="flex items-center justify-between gap-3">
+          <div class="flex-1 min-w-0">
+            <div class="flex items-center gap-2">
+              <label 
+                :for="setting.key" 
+                class="block text-sm font-medium text-gray-700 cursor-pointer"
+                @click="$emit('update:modelValue', !modelValue)"
+              >
+                {{ setting.label || setting.title }}
+              </label>
+              <Transition name="fade">
+                <svg
+                  v-if="showSuccess"
+                  class="h-5 w-5 text-green-600 flex-shrink-0"
+                  fill="currentColor"
+                  viewBox="0 0 20 20"
+                >
+                  <path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clip-rule="evenodd" />
+                </svg>
+              </Transition>
+            </div>
+            <p v-if="setting.description" class="text-sm text-gray-500 mt-1">
+              {{ setting.description }}
+            </p>
+          </div>
+          <ToggleButton
+            :id="setting.key"
+            :model-value="modelValue"
+            :label="setting.label || setting.title"
+            @update:model-value="$emit('update:modelValue', $event)"
+          />
         </div>
       </div>
     </div>
@@ -147,9 +185,13 @@
 </template>
 
 <script>
+import ToggleButton from '@/components/parts/ToggleButton.vue'
+
 export default {
   name: 'SettingsInput',
-  components: {},
+  components: {
+    ToggleButton
+  },
   props: {
     setting: {
       type: Object,

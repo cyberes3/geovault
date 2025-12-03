@@ -1179,7 +1179,14 @@ export default {
       // Layer for icons/images - no declutter, so icons can overlap
       this.vectorLayer = markRaw(new VectorLayer({
         source: this.vectorSource,
-        style: (feature, resolution) => getFeatureIconStyle(feature, resolution),
+        style: (feature, resolution) => {
+          // Get setting from store, default to true if not set
+          const userSettings = this.$store.state.userSettings || {}
+          const replaceIconsLowZoom = userSettings.map?.replace_icons_low_zoom !== undefined 
+            ? userSettings.map.replace_icons_low_zoom 
+            : true
+          return getFeatureIconStyle(feature, resolution, replaceIconsLowZoom)
+        },
         // Performance optimizations for complex polygon rendering
         renderBuffer: 100,  // Only render features within 100px of viewport
         updateWhileAnimating: true,  // Continue updating during animations
@@ -1697,6 +1704,17 @@ export default {
     '$store.state.userSettings.account.units': {
       handler(newUnits) {
         // Controls removed - no action needed
+      }
+    },
+    // Watch for replace icons low zoom setting changes
+    '$store.state.userSettings.map.replace_icons_low_zoom': {
+      handler() {
+        // Trigger style refresh when setting changes
+        if (this.vectorLayer) {
+          // Force style recalculation by triggering a change on all features
+          const features = this.vectorSource.getFeatures()
+          features.forEach(feature => feature.changed())
+        }
       }
     },
     // Watch for default basemap setting changes
