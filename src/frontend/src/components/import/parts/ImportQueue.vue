@@ -32,151 +32,142 @@
       </div>
     </div>
 
-    <table class="min-w-full sm:divide-y sm:divide-gray-200">
-      <thead class="hidden sm:table-header-group bg-gray-50">
-        <tr>
-          <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-            <input
-              type="checkbox"
-              ref="selectAllCheckbox"
-              :checked="selectedItems.size === filteredImportQueue.length && filteredImportQueue.length > 0"
-              @change="handleSelectAllToggle($event.target.checked)"
-              class="checkbox-custom"
-            />
-          </th>
-          <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">File Name</th>
-          <th class="px-6 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">Features</th>
-          <th class="px-6 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">Status</th>
-          <th class="px-6 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">Actions</th>
-        </tr>
-      </thead>
-      <tbody class="bg-white sm:divide-y sm:divide-gray-200">
+    <div class="flex flex-col">
+      <!-- Header Row (Desktop only) -->
+      <div class="hidden md:flex bg-gray-50 px-3 py-3 sm:px-6 sm:py-3 border-b border-gray-200">
+        <div class="w-12 text-left">
+          <input
+            type="checkbox"
+            ref="selectAllCheckbox"
+            :checked="selectedItems.size === filteredImportQueue.length && filteredImportQueue.length > 0"
+            @change="handleSelectAllToggle($event.target.checked)"
+            class="checkbox-custom"
+          />
+        </div>
+        <div class="flex-1 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">File Name</div>
+        <div class="flex-1 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">Features</div>
+        <div class="flex-1 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">Status</div>
+        <div class="flex-1 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">Actions</div>
+      </div>
+
+      <!-- Items -->
+      <div class="flex flex-col space-y-3 md:space-y-0 md:divide-y md:divide-gray-200">
         <!-- Loading placeholders -->
-        <tr
+        <div
           v-for="n in 3"
           v-if="combinedLoading"
           :key="`loading-${n}`"
-          class="block sm:table-row mb-4 sm:mb-0 border border-gray-200 sm:border-0 rounded-lg sm:rounded-none shadow-sm sm:shadow-none bg-white animate-pulse"
+          class="flex flex-col md:flex-row md:items-center p-3 md:p-0 md:px-3 md:py-3 lg:px-6 lg:py-4 border border-gray-200 md:border-0 rounded-lg md:rounded-none animate-pulse"
         >
-          <td class="block sm:table-cell px-4 py-3 sm:px-6 sm:py-4 sm:whitespace-nowrap border-b border-gray-100 sm:border-0 bg-gray-50 sm:bg-transparent">
-            <div class="flex items-center justify-between sm:justify-start">
-              <div class="w-4 h-4 bg-gray-200 rounded"></div>
-              <div class="sm:hidden w-16 h-5 bg-gray-200 rounded-full"></div>
-            </div>
-          </td>
-          <td class="block sm:table-cell px-4 py-2 sm:px-6 sm:py-4 sm:whitespace-nowrap">
+          <div class="w-full md:w-12 mb-2 md:mb-0 flex items-center justify-between">
+            <div class="w-4 h-4 bg-gray-200 rounded"></div>
+            <div class="md:hidden w-16 h-5 bg-gray-200 rounded-full"></div>
+          </div>
+          <div class="flex-1 mb-2 md:mb-0">
             <div class="flex items-center">
               <div class="w-8 h-8 bg-gray-200 rounded-lg"></div>
               <div class="ml-4 w-32 h-4 bg-gray-200 rounded"></div>
             </div>
-          </td>
-          <td class="block sm:table-cell px-4 py-2 sm:px-6 sm:py-4 sm:whitespace-nowrap sm:text-center">
-            <div class="flex items-center sm:justify-center">
-              <div class="sm:hidden w-16 h-4 bg-gray-200 rounded mr-2"></div>
-              <div class="w-8 h-4 bg-gray-200 rounded sm:mx-auto"></div>
+          </div>
+          <div class="flex-1 mb-2 md:mb-0 md:text-center">
+            <div class="flex items-center md:justify-center">
+              <div class="md:hidden w-16 h-4 bg-gray-200 rounded mr-2"></div>
+              <div class="w-8 h-4 bg-gray-200 rounded md:mx-auto"></div>
             </div>
-          </td>
-          <td class="hidden sm:table-cell px-6 py-4 whitespace-nowrap text-center">
-            <div class="w-20 h-6 bg-gray-200 rounded mx-auto"></div>
-          </td>
-          <td class="block sm:table-cell px-4 py-3 sm:px-6 sm:py-4 sm:whitespace-nowrap sm:text-center border-t border-gray-100 sm:border-0">
-            <div class="flex items-center justify-start sm:justify-center space-x-2">
+          </div>
+          <div class="hidden md:flex flex-1 items-center justify-center">
+            <div class="w-20 h-6 bg-gray-200 rounded"></div>
+          </div>
+          <div class="flex-1 md:text-center">
+            <div class="flex items-center justify-start md:justify-center space-x-2">
               <div class="w-16 h-7 bg-gray-200 rounded"></div>
               <div class="w-16 h-7 bg-gray-200 rounded"></div>
             </div>
-          </td>
-        </tr>
+          </div>
+        </div>
 
         <!-- Empty state when no files are uploaded -->
-        <tr v-if="!combinedLoading && filteredImportQueue.length === 0 && hasInitiallyLoaded" class="block sm:table-row">
-          <td colspan="5" class="block sm:table-cell px-4 sm:px-6 py-12 text-center">
-            <div class="flex flex-col items-center">
-              <h3 class="text-lg font-medium text-gray-900 mb-2">No files uploaded yet</h3>
-              <p class="text-gray-500 mb-6 max-w-sm">
-                Get started by uploading your first geospatial data file. Supported formats include KMZ/KML and GeoJSON.
-              </p>
-              <router-link
-                v-if="!isOnUploadPage"
-                to="/import/upload"
-                class="inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md text-white bg-blue-500 hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 transition-colors duration-200"
-              >
-                <ArrowUpTrayIcon class="w-4 h-4 mr-2" />
-                Upload A File
-              </router-link>
-            </div>
-          </td>
-        </tr>
+        <div v-if="!combinedLoading && filteredImportQueue.length === 0 && hasInitiallyLoaded" class="py-12 text-center">
+          <div class="flex flex-col items-center">
+            <h3 class="text-lg font-medium text-gray-900 mb-2">No files uploaded yet</h3>
+            <p class="text-gray-500 mb-6 max-w-sm">
+              Get started by uploading your first geospatial data file. Supported formats include KMZ/KML and GeoJSON.
+            </p>
+            <router-link
+              v-if="!isOnUploadPage"
+              to="/import/upload"
+              class="inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md text-white bg-blue-500 hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 transition-colors duration-200"
+            >
+              <ArrowUpTrayIcon class="w-4 h-4 mr-2" />
+              Upload A File
+            </router-link>
+          </div>
+        </div>
 
         <!-- Actual data rows -->
-        <tr
+        <div
           v-for="(item, index) in filteredImportQueue"
           :key="`item-${index}`"
           :class="[
-            'block sm:table-row mb-4 sm:mb-0 border border-gray-200 sm:border-0 rounded-xl sm:rounded-none shadow-sm sm:shadow-none transition-shadow duration-200',
-            (item.deleting || item.importing) ? 'opacity-60 bg-gray-50' : 'bg-white sm:hover:bg-gray-50 sm:hover:shadow-md'
+            'flex flex-col md:flex-row md:items-center p-3 md:p-0 md:px-3 md:py-3 lg:px-6 lg:py-4 border border-gray-200 md:border-0 rounded-lg md:rounded-none hover:bg-gray-50 transition-colors',
+            (item.deleting || item.importing) ? 'opacity-60 bg-gray-50' : ''
           ]"
         >
-          <!-- Checkbox cell -->
-          <td class="block sm:table-cell px-4 py-3 sm:px-6 sm:py-4 sm:whitespace-nowrap border-b border-gray-100 sm:border-0 bg-gray-50 sm:bg-transparent">
-            <div class="flex items-center justify-between sm:justify-start">
-              <input
-                type="checkbox"
-                :checked="selectedItems.has(item.id)"
-                @change="handleItemToggle(item.id, $event.target.checked)"
-                :disabled="item.imported || item.processing === true || (item.processing === false && item.feature_count === -1) || item.deleting || item.importing"
-                class="checkbox-custom"
-              />
-              <!-- Mobile-only status badge next to checkbox -->
-              <div class="sm:hidden">
-                <StatusBadge :item="item" />
-              </div>
+          <!-- Checkbox + Status (mobile) / Checkbox only (desktop) -->
+          <div class="w-full md:w-12 mb-2 md:mb-0 flex items-center justify-between">
+            <input
+              type="checkbox"
+              :checked="selectedItems.has(item.id)"
+              @change="handleItemToggle(item.id, $event.target.checked)"
+              :disabled="item.imported || item.processing === true || (item.processing === false && item.feature_count === -1) || item.deleting || item.importing"
+              class="checkbox-custom"
+            />
+            <!-- Mobile-only status badge on far right -->
+            <div class="md:hidden">
+              <StatusBadge :item="item" />
             </div>
-          </td>
-          <!-- Filename cell -->
-          <td class="block sm:table-cell px-4 py-2 sm:px-6 sm:py-4 sm:whitespace-nowrap">
-            <div class="flex items-center">
-              <div class="min-w-0 flex-1">
-                <div class="text-sm font-medium text-gray-900 break-words">
-                  <!-- Disable link for duplicates in queue or when this specific item is being imported/deleted -->
-                  <router-link v-if="item.file_duplicate?.status !== 'duplicate_in_queue' && !item.deleting && !item.importing"
-                     :to="`/import/process/${item.id}`"
-                     class="text-blue-500 hover:text-blue-700">
-                    {{ item.original_filename }}
-                  </router-link>
-                  <span v-else class="text-gray-500 cursor-not-allowed">
-                    {{ item.original_filename }}
-                  </span>
-                </div>
-              </div>
+          </div>
+          <!-- Filename -->
+          <div class="flex-1 mb-2 md:mb-0">
+            <div class="text-base sm:text-lg font-medium text-gray-900 break-words">
+              <!-- Disable link for duplicates in queue or when this specific item is being imported/deleted -->
+              <router-link v-if="item.file_duplicate?.status !== 'duplicate_in_queue' && !item.deleting && !item.importing"
+                 :to="`/import/process/${item.id}`"
+                 class="text-blue-500 hover:text-blue-700">
+                {{ item.original_filename }}
+              </router-link>
+              <span v-else class="text-gray-500 cursor-not-allowed">
+                {{ item.original_filename }}
+              </span>
             </div>
-          </td>
-          <!-- Features cell -->
-          <td class="block sm:table-cell px-4 py-2 sm:px-6 sm:py-4 sm:whitespace-nowrap sm:text-center text-sm text-gray-900">
-            <div class="flex items-center sm:justify-center">
-              <span class="sm:hidden text-xs font-semibold tracking-wide text-gray-500 mr-2 uppercase">Features</span>
+          </div>
+          <!-- Features -->
+          <div class="flex-1 mb-2 md:mb-0 md:text-center text-xs sm:text-sm text-gray-900">
+            <div class="flex items-center md:justify-center">
+              <span class="md:hidden text-[10px] font-semibold tracking-wide text-gray-900 mr-2 uppercase leading-none">Features</span>
               <span v-if="item.processing === true || (item.processing === false && item.feature_count === -1)" class="text-gray-400">
                 -
               </span>
-              <span v-else-if="item.processing_failed" class="text-red-600">
+              <span v-else-if="item.processing_failed" class="text-red-600 flex items-center">
                 <XMarkIcon class="w-4 h-4" />
               </span>
-              <span v-else class="font-medium">{{ item.feature_count }}</span>
+              <span v-else class="font-medium text-gray-900">{{ item.feature_count }}</span>
             </div>
-          </td>
-          <!-- Status cell (desktop only - mobile shown in checkbox row) -->
-          <td class="hidden sm:table-cell px-6 py-4 whitespace-nowrap text-center">
+          </div>
+          <!-- Status (desktop only - mobile shown in checkbox row) -->
+          <div class="hidden md:flex flex-1 items-center justify-center">
             <StatusBadge :item="item" />
-          </td>
-          <!-- Actions cell -->
-          <td class="block sm:table-cell px-4 py-3 sm:px-6 sm:py-4 sm:whitespace-nowrap sm:text-center text-sm font-medium border-t border-gray-100 sm:border-0">
+          </div>
+          <!-- Actions -->
+          <div class="flex-1 md:text-center text-sm font-medium">
             <div class="flex flex-col sm:flex-row items-stretch sm:items-center justify-stretch sm:justify-center space-y-2 sm:space-y-0 sm:space-x-2">
               <button
                 :disabled="item.imported || item.processing_failed || (item.processing === true || (item.processing === false && item.feature_count === -1)) || item.file_duplicate?.status === 'duplicate_in_queue' || item.deleting || item.importing"
-                class="w-full sm:w-auto inline-flex items-center justify-center px-3 py-1.5 border border-transparent text-sm font-medium rounded-md text-white bg-green-500 hover:bg-green-600 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-green-400 transition-colors duration-200 disabled:opacity-50 disabled:cursor-not-allowed disabled:bg-gray-300 disabled:hover:bg-gray-300"
+                class="w-full sm:w-auto inline-flex items-center justify-center px-3 py-1.5 border border-green-200 text-sm font-medium rounded-md text-green-700 bg-green-50 hover:bg-green-100 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-green-300 transition-colors duration-200 disabled:opacity-50 disabled:cursor-not-allowed disabled:bg-gray-100 disabled:hover:bg-gray-100"
                 @click="importItem(item, index)"
                 title="Import this item"
               >
-              <ArrowUpTrayIcon class="w-4 h-4 mr-2" />
+                <ArrowUpTrayIcon class="w-4 h-4 mr-2" />
                 Import
               </button>
               <button
@@ -189,10 +180,10 @@
                 Delete
               </button>
             </div>
-          </td>
-        </tr>
-      </tbody>
-    </table>
+          </div>
+        </div>
+      </div>
+    </div>
   </div>
 </template>
 

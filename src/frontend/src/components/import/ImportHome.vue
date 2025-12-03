@@ -52,51 +52,49 @@
       <h2 class="text-base sm:text-lg font-semibold text-gray-900 mb-4">Import History</h2>
       <p class="text-sm text-gray-600 mb-4">Click to download your previously imported files.</p>
 
-      <div class="overflow-x-auto">
-        <table class="min-w-full divide-y divide-gray-200">
-          <thead class="bg-gray-50">
-            <tr>
-              <th class="px-3 py-3 sm:px-6 sm:py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">File Name</th>
-              <th class="px-3 py-3 sm:px-6 sm:py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">Date/Time Imported</th>
-            </tr>
-          </thead>
-          <tbody class="bg-white divide-y divide-gray-200">
-            <tr v-for="(item, index) in importHistory" :key="`history-${index}`" class="hover:bg-gray-50">
-              <td class="px-3 py-3 sm:px-6 sm:py-4 whitespace-nowrap">
-                <a :href="`${IMPORT_HISTORY_URL()}/${item.id}`" class="text-xs sm:text-sm font-medium text-blue-500 hover:text-blue-700">
-                  {{ item.original_filename }}
-                </a>
-              </td>
-              <td class="px-3 py-3 sm:px-6 sm:py-4 whitespace-nowrap text-center text-xs sm:text-sm text-gray-900">
-                {{ item.timestamp }}
-              </td>
-            </tr>
-            <tr v-for="n in 3" v-if="combinedHistoryLoading" :key="`history-loading-${n}`" class="animate-pulse">
-              <td class="px-3 py-3 sm:px-6 sm:py-4 whitespace-nowrap">
-                <div class="flex items-center">
-                  <div class="w-8 h-8 bg-gray-200 rounded-lg"></div>
-                  <div class="ml-4 w-32 h-4 bg-gray-200 rounded"></div>
-                </div>
-              </td>
-              <td class="px-3 py-3 sm:px-6 sm:py-4 whitespace-nowrap text-center">
-                <div class="w-24 h-4 bg-gray-200 rounded mx-auto"></div>
-              </td>
-            </tr>
-            <tr v-if="!combinedHistoryLoading && importHistory.length === 0">
-              <td colspan="3" class="px-3 py-12 sm:px-6 text-center">
-                <div class="flex flex-col items-center">
-                  <div class="w-12 h-12 bg-gray-100 rounded-full flex items-center justify-center mb-3">
-                    <svg class="w-6 h-6 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"></path>
-                    </svg>
-                  </div>
-                  <h3 class="text-sm font-medium text-gray-900 mb-1">No import history yet</h3>
-                  <p class="text-sm text-gray-500">Files you've successfully imported will appear here.</p>
-                </div>
-              </td>
-            </tr>
-          </tbody>
-        </table>
+      <div class="flex flex-col">
+        <!-- Header Row (Desktop only) -->
+        <div class="hidden md:flex bg-gray-50 px-3 py-3 sm:px-6 sm:py-3 border-b border-gray-200">
+          <div class="flex-1 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">File Name</div>
+          <div class="flex-1 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">Date/Time Imported</div>
+        </div>
+
+        <!-- Items -->
+        <div class="flex flex-col space-y-3 md:space-y-0 md:divide-y md:divide-gray-200">
+          <div v-for="(item, index) in importHistory" :key="`history-${index}`" class="flex flex-col md:flex-row md:items-center p-3 md:p-0 md:px-3 md:py-3 lg:px-6 lg:py-4 border border-gray-200 md:border-0 rounded-lg md:rounded-none hover:bg-gray-50 transition-colors">
+            <div class="flex-1 mb-2 md:mb-0">
+              <a :href="`${IMPORT_HISTORY_URL()}/${item.id}`" class="text-xs sm:text-sm font-medium text-blue-500 hover:text-blue-700 break-words">
+                {{ item.original_filename }}
+              </a>
+            </div>
+            <div class="flex-1 text-xs sm:text-sm text-gray-900 md:text-center">
+              {{ item.timestamp }}
+            </div>
+          </div>
+
+          <!-- Loading States -->
+          <div v-for="n in 3" v-if="combinedHistoryLoading" :key="`history-loading-${n}`" class="flex flex-col md:flex-row md:items-center p-3 md:p-0 md:px-3 md:py-3 lg:px-6 lg:py-4 border border-gray-200 md:border-0 rounded-lg md:rounded-none animate-pulse">
+            <div class="flex-1 mb-2 md:mb-0">
+              <div class="w-3/4 md:w-32 h-4 bg-gray-200 rounded"></div>
+            </div>
+            <div class="flex-1 md:text-center">
+              <div class="w-1/2 md:w-24 h-4 bg-gray-200 rounded md:mx-auto"></div>
+            </div>
+          </div>
+
+          <!-- Empty State -->
+          <div v-if="!combinedHistoryLoading && importHistory.length === 0" class="py-12 text-center">
+            <div class="flex flex-col items-center">
+              <div class="w-12 h-12 bg-gray-100 rounded-full flex items-center justify-center mb-3">
+                <svg class="w-6 h-6 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"></path>
+                </svg>
+              </div>
+              <h3 class="text-sm font-medium text-gray-900 mb-1">No import history yet</h3>
+              <p class="text-sm text-gray-500">Files you've successfully imported will appear here.</p>
+            </div>
+          </div>
+        </div>
       </div>
     </div>
   </div>
