@@ -75,13 +75,15 @@ export function formatDistance(meters, decimals = 2) {
 /**
  * Format elevation string based on user preference
  * @param {number} meters - Elevation in meters
- * @param {number} decimals - Number of decimal places
- * @returns {string} Formatted string (e.g. "1500 ft")
+ * @param {number} decimals - Number of decimal places (ignored, always 0 for display)
+ * @returns {string} Formatted string (e.g. "1,500 ft")
  */
 export function formatElevation(meters, decimals = 1) {
   if (meters === null || meters === undefined) return 'N/A';
   const { value, unit } = getElevationValue(meters);
-  return `${value.toFixed(decimals)} ${unit}`;
+  // Round to integer and add thousands separators
+  const roundedValue = Math.round(value);
+  return `${roundedValue.toLocaleString('en-US')} ${unit}`;
 }
 
 /**

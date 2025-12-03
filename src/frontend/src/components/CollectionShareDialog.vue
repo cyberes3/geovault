@@ -251,6 +251,12 @@ export default {
       } else {
         document.body.classList.remove('overflow-hidden');
       }
+    },
+    $route() {
+      // Close dialog when route changes
+      if (this.isOpen) {
+        this.closeDialog();
+      }
     }
   },
   methods: {

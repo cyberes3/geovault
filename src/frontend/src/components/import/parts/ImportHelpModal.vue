@@ -282,6 +282,12 @@ export default {
       } else {
         document.body.style.overflow = ''
       }
+    },
+    $route() {
+      // Close modal when route changes
+      if (this.show) {
+        this.close()
+      }
     }
   }
 }

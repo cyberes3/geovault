@@ -121,6 +121,12 @@ export default {
         }
       },
       deep: true
+    },
+    $route() {
+      // Close dialog when route changes
+      if (this.isOpen) {
+        this.closeDialog()
+      }
     }
   },
   methods: {

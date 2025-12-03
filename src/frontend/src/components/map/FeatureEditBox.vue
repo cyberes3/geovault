@@ -64,106 +64,48 @@
         </div>
 
         <!-- Icon Section (for points) -->
+        <IconSelector
+          v-if="isPoint"
+          :icon-url="currentIconUrl"
+          :disabled="isSaving"
+          :show-remove="true"
+          size="sm"
+          :error="iconUploadError"
+          @icon-selected="handleIconSelectedFromSelector"
+          @icon-removed="handleRemoveIcon"
+        />
+
+        <!-- Icon Color (for points) -->
+        <!-- Enabled for: default markers (no icon) OR system icons (recolorable) -->
+        <!-- Disabled for: user icons or external URLs (custom, non-recolorable) -->
         <div v-if="isPoint">
-          <label class="block text-xs font-bold text-gray-500 uppercase mb-1">Icon</label>
-
-          <!-- Icon Display with Choose Button Inline -->
-          <div class="flex items-center justify-between p-2 bg-gray-50 rounded-md border border-gray-200">
-            <!-- Current Icon Preview (Left) -->
-            <div class="flex items-center">
-              <div v-if="hasPngIcon && currentIconUrl" class="mr-2">
-                <img
-                  :src="resolveIconUrl(currentIconUrl)"
-                  alt="Current icon"
-                  class="w-8 h-8 object-contain border border-gray-300 rounded bg-white"
-                  @error="handleIconError"
-                />
-              </div>
-              <span v-else class="text-xs text-gray-500 italic">Default Marker</span>
-            </div>
-
-            <!-- Buttons (Right) -->
-            <div class="flex items-center space-x-2">
-              <button
-                v-if="hasPngIcon && currentIconUrl"
-                type="button"
-                @click="handleRemoveIcon"
-                :disabled="isSaving"
-                class="text-xs text-red-600 hover:text-red-800 disabled:opacity-50 disabled:cursor-not-allowed font-medium"
-                title="Remove icon"
-              >
-                Remove
-              </button>
-              <button
-                type="button"
-                @click="openIconPicker"
-                :disabled="isSaving"
-                class="text-xs px-2 py-1 text-blue-600 hover:text-blue-800 bg-blue-50 hover:bg-blue-100 rounded border border-blue-200 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 disabled:opacity-50 disabled:cursor-not-allowed font-medium"
-                title="Choose icon"
-              >
-                Choose
-              </button>
-            </div>
-          </div>
-
-          <!-- Icon Preview (for newly selected file) -->
-          <div v-if="iconPreviewUrl" class="mt-2 flex items-center p-2 bg-blue-50 border border-blue-100 rounded-md">
-            <img
-              :src="iconPreviewUrl"
-              alt="Icon preview"
-              class="w-6 h-6 object-contain border border-gray-300 rounded bg-white"
-            />
-            <p class="text-xs text-blue-800 ml-2">New Selection Preview</p>
-          </div>
-
-          <!-- Icon Upload Error -->
-          <div v-if="iconUploadError" class="mt-1 p-1.5 bg-red-50 border border-red-200 rounded-md">
-            <p class="text-xs text-red-800">{{ iconUploadError }}</p>
-          </div>
-        </div>
-
-        <!-- Icon Color Field (for points) -->
-        <div v-if="isPoint && !isCustomIcon">
           <label class="block text-xs font-bold text-gray-500 uppercase mb-1">Icon Color</label>
-          <div class="flex items-center space-x-2">
-            <input
-              v-model="formData.markerColor"
-              type="color"
-              :disabled="isSaving"
-              class="h-8 w-12 border border-gray-300 rounded cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed p-0.5"
-            />
-            <input
-              v-model="formData.markerColor"
-              type="text"
-              :disabled="isSaving"
-              class="flex-1 px-2 py-1.5 text-sm border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500 disabled:bg-gray-100 disabled:cursor-not-allowed"
-              placeholder="#ff0000"
-              pattern="^#[0-9A-Fa-f]{6}$"
-            />
-          </div>
+          <ColorPicker
+            v-model="formData.markerColor"
+            :disabled="isSaving || isCustomIcon"
+            size="sm"
+          />
         </div>
 
-        <!-- Line/Polygon Color Field -->
-        <div v-if="isLine || isPolygon">
+        <!-- Line/Polygon Color -->
+        <div v-if="isLine">
+          <label class="block text-xs font-bold text-gray-500 uppercase mb-1">Line Color</label>
+          <ColorPicker
+            v-model="formData.strokeColor"
+            :disabled="isSaving"
+            size="sm"
+            @change="onStrokeColorChange"
+          />
+        </div>
+
+        <div v-if="isPolygon">
           <label class="block text-xs font-bold text-gray-500 uppercase mb-1">Border Color</label>
-          <div class="flex items-center space-x-2">
-            <input
-              v-model="formData.strokeColor"
-              type="color"
-              :disabled="isSaving"
-              class="h-8 w-12 border border-gray-300 rounded cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed p-0.5"
-              @input="onStrokeColorChange"
-            />
-            <input
-              v-model="formData.strokeColor"
-              type="text"
-              :disabled="isSaving"
-              class="flex-1 px-2 py-1.5 text-sm border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500 disabled:bg-gray-100 disabled:cursor-not-allowed"
-              placeholder="#ff0000"
-              pattern="^#[0-9A-Fa-f]{6}$"
-              @input="onStrokeColorChange"
-            />
-          </div>
+          <ColorPicker
+            v-model="formData.strokeColor"
+            :disabled="isSaving"
+            size="sm"
+            @change="onStrokeColorChange"
+          />
         </div>
 
         <!-- Coordinates Section -->
@@ -256,13 +198,6 @@
       </div>
     </div>
 
-    <!-- Icon Picker Dialog -->
-    <IconPickerDialog
-      :is-open="iconPickerOpen"
-      @close="closeIconPicker"
-      @icon-selected="handleIconSelected"
-    />
-
     <!-- Replacement Feature Dialog -->
     <ReplacementFeatureDialog
       :is-open="replacementDialogOpen"
@@ -323,27 +258,29 @@
 <script>
 import {APIHOST} from '@/config.js'
 import {GeoJSON} from 'ol/format'
-import IconPickerDialog from './IconPickerDialog.vue'
 import ReplacementFeatureDialog from './ReplacementFeatureDialog.vue'
 import TagPicker from '@/components/TagPicker.vue'
+import ColorPicker from '@/components/parts/ColorPicker.vue'
+import IconSelector from '@/components/parts/IconSelector.vue'
 import { XMarkIcon, MapIcon, ArrowUpTrayIcon } from '@heroicons/vue/24/outline'
 import { sortTagsByPriority } from '@/utils/tagUtils.js'
 
 // Helper functions for icon type checking
 function isSystemIcon(iconUrl) {
-  return iconUrl.startsWith('/api/icons/system/')
+  return iconUrl && iconUrl.includes('/api/icons/system/')
 }
 
 function isUserIcon(iconUrl) {
-  return iconUrl.startsWith('/api/icons/user/')
+  return iconUrl && iconUrl.includes('/api/icons/user/')
 }
 
 export default {
   name: 'FeatureEditBox',
   components: {
-    IconPickerDialog,
     ReplacementFeatureDialog,
     TagPicker,
+    ColorPicker,
+    IconSelector,
     XMarkIcon,
     MapIcon,
     ArrowUpTrayIcon
@@ -390,7 +327,6 @@ export default {
       iconUploadError: '',
       currentIconUrl: null,
       iconRemoved: false,
-      iconPickerOpen: false,
       replacementDialogOpen: false,
       coordinatesDialogOpen: false,
       hideOnMainMap: false
@@ -1057,12 +993,6 @@ export default {
       }
     },
 
-    openIconPicker() {
-      this.iconPickerOpen = true
-    },
-    closeIconPicker() {
-      this.iconPickerOpen = false
-    },
     handleIconSelected(iconUrl) {
       // Set the selected icon URL
       this.uploadedIconFile = null
@@ -1081,6 +1011,10 @@ export default {
         this.hasPngIcon = true
         this.iconRemoved = false
       }
+    },
+    handleIconSelectedFromSelector(event) {
+      // Wrapper to bridge IconSelector component with existing logic
+      this.handleIconSelected(event.iconUrl)
     },
     getCsrfToken() {
       // Get CSRF token from cookies

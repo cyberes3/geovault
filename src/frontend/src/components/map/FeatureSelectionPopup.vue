@@ -95,6 +95,14 @@ export default {
       }
     }
   },
+  watch: {
+    $route() {
+      // Close popup when route changes
+      if (this.visible) {
+        this.$emit('close')
+      }
+    }
+  },
   methods: {
     getFeatureKey(feature, index) {
       // Generate a unique key for each feature

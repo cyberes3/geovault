@@ -129,6 +129,12 @@ export default {
         document.body.style.overflow = '';
       }
     },
+    $route() {
+      // Close modal when route changes
+      if (this.isOpen) {
+        this.$emit('close');
+      }
+    }
   },
   mounted() {
     document.addEventListener('keydown', this.handleKeydown);

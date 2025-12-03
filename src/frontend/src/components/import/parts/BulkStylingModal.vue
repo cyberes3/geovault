@@ -52,22 +52,11 @@
                     />
                   </div>
                 </div>
-                <div class="flex flex-col sm:flex-row sm:items-center space-y-2 sm:space-y-0 sm:space-x-2">
-                  <input
-                    v-model="bulkData.pointColor"
-                    type="color"
-                    :disabled="!enabled.pointColor"
-                    class="h-10 w-full sm:w-20 border border-gray-300 rounded cursor-pointer p-0.5 disabled:opacity-50 disabled:cursor-not-allowed"
-                  />
-                  <input
-                    v-model="bulkData.pointColor"
-                    type="text"
-                    :disabled="!enabled.pointColor"
-                    class="flex-1 px-3 py-2 text-sm border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500 disabled:bg-gray-100 disabled:cursor-not-allowed"
-                    placeholder="#ff0000"
-                    pattern="^#[0-9A-Fa-f]{6}$"
-                  />
-                </div>
+                <ColorPicker
+                  v-model="bulkData.pointColor"
+                  :disabled="!enabled.pointColor"
+                  size="md"
+                />
               </div>
 
               <!-- Point Icon -->
@@ -129,22 +118,11 @@
                   />
                 </div>
               </div>
-              <div class="flex flex-col sm:flex-row sm:items-center space-y-2 sm:space-y-0 sm:space-x-2">
-                <input
-                  v-model="bulkData.lineColor"
-                  type="color"
-                  :disabled="!enabled.lineColor"
-                  class="h-10 w-full sm:w-20 border border-gray-300 rounded cursor-pointer p-0.5 disabled:opacity-50 disabled:cursor-not-allowed"
-                />
-                <input
-                  v-model="bulkData.lineColor"
-                  type="text"
-                  :disabled="!enabled.lineColor"
-                  class="flex-1 px-3 py-2 text-sm border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500 disabled:bg-gray-100 disabled:cursor-not-allowed"
-                  placeholder="#ff0000"
-                  pattern="^#[0-9A-Fa-f]{6}$"
-                />
-              </div>
+              <ColorPicker
+                v-model="bulkData.lineColor"
+                :disabled="!enabled.lineColor"
+                size="md"
+              />
             </div>
           </div>
 
@@ -163,22 +141,11 @@
                   />
                 </div>
               </div>
-              <div class="flex flex-col sm:flex-row sm:items-center space-y-2 sm:space-y-0 sm:space-x-2">
-                <input
-                  v-model="bulkData.polyColor"
-                  type="color"
-                  :disabled="!enabled.polyColor"
-                  class="h-10 w-full sm:w-20 border border-gray-300 rounded cursor-pointer p-0.5 disabled:opacity-50 disabled:cursor-not-allowed"
-                />
-                <input
-                  v-model="bulkData.polyColor"
-                  type="text"
-                  :disabled="!enabled.polyColor"
-                  class="flex-1 px-3 py-2 text-sm border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500 disabled:bg-gray-100 disabled:cursor-not-allowed"
-                  placeholder="#ff0000"
-                  pattern="^#[0-9A-Fa-f]{6}$"
-                />
-              </div>
+              <ColorPicker
+                v-model="bulkData.polyColor"
+                :disabled="!enabled.polyColor"
+                size="md"
+              />
             </div>
           </div>
         </div>
@@ -232,6 +199,7 @@ import { XMarkIcon, PhotoIcon } from '@heroicons/vue/24/outline'
 import TagPicker from '@/components/TagPicker.vue'
 import IconPickerDialog from '@/components/map/IconPickerDialog.vue'
 import ToggleButton from '@/components/parts/ToggleButton.vue'
+import ColorPicker from '@/components/parts/ColorPicker.vue'
 import { APIHOST } from '@/config.js'
 
 export default {
@@ -241,7 +209,8 @@ export default {
     PhotoIcon,
     TagPicker,
     IconPickerDialog,
-    ToggleButton
+    ToggleButton,
+    ColorPicker
   },
   props: {
     isOpen: {
@@ -318,6 +287,12 @@ export default {
         }
       },
       deep: true
+    },
+    $route() {
+      // Close modal when route changes
+      if (this.isOpen) {
+        this.closeModal()
+      }
     }
   },
   methods: {

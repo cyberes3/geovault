@@ -165,6 +165,12 @@ export default {
         this.isUnhidingAll = false
       }
     },
+    $route() {
+      // Close modal when route changes
+      if (this.visible) {
+        this.$emit('close')
+      }
+    }
   },
 }
 </script>

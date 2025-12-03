@@ -149,6 +149,12 @@ export default {
           this.vectorLayer.changed() // Force style update
         }
       }
+    },
+    $route() {
+      // Close dialog when route changes
+      if (this.isOpen) {
+        this.closeDialog()
+      }
     }
   },
   methods: {

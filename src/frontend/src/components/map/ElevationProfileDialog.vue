@@ -20,47 +20,36 @@
       </div>
 
       <!-- Stats -->
-      <div class="px-3 py-1.5 md:px-4 md:py-2 border-b border-gray-200 bg-gray-50 flex-none min-h-[28px] flex items-center">
-        <div v-if="hasElevationData && stats" class="flex flex-wrap gap-x-3 gap-y-1 text-[10px] md:text-xs justify-between md:justify-start w-full">
-          <div class="flex items-center">
-            <span class="text-gray-600 mr-1">Dist:</span>
-            <span class="font-medium text-gray-900">{{ stats.totalDistance }}</span>
+      <div class="stats-container px-3 py-1.5 md:px-4 md:py-2 border-b border-gray-200 bg-gray-50 flex-none min-h-[28px] relative">
+        <template v-if="hasElevationData && stats">
+          <!-- Mobile layout: flex row with button on right -->
+          <div class="sm:hidden flex items-center justify-between w-full gap-x-3 text-[10px]">
+            <div class="flex items-center gap-x-3 flex-1">
+              <div v-for="stat in firstRowStats" :key="stat.label" class="flex items-center">
+                <span class="text-gray-600 mr-1">{{ stat.label }}:</span>
+                <span class="font-medium text-gray-900">{{ stat.value }}</span>
+              </div>
+            </div>
+            <!-- More button (only on mobile when there are remaining stats) -->
+            <button
+              v-if="hasRemainingStats"
+              @click.stop="toggleDropdown"
+              class="flex items-center justify-center text-gray-600 hover:text-gray-900 transition-colors flex-shrink-0 p-2 -mr-2 -my-1 min-w-[44px] min-h-[44px]"
+              :class="{ 'text-gray-900': showMoreStats }"
+            >
+              <EllipsisHorizontalIcon class="w-4 h-4" />
+            </button>
           </div>
-          <div class="flex items-center">
-            <span class="text-gray-600 mr-1">Change:</span>
-            <span class="font-medium text-gray-900">{{ stats.totalElevationChange }}</span>
+          <!-- Desktop layout: grid -->
+          <div class="hidden sm:grid grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-x-3 gap-y-1 text-[10px] md:text-xs w-full">
+            <div v-for="stat in allStatItems" :key="stat.label" class="flex items-center">
+              <span class="text-gray-600 mr-1">{{ stat.label }}:</span>
+              <span class="font-medium text-gray-900">{{ stat.value }}</span>
+            </div>
           </div>
-          <div class="flex items-center">
-             <span class="text-gray-600 mr-1">Asc:</span>
-             <span class="font-medium text-gray-900">{{ stats.grossAscent }}</span>
-          </div>
-           <div class="flex items-center">
-             <span class="text-gray-600 mr-1">Des:</span>
-             <span class="font-medium text-gray-900">{{ stats.grossDescent }}</span>
-          </div>
-          <div class="hidden sm:flex items-center">
-            <span class="text-gray-600 mr-1">Min:</span>
-            <span class="font-medium text-gray-900">{{ stats.minElevation }}</span>
-          </div>
-          <div class="hidden sm:flex items-center">
-            <span class="text-gray-600 mr-1">Max:</span>
-            <span class="font-medium text-gray-900">{{ stats.maxElevation }}</span>
-          </div>
-          <!-- Speed stats (only show if available) -->
-          <div v-if="stats.movingAverageSpeed" class="flex items-center">
-            <span class="text-gray-600 mr-1">Mov Avg:</span>
-            <span class="font-medium text-gray-900">{{ stats.movingAverageSpeed }}</span>
-          </div>
-          <div v-if="stats.totalMovingTime" class="flex items-center">
-            <span class="text-gray-600 mr-1">Moving:</span>
-            <span class="font-medium text-gray-900">{{ stats.totalMovingTime }}</span>
-          </div>
-          <div v-if="stats.totalTrackTime" class="flex items-center">
-            <span class="text-gray-600 mr-1">Total:</span>
-            <span class="font-medium text-gray-900">{{ stats.totalTrackTime }}</span>
-          </div>
-        </div>
-        <div v-else-if="isUpdatingChart" class="flex flex-wrap gap-x-3 gap-y-1 text-[10px] md:text-xs justify-between md:justify-start w-full animate-pulse">
+        </template>
+        <template v-else-if="isUpdatingChart">
+          <div class="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-x-3 gap-y-1 text-[10px] md:text-xs w-full animate-pulse">
           <!-- Dist -->
           <div class="flex items-center">
             <div class="h-2.5 bg-gray-200 rounded w-6 mr-1"></div>
@@ -81,19 +70,41 @@
             <div class="h-2.5 bg-gray-200 rounded w-6 mr-1"></div>
             <div class="h-2.5 bg-gray-300 rounded w-8"></div>
           </div>
-          <!-- Min (Hidden on mobile) -->
-          <div class="hidden sm:flex items-center">
+          <!-- Min -->
+          <div class="flex items-center">
             <div class="h-2.5 bg-gray-200 rounded w-6 mr-1"></div>
             <div class="h-2.5 bg-gray-300 rounded w-8"></div>
           </div>
-          <!-- Max (Hidden on mobile) -->
-          <div class="hidden sm:flex items-center">
+          <!-- Max -->
+          <div class="flex items-center">
             <div class="h-2.5 bg-gray-200 rounded w-6 mr-1"></div>
             <div class="h-2.5 bg-gray-300 rounded w-8"></div>
           </div>
-        </div>
-        <div v-else class="text-[10px] md:text-xs text-gray-400 italic">
-          No stats available
+          <!-- Avg -->
+          <div class="flex items-center">
+            <div class="h-2.5 bg-gray-200 rounded w-6 mr-1"></div>
+            <div class="h-2.5 bg-gray-300 rounded w-8"></div>
+          </div>
+          </div>
+        </template>
+        <template v-else>
+          <div class="text-[10px] md:text-xs text-gray-400 italic">
+            No stats available
+          </div>
+        </template>
+        <!-- Mobile dropdown for remaining stats -->
+        <div
+          v-if="hasRemainingStats && hasElevationData && stats"
+          class="stats-dropdown sm:hidden absolute top-full left-0 right-0 bg-white border-t border-gray-200 shadow-lg z-50 max-h-48 overflow-y-auto transition-all duration-200 ease-out"
+          :class="showMoreStats ? 'opacity-100 translate-y-0' : 'opacity-0 -translate-y-2 pointer-events-none'"
+          @click.stop
+        >
+          <div class="px-3 py-2 space-y-2">
+            <div v-for="stat in remainingStats" :key="stat.label" class="flex items-center justify-between text-[10px]">
+              <span class="text-gray-600 mr-2">{{ stat.label }}:</span>
+              <span class="font-medium text-gray-900">{{ stat.value }}</span>
+            </div>
+          </div>
         </div>
       </div>
 
@@ -128,7 +139,7 @@ import axios from 'axios'
 import { Chart, registerables } from 'chart.js'
 import { getCookie } from '@/assets/js/auth.js'
 import Loader from '@/components/parts/Loader.vue'
-import { XMarkIcon, ExclamationTriangleIcon } from '@heroicons/vue/24/outline'
+import { XMarkIcon, ExclamationTriangleIcon, EllipsisHorizontalIcon } from '@heroicons/vue/24/outline'
 import { 
   getElevationMultiplier, 
   getDistanceMultiplier, 
@@ -164,7 +175,8 @@ export default {
   components: {
     Loader,
     XMarkIcon,
-    ExclamationTriangleIcon
+    ExclamationTriangleIcon,
+    EllipsisHorizontalIcon
   },
   data() {
     return {
@@ -173,7 +185,9 @@ export default {
       isUpdatingChart: false,
       stats: null,
       coordinateMapping: null, // Maps chart data indices to original coordinates [lon, lat]
-      distances: null // Store distances array for mapping
+      distances: null, // Store distances array for mapping
+      showMoreStats: false, // Track if mobile dropdown is open
+      toggleDebounceTimer: null // Track debounce timer
     }
   },
   computed: {
@@ -181,26 +195,90 @@ export default {
       // Get elevation profile source from store, default to 'gps'
       const settings = this.$store.state.userSettings
       return settings?.map?.elevation_profile_source || 'gps'
-    }
+    },
+    /**
+     * Get all stat items as an array for easier manipulation
+     */
+    allStatItems() {
+      if (!this.stats) return []
+      const items = [
+        { label: 'Dist', value: this.stats.totalDistance },
+        { label: 'Change', value: this.stats.totalElevationChange },
+        { label: 'Asc', value: this.stats.grossAscent },
+        { label: 'Des', value: this.stats.grossDescent },
+        { label: 'Min', value: this.stats.minElevation },
+        { label: 'Max', value: this.stats.maxElevation },
+        { label: 'Avg', value: this.stats.averageElevation }
+      ]
+      if (this.stats.movingAverageSpeed) {
+        items.push({ label: 'Mov Avg', value: this.stats.movingAverageSpeed })
+      }
+      if (this.stats.totalMovingTime) {
+        items.push({ label: 'Moving', value: this.stats.totalMovingTime })
+      }
+      if (this.stats.totalTrackTime) {
+        items.push({ label: 'Total', value: this.stats.totalTrackTime })
+      }
+      return items
+    },
+    /**
+     * First row stats (first 2 items on mobile)
+     */
+    firstRowStats() {
+      return this.allStatItems.slice(0, 2)
+    },
+    /**
+     * Remaining stats (beyond first row)
+     */
+    remainingStats() {
+      return this.allStatItems.slice(2)
+    },
+    /**
+     * Whether there are remaining stats to show
+     */
+    hasRemainingStats() {
+      return this.remainingStats.length > 0
+    },
   },
   watch: {
     feature: {
       handler() {
+        // Reset dropdown state when feature changes
+        this.showMoreStats = false
+        if (this.toggleDebounceTimer) {
+          clearTimeout(this.toggleDebounceTimer)
+          this.toggleDebounceTimer = null
+        }
         this.$nextTick(() => {
           this.updateChart()
         })
       },
       immediate: true
+    },
+    $route() {
+      // Close dialog when route changes
+      if (this.feature) {
+        this.$emit('close')
+      }
     }
   },
   mounted() {
     this.updateChart()
     // Add keyboard event listener for Escape key
     document.addEventListener('keydown', this.handleKeyDown)
+    // Add click outside listener to close dropdown
+    document.addEventListener('click', this.handleClickOutside)
   },
   beforeUnmount() {
+    // Clear debounce timer
+    if (this.toggleDebounceTimer) {
+      clearTimeout(this.toggleDebounceTimer)
+      this.toggleDebounceTimer = null
+    }
     // Remove keyboard event listener
     document.removeEventListener('keydown', this.handleKeyDown)
+    // Remove click outside listener
+    document.removeEventListener('click', this.handleClickOutside)
 
     // Destroy chart instance
     if (this.chart) {
@@ -230,8 +308,42 @@ export default {
      */
     handleKeyDown(event) {
       if (event.key === 'Escape') {
-        this.$emit('close')
+        if (this.showMoreStats) {
+          this.showMoreStats = false
+        } else {
+          this.$emit('close')
+        }
       }
+    },
+
+    /**
+     * Handle clicks outside the dropdown to close it
+     */
+    handleClickOutside(event) {
+      if (this.showMoreStats) {
+        // Check if click is outside the stats container and dropdown
+        const statsContainer = event.target.closest('.stats-container')
+        const dropdown = event.target.closest('.stats-dropdown')
+        if (!statsContainer && !dropdown) {
+          this.showMoreStats = false
+        }
+      }
+    },
+
+    /**
+     * Debounced toggle for dropdown
+     */
+    toggleDropdown() {
+      // Clear any existing debounce timer
+      if (this.toggleDebounceTimer) {
+        clearTimeout(this.toggleDebounceTimer)
+      }
+      
+      // Set new debounce timer
+      this.toggleDebounceTimer = setTimeout(() => {
+        this.showMoreStats = !this.showMoreStats
+        this.toggleDebounceTimer = null
+      }, 150) // 150ms debounce
     },
 
     /**
@@ -301,6 +413,15 @@ export default {
 
 
     /**
+     * Format a number with commas and no decimal places
+     * @param {number} value - Number to format
+     * @returns {string} Formatted number with commas
+     */
+    formatElevationNumber(value) {
+      return Math.round(value).toLocaleString('en-US')
+    },
+
+    /**
      * Calculate statistics from elevation data
      * Returns stats object with formatted values
      * @param {Array} distances - Array of cumulative distances in user units
@@ -324,13 +445,16 @@ export default {
       // Total elevation change (end - start) - use original elevations
       const totalElevationChange = elevations[elevations.length - 1] - elevations[0]
       const totalElevationChangeFormatted = totalElevationChange >= 0
-        ? `+${totalElevationChange.toFixed(0)} ${elevUnit}`
-        : `${totalElevationChange.toFixed(0)} ${elevUnit}`
+        ? `+${this.formatElevationNumber(totalElevationChange)} ${elevUnit}`
+        : `${this.formatElevationNumber(totalElevationChange)} ${elevUnit}`
 
       // Elevation range (max - min) - use original elevations
       const minElevation = Math.min(...elevations)
       const maxElevation = Math.max(...elevations)
-      const elevationRange = `${(maxElevation - minElevation).toFixed(0)} ${elevUnit}`
+      const elevationRange = `${this.formatElevationNumber(maxElevation - minElevation)} ${elevUnit}`
+      
+      // Average elevation - use original elevations
+      const averageElevation = elevations.reduce((sum, elev) => sum + elev, 0) / elevations.length
 
       // Gross elevation change (sum of all positive and negative changes)
       // Use smoothed elevation data to filter out GPS noise
@@ -357,10 +481,11 @@ export default {
         totalDistance,
         totalElevationChange: totalElevationChangeFormatted,
         elevationRange,
-        grossAscent: `${grossAscent.toFixed(0)} ${elevUnit}`,
-        grossDescent: `${grossDescent.toFixed(0)} ${elevUnit}`,
-        minElevation: `${minElevation.toFixed(0)} ${elevUnit}`,
-        maxElevation: `${maxElevation.toFixed(0)} ${elevUnit}`
+        grossAscent: `${this.formatElevationNumber(grossAscent)} ${elevUnit}`,
+        grossDescent: `${this.formatElevationNumber(grossDescent)} ${elevUnit}`,
+        minElevation: `${this.formatElevationNumber(minElevation)} ${elevUnit}`,
+        maxElevation: `${this.formatElevationNumber(maxElevation)} ${elevUnit}`,
+        averageElevation: `${this.formatElevationNumber(averageElevation)} ${elevUnit}`
       }
 
       // Calculate speed stats if timestamps and distances in meters are available
@@ -792,7 +917,9 @@ export default {
                     return `Distance: ${items[0].parsed.x.toFixed(2)} mi`
                   },
                   label: (context) => {
-                    return `Elevation: ${context.parsed.y.toFixed(0)} ft`
+                    const elevUnit = getElevationUnitLabel()
+                    const formattedElevation = Math.round(context.parsed.y).toLocaleString('en-US')
+                    return `Elevation: ${formattedElevation} ${elevUnit}`
                   }
                 }
               },

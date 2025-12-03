@@ -231,6 +231,12 @@ export default {
         // Remove escape key listener when dialog closes
         document.removeEventListener('keydown', this.handleEscapeKey);
       }
+    },
+    $route() {
+      // Close dialog when route changes
+      if (this.isOpen) {
+        this.closeDialog();
+      }
     }
   },
   methods: {

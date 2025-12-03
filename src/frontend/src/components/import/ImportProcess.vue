@@ -410,15 +410,6 @@
             Feature {{ (pagination.currentPage - 1) * pagination.pageSize + entry.originalIndex + 1 }} (of {{ pagination.totalFeatures }})
           </h3>
           <div class="flex flex-wrap items-center gap-2 sm:space-x-2">
-            <!-- Icon Preview -->
-            <div v-if="getFeatureIconUrl(entry.item)" class="flex items-center justify-center w-8 h-8 p-1 border border-gray-300 rounded bg-white shadow-sm">
-              <img
-                  :src="getFeatureIconUrl(entry.item)"
-                  :alt="'Custom icon for ' + (entry.item.properties.name || 'feature')"
-                  class="max-w-full max-h-full object-contain"
-                  @error="handleIconError($event)"
-              />
-            </div>
             <!-- Skip/Restore Button -->
             <button
                 v-if="!isImported && !loading.importing"
@@ -503,29 +494,90 @@
             </div>
           </div>
 
-          <!-- Created Date Field -->
-          <div>
-            <label class="block text-sm font-medium text-gray-700 mb-2">Created Date</label>
-            <div class="flex items-center space-x-2">
-              <input
-                  :class="isItemDisabled(entry.item, entry.originalIndex) ? 'block w-full px-3 py-2 border border-gray-300 rounded-md bg-gray-100 cursor-not-allowed' : 'block w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-blue-500 focus:border-blue-500'"
-                  :disabled="isItemDisabled(entry.item, entry.originalIndex)"
-                  :value="formatDateForInput(entry.item.properties.created)"
-                  type="datetime-local"
-                  @change="updateDate(entry.originalIndex, $event)"
+          <!-- Left Column: Created Date + Style Controls -->
+          <div class="space-y-4">
+            <!-- Created Date Field -->
+            <div>
+              <label class="block text-sm font-medium text-gray-700 mb-2">Created Date</label>
+              <div class="flex items-center space-x-2">
+                <input
+                    :class="isItemDisabled(entry.item, entry.originalIndex) ? 'block w-full px-3 py-2 border border-gray-300 rounded-md bg-gray-100 cursor-not-allowed' : 'block w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-blue-500 focus:border-blue-500'"
+                    :disabled="isItemDisabled(entry.item, entry.originalIndex)"
+                    :value="formatDateForInput(entry.item.properties.created)"
+                    type="datetime-local"
+                    @change="updateDate(entry.originalIndex, $event)"
+                />
+                <button
+                    :disabled="!isItemEditable(entry.item, entry.originalIndex)"
+                    class="inline-flex items-center px-3 py-2 border border-gray-300 shadow-sm text-sm leading-4 font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:bg-white"
+                    @click="resetNestedField(entry.originalIndex, 'properties', 'created')"
+                    title="Reset to original date"
+                >
+                  <ArrowPathIcon class="w-4 h-4" />
+                </button>
+              </div>
+            </div>
+
+            <!-- Icon Selector (for points) -->
+            <IconSelector
+              v-if="isPointGeometry(entry.item)"
+              :icon-url="getFeatureIconUrl(entry.item)"
+              :original-icon-url="getFeatureIconUrlRaw(originalItems[entry.originalIndex])"
+              :icon-color="entry.item.properties['marker-color']"
+              :original-icon-color="originalItems[entry.originalIndex]?.properties?.['marker-color']"
+              :disabled="isItemDisabled(entry.item, entry.originalIndex)"
+              :show-remove="true"
+              :show-reset="true"
+              size="md"
+              @icon-selected="handleIconSelected(entry.originalIndex, entry.item, $event)"
+              @icon-removed="handleIconRemoved(entry.originalIndex, entry.item)"
+              @icon-reset="handleIconReset(entry.originalIndex, entry.item, $event)"
+              @icon-color-reset="handleIconColorReset(entry.originalIndex, entry.item)"
+            />
+
+            <!-- Icon Color (for points) -->
+            <!-- Enabled for: default markers (no icon) OR system icons (recolorable) -->
+            <!-- Disabled for: user icons or external URLs (non-recolorable) -->
+            <div v-if="isPointGeometry(entry.item)">
+              <label class="block text-sm font-medium text-gray-700 mb-2">Icon Color</label>
+              <ColorPicker
+                v-model="entry.item.properties['marker-color']"
+                :disabled="isItemDisabled(entry.item, entry.originalIndex) || hasNonRecolorableIcon(entry.item)"
+                size="md"
+                @change="markItemAsEdited(entry.originalIndex)"
               />
-              <button
-                  :disabled="!isItemEditable(entry.item, entry.originalIndex)"
-                  class="inline-flex items-center px-3 py-2 border border-gray-300 shadow-sm text-sm leading-4 font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:bg-white"
-                  @click="resetNestedField(entry.originalIndex, 'properties', 'created')"
-                  title="Reset to original date"
-              >
-                <ArrowPathIcon class="w-4 h-4" />
-              </button>
+            </div>
+
+            <!-- Line Color -->
+            <div v-if="isLineGeometry(entry.item)">
+              <label class="block text-sm font-medium text-gray-700 mb-2">Line Color</label>
+              <ColorPicker
+                v-model="entry.item.properties.stroke"
+                :disabled="isItemDisabled(entry.item, entry.originalIndex)"
+                :show-reset="true"
+                :can-reset="isItemEditable(entry.item, entry.originalIndex)"
+                size="md"
+                @change="handleStrokeColorChange(entry.originalIndex, entry.item)"
+                @reset="resetNestedField(entry.originalIndex, 'properties', 'stroke')"
+              />
+            </div>
+
+            <!-- Border Color -->
+            <div v-if="isPolygonGeometry(entry.item)">
+              <label class="block text-sm font-medium text-gray-700 mb-2">Border Color</label>
+              <ColorPicker
+                v-model="entry.item.properties.stroke"
+                :disabled="isItemDisabled(entry.item, entry.originalIndex)"
+                :show-reset="true"
+                :can-reset="isItemEditable(entry.item, entry.originalIndex)"
+                size="md"
+                @change="handleStrokeColorChange(entry.originalIndex, entry.item)"
+                @reset="resetNestedField(entry.originalIndex, 'properties', 'stroke')"
+              />
             </div>
           </div>
 
-          <!-- Tags Section -->
+          <!-- Right Column: Tags Section -->
           <div>
             <TagPicker
               v-model:tags="entry.item.properties.tags"
@@ -644,6 +696,8 @@ import ImportControls from "@/components/import/parts/ImportControls.vue";
 import BulkStylingModal from "@/components/import/parts/BulkStylingModal.vue";
 import DuplicateWarning from "@/components/import/parts/DuplicateWarning.vue";
 import TagPicker from "@/components/TagPicker.vue";
+import ColorPicker from "@/components/parts/ColorPicker.vue";
+import IconSelector from "@/components/parts/IconSelector.vue";
 import { DEFAULT_BULK_OPERATIONS, hasBulkOperationsConfigured, areBulkOperationsEqual, cloneBulkOperations } from "@/utils/bulkOperations.js";
 import { CheckIcon, ExclamationCircleIcon, ArrowTopRightOnSquareIcon, DocumentIcon, ExclamationTriangleIcon, ArrowDownTrayIcon, ArrowUpTrayIcon, XMarkIcon, MapIcon, ArrowPathIcon, MagnifyingGlassIcon, RectangleStackIcon, ChevronLeftIcon, ChevronRightIcon } from '@heroicons/vue/24/outline';
 
@@ -777,6 +831,8 @@ export default {
     BulkStylingModal,
     DuplicateWarning,
     TagPicker,
+    ColorPicker,
+    IconSelector,
     CheckIcon,
     ExclamationCircleIcon,
     ArrowTopRightOnSquareIcon,
@@ -1207,6 +1263,29 @@ export default {
           if (item.error) {
             return;
           }
+          // Initialize default style properties if not present
+          if (!item.properties) {
+            item.properties = {};
+          }
+          // Check if item has a custom icon
+          const iconPropertyNames = ['icon', 'icon-href', 'iconUrl', 'icon_url', 'marker-icon', 'marker-symbol', 'symbol'];
+          const hasIcon = iconPropertyNames.some(propName => {
+            const iconValue = item.properties[propName];
+            return iconValue && typeof iconValue === 'string' && iconValue.trim() !== '';
+          });
+          
+          // Set default marker-color for points if not present and no custom icon
+          if ((item.geometry.type === 'Point' || item.geometry.type === 'MultiPoint') && 
+              !item.properties['marker-color'] && 
+              !hasIcon) {
+            item.properties['marker-color'] = '#ff0000';
+          }
+          // Set default stroke for lines and polygons if not present
+          if ((item.geometry.type === 'LineString' || item.geometry.type === 'MultiLineString' ||
+               item.geometry.type === 'Polygon' || item.geometry.type === 'MultiPolygon') && 
+              !item.properties.stroke) {
+            item.properties.stroke = '#ff0000';
+          }
           this.itemsForUser.push(this.parseGeoJson(item));
         });
         this.originalItems = JSON.parse(JSON.stringify(this.itemsForUser));
@@ -1477,6 +1556,39 @@ export default {
 
       return null;
     },
+    getFeatureIconUrlRaw(feature) {
+      /**
+       * Get raw (unresolved) icon URL from feature properties.
+       * Checks multiple common property names for icon URLs.
+       * @param feature - Feature object with properties
+       * @returns Raw icon URL if found, null otherwise
+       */
+      if (!feature || !feature.properties) {
+        return null;
+      }
+
+      // Common property names that might contain icon hrefs
+      const iconPropertyNames = [
+        'icon',
+        'icon-href',
+        'iconUrl',
+        'icon_url',
+        'marker-icon',
+        'marker-symbol',
+        'symbol',
+      ];
+
+      for (const propName of iconPropertyNames) {
+        if (feature.properties[propName] && typeof feature.properties[propName] === 'string') {
+          const iconUrl = feature.properties[propName].trim();
+          if (iconUrl) {
+            return iconUrl;
+          }
+        }
+      }
+
+      return null;
+    },
     resolveIconUrl(iconUrl) {
       /**
        * Resolve icon URL to absolute URL.
@@ -1635,6 +1747,154 @@ export default {
         default:
           throw new Error(`Invalid feature type: ${item.geometry.type}`);
       }
+    },
+    // Geometry type detection methods for styling
+    isPointGeometry(item) {
+      if (!item || !item.geometry) return false;
+      return item.geometry.type === 'Point' || item.geometry.type === 'MultiPoint';
+    },
+    isLineGeometry(item) {
+      if (!item || !item.geometry) return false;
+      return item.geometry.type === 'LineString' || item.geometry.type === 'MultiLineString';
+    },
+    isPolygonGeometry(item) {
+      if (!item || !item.geometry) return false;
+      return item.geometry.type === 'Polygon' || item.geometry.type === 'MultiPolygon';
+    },
+    hasCustomIcon(item) {
+      if (!item || !item.properties) return false;
+      const iconPropertyNames = ['icon', 'icon-href', 'iconUrl', 'icon_url', 'marker-icon', 'marker-symbol', 'symbol'];
+      for (const propName of iconPropertyNames) {
+        const iconValue = item.properties[propName];
+        if (iconValue && typeof iconValue === 'string' && iconValue.trim() !== '') {
+          return true;
+        }
+      }
+      return false;
+    },
+    isSystemIcon(iconUrl) {
+      // System icons can be recolored, so color picker should show for them
+      // Check for the path segment, allowing for absolute URLs or leading slashes
+      return iconUrl && iconUrl.includes('/api/icons/system/');
+    },
+    hasNonRecolorableIcon(item) {
+      // Check if item has an icon that can't be recolored (user icon or external URL)
+      if (!item || !item.properties) return false;
+      const iconUrl = this.getFeatureIconUrl(item);
+      if (!iconUrl) return false;
+      
+      // System icons can be recolored
+      if (this.isSystemIcon(iconUrl)) return false;
+      
+      // Everything else (user icons, external URLs) can't be recolored
+      return true;
+    },
+    handleStrokeColorChange(index, item) {
+      // Mark item as edited
+      this.markItemAsEdited(index);
+      
+      // For polygons, automatically update fill color to match stroke with 10% opacity
+      if (this.isPolygonGeometry(item) && item.properties.stroke) {
+        item.properties.fill = item.properties.stroke;
+        item.properties['fill-opacity'] = 0.1;
+      }
+    },
+    markItemAsEdited(index) {
+      // This ensures the edit is tracked in the cache when saving
+      // The cacheCurrentPageChanges method will handle persisting to editCache
+      this.$forceUpdate();
+    },
+    handleIconSelected(index, item, event) {
+      // Mark item as edited
+      this.markItemAsEdited(index);
+      
+      // Set the icon URL in the item's properties
+      const iconUrl = event.iconUrl;
+      
+      // Set icon in various possible property names for compatibility
+      item.properties.icon = iconUrl;
+      item.properties['icon-href'] = iconUrl;
+      item.properties.iconUrl = iconUrl;
+      item.properties.icon_url = iconUrl;
+      
+      // If it's a system icon, ensure marker-color is set for recoloring
+      if (event.isSystemIcon) {
+        // Initialize marker-color if not present
+        if (!item.properties['marker-color']) {
+          item.properties['marker-color'] = '#ff0000';
+        }
+      }
+      
+      this.$forceUpdate();
+    },
+    handleIconRemoved(index, item) {
+      // Mark item as edited
+      this.markItemAsEdited(index);
+      
+      // Remove icon from all possible property names
+      item.properties.icon = '';
+      item.properties['icon-href'] = '';
+      item.properties.iconUrl = '';
+      item.properties.icon_url = '';
+      item.properties['marker-icon'] = '';
+      item.properties['marker-symbol'] = '';
+      item.properties.symbol = '';
+      
+      // Restore default marker-color if not present
+      if (!item.properties['marker-color']) {
+        item.properties['marker-color'] = '#ff0000';
+      }
+      
+      this.$forceUpdate();
+    },
+    handleIconReset(index, item, originalIconUrl) {
+      // Mark item as edited
+      this.markItemAsEdited(index);
+      
+      // Restore original icon to all possible property names
+      if (originalIconUrl) {
+        item.properties.icon = originalIconUrl;
+        item.properties['icon-href'] = originalIconUrl;
+        item.properties.iconUrl = originalIconUrl;
+        item.properties.icon_url = originalIconUrl;
+      } else {
+        // If original was null/empty, clear all icon properties
+        item.properties.icon = '';
+        item.properties['icon-href'] = '';
+        item.properties.iconUrl = '';
+        item.properties.icon_url = '';
+        item.properties['marker-icon'] = '';
+        item.properties['marker-symbol'] = '';
+        item.properties.symbol = '';
+      }
+      
+      // Reset marker-color based on icon type
+      const originalItem = this.originalItems[index];
+      if (!originalIconUrl) {
+        // Default marker - reset color to original or default
+        const originalColor = originalItem?.properties?.['marker-color'];
+        item.properties['marker-color'] = originalColor || '#ff0000';
+      } else if (this.isSystemIcon(originalIconUrl)) {
+        // System icon - reset color to original or default
+        const originalColor = originalItem?.properties?.['marker-color'];
+        item.properties['marker-color'] = originalColor || '#ff0000';
+      } else {
+        // External/user icon - set color to black
+        item.properties['marker-color'] = '#000000';
+      }
+      
+      this.$forceUpdate();
+    },
+    handleIconColorReset(index, item) {
+      // Mark item as edited
+      this.markItemAsEdited(index);
+      
+      // Reset color to original value
+      const originalItem = this.originalItems[index];
+      const originalColor = originalItem?.properties?.['marker-color'];
+      item.properties['marker-color'] = originalColor || '#ff0000';
+      
+      this.$forceUpdate();
     },
     resetField(index, fieldName) {
       this.itemsForUser[index][fieldName] = this.originalItems[index][fieldName];

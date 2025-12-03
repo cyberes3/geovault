@@ -300,6 +300,14 @@ export default {
       });
     }
   },
+  watch: {
+    $route() {
+      // Close dialog when route changes
+      if (this.$el) {
+        this.closeDialog()
+      }
+    }
+  },
   methods: {
     onTagCheckboxChange(tag, checked) {
       const index = this.formData.tags.indexOf(tag);
