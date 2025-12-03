@@ -42,7 +42,7 @@ class TestUserTagsEndpoint(TestCase):
             {
                 'name': 'Feature 2',
                 'tags': ['beta', 'delta'],
-                'system_tags': ['type:linestring'],
+                'system_tags': ['type:line'],
             },
             {
                 'name': 'Feature 3',
@@ -89,7 +89,7 @@ class TestUserTagsEndpoint(TestCase):
         forbidden_system_tags = [
             'type:point',
             'elevation:high',
-            'type:linestring',
+            'type:line',
             'import-year:2025',
         ]
         for tag in forbidden_system_tags:
@@ -170,7 +170,7 @@ class TestTagSeparation(TestCase):
         """Test that various system tag patterns are properly categorized."""
         # Create features with various system tag patterns
         system_tag_patterns = [
-            'type:linestring',
+            'type:line',
             'import-year:2024',
             'import-month:December',
             'feature-year:2023',
@@ -234,7 +234,7 @@ class TestTagSeparation(TestCase):
             {
                 'name': 'Feature 2',
                 'tags': ['hiking', 'camping'],
-                'system_tags': ['type:linestring', 'elevation:high']
+                'system_tags': ['type:line', 'elevation:high']
             },
             {
                 'name': 'Feature 3',
@@ -278,7 +278,7 @@ class TestTagSeparation(TestCase):
         self.assertEqual(set(user_tag_names), expected_user_tags)
 
         # Verify all system tags are present (deduplicated)
-        expected_system_tags = {'type:point', 'type:linestring', 'type:polygon',
+        expected_system_tags = {'type:point', 'type:line', 'type:polygon',
                                'elevation:high', 'import-year:2025'}
         self.assertEqual(set(system_tag_names), expected_system_tags)
 

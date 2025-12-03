@@ -34,5 +34,7 @@ class GeometryTypeTagGenerator(TagGenerator):
             List containing a single type tag
         """
         geometry_type = feature.geometry.type.value.lower()
-        return [f'type:{geometry_type}']
+        # Map linestring to line for tag
+        tag_type = "line" if geometry_type == "linestring" else geometry_type
+        return [f'type:{tag_type}']
 

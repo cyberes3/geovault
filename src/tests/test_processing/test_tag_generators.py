@@ -37,7 +37,7 @@ class TestGeometryTypeTagGenerator:
         assert tags == ['type:point']
     
     def test_linestring_type_tag(self):
-        """Test that linestring features get type:linestring tag."""
+        """Test that linestring features get type:line tag."""
         generator = GeometryTypeTagGenerator()
         feature = LineStringFeature(
             type='Feature',
@@ -50,7 +50,7 @@ class TestGeometryTypeTagGenerator:
         
         tags = generator.process(feature)
         
-        assert tags == ['type:linestring']
+        assert tags == ['type:line']
     
     def test_polygon_type_tag(self):
         """Test that polygon features get type:polygon tag."""
