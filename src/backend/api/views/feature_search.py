@@ -66,140 +66,126 @@ def get_features_by_tag(request):
     
     Query parameters:
     - search: optional search query to filter tags by name
+    
+    OPTIMIZED VERSION: Uses a single PostgreSQL CTE query that processes everything in the database,
+    avoiding Python-side iteration and leveraging GIN indexes for fast JSONB array operations.
     """
     # Get search query
     search_query = request.GET.get('search', '').strip().lower()
+    user_id = request.user.id
+    table_name = FeatureStore._meta.db_table
 
-    # Step 1: Get all unique tags using PostgreSQL JSON functions (database-side processing)
-    # This is much faster than Python-side iteration - all processing happens in PostgreSQL
+    # Build single optimized query that does everything in PostgreSQL:
+    # 1. Extract all tag-feature pairs using LATERAL joins
+    # 2. Build minimal feature JSON objects in the database
+    # 3. Aggregate features by tag using json_agg
+    # 4. Return pre-grouped results
     with connection.cursor() as cursor:
-        # Use PostgreSQL's jsonb_array_elements_text to extract tags from JSON arrays
-        # This processes everything in the database, not in Python
-        user_id = request.user.id
-        table_name = FeatureStore._meta.db_table
-
-        # Build the CTE query to extract unique tags
-        # We use UNION to combine user_tags and system_tags, then DISTINCT to get unique values
-        # All filtering, sorting, and distinct operations happen in PostgreSQL
-        cte_part = f"""
-            WITH user_tags AS (
-                SELECT DISTINCT jsonb_array_elements_text(
-                    COALESCE(geojson->'properties'->'tags', '[]'::jsonb)
-                ) AS tag
-                FROM {table_name}
-                WHERE user_id = %s
-                  AND geojson->'properties'->'tags' IS NOT NULL
-                  AND jsonb_typeof(geojson->'properties'->'tags') = 'array'
-            ),
-            system_tags AS (
-                SELECT DISTINCT jsonb_array_elements_text(
-                    COALESCE(geojson->'properties'->'system_tags', '[]'::jsonb)
-                ) AS tag
-                FROM {table_name}
-                WHERE user_id = %s
-                  AND geojson->'properties'->'system_tags' IS NOT NULL
-                  AND jsonb_typeof(geojson->'properties'->'system_tags') = 'array'
-            ),
-            all_user_tags AS (
-                SELECT tag, 'user' AS tag_type
-                FROM user_tags
-                WHERE tag != '' AND tag IS NOT NULL
-            ),
-            all_system_tags AS (
-                SELECT tag, 'system' AS tag_type
-                FROM system_tags
-                WHERE tag != '' AND tag IS NOT NULL
-            ),
-            combined_tags AS (
-                SELECT tag, tag_type FROM all_user_tags
-                UNION ALL
-                SELECT tag, tag_type FROM all_system_tags
-            ),
-            filtered_tags AS (
-                SELECT tag, tag_type
-                FROM combined_tags
-        """
-
-        # Add search filter if provided (database-side filtering)
+        # Build parameters list
         params = [user_id, user_id]
+        
+        # Add search filter condition if provided
+        search_condition = ""
         if search_query:
-            cte_part += " WHERE LOWER(tag) LIKE %s"
+            search_condition = "AND LOWER(tag) LIKE %s"
             params.append(f'%{search_query}%')
-
-        cte_part += ") "
         
-        # Fetch all tags (no pagination)
-        all_tags_query = cte_part + "SELECT tag, tag_type FROM filtered_tags ORDER BY tag"
+        # Single optimized CTE query that does all processing in PostgreSQL
+        query = f"""
+            WITH 
+            -- Extract user tag-feature pairs
+            user_tag_features AS (
+                SELECT 
+                    f.id,
+                    tag.tag,
+                    'user' AS tag_type,
+                    f.geojson->'properties'->>'name' AS feature_name,
+                    f.geojson->'properties'->>'description' AS feature_description,
+                    f.geojson->'geometry'->>'type' AS geometry_type
+                FROM {table_name} f
+                CROSS JOIN LATERAL jsonb_array_elements_text(f.geojson->'properties'->'tags') AS tag(tag)
+                WHERE f.user_id = %s
+                  AND f.geojson->'properties'->'tags' IS NOT NULL
+                  AND jsonb_typeof(f.geojson->'properties'->'tags') = 'array'
+                  AND tag.tag != ''
+                  {search_condition}
+            ),
+            -- Extract system tag-feature pairs
+            system_tag_features AS (
+                SELECT 
+                    f.id,
+                    tag.tag,
+                    'system' AS tag_type,
+                    f.geojson->'properties'->>'name' AS feature_name,
+                    f.geojson->'properties'->>'description' AS feature_description,
+                    f.geojson->'geometry'->>'type' AS geometry_type
+                FROM {table_name} f
+                CROSS JOIN LATERAL jsonb_array_elements_text(f.geojson->'properties'->'system_tags') AS tag(tag)
+                WHERE f.user_id = %s
+                  AND f.geojson->'properties'->'system_tags' IS NOT NULL
+                  AND jsonb_typeof(f.geojson->'properties'->'system_tags') = 'array'
+                  AND tag.tag != ''
+                  {search_condition}
+            ),
+            -- Combine all tag-feature pairs
+            all_tag_features AS (
+                SELECT * FROM user_tag_features
+                UNION ALL
+                SELECT * FROM system_tag_features
+            ),
+            -- Aggregate features by tag using json_agg
+            aggregated_tags AS (
+                SELECT 
+                    tag,
+                    tag_type,
+                    json_agg(
+                        json_build_object(
+                            'properties', json_build_object(
+                                'database_id', id,
+                                'name', COALESCE(feature_name, 'Unnamed Feature'),
+                                'description', COALESCE(feature_description, '')
+                            ),
+                            'geometry', json_build_object(
+                                'type', COALESCE(geometry_type, 'Unknown')
+                            )
+                        )
+                    ) AS features
+                FROM all_tag_features
+                GROUP BY tag, tag_type
+            )
+            SELECT tag, tag_type, features
+            FROM aggregated_tags
+            ORDER BY tag
+        """
         
-        cursor.execute(all_tags_query, params)
-        all_tags = [{'tag': row[0], 'type': row[1]} for row in cursor.fetchall()]
-
-        # Separate user tags and system tags
-        user_tags_list = [t for t in all_tags if t['type'] == 'user']
-        system_tags_list = [t for t in all_tags if t['type'] == 'system']
-        
-        # Sort user tags alphabetically, system tags by priority then alphabetically
-        user_tags_list.sort(key=lambda x: x['tag'].lower())
-        system_tags_list.sort(key=lambda x: (get_tag_priority(x['tag']), x['tag'].lower()))
-        
-        # Combine: user tags first, then system tags
-        all_tags = user_tags_list + system_tags_list
+        cursor.execute(query, params)
+        results = cursor.fetchall()
     
-    # Step 2: Fetch features for all tags
-    user_tags_to_fetch = [tag_info['tag'] for tag_info in all_tags if tag_info['type'] == 'user']
-    system_tags_to_fetch = [tag_info['tag'] for tag_info in all_tags if tag_info['type'] == 'system']
-
-    # Build dictionaries for features by tag
-    features_by_user_tag = {tag: [] for tag in user_tags_to_fetch}
-    features_by_system_tag = {tag: [] for tag in system_tags_to_fetch}
+    # Process results and separate by tag type
+    user_tags_dict = {}
+    system_tags_dict = {}
     
-    # Query features that have any of the tags
-    if user_tags_to_fetch or system_tags_to_fetch:
-        # Build query to get features with any of the tags we need
-        tag_query = Q()
-        for tag in user_tags_to_fetch:
-            tag_query |= Q(geojson__properties__tags__contains=[tag])
-        for tag in system_tags_to_fetch:
-            tag_query |= Q(geojson__properties__system_tags__contains=[tag])
-
-        # Fetch only needed fields
-        features_to_process = FeatureStore.objects.filter(
-            user=request.user
-        ).filter(tag_query).only('id', 'geojson')
-
-        # Process features and assign to tags
-        for feature in features_to_process.iterator(chunk_size=1000):
-            minimal_feature = _create_minimal_feature(feature)
-            if not minimal_feature:
-                continue
-
-            geojson_data = feature.geojson
-            properties = geojson_data.get('properties', {})
-            feature_user_tags = _normalize_tags(properties.get('tags', []))
-            feature_system_tags = _normalize_tags(properties.get('system_tags', []))
-
-            # Add feature to relevant tags
-            for tag in feature_user_tags:
-                if tag in features_by_user_tag:
-                    features_by_user_tag[tag].append(minimal_feature)
-            
-            for tag in feature_system_tags:
-                if tag in features_by_system_tag:
-                    features_by_system_tag[tag].append(minimal_feature)
+    for tag, tag_type, features_json in results:
+        if tag_type == 'user':
+            user_tags_dict[tag] = features_json
+        else:
+            system_tags_dict[tag] = features_json
     
-    # Build response with all tags
+    # Sort tags according to requirements:
+    # - User tags: alphabetically
+    # - System tags: by priority then alphabetically
+    user_tags_sorted = dict(sorted(user_tags_dict.items(), key=lambda x: x[0].lower()))
+    system_tags_sorted = dict(sorted(
+        system_tags_dict.items(),
+        key=lambda x: (get_tag_priority(x[0]), x[0].lower())
+    ))
+    
+    # Build response
     response_data = {
-        'user_tags': {},
-        'system_tags': {}
+        'user_tags': user_tags_sorted,
+        'system_tags': system_tags_sorted
     }
     
-    # Add features for all tags
-    for tag_info in all_tags:
-        if tag_info['type'] == 'user':
-            response_data['user_tags'][tag_info['tag']] = features_by_user_tag.get(tag_info['tag'], [])
-        else:
-            response_data['system_tags'][tag_info['tag']] = features_by_system_tag.get(tag_info['tag'], [])
-
     return JsonResponse(response_data)
 
 
@@ -212,29 +198,29 @@ def get_user_tags(request):
 
     This is optimized for tag autocomplete use-cases and intentionally avoids
     returning any feature data or system tags.
+    
+    OPTIMIZED: Leverages GIN index on geojson field for fast JSONB array operations.
     """
     user_id = request.user.id
     table_name = FeatureStore._meta.db_table
 
     # Use PostgreSQL JSONB functions to efficiently extract distinct user tags
-    # for this user only. All work (distinct, filtering, sorting) happens
-    # in the database for performance.
+    # The GIN index on the geojson field makes JSONB array operations extremely fast
     with connection.cursor() as cursor:
         query = f"""
-            SELECT DISTINCT t.tag
-            FROM {table_name} f
-            CROSS JOIN LATERAL jsonb_array_elements_text(f.geojson->'properties'->'tags') AS t(tag)
-            WHERE f.user_id = %s
-              AND jsonb_typeof(f.geojson->'properties'->'tags') = 'array'
-              AND t.tag <> ''
+            SELECT tag
+            FROM (
+                SELECT DISTINCT t.tag
+                FROM {table_name} f
+                CROSS JOIN LATERAL jsonb_array_elements_text(f.geojson->'properties'->'tags') AS t(tag)
+                WHERE f.user_id = %s
+                  AND jsonb_typeof(f.geojson->'properties'->'tags') = 'array'
+                  AND t.tag <> ''
+            ) AS distinct_tags
+            ORDER BY LOWER(tag)
         """
         cursor.execute(query, [user_id])
-        # Sort in Python to avoid "ORDER BY expression must appear in select list" error
-        # when using DISTINCT. This is fast enough for the number of tags a user typically has.
-        tags = sorted(
-            [row[0] for row in cursor.fetchall()],
-            key=str.lower
-        )
+        tags = [row[0] for row in cursor.fetchall()]
 
     return JsonResponse(tags, safe=False)
 
@@ -248,6 +234,8 @@ def search_features(request):
     
     Query parameters:
     - query: search text (required)
+    
+    NOTE: Tag searches benefit from GIN index on geojson field for fast JSONB operations.
     """
     # Get query parameter
     query = request.GET.get('query', '').strip()
@@ -265,6 +253,7 @@ def search_features(request):
         # Build search query using Q objects for OR conditions
         # Search in name, description, tags, and system_tags fields
         # Use PostgreSQL JSON field lookups with case-insensitive contains
+        # The GIN index on geojson field accelerates tag searches
         search_q = (
                 Q(geojson__properties__name__icontains=query) |
                 Q(geojson__properties__description__icontains=query) |
@@ -319,6 +308,8 @@ def filter_features_by_tags(request):
     Query parameters:
     - tags: list of tag names (can be repeated: ?tags=tag1&tags=tag2)
     Returns features that have ALL specified tags.
+    
+    OPTIMIZED: Uses GIN index on geojson field for fast JSONB containment operations.
     """
     # Get tags from query parameters (can be multiple)
     tags = request.GET.getlist('tags')
@@ -342,7 +333,7 @@ def filter_features_by_tags(request):
         
         for tag in tags:
             # Use JSON field lookup to check if tag exists in either tags or system_tags array
-            # This uses PostgreSQL's JSON containment operator
+            # Uses PostgreSQL's @> containment operator, accelerated by GIN index
             features_query = features_query.filter(
                 Q(geojson__properties__tags__contains=[tag]) |
                 Q(geojson__properties__system_tags__contains=[tag])

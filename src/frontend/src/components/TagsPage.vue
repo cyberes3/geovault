@@ -1,7 +1,18 @@
 <template>
   <div class="space-y-6 min-w-0 max-w-full overflow-x-hidden">
     <!-- Page Header -->
-    <div class="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
+    <div class="bg-white rounded-lg shadow-sm border border-gray-200 p-6 relative">
+      <!-- Refresh Spinner -->
+      <div
+        v-show="refreshing"
+        class="absolute top-4 right-4 z-10 flex items-center"
+      >
+        <Loader
+          size="sm"
+          layout="inline"
+          :showMessage="false"
+        />
+      </div>
       <div class="mb-4">
         <h1 class="text-2xl font-bold text-gray-900 mb-2">Tags</h1>
       </div>
@@ -381,6 +392,7 @@ export default {
       userTagsData: {}, // User tags only
       systemTagsData: {}, // System tags only
       loading: true,
+      refreshing: false, // Background refresh state (separate from loading)
       error: null,
       searchQuery: '', // Search query for filtering tags
       editingTag: null, // Tag currently being edited
@@ -549,8 +561,10 @@ export default {
       // Check if tag exists in systemTagsData
       return tag in this.systemTagsData;
     },
-    async fetchTagsData() {
-      this.loading = true;
+    async fetchTagsData(showLoading = true, mergeMode = false) {
+      if (showLoading) {
+        this.loading = true;
+      }
       this.error = null;
 
       try {
@@ -573,15 +587,36 @@ export default {
         const data = await response.json();
 
         if (response.ok) {
-          // Store user and system tags separately
-          this.userTagsData = data.user_tags || {};
-          this.systemTagsData = data.system_tags || {};
+          const newUserTags = data.user_tags || {};
+          const newSystemTags = data.system_tags || {};
           
-          // Combine both for display
-          this.tagsData = {
-            ...this.userTagsData,
-            ...this.systemTagsData
-          };
+          if (mergeMode) {
+            // Merge mode: update only tags that are in the fetched data (current page)
+            // Preserve tags that aren't on the current page
+            // Update tags that are on the current page with fresh data
+            Object.keys(newUserTags).forEach(tag => {
+              this.userTagsData[tag] = newUserTags[tag];
+            });
+            Object.keys(newSystemTags).forEach(tag => {
+              this.systemTagsData[tag] = newSystemTags[tag];
+            });
+            
+            // Rebuild combined tagsData from merged data
+            this.tagsData = {
+              ...this.userTagsData,
+              ...this.systemTagsData
+            };
+          } else {
+            // Replace mode: completely replace the data
+            this.userTagsData = newUserTags;
+            this.systemTagsData = newSystemTags;
+            
+            // Combine both for display
+            this.tagsData = {
+              ...this.userTagsData,
+              ...this.systemTagsData
+            };
+          }
           
           // Store pagination info from server
           if (data.pagination) {
@@ -596,7 +631,22 @@ export default {
         console.error('Error fetching tags data:', error);
         this.error = error.message || 'Failed to load tags. Please try again.';
       } finally {
-        this.loading = false;
+        if (showLoading) {
+          this.loading = false;
+        }
+      }
+    },
+    async refreshTagsData() {
+      // Background refresh that preserves pagination and search state
+      this.refreshing = true;
+      try {
+        // Fetch data without showing full-page loader
+        await this.fetchTagsData(false);
+      } catch (error) {
+        // Errors are already handled in fetchTagsData, just log here
+        console.error('Error refreshing tags data:', error);
+      } finally {
+        this.refreshing = false;
       }
     },
     startTagEdit(tag, event) {
@@ -730,12 +780,22 @@ export default {
         newTagsData[newTag] = newTagsData[oldTag];
         delete newTagsData[oldTag];
         this.tagsData = newTagsData;
+        
+        // Also update userTagsData or systemTagsData to keep them in sync
+        if (this.userTagsData[oldTag]) {
+          this.userTagsData[newTag] = this.userTagsData[oldTag];
+          delete this.userTagsData[oldTag];
+        }
+        if (this.systemTagsData[oldTag]) {
+          this.systemTagsData[newTag] = this.systemTagsData[oldTag];
+          delete this.systemTagsData[oldTag];
+        }
 
         // Cancel edit mode
         this.cancelTagEdit();
 
-        // Refresh the data to ensure consistency
-        await this.fetchTagsData();
+        // Refresh the data to ensure consistency (merge mode to update only changed tags)
+        await this.fetchTagsData(true, true);
 
         // Scroll to the newly renamed tag after data refresh
         this.$nextTick(() => {
@@ -836,9 +896,17 @@ export default {
         const newTagsData = {...this.tagsData};
         delete newTagsData[tag];
         this.tagsData = newTagsData;
+        
+        // Also remove from userTagsData or systemTagsData
+        if (this.userTagsData[tag]) {
+          delete this.userTagsData[tag];
+        }
+        if (this.systemTagsData[tag]) {
+          delete this.systemTagsData[tag];
+        }
 
-        // Refresh the data to ensure consistency
-        await this.fetchTagsData();
+        // Refresh the data to ensure consistency (merge mode to update only changed tags)
+        await this.fetchTagsData(true, true);
       } catch (error) {
         console.error('Error deleting tag:', error);
         alert(`Failed to delete tag: ${error.message}`);
@@ -949,8 +1017,8 @@ export default {
           throw new Error(errorData.error || `Failed to apply bulk operations: ${response.status}`);
         }
 
-        // Refresh tags data to reflect styling/tag changes
-        await this.fetchTagsData();
+        // Refresh tags data to reflect styling/tag changes (merge mode to update only changed tags)
+        await this.fetchTagsData(true, true);
       } catch (error) {
         console.error('Error applying bulk operations to tag:', error);
         alert(`Failed to apply bulk operations: ${error.message}`);
@@ -1052,10 +1120,45 @@ export default {
       this.searchDebounceTimer = setTimeout(() => {
         this.fetchTagsData();
       }, 400);
+    },
+    $route(to, from) {
+      // Refresh data when navigating back to tags page from another route
+      // Skip on initial mount (handled by mounted hook) and if already refreshing
+      // Only refresh if we have existing data (not initial load) and coming from different route
+      if (to.path === '/tags' && 
+          from.path !== '/tags' && 
+          from.path !== '/' && 
+          !this.refreshing &&
+          Object.keys(this.tagsData).length > 0) {
+        this.refreshTagsData();
+      }
     }
   },
   async mounted() {
     await this.fetchTagsData();
+  },
+  beforeRouteEnter(to, from, next) {
+    // Handle initial navigation to tags page
+    // Skip refresh on initial mount - let mounted() handle it
+    next();
+  },
+  beforeRouteUpdate(to, from, next) {
+    // Refresh data when navigating to tags page from another route
+    if (to.path === '/tags' && from.path !== '/tags') {
+      // Use next() callback to access component instance
+      next((vm) => {
+        vm.refreshTagsData();
+      });
+    } else {
+      next();
+    }
+  },
+  activated() {
+    // Handle navigation back to tags page when component is kept alive
+    // Only refresh if we have data already (not initial mount) and not already refreshing
+    if (Object.keys(this.tagsData).length > 0 && !this.refreshing) {
+      this.refreshTagsData();
+    }
   },
   beforeUnmount() {
     // Clear debounce timer when component is destroyed

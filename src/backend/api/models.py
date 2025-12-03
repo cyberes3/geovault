@@ -2,7 +2,7 @@ import uuid
 
 from django.contrib.auth import get_user_model
 from django.contrib.gis.db import models
-from django.contrib.postgres.indexes import GistIndex
+from django.contrib.postgres.indexes import GinIndex, GistIndex
 from django.db import models as django_models
 
 
@@ -68,6 +68,14 @@ class FeatureStore(models.Model):
             # 4. Hash + Timestamp for hash-based chronological queries
             # Optimizes duplicate detection with temporal ordering
             models.Index(fields=['geojson_hash', 'timestamp'], name='fs_hash_time'),
+            
+            # 5. GIN index for user tags JSONB array (for efficient containment queries)
+            # Optimizes queries like: geojson->'properties'->'tags' @> '["tag_name"]'
+            GinIndex(fields=['geojson'], name='fs_tags_gin', opclasses=['jsonb_path_ops']),
+            
+            # 6. GIN index for system tags JSONB array (for efficient containment queries)
+            # Optimizes queries like: geojson->'properties'->'system_tags' @> '["tag_name"]'
+            # Note: Using same GIN index as above since jsonb_path_ops covers all JSONB paths
         ]
         constraints = [
             # Unique constraint: Each user can only have one feature with a given hash
