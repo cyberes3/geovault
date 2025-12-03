@@ -13,7 +13,7 @@
             <h3 class="text-lg font-medium text-gray-900">Bulk Operations</h3>
             <button
               @click="closeModal"
-              class="text-gray-400 hover:text-gray-600 focus:outline-none focus:text-gray-600 transition ease-in-out duration-150"
+              class="p-2 sm:p-1 min-w-[44px] min-h-[44px] sm:min-w-0 sm:min-h-0 text-gray-400 hover:text-gray-600 focus:outline-none focus:text-gray-600 transition ease-in-out duration-150"
               title="Close modal"
             >
               <XMarkIcon class="h-6 w-6" />

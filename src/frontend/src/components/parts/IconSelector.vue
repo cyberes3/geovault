@@ -26,7 +26,7 @@
           type="button"
           @click="handleRemove"
           :disabled="disabled"
-          class="text-xs text-red-600 hover:text-red-800 disabled:opacity-50 disabled:cursor-not-allowed font-medium"
+          class="text-xs px-3 py-2 sm:px-2 sm:py-1 min-h-[44px] sm:min-h-0 text-red-600 hover:text-red-800 disabled:opacity-50 disabled:cursor-not-allowed font-medium"
           title="Remove icon"
         >
           Remove
@@ -36,7 +36,7 @@
           type="button"
           @click="handleReset"
           :disabled="disabled || !hasIconChanged"
-          class="text-xs px-2 py-1 text-gray-600 hover:text-gray-800 bg-gray-50 hover:bg-gray-100 rounded border border-gray-200 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-gray-500 disabled:opacity-50 disabled:cursor-not-allowed font-medium"
+          class="text-xs px-3 py-2 sm:px-2 sm:py-1 min-h-[44px] sm:min-h-0 text-gray-600 hover:text-gray-800 bg-gray-50 hover:bg-gray-100 rounded border border-gray-200 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-gray-500 disabled:opacity-50 disabled:cursor-not-allowed font-medium"
           title="Reset to original icon"
         >
           Reset
@@ -45,7 +45,7 @@
           type="button"
           @click="openPicker"
           :disabled="disabled"
-          class="text-xs px-2 py-1 text-blue-600 hover:text-blue-800 bg-blue-50 hover:bg-blue-100 rounded border border-blue-200 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 disabled:opacity-50 disabled:cursor-not-allowed font-medium"
+          class="text-xs px-3 py-2 sm:px-2 sm:py-1 min-h-[44px] sm:min-h-0 text-blue-600 hover:text-blue-800 bg-blue-50 hover:bg-blue-100 rounded border border-blue-200 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 disabled:opacity-50 disabled:cursor-not-allowed font-medium"
           title="Choose icon"
         >
           Choose

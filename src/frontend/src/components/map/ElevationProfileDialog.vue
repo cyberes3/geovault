@@ -12,7 +12,7 @@
         </div>
         <button
           @click="$emit('close')"
-          class="text-gray-400 hover:text-gray-600 transition-colors p-1"
+          class="text-gray-400 hover:text-gray-600 transition-colors p-2 sm:p-1 min-w-[44px] min-h-[44px] sm:min-w-0 sm:min-h-0"
           title="Close elevation profile"
         >
           <XMarkIcon class="w-5 h-5" />

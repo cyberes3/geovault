@@ -22,7 +22,7 @@
           </h3>
           <button
             @click="closeDialog"
-            class="text-gray-400 hover:text-gray-600 focus:outline-none focus:text-gray-600 transition ease-in-out duration-150"
+            class="p-2 sm:p-1 min-w-[44px] min-h-[44px] sm:min-w-0 sm:min-h-0 text-gray-400 hover:text-gray-600 focus:outline-none focus:text-gray-600 transition ease-in-out duration-150"
             title="Close dialog"
           >
             <XMarkIcon class="h-6 w-6" />

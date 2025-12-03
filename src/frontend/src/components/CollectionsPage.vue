@@ -67,7 +67,7 @@
             <h3 class="text-base sm:text-lg font-semibold text-gray-900 truncate flex-1">{{ collection.name }}</h3>
             <div class="flex items-center space-x-1 ml-2">
               <button
-                  class="p-1.5 text-gray-400 hover:text-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-1 rounded"
+                  class="p-2 sm:p-1.5 min-w-[44px] min-h-[44px] sm:min-w-0 sm:min-h-0 text-gray-400 hover:text-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-1 rounded"
                   title="Share collection"
                   type="button"
                   @click.stop.prevent="openShareDialog(collection)"
@@ -76,7 +76,7 @@
                 <ShareIcon class="w-4 h-4" />
               </button>
               <button
-                  class="p-1.5 text-gray-400 hover:text-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-1 rounded"
+                  class="p-2 sm:p-1.5 min-w-[44px] min-h-[44px] sm:min-w-0 sm:min-h-0 text-gray-400 hover:text-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-1 rounded"
                   title="Download Collection KMZ"
                   type="button"
                   @click.stop.prevent="downloadCollectionKmz(collection)"
@@ -85,7 +85,7 @@
                 <ArrowDownTrayIcon class="w-4 h-4" />
               </button>
               <button
-                  class="p-1.5 text-gray-400 hover:text-gray-600 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-1 rounded"
+                  class="p-2 sm:p-1.5 min-w-[44px] min-h-[44px] sm:min-w-0 sm:min-h-0 text-gray-400 hover:text-gray-600 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-1 rounded"
                   title="Edit collection"
                   type="button"
                   @click.stop.prevent="openEditDialog(collection)"
@@ -94,7 +94,7 @@
                 <PencilIcon class="w-4 h-4" />
               </button>
               <button
-                  class="p-1.5 text-gray-400 hover:text-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-1 rounded"
+                  class="p-2 sm:p-1.5 min-w-[44px] min-h-[44px] sm:min-w-0 sm:min-h-0 text-gray-400 hover:text-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-1 rounded"
                   title="Bulk style features in this collection"
                   type="button"
                   @click.stop.prevent="openBulkOperationsModal(collection)"
@@ -103,7 +103,7 @@
                 <RectangleStackIcon class="w-4 h-4" />
               </button>
               <button
-                  class="p-1.5 text-gray-400 hover:text-red-600 focus:outline-none focus:ring-2 focus:ring-red-500 focus:ring-offset-1 rounded"
+                  class="p-2 sm:p-1.5 min-w-[44px] min-h-[44px] sm:min-w-0 sm:min-h-0 text-gray-400 hover:text-red-600 focus:outline-none focus:ring-2 focus:ring-red-500 focus:ring-offset-1 rounded"
                   title="Delete collection"
                   type="button"
                   @click.stop.prevent="deleteCollection(collection)"

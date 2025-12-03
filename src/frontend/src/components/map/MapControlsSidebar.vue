@@ -15,7 +15,7 @@
       <h2 class="text-lg font-semibold text-gray-900">Map Controls</h2>
       <button 
         @click="$emit('close')" 
-        class="text-gray-500 hover:text-gray-700 p-1 rounded-md hover:bg-gray-100"
+        class="text-gray-500 hover:text-gray-700 p-2 sm:p-1 min-w-[44px] min-h-[44px] sm:min-w-0 sm:min-h-0 rounded-md hover:bg-gray-100"
       >
         <XMarkIcon class="w-6 h-6" />
       </button>

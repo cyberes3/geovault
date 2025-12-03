@@ -38,7 +38,7 @@
         />
         <button
             v-if="searchQuery"
-            class="absolute inset-y-0 right-0 pr-3 flex items-center"
+            class="absolute inset-y-0 right-0 pr-3 flex items-center min-w-[44px] min-h-[44px] sm:min-w-0 sm:min-h-0 justify-center"
             @click="searchQuery = ''"
             title="Clear search"
         >
@@ -113,7 +113,7 @@
             </div>
             <div v-if="editingTag !== tag" class="flex items-center space-x-1">
               <button
-                  class="p-1.5 text-gray-400 hover:text-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-1 rounded"
+                  class="p-2 sm:p-1.5 min-w-[44px] min-h-[44px] sm:min-w-0 sm:min-h-0 text-gray-400 hover:text-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-1 rounded"
                   title="View on Map"
                   type="button"
                   @click.stop.prevent="viewTagOnMap(tag)"
@@ -122,7 +122,7 @@
                 <MapIcon class="w-4 h-4" />
               </button>
               <button
-                  class="p-1.5 text-gray-400 hover:text-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-1 rounded"
+                  class="p-2 sm:p-1.5 min-w-[44px] min-h-[44px] sm:min-w-0 sm:min-h-0 text-gray-400 hover:text-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-1 rounded"
                   title="Share tag"
                   type="button"
                   @click.stop.prevent="openShareDialog(tag)"
@@ -131,7 +131,7 @@
                 <ShareIcon class="w-4 h-4" />
               </button>
               <button
-                  class="p-1.5 text-gray-400 hover:text-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-1 rounded"
+                  class="p-2 sm:p-1.5 min-w-[44px] min-h-[44px] sm:min-w-0 sm:min-h-0 text-gray-400 hover:text-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-1 rounded"
                   title="Download Tag KMZ"
                   type="button"
                   @click.stop.prevent="downloadTagKmz(tag)"
@@ -141,7 +141,7 @@
               </button>
               <button
                   v-if="!isSystemTag(tag)"
-                  class="p-1.5 text-gray-400 hover:text-gray-600 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-1 rounded"
+                  class="p-2 sm:p-1.5 min-w-[44px] min-h-[44px] sm:min-w-0 sm:min-h-0 text-gray-400 hover:text-gray-600 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-1 rounded"
                   title="Edit tag name"
                   type="button"
                   @click.stop.prevent="startTagEdit(tag)"
@@ -150,7 +150,7 @@
                 <PencilIcon class="w-4 h-4" />
               </button>
               <button
-                  class="p-1.5 text-gray-400 hover:text-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-1 rounded"
+                  class="p-2 sm:p-1.5 min-w-[44px] min-h-[44px] sm:min-w-0 sm:min-h-0 text-gray-400 hover:text-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-1 rounded"
                   title="Bulk style features in this tag"
                   type="button"
                   @click.stop.prevent="openBulkOperationsModal(tag)"
@@ -160,7 +160,7 @@
               </button>
               <button
                   v-if="!isSystemTag(tag)"
-                  class="p-1.5 text-gray-400 hover:text-red-600 focus:outline-none focus:ring-2 focus:ring-red-500 focus:ring-offset-1 rounded"
+                  class="p-2 sm:p-1.5 min-w-[44px] min-h-[44px] sm:min-w-0 sm:min-h-0 text-gray-400 hover:text-red-600 focus:outline-none focus:ring-2 focus:ring-red-500 focus:ring-offset-1 rounded"
                   title="Delete tag"
                   type="button"
                   @click.stop.prevent="deleteTag(tag)"
@@ -171,7 +171,7 @@
             </div>
             <button
                 v-else
-                class="ml-2 p-1.5 bg-blue-500 text-white hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-1 rounded"
+                class="ml-2 p-2 sm:p-1.5 min-w-[44px] min-h-[44px] sm:min-w-0 sm:min-h-0 bg-blue-500 text-white hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-1 rounded"
                 title="Save tag name"
                 @click.stop="saveTagEdit(tag)"
             >
@@ -195,7 +195,7 @@
             />
             <button
                 v-if="getTagSearchQuery(tag)"
-                class="absolute inset-y-0 right-0 pr-3 flex items-center"
+                class="absolute inset-y-0 right-0 pr-3 flex items-center min-w-[44px] min-h-[44px] sm:min-w-0 sm:min-h-0 justify-center"
                 @click="updateTagSearchQuery(tag, '')"
                 title="Clear search"
             >
@@ -228,7 +228,7 @@
               <div class="flex-shrink-0 relative z-10 flex items-center space-x-2">
                 <button
                     v-if="!isSystemTag(tag)"
-                    class="p-1.5 text-gray-400 hover:text-red-600 focus:outline-none focus:ring-2 focus:ring-red-500 focus:ring-offset-1 rounded"
+                    class="p-2 sm:p-1.5 min-w-[44px] min-h-[44px] sm:min-w-0 sm:min-h-0 text-gray-400 hover:text-red-600 focus:outline-none focus:ring-2 focus:ring-red-500 focus:ring-offset-1 rounded"
                     title="Remove this feature from tag"
                     type="button"
                     @click.stop.prevent="removeTagFromFeature(tag, feature)"
@@ -266,7 +266,7 @@
             <div class="flex items-center space-x-2">
               <button
                   :disabled="!getTagHasPreviousPage(tag)"
-                  class="inline-flex items-center px-2 py-1 border border-gray-300 shadow-sm text-xs font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-1 focus:ring-blue-500 disabled:opacity-50 disabled:cursor-not-allowed"
+                  class="inline-flex items-center px-3 py-2 sm:px-2 sm:py-1 min-h-[44px] sm:min-h-0 border border-gray-300 shadow-sm text-xs font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-1 focus:ring-blue-500 disabled:opacity-50 disabled:cursor-not-allowed"
                   @click="tagPreviousPage(tag)"
                   title="Previous page"
               >
@@ -276,7 +276,7 @@
               <span class="text-xs text-gray-700">Page {{ getTagCurrentPage(tag) }} of {{ getTagTotalPages(tag) }}</span>
               <button
                   :disabled="!getTagHasNextPage(tag)"
-                  class="inline-flex items-center px-2 py-1 border border-gray-300 shadow-sm text-xs font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-1 focus:ring-blue-500 disabled:opacity-50 disabled:cursor-not-allowed"
+                  class="inline-flex items-center px-3 py-2 sm:px-2 sm:py-1 min-h-[44px] sm:min-h-0 border border-gray-300 shadow-sm text-xs font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-1 focus:ring-blue-500 disabled:opacity-50 disabled:cursor-not-allowed"
                   @click="tagNextPage(tag)"
                   title="Next page"
               >

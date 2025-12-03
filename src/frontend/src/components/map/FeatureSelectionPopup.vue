@@ -10,11 +10,11 @@
         <div
             v-for="(feature, index) in sortedFeatures"
             :key="getFeatureKey(feature, index)"
-            class="py-1 px-1.5 rounded-md hover:bg-gray-50 transition-colors"
+            class="py-2 px-2 sm:py-1 sm:px-1.5 rounded-md hover:bg-gray-50 transition-colors min-h-[44px] sm:min-h-0"
             :style="{ borderLeft: `3px solid ${getGeometryTypeColor(feature)}` }"
         >
           <button
-              class="w-full text-left flex items-center gap-2 text-xs text-gray-900 hover:text-blue-500 transition-colors"
+              class="w-full text-left flex items-center gap-2 text-xs text-gray-900 hover:text-blue-500 transition-colors min-h-[44px] sm:min-h-0"
               @click="$emit('select', feature)"
               title="Select this feature"
           >

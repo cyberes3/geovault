@@ -13,7 +13,7 @@
             <h3 class="text-lg font-medium text-gray-900">Choose an Icon Style</h3>
             <button
               @click="closeDialog"
-              class="text-gray-400 hover:text-gray-600 focus:outline-none focus:text-gray-600 transition ease-in-out duration-150"
+              class="p-2 sm:p-1 min-w-[44px] min-h-[44px] sm:min-w-0 sm:min-h-0 text-gray-400 hover:text-gray-600 focus:outline-none focus:text-gray-600 transition ease-in-out duration-150"
               title="Close icon picker"
             >
               <XMarkIcon class="h-6 w-6" />
@@ -33,7 +33,7 @@
                 type="button"
                 @click.stop="selectIcon(icon.url)"
                 :class="[
-                  'relative w-6 h-6 flex items-center justify-center hover:bg-blue-100 transition-colors',
+                  'relative w-10 h-10 sm:w-6 sm:h-6 flex items-center justify-center hover:bg-blue-100 transition-colors',
                   selectedIconUrl === icon.url ? 'border-2 border-blue-500' : ''
                 ]"
                 :title="icon.filename"
@@ -60,7 +60,7 @@
                 type="button"
                 @click.stop="selectIcon(icon.url)"
                 :class="[
-                  'relative w-6 h-6 flex items-center justify-center hover:bg-blue-100 transition-colors',
+                  'relative w-10 h-10 sm:w-6 sm:h-6 flex items-center justify-center hover:bg-blue-100 transition-colors',
                   selectedIconUrl === icon.url ? 'border-2 border-blue-500' : ''
                 ]"
                 :title="icon.filename"
@@ -96,14 +96,14 @@
                 <option value="square-rounded">Square Rounded</option>
               </select>
             </div>
-            <div class="grid grid-cols-12 gap-0.5 h-[258px] overflow-y-auto">
+            <div class="grid grid-cols-6 sm:grid-cols-12 gap-0.5 h-[258px] overflow-y-auto">
               <button
                 v-for="icon in filteredRecreationIcons"
                 :key="icon.url"
                 type="button"
                 @click.stop="selectIcon(icon.url)"
                 :class="[
-                  'relative w-6 h-6 flex items-center justify-center hover:bg-blue-100 transition-colors',
+                  'relative w-10 h-10 sm:w-6 sm:h-6 flex items-center justify-center hover:bg-blue-100 transition-colors',
                   selectedIconUrl === icon.url ? 'border-2 border-blue-500' : ''
                 ]"
                 :title="icon.filename"
