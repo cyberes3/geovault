@@ -219,12 +219,15 @@ export default {
     filteredImportQueue() {
       // Filter out items that have been locally deleted and add deleting/importing state
       return this.importQueue
+        .slice()
         .filter(item => !this.deletedItems.has(item.id))
         .map(item => ({
           ...item,
           deleting: this.deletingItems.has(item.id),
           importing: this.importingItems.has(item.id)
-        }));
+        }))
+        // Sort so the oldest items appear at the top of the table
+        .sort((a, b) => new Date(a.timestamp) - new Date(b.timestamp));
     },
     combinedLoading() {
       // Show loading placeholders only when:
