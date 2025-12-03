@@ -63,6 +63,12 @@ class ImportQueueModule(BaseWebSocketModule):
             job.import_queue_id for job in user_jobs
             if job.status.value == 'processing' and job.import_queue_id
         }
+        
+        # Get all waiting jobs for this user
+        waiting_job_ids = {
+            job.import_queue_id for job in user_jobs
+            if job.status.value == 'waiting' and job.import_queue_id
+        }
 
         # Build a map of file hash to items for duplicate detection (hash of raw file content)
         hash_to_items = {}
@@ -95,6 +101,9 @@ class ImportQueueModule(BaseWebSocketModule):
 
             # Check if this item is currently being processed
             item['processing'] = item['id'] in active_job_ids
+            
+            # Check if this item is waiting in queue
+            item['waiting'] = item['id'] in waiting_job_ids
 
             # Also consider items with empty geofeatures as processing if they were created recently
             if not item['processing'] and count == 0 and not item.get('unparsable'):
@@ -115,8 +124,8 @@ class ImportQueueModule(BaseWebSocketModule):
             if item.get('unparsable') or (count == 1 and item['geofeatures'] and isinstance(item['geofeatures'][0], dict) and 'error' in item['geofeatures'][0]):
                 item['feature_count'] = 0
                 item['processing_failed'] = True
-            elif count == 0 and item['processing']:
-                item['feature_count'] = -1  # Special value to indicate processing
+            elif count == 0 and (item['processing'] or item['waiting']):
+                item['feature_count'] = -1  # Special value to indicate processing or waiting
                 item['processing_failed'] = False
             else:
                 item['feature_count'] = count

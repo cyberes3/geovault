@@ -149,7 +149,7 @@
                   Waiting in Queue
                 </span>
                 <span v-else-if="item.processing === true || (item.processing === false && item.feature_count === -1)" class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-yellow-200 text-yellow-900">
-                  <Loader size="sm" layout="inline" :showMessage="false" />
+                  <Loader size="sm" layout="inline" :showMessage="false" color="#854d0e" />
                   <span class="ml-1">Processing</span>
                 </span>
                 <span v-else-if="item.file_duplicate?.status === 'duplicate_in_queue' || item.file_duplicate?.status === 'duplicate_imported'" class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-purple-200 text-purple-900">
@@ -188,6 +188,9 @@
               <span v-if="item.processing === true || (item.processing === false && item.feature_count === -1)" class="text-gray-400">
                 -
               </span>
+              <span v-else-if="item.processing_failed" class="text-red-600">
+                <XMarkIcon class="w-4 h-4" />
+              </span>
               <span v-else class="font-medium">{{ item.feature_count }}</span>
             </div>
           </td>
@@ -214,7 +217,7 @@
               Waiting in Queue
             </span>
             <span v-else-if="item.processing === true || (item.processing === false && item.feature_count === -1)" class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-yellow-200 text-yellow-900">
-              <Loader size="sm" layout="inline" :showMessage="false" />
+              <Loader size="sm" layout="inline" :showMessage="false" color="#854d0e" />
               <span class="ml-1">Processing</span>
             </span>
             <span v-else-if="item.deleting" class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-orange-200 text-orange-900">
@@ -267,7 +270,7 @@ import {getCookie} from "@/assets/js/auth.js";
 import {realtimeSocket} from "@/assets/js/websocket/realtimeSocket.js";
 import { toggleSetItem } from "@/assets/js/toggle-utils.js";
 import Loader from "@/components/parts/Loader.vue";
-import { ArrowUpTrayIcon, TrashIcon, CheckIcon, ExclamationCircleIcon, DocumentDuplicateIcon, ClockIcon } from '@heroicons/vue/24/outline';
+import { ArrowUpTrayIcon, TrashIcon, CheckIcon, ExclamationCircleIcon, DocumentDuplicateIcon, ClockIcon, XMarkIcon } from '@heroicons/vue/24/outline';
 import { CheckCircleIcon } from '@heroicons/vue/24/solid';
 
 export default {

@@ -570,6 +570,34 @@ def check_site_configuration():
         return False
 
 
+def cleanup_redis_locks():
+    """
+    Clean up any stale Redis processing locks on startup.
+    
+    This prevents deadlocks caused by locks that weren't properly released
+    (e.g., from server crashes, force kills, or development restarts).
+    """
+    try:
+        from geo_lib.utils.redis_connection import get_redis_connection
+        redis_client = get_redis_connection()
+        
+        # Find all processing lock keys
+        lock_keys = redis_client.keys('processing_lock:*')
+        
+        if lock_keys:
+            # Delete all processing locks
+            deleted_count = redis_client.delete(*lock_keys)
+            logger.info(f"✓ Cleaned up {deleted_count} stale Redis processing lock(s)")
+        else:
+            logger.info("✓ No stale Redis processing locks found")
+        
+        return True
+    except Exception as e:
+        logger.warning(f"⚠ Failed to cleanup Redis locks: {e}")
+        # This is not critical - locks will expire naturally (5 min timeout)
+        return True
+
+
 def run_startup_checks():
     """
     Run all startup checks and exit if any fail.
@@ -585,6 +613,7 @@ def run_startup_checks():
     8. Check togeojson installation
     9. Validate file type max_size values (< 200MB)
     10. Verify Site configuration (for email confirmation URLs)
+    11. Clean up stale Redis processing locks
     
     Warning checks (don't fail startup):
     - Configuration file
@@ -624,6 +653,10 @@ def run_startup_checks():
     check_secret_key()
     check_maxmind_database()
     check_email_config()
+    
+    # Cleanup stale Redis locks (non-critical)
+    logger.info("Cleaning up stale Redis locks...")
+    cleanup_redis_locks()
     
     if failed_checks:
         logger.error("=" * 60)

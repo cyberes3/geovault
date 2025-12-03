@@ -112,27 +112,34 @@ class RedisProcessingLock:
     def __exit__(self, exc_type, exc_val, exc_tb):
         """Release the lock."""
         if self.acquired and self.redis_client:
-            # Only delete the lock if it's still ours (check value matches)
-            # This prevents deleting a lock that was acquired by another process
-            # after ours expired
-            lua_script = """
-            if redis.call("get", KEYS[1]) == ARGV[1] then
-                return redis.call("del", KEYS[1])
-            else
-                return 0
-            end
-            """
-            deleted = self.redis_client.eval(lua_script, 1, self.lock_key, self.lock_value)
-            
-            if deleted:
-                logger.info(f"Released processing lock for user {self.user_id}")
-            else:
-                logger.warning(
-                    f"Processing lock for user {self.user_id} was already released "
-                    "(possibly expired)"
+            try:
+                # Only delete the lock if it's still ours (check value matches)
+                # This prevents deleting a lock that was acquired by another process
+                # after ours expired
+                lua_script = """
+                if redis.call("get", KEYS[1]) == ARGV[1] then
+                    return redis.call("del", KEYS[1])
+                else
+                    return 0
+                end
+                """
+                deleted = self.redis_client.eval(lua_script, 1, self.lock_key, self.lock_value)
+                
+                if deleted:
+                    logger.info(f"Released processing lock for user {self.user_id}")
+                else:
+                    logger.warning(
+                        f"Processing lock for user {self.user_id} was already released "
+                        "(possibly expired)"
+                    )
+            except Exception as e:
+                # Log error but don't raise - lock will expire naturally (5 min timeout)
+                logger.error(
+                    f"Failed to release processing lock for user {self.user_id}: {e}. "
+                    "Lock will expire automatically after 5 minutes."
                 )
-            
-            self.acquired = False
+            finally:
+                self.acquired = False
         
         return False  # Don't suppress exceptions
     
