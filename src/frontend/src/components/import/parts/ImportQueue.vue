@@ -34,8 +34,8 @@
 
     <div class="flex flex-col">
       <!-- Header Row (Desktop only) -->
-      <div class="hidden md:flex bg-gray-50 px-3 py-3 sm:px-6 sm:py-3 border-b border-gray-200">
-        <div class="w-12 text-left">
+      <div class="hidden md:flex bg-gray-50 md:px-3 md:py-3 lg:px-6 lg:py-4 border-b border-gray-200">
+        <div class="w-12 flex-shrink-0 text-left">
           <input
             type="checkbox"
             ref="selectAllCheckbox"
@@ -44,10 +44,10 @@
             class="checkbox-custom"
           />
         </div>
-        <div class="flex-1 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">File Name</div>
-        <div class="flex-1 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">Features</div>
-        <div class="flex-1 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">Status</div>
-        <div class="flex-1 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">Actions</div>
+        <div class="flex-1 min-w-0 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">File Name</div>
+        <div class="flex-1 min-w-0 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">Features</div>
+        <div class="flex-1 min-w-0 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">Status</div>
+        <div class="flex-1 min-w-0 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">Actions</div>
       </div>
 
       <!-- Items -->
@@ -100,13 +100,31 @@
         <div
           v-for="(item, index) in filteredImportQueue"
           :key="`item-${index}`"
+          :ref="el => setRowRef(el, index)"
           :class="[
-            'flex flex-col md:flex-row md:items-center p-3 md:p-0 md:px-3 md:py-3 lg:px-6 lg:py-4 border border-gray-200 md:border-0 rounded-lg md:rounded-none hover:bg-gray-50 transition-colors',
+            'flex',
+            'flex-col md:flex-row',
+            'items-stretch md:items-center',
+            'p-3 md:p-0',
+            'md:px-3 md:py-3',
+            'lg:px-6 lg:py-4',
+            'border border-gray-200 md:border-0',
+            'rounded-lg md:rounded-none',
+            'hover:bg-gray-50 transition-colors',
+            'relative',
             (item.deleting || item.importing) ? 'opacity-60 bg-gray-50' : ''
           ]"
         >
+          <!-- Tooltip (positioned relative to row) -->
+          <div
+            v-if="showTooltip[index]"
+            class="custom-tooltip"
+            :style="tooltipStyles[index]"
+          >
+            {{ item.original_filename }}
+          </div>
           <!-- Checkbox + Status (mobile) / Checkbox only (desktop) -->
-          <div class="w-full md:w-12 mb-2 md:mb-0 flex items-center justify-between">
+          <div class="w-full md:w-12 mb-2 md:mb-0 flex items-center justify-between md:justify-start md:flex-shrink-0">
             <input
               type="checkbox"
               :checked="selectedItems.has(item.id)"
@@ -115,47 +133,66 @@
               class="checkbox-custom"
             />
             <!-- Mobile-only status badge on far right -->
-            <div class="md:hidden">
+            <div 
+              class="md:hidden relative cursor-pointer"
+              data-status-container
+              @mouseenter="handleStatusHover($event, index)"
+              @mouseleave="handleStatusLeave(index)"
+              @touchstart="handleStatusTouchStart($event, index)"
+              @touchend="handleStatusTouchEnd(index)"
+              @click.stop="handleStatusClick($event, index)">
               <StatusBadge :item="item" />
             </div>
           </div>
           <!-- Filename -->
-          <div class="flex-1 mb-2 md:mb-0">
-            <div class="text-base sm:text-lg font-medium text-gray-900 break-words">
+          <div class="flex-1 mb-2 md:mb-0 md:min-w-0 relative">
+            <div class="md:text-sm font-medium text-gray-900 break-words md:break-normal">
               <!-- Disable link for duplicates in queue or when this specific item is being imported/deleted -->
-              <router-link v-if="item.file_duplicate?.status !== 'duplicate_in_queue' && !item.deleting && !item.importing"
-                 :to="`/import/process/${item.id}`"
-                 class="text-blue-500 hover:text-blue-700">
+              <router-link 
+                v-if="item.file_duplicate?.status !== 'duplicate_in_queue' && !item.deleting && !item.importing"
+                :to="`/import/process/${item.id}`"
+                :ref="el => setFilenameRef(el, index)"
+                class="filename-mobile text-blue-500 hover:text-blue-700 block md:inline">
                 {{ item.original_filename }}
               </router-link>
-              <span v-else class="text-gray-500 cursor-not-allowed">
+              <span 
+                v-else 
+                :ref="el => setFilenameRef(el, index)"
+                class="filename-mobile text-gray-500 cursor-not-allowed block md:inline">
                 {{ item.original_filename }}
               </span>
             </div>
           </div>
           <!-- Features -->
-          <div class="flex-1 mb-2 md:mb-0 md:text-center text-xs sm:text-sm text-gray-900">
+          <div class="flex-1 mb-2 md:mb-0 md:text-center md:min-w-0">
             <div class="flex items-center md:justify-center">
               <span class="md:hidden text-[10px] font-semibold tracking-wide text-gray-900 mr-2 uppercase leading-none">Features</span>
-              <span v-if="item.processing === true || (item.processing === false && item.feature_count === -1)" class="text-gray-400">
+              <span v-if="item.processing === true || (item.processing === false && item.feature_count === -1)" class="text-gray-400 text-xs sm:text-sm md:text-sm">
                 -
               </span>
-              <span v-else-if="item.processing_failed" class="text-red-600 flex items-center">
+              <span v-else-if="item.processing_failed" class="text-red-600 flex items-center text-xs sm:text-sm md:text-sm">
                 <XMarkIcon class="w-4 h-4" />
               </span>
-              <span v-else class="font-medium text-gray-900">{{ item.feature_count }}</span>
+              <span v-else class="font-medium text-gray-900 text-xs sm:text-sm md:text-sm">{{ item.feature_count }}</span>
             </div>
           </div>
           <!-- Status (desktop only - mobile shown in checkbox row) -->
-          <div class="hidden md:flex flex-1 items-center justify-center">
+          <div 
+            class="hidden md:flex flex-1 items-center justify-center md:min-w-0 relative cursor-pointer"
+            data-status-container
+            @mouseenter="handleStatusHover($event, index)"
+            @mouseleave="handleStatusLeave(index)"
+            @touchstart="handleStatusTouchStart($event, index)"
+            @touchend="handleStatusTouchEnd(index)"
+            @click.stop="handleStatusClick($event, index)">
             <StatusBadge :item="item" />
           </div>
           <!-- Actions -->
-          <div class="flex-1 md:text-center text-sm font-medium">
-            <div class="flex flex-col sm:flex-row items-stretch sm:items-center justify-stretch sm:justify-center space-y-2 sm:space-y-0 sm:space-x-2">
+          <div class="flex-1 mb-2 md:mb-0 md:text-center md:min-w-0">
+            <div class="flex flex-col sm:flex-row md:flex-row items-stretch sm:items-center md:items-center justify-start sm:justify-center md:justify-center space-y-2 sm:space-y-0 md:space-y-0 sm:space-x-2 md:space-x-2">
               <button
                 :disabled="item.imported || item.processing_failed || (item.processing === true || (item.processing === false && item.feature_count === -1)) || item.file_duplicate?.status === 'duplicate_in_queue' || item.deleting || item.importing"
-                class="w-full sm:w-auto inline-flex items-center justify-center px-3 py-1.5 border border-green-200 text-sm font-medium rounded-md text-green-700 bg-green-50 hover:bg-green-100 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-green-300 transition-colors duration-200 disabled:opacity-50 disabled:cursor-not-allowed disabled:bg-gray-100 disabled:hover:bg-gray-100"
+                class="w-full sm:w-auto md:w-auto inline-flex items-center justify-center px-3 py-1.5 border border-green-200 text-sm font-medium rounded-md text-green-700 bg-green-50 hover:bg-green-100 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-green-300 transition-colors duration-200 disabled:opacity-50 disabled:cursor-not-allowed disabled:bg-gray-100 disabled:hover:bg-gray-100"
                 @click="importItem(item, index)"
                 title="Import this item"
               >
@@ -164,7 +201,7 @@
               </button>
               <button
                 :disabled="item.deleting || item.importing"
-                class="w-full sm:w-auto inline-flex items-center justify-center px-3 py-1.5 border border-red-200 text-sm font-medium rounded-md text-red-700 bg-red-50 hover:bg-red-100 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-red-300 transition-colors duration-200 disabled:opacity-50 disabled:cursor-not-allowed disabled:bg-gray-100 disabled:hover:bg-gray-100"
+                class="w-full sm:w-auto md:w-auto inline-flex items-center justify-center px-3 py-1.5 border border-red-200 text-sm font-medium rounded-md text-red-700 bg-red-50 hover:bg-red-100 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-red-300 transition-colors duration-200 disabled:opacity-50 disabled:cursor-not-allowed disabled:bg-gray-100 disabled:hover:bg-gray-100"
                 @click="deleteItem(item, index)"
                 title="Delete this item"
               >
@@ -259,6 +296,14 @@ export default {
       bulkImportJobId: null, // Track current bulk import job ID
       bulkDeleteJobId: null, // Track current bulk delete job ID
       bulkJobHandlers: [], // Store handler references for cleanup
+      filenameRefs: {}, // Store refs to filename elements for truncation detection
+      rowRefs: {}, // Store refs to row elements for tooltip positioning
+      showTooltip: {}, // Track which tooltips are visible
+      isTruncated: {}, // Track which filenames are truncated
+      tooltipStyles: {}, // Store tooltip positioning styles
+      touchTimeouts: {}, // Store touch timeout IDs
+      resizeTimeout: null, // Store resize timeout ID
+      touchHandled: {}, // Track if touch event was handled to prevent click event
     }
   },
   watch: {
@@ -266,6 +311,12 @@ export default {
       if (newVal) {
         // WebSocket connected - delete job events are now handled directly by store actions
       }
+    },
+    filteredImportQueue() {
+      // Check truncation when queue updates
+      this.$nextTick(() => {
+        this.checkAllFilenameTruncation()
+      })
     }
   },
   methods: {
@@ -282,6 +333,173 @@ export default {
     },
     async refreshData() {
       await this.fetchQueueList()
+    },
+    setFilenameRef(el, index) {
+      if (el) {
+        this.filenameRefs[index] = el
+        this.$nextTick(() => {
+          this.checkFilenameTruncation(index)
+        })
+      }
+    },
+    checkFilenameTruncation(index) {
+      this.$nextTick(() => {
+        const element = this.filenameRefs[index]
+        if (element) {
+          // Only check on mobile (where filename-mobile class applies)
+          if (window.innerWidth < 768) {
+            const isTruncated = element.scrollWidth > element.clientWidth
+            this.isTruncated[index] = isTruncated
+          } else {
+            // On desktop, text can wrap, so no truncation
+            this.isTruncated[index] = false
+          }
+        }
+      })
+    },
+    handleStatusHover(event, index) {
+      // Always show tooltip on hover if filename is truncated
+      if (this.isTruncated[index]) {
+        this.showTooltip[index] = true
+        this.updateTooltipPosition(event, index)
+      }
+    },
+    handleStatusLeave(index) {
+      this.showTooltip[index] = false
+    },
+    handleStatusTouchStart(event, index) {
+      // Toggle tooltip on tap/click
+      event.preventDefault()
+      event.stopPropagation()
+      
+      // Mark that touch was handled to prevent click event from firing
+      this.touchHandled[index] = true
+      
+      // Clear any existing timeout first
+      if (this.touchTimeouts[index]) {
+        clearTimeout(this.touchTimeouts[index])
+        this.touchTimeouts[index] = null
+      }
+      
+      // Toggle tooltip: if already showing, hide it; otherwise show it
+      if (this.showTooltip[index]) {
+        this.showTooltip[index] = false
+      } else {
+        this.showTooltip[index] = true
+        this.updateTooltipPosition(event, index)
+        // Hide tooltip after 3 seconds on mobile
+        this.touchTimeouts[index] = setTimeout(() => {
+          this.showTooltip[index] = false
+          this.touchTimeouts[index] = null
+        }, 3000)
+      }
+      
+      // Clear touch handled flag after a short delay to allow for next interaction
+      setTimeout(() => {
+        this.touchHandled[index] = false
+      }, 300)
+    },
+    handleStatusTouchEnd(index) {
+      // Don't hide immediately to give user time to read
+    },
+    handleStatusClick(event, index) {
+      // Handle click (for desktop mouse clicks) - toggle behavior
+      // Skip if touch was already handled (prevents double-toggle on mobile)
+      if (this.touchHandled[index]) {
+        event.preventDefault()
+        event.stopPropagation()
+        return
+      }
+      
+      event.preventDefault()
+      event.stopPropagation()
+      
+      // Clear any existing timeout first
+      if (this.touchTimeouts[index]) {
+        clearTimeout(this.touchTimeouts[index])
+        this.touchTimeouts[index] = null
+      }
+      
+      // Toggle tooltip: if already showing, hide it; otherwise show it
+      if (this.showTooltip[index]) {
+        this.showTooltip[index] = false
+      } else {
+        this.showTooltip[index] = true
+        this.updateTooltipPosition(event, index)
+        // Hide tooltip after 3 seconds
+        this.touchTimeouts[index] = setTimeout(() => {
+          this.showTooltip[index] = false
+          this.touchTimeouts[index] = null
+        }, 3000)
+      }
+    },
+    updateTooltipPosition(event, index) {
+      // Position tooltip centered along the table card (row)
+      // Using absolute positioning so it scrolls with the page
+      const rowElement = this.rowRefs[index]
+      if (rowElement) {
+        this.tooltipStyles[index] = {
+          left: '50%',
+          top: '-8px',
+          transform: 'translate(-50%, -100%)',
+          position: 'absolute'
+        }
+      }
+    },
+    setRowRef(el, index) {
+      if (el) {
+        this.rowRefs[index] = el
+      }
+    },
+    closeAllTooltips() {
+      // Close all tooltips
+      Object.keys(this.showTooltip).forEach(index => {
+        this.showTooltip[index] = false
+      })
+      // Clear all timeouts
+      Object.values(this.touchTimeouts).forEach(timeout => {
+        if (timeout) clearTimeout(timeout)
+      })
+      this.touchTimeouts = {}
+    },
+    handleOutsideClick(event) {
+      // Check if click is outside any status badge or tooltip
+      const clickedElement = event.target
+      let clickedOnStatus = false
+      
+      // Check if click is on a status badge or its container
+      const statusContainers = document.querySelectorAll('[data-status-container]')
+      statusContainers.forEach(container => {
+        if (container.contains(clickedElement)) {
+          clickedOnStatus = true
+        }
+      })
+      
+      // Check if click is on a tooltip
+      const tooltips = document.querySelectorAll('.custom-tooltip')
+      tooltips.forEach(tooltip => {
+        if (tooltip.contains(clickedElement)) {
+          clickedOnStatus = true
+        }
+      })
+      
+      // If not clicked on status or tooltip, close all tooltips
+      if (!clickedOnStatus) {
+        this.closeAllTooltips()
+      }
+    },
+    checkAllFilenameTruncation() {
+      // Check truncation for all filename elements
+      Object.keys(this.filenameRefs).forEach(index => {
+        this.checkFilenameTruncation(parseInt(index))
+      })
+    },
+    handleResize() {
+      // Debounce resize handler
+      clearTimeout(this.resizeTimeout)
+      this.resizeTimeout = setTimeout(() => {
+        this.checkAllFilenameTruncation()
+      }, 150)
     },
     async fetchQueueList() {
       // This method is now only used for manual refresh
@@ -753,6 +971,14 @@ export default {
     if (!this.hasInitiallyLoaded && !this.hasRequestedInitialLoad && this.websocketConnected && (!this.importQueue || this.importQueue.length === 0)) {
       this.fetchQueueList();
     }
+    
+    // Check filename truncation on mount and window resize
+    this.checkAllFilenameTruncation();
+    window.addEventListener('resize', this.handleResize);
+    
+    // Add click listener to close tooltips when clicking outside
+    document.addEventListener('click', this.handleOutsideClick);
+    document.addEventListener('touchstart', this.handleOutsideClick);
   },
   beforeDestroy() {
     // Unsubscribe from bulk job events
@@ -762,10 +988,77 @@ export default {
     this.clearDeletedItems();
     // Clear selected items when component is destroyed
     this.clearSelection();
+    
+    // Clean up resize listener and timeouts
+    window.removeEventListener('resize', this.handleResize);
+    document.removeEventListener('click', this.handleOutsideClick);
+    document.removeEventListener('touchstart', this.handleOutsideClick);
+    if (this.resizeTimeout) {
+      clearTimeout(this.resizeTimeout);
+    }
+    Object.values(this.touchTimeouts).forEach(timeout => {
+      if (timeout) clearTimeout(timeout);
+    });
   },
 }
 </script>
 
 <style scoped>
 /* Checkbox styles are now in main.css */
+
+/* Dynamic font sizing for mobile filename - fits in one line with min 12pt */
+.filename-mobile {
+  font-size: clamp(0.75rem, 4vw, 1rem);
+  line-height: 1.2;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+@media (min-width: 768px) {
+  .filename-mobile {
+    font-size: inherit;
+    white-space: normal;
+    overflow: visible;
+    text-overflow: clip;
+  }
+}
+
+/* Custom Tooltip (matching FeatureInfoBox style) */
+.custom-tooltip {
+  position: absolute;
+  z-index: 9999;
+  background-color: rgba(0, 0, 0, 0.9);
+  color: white;
+  padding: 0.375rem 0.5rem;
+  border-radius: 0.25rem;
+  font-size: 0.8125rem;
+  font-weight: 500;
+  line-height: 1.4;
+  white-space: normal;
+  word-wrap: break-word;
+  word-break: break-word;
+  overflow-wrap: break-word;
+  width: 100%;
+  box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06);
+  pointer-events: none;
+}
+
+/* Tooltip arrow */
+.custom-tooltip::after {
+  content: '';
+  position: absolute;
+  top: 100%;
+  left: 50%;
+  transform: translateX(-50%);
+  border: 5px solid transparent;
+  border-top-color: rgba(0, 0, 0, 0.9);
+}
+
+/* Mobile adjustments */
+@media (max-width: 768px) {
+  .custom-tooltip {
+    width: 100%;
+  }
+}
 </style>
