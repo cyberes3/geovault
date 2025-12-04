@@ -3,21 +3,37 @@ Process job processor for asynchronous file processing.
 Handles converting uploaded files to geojson representation.
 """
 
+import base64
+import hashlib
+import json
 import os
 import subprocess
 import time
 import traceback
 from typing import Dict, Any, Optional
 
+from asgiref.sync import async_to_sync
+from channels.layers import get_channel_layer
 from django.contrib.auth.models import User
+from django.core.files.uploadedfile import SimpleUploadedFile
 from django.db import transaction
 
 from api.models import ImportQueue, UserSettings, FeatureStore
 from geo_lib.feature_id import generate_geojson_hash
 from geo_lib.logging.console import get_job_logger
+from geo_lib.processing.duplicate_detection import (
+    find_duplicates_for_source,
+    strip_duplicate_features
+)
+from geo_lib.processing.duplicate_models import (
+    DuplicateMatchType,
+    DuplicateSource,
+    split_duplicates_by_match_type
+)
 from geo_lib.processing.jobs.base_job import BaseJob
 from geo_lib.processing.logging import RealTimeImportLog, DatabaseLogLevel
-from geo_lib.processing.duplicate_models import DuplicateMatchType
+from geo_lib.processing.queue_worker import start_worker_for_user
+from geo_lib.processing.redis_queue import get_processing_queue
 from geo_lib.processing.messages import (
     PROCESSING_FAILED,
     FILE_VALIDATION_FAILED,
@@ -69,10 +85,6 @@ class ProcessJob(BaseJob):
             return False
 
         # Enqueue job to Redis
-        from geo_lib.processing.redis_queue import get_processing_queue
-        from geo_lib.processing.queue_worker import start_worker_for_user
-        from geo_lib.processing.status_tracker import ProcessingStatus
-        
         try:
             queue = get_processing_queue(user_id)
             job_data = {
@@ -259,7 +271,6 @@ class ProcessJob(BaseJob):
             realtime_log.add("Validating file format and security", "ProcessJob", DatabaseLogLevel.INFO)
     
             # Create a mock uploaded file for validation
-            from django.core.files.uploadedfile import SimpleUploadedFile
             uploaded_file = SimpleUploadedFile(
                 name=filename,
                 content=file_data,
@@ -417,7 +428,6 @@ class ProcessJob(BaseJob):
             realtime_log.extend(processing_log)
     
             # Prepare GeoJSON string and size for database storage
-            import json
             geojson_str = json.dumps(geojson_data)
             geojson_size_mb = len(geojson_str) / (1024 * 1024)
     
@@ -574,7 +584,6 @@ class ProcessJob(BaseJob):
             # Hash the raw file content for duplicate detection OUTSIDE the transaction
             # This ensures files with the same source content get the same hash,
             # regardless of processing differences or file format (KML vs KMZ)
-            import hashlib
             if isinstance(raw_file_data, str):
                 raw_file_data = raw_file_data.encode('utf-8')
             file_hash = hashlib.sha256(raw_file_data).hexdigest()
@@ -642,17 +651,6 @@ class ProcessJob(BaseJob):
 
                     # Perform duplicate detection against existing features
                     processing_log.add("Starting duplicate detection against existing feature store", "ProcessJob", DatabaseLogLevel.INFO)
-
-                    # Import the duplicate detection functions
-                    from geo_lib.processing.duplicate_detection import (
-                        find_duplicates_for_source,
-                        strip_duplicate_features
-                    )
-                    from geo_lib.processing.duplicate_models import (
-                        DuplicateSource, 
-                        DuplicateMatchType,
-                        split_duplicates_by_match_type
-                    )
 
                     # First, check for internal duplicates within the file
                     processing_log.add("Checking for internal duplicates within the uploaded file", "ProcessJob", DatabaseLogLevel.INFO)
@@ -767,7 +765,6 @@ class ProcessJob(BaseJob):
                         raw_file_content = raw_file_data.decode('utf-8')
                     except UnicodeDecodeError:
                         # For binary files like KMZ, store as base64
-                        import base64
                         raw_file_content = base64.b64encode(raw_file_data).decode('utf-8')
                 else:
                     raw_file_content = raw_file_data
@@ -837,9 +834,6 @@ class ProcessJob(BaseJob):
 
     def _broadcast_to_import_queue_module(self, user_id: int, event_type: str, data: dict):
         """Broadcast WebSocket event to import_queue module."""
-        from channels.layers import get_channel_layer
-        from asgiref.sync import async_to_sync
-
         channel_layer = get_channel_layer()
         if channel_layer:
             async_to_sync(channel_layer.group_send)(
@@ -856,9 +850,6 @@ class ProcessJob(BaseJob):
 
     def _broadcast_to_process_status_module(self, user_id: int, import_queue_id: int, event_type: str, data: dict):
         """Broadcast WebSocket event to process_status module for specific item."""
-        from channels.layers import get_channel_layer
-        from asgiref.sync import async_to_sync
-
         channel_layer = get_channel_layer()
         if channel_layer:
             async_to_sync(channel_layer.group_send)(

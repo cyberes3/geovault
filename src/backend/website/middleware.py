@@ -1,8 +1,13 @@
 import traceback
+from urllib.parse import urlparse
 
+from django.conf import settings
 from django.contrib.auth.models import AnonymousUser
+
 from geo_lib.logging.console import get_access_logger
 from geo_lib.utils.ip_utils import get_client_ip, get_user_identifier
+from users.models import UserProfile
+from website.settings import get_tile_source_origins
 
 access_logger = get_access_logger()
 
@@ -123,7 +128,6 @@ class ActivityTrackingMiddleware:
             not request.path.startswith('/static/') and
             request.path != '/favicon.ico'):
             try:
-                from users.models import UserProfile
                 profile, _ = UserProfile.get_or_create_profile(request.user)
                 profile.update_activity()
             except Exception as e:
@@ -145,9 +149,6 @@ class CustomHeaderMiddleware:
     def _get_cors_origins(self):
         """Get list of allowed CORS origins (cached)."""
         if self._cors_origins is None:
-            from django.conf import settings
-            from website.settings import get_tile_source_origins
-            from urllib.parse import urlparse
             
             origins = set()
             
@@ -175,9 +176,6 @@ class CustomHeaderMiddleware:
     def _get_csp_connect_src(self):
         """Get CSP connect-src directive (cached)."""
         if self._csp_connect_src is None:
-            from django.conf import settings
-            from website.settings import get_tile_source_origins
-            from urllib.parse import urlparse
             
             # Start with 'self'
             connect_sources = ["'self'"]
@@ -210,7 +208,6 @@ class CustomHeaderMiddleware:
             response['Access-Control-Allow-Credentials'] = 'true'
         else:
             # For requests without Origin header or from same origin, allow the site domain
-            from django.conf import settings
             protocol = 'https' if not settings.DEBUG else 'http'
             response['Access-Control-Allow-Origin'] = f"{protocol}://{settings.SITE_DOMAIN}"
         

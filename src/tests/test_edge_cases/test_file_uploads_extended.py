@@ -8,8 +8,10 @@ from io import BytesIO
 from django.test import TestCase, TransactionTestCase
 from django.core.files.uploadedfile import SimpleUploadedFile
 
+from django.contrib.auth import get_user_model
+
 from api.models import ImportQueue
-from geo_lib.processing.status_tracker import status_tracker, ProcessingStatus
+from geo_lib.processing.status_tracker import ProcessingStatus, status_tracker
 
 
 class TestLargeFileUploads(TransactionTestCase):
@@ -17,7 +19,6 @@ class TestLargeFileUploads(TransactionTestCase):
 
     def setUp(self):
         """Set up test fixtures."""
-        from django.contrib.auth import get_user_model
         User = get_user_model()
         self.user = User.objects.create_user(
             email='test@example.com',
@@ -107,7 +108,6 @@ class TestCorruptedFiles(TransactionTestCase):
 
     def setUp(self):
         """Set up test fixtures."""
-        from django.contrib.auth import get_user_model
         User = get_user_model()
         self.user = User.objects.create_user(
             email='test@example.com',
@@ -171,7 +171,6 @@ class TestCorruptedKMZ(TransactionTestCase):
 
     def setUp(self):
         """Set up test fixtures."""
-        from django.contrib.auth import get_user_model
         User = get_user_model()
         self.user = User.objects.create_user(
             email='test@example.com',
@@ -241,7 +240,6 @@ class TestInvalidCoordinates(TransactionTestCase):
 
     def setUp(self):
         """Set up test fixtures."""
-        from django.contrib.auth import get_user_model
         User = get_user_model()
         self.user = User.objects.create_user(
             email='test@example.com',
@@ -317,7 +315,6 @@ class TestEmptyFiles(TransactionTestCase):
 
     def setUp(self):
         """Set up test fixtures."""
-        from django.contrib.auth import get_user_model
         User = get_user_model()
         self.user = User.objects.create_user(
             email='test@example.com',
@@ -369,7 +366,6 @@ class TestSpecialCharactersInFiles(TransactionTestCase):
 
     def setUp(self):
         """Set up test fixtures."""
-        from django.contrib.auth import get_user_model
         User = get_user_model()
         self.user = User.objects.create_user(
             email='test@example.com',

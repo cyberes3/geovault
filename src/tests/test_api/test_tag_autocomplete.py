@@ -14,6 +14,8 @@ import json
 from django.test import TestCase
 from django.contrib.gis.geos import Point
 
+from django.contrib.auth import get_user_model
+
 from api.models import FeatureStore
 from geo_lib.feature_id import generate_geojson_hash
 
@@ -22,8 +24,6 @@ class TestUserTagsEndpoint(TestCase):
     """Tests for the lightweight /api/features/user-tags/ endpoint."""
 
     def setUp(self):
-        from django.contrib.auth import get_user_model
-
         User = get_user_model()
         self.user = User.objects.create_user(
             email='user-tags@example.com',
@@ -101,7 +101,6 @@ class TestTagSeparation(TestCase):
 
     def setUp(self):
         """Set up test fixtures."""
-        from django.contrib.auth import get_user_model
         User = get_user_model()
         self.user = User.objects.create_user(
             email='test@example.com',
@@ -334,7 +333,6 @@ class TestAllTagsReturned(TestCase):
 
     def setUp(self):
         """Set up test fixtures."""
-        from django.contrib.auth import get_user_model
         User = get_user_model()
         self.user = User.objects.create_user(
             email='test@example.com',
@@ -466,7 +464,6 @@ class TestTagSearch(TestCase):
 
     def setUp(self):
         """Set up test fixtures."""
-        from django.contrib.auth import get_user_model
         User = get_user_model()
         self.user = User.objects.create_user(
             email='test@example.com',
@@ -569,7 +566,6 @@ class TestTagAutocompleteIntegration(TestCase):
 
     def setUp(self):
         """Set up test fixtures."""
-        from django.contrib.auth import get_user_model
         User = get_user_model()
         self.user = User.objects.create_user(
             email='test@example.com',

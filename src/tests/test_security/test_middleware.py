@@ -1,11 +1,18 @@
 """
 Tests for security middleware (CORS and CSP).
 """
+import re
 import json
-from django.test import TestCase, override_settings
+from urllib.parse import urlparse
+
+from django.conf import settings
 from django.contrib.auth import get_user_model
 from django.http import HttpResponse
+from django.test import TestCase, override_settings
+
+from geo_lib.tile_sources import get_all_tile_sources
 from website.middleware import _get_content_length
+from website.settings import get_tile_source_origins
 
 User = get_user_model()
 
@@ -161,7 +168,6 @@ class TestSecurityMiddleware(TestCase):
 
     def test_cors_headers_with_origin(self):
         """Test CORS headers when Origin header is sent."""
-        from django.conf import settings
         protocol = 'https' if not settings.DEBUG else 'http'
         origin = f"{protocol}://{settings.SITE_DOMAIN}"
         
@@ -177,7 +183,6 @@ class TestSecurityMiddleware(TestCase):
 
     def test_cors_preflight_request(self):
         """Test CORS preflight OPTIONS request."""
-        from django.conf import settings
         protocol = 'https' if not settings.DEBUG else 'http'
         origin = f"{protocol}://{settings.SITE_DOMAIN}"
         
@@ -236,7 +241,6 @@ class TestSecurityMiddleware(TestCase):
 
     def test_tile_source_origins_in_csp(self):
         """Test that external tile source origins are included in CSP connect-src."""
-        from website.settings import get_tile_source_origins
         
         # Get the actual tile source origins from the system
         tile_origins = get_tile_source_origins()
@@ -257,7 +261,6 @@ class TestSecurityMiddleware(TestCase):
             
             # Verify the connect-src directive contains all expected origins
             # Extract the connect-src value
-            import re
             connect_match = re.search(r"connect-src ([^;]+)", csp)
             if connect_match:
                 connect_src = connect_match.group(1)
@@ -272,7 +275,6 @@ class TestSecurityMiddleware(TestCase):
         # This test verifies the structure is in place
         # Actual testing with additional origins would require settings override
         
-        from django.conf import settings
         protocol = 'https' if not settings.DEBUG else 'http'
         origin = f"{protocol}://{settings.SITE_DOMAIN}"
         
@@ -309,7 +311,6 @@ class TestSecurityMiddleware(TestCase):
 
     def test_tile_sources_in_cors_origins(self):
         """Test that tile source origins are included in allowed CORS origins."""
-        from website.settings import get_tile_source_origins
         
         # Get the actual tile source origins from the system
         tile_origins = get_tile_source_origins()
@@ -331,9 +332,6 @@ class TestSecurityMiddleware(TestCase):
 
     def test_all_external_tile_sources_detected(self):
         """Test that all external tile sources (requires_proxy=False) are detected."""
-        from geo_lib.tile_sources import get_all_tile_sources
-        from website.settings import get_tile_source_origins
-        from urllib.parse import urlparse
         
         # Get all tile sources
         all_sources = get_all_tile_sources()

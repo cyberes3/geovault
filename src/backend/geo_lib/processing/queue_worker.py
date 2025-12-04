@@ -235,8 +235,6 @@ def stop_all_workers(wait_timeout: float = 2.0):
     Args:
         wait_timeout: Seconds to wait for workers to stop (default: 2.0)
     """
-    import time
-    
     WorkerRegistry.stop_all_workers()
     
     # Wait for workers to actually stop

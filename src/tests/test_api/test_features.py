@@ -7,6 +7,8 @@ import pytest
 from django.test import TestCase
 from django.contrib.gis.geos import Point
 
+from django.contrib.auth import get_user_model
+
 from api.models import FeatureStore, ImportQueue
 from geo_lib.feature_id import generate_geojson_hash
 
@@ -16,7 +18,6 @@ class TestFeatureAPI(TestCase):
 
     def setUp(self):
         """Set up test fixtures."""
-        from django.contrib.auth import get_user_model
         User = get_user_model()
         self.user = User.objects.create_user(
             email='test@example.com',
@@ -80,7 +81,6 @@ class TestFeatureAPI(TestCase):
 
     def test_get_feature_unauthorized(self):
         """Test getting another user's feature."""
-        from django.contrib.auth import get_user_model
         User = get_user_model()
         other_user = User.objects.create_user(
             email='other@example.com',
@@ -1018,7 +1018,6 @@ class TestFeatureEdgeCases(TestCase):
     
     def setUp(self):
         """Set up test fixtures."""
-        from django.contrib.auth import get_user_model
         User = get_user_model()
         self.user = User.objects.create_user(
             email='edge@example.com',

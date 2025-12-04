@@ -9,6 +9,7 @@ It handles icons in subdirectories (e.g., caltopo/) and icons in the root assets
 
 import json
 import re
+import sys
 from pathlib import Path
 
 
@@ -168,7 +169,6 @@ def generate_registry(icons_dir, output_file):
 
 
 if __name__ == '__main__':
-    import sys
     
     # Get script directory (backend root)
     script_dir = Path(__file__).parent

@@ -9,8 +9,10 @@ from channels.db import database_sync_to_async
 from django.test import TransactionTestCase
 from django.contrib.auth import get_user_model
 
-from api.ws_consumers.process_status_consumer import ProcessStatusConsumer
+from django.contrib.auth.models import AnonymousUser
+
 from api.models import ImportQueue
+from api.ws_consumers.process_status_consumer import ProcessStatusConsumer
 
 User = get_user_model()
 
@@ -48,7 +50,6 @@ class TestProcessStatusConsumerConnection(TransactionTestCase):
 
     async def test_connection_unauthenticated(self):
         """Test that unauthenticated users are rejected."""
-        from django.contrib.auth.models import AnonymousUser
         
         communicator = WebsocketCommunicator(
             ProcessStatusConsumer.as_asgi(),

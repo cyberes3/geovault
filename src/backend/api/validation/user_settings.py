@@ -11,6 +11,8 @@ from typing import Any, Dict, Optional
 
 from pydantic import BaseModel, Field, ValidationError, ConfigDict, field_validator, model_serializer
 
+from geo_lib.tile_sources import get_all_tile_sources
+
 
 class ElevationProfileSource(str, Enum):
     """Valid values for map.elevation_profile_source setting."""
@@ -109,9 +111,6 @@ def _get_cached_tile_source_ids():
     Returns:
         set: Set of available tile source ID strings
     """
-    # Import here to avoid circular dependencies
-    from geo_lib.tile_sources import get_all_tile_sources
-    
     # Get all available tile source IDs
     all_sources = get_all_tile_sources()
     return set(all_sources.keys())

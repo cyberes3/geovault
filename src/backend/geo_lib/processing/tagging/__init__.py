@@ -8,6 +8,7 @@ and will be automatically discovered and executed.
 from typing import List, Optional
 
 from geo_lib.logging.console import get_job_logger
+from geo_lib.processing.logging import DatabaseLogLevel
 from geo_lib.processing.tagging.base import TagGenerator
 from geo_lib.processing.tagging.modules.driving_detection import DrivingDetectionTagGenerator
 from geo_lib.processing.tagging.modules.elevation import ElevationTagGenerator
@@ -112,7 +113,6 @@ def generate_auto_tags(
             logger = get_job_logger()
             logger.warning(f"Tag generator {generator.__class__.__name__} failed: {e}")
             if import_log:
-                from geo_lib.processing.logging import DatabaseLogLevel
                 import_log.add(
                     f"Tag generator {generator.__class__.__name__} failed: {str(e)}",
                     "Tagging",

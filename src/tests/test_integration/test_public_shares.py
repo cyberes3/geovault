@@ -6,6 +6,8 @@ import uuid
 from django.test import TestCase
 from django.contrib.gis.geos import Point
 
+from django.contrib.auth import get_user_model
+
 from api.models import FeatureStore, TagShare, CollectionShare, Collection
 from geo_lib.feature_id import generate_geojson_hash
 
@@ -15,7 +17,6 @@ class TestPublicShareWorkflow(TestCase):
 
     def setUp(self):
         """Set up test fixtures."""
-        from django.contrib.auth import get_user_model
         User = get_user_model()
         self.user = User.objects.create_user(
             email='test@example.com',
@@ -140,7 +141,6 @@ class TestPublicShareDownloads(TestCase):
 
     def setUp(self):
         """Set up test fixtures."""
-        from django.contrib.auth import get_user_model
         User = get_user_model()
         self.user = User.objects.create_user(
             email='test@example.com',
@@ -246,7 +246,6 @@ class TestPublicShareWithTags(TestCase):
 
     def setUp(self):
         """Set up test fixtures."""
-        from django.contrib.auth import get_user_model
         User = get_user_model()
         self.user = User.objects.create_user(
             email='test@example.com',
@@ -330,7 +329,6 @@ class TestPublicShareAccessCount(TestCase):
 
     def setUp(self):
         """Set up test fixtures."""
-        from django.contrib.auth import get_user_model
         User = get_user_model()
         self.user = User.objects.create_user(
             email='test@example.com',
@@ -423,7 +421,6 @@ class TestPublicShareSecurity(TestCase):
 
     def setUp(self):
         """Set up test fixtures."""
-        from django.contrib.auth import get_user_model
         User = get_user_model()
         self.user1 = User.objects.create_user(
             email='user1@example.com',

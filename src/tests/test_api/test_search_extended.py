@@ -5,6 +5,8 @@ import json
 from django.test import TestCase
 from django.contrib.gis.geos import Point
 
+from django.contrib.auth import get_user_model
+
 from api.models import FeatureStore
 from geo_lib.feature_id import generate_geojson_hash
 
@@ -14,7 +16,6 @@ class TestSearchWithSpecialCharacters(TestCase):
 
     def setUp(self):
         """Set up test fixtures."""
-        from django.contrib.auth import get_user_model
         User = get_user_model()
         self.user = User.objects.create_user(
             email='test@example.com',
@@ -101,7 +102,6 @@ class TestSearchWithUnicode(TestCase):
 
     def setUp(self):
         """Set up test fixtures."""
-        from django.contrib.auth import get_user_model
         User = get_user_model()
         self.user = User.objects.create_user(
             email='test@example.com',
@@ -179,7 +179,6 @@ class TestSearchCaseSensitivity(TestCase):
 
     def setUp(self):
         """Set up test fixtures."""
-        from django.contrib.auth import get_user_model
         User = get_user_model()
         self.user = User.objects.create_user(
             email='test@example.com',
@@ -237,7 +236,6 @@ class TestSearchEmptyResults(TestCase):
 
     def setUp(self):
         """Set up test fixtures."""
-        from django.contrib.auth import get_user_model
         User = get_user_model()
         self.user = User.objects.create_user(
             email='test@example.com',
@@ -290,7 +288,6 @@ class TestSearchPagination(TestCase):
 
     def setUp(self):
         """Set up test fixtures."""
-        from django.contrib.auth import get_user_model
         User = get_user_model()
         self.user = User.objects.create_user(
             email='test@example.com',
@@ -354,7 +351,6 @@ class TestFeaturesByTagSearch(TestCase):
 
     def setUp(self):
         """Set up test fixtures."""
-        from django.contrib.auth import get_user_model
         User = get_user_model()
         self.user = User.objects.create_user(
             email='test@example.com',
@@ -422,7 +418,6 @@ class TestSystemTagsVsUserTags(TestCase):
 
     def setUp(self):
         """Set up test fixtures."""
-        from django.contrib.auth import get_user_model
         User = get_user_model()
         self.user = User.objects.create_user(
             email='test@example.com',

@@ -4,9 +4,11 @@ Import queue WebSocket module.
 
 import json
 import traceback
+from datetime import datetime, timedelta
 
 from channels.db import database_sync_to_async
 from django.core.serializers.json import DjangoJSONEncoder
+from django.utils import timezone
 
 from api.models import ImportQueue
 from geo_lib.processing.status_tracker import status_tracker
@@ -107,13 +109,9 @@ class ImportQueueModule(BaseWebSocketModule):
 
             # Also consider items with empty geofeatures as processing if they were created recently
             if not item['processing'] and count == 0 and not item.get('unparsable'):
-                from django.utils import timezone
-                from datetime import timedelta
-
                 # If item was created within the last 10 seconds, consider it as processing
                 item_timestamp = item['timestamp']
                 if isinstance(item_timestamp, str):
-                    from datetime import datetime
                     item_timestamp = datetime.fromisoformat(item_timestamp.replace('Z', '+00:00'))
 
                 time_since_creation = timezone.now() - item_timestamp

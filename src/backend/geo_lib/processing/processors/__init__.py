@@ -3,6 +3,7 @@ Unified file import pipeline processors.
 Factory module for creating appropriate processors based on file type.
 """
 
+import os
 from typing import Union, Optional
 
 from geo_lib.processing.file_types import FileType
@@ -37,7 +38,6 @@ def get_processor(file_data: Union[bytes, str], filename: str = "",
     file_type = detect_file_type(file_data, filename)
 
     # Check if file extension is supported (more reliable than content detection for unknown files)
-    import os
     if filename:
         _, ext = os.path.splitext(filename.lower())
         supported_extensions = ['.kml', '.kmz', '.gpx']

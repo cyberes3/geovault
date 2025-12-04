@@ -6,6 +6,10 @@ from unittest.mock import patch
 from django.test import TestCase
 from django.contrib.gis.geos import Point
 
+import uuid
+
+from django.contrib.auth import get_user_model
+
 from api.models import FeatureStore, Collection
 from geo_lib.feature_id import generate_geojson_hash
 
@@ -15,7 +19,6 @@ class TestBboxEmptyResults(TestCase):
 
     def setUp(self):
         """Set up test fixtures."""
-        from django.contrib.auth import get_user_model
         User = get_user_model()
         self.user = User.objects.create_user(
             email='test@example.com',
@@ -73,7 +76,6 @@ class TestBboxWorldWideExtent(TestCase):
 
     def setUp(self):
         """Set up test fixtures."""
-        from django.contrib.auth import get_user_model
         User = get_user_model()
         self.user = User.objects.create_user(
             email='test@example.com',
@@ -183,7 +185,6 @@ class TestBboxInvalidCoordinates(TestCase):
 
     def setUp(self):
         """Set up test fixtures."""
-        from django.contrib.auth import get_user_model
         User = get_user_model()
         self.user = User.objects.create_user(
             email='test@example.com',
@@ -248,7 +249,6 @@ class TestZoomLevelBoundaries(TestCase):
 
     def setUp(self):
         """Set up test fixtures."""
-        from django.contrib.auth import get_user_model
         User = get_user_model()
         self.user = User.objects.create_user(
             email='test@example.com',
@@ -331,7 +331,6 @@ class TestMaxFeaturesLimit(TestCase):
 
     def setUp(self):
         """Set up test fixtures."""
-        from django.contrib.auth import get_user_model
         User = get_user_model()
         self.user = User.objects.create_user(
             email='test@example.com',
@@ -421,7 +420,6 @@ class TestCollectionModeWithBbox(TestCase):
 
     def setUp(self):
         """Set up test fixtures."""
-        from django.contrib.auth import get_user_model
         User = get_user_model()
         self.user = User.objects.create_user(
             email='test@example.com',
@@ -488,7 +486,6 @@ class TestCollectionModeWithBbox(TestCase):
 
     def test_bbox_with_nonexistent_collection(self):
         """Test bbox query with non-existent collection."""
-        import uuid
         fake_uuid = uuid.uuid4()
         response = self.client.get(
             '/api/geojson/',
@@ -506,7 +503,6 @@ class TestBboxResponseStructure(TestCase):
 
     def setUp(self):
         """Set up test fixtures."""
-        from django.contrib.auth import get_user_model
         User = get_user_model()
         self.user = User.objects.create_user(
             email='test@example.com',

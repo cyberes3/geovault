@@ -11,6 +11,9 @@ import uuid
 
 from pydantic import BaseModel, Field, ValidationError, ConfigDict, field_validator
 
+from api.utils.responses import error_response
+from geo_lib.validation.styling_validation import is_valid_hex_color, is_valid_icon_url
+
 
 # ============================================================================
 # Base Models and Mixins
@@ -103,7 +106,6 @@ class BulkOperationsPayload(BaseModel):
     def validate_color(cls, v: Any) -> Optional[str]:
         if v is None:
             return None
-        from geo_lib.validation.styling_validation import is_valid_hex_color
         if not is_valid_hex_color(v):
             raise ValueError('Invalid hex color')
         return v
@@ -113,7 +115,6 @@ class BulkOperationsPayload(BaseModel):
     def validate_icon(cls, v: Any) -> Optional[str]:
         if v is None:
             return None
-        from geo_lib.validation.styling_validation import is_valid_icon_url
         if not is_valid_icon_url(v):
             raise ValueError('Invalid icon URL')
         return v
@@ -276,7 +277,6 @@ def validate_payload(model_class: Type[BaseModel], allow_empty: bool = False):
     def decorator(view_func):
         @wraps(view_func)
         def wrapper(request, *args, **kwargs):
-            from api.utils.responses import error_response
             
             # Handle empty body - check for truly empty or just boundary markers
             # Django Test Client may send boundary markers even with no actual content

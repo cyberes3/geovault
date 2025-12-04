@@ -4,12 +4,15 @@ Tests for database transaction rollback and failure scenarios.
 These tests verify that the application correctly handles transaction failures
 and rolls back changes to maintain data integrity.
 """
+import threading
+import time
+
 import pytest
-from unittest.mock import patch, MagicMock
-from django.test import TestCase
 from django.contrib.auth import get_user_model
 from django.contrib.gis.geos import Point
-from django.db import transaction, IntegrityError, DatabaseError
+from django.db import DatabaseError, IntegrityError, transaction
+from django.test import TestCase
+from unittest.mock import MagicMock, patch
 
 from api.models import FeatureStore, ImportQueue, Collection
 from geo_lib.feature_id import generate_geojson_hash
@@ -246,8 +249,6 @@ class TestAdvisoryLockFailureRecovery:
 
     def test_lock_held_too_long_timeout(self, user):
         """Test behavior when a lock is held for an extended period."""
-        import threading
-        import time
         
         test_hash = "long_lock_test_hash"
         results = []

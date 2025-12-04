@@ -2,12 +2,16 @@
 Unit tests for PostgreSQL advisory lock utilities.
 """
 
-import pytest
 import threading
 import time
-from unittest.mock import Mock, patch, MagicMock
 
-from geo_lib.utils.advisory_locks import hash_to_lock_id, AdvisoryLock, advisory_lock
+import pytest
+from django.contrib.auth import get_user_model
+from django.db import connections
+from unittest.mock import MagicMock, Mock, patch
+
+from api.models import ImportQueue
+from geo_lib.utils.advisory_locks import AdvisoryLock, advisory_lock, hash_to_lock_id
 
 
 class TestHashToLockId:
@@ -134,7 +138,6 @@ class TestAdvisoryLock:
     
     def test_concurrent_different_hash_parallel(self):
         """Test that two threads with different hashes execute in parallel."""
-        from django.db import connections
         
         execution_log = []
         start_time = time.time()
@@ -177,8 +180,6 @@ class TestAdvisoryLockIntegration:
     
     def test_lock_prevents_race_condition(self):
         """Test that advisory lock prevents race condition in file hash saving."""
-        from api.models import ImportQueue
-        from django.contrib.auth import get_user_model
         
         User = get_user_model()
         user = User.objects.create_user(username='testuser_lock', password='testpass')

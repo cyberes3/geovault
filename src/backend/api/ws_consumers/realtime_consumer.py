@@ -3,6 +3,7 @@ Realtime WebSocket consumer for global real-time updates.
 """
 
 import json
+import traceback
 
 from channels.generic.websocket import AsyncWebsocketConsumer
 from django.contrib.auth.models import AnonymousUser
@@ -38,7 +39,6 @@ class RealtimeConsumer(AsyncWebsocketConsumer):
 
     async def connect(self):
         """Handle WebSocket connection."""
-        import traceback
         
         path = self.scope.get('path', 'unknown')
         client_ip = 'unknown'
@@ -103,7 +103,6 @@ class RealtimeConsumer(AsyncWebsocketConsumer):
 
     async def disconnect(self, close_code):
         """Handle WebSocket disconnection."""
-        import traceback
         
         path = self.scope.get('path', 'unknown')
         client_ip = 'unknown'

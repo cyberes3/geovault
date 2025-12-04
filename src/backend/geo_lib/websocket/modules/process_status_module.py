@@ -2,21 +2,26 @@
 Process status WebSocket module.
 Handles real-time status updates for a specific import item.
 """
-from api.models import ImportQueue
-from geo_lib.processing.logging import RealTimeImportLog, DatabaseLogLevel
-from geo_lib.utils.pydantic_serialization import convert_features_to_pydantic
-from asgiref.sync import sync_to_async
-import time
 import asyncio
 import json
+import time
 import traceback
 from typing import Dict, Any, Optional
 
+from asgiref.sync import async_to_sync, sync_to_async
+from channels.layers import get_channel_layer
 from django.conf import settings
-from geo_lib.processing.status_tracker import status_tracker
-from geo_lib.processing.messages import PROCESSING_FAILED_WITH_LOGS, ERROR_TYPE_FILE_UNPARSABLE
-from geo_lib.websocket.base_module import BaseWebSocketModule
+
+from api.models import DatabaseLogging, FeatureStore, ImportQueue
+from geo_lib.feature_id import generate_geojson_hash
 from geo_lib.logging.console import get_websocket_logger
+from geo_lib.processing.duplicate_detection import normalize_coordinates
+from geo_lib.processing.duplicate_models import DuplicateMatchType, DuplicateSource
+from geo_lib.processing.logging import DatabaseLogLevel, RealTimeImportLog
+from geo_lib.processing.messages import ERROR_TYPE_FILE_UNPARSABLE, PROCESSING_FAILED_WITH_LOGS
+from geo_lib.processing.status_tracker import status_tracker
+from geo_lib.utils.pydantic_serialization import convert_features_to_pydantic
+from geo_lib.websocket.base_module import BaseWebSocketModule
 
 logger = get_websocket_logger()
 
@@ -51,8 +56,6 @@ class ProcessStatusModule(BaseWebSocketModule):
         """Send initial state with item status, features, and logs."""
         try:
             # Refresh the import item from database to get latest data
-            from api.models import ImportQueue
-            from asgiref.sync import sync_to_async
 
             get_item = sync_to_async(ImportQueue.objects.get)
             self.import_item = await get_item(id=self.import_item.id)
@@ -203,8 +206,6 @@ class ProcessStatusModule(BaseWebSocketModule):
     async def handle_duplicates_updated(self, data: Dict[str, Any]) -> None:
         """Handle duplicates updated event - refresh page data to show updated duplicate markers."""
         # Refresh the import item from database to get the latest duplicate_features
-        from api.models import ImportQueue
-        from asgiref.sync import sync_to_async
         
         get_item = sync_to_async(ImportQueue.objects.get)
         self.import_item = await get_item(id=self.import_item.id)
@@ -389,9 +390,6 @@ class ProcessStatusModule(BaseWebSocketModule):
         geometry_duplicate_hashes_for_skipping = []  # For skipped_feature_ids
 
         # Import necessary functions
-        from geo_lib.processing.duplicate_detection import normalize_coordinates
-        from geo_lib.feature_id import generate_geojson_hash
-        from geo_lib.processing.duplicate_models import DuplicateSource, DuplicateMatchType
         
         # Get other unimported ImportQueue items for cross-queue checking
         other_queue_items = await self._get_other_queue_items()
@@ -419,8 +417,6 @@ class ProcessStatusModule(BaseWebSocketModule):
             queue_item_sorted_indices[queue_item.id] = original_to_sorted
         
         # Get existing feature hashes from FeatureStore
-        from api.models import FeatureStore
-        from asgiref.sync import sync_to_async
         
         @sync_to_async
         def get_existing_hashes_and_ids():
@@ -606,8 +602,6 @@ class ProcessStatusModule(BaseWebSocketModule):
             return []
 
         try:
-            from api.models import DatabaseLogging
-            from asgiref.sync import sync_to_async
 
             # Create async database query
             def get_logs():

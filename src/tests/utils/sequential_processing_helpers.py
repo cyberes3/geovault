@@ -10,6 +10,8 @@ import time
 from contextlib import contextmanager
 from typing import Optional
 
+from geo_lib.processing.jobs import delete_job, import_job, process_job
+from geo_lib.processing.queue_worker import WorkerRegistry, stop_all_workers
 from geo_lib.processing.status_tracker import ProcessingStatus, status_tracker
 
 
@@ -99,7 +101,6 @@ def with_queue_worker(user_id: int):
             # Queue worker is available for this user
             pass
     """
-    from geo_lib.processing.queue_worker import WorkerRegistry, stop_all_workers
     
     try:
         yield
@@ -120,7 +121,6 @@ def ensure_job_thread_completes(job_id: str, timeout: float = 5.0):
         job_id: Job ID
         timeout: Maximum time to wait for thread completion
     """
-    from geo_lib.processing.jobs import process_job, import_job, delete_job
     
     # Check all job types for the thread
     for job_processor in [process_job, import_job, delete_job]:

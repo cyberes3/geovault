@@ -18,8 +18,8 @@ from django.conf import settings
 from django.core.files.uploadedfile import UploadedFile
 
 from geo_lib.processing.file_types import (
-    FileType, get_file_type_by_extension, validate_file_size, validate_mime_type, 
-    validate_file_signature, get_allowed_elements, get_max_file_size
+    FILE_TYPE_CONFIGS, FileType, get_file_type_by_extension, get_max_file_size,
+    validate_file_size, validate_mime_type, validate_file_signature, get_allowed_elements
 )
 from geo_lib.logging.console import get_security_logger
 
@@ -107,7 +107,6 @@ class SecureFileValidator:
 
         # Check file extension
         try:
-            import os
             _, ext = os.path.splitext(uploaded_file.name)
             get_file_type_by_extension(ext)
         except ValueError:
@@ -120,7 +119,6 @@ class SecureFileValidator:
         uploaded_file.seek(0)  # Reset file pointer
 
         try:
-            import os
             _, ext = os.path.splitext(uploaded_file.name)
             file_type = get_file_type_by_extension(ext)
             if not validate_file_signature(file_data, file_type):
@@ -144,7 +142,6 @@ class SecureFileValidator:
         mime_type = magic.from_buffer(file_data, mime=True)
         
         try:
-            import os
             _, ext = os.path.splitext(uploaded_file.name)
             file_type = get_file_type_by_extension(ext)
             if not validate_mime_type(mime_type, file_type):
@@ -162,7 +159,6 @@ class SecureFileValidator:
     def _validate_file_size(self, uploaded_file: UploadedFile):
         """Validate file size limits."""
         try:
-            import os
             _, ext = os.path.splitext(uploaded_file.name)
             file_type = get_file_type_by_extension(ext)
             if not validate_file_size(uploaded_file.size, file_type):
@@ -175,7 +171,6 @@ class SecureFileValidator:
     def _validate_content(self, uploaded_file: UploadedFile):
         """Validate file content structure."""
         try:
-            import os
             _, ext = os.path.splitext(uploaded_file.name)
             file_type = get_file_type_by_extension(ext)
             
@@ -219,7 +214,6 @@ class SecureFileValidator:
                 kml_content = kmz.read(main_kml_file).decode('utf-8')
                 
                 # Check embedded KML size against KML file type limit (not KMZ limit)
-                from geo_lib.processing.file_types import FILE_TYPE_CONFIGS, FileType, get_max_file_size
                 kml_size_limit = get_max_file_size(FileType.KML)
                 kml_content_size = len(kml_content.encode('utf-8'))
                 
@@ -497,7 +491,6 @@ def basic_file_security_check(uploaded_file: UploadedFile) -> Tuple[bool, str]:
         
         # Check file extension
         try:
-            import os
             _, ext = os.path.splitext(uploaded_file.name)
             file_type = get_file_type_by_extension(ext)
         except ValueError:

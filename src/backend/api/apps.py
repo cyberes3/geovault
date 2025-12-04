@@ -1,6 +1,11 @@
+import atexit
+import logging
 import os
 import sys
+
 from django.apps import AppConfig
+
+from geo_lib.processing.queue_worker import stop_all_workers
 
 
 class DatamanageConfig(AppConfig):
@@ -31,8 +36,6 @@ class DatamanageConfig(AppConfig):
         - If RUN_MAIN is not set: we're in production (WSGI/ASGI) → start service
           (In production, ready() is only called once per process anyway)
         """
-        import logging
-        import atexit
         apps_logger = logging.getLogger('api.apps')
         
         # Skip if we're in the reloader process (development only)
@@ -55,7 +58,8 @@ class DatamanageConfig(AppConfig):
                 return
 
         # Start the replacement cleanup service (idempotent - only starts once)
-        # Import here to avoid circular imports and ensure Django is fully initialized
+        # Ensure Django is fully initialized
+        # Import here to avoid circular import issues during app loading
         try:
             from api.services.replacement_cleanup_service import ensure_service_started
             ensure_service_started()
@@ -65,7 +69,6 @@ class DatamanageConfig(AppConfig):
         
         # Register queue worker cleanup on shutdown
         try:
-            from geo_lib.processing.queue_worker import stop_all_workers
             atexit.register(stop_all_workers)
             apps_logger.info("Registered queue worker cleanup handler")
         except Exception as e:

@@ -18,16 +18,22 @@ Warning checks (don't fail startup):
 - Email configuration
 """
 
-import sys
 import os
+import sys
 from pathlib import Path
-from django.db import connection
-from django.core.exceptions import ImproperlyConfigured
-from django.conf import settings
-from channels.layers import get_channel_layer
-from website.settings_utils import get_required_setting
+
 from asgiref.sync import async_to_sync
+from channels.layers import get_channel_layer
+from django.conf import settings
+from django.core.exceptions import ImproperlyConfigured
+from django.contrib.sites.models import Site
+from django.db import connection
+
 from geo_lib.logging.console import get_startup_logger
+from geo_lib.processing.file_types import FILE_TYPE_CONFIGS
+from geo_lib.utils.redis_connection import get_redis_connection
+from website.config_loader import get_config_loader
+from website.settings_utils import get_required_setting
 
 logger = get_startup_logger()
 
@@ -383,8 +389,6 @@ def check_file_type_max_size():
         bool: True if all max_size values are valid, False otherwise
     """
     try:
-        from geo_lib.processing.file_types import FILE_TYPE_CONFIGS
-        
         MAX_ALLOWED_SIZE_BYTES = 200 * 1024 * 1024  # 200MB in bytes
         invalid_configs = []
         
@@ -416,7 +420,6 @@ def check_config_file():
     This is a warning-only check.
     """
     try:
-        from website.config_loader import get_config_loader
         config_loader = get_config_loader()
         config_path = config_loader.config_path
         
@@ -523,8 +526,6 @@ def check_site_configuration():
         bool: True if Site configuration is valid, False otherwise
     """
     try:
-        from django.contrib.sites.models import Site
-        
         # Check if required settings exist
         if not hasattr(settings, 'SITE_DOMAIN') or not hasattr(settings, 'SITE_NAME'):
             logger.error("✗ Site configuration missing: SITE_DOMAIN and SITE_NAME must be defined in settings")
@@ -578,7 +579,6 @@ def cleanup_redis_queues():
     old processing locks (for migration from lock-based to queue-based system).
     """
     try:
-        from geo_lib.utils.redis_connection import get_redis_connection
         redis_client = get_redis_connection()
         
         # Find all processing queue keys

@@ -28,13 +28,31 @@ import django
 if not django.apps.apps.ready:
     django.setup()
 
+import io
+import logging
+import time
+import zipfile
+from io import BytesIO
+from unittest.mock import MagicMock, patch
+from urllib.error import HTTPError, URLError
+from urllib.parse import urlparse
+from urllib.request import Request, urlopen
+
+import requests
+
 from django.conf import settings
 from django.contrib.auth import get_user_model
-from django.test import Client
 from django.contrib.gis.geos import Point
+from django.db import connections
+from django.test import Client
 
 from api.models import FeatureStore, ImportQueue, Collection, TagShare, CollectionShare, UserSettings
+from geo_lib.feature_id import generate_geojson_hash
+from geo_lib.processing import elevation_service
+from geo_lib.processing.status_tracker import ProcessingStatus, status_tracker
+from users.api_keys import create_user_api_key
 from users.models import ApiKey, UserProfile
+from website.settings_utils import get_required_setting
 
 User = get_user_model()
 
@@ -44,8 +62,6 @@ def pytest_configure():
     Pytest hook that runs before test collection.
     Ensures test database settings are merged before any Django test framework initialization.
     """
-    from django.db import connections
-    
     # Force merge TEST database settings into default before any connection
     if 'TEST' in settings.DATABASES.get('default', {}):
         test_config = settings.DATABASES['default']['TEST'].copy()
@@ -245,7 +261,6 @@ def collection(db, user):
 @pytest.fixture
 def api_key(db, user):
     """Create an API key for a user."""
-    from users.api_keys import create_user_api_key
     key_obj, raw_key = create_user_api_key(user, 'Test API Key')
     return key_obj, raw_key
 
@@ -293,8 +308,6 @@ def large_feature_set(db, user):
             }
         }
         
-        from geo_lib.feature_id import generate_geojson_hash
-        
         feature = FeatureStore(
             user=user,
             geojson=feature_data,
@@ -319,8 +332,6 @@ def mock_external_services():
     DEPRECATED: Use conditional_external_api_mocking instead.
     Mock external services (elevation, geocoding) for error testing.
     """
-    from unittest.mock import patch, MagicMock
-    
     mocks = {}
     
     # Mock elevation service
@@ -345,11 +356,6 @@ def conditional_external_api_mocking():
     - Geocoding: Always mocked (not ready yet per requirements)
     - Logs warnings on external API timeouts/failures without failing tests
     """
-    import logging
-    import requests
-    from unittest.mock import patch, MagicMock
-    from website.settings_utils import get_required_setting
-    
     logger = logging.getLogger(__name__)
     patches = []
     
@@ -390,7 +396,6 @@ def conditional_external_api_mocking():
         # Wrap real elevation calls with timeout/error handling
         original_fill = None
         try:
-            from geo_lib.processing import elevation_service
             original_fill = elevation_service.fill_missing_elevations
         except ImportError:
             pass
@@ -467,9 +472,6 @@ def load_google_earth_kml(test_files_dir):
 @pytest.fixture
 def create_test_kmz():
     """Create a KMZ file (ZIP with doc.kml inside) from KML content."""
-    import zipfile
-    from io import BytesIO
-    
     def _create_kmz(kml_content: bytes) -> bytes:
         """Create KMZ file from KML content."""
         zip_buffer = BytesIO()
@@ -483,9 +485,6 @@ def create_test_kmz():
 @pytest.fixture
 def wait_for_job_completion():
     """Helper to wait for async job completion with timeout."""
-    import time
-    from geo_lib.processing.status_tracker import status_tracker, ProcessingStatus
-    
     def _wait(job_id: str, timeout: float = 30.0, poll_interval: float = 0.5) -> dict:
         """
         Wait for job to complete.
@@ -525,7 +524,6 @@ def wait_for_processing(wait_for_job_completion):
         """Wait for processing job and verify success."""
         job_status = wait_for_job_completion(job_id, timeout)
         
-        from geo_lib.processing.status_tracker import ProcessingStatus
         if job_status['status'] == ProcessingStatus.FAILED:
             error_msg = job_status.get('error_message', job_status.get('message', 'Unknown error'))
             raise RuntimeError(f"Processing failed: {error_msg}")
@@ -542,7 +540,6 @@ def wait_for_import(wait_for_job_completion):
         """Wait for import job and verify success."""
         job_status = wait_for_job_completion(job_id, timeout)
         
-        from geo_lib.processing.status_tracker import ProcessingStatus
         if job_status['status'] == ProcessingStatus.FAILED:
             error_msg = job_status.get('error_message', job_status.get('message', 'Unknown error'))
             raise RuntimeError(f"Import failed: {error_msg}")

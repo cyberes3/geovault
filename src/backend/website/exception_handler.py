@@ -1,13 +1,16 @@
 """
 Custom exception handler for Django to log unhandled exceptions.
 """
-import sys
-import traceback
 import asyncio
 import logging
+import sys
+import traceback
 
 from django.core.signals import got_request_exception
 from django.dispatch import receiver
+from django.http import HttpResponse
+
+from api.utils.responses import server_error_response
 from geo_lib.logging.console import get_access_logger
 
 access_logger = get_access_logger()
@@ -41,8 +44,6 @@ def custom_exception_handler(request, exception=None):
     Exception logging is handled by the signal handler.
     """
     # Return appropriate error response based on request path
-    from django.http import HttpResponse
-    from api.utils.responses import server_error_response
     
     if request.path.startswith('/api/'):
         # Return JSON error response for API endpoints

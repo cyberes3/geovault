@@ -6,6 +6,8 @@ import uuid
 from django.test import TestCase
 from django.contrib.gis.geos import Point
 
+from django.contrib.auth import get_user_model
+
 from api.models import TagShare, CollectionShare, Collection, FeatureStore
 from geo_lib.feature_id import generate_geojson_hash
 
@@ -15,7 +17,6 @@ class TestSharingAPI(TestCase):
 
     def setUp(self):
         """Set up test fixtures."""
-        from django.contrib.auth import get_user_model
         User = get_user_model()
         self.user = User.objects.create_user(
             email='test@example.com',

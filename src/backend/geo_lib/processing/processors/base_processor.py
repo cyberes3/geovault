@@ -31,6 +31,7 @@ from website.settings_utils import get_required_setting
 from geo_lib.types.feature import PointFeature, LineStringFeature, MultiLineStringFeature, PolygonFeature
 from geo_lib.const_strings import CONST_INTERNAL_TAGS, is_protected_tag, filter_protected_tags, prepare_user_tags
 from geo_lib.types.geojson import GeojsonRawProperty
+from django.conf import settings
 from django.core.files.uploadedfile import SimpleUploadedFile
 
 logger = get_job_logger()
@@ -600,8 +601,6 @@ class BaseProcessor(ABC):
         Returns:
             Timeout in seconds
         """
-        from django.conf import settings
-        
         file_size = len(self.file_data) if isinstance(self.file_data, bytes) else len(self.file_data.encode('utf-8'))
         file_size_mb = file_size / (1024 * 1024)
 

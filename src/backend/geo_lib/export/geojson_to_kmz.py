@@ -16,6 +16,7 @@ from __future__ import annotations
 import os
 import zipfile
 from dataclasses import dataclass
+from io import BytesIO
 from typing import Any, Dict, Iterable, List, Optional, Tuple, Union
 from xml.etree import ElementTree as ET
 
@@ -61,7 +62,6 @@ def geojson_to_kmz_bytes(
     kml_bytes, embedded_files = _build_kml_and_collect_icons(features, options)
 
     # Package into KMZ (ZIP) in memory
-    from io import BytesIO
 
     kmz_buffer = BytesIO()
     with zipfile.ZipFile(kmz_buffer, mode="w", compression=zipfile.ZIP_DEFLATED) as zf:

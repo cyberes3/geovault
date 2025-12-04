@@ -9,10 +9,14 @@ https://docs.djangoproject.com/en/5.0/topics/settings/
 For the full list of settings and their values, see
 https://docs.djangoproject.com/en/5.0/ref/settings/
 """
+import logging
 import os
 from pathlib import Path
+from urllib.parse import urlparse
 
 from website.config_loader import get_config_loader
+
+from geo_lib.tile_sources import get_all_tile_sources
 
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
 BASE_DIR = Path(__file__).resolve().parent.parent
@@ -565,8 +569,6 @@ def get_tile_source_origins():
     Returns:
         list: List of origin URLs (e.g., ['https://tile.opentopomap.org'])
     """
-    from urllib.parse import urlparse
-    from geo_lib.tile_sources import get_all_tile_sources
     
     origins = set()
     
@@ -626,7 +628,6 @@ def get_tile_source_origins():
     except Exception as e:
         # If tile sources aren't loaded yet (during startup), return empty list
         # The middleware will call this again later when needed
-        import logging
         logger = logging.getLogger('config')
         logger.debug(f"Could not load tile source origins during settings initialization: {e}")
     

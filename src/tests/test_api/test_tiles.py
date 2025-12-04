@@ -2,7 +2,11 @@
 Tests for tile API endpoints.
 """
 import json
-from unittest.mock import patch, MagicMock
+from io import BytesIO
+from unittest.mock import MagicMock, patch
+from urllib.response import addinfourl
+
+from django.contrib.auth import get_user_model
 from django.test import TestCase
 
 
@@ -11,7 +15,6 @@ class TestTilesAPI(TestCase):
 
     def setUp(self):
         """Set up test fixtures."""
-        from django.contrib.auth import get_user_model
         User = get_user_model()
         self.user = User.objects.create_user(
             email='test@example.com',
@@ -30,8 +33,6 @@ class TestTilesAPI(TestCase):
     @patch('urllib.request.urlopen')
     def test_tile_proxy(self, mock_urlopen):
         """Test tile proxy endpoint."""
-        from urllib.response import addinfourl
-        from io import BytesIO
         
         # Create a mock response object
         mock_response = addinfourl(

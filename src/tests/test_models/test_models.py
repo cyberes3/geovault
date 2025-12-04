@@ -7,10 +7,13 @@ from django.contrib.auth import get_user_model
 from django.contrib.gis.geos import Point
 from django.utils import timezone
 
+import logging
+
 from api.models import (
     FeatureStore, ImportQueue, Collection, TagShare, CollectionShare,
     UserSettings, DatabaseLogging
 )
+from users.api_keys import create_user_api_key, validate_api_key
 from users.models import ApiKey, UserProfile
 from geo_lib.feature_id import generate_geojson_hash
 
@@ -354,7 +357,6 @@ class TestApiKey(TestCase):
 
     def test_create_api_key(self):
         """Test creating an ApiKey instance."""
-        from users.api_keys import create_user_api_key
         key_obj, raw_key = create_user_api_key(self.user, 'Test Key')
         self.assertEqual(key_obj.user, self.user)
         self.assertEqual(key_obj.name, 'Test Key')
@@ -366,7 +368,6 @@ class TestApiKey(TestCase):
 
     def test_api_key_last_used_at(self):
         """Test updating last_used_at."""
-        from users.api_keys import create_user_api_key, validate_api_key
         key_obj, raw_key = create_user_api_key(self.user, 'Test Key')
         self.assertIsNone(key_obj.last_used_at)
         
@@ -425,7 +426,6 @@ class TestDatabaseLogging(TestCase):
 
     def test_create_database_logging(self):
         """Test creating a DatabaseLogging instance."""
-        import logging
         log_id = uuid.uuid4()
         log_entry = DatabaseLogging.objects.create(
             user=self.user,

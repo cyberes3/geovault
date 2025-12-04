@@ -5,13 +5,16 @@ Process status WebSocket consumer for specific import item updates.
 import json
 import traceback
 
+from asgiref.sync import sync_to_async
 from channels.generic.websocket import AsyncWebsocketConsumer
 from django.contrib.auth.models import AnonymousUser
 from django.http import Http404
 
-from geo_lib.websocket.modules.process_status_module import ProcessStatusModule
+from api.models import ImportQueue
+from api.utils.authorization import get_object_or_404_for_user
 from geo_lib.logging.console import get_websocket_logger
 from geo_lib.utils.ip_utils import get_client_ip, get_user_identifier
+from geo_lib.websocket.modules.process_status_module import ProcessStatusModule
 
 logger = get_websocket_logger()
 
@@ -26,7 +29,6 @@ class ProcessStatusConsumer(AsyncWebsocketConsumer):
 
     async def connect(self):
         """Handle WebSocket connection."""
-        import traceback
         
         path = self.scope.get('path', 'unknown')
         client_ip = 'unknown'
@@ -52,9 +54,6 @@ class ProcessStatusConsumer(AsyncWebsocketConsumer):
 
         try:
             # Verify user owns this import item using async database query
-            from api.models import ImportQueue
-            from api.utils.authorization import get_object_or_404_for_user
-            from asgiref.sync import sync_to_async
 
             # Use sync_to_async to make the database query async-safe
             get_item = sync_to_async(get_object_or_404_for_user)

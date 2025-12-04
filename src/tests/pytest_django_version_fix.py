@@ -6,10 +6,12 @@ The patch is applied at module import time to ensure it's active before any Djan
 """
 import sys
 
+
 # Patch immediately when this module is imported (before pytest_configure)
 # This ensures the patch is active before any Django imports happen
 try:
     import django.utils.version as version_module
+    from django import VERSION as real_version
     
     # Save the original function
     _original_get_complete_version = version_module.get_complete_version
@@ -17,7 +19,6 @@ try:
     def patched_get_complete_version(version=None):
         """Patched version of get_complete_version to work around Django 6.0a1 bug."""
         # Always get Django's real VERSION first as a fallback
-        from django import VERSION as real_version
         
         if version is None:
             version = real_version

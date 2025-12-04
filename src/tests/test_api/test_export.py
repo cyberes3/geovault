@@ -10,6 +10,8 @@ from django.test import TestCase
 from django.contrib.gis.geos import Point
 from lxml import etree
 
+from django.contrib.auth import get_user_model
+
 from api.models import FeatureStore, Collection, TagShare, CollectionShare
 from geo_lib.feature_id import generate_geojson_hash
 
@@ -72,7 +74,6 @@ class TestSingleFeatureExport(TestCase):
 
     def setUp(self):
         """Set up test fixtures."""
-        from django.contrib.auth import get_user_model
         User = get_user_model()
         self.user = User.objects.create_user(
             email='test@example.com',
@@ -138,7 +139,6 @@ class TestSingleFeatureExport(TestCase):
 
     def test_export_single_feature_unauthorized(self):
         """Test exporting another user's feature."""
-        from django.contrib.auth import get_user_model
         User = get_user_model()
         other_user = User.objects.create_user(
             email='other@example.com',
@@ -182,7 +182,6 @@ class TestBulkExport(TestCase):
 
     def setUp(self):
         """Set up test fixtures."""
-        from django.contrib.auth import get_user_model
         User = get_user_model()
         self.user = User.objects.create_user(
             email='test@example.com',
@@ -317,7 +316,6 @@ class TestPublicShareExport(TestCase):
 
     def setUp(self):
         """Set up test fixtures."""
-        from django.contrib.auth import get_user_model
         User = get_user_model()
         self.user = User.objects.create_user(
             email='test@example.com',
@@ -451,7 +449,6 @@ class TestFilenameSanitization(TestCase):
 
     def setUp(self):
         """Set up test fixtures."""
-        from django.contrib.auth import get_user_model
         User = get_user_model()
         self.user = User.objects.create_user(
             email='test@example.com',
@@ -567,7 +564,6 @@ class TestExportInvalidParameters(TestCase):
 
     def setUp(self):
         """Set up test fixtures."""
-        from django.contrib.auth import get_user_model
         User = get_user_model()
         self.user = User.objects.create_user(
             email='test@example.com',
@@ -589,7 +585,6 @@ class TestExportInvalidParameters(TestCase):
 
     def test_export_feature_with_share_mismatch(self):
         """Test exporting feature with unrelated share ID."""
-        from django.contrib.auth import get_user_model
         User = get_user_model()
         other_user = User.objects.create_user(
             email='other@example.com',
@@ -654,7 +649,6 @@ class TestIconEmbedding(TestCase):
 
     def setUp(self):
         """Set up test fixtures."""
-        from django.contrib.auth import get_user_model
         User = get_user_model()
         self.user = User.objects.create_user(
             email='test@example.com',

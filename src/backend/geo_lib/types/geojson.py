@@ -4,6 +4,8 @@ import logging
 
 from pydantic import BaseModel, Field, field_validator, ConfigDict
 
+from geo_lib.utils.date_parser import parse_date_field
+
 
 class GeojsonRawProperty(BaseModel):
     # A class to whitelist these properties.
@@ -75,5 +77,4 @@ class GeojsonRawProperty(BaseModel):
     @classmethod
     def parse_created_field(cls, v):
         """Parse created field from string or datetime using dateparser for flexible format support."""
-        from geo_lib.utils.date_parser import parse_date_field
         return parse_date_field(v)

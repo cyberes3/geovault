@@ -2,10 +2,13 @@
 Tests for CalTopo icon URL detection and processing.
 """
 import pytest
+from unittest.mock import patch
+
 from geo_lib.processing.icon_manager import (
-    _is_caltopo_point_icon,
     _extract_color_from_caltopo_url,
     _fix_nested_caltopo_url,
+    _is_caltopo_point_icon,
+    _process_single_icon_href
 )
 
 
@@ -144,7 +147,6 @@ class TestCalTopoIconProcessingIntegration:
         
         CalTopo defaults to black for point icons without a color parameter.
         """
-        from geo_lib.processing.icon_manager import _process_single_icon_href
         
         url = "http://caltopo.com/icon.png?cfg=point%231.0"
         
@@ -163,7 +165,6 @@ class TestCalTopoIconProcessingIntegration:
 
     def test_point_with_color_should_not_fetch_icon(self):
         """Test that a point icon with color is detected and color is extracted."""
-        from geo_lib.processing.icon_manager import _process_single_icon_href
         
         url = "http://caltopo.com/icon.png?cfg=point%2CFF0000%231.0"
         
@@ -181,8 +182,6 @@ class TestCalTopoIconProcessingIntegration:
 
     def test_non_point_icon_should_fetch(self):
         """Test that non-point CalTopo icons should be fetched."""
-        from geo_lib.processing.icon_manager import _process_single_icon_href
-        from unittest.mock import patch
         
         url = "http://caltopo.com/icon.png?cfg=campfire%2CFF0000%231.0"
         
@@ -208,7 +207,6 @@ class TestCalTopoIconProcessingIntegration:
         Test href_mapping with a CalTopo point icon that has no color.
         This tests the cascading fallback logic: mapped_color -> original_color -> black default.
         """
-        from geo_lib.processing.icon_manager import _process_single_icon_href
         
         # Original URL has no color
         original_url = "http://caltopo.com/icon.png?cfg=point%231.0"
@@ -229,7 +227,6 @@ class TestCalTopoIconProcessingIntegration:
         Test href_mapping where original has color but mapped doesn't.
         Should use original color as fallback.
         """
-        from geo_lib.processing.icon_manager import _process_single_icon_href
         
         # Original URL has color
         original_url = "http://caltopo.com/icon.png?cfg=point%2CFF0000%231.0"
@@ -251,7 +248,6 @@ class TestCalTopoIconProcessingIntegration:
         Note: When the original URL is already a point icon, it returns immediately
         without checking the mapping. The mapping is only used for non-point icons.
         """
-        from geo_lib.processing.icon_manager import _process_single_icon_href
         
         # Original URL has no color and is a point icon
         original_url = "http://caltopo.com/icon.png?cfg=point"
@@ -274,7 +270,6 @@ class TestCalTopoIconProcessingIntegration:
         Test href_mapping where a non-point icon is mapped to a point icon.
         This is the actual use case for href_mapping - when icons are remapped during processing.
         """
-        from geo_lib.processing.icon_manager import _process_single_icon_href
         
         # Original URL is a non-point icon
         original_url = "http://caltopo.com/icon.png?cfg=campfire%2CFF0000"
@@ -295,8 +290,6 @@ class TestCalTopoIconProcessingIntegration:
         Test that non-point CalTopo icons WITHOUT color still attempt to fetch.
         This is an edge case - CalTopo should always include colors, but we handle it gracefully.
         """
-        from geo_lib.processing.icon_manager import _process_single_icon_href
-        from unittest.mock import patch
         
         # A CalTopo campfire icon without a color parameter (unusual but possible)
         url = "http://caltopo.com/icon.png?cfg=campfire%231.0"

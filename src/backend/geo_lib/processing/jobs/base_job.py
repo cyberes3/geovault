@@ -7,6 +7,9 @@ import traceback
 from abc import ABC, abstractmethod
 from typing import Dict, Any
 
+from asgiref.sync import async_to_sync
+from channels.layers import get_channel_layer
+
 from geo_lib.processing.status_tracker import ProcessingStatusTracker, ProcessingStatus
 from geo_lib.logging.console import get_job_logger
 
@@ -130,9 +133,6 @@ class BaseJob(ABC):
 
     def _broadcast_websocket_event(self, user_id: int, event_type: str, data: Dict[str, Any]):
         """Unified WebSocket broadcast helper."""
-        from channels.layers import get_channel_layer
-        from asgiref.sync import async_to_sync
-
         channel_layer = get_channel_layer()
         if channel_layer:
             async_to_sync(channel_layer.group_send)(

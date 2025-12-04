@@ -3,17 +3,19 @@ import traceback
 import uuid
 from typing import Tuple
 
+from django.conf import settings
 from django.db.models import F, Q
 from django.http import JsonResponse, Http404
 from django.views.decorators.http import require_http_methods
 
 from api.models import TagShare, CollectionShare, Collection, FeatureStore
 from api.utils.authorization import get_object_or_404_for_user
+from api.utils.responses import error_response, success_response, not_found_response, handle_404
+from api.validation.feature_updates import validate_payload, TagSharePayload, CollectionSharePayload
 from api.views.bbox_query import BboxQueryResult, _build_bbox_response, _get_features_in_bbox, _validate_bbox_params
 from geo_lib.logging.console import get_access_logger
 from geo_lib.website.auth import api_or_login_required_401
-from api.utils.responses import error_response, success_response, not_found_response, handle_404
-from api.validation.feature_updates import validate_payload, TagSharePayload, CollectionSharePayload
+from website.settings_utils import get_required_setting
 
 logger = get_access_logger()
 
@@ -57,8 +59,6 @@ def create_share(request, validated_data):
         tag = validated_data['tag'].strip()
 
         # Validate tag length
-        from django.conf import settings
-        from website.settings_utils import get_required_setting
         tag_max_length = get_required_setting('TAG_MAX_LENGTH')
         if len(tag) > tag_max_length:
             return error_response(f'Tag name exceeds maximum length of {tag_max_length} characters', code=400)

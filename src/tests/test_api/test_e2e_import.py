@@ -2,15 +2,27 @@
 End-to-end tests for the complete import flow.
 Tests file upload -> async processing -> import to FeatureStore using real files.
 """
+import io
 import json
+import re
+import threading
 import time
+import zipfile
+from io import BytesIO
 from pathlib import Path
+from urllib.error import HTTPError, URLError
+from urllib.parse import urlparse
+from urllib.request import Request, urlopen
 
 import pytest
+from django.contrib.auth import get_user_model
+from django.contrib.gis.geos import Point
 from django.test import TransactionTestCase
 from django.core.files.uploadedfile import SimpleUploadedFile
 
 from api.models import ImportQueue, FeatureStore
+from geo_lib.feature_id import generate_geojson_hash
+from geo_lib.processing.duplicate_models import DuplicateMatchType, DuplicateSource
 from geo_lib.processing.status_tracker import status_tracker, ProcessingStatus
 
 
@@ -26,7 +38,6 @@ class TestE2EImport(TransactionTestCase):
 
     def setUp(self):
         """Set up test fixtures."""
-        from django.contrib.auth import get_user_model
         User = get_user_model()
         self.user = User.objects.create_user(
             email='e2e@example.com',
@@ -86,13 +97,6 @@ class TestE2EImport(TransactionTestCase):
         Create a KMZ file (ZIP with doc.kml inside) from KML content.
         Downloads and embeds any remote icons referenced in the KML.
         """
-        import zipfile
-        import re
-        from io import BytesIO
-        from urllib.request import urlopen, Request
-        from urllib.parse import urlparse
-        from urllib.error import URLError, HTTPError
-        
         # Parse KML content to find icon hrefs
         kml_str = kml_content.decode('utf-8') if isinstance(kml_content, bytes) else kml_content
         
@@ -484,9 +488,6 @@ class TestE2EImport(TransactionTestCase):
                           "Should have detected duplicate features")
         
         # Verify that duplicates are GEOMETRY duplicates (not hash duplicates)
-        from geo_lib.processing.duplicate_models import DuplicateMatchType, DuplicateSource
-        from geo_lib.feature_id import generate_geojson_hash
-        
         # Check that detected duplicates are geometry-based (same location, different properties)
         geometry_duplicate_count = 0
         for dup_info in import_item.duplicate_features:
@@ -517,8 +518,6 @@ class TestE2EImport(TransactionTestCase):
 
     def test_e2e_cross_queue_duplicate_detection(self):
         """Test that hash-based duplicate detection works across ImportQueue items during processing."""
-        from geo_lib.feature_id import generate_geojson_hash
-        
         # Create a simple KML with a single point
         point_kml = """<?xml version="1.0" encoding="UTF-8"?>
 <kml xmlns="http://www.opengis.net/kml/2.2">
@@ -830,7 +829,6 @@ class TestE2EImport(TransactionTestCase):
 
     def test_e2e_skipped_features(self):
         """Test skipping specific features during import."""
-        from geo_lib.feature_id import generate_geojson_hash
         
         # Upload a file
         kml_content = self._load_test_file('Test Items.kml')
@@ -945,9 +943,6 @@ class TestE2EImport(TransactionTestCase):
         4. The ImportQueue item is deleted
         """
         # First create a feature to replace
-        from django.contrib.gis.geos import Point
-        from geo_lib.feature_id import generate_geojson_hash
-        
         original_geojson = {
             'type': 'Feature',
             'geometry': {'type': 'Point', 'coordinates': [-122.0, 37.0, 0.0]},
@@ -1077,8 +1072,6 @@ class TestE2EImport(TransactionTestCase):
 
     def test_e2e_multiple_concurrent_imports(self):
         """Test importing multiple files concurrently."""
-        import threading
-        
         # Prepare multiple files
         kml_content = self._load_test_file('Test Items.kml')
         gpx1_content = self._load_test_file('blue_hills.gpx')

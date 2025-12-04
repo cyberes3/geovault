@@ -9,6 +9,7 @@ from django.conf import settings
 from website.settings_utils import get_required_setting
 
 from geo_lib.logging.console import get_geocode_logger
+from geo_lib.processing.logging import DatabaseLogLevel
 
 logger = get_geocode_logger()
 
@@ -93,7 +94,6 @@ out tags;"""
                 error_msg = f"Overpass API returned status {response.status_code} for coordinates ({latitude}, {longitude})"
                 logger.warning(error_msg)
                 if import_log:
-                    from geo_lib.processing.logging import DatabaseLogLevel
                     import_log.add(error_msg, "Geocoding", DatabaseLogLevel.WARNING)
                 return None
 
@@ -176,7 +176,6 @@ out tags;"""
             error_msg = f"Overpass reverse geocoding failed for coordinates ({latitude}, {longitude}): {str(e)}"
             logger.warning(error_msg)
             if import_log:
-                from geo_lib.processing.logging import DatabaseLogLevel
                 import_log.add(error_msg, "Geocoding", DatabaseLogLevel.WARNING)
             return None
 
@@ -214,7 +213,6 @@ out tags;"""
                 error_msg = f"Nominatim API returned status {response.status_code} for coordinates ({latitude}, {longitude})"
                 logger.warning(error_msg)
                 if import_log:
-                    from geo_lib.processing.logging import DatabaseLogLevel
                     import_log.add(error_msg, "Geocoding", DatabaseLogLevel.WARNING)
                 return None
 
@@ -292,7 +290,6 @@ out tags;"""
         except Exception as e:
             logger.warning(f"Nominatim reverse geocoding failed for coordinates ({latitude}, {longitude}): {str(e)}")
             if import_log:
-                from geo_lib.processing.logging import DatabaseLogLevel
                 import_log.add(f'Nominatim reverse geocoding failed for coordinates ({latitude}, {longitude})', "Geocoding", DatabaseLogLevel.WARNING)
             return None
 
@@ -494,7 +491,6 @@ out tags center;"""
             error_msg = f"City proximity check failed for coordinates ({latitude}, {longitude}): {str(e)}"
             logger.warning(error_msg)
             if import_log:
-                from geo_lib.processing.logging import DatabaseLogLevel
                 import_log.add(error_msg, "Geocoding", DatabaseLogLevel.WARNING)
             return None
 
@@ -540,7 +536,6 @@ out tags center;"""
             error_msg = f"Protected areas search failed for coordinates ({latitude}, {longitude}): {str(e)}"
             logger.warning(error_msg)
             if import_log:
-                from geo_lib.processing.logging import DatabaseLogLevel
                 import_log.add(error_msg, "Geocoding", DatabaseLogLevel.WARNING)
             protected_areas = []
         for area in protected_areas:
@@ -570,7 +565,6 @@ out tags center;"""
             error_msg = f"Lake search failed for coordinates ({latitude}, {longitude}): {str(e)}"
             logger.warning(error_msg)
             if import_log:
-                from geo_lib.processing.logging import DatabaseLogLevel
                 import_log.add(error_msg, "Geocoding", DatabaseLogLevel.WARNING)
             lakes = []
         for lake in lakes:

@@ -14,6 +14,7 @@ from django.contrib.gis.geos import GEOSGeometry
 from api.models import FeatureStore, ImportQueue
 from website.settings_utils import get_required_setting
 from geo_lib.feature_id import generate_geojson_hash
+from geo_lib.processing.duplicate_models import DuplicateMatchType, DuplicateSource
 from geo_lib.processing.logging import ImportLog, DatabaseLogLevel
 from geo_lib.logging.console import get_job_logger
 
@@ -228,7 +229,6 @@ def find_geometry_duplicates(
                 existing_features.append(queue_existing)
 
         if existing_features:
-            from geo_lib.processing.duplicate_models import DuplicateSource, DuplicateMatchType
             
             # Create log message for the duplicate
             feature_name = feature.get('properties', {}).get('name', 'Unnamed')
@@ -346,7 +346,6 @@ def _find_geometry_duplicates_batched(
                     elif geom_type == 'multipoint':
                         geom_type_name = 'MultiPoint'
                     elif geom_type == 'geometrycollection':
-                        from geo_lib.processing.duplicate_models import DuplicateSource, DuplicateMatchType
                         
                         # GeometryCollection needs special handling - skip batching for now
                         # and use the regular duplicate detection logic
@@ -421,7 +420,6 @@ def _find_geometry_duplicates_batched(
                     coords_key = json.dumps(normalized_coords, sort_keys=True)
                     
                     if coords_key in existing_lookup:
-                        from geo_lib.processing.duplicate_models import DuplicateSource, DuplicateMatchType
                         
                         # This is a duplicate from FeatureStore
                         duplicate_info = {
@@ -504,7 +502,6 @@ def _find_geometry_duplicates_batched(
                 coords_key = (feature_type, json.dumps(normalized_feature_coords, sort_keys=True))
                 
                 if coords_key in queue_coords_map:
-                    from geo_lib.processing.duplicate_models import DuplicateSource, DuplicateMatchType
                     
                     queue_match = queue_coords_map[coords_key]
                     queue_existing = {
@@ -597,8 +594,6 @@ def find_hash_duplicates(
     Returns:
         Tuple of (hash_duplicate_features, log_messages)
     """
-    from geo_lib.processing.duplicate_models import DuplicateSource, DuplicateMatchType
-    
     import_log = ImportLog()
     
     if not features:

@@ -9,6 +9,9 @@ from typing import Dict, Any, List
 
 from django.db import transaction
 
+from asgiref.sync import async_to_sync
+from channels.layers import get_channel_layer
+
 from api.models import ImportQueue, DatabaseLogging
 from geo_lib.processing.jobs.base_job import BaseJob
 from geo_lib.processing.status_tracker import ProcessingStatus, JobType
@@ -202,7 +205,6 @@ class BulkDeleteJob(BaseJob):
             user_jobs = self.status_tracker.get_user_jobs(user_id)
 
             # Find active process jobs for this item (including waiting jobs)
-            from geo_lib.processing.status_tracker import JobType
             active_process_jobs = [
                 job for job in user_jobs
                 if (job.import_queue_id == item_id and
@@ -246,9 +248,6 @@ class BulkDeleteJob(BaseJob):
 
     def _broadcast_items_deleted(self, user_id: int, item_ids: List[int]):
         """Broadcast WebSocket event when multiple items are deleted."""
-        from channels.layers import get_channel_layer
-        from asgiref.sync import async_to_sync
-        
         channel_layer = get_channel_layer()
         if channel_layer:
             async_to_sync(channel_layer.group_send)(

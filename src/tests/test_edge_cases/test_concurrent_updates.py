@@ -7,7 +7,11 @@ import time
 from django.test import TransactionTestCase
 from django.contrib.gis.geos import Point
 
-from api.models import FeatureStore, Collection
+from django.contrib.auth import get_user_model
+from django.db import IntegrityError
+from django.test import Client
+
+from api.models import FeatureStore, Collection, ImportQueue
 from geo_lib.feature_id import generate_geojson_hash
 
 
@@ -16,7 +20,6 @@ class TestConcurrentFeatureEdits(TransactionTestCase):
 
     def setUp(self):
         """Set up test fixtures."""
-        from django.contrib.auth import get_user_model
         User = get_user_model()
         self.user = User.objects.create_user(
             email='test@example.com',
@@ -45,7 +48,6 @@ class TestConcurrentFeatureEdits(TransactionTestCase):
 
     def test_concurrent_metadata_updates(self):
         """Test concurrent metadata updates to same feature."""
-        from django.test import Client
         
         client1 = Client()
         client2 = Client()
@@ -99,7 +101,6 @@ class TestConcurrentFeatureEdits(TransactionTestCase):
 
     def test_concurrent_geometry_updates(self):
         """Test concurrent geometry updates to same feature."""
-        from django.test import Client
         
         client1 = Client()
         client2 = Client()
@@ -156,7 +157,6 @@ class TestConcurrentCollectionUpdates(TransactionTestCase):
 
     def setUp(self):
         """Set up test fixtures."""
-        from django.contrib.auth import get_user_model
         User = get_user_model()
         self.user = User.objects.create_user(
             email='test@example.com',
@@ -173,7 +173,6 @@ class TestConcurrentCollectionUpdates(TransactionTestCase):
 
     def test_concurrent_collection_updates(self):
         """Test concurrent updates to same collection."""
-        from django.test import Client
         
         client1 = Client()
         client2 = Client()
@@ -230,7 +229,6 @@ class TestConcurrentBulkOperations(TransactionTestCase):
 
     def setUp(self):
         """Set up test fixtures."""
-        from django.contrib.auth import get_user_model
         User = get_user_model()
         self.user = User.objects.create_user(
             email='test@example.com',
@@ -264,7 +262,6 @@ class TestConcurrentBulkOperations(TransactionTestCase):
 
     def test_concurrent_bulk_metadata_updates(self):
         """Test concurrent bulk metadata updates."""
-        from django.test import Client
         
         client1 = Client()
         client2 = Client()
@@ -325,7 +322,6 @@ class TestConcurrentFeatureCreation(TransactionTestCase):
 
     def setUp(self):
         """Set up test fixtures."""
-        from django.contrib.auth import get_user_model
         User = get_user_model()
         self.user = User.objects.create_user(
             email='test@example.com',
@@ -335,8 +331,6 @@ class TestConcurrentFeatureCreation(TransactionTestCase):
 
     def test_concurrent_identical_feature_creation(self):
         """Test creating identical features concurrently."""
-        from django.test import Client
-        from api.models import ImportQueue
         
         # Create import queue items with identical features
         feature_data = {
@@ -368,7 +362,6 @@ class TestConcurrentFeatureCreation(TransactionTestCase):
         # This test verifies the database constraint works
         
         # Try to create the same feature twice
-        from django.db import IntegrityError
         
         try:
             FeatureStore.objects.create(
@@ -398,7 +391,6 @@ class TestConcurrentDelete(TransactionTestCase):
 
     def setUp(self):
         """Set up test fixtures."""
-        from django.contrib.auth import get_user_model
         User = get_user_model()
         self.user = User.objects.create_user(
             email='test@example.com',
@@ -426,7 +418,6 @@ class TestConcurrentDelete(TransactionTestCase):
 
     def test_concurrent_feature_delete(self):
         """Test deleting same feature from multiple clients."""
-        from django.test import Client
         
         client1 = Client()
         client2 = Client()
@@ -470,7 +461,6 @@ class TestReadWriteConsistency(TransactionTestCase):
 
     def setUp(self):
         """Set up test fixtures."""
-        from django.contrib.auth import get_user_model
         User = get_user_model()
         self.user = User.objects.create_user(
             email='test@example.com',
@@ -499,7 +489,6 @@ class TestReadWriteConsistency(TransactionTestCase):
 
     def test_read_after_write_consistency(self):
         """Test that reads reflect writes immediately."""
-        from django.test import Client
         
         client = Client()
         client.force_login(self.user)

@@ -424,7 +424,6 @@ def process_single_feature_for_import(
             except Exception as e:
                 # Log internal error details for debugging - don't expose to user
                 logger.warning(f"Error creating geometry for feature {feature_index}: {type(e).__name__}: {str(e)}")
-                import traceback
                 logger.error(f"Geometry creation error traceback for feature {feature_index}: {traceback.format_exc()}")
 
         # Create FeatureStore object
@@ -437,7 +436,6 @@ def process_single_feature_for_import(
         )
     except Exception as e:
         logger.error(f"Error processing feature {feature_index}: {str(e)}")
-        import traceback
         logger.error(f"Feature processing error traceback: {traceback.format_exc()}")
         return None
 

@@ -3,6 +3,7 @@ Centralized file type configuration and metadata.
 This module provides a unified registry of supported file types with their properties.
 """
 
+import os
 from dataclasses import dataclass
 from typing import List, Dict, Any, Union
 from enum import Enum
@@ -251,7 +252,6 @@ def detect_file_type(file_data: Union[bytes, str], filename: str = "") -> FileTy
     # First check filename extension
     if filename:
         try:
-            import os
             _, ext = os.path.splitext(filename)
             return get_file_type_by_extension(ext)
         except ValueError:

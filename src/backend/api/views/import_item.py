@@ -1,7 +1,10 @@
 import copy
 import json
+import time
 import traceback
 
+from asgiref.sync import async_to_sync
+from channels.layers import get_channel_layer
 from django import forms
 from django.db import transaction
 from django.http import HttpResponse, JsonResponse
@@ -9,6 +12,7 @@ from django.views.decorators.http import require_http_methods
 
 from api.models import ImportQueue
 from api.utils.authorization import get_object_or_404_for_user
+from api.views.feature_update import _extract_system_tags
 from api.utils.responses import (
     error_response,
     success_response,
@@ -18,9 +22,16 @@ from api.utils.responses import (
     handle_404,
 )
 from geo_lib.const_strings import CONST_INTERNAL_TAGS, filter_protected_tags, prepare_user_tags
+from geo_lib.feature_id import generate_geojson_hash
 from geo_lib.logging.console import get_access_logger
+from geo_lib.processing.duplicate_detection import (
+    find_duplicates_for_source,
+    get_skipped_feature_ids_from_duplicates
+)
+from geo_lib.processing.duplicate_models import DuplicateMatchType
 from geo_lib.processing.jobs import process_job, delete_job, import_job
 from geo_lib.processing.import_utils import validate_bulk_operations_payload
+from geo_lib.processing.logging import DatabaseLogLevel, RealTimeImportLog
 from geo_lib.processing.status_tracker import status_tracker
 from geo_lib.security.file_validation import basic_file_security_check
 from geo_lib.validation.geojson_whitelist import validate_and_normalize_geojson_feature
@@ -299,7 +310,6 @@ def update_import_item(request, item_id, validated_data):
                 merged_feature = copy.deepcopy(existing_feature)
 
                 # Preserve existing system_tags from original feature
-                from api.views.feature_update import _extract_system_tags
                 original_system_tags = _extract_system_tags(existing_feature)
 
                 # Get the partial update fields
@@ -482,7 +492,6 @@ def save_skip_state(request, item_id, validated_data):
         # Validate that all feature IDs exist in the item's geofeatures
         if skipped_feature_ids:
             # Get all feature IDs from geofeatures
-            from geo_lib.feature_id import generate_geojson_hash
             existing_feature_ids = set()
             for feature in import_item.geofeatures:
                 geojson_hash = generate_geojson_hash(feature)
@@ -528,11 +537,6 @@ def recheck_duplicates(request, item_id):
         )
 
     try:
-        from geo_lib.processing.duplicate_detection import find_duplicates_for_source
-        from geo_lib.processing.duplicate_models import DuplicateMatchType
-        from geo_lib.processing.logging import RealTimeImportLog, DatabaseLogLevel
-        import time
-
         # Get the features from the import item
         features = import_item.geofeatures
         if not features:
@@ -590,8 +594,6 @@ def recheck_duplicates(request, item_id):
         
         # Auto-skip ONLY geometry duplicates by adding their feature IDs to skipped_feature_ids
         # Hash duplicates are always blocked, not added to skipped_feature_ids
-        from geo_lib.processing.duplicate_detection import get_skipped_feature_ids_from_duplicates
-        
         # Filter to only geometry duplicates
         geometry_duplicates = [
             dup for dup in duplicate_features 
@@ -616,9 +618,6 @@ def recheck_duplicates(request, item_id):
 
         # Broadcast a refresh message to any connected WebSocket clients
         # so they update their duplicate markers
-        from channels.layers import get_channel_layer
-        from asgiref.sync import async_to_sync
-        
         channel_layer = get_channel_layer()
         if channel_layer:
             # Send a message to trigger the process_status module to refresh the page data

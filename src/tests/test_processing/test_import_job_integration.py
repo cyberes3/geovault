@@ -8,10 +8,12 @@ import pytest
 from django.test import TestCase, TransactionTestCase
 from django.contrib.auth import get_user_model
 
+import time
+
 from api.models import ImportQueue, FeatureStore
-from geo_lib.processing.jobs.import_job import ImportJob
-from geo_lib.processing.status_tracker import status_tracker, ProcessingStatus, ProcessingStatusTracker
 from geo_lib.feature_id import generate_geojson_hash
+from geo_lib.processing.jobs.import_job import ImportJob
+from geo_lib.processing.status_tracker import ProcessingStatus, ProcessingStatusTracker, status_tracker
 
 User = get_user_model()
 
@@ -57,7 +59,6 @@ class TestImportJobEndToEnd(TransactionTestCase):
         
     def _wait_for_job_completion(self, job_id: str, timeout: float = 30.0) -> dict:
         """Wait for job to complete with timeout."""
-        import time
         start_time = time.time()
         while time.time() - start_time < timeout:
             job_status = status_tracker.get_job_status(job_id)
@@ -336,7 +337,6 @@ class TestImportJobWithManualSkips(TransactionTestCase):
     
     def _wait_for_job_completion(self, job_id: str, timeout: float = 30.0) -> dict:
         """Wait for job to complete with timeout."""
-        import time
         start_time = time.time()
         while time.time() - start_time < timeout:
             job_status = status_tracker.get_job_status(job_id)

@@ -158,7 +158,6 @@ class DeleteJob(BaseJob):
             user_jobs = self.status_tracker.get_user_jobs(user_id)
 
             # Find active process jobs for this item (including waiting jobs)
-            from geo_lib.processing.status_tracker import JobType
             active_process_jobs = [
                 job for job in user_jobs
                 if (job.import_queue_id == item_id and

@@ -5,10 +5,15 @@ import json
 import time
 from unittest.mock import patch, MagicMock, call, ANY
 import pytest
+from django.contrib.auth import get_user_model
+from django.contrib.gis.geos import Point
 from django.test import TestCase, TransactionTestCase
 from django.core.files.uploadedfile import SimpleUploadedFile
 
 from api.models import ImportQueue, FeatureStore
+from geo_lib.feature_id import generate_geojson_hash
+from geo_lib.processing.duplicate_models import DuplicateMatchType, DuplicateSource
+from geo_lib.processing.jobs.import_job import ImportJob
 from geo_lib.processing.status_tracker import ProcessingStatus, JobType, status_tracker
 
 
@@ -17,7 +22,6 @@ class TestImportAPI(TransactionTestCase):
 
     def setUp(self):
         """Set up test fixtures."""
-        from django.contrib.auth import get_user_model
         User = get_user_model()
         self.user = User.objects.create_user(
             email='test@example.com',
@@ -178,7 +182,6 @@ class TestImportAPI(TransactionTestCase):
 
     def test_get_processing_status_unauthorized(self):
         """Test getting status for another user's job."""
-        from django.contrib.auth import get_user_model
         User = get_user_model()
         other_user = User.objects.create_user(
             email='other@example.com',
@@ -250,7 +253,6 @@ class TestImportAPI(TransactionTestCase):
 
     def test_fetch_import_history_item_unauthorized(self):
         """Test fetching another user's import history item."""
-        from django.contrib.auth import get_user_model
         User = get_user_model()
         other_user = User.objects.create_user(
             email='other@example.com',
@@ -713,7 +715,6 @@ class TestImportAPI(TransactionTestCase):
 
     def test_update_import_item_multiple_features(self):
         """Test updating multiple features in a single request."""
-        from geo_lib.feature_id import generate_geojson_hash
         
         feature1 = {
             'type': 'Feature',
@@ -895,7 +896,6 @@ class TestImportAPI(TransactionTestCase):
 
     def test_update_import_item_system_tags_preservation_multiple_features(self):
         """Test that system_tags are preserved when updating multiple features."""
-        from geo_lib.feature_id import generate_geojson_hash
         
         feature1 = {
             'type': 'Feature',
@@ -1137,7 +1137,6 @@ class TestImportAPI(TransactionTestCase):
 
     def test_import_to_featurestore(self):
         """Test importing to featurestore with real import job."""
-        from geo_lib.feature_id import generate_geojson_hash
         
         feature = {
             'type': 'Feature',
@@ -1251,8 +1250,6 @@ class TestImportAPI(TransactionTestCase):
 
     def test_recheck_duplicates(self):
         """Test rechecking duplicates for an import queue item with real duplicate detection."""
-        from geo_lib.feature_id import generate_geojson_hash
-        from django.contrib.gis.geos import Point
         
         # Create an existing feature in the feature store
         existing_feature_data = {
@@ -1307,9 +1304,6 @@ class TestImportAPI(TransactionTestCase):
 
     def test_recheck_duplicates_hash_takes_precedence(self):
         """Test that hash duplicates take precedence over geometry duplicates with real duplicate detection."""
-        from geo_lib.feature_id import generate_geojson_hash
-        from api.models import FeatureStore
-        from django.contrib.gis.geos import Point
         
         # Create a feature that will be a hash duplicate
         test_feature = {
@@ -1350,7 +1344,6 @@ class TestImportAPI(TransactionTestCase):
 
     def test_recheck_duplicates_cross_queue_coord_duplicate(self):
         """Test cross-queue geometry duplicate detection with real processing."""
-        from geo_lib.feature_id import generate_geojson_hash
         
         # Create first import queue item with a feature
         feature1 = {
@@ -1399,8 +1392,6 @@ class TestImportAPI(TransactionTestCase):
 
     def test_recheck_duplicates_cross_queue_hash_is_blocked(self):
         """Test that cross-queue hash duplicates are BLOCKED (not skipped/restorable)."""
-        from geo_lib.feature_id import generate_geojson_hash
-        from geo_lib.processing.duplicate_models import DuplicateSource, DuplicateMatchType
         
         # Create feature with hash
         test_feature = {
@@ -1435,7 +1426,6 @@ class TestImportJobWebSocket(TestCase):
 
     def setUp(self):
         """Set up test fixtures."""
-        from django.contrib.auth import get_user_model
         User = get_user_model()
         self.user = User.objects.create_user(
             email='test@example.com',
@@ -1445,7 +1435,6 @@ class TestImportJobWebSocket(TestCase):
 
     def test_broadcast_to_process_status_module_called(self):
         """Test that _broadcast_to_process_status_module creates correct WebSocket message."""
-        from geo_lib.processing.jobs.import_job import ImportJob
         
         # Create import job instance
         import_job = ImportJob(status_tracker)
@@ -1463,7 +1452,6 @@ class TestImportJobWebSocket(TestCase):
 
     def test_broadcast_completion_message_format(self):
         """Test that item_completed broadcast has correct data structure."""
-        from geo_lib.processing.jobs.import_job import ImportJob
         
         import_job = ImportJob(status_tracker)
         
@@ -1485,7 +1473,6 @@ class TestImportJobWebSocket(TestCase):
 
     def test_broadcast_failure_message_format(self):
         """Test that item_failed broadcast has correct data structure."""
-        from geo_lib.processing.jobs.import_job import ImportJob
         
         import_job = ImportJob(status_tracker)
         
@@ -1505,7 +1492,6 @@ class TestImportJobWebSocket(TestCase):
 
     def test_broadcast_channel_name_format(self):
         """Test that broadcast uses correct channel naming convention."""
-        from geo_lib.processing.jobs.import_job import ImportJob
         
         import_job = ImportJob(status_tracker)
         
@@ -1528,7 +1514,6 @@ class TestSequentialProcessing(TestCase):
 
     def setUp(self):
         """Set up test fixtures."""
-        from django.contrib.auth import get_user_model
         User = get_user_model()
         self.user = User.objects.create_user(
             email='sequential@example.com',
@@ -1570,7 +1555,6 @@ class TestSequentialProcessing(TestCase):
     @patch('api.views.import_item.status_tracker')
     def test_upload_returns_immediately_job_runs_async(self, mock_status_tracker, mock_process_job):
         """Test that upload returns immediately while job runs asynchronously."""
-        import time
 
         # Setup mocks
         job_id = 'async-test-job-id'

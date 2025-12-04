@@ -12,9 +12,9 @@ from django.contrib.auth import get_user_model
 
 from api.models import ImportQueue
 from geo_lib.processing.jobs.process_job import ProcessJob
-from geo_lib.processing.status_tracker import status_tracker, ProcessingStatus
+from geo_lib.processing.queue_worker import QueueWorker, WorkerRegistry
 from geo_lib.processing.redis_queue import get_processing_queue
-from geo_lib.processing.queue_worker import WorkerRegistry
+from geo_lib.processing.status_tracker import ProcessingStatus, status_tracker
 from geo_lib.utils.redis_connection import get_redis_connection
 
 User = get_user_model()
@@ -235,7 +235,6 @@ class TestSequentialProcessing(TransactionTestCase):
     def test_worker_exits_after_idle(self):
         """Test that worker exits after idle timeout."""
         # Set a short idle timeout for testing
-        from geo_lib.processing.queue_worker import QueueWorker
         original_timeout = QueueWorker.IDLE_TIMEOUT
         QueueWorker.IDLE_TIMEOUT = 1  # 1 second timeout
         
@@ -443,7 +442,6 @@ class TestSequentialProcessing(TransactionTestCase):
         def slow_execute(job_id, kwargs):
             # Call the original method to set status to PROCESSING, but catch it early
             # We'll manually set the status and then sleep
-            from geo_lib.processing.status_tracker import ProcessingStatus
             self.process_job.status_tracker.update_job_status(
                 job_id, ProcessingStatus.PROCESSING,
                 "Processing...", 50.0
@@ -463,7 +461,8 @@ class TestSequentialProcessing(TransactionTestCase):
             
             # Give time for worker to start and process first job
             # Worker needs time to: start thread, dequeue job, call _execute_job (which sets PROCESSING)
-            time.sleep(0.5)
+            # Use a shorter sleep to catch the state right after first job starts but before second job dequeues
+            time.sleep(0.2)
             
             # Check statuses (simulating what frontend would see)
             jobs_status = []

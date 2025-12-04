@@ -12,7 +12,10 @@ from django.contrib.sites.models import Site
 from django.urls import reverse
 from django.utils import timezone
 
+from django.test import RequestFactory
+
 from allauth.account.models import EmailAddress, EmailConfirmation
+from users.adapters import NoUsernameAccountAdapter
 from users.constants import EMAIL_VERIFICATION_CACHE_KEY, EMAIL_VERIFICATION_COOLDOWN_SECONDS
 
 User = get_user_model()
@@ -235,9 +238,6 @@ class TestSignupEmailConfirmation(TestCase):
 
     def test_adapter_cooldown_blocks_duplicate_sends(self):
         """Test that adapter's cooldown prevents duplicate emails when called directly."""
-        from allauth.account.models import EmailConfirmation
-        from users.adapters import NoUsernameAccountAdapter
-        from django.test import RequestFactory
         
         # Create a user with unverified email
         user = User.objects.create_user(

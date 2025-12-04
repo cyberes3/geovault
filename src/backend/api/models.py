@@ -1,6 +1,6 @@
 import uuid
 
-from django.contrib.auth import get_user_model
+from django.conf import settings
 from django.contrib.gis.db import models
 from django.contrib.postgres.indexes import GinIndex, GistIndex
 from django.db import models as django_models
@@ -8,7 +8,7 @@ from django.db import models as django_models
 
 class ImportQueue(django_models.Model):
     id = django_models.AutoField(primary_key=True)
-    user = django_models.ForeignKey(get_user_model(), on_delete=django_models.CASCADE)
+    user = django_models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=django_models.CASCADE)
     imported = django_models.BooleanField(default=False)
     unparsable = django_models.BooleanField(default=False, help_text="True if the file failed to parse and should not be retried")
     geofeatures = django_models.JSONField(default=list)
@@ -35,7 +35,7 @@ class ImportQueue(django_models.Model):
 
 class FeatureStore(models.Model):
     id = models.AutoField(primary_key=True)
-    user = models.ForeignKey(get_user_model(), on_delete=models.CASCADE)
+    user = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE)
     source = models.ForeignKey(ImportQueue, on_delete=models.SET_NULL, null=True)
     geojson = models.JSONField(null=False)
     geojson_hash = models.CharField(max_length=64, null=True, blank=True, help_text="SHA-256 hash of this individual feature's GeoJSON content")
@@ -91,7 +91,7 @@ class FeatureStore(models.Model):
 
 class DatabaseLogging(django_models.Model):
     id = django_models.AutoField(primary_key=True)
-    user = django_models.ForeignKey(get_user_model(), on_delete=django_models.CASCADE)
+    user = django_models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=django_models.CASCADE)
     log_id = django_models.UUIDField(null=True, blank=True, db_index=True, help_text="UUID to group related log entries")
     level = django_models.IntegerField()
     text = django_models.TextField()
@@ -130,7 +130,7 @@ class DatabaseLogging(django_models.Model):
 class TagShare(django_models.Model):
     share_id = django_models.CharField(max_length=255, unique=True, db_index=True, help_text="UUID4")
     tag = django_models.CharField(max_length=255, help_text="The tag being shared")
-    user = django_models.ForeignKey(get_user_model(), on_delete=django_models.CASCADE)
+    user = django_models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=django_models.CASCADE)
     created_at = django_models.DateTimeField(auto_now_add=True)
     access_count = django_models.IntegerField(default=0, help_text="Number of times this share has been accessed")
     allow_downloads = django_models.BooleanField(default=False, help_text="Whether viewers can download features as KMZ")
@@ -146,7 +146,7 @@ class TagShare(django_models.Model):
 class CollectionShare(django_models.Model):
     share_id = django_models.CharField(max_length=255, unique=True, db_index=True, help_text="UUID4 share identifier")
     collection = django_models.ForeignKey('Collection', on_delete=django_models.CASCADE, help_text="The collection being shared")
-    user = django_models.ForeignKey(get_user_model(), on_delete=django_models.CASCADE)
+    user = django_models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=django_models.CASCADE)
     created_at = django_models.DateTimeField(auto_now_add=True)
     access_count = django_models.IntegerField(default=0, help_text="Number of times this share has been accessed")
     include_tags = django_models.BooleanField(default=False, help_text="Whether to include tags in the shared features")
@@ -162,7 +162,7 @@ class CollectionShare(django_models.Model):
 
 class Collection(django_models.Model):
     id = django_models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
-    user = django_models.ForeignKey(get_user_model(), on_delete=django_models.CASCADE)
+    user = django_models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=django_models.CASCADE)
     name = django_models.CharField(max_length=255)
     description = django_models.TextField(blank=True, null=True)
     tags = django_models.JSONField(default=list, help_text="Array of tag strings")
@@ -177,7 +177,7 @@ class Collection(django_models.Model):
 
 
 class UserSettings(django_models.Model):
-    user = django_models.OneToOneField(get_user_model(), on_delete=django_models.CASCADE, primary_key=True)
+    user = django_models.OneToOneField(settings.AUTH_USER_MODEL, on_delete=django_models.CASCADE, primary_key=True)
     settings = django_models.JSONField(default=dict, help_text="Key-value pairs for user settings")
     hidden_features = django_models.JSONField(default=list, help_text="List of feature IDs hidden on the main map page")
     created_at = django_models.DateTimeField(auto_now_add=True)

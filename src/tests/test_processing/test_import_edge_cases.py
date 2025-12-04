@@ -10,12 +10,14 @@ from django.contrib.auth import get_user_model
 from unittest.mock import patch
 import time
 
+from django.contrib.gis.geos import Point
+
 from api.models import ImportQueue, FeatureStore
-from geo_lib.processing.jobs.import_job import ImportJob
-from geo_lib.processing.jobs.bulk_import_job import BulkImportJob
-from geo_lib.processing.status_tracker import status_tracker, ProcessingStatus
 from geo_lib.feature_id import generate_geojson_hash
 from geo_lib.processing.duplicate_models import DuplicateMatchType, DuplicateSource
+from geo_lib.processing.jobs.bulk_import_job import BulkImportJob
+from geo_lib.processing.jobs.import_job import ImportJob
+from geo_lib.processing.status_tracker import ProcessingStatus, status_tracker
 
 User = get_user_model()
 
@@ -183,7 +185,6 @@ class TestImportEdgeCases(TransactionTestCase):
         feature3['properties']['geojson_hash'] = hash3
         
         # Create feature that already exists (hash duplicate)
-        from django.contrib.gis.geos import Point
         existing_feature = FeatureStore.objects.create(
             user=self.user,
             geojson=feature1,

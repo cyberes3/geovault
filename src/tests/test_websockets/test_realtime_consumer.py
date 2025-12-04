@@ -2,14 +2,17 @@
 Tests for RealtimeConsumer WebSocket functionality.
 """
 import json
-from unittest.mock import AsyncMock, patch, MagicMock
-from channels.testing import WebsocketCommunicator
-from channels.layers import get_channel_layer
+from unittest.mock import AsyncMock, MagicMock, patch
 from channels.db import database_sync_to_async
+from channels.layers import get_channel_layer
+from channels.testing import WebsocketCommunicator
+from django.contrib.auth.models import AnonymousUser
 from django.test import TransactionTestCase
 from django.contrib.auth import get_user_model
 
+from api.models import ImportQueue
 from api.ws_consumers.realtime_consumer import RealtimeConsumer
+from geo_lib.websocket.modules.import_queue_module import ImportQueueModule
 
 User = get_user_model()
 
@@ -38,7 +41,6 @@ class TestRealtimeConsumerConnection(TransactionTestCase):
 
     async def test_connection_unauthenticated(self):
         """Test that unauthenticated users are rejected."""
-        from django.contrib.auth.models import AnonymousUser
         
         communicator = WebsocketCommunicator(
             RealtimeConsumer.as_asgi(),
@@ -146,8 +148,6 @@ class TestRealtimeConsumerModules(TransactionTestCase):
         This test would have caught the NameError bug where 'already_imported_items'
         was used instead of 'imported_items'.
         """
-        from api.models import ImportQueue
-        from geo_lib.websocket.modules.import_queue_module import ImportQueueModule
         
         user = await database_sync_to_async(User.objects.create_user)(
             email='test@example.com',
@@ -212,8 +212,6 @@ class TestRealtimeConsumerModules(TransactionTestCase):
         This tests the edge case where queue_hashes is empty, ensuring the code
         doesn't break when there are no hashes to check.
         """
-        from api.models import ImportQueue
-        from geo_lib.websocket.modules.import_queue_module import ImportQueueModule
         
         user = await database_sync_to_async(User.objects.create_user)(
             email='test2@example.com',

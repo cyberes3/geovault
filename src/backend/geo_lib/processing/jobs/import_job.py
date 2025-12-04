@@ -6,6 +6,9 @@ Handles importing a single import queue item to the feature store.
 import json
 from typing import Dict, Any, List
 
+from asgiref.sync import async_to_sync
+from channels.layers import get_channel_layer
+
 from api.models import ImportQueue, FeatureStore
 from geo_lib.logging.console import get_job_logger
 from geo_lib.processing.import_utils import (
@@ -33,9 +36,6 @@ class ImportJob(BaseJob):
 
     def _broadcast_to_process_status_module(self, user_id: int, import_queue_id: int, event_type: str, data: dict):
         """Broadcast WebSocket event to process_status module for specific item."""
-        from channels.layers import get_channel_layer
-        from asgiref.sync import async_to_sync
-
         channel_layer = get_channel_layer()
         if channel_layer:
             async_to_sync(channel_layer.group_send)(

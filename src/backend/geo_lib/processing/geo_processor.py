@@ -10,9 +10,13 @@ from typing import Optional
 
 import markdownify
 
+import logging
+
 from geo_lib.feature_id import generate_geojson_hash
 from geo_lib.processing.file_types import FileType
 from geo_lib.logging.console import get_job_logger
+from geo_lib.validation.geojson_whitelist import validate_and_normalize_geojson_feature
+from geo_lib.validation.geometry_validation import GeometryValidationError
 
 logger = get_job_logger()
 
@@ -194,8 +198,6 @@ def geojson_property_generation(feature: dict) -> dict:
     Returns:
         Properties dictionary with validated, whitelisted keys and normalized styles
     """
-    from geo_lib.validation.geojson_whitelist import validate_and_normalize_geojson_feature
-    from geo_lib.validation.geometry_validation import GeometryValidationError
     
     # Extract and preserve system_tags if they exist (they're generated during processing)
     original_system_tags = feature.get('properties', {}).get('system_tags')
@@ -215,7 +217,6 @@ def geojson_property_generation(feature: dict) -> dict:
         return normalized_feature.get('properties', {})
     except GeometryValidationError as e:
         # If validation fails, log warning and return original properties with basic normalization
-        import logging
         logger = logging.getLogger(__name__)
         logger.warning(f"Feature validation failed during property generation: {str(e)}")
         # Return original properties (caller should handle validation errors)

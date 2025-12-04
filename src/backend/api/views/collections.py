@@ -17,6 +17,7 @@ from api.utils.responses import (
     handle_404,
 )
 from api.validation.feature_updates import validate_payload, CollectionCreatePayload, CollectionUpdatePayload
+from api.views.feature_update import _apply_bulk_ops_and_save_feature
 from geo_lib.feature_id import generate_geojson_hash
 from geo_lib.logging.console import get_access_logger
 from geo_lib.processing.import_utils import (
@@ -301,7 +302,6 @@ def apply_bulk_operations_to_collection(request, collection_id):
     features_qs = FeatureStore.objects.filter(id__in=feature_ids_set).only("id", "geojson")
 
     # Import helper from feature_update module
-    from api.views.feature_update import _apply_bulk_ops_and_save_feature
 
     # Wrap in transaction to ensure atomicity
     with transaction.atomic():

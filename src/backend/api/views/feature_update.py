@@ -17,7 +17,7 @@ from api.utils.responses import error_response, success_response, not_found_resp
 from geo_lib.const_strings import CONST_INTERNAL_TAGS, filter_protected_tags, is_protected_tag, prepare_user_tags
 from geo_lib.feature_id import generate_geojson_hash
 from geo_lib.logging.console import get_access_logger
-from geo_lib.processing.tagging import update_feature_date_tags
+from geo_lib.processing.tagging import generate_auto_tags, update_feature_date_tags
 from geo_lib.processing.import_utils import (
     apply_bulk_operations as apply_bulk_operations_to_features,
     validate_bulk_operations_payload,
@@ -938,7 +938,6 @@ def apply_replacement_geometry(request, feature_id, validated_data):
                         existing_user_tags = []
 
                     # Generate new system tags based on the new geometry
-                    from geo_lib.processing.tagging import generate_auto_tags
                     new_system_tags = generate_auto_tags(feature_instance, import_log=None)
 
                     # Remove any import-year and import-month tags from new system tags
@@ -1037,7 +1036,6 @@ def regenerate_feature_tags(request, feature_id):
         existing_user_tags = []
 
     # Generate new system tags
-    from geo_lib.processing.tagging import generate_auto_tags
     new_system_tags = generate_auto_tags(feature_instance, import_log=None)
 
     # Update the feature's tags - preserve user tags, regenerate system tags

@@ -15,14 +15,18 @@ import pytest
 from django.test import TestCase, TransactionTestCase
 from django.contrib.auth import get_user_model
 
+from datetime import datetime, timedelta, timezone
+
+from django.contrib.gis.geos import Point
+
 from api.models import FeatureStore, ImportQueue
+from geo_lib.feature_id import generate_geojson_hash
 from geo_lib.processing.duplicate_detection import (
     find_duplicates_for_source,
     find_hash_duplicates,
     find_geometry_duplicates
 )
-from geo_lib.processing.duplicate_models import DuplicateSource, DuplicateMatchType
-from geo_lib.feature_id import generate_geojson_hash
+from geo_lib.processing.duplicate_models import DuplicateMatchType, DuplicateSource, split_duplicates_by_match_type
 
 
 User = get_user_model()
@@ -91,7 +95,6 @@ class TestDuplicateDetectionIndividual(TestCase):
 
     def test_feature_store_geometry_duplicate_only(self):
         """Test 2: Feature store geometry duplicate detection."""
-        from django.contrib.gis.geos import Point
         
         # Create a feature with same coordinates but different properties
         feature_hash = generate_geojson_hash(self.point_feature)
@@ -354,7 +357,6 @@ class TestDuplicatePriorityRules(TestCase):
 
     def test_feature_store_over_cross_queue_both_geometry(self):
         """Test 8: Feature store geometry takes precedence over cross-queue geometry."""
-        from django.contrib.gis.geos import Point
         
         # Feature store has geometry match
         feature_hash1 = generate_geojson_hash(self.point_feature)
@@ -486,7 +488,6 @@ class TestDuplicatePriorityRules(TestCase):
 
     def test_feature_store_geometry_over_cross_queue_hash(self):
         """Test 10: Feature store geometry takes precedence over cross-queue hash."""
-        from django.contrib.gis.geos import Point
         
         # Feature store has geometry match only
         fs_feature = self.point_feature.copy()
@@ -701,7 +702,6 @@ class TestSourceIsolation(TestCase):
     
     def test_feature_store_filter_ignores_cross_queue(self):
         """Test 15: source='feature_store' doesn't return cross-queue duplicates."""
-        from django.contrib.gis.geos import Point
         
         # Create feature in feature store
         feature_in_store = {
@@ -775,7 +775,6 @@ class TestSourceIsolation(TestCase):
     
     def test_cross_queue_filter_ignores_feature_store(self):
         """Test 16: source='cross_queue' doesn't return feature store duplicates."""
-        from django.contrib.gis.geos import Point
         
         # Create feature in feature store
         feature_in_store = {
@@ -861,7 +860,6 @@ class TestTimestampOrdering(TestCase):
     
     def test_simultaneous_uploads_only_newer_shows_duplicates(self):
         """Test 17: Two files uploaded simultaneously - only newer one shows duplicates of older."""
-        from datetime import datetime, timezone, timedelta
         
         # Create identical feature
         feature = {
@@ -935,7 +933,6 @@ class TestTimestampOrdering(TestCase):
     
     def test_three_sequential_uploads_correct_ordering(self):
         """Test 18: Three files uploaded sequentially - each only sees older ones as duplicates."""
-        from datetime import datetime, timezone, timedelta
         
         # Create identical feature
         feature = {
@@ -1023,8 +1020,6 @@ class TestIntegration(TestCase):
     
     def test_full_processing_flow_with_all_duplicate_types(self):
         """Test 19: Full ProcessJob integration - all 4 duplicate types in one processing run."""
-        from django.contrib.gis.geos import Point
-        from datetime import datetime, timezone
         
         # Setup: Create features in feature store
         fs_hash_feature = {
@@ -1114,8 +1109,6 @@ class TestIntegration(TestCase):
         ]
         
         # Simulate the full 2-pass detection flow (like ProcessJob does)
-        from geo_lib.processing.duplicate_detection import find_duplicates_for_source
-        from geo_lib.processing.duplicate_models import split_duplicates_by_match_type
         
         # PASS 1: Feature store detection
         remaining_after_fs, fs_duplicates, fs_log = find_duplicates_for_source(
@@ -1196,8 +1189,6 @@ class TestIntegration(TestCase):
     
     def test_integration_skipped_feature_ids_only_geometry(self):
         """Test 20: Integration test verifying skipped_feature_ids only contains geometry duplicates."""
-        from django.contrib.gis.geos import Point
-        from datetime import datetime, timezone
         
         # Create features that will be hash and geometry duplicates
         hash_dup_feature = {
@@ -1240,8 +1231,6 @@ class TestIntegration(TestCase):
         test_features = [hash_dup_feature, geom_dup_feature]
         
         # Run detection
-        from geo_lib.processing.duplicate_detection import find_duplicates_for_source
-        from geo_lib.processing.duplicate_models import split_duplicates_by_match_type
         
         remaining, fs_dups, log = find_duplicates_for_source(
             test_features,
@@ -1291,7 +1280,6 @@ class TestComplexScenarios(TestCase):
 
     def test_multiple_features_mixed_duplicates(self):
         """Test 11: Multiple features with different duplicate types."""
-        from django.contrib.gis.geos import Point
         
         # Feature 1: Hash duplicate in feature store
         feature1 = {
@@ -1482,7 +1470,6 @@ class TestSequentialProcessingIntegration(TransactionTestCase):
     
     def test_timestamp_ordering_enforced_by_sequential_processing(self):
         """Test that sequential processing enforces timestamp-based duplicate detection."""
-        from datetime import datetime, timezone, timedelta
         
         # Create two queue items with different timestamps
         feature = {

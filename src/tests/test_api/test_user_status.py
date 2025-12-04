@@ -5,6 +5,10 @@ import json
 from django.test import TestCase
 from django.contrib.gis.geos import Point
 
+from allauth.account.models import EmailAddress
+
+from django.contrib.auth import get_user_model
+
 from api.models import FeatureStore, ImportQueue
 from geo_lib.feature_id import generate_geojson_hash
 
@@ -14,7 +18,6 @@ class TestUserStatusEndpoint(TestCase):
 
     def setUp(self):
         """Set up test fixtures."""
-        from django.contrib.auth import get_user_model
         User = get_user_model()
         self.user = User.objects.create_user(
             email='test@example.com',
@@ -53,7 +56,6 @@ class TestUserStatusEndpoint(TestCase):
 
     def test_user_status_superuser_flag(self):
         """Test that is_superuser flag is correctly set for superuser."""
-        from django.contrib.auth import get_user_model
         User = get_user_model()
         admin = User.objects.create_user(
             email='admin@example.com',
@@ -77,7 +79,6 @@ class TestFeatureCountCalculation(TestCase):
 
     def setUp(self):
         """Set up test fixtures."""
-        from django.contrib.auth import get_user_model
         User = get_user_model()
         self.user = User.objects.create_user(
             email='test@example.com',
@@ -123,7 +124,6 @@ class TestFeatureCountCalculation(TestCase):
 
     def test_feature_count_only_own_features(self):
         """Test that feature count only includes user's own features."""
-        from django.contrib.auth import get_user_model
         User = get_user_model()
         other_user = User.objects.create_user(
             email='other@example.com',
@@ -185,7 +185,6 @@ class TestEmailAddress(TestCase):
 
     def setUp(self):
         """Set up test fixtures."""
-        from django.contrib.auth import get_user_model
         User = get_user_model()
         self.user = User.objects.create_user(
             email='test@example.com',
@@ -205,7 +204,6 @@ class TestEmailAddress(TestCase):
 
     def test_email_address_with_primary(self):
         """Test email address when primary email is set."""
-        from allauth.account.models import EmailAddress
         
         # Create primary email address
         EmailAddress.objects.create(
@@ -222,7 +220,6 @@ class TestEmailAddress(TestCase):
 
     def test_email_address_fallback(self):
         """Test email address fallback when no primary is set."""
-        from allauth.account.models import EmailAddress
         
         # Create non-primary email addresses
         EmailAddress.objects.create(
@@ -250,7 +247,6 @@ class TestUserStorageEndpoint(TestCase):
 
     def setUp(self):
         """Set up test fixtures."""
-        from django.contrib.auth import get_user_model
         User = get_user_model()
         self.user = User.objects.create_user(
             email='test@example.com',
@@ -334,7 +330,6 @@ class TestUserStorageEndpoint(TestCase):
 
     def test_storage_only_own_data(self):
         """Test that storage only includes user's own data."""
-        from django.contrib.auth import get_user_model
         User = get_user_model()
         other_user = User.objects.create_user(
             email='other@example.com',

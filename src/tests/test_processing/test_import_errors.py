@@ -12,10 +12,10 @@ from unittest.mock import patch, MagicMock
 import time
 
 from api.models import ImportQueue, FeatureStore
-from geo_lib.processing.jobs.import_job import ImportJob
-from geo_lib.processing.jobs.bulk_import_job import BulkImportJob
-from geo_lib.processing.status_tracker import status_tracker, ProcessingStatus
 from geo_lib.feature_id import generate_geojson_hash
+from geo_lib.processing.jobs.bulk_import_job import BulkImportJob
+from geo_lib.processing.jobs.import_job import ImportJob
+from geo_lib.processing.status_tracker import ProcessingStatus, status_tracker
 
 User = get_user_model()
 
@@ -92,7 +92,6 @@ class TestImportErrorHandling(TransactionTestCase):
         )
         
         # Try to import the second item via bulk import (should fail due to file-level duplicate)
-        from geo_lib.processing.jobs.bulk_import_job import BulkImportJob
         job = BulkImportJob(status_tracker)
         job_id = job.start_bulk_import_job(
             item_ids=[item2.id],

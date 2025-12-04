@@ -8,8 +8,13 @@ from enum import Enum
 from typing import List
 from typing import Optional
 
+from asgiref.sync import async_to_sync, sync_to_async
+from channels.layers import get_channel_layer
 from pydantic import BaseModel, Field
 from django.utils import timezone
+
+from api.models import DatabaseLogging, ImportQueue
+from geo_lib.logging.console import get_database_logger
 
 
 @contextmanager
@@ -86,7 +91,6 @@ class RealTimeImportLog:
         self._messages: List[DatabaseLogMsg] = []
         self.user_id = user_id
         self.log_id = log_id  # This should be a UUID string
-        from geo_lib.logging.console import get_database_logger
         self._db_logger = get_database_logger()
     
     def add(self, msg: str, source: str, level=DatabaseLogLevel.INFO, duration: float = None):
@@ -107,7 +111,6 @@ class RealTimeImportLog:
         
         # Write to database immediately with the same timestamp
         try:
-            from api.models import DatabaseLogging
             db_log = DatabaseLogging.objects.create(
                 user_id=self.user_id,
                 log_id=self.log_id,
@@ -132,7 +135,6 @@ class RealTimeImportLog:
     
     async def add_async(self, msg: str, source: str, level=DatabaseLogLevel.INFO, duration: float = None):
         """Async version of add() for use in async contexts."""
-        from asgiref.sync import sync_to_async
         await sync_to_async(self.add)(msg, source, level, duration)
     
     def extend(self, msgs: 'ImportLog'):
@@ -141,7 +143,6 @@ class RealTimeImportLog:
         if not messages_to_add:
             return
 
-        from api.models import DatabaseLogging
         timestamp = timezone.now()
         db_logs = []
         
@@ -182,7 +183,6 @@ class RealTimeImportLog:
 
     async def extend_async(self, msgs: 'ImportLog'):
         """Async version of extend() for use in async contexts."""
-        from asgiref.sync import sync_to_async
         await sync_to_async(self.extend)(msgs)
 
     def get(self) -> List[DatabaseLogMsg]:
@@ -204,11 +204,8 @@ class RealTimeImportLog:
     def _broadcast_log_to_websocket(self, log_msg: DatabaseLogMsg):
         """Broadcast log message to WebSocket channels."""
         try:
-            from channels.layers import get_channel_layer
-            from asgiref.sync import async_to_sync
             
             # Find the import item associated with this log_id
-            from api.models import ImportQueue
             try:
                 import_item = ImportQueue.objects.get(log_id=self.log_id)
                 user_id = import_item.user_id
@@ -240,11 +237,8 @@ class RealTimeImportLog:
     def _broadcast_logs_batch_to_websocket(self, log_msgs: List[DatabaseLogMsg]):
         """Broadcast batch of log messages to WebSocket channels."""
         try:
-            from channels.layers import get_channel_layer
-            from asgiref.sync import async_to_sync
             
             # Find the import item associated with this log_id
-            from api.models import ImportQueue
             try:
                 import_item = ImportQueue.objects.get(log_id=self.log_id)
                 user_id = import_item.user_id

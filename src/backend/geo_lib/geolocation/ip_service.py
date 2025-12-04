@@ -4,9 +4,13 @@ IP-based geolocation service using MaxMind GeoIP2 database.
 import os
 import traceback
 from typing import Optional, Dict, Any
+
 import geoip2.database
 import geoip2.errors
+from django.conf import settings
+
 from geo_lib.logging.console import get_geocode_logger
+from website.settings_utils import get_required_setting
 
 logger = get_geocode_logger()
 
@@ -27,8 +31,6 @@ class IPGeolocationService:
         if database_path is None:
             # Try to get from Django settings first
             try:
-                from django.conf import settings
-                from website.settings_utils import get_required_setting
                 database_path = get_required_setting('MAXMIND_DATABASE_PATH')
             except Exception:
                 # Django not initialized yet, fall back to environment variable

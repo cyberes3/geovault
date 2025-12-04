@@ -4,6 +4,7 @@ Tests for geolocation API endpoints.
 import json
 from unittest.mock import patch
 from django.test import TestCase
+from django.contrib.auth import get_user_model
 
 
 class TestGeolocationAPI(TestCase):
@@ -11,7 +12,6 @@ class TestGeolocationAPI(TestCase):
 
     def setUp(self):
         """Set up test fixtures."""
-        from django.contrib.auth import get_user_model
         User = get_user_model()
         self.user = User.objects.create_user(
             email='test@example.com',

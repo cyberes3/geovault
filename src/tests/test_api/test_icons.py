@@ -2,11 +2,13 @@
 Tests for icon management API endpoints.
 """
 import json
-from unittest.mock import patch, MagicMock
-from django.test import TestCase
-from django.core.files.uploadedfile import SimpleUploadedFile
-from PIL import Image
 from io import BytesIO
+from unittest.mock import MagicMock, patch
+
+from django.contrib.auth import get_user_model
+from django.core.files.uploadedfile import SimpleUploadedFile
+from django.test import TestCase
+from PIL import Image
 
 
 class TestIconsAPI(TestCase):
@@ -14,7 +16,6 @@ class TestIconsAPI(TestCase):
 
     def setUp(self):
         """Set up test fixtures."""
-        from django.contrib.auth import get_user_model
         User = get_user_model()
         self.user = User.objects.create_user(
             email='test@example.com',

@@ -8,6 +8,7 @@ from pydantic import BaseModel, Field, ConfigDict, field_validator
 
 from geo_lib.feature_id import generate_geojson_hash
 from geo_lib.processing.logging import ImportLog, DatabaseLogLevel
+from geo_lib.utils.date_parser import parse_date_field
 
 
 class GeoFeatureType(str, Enum):
@@ -31,7 +32,6 @@ class Properties(BaseModel):
     @classmethod
     def parse_created_field(cls, v: Any) -> Optional[datetime]:
         """Parse created field from string or datetime using dateparser for flexible format support."""
-        from geo_lib.utils.date_parser import parse_date_field
         return parse_date_field(v)
 
 
