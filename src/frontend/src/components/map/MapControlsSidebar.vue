@@ -61,6 +61,29 @@
       </select>
     </div>
 
+    <!-- Hide All Labels Toggle -->
+    <div class="mb-4 lg:mb-3 xl:mb-4">
+      <div class="flex items-start gap-3">
+        <div class="flex-1 min-w-0">
+          <div class="flex items-center justify-between gap-3">
+            <div class="flex-1 min-w-0">
+              <span class="block text-sm font-medium text-gray-700 lg:text-xs xl:text-sm">
+                Hide all feature labels
+              </span>
+              <span class="block text-xs text-gray-500 lg:text-[11px] xl:text-xs mt-1">
+                Hide labels for all features on the map
+              </span>
+            </div>
+            <ToggleButton
+              :model-value="!showAllLabels"
+              label="Hide all feature labels"
+              @update:model-value="$emit('labels-visibility-change', !$event)"
+            />
+          </div>
+        </div>
+      </div>
+    </div>
+
     <!-- Hidden Features Summary & Feature Stats -->
     <div class="mt-auto text-xs text-gray-600 mb-4 space-y-3 lg:text-[11px] lg:mb-3 lg:space-y-2 xl:text-xs xl:mb-4 xl:space-y-3">
       <!-- Hidden features summary (account-level, main map only) -->
@@ -105,6 +128,7 @@
 import {APIHOST} from '@/config.js'
 import { XMarkIcon, ArrowDownTrayIcon, TagIcon, FolderIcon, ShareIcon } from '@heroicons/vue/24/outline'
 import HiddenFeaturesWidget from './HiddenFeaturesWidget.vue'
+import ToggleButton from '@/components/parts/ToggleButton.vue'
 
 export default {
   name: 'MapControlsSidebar',
@@ -115,6 +139,7 @@ export default {
     FolderIcon,
     ShareIcon,
     HiddenFeaturesWidget,
+    ToggleButton,
   },
   props: {
     selectedLayer: {
@@ -179,9 +204,13 @@ export default {
     canManageHidden: {
       type: Boolean,
       default: false
+    },
+    showAllLabels: {
+      type: Boolean,
+      default: true
     }
   },
-  emits: ['layer-change', 'close', 'unhide-feature', 'unhide-all'],
+  emits: ['layer-change', 'close', 'unhide-feature', 'unhide-all', 'labels-visibility-change'],
   methods: {
     handleDownload() {
       if (!this.shareId) {

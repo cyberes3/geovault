@@ -169,10 +169,12 @@
         :user-location="userLocation"
         :view-context="viewContext"
         :can-manage-hidden="isMainMapRoute && !isPublicShareMode && !!$store.state.userInfo"
+        :show-all-labels="showAllLabels"
         @close="activeMobileSidebar = null"
         @layer-change="updateMapLayer"
         @unhide-feature="handleUnhideFeature"
         @unhide-all="handleUnhideAllHidden"
+        @labels-visibility-change="handleLabelsVisibilityChange"
     />
   </div>
 </template>
@@ -374,6 +376,7 @@ export default {
       sidebarKey: 0, // Force sidebar remount when tag share state changes
       activeMobileSidebar: null, // 'features', 'controls', or null
       mapWasDestroyed: false, // Track if map was fully destroyed for memory reasons
+      showAllLabels: true, // Global toggle to show/hide all feature labels
     }
   },
   methods: {
@@ -502,6 +505,13 @@ export default {
       this.loadedBounds.clear()
       this.loadDataForCurrentView()
       this.debouncedUpdateFeaturesInExtent()
+    },
+    handleLabelsVisibilityChange(showLabels) {
+      this.showAllLabels = showLabels
+      // Trigger text layer style update
+      if (this.textLayer) {
+        this.textLayer.changed()
+      }
     },
     async withLoading(flagKey, fn) {
       if (!flagKey || typeof fn !== 'function') {
@@ -1200,7 +1210,13 @@ export default {
       // Layer for text labels - with declutter, so overlapping labels are hidden
       this.textLayer = markRaw(new VectorLayer({
         source: this.vectorSource,
-        style: (feature, resolution) => getFeatureTextStyle(feature, resolution),
+        style: (feature, resolution) => {
+          // Check global label visibility
+          if (!this.showAllLabels) {
+            return null
+          }
+          return getFeatureTextStyle(feature, resolution)
+        },
         // Performance optimizations
         renderBuffer: 100,
         updateWhileAnimating: true,
