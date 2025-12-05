@@ -14,6 +14,17 @@ export default defineConfig({
     build: {
         outDir: 'dist',
         assetsDir: 'static',
+        rollupOptions: {
+            output: {
+                manualChunks: {
+                    // Split MapLibre GL JS into its own chunk
+                    'maplibre-gl': ['maplibre-gl'],
+                    // Split OpenLayers into its own chunk (for the original map)
+                    'openlayers': ['ol'],
+                }
+            }
+        },
+        chunkSizeWarningLimit: 1000, // Increase limit to 1MB for map libraries
     },
     server: {
         proxy: {

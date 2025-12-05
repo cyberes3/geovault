@@ -223,6 +223,7 @@ class CustomHeaderMiddleware:
         csp_directives = [
             "default-src 'self'",
             "script-src 'self' 'unsafe-inline'",
+            "worker-src 'self' blob:",  # Allow blob: workers for MapLibre GL JS
             "style-src 'self' 'unsafe-inline'",
             "img-src 'self' data: blob: https:",
             f"connect-src {self._get_csp_connect_src()}",

@@ -32,6 +32,11 @@ const routes = [
         component: () => import('./components/map/GeoJsonMap.vue'),
     },
     {
+        path: '/maplibre',
+        name: 'MapLibre',
+        component: () => import('./components/map/MapLibreMap.vue'),
+    },
+    {
         path: '/mapshare',
         name: 'MapShare',
         component: () => import('./components/map/GeoJsonMap.vue'),

@@ -239,7 +239,7 @@ export default {
   computed: {
     ...mapState(["userInfo"]),
     isMapRoute() {
-      return this.$route.path === '/map' || this.$route.path === '/mapshare'
+      return this.$route.path === '/map' || this.$route.path === '/mapshare' || this.$route.path === '/maplibre'
     },
     isPublicShareRoute() {
       return this.$route.path === '/mapshare'

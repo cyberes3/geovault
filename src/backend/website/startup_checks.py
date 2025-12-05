@@ -327,6 +327,74 @@ def check_frontend_files():
         return False
 
 
+def check_font_glyphs():
+    """
+    Check if MapLibre font glyphs have been generated.
+    
+    Returns:
+        bool: True if fonts are present, False otherwise
+    """
+    try:
+        # Get assets fonts directory path
+        assets_fonts_dir = Path(settings.BASE_DIR) / 'assets' / 'fonts'
+        
+        # Check if fonts directory exists
+        if not assets_fonts_dir.exists():
+            logger.error(f"✗ Fonts directory not found: {assets_fonts_dir}")
+            logger.error("  Please run: cd src/backend && ./generate-map-fonts.sh")
+            return False
+        
+        if not assets_fonts_dir.is_dir():
+            logger.error(f"✗ Fonts path is not a directory: {assets_fonts_dir}")
+            return False
+        
+        # Check for font stack directories
+        font_stacks = [d for d in assets_fonts_dir.iterdir() if d.is_dir()]
+        if not font_stacks:
+            logger.error(f"✗ No font stacks found in: {assets_fonts_dir}")
+            logger.error("  Please run: cd src/backend && ./generate-map-fonts.sh")
+            return False
+        
+        # Check that at least one font stack has PBF files
+        found_pbf_files = False
+        common_fonts = ['Noto Sans Regular', 'Open Sans Regular', 'Roboto Regular']
+        found_common_fonts = []
+        
+        for font_stack in font_stacks:
+            # Check for PBF files in this font stack
+            pbf_files = list(font_stack.glob('*.pbf'))
+            if pbf_files:
+                found_pbf_files = True
+                if font_stack.name in common_fonts:
+                    found_common_fonts.append(font_stack.name)
+        
+        if not found_pbf_files:
+            logger.error(f"✗ No PBF font files found in any font stack")
+            logger.error("  Please run: cd src/backend && ./generate-map-fonts.sh")
+            return False
+        
+        # Check for the first range file (0-255.pbf) in at least one common font
+        has_base_range = False
+        for font_name in common_fonts:
+            font_dir = assets_fonts_dir / font_name
+            if font_dir.exists() and (font_dir / '0-255.pbf').exists():
+                has_base_range = True
+                break
+        
+        if not has_base_range:
+            logger.warning(f"⚠ Common font base range (0-255.pbf) not found")
+            logger.warning("  Fonts may be incomplete. Consider re-running: cd src/backend && ./generate-map-fonts.sh")
+        
+        logger.info(f"✓ Font glyphs found: {len(font_stacks)} font stack(s)")
+        if found_common_fonts:
+            logger.info(f"  Common fonts available: {', '.join(found_common_fonts)}")
+        return True
+        
+    except Exception as e:
+        logger.error(f"✗ Font glyphs check failed: {e}")
+        return False
+
+
 def check_togeojson_installation():
     """
     Check if togeojson Node.js converter is installed and available.
@@ -652,6 +720,7 @@ def run_startup_checks():
         ("Redis Connection", check_redis_connection),
         ("Writable Directories", check_writable_directories),
         ("Frontend Files", check_frontend_files),
+        ("Font Glyphs", check_font_glyphs),
         ("togeojson Installation", check_togeojson_installation),
         ("File Type Max Size", check_file_type_max_size),
         ("Site Configuration", check_site_configuration),
@@ -690,6 +759,7 @@ def run_startup_checks():
         logger.error("  - Run migrations: python manage.py migrate")
         logger.error("  - Ensure Redis is running and accessible")
         logger.error("  - Build frontend: cd frontend && npm run build")
+        logger.error("  - Generate fonts: cd src/backend && ./generate-map-fonts.sh")
         logger.error("  - Install togeojson: cd src/backend/geo_lib/processing/togeojson && npm install")
         logger.error("  - Ensure directories are writable")
         logger.error("=" * 60)

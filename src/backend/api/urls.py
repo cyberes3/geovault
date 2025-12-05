@@ -15,6 +15,7 @@ from api.views.feature_search import (
 from api.views.feature_update import update_feature, update_feature_metadata, bulk_update_features_metadata, apply_replacement_geometry, regenerate_feature_tags, apply_bulk_operations_to_tag
 from api.views.geolocation_api import get_user_location, get_location_by_ip
 from api.views.icon_management import serve_user_icon, serve_system_icon, upload_icon, recolor_icon, serve_icon_registry
+from api.views.font_management import serve_font_glyph
 from api.views.import_item import upload_item, get_processing_status, get_user_processing_jobs, delete_import_item, update_import_item, fetch_import_history_item, \
     import_to_featurestore, get_import_queue_item_features, search_import_item_features, save_bulk_operations, get_bulk_operations, recheck_duplicates, save_skip_state
 from api.views.sharing import create_share, list_shares, delete_share, get_public_share_info, get_public_share, create_collection_share, get_public_collection_share
@@ -71,6 +72,10 @@ urlpatterns = [
     path('icons/system/<path:path>', serve_system_icon, name='serve_system_icon'),
     # User icons (uploaded icons with hash)
     path('icons/user/<str:icon_hash>', serve_user_icon, name='serve_user_icon'),
+    # Font glyph endpoints (for MapLibre GL JS)
+    # Note: fontstack uses <str> not <path> to avoid capturing the range_str
+    # Django automatically URL-decodes parameters, so "Noto%20Sans%20Regular" becomes "Noto Sans Regular"
+    path('fonts/<str:fontstack>/<str:range_str>', serve_font_glyph, name='serve_font_glyph'),
     # Geolocation API endpoints
     path('location/user/', get_user_location),
     path('location/ip/', get_location_by_ip),

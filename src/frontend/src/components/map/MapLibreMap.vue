@@ -1,0 +1,1219 @@
+<template>
+  <div class="w-full h-full flex">
+    <!-- Left Sidebar - Feature List -->
+    <FeatureListSidebar
+        :key="sidebarKey"
+        :available-tags="availableTags"
+        :class="['transition-opacity duration-300', (publicShareError || loadError) ? 'opacity-50 pointer-events-none' : 'opacity-100']"
+        :features="featuresInExtent"
+        :initial-selected-tags="initialSelectedTags"
+        :is-initial-load="isMapInitializing || (isDataLoading && isInitialLoad)"
+        :is-mobile-open="activeMobileSidebar === 'features'"
+        :can-hide-features="isMainMapRoute && !isPublicShareMode && !!$store.state.userInfo"
+        @close="activeMobileSidebar = null"
+        @feature-click="zoomToFeature"
+        @feature-hide="handleHideFeature"
+        @tag-filter-change="handleTagFilterChange"
+        @tag-filter-loading-change="isTagFilterLoading = $event"
+    />
+
+    <!-- Center - Map -->
+    <div class="flex-1 w-full bg-gray-50 relative overflow-hidden">
+      <!-- Mobile Controls Bar -->
+      <div class="lg:hidden bg-white border-b border-gray-200 px-4 py-3 flex justify-between items-center">
+        <button
+            class="p-2 text-gray-600 hover:text-gray-900 rounded-md hover:bg-gray-100 focus:outline-none"
+            title="Features"
+            @click="activeMobileSidebar = 'features'"
+        >
+          <ListBulletIcon class="w-6 h-6"/>
+        </button>
+        <div class="text-sm font-medium text-gray-900 max-w-[50%] text-center leading-tight flex flex-col items-center justify-center">
+          <template v-if="isPublicShareMode">
+            <div v-if="publicShareTag" class="flex items-center justify-center gap-1 w-full">
+              <ShareIcon class="w-4 h-4 text-blue-500 flex-shrink-0"/>
+              <span class="line-clamp-2">Tag: {{ publicShareTag }}</span>
+            </div>
+            <div v-else-if="publicShareCollectionName" class="flex items-center justify-center gap-1 w-full">
+              <ShareIcon class="w-4 h-4 text-blue-500 flex-shrink-0"/>
+              <span class="line-clamp-2">Collection: {{ publicShareCollectionName }}</span>
+            </div>
+            <div v-else class="flex items-center justify-center gap-1 w-full">
+              <ShareIcon class="w-4 h-4 text-blue-500 flex-shrink-0"/>
+              <span>Shared Map</span>
+            </div>
+          </template>
+          <template v-else>
+            <span class="line-clamp-2">{{ collectionName || 'Map' }}</span>
+          </template>
+        </div>
+        <button
+            class="p-2 text-gray-600 hover:text-gray-900 rounded-md hover:bg-gray-100 focus:outline-none"
+            title="Map Controls"
+            @click="activeMobileSidebar = 'controls'"
+        >
+          <Cog6ToothIcon class="w-6 h-6"/>
+        </button>
+      </div>
+      <div class="relative w-full h-full">
+        <!-- Map -->
+        <div
+            ref="mapContainer"
+            :class="[
+            'w-full h-full transition-opacity duration-300',
+            (publicShareError || loadError) ? 'opacity-50 pointer-events-none' : 'opacity-100'
+          ]"
+        ></div>
+
+        <!-- Error Overlay for Invalid Share -->
+        <MapErrorOverlay
+            :message="publicShareError"
+            :visible="!!publicShareError"
+            subtext="The share link may have been deleted or expired."
+            title="Invalid Share Link"
+        />
+
+        <!-- Error Overlay for Loading Failures -->
+        <MapErrorOverlay
+            :message="loadError"
+            :visible="!!loadError"
+            subtext="Please try refreshing the page or check your connection."
+            title="Error Loading Map"
+        />
+
+        <!-- Loading Indicator -->
+        <MapLoadingIndicator
+            :is-loading="isMapInitializing || isDataLoading || isRestoring || isTagFilterLoading"
+            :is-public-share-mode="isPublicShareMode"
+        />
+
+        <!-- Feature Info Box or Edit Box -->
+        <FeatureInfoBox
+            v-if="!isEditingFeature && !isPublicShareMode && !showElevationProfile"
+            :feature="selectedFeature"
+            @close="selectedFeature = null"
+            @download="handleDownloadFeatureKmz"
+            @edit="handleEditFeature"
+            @zoom="zoomToFeature(selectedFeature)"
+            @show-profile="showElevationProfile = true"
+        />
+        <FeatureInfoBox
+            v-if="!isEditingFeature && isPublicShareMode && !showElevationProfile"
+            :feature="selectedFeature"
+            :share-id="shareId"
+            :show-download-button="publicShareInfo && publicShareInfo.allow_downloads"
+            :show-edit-button="false"
+            @close="selectedFeature = null"
+            @download="handleDownloadFeatureKmz"
+            @zoom="zoomToFeature(selectedFeature)"
+            @show-profile="showElevationProfile = true"
+        />
+        <FeatureEditBox
+            v-if="isEditingFeature && !isPublicShareMode"
+            :available-tags="availableTags"
+            :feature="selectedFeature"
+            :can-hide-feature="isMainMapRoute && !!$store.state.userInfo"
+            :initial-hidden="hiddenFeatureIds.includes(String(selectedFeature?.properties?.database_id || selectedFeature?.get?.('properties')?.database_id || ''))"
+            @cancel="handleCancelEdit"
+            @deleted="handleFeatureDeleted"
+            @saved="handleFeatureSaved"
+            @visibility-change="handleEditBoxVisibilityChange"
+        />
+
+        <!-- Elevation Profile Dialog -->
+        <ElevationProfileDialog
+            v-if="showElevationProfile"
+            :feature="selectedFeature"
+            @close="handleElevationProfileClose"
+            @hover-point="handleHoverPoint"
+            @hover-clear="handleHoverClear"
+            @click-point="handleClickPoint"
+        />
+
+        <!-- Feature Selection Popup (for overlapping features) -->
+        <FeatureSelectionPopup
+            :features="overlappingFeatures"
+            :position="popupPosition"
+            :visible="showFeaturePopup"
+            @close="showFeaturePopup = false"
+            @select="handleFeatureSelect"
+        />
+
+      </div>
+
+      <!-- Center to User Location Button -->
+      <button
+          v-if="userLocation && !isPublicShareMode"
+          class="absolute z-10 bottom-4 left-4 p-2 bg-white border border-gray-200 rounded shadow-md hover:bg-gray-50 text-gray-700 transition-colors"
+          title="Center map to your location"
+          @click="centerToUserLocation"
+      >
+        <HomeIcon class="w-5 h-5"/>
+      </button>
+    </div>
+
+      <!-- Right Sidebar - Map Controls -->
+      <MapControlsSidebar
+        :allow-downloads="publicShareInfo && publicShareInfo.allow_downloads"
+        :allowed-options="publicShareAllowedOptions"
+        :class="['transition-opacity duration-300', (publicShareError || loadError) ? 'opacity-50 pointer-events-none' : 'opacity-100']"
+        :feature-count="featureCount"
+        :hidden-features="hiddenFeatureSummaries"
+        :is-mobile-open="activeMobileSidebar === 'controls'"
+        :is-public-share-mode="isPublicShareMode"
+        :location-display-name="getLocationDisplayName()"
+        :max-features="MAX_FEATURES"
+        :selected-layer="selectedLayer"
+        :share-id="shareId"
+        :tile-sources="tileSources"
+        :user-location="userLocation"
+        :view-context="viewContext"
+        :can-manage-hidden="isMainMapRoute && !isPublicShareMode && !!$store.state.userInfo"
+        :show-all-labels="showAllLabels"
+        @close="activeMobileSidebar = null"
+        @layer-change="updateMapLayer"
+        @unhide-feature="handleUnhideFeature"
+        @unhide-all="handleUnhideAllHidden"
+        @labels-visibility-change="handleLabelsVisibilityChange"
+    />
+  </div>
+</template>
+
+<script>
+import {markRaw} from 'vue'
+import 'maplibre-gl/dist/maplibre-gl.css'
+import {getInitialMapConfig, getLocationDisplayName} from '@/utils/map/mapConfigUtils'
+import { sortTagsByPriority, sortUserTagsAlphabetically, isSystemTag } from '@/utils/tagUtils.js'
+import {getInverseColor} from '@/utils/map/colorUtils'
+import {getCookie} from '@/assets/js/auth.js'
+import {getUnitPreference} from '@/utils/units'
+import {APIHOST, MAP_CONFIG} from '@/config.js'
+
+// Components
+import FeatureListSidebar from './FeatureListSidebar.vue'
+import MapControlsSidebar from './MapControlsSidebar.vue'
+import FeatureInfoBox from './FeatureInfoBox.vue'
+import FeatureEditBox from './FeatureEditBox.vue'
+import FeatureSelectionPopup from './FeatureSelectionPopup.vue'
+import ElevationProfileDialog from './ElevationProfileDialog.vue'
+import MapErrorOverlay from './MapErrorOverlay.vue'
+import MapLoadingIndicator from './MapLoadingIndicator.vue'
+import {HomeIcon, ExclamationCircleIcon, ShareIcon, FolderIcon, ListBulletIcon, Cog6ToothIcon} from '@heroicons/vue/24/outline'
+import {
+  getBoundingBoxKey,
+  getBoundingBoxString,
+  getFeatureCoordinates,
+  convertMapLibreFeature,
+  ensureLayersExist,
+  initializeMap,
+  setupGeoJsonSource,
+  setupMapEventListeners,
+  addFeaturesToMap,
+  updateMapLayerSource,
+  filterPointsOnBorders
+} from '@/utils/map/maplibre'
+
+export default {
+  name: 'MapLibreMap',
+  components: {
+    FeatureListSidebar,
+    MapControlsSidebar,
+    FeatureInfoBox,
+    FeatureEditBox,
+    FeatureSelectionPopup,
+    ElevationProfileDialog,
+    MapErrorOverlay,
+    MapLoadingIndicator,
+    HomeIcon,
+    ExclamationCircleIcon,
+    ShareIcon,
+    FolderIcon,
+    ListBulletIcon,
+    Cog6ToothIcon
+  },
+  computed: {
+    isMainMapRoute() {
+      const path = this.$route.path
+      const hasCollection = !!this.$route.query.collection
+      const hasTag = !!this.$route.query.tag
+      return path === '/maplibre' && !hasCollection && !hasTag
+    },
+    hiddenFeatureIds() {
+      const features = this.$store.state.hiddenFeatures || []
+      if (!Array.isArray(features)) return []
+      return features.map(f => String(f.id))
+    },
+    hiddenFeatureSummaries() {
+      const features = this.$store.state.hiddenFeatures || []
+      if (!Array.isArray(features)) return []
+      return features.map(f => ({
+        id: String(f.id),
+        name: f.name || null,
+        geometry_type: f.geometry_type || null
+      }))
+    },
+    isPublicShareMode() {
+      return this.$route.path === '/mapshare' && this.$route.query.id
+    },
+    shareId() {
+      return this.$route.query.id || null
+    },
+    collectionId() {
+      return this.$route.query.collection || null
+    },
+    initialSelectedTags() {
+      const tag = this.$route.query.tag
+      if (!tag) {
+        return []
+      }
+      return Array.isArray(tag) ? tag : [tag]
+    },
+    viewContext() {
+      if (this.isPublicShareMode) {
+        if (this.publicShareTag) {
+          return { type: 'tag', name: this.publicShareTag, isPublicShare: true }
+        } else if (this.publicShareCollectionName) {
+          return { type: 'collection', name: this.publicShareCollectionName, isPublicShare: true }
+        }
+        return null
+      }
+
+      if (this.collectionName) {
+        return { type: 'collection', name: this.collectionName, isPublicShare: false }
+      }
+
+      const tag = this.$route.query.tag
+      if (tag) {
+        return { type: 'tag', name: Array.isArray(tag) ? tag[0] : tag, isPublicShare: false }
+      }
+
+      return null
+    },
+    publicShareAllowedOptions() {
+      if (this.isPublicShareMode) {
+        return {
+          mapLayer: true,
+          featureStats: false,
+          userLocation: false
+        }
+      }
+      return {
+        mapLayer: true,
+        featureStats: true,
+        userLocation: true
+      }
+    }
+  },
+  data() {
+    return {
+      map: null,
+      // Loading state
+      isMapInitializing: false,
+      isDataLoading: false,
+      isInitialLoad: true,
+      loadedBounds: new Set(),
+      lastUpdateTime: null,
+      featureCount: 0,
+      loadTimeout: null,
+      userLocation: null,
+      currentAbortController: null,
+      selectedLayer: 'osm',
+      featuresInExtent: [],
+      featureListUpdateTimeout: null,
+      selectedFeature: null,
+      tileSources: [],
+      // Configuration
+      API_BASE_URL: '/api/geojson/',
+      SHARE_API_BASE_URL: '/api/sharing/public/',
+      LOCATION_API_URL: '/api/location/user/',
+      TILE_SOURCES_API_URL: '/api/tiles/sources/',
+      MAX_FEATURES: 5000,
+      featureTimestamps: {},
+      featureIdCounter: 0,
+      currentZoom: null,
+      featureCountUpdatePending: false,
+      isEditingFeature: false,
+      showElevationProfile: false,
+      hoverMarker: null,
+      publicShareError: null,
+      loadError: null,
+      publicShareTag: null,
+      publicShareCollectionName: null,
+      publicShareInfo: null,
+      overlappingFeatures: [],
+      popupPosition: {x: 0, y: 0, containerWidth: 0, containerHeight: 0},
+      showFeaturePopup: false,
+      isTagFilterActive: false,
+      tagFilteredFeatures: [],
+      collectionName: null,
+      isCollectionMode: false,
+      availableTags: [],
+      isRestoring: false,
+      isTagFilterLoading: false,
+      sidebarKey: 0,
+      activeMobileSidebar: null,
+      mapWasDestroyed: false,
+      showAllLabels: true,
+    }
+  },
+  methods: {
+    // Placeholder methods - will be implemented
+    async handleHideFeature(feature) {},
+    async handleEditBoxVisibilityChange(payload) {},
+    handleTagFilterChange(tags) {},
+    zoomToFeature(feature) {},
+    handleDownloadFeatureKmz(feature) {},
+    handleEditFeature(feature) {},
+    handleCancelEdit() {},
+    handleFeatureDeleted(feature) {},
+    handleFeatureSaved(feature) {},
+    handleElevationProfileClose() {},
+    handleHoverPoint(point) {},
+    handleHoverClear() {},
+    handleClickPoint(point) {},
+    handleFeatureSelect(feature) {},
+    handleUnhideFeature(featureId) {},
+    handleUnhideAllHidden() {},
+    handleLabelsVisibilityChange(show) {},
+    updateMapLayer(layerId) {},
+    centerToUserLocation() {},
+    getLocationDisplayName() {
+      return getLocationDisplayName(this.userLocation)
+    },
+    getInitialMapConfig() {
+      return getInitialMapConfig(this.userLocation)
+    },
+    getBoundingBoxKey(bounds, zoom) {
+      return getBoundingBoxKey(bounds, zoom)
+    },
+    getBoundingBoxString(bounds) {
+      return getBoundingBoxString(bounds)
+    },
+    async getUserLocation() {
+      try {
+        const response = await fetch(this.LOCATION_API_URL)
+        const data = await response.json()
+
+        if (response.ok && data.location) {
+          this.userLocation = data.location
+        } else {
+          this.userLocation = null
+        }
+      } catch (error) {
+        console.error('Error fetching user location:', error)
+        this.userLocation = null
+      }
+    },
+    async initializeMap() {
+      // Get user location first (skip for public share mode)
+      if (!this.isPublicShareMode) {
+        await this.getUserLocation()
+      }
+
+      // Determine initial map center and zoom based on user location
+      const mapConfig = this.getInitialMapConfig()
+
+      // Create MapLibre map with OSM base layer and glyphs for text labels
+      this.map = markRaw(initializeMap(this.$refs.mapContainer, {
+        center: mapConfig.center, // [lon, lat]
+        zoom: mapConfig.zoom,
+        glyphsUrl: '/api/fonts/{fontstack}/{range}.pbf'
+      }))
+
+      // Setup GeoJSON source
+      setupGeoJsonSource(this.map, () => {
+        this.isMapInitializing = false
+        
+        // Trigger initial data load after map is fully loaded
+        if (this.isInitialLoad && !this.collectionId && !this.isTagFilterActive) {
+          setTimeout(() => {
+            this.loadDataForCurrentView()
+          }, 100)
+        }
+      })
+
+      // Setup event listeners
+      setupMapEventListeners(this.map, {
+        onMoveEnd: () => {
+          this.debouncedLoadData()
+          this.debouncedUpdateFeaturesInExtent()
+        },
+        onZoomEnd: () => {
+          this.debouncedLoadData()
+          this.debouncedUpdateFeaturesInExtent()
+        },
+        onClick: (e) => {
+          const features = this.map.queryRenderedFeatures(e.point, {
+            layers: ['points', 'lines', 'polygons', 'polygon-outlines', 'labels']
+          })
+
+          if (features.length === 0) {
+            this.selectedFeature = null
+            this.isEditingFeature = false
+            this.showFeaturePopup = false
+          } else if (features.length === 1) {
+            const feature = convertMapLibreFeature(features[0])
+            this.selectedFeature = feature
+            this.isEditingFeature = false
+          } else {
+            const convertedFeatures = features.map(f => convertMapLibreFeature(f))
+            this.overlappingFeatures = convertedFeatures
+            this.popupPosition = {
+              x: e.point.x,
+              y: e.point.y,
+              containerWidth: this.$refs.mapContainer?.clientWidth || 0,
+              containerHeight: this.$refs.mapContainer?.clientHeight || 0
+            }
+            this.showFeaturePopup = true
+          }
+        }
+      })
+    },
+    convertMapLibreFeature(mlFeature) {
+      return convertMapLibreFeature(mlFeature)
+    },
+    debouncedLoadData() {
+      if (this.loadTimeout) {
+        clearTimeout(this.loadTimeout)
+      }
+      this.loadTimeout = setTimeout(() => {
+        this.loadDataForCurrentView()
+      }, 300)
+    },
+    debouncedUpdateFeaturesInExtent() {
+      if (this.featureListUpdateTimeout) {
+        clearTimeout(this.featureListUpdateTimeout)
+      }
+      this.featureListUpdateTimeout = setTimeout(() => {
+        this.updateFeaturesInExtent()
+      }, 300)
+    },
+    async loadDataForCurrentView() {
+      if (!this.map) return
+      if (this.isTagFilterActive) return
+
+      // For MapLibre, check if map is ready by checking if it has bounds
+      // The loaded() check can be too strict - instead check if we can get bounds
+      let bounds
+      try {
+        bounds = this.map.getBounds()
+        if (!bounds) return
+      } catch (e) {
+        // Map not ready yet
+        return
+      }
+
+      // Cancel any existing request
+      if (this.currentAbortController) {
+        this.currentAbortController.abort()
+      }
+
+      const zoom = this.map.getZoom()
+      const bbox = [bounds.getWest(), bounds.getSouth(), bounds.getEast(), bounds.getNorth()]
+      const bboxKey = this.getBoundingBoxKey(bbox, zoom)
+
+      // Check if already loaded
+      if (this.loadedBounds.has(bboxKey)) {
+        return
+      }
+
+      // Create new AbortController
+      this.currentAbortController = new AbortController()
+      this.isDataLoading = true
+      this.loadError = null
+
+      try {
+        const bboxString = this.getBoundingBoxString(bbox)
+        const roundedZoom = Math.round(zoom)
+
+        let url, response, data
+
+        if (this.isPublicShareMode) {
+          if (!this.shareId) return
+
+          if (!this.publicShareInfo || this.publicShareInfo.share_id !== this.shareId) {
+            const infoUrl = `/api/sharing/public/info/${this.shareId}/`
+            const infoResponse = await fetch(infoUrl, {
+              signal: this.currentAbortController.signal
+            })
+
+            if (!infoResponse.ok) {
+              const errorData = await infoResponse.json()
+              this.handlePublicShareError(errorData.error || 'Invalid share link')
+              return
+            }
+
+            const infoData = await infoResponse.json()
+            this.publicShareInfo = {
+              share_id: this.shareId,
+              share_type: infoData.share_type,
+              tag: infoData.tag || null,
+              collection_name: infoData.collection_name || null,
+              collection_id: infoData.collection_id || null,
+              include_tags: infoData.include_tags || false,
+              allow_downloads: infoData.allow_downloads || false
+            }
+
+            if (infoData.share_type === 'tag') {
+              this.publicShareTag = infoData.tag
+              this.publicShareCollectionName = null
+            } else if (infoData.share_type === 'collection') {
+              this.publicShareCollectionName = infoData.collection_name
+              this.publicShareTag = null
+            }
+          }
+
+          if (this.publicShareInfo.share_type === 'tag') {
+            url = `${this.SHARE_API_BASE_URL}${this.shareId}/?bbox=${bboxString}&zoom=${roundedZoom}`
+          } else if (this.publicShareInfo.share_type === 'collection') {
+            url = `/api/sharing/public/collection/${this.shareId}/?bbox=${bboxString}&zoom=${roundedZoom}`
+          } else {
+            this.publicShareError = 'Unknown share type'
+            return
+          }
+
+          response = await fetch(url, {
+            signal: this.currentAbortController.signal
+          })
+          data = await response.json()
+        } else {
+          url = `${this.API_BASE_URL}?bbox=${bboxString}&zoom=${roundedZoom}`
+          if (this.isCollectionMode && this.collectionId) {
+            url += `&collection=${this.collectionId}`
+          }
+
+          response = await fetch(url, {
+            signal: this.currentAbortController.signal
+          })
+          data = await response.json()
+        }
+
+        if (!response.ok) {
+          if (this.isPublicShareMode) {
+            this.handlePublicShareError(data.error || 'Failed to load shared features.')
+          } else {
+            this.loadError = data.error || 'Failed to load map data.'
+          }
+          return
+        }
+
+        if (data.data && data.data.features) {
+          this.loadedBounds.add(bboxKey)
+          this.updateFeatureCount()
+          this.addFeaturesToMap(data.data)
+        }
+      } catch (error) {
+        if (error.name === 'AbortError') return
+        console.error('Error loading data:', error)
+        this.loadError = error.message || 'Failed to load map data.'
+      } finally {
+        this.isDataLoading = false
+        this.currentAbortController = null
+        if (this.isInitialLoad) {
+          this.isInitialLoad = false
+        }
+      }
+    },
+    addFeaturesToMap(geojsonData) {
+      addFeaturesToMap(this.map, geojsonData, this.showAllLabels)
+    },
+    updateFeaturesInExtent() {
+      if (!this.map || !this.map.getSource('geojson-data')) {
+        this.featuresInExtent = []
+        return
+      }
+
+      const bounds = this.map.getBounds()
+      const source = this.map.getSource('geojson-data')
+      const data = source._data || { type: 'FeatureCollection', features: [] }
+      const features = data.features || []
+
+      // Filter features in current bounds
+      const featuresInBounds = features.filter(f => {
+        if (!f.geometry) return false
+        const coords = this.getFeatureCoordinates(f.geometry)
+        return coords.some(coord => {
+          const [lon, lat] = coord
+          return lon >= bounds.getWest() && lon <= bounds.getEast() &&
+                 lat >= bounds.getSouth() && lat <= bounds.getNorth()
+        })
+      })
+
+      // Convert to format expected by FeatureListSidebar
+      this.featuresInExtent = featuresInBounds.map(f => this.convertMapLibreFeature(f))
+    },
+    getFeatureCoordinates(geometry) {
+      return getFeatureCoordinates(geometry)
+    },
+    updateFeatureCount() {
+      if (this.featureCountUpdatePending) return
+      this.featureCountUpdatePending = true
+
+      this.$nextTick(() => {
+        if (this.map && this.map.getSource('geojson-data')) {
+          const source = this.map.getSource('geojson-data')
+          const data = source._data || { type: 'FeatureCollection', features: [] }
+          this.featureCount = data.features?.length || 0
+        }
+        this.featureCountUpdatePending = false
+      })
+    },
+    async fetchTileSources() {
+      try {
+        const response = await fetch(this.TILE_SOURCES_API_URL)
+        const data = await response.json()
+
+        if (data.sources && Array.isArray(data.sources)) {
+          this.tileSources = data.sources
+
+          const userSettings = this.$store.state.userSettings || {}
+          const defaultBasemap = userSettings.map?.default_basemap
+
+          if (defaultBasemap && this.tileSources.find(s => s.id === defaultBasemap)) {
+            this.selectedLayer = defaultBasemap
+          } else if (!this.selectedLayer || !this.tileSources.find(s => s.id === this.selectedLayer)) {
+            if (this.tileSources.length > 0) {
+              this.selectedLayer = this.tileSources[0].id
+            }
+          }
+        }
+      } catch (error) {
+        console.error('Error fetching tile sources:', error)
+        this.tileSources = [{
+          id: 'osm',
+          name: 'OpenStreetMap',
+          type: 'osm',
+          requires_proxy: false,
+          client_config: {type: 'osm'}
+        }]
+        if (!this.selectedLayer) {
+          this.selectedLayer = 'osm'
+        }
+      }
+    },
+    async fetchAvailableTags() {
+      if (!this.$store.state.userInfo) return
+      try {
+        const response = await fetch(`${APIHOST}/api/features/by-tag/`)
+        const data = await response.json()
+
+        if (response.ok) {
+          const userTags = data.user_tags ? Object.keys(data.user_tags) : []
+          const systemTags = data.system_tags ? Object.keys(data.system_tags) : []
+
+          const sortedUserTags = sortUserTagsAlphabetically(userTags)
+          const sortedSystemTags = sortTagsByPriority(systemTags)
+
+          this.availableTags = [...sortedUserTags, ...sortedSystemTags]
+        } else {
+          this.availableTags = []
+        }
+      } catch (error) {
+        console.error('Error fetching available tags:', error)
+        this.availableTags = []
+      }
+    },
+    updateMapLayer(layerValue) {
+      if (!this.map) return
+
+      this.selectedLayer = layerValue
+      const tileSource = this.tileSources.find(s => s.id === layerValue)
+      if (!tileSource) return
+
+      const clientConfig = tileSource.client_config || {}
+
+      // Remove existing raster layer
+      if (this.map.getLayer('osm-layer')) {
+        this.map.removeLayer('osm-layer')
+      }
+      if (this.map.getSource('osm')) {
+        this.map.removeSource('osm')
+      }
+
+      // Add new source and layer
+      if (clientConfig.type === 'osm' || tileSource.type === 'osm') {
+        this.map.addSource('osm', {
+          type: 'raster',
+          tiles: ['https://tile.openstreetmap.org/{z}/{x}/{y}.png'],
+          tileSize: 256,
+          attribution: '© OpenStreetMap contributors'
+        })
+        this.map.addLayer({
+          id: 'osm-layer',
+          type: 'raster',
+          source: 'osm',
+          minzoom: 0,
+          maxzoom: 19
+        })
+      } else if (clientConfig.type === 'xyz' || tileSource.type === 'xyz') {
+        const url = clientConfig.url || `/api/tiles/${layerValue}/{z}/{x}/{y}`
+        this.map.addSource('tile-source', {
+          type: 'raster',
+          tiles: [url],
+          tileSize: 256
+        })
+        this.map.addLayer({
+          id: 'tile-layer',
+          type: 'raster',
+          source: 'tile-source'
+        })
+      }
+    },
+    centerToUserLocation() {
+      if (!this.map || !this.userLocation) return
+
+      const latitude = this.userLocation.latitude
+      const longitude = this.userLocation.longitude
+
+      if (latitude == null || longitude == null) return
+
+      const currentZoom = this.map.getZoom()
+      const maxReasonableZoom = 12
+      const reasonableZoom = 10
+
+      if (currentZoom > maxReasonableZoom) {
+        this.map.flyTo({
+          center: [longitude, latitude],
+          zoom: reasonableZoom,
+          duration: 500
+        })
+      } else {
+        this.map.flyTo({
+          center: [longitude, latitude],
+          duration: 500
+        })
+      }
+    },
+    zoomToFeature(feature) {
+      if (!this.map || !feature) return
+
+      // Get feature geometry and calculate bounds
+      const geometry = feature.geometry || feature.get?.('geometry')
+      if (!geometry) return
+
+      const coords = this.getFeatureCoordinates(geometry)
+      if (coords.length === 0) return
+
+      // Calculate bounding box
+      let minLon = Infinity, minLat = Infinity, maxLon = -Infinity, maxLat = -Infinity
+      coords.forEach(([lon, lat]) => {
+        minLon = Math.min(minLon, lon)
+        minLat = Math.min(minLat, lat)
+        maxLon = Math.max(maxLon, lon)
+        maxLat = Math.max(maxLat, lat)
+      })
+
+      // Fly to feature
+      this.map.flyTo({
+        bounds: [[minLon, minLat], [maxLon, maxLat]],
+        padding: 50,
+        duration: 500
+      })
+    },
+    handlePublicShareError(errorMessage) {
+      this.publicShareError = errorMessage || 'Invalid share link'
+    },
+    handleDownloadFeatureKmz() {
+      const feature = this.selectedFeature
+      if (!feature) return
+
+      const properties = feature.properties || feature.get?.('properties') || {}
+      const featureId = properties.database_id
+      if (!featureId) return
+
+      let url = `${APIHOST}/api/export-kmz?feature=${encodeURIComponent(featureId)}`
+
+      if (this.isPublicShareMode && this.shareId) {
+        url += `&share=${encodeURIComponent(this.shareId)}`
+      }
+
+      window.open(url, '_blank')
+    },
+    handleEditFeature(feature) {
+      this.isEditingFeature = true
+    },
+    handleCancelEdit() {
+      this.isEditingFeature = false
+    },
+    handleFeatureDeleted(feature) {
+      // Remove feature from map
+      if (this.map && this.map.getSource('geojson-data')) {
+        const source = this.map.getSource('geojson-data')
+        const data = source._data || { type: 'FeatureCollection', features: [] }
+        const properties = feature.properties || feature.get?.('properties') || {}
+        const featureId = properties.database_id
+
+        if (featureId && data.features) {
+          data.features = data.features.filter(f => f.properties?.database_id !== featureId)
+          source.setData(data)
+          this.updateFeatureCount()
+        }
+      }
+
+      this.selectedFeature = null
+      this.isEditingFeature = false
+    },
+    handleFeatureSaved(feature) {
+      // Feature was updated, reload data for current view
+      this.loadedBounds.clear()
+      this.loadDataForCurrentView()
+      this.isEditingFeature = false
+    },
+    handleFeatureSelect(feature) {
+      this.selectedFeature = feature
+      this.isEditingFeature = false
+      this.showFeaturePopup = false
+    },
+    handleLabelsVisibilityChange(showLabels) {
+      this.showAllLabels = showLabels
+      if (this.map) {
+        const labelsLayer = this.map.getLayer('labels')
+        if (labelsLayer) {
+          this.map.setLayoutProperty('labels', 'visibility', showLabels ? 'visible' : 'none')
+        } else if (showLabels) {
+          // Create labels layer if it doesn't exist and labels should be shown
+          ensureLayersExist(this.map, this.showAllLabels)
+        }
+      }
+    },
+    async handleUnhideFeature(featureId) {
+      if (!this.isMainMapRoute || this.isPublicShareMode || !this.$store.state.userInfo) {
+        return
+      }
+
+      const hiddenFeaturesManager = (await import('@/utils/hiddenFeaturesManager.js')).default
+
+      try {
+        await hiddenFeaturesManager.removeHidden(featureId)
+        this.$store.commit('removeHiddenFeature', String(featureId))
+        this.loadedBounds.clear()
+        this.loadDataForCurrentView()
+        this.updateFeaturesInExtent()
+      } catch (error) {
+        console.error('Error unhiding feature:', error)
+      }
+    },
+    async handleUnhideAllHidden() {
+      if (!this.isMainMapRoute || this.isPublicShareMode || !this.$store.state.userInfo) {
+        return
+      }
+
+      const hiddenFeaturesManager = (await import('@/utils/hiddenFeaturesManager.js')).default
+
+      try {
+        await hiddenFeaturesManager.clearAllHidden()
+        this.$store.commit('setHiddenFeatures', [])
+        this.loadedBounds.clear()
+        this.loadDataForCurrentView()
+        this.updateFeaturesInExtent()
+      } catch (error) {
+        console.error('Error clearing hidden features:', error)
+      }
+    },
+    handleTagFilterChange(filteredFeatures) {
+      if (!this.map || !this.map.getSource('geojson-data')) {
+        return
+      }
+
+      if (filteredFeatures === null) {
+        // Clear tag filter
+        this.isTagFilterActive = false
+        this.tagFilteredFeatures = []
+        const source = this.map.getSource('geojson-data')
+        source.setData({ type: 'FeatureCollection', features: [] })
+        this.loadedBounds.clear()
+        this.featureTimestamps = {}
+        this.loadDataForCurrentView()
+        return
+      }
+
+      // Apply tag filter
+      this.isTagFilterActive = true
+      this.tagFilteredFeatures = filteredFeatures
+
+      // Convert OpenLayers features to GeoJSON
+      const geojsonFeatures = filteredFeatures.map(f => {
+        const props = f.properties || f.get?.('properties') || {}
+        const geom = f.geometry || f.getGeometry?.()
+        return {
+          type: 'Feature',
+          properties: props,
+          geometry: geom || null
+        }
+      })
+
+      // Filter out points on borders
+      const filteredGeojsonFeatures = filterPointsOnBorders(geojsonFeatures)
+
+      const source = this.map.getSource('geojson-data')
+      source.setData({
+        type: 'FeatureCollection',
+        features: filteredGeojsonFeatures
+      })
+
+      this.updateFeatureCount()
+      this.updateFeaturesInExtent()
+    },
+    async handleHideFeature(feature) {
+      if (!this.isMainMapRoute || this.isPublicShareMode || !this.$store.state.userInfo) {
+        return
+      }
+
+      if (!feature) return
+
+      const properties = feature.properties || feature.get?.('properties') || {}
+      const featureId = properties.database_id
+      const featureName = properties.name
+      const geometryType = feature.geometry?.type
+
+      if (!featureId) return
+
+      const hiddenFeaturesManager = (await import('@/utils/hiddenFeaturesManager.js')).default
+
+      const optimisticUpdate = () => {
+        this.$store.commit('addHiddenFeature', {
+          featureId: String(featureId),
+          featureName: featureName || null,
+          geometryType: geometryType || null
+        })
+
+        // Remove from map
+        if (this.map && this.map.getSource('geojson-data')) {
+          const source = this.map.getSource('geojson-data')
+          const data = source._data || { type: 'FeatureCollection', features: [] }
+          if (data.features) {
+            data.features = data.features.filter(f => f.properties?.database_id !== featureId)
+            source.setData(data)
+            this.updateFeatureCount()
+          }
+        }
+
+        if (this.selectedFeature) {
+          const propsSelected = this.selectedFeature.properties || this.selectedFeature.get?.('properties') || {}
+          if (propsSelected.database_id === featureId) {
+            this.selectedFeature = null
+            this.isEditingFeature = false
+          }
+        }
+
+        this.updateFeaturesInExtent()
+      }
+
+      hiddenFeaturesManager.addHidden(featureId, optimisticUpdate)
+    },
+    async handleEditBoxVisibilityChange(payload) {
+      if (!payload || !payload.featureId) return
+
+      if (payload.hidden) {
+        await this.handleHideFeature({ properties: { database_id: payload.featureId } })
+      } else {
+        await this.handleUnhideFeature(payload.featureId)
+      }
+    },
+    handleElevationProfileClose() {
+      this.showElevationProfile = false
+    },
+    handleHoverPoint(point) {
+      // Implementation will be added
+    },
+    handleHoverClear() {
+      // Implementation will be added
+    },
+    handleClickPoint(point) {
+      // Implementation will be added
+    },
+    async handleCollectionFilter(collectionId) {
+      if (!this.map || !collectionId) {
+        return
+      }
+
+      try {
+        const collectionResponse = await fetch(`${APIHOST}/api/collections/${collectionId}/`)
+
+        if (!collectionResponse.ok) {
+          throw new Error('Failed to load collection')
+        }
+
+        const collectionData = await collectionResponse.json()
+
+        if (collectionResponse.ok && collectionData.collection) {
+          this.collectionName = collectionData.collection.name
+          this.isCollectionMode = true
+
+          // Clear current features and loaded bounds
+          if (this.map.getSource('geojson-data')) {
+            const source = this.map.getSource('geojson-data')
+            source.setData({ type: 'FeatureCollection', features: [] })
+          }
+          this.featureTimestamps = {}
+          this.loadedBounds.clear()
+
+          // Trigger bbox loading for current view
+          await this.loadDataForCurrentView()
+        } else {
+          throw new Error('Failed to load collection info')
+        }
+      } catch (error) {
+        console.error('Error loading collection:', error)
+        this.collectionName = null
+        this.isCollectionMode = false
+        if (this.map.getSource('geojson-data')) {
+          const source = this.map.getSource('geojson-data')
+          source.setData({ type: 'FeatureCollection', features: [] })
+        }
+        this.loadedBounds.clear()
+        this.featureTimestamps = {}
+        await this.loadDataForCurrentView()
+      }
+    },
+    async handleUrlFeatureId() {
+      const featureId = this.$route.query.featureId
+      if (!featureId) {
+        return
+      }
+
+      try {
+        const response = await fetch(`${APIHOST}/api/feature/${featureId}/`)
+        if (!response.ok) {
+          console.error(`Failed to fetch feature ${featureId}: ${response.statusText}`)
+          this.removeFeatureIdFromUrl()
+          return
+        }
+
+        const data = await response.json()
+        if (!response.ok || !data.feature) {
+          console.error(`Feature ${featureId} not found or access denied`)
+          this.removeFeatureIdFromUrl()
+          return
+        }
+
+        const geojsonData = data.feature.geojson
+        const properties = geojsonData && geojsonData.properties ? {...geojsonData.properties} : {}
+        properties.database_id = featureId
+
+        const feature = {
+          type: 'Feature',
+          properties: properties,
+          geometry: geojsonData.geometry
+        }
+
+        // Add feature to map
+        if (this.map && this.map.getSource('geojson-data')) {
+          const source = this.map.getSource('geojson-data')
+          const currentData = source._data || { type: 'FeatureCollection', features: [] }
+          const existingFeatures = currentData.features || []
+          
+          // Check if feature already exists
+          const exists = existingFeatures.some(f => f.properties?.database_id === featureId)
+          if (!exists) {
+            existingFeatures.push(feature)
+            source.setData({
+              type: 'FeatureCollection',
+              features: existingFeatures
+            })
+          }
+        }
+
+        // Zoom to feature
+        await this.$nextTick()
+        setTimeout(() => {
+          this.zoomToFeature(this.convertMapLibreFeature(feature))
+          this.removeFeatureIdFromUrl()
+        }, 100)
+      } catch (error) {
+        console.error(`Error fetching feature ${featureId}:`, error)
+        this.removeFeatureIdFromUrl()
+      }
+    },
+    removeFeatureIdFromUrl() {
+      const query = {...this.$route.query}
+      delete query.featureId
+      this.$router.replace({
+        path: this.$route.path,
+        query: query
+      })
+    },
+  },
+  async mounted() {
+    this.isMapInitializing = true
+
+    // Initialize featureTimestamps as empty object
+    this.featureTimestamps = {}
+
+    // Ensure map container is available
+    await this.$nextTick()
+    if (!this.$refs.mapContainer) {
+      console.error('Map container not available')
+      this.isMapInitializing = false
+      return
+    }
+
+    // Fetch tile sources and available tags in parallel
+    const initPromises = [this.fetchTileSources()]
+
+    // Fetch available tags for child components (only for authenticated users)
+    if (this.$store.state.userInfo) {
+      initPromises.push(this.fetchAvailableTags())
+    }
+
+    await Promise.all(initPromises)
+
+    // Wait for map to be fully initialized before loading data
+    try {
+      await this.initializeMap()
+    } catch (error) {
+      console.error('Error initializing map:', error)
+      this.loadError = error.message || 'Failed to initialize map. Please refresh the page.'
+      this.isMapInitializing = false
+      return
+    }
+
+    // Wait for map to load before proceeding
+    await new Promise((resolve) => {
+      if (this.map.loaded()) {
+        resolve()
+      } else {
+        this.map.once('load', resolve)
+      }
+    })
+
+    // Update map layer to use the selected source (in case it's not the default OSM)
+    if (this.selectedLayer && this.tileSources.length > 0) {
+      this.updateMapLayer(this.selectedLayer)
+    }
+
+    // Check for collection query parameter
+    if (this.collectionId) {
+      await this.handleCollectionFilter(this.collectionId)
+    } else {
+      // Initial data load
+      await this.loadDataForCurrentView()
+      
+      // Check for featureId in URL
+      await this.handleUrlFeatureId()
+    }
+
+    // Update map size to ensure it renders properly
+    await this.$nextTick()
+    if (this.map) {
+      setTimeout(() => {
+        this.map.resize()
+      }, 100)
+    }
+
+    // Initial feature list update
+    this.updateFeaturesInExtent()
+  },
+  beforeUnmount() {
+    if (this.map) {
+      this.map.remove()
+      this.map = null
+    }
+  }
+}
+</script>
+
+<style>
+@import 'maplibre-gl/dist/maplibre-gl.css';
+</style>
+
