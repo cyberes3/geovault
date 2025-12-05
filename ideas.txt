@@ -19,3 +19,5 @@ Auto scrape inreach tracks and present the user with a dialog to import them (al
 If a track was updated within the last 10 minutes, it is a live track and should have a direction arrow on it
 
 Stretch goal should be implementing some sort of live tracking platform like hawk does
+
+use maptiler geocoding and search

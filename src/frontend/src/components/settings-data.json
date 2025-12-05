@@ -36,6 +36,14 @@
     "description": "Replace custom icons with colored default points when zoomed out. This helps make features more visible when you're zoomed out."
   },
   {
+    "key": "map.enable_3d_terrain",
+    "title": "Default 3D Terrain to On",
+    "type": "toggle",
+    "section": "map",
+    "defaultValue": false,
+    "description": "When enabled, 3D terrain will be turned on by default when you load the map. You can still toggle it on/off using the map control button."
+  },
+  {
     "key": "import.overwrite_single_track_name_with_filename",
     "title": "Overwrite Single Track Name with Filename",
     "type": "checkbox",

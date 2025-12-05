@@ -21,27 +21,13 @@ export function initializeMap(container, config) {
     style: {
       version: 8,
       glyphs: glyphsUrl,
-      sources: {
-        'osm': {
-          type: 'raster',
-          tiles: ['https://tile.openstreetmap.org/{z}/{x}/{y}.png'],
-          tileSize: 256,
-          attribution: '© OpenStreetMap contributors'
-        }
-      },
-      layers: [
-        {
-          id: 'osm-layer',
-          type: 'raster',
-          source: 'osm',
-          minzoom: 0,
-          maxzoom: 19
-        }
-      ]
+      sources: {},
+      layers: []
     },
     center: center, // [lon, lat]
     zoom: zoom,
     maxZoom: 20,
+    maxPitch: 85,
     attributionControl: false
   })
 

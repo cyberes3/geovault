@@ -45,6 +45,11 @@ class MapSettings(BaseModel):
         description="Replace custom icons with colored default points when zoomed out to improve visibility"
     )
     
+    enable_3d_terrain: Optional[bool] = Field(
+        default=False,
+        description="Default 3D terrain to on when loading the map. User can still toggle it on/off with the map control button."
+    )
+    
     @field_validator('default_basemap')
     @classmethod
     def validate_default_basemap(cls, v):

@@ -353,13 +353,13 @@ MAX_FEATURES_PER_REQUEST = config.get_int('api.max_features_per_request', -1)
 
 # Tile Proxy Cache Configuration
 # Directory where proxied tiles will be cached on disk
-TILE_CACHE_DIR = config.get_with_env_override('tiles.cache_dir', 'TILE_CACHE_DIR', '/tmp/geovault-tiles')
+TILE_CACHE_DIR = config.get_with_env_override('tilesources.cache_dir', 'TILE_CACHE_DIR', '/tmp/geovault-tiles')
 
 # Enable or disable tile caching
-TILE_CACHE_ENABLED = config.get_bool_with_env_override('tiles.cache_enabled', 'TILE_CACHE_ENABLED', True)
+TILE_CACHE_ENABLED = config.get_bool_with_env_override('tilesources.cache_enabled', 'TILE_CACHE_ENABLED', True)
 
 # Number of days before cached tiles expire
-TILE_CACHE_EXPIRY_DAYS = config.get_int('tiles.cache_expiry_days', 30)
+TILE_CACHE_EXPIRY_DAYS = config.get_int('tilesources.cache_expiry_days', 30)
 
 # Icon Processing Configuration
 # Enable or disable icon processing for KML/KMZ files

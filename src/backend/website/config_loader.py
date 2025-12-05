@@ -168,6 +168,23 @@ class ConfigLoader:
         
         # Fall back to config file
         return self.get_bool(key_path, default)
+    
+    def get_maptiler_api_key(self) -> Optional[str]:
+        """
+        Get MapTiler API key with environment variable override.
+        
+        Returns:
+            MapTiler API key from environment variable or config file, or None if not configured
+        """
+        api_key = self.get_with_env_override(
+            'tilesources.maptiles.api_key',
+            'MAPTILER_API_KEY',
+            None
+        )
+        # Return None if empty string
+        if api_key and isinstance(api_key, str) and api_key.strip():
+            return api_key.strip()
+        return None
 
 
 # Global config loader instance

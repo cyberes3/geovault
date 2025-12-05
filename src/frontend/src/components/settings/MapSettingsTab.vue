@@ -104,7 +104,8 @@ export default {
         }
         const data = await response.json();
         if (data.sources && Array.isArray(data.sources)) {
-          this.tileSources = data.sources;
+          // Filter out hidden sources (utility sources like terrain/hillshade)
+          this.tileSources = data.sources.filter(source => !source.hidden);
         }
       } catch (error) {
         console.error('Error fetching tile sources:', error);

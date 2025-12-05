@@ -213,6 +213,14 @@ import {
   updateMapLayerSource,
   filterPointsOnBorders
 } from '@/utils/map/maplibre'
+import { 
+  MapTilerConfig,
+  setupTerrain as maptilerSetupTerrain,
+  removeTerrain as maptilerRemoveTerrain,
+  addHillshade,
+  removeHillshade as maptilerRemoveHillshade,
+  createTerrainControl
+} from '@/utils/map/maplibre/maptilerIntegration.js'
 
 export default {
   name: 'MapLibreMap',
@@ -355,29 +363,11 @@ export default {
       mapWasDestroyed: false,
       showAllLabels: true,
       labelMarkerManager: null,
+      maptilerConfig: null, // MapTilerConfig instance
+      terrainEnabled: false, // Current state of terrain (on/off)
     }
   },
   methods: {
-    // Placeholder methods - will be implemented
-    async handleHideFeature(feature) {},
-    async handleEditBoxVisibilityChange(payload) {},
-    handleTagFilterChange(tags) {},
-    zoomToFeature(feature) {},
-    handleDownloadFeatureKmz(feature) {},
-    handleEditFeature(feature) {},
-    handleCancelEdit() {},
-    handleFeatureDeleted(feature) {},
-    handleFeatureSaved(feature) {},
-    handleElevationProfileClose() {},
-    handleHoverPoint(point) {},
-    handleHoverClear() {},
-    handleClickPoint(point) {},
-    handleFeatureSelect(feature) {},
-    handleUnhideFeature(featureId) {},
-    handleUnhideAllHidden() {},
-    handleLabelsVisibilityChange(show) {},
-    updateMapLayer(layerId) {},
-    centerToUserLocation() {},
     getLocationDisplayName() {
       return getLocationDisplayName(this.userLocation)
     },
@@ -420,6 +410,16 @@ export default {
         zoom: mapConfig.zoom,
         glyphsUrl: '/api/fonts/{fontstack}/{range}.pbf'
       }))
+
+      // Add navigation controls (compass and pitch reset buttons)
+      this.map.addControl(
+        new maplibregl.NavigationControl({
+          visualizePitch: true, // Show pitch/tilt indicator
+          showCompass: true,    // Show compass for rotation
+          showZoom: true        // Show zoom buttons
+        }),
+        'top-left'
+      )
 
       // Initialize label marker manager
       this.labelMarkerManager = new LabelMarkerManager(this.map)
@@ -800,7 +800,8 @@ export default {
         const data = await response.json()
 
         if (data.sources && Array.isArray(data.sources)) {
-          this.tileSources = data.sources
+          // Filter out hidden sources (utility sources like terrain/hillshade)
+          this.tileSources = data.sources.filter(source => !source.hidden)
 
           const userSettings = this.$store.state.userSettings || {}
           const defaultBasemap = userSettings.map?.default_basemap
@@ -815,17 +816,80 @@ export default {
         }
       } catch (error) {
         console.error('Error fetching tile sources:', error)
+        // Fallback to OSM if tile sources fail to load
         this.tileSources = [{
           id: 'osm',
           name: 'OpenStreetMap',
-          type: 'osm',
+          type: 'xyz',
           requires_proxy: false,
-          client_config: {type: 'osm'}
+          client_config: {
+            type: 'xyz',
+            url: 'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
+            tileSize: 256
+          }
         }]
         if (!this.selectedLayer) {
           this.selectedLayer = 'osm'
         }
       }
+    },
+    async fetchMaptilerConfig() {
+      this.maptilerConfig = new MapTilerConfig()
+      await this.maptilerConfig.fetchConfig()
+    },
+    add3DTerrainControl() {
+      // Only add control if MapTiler is configured
+      if (!this.maptilerConfig || !this.maptilerConfig.isAvailable()) {
+        return
+      }
+
+      const terrainControl = createTerrainControl({
+        initialState: this.terrainEnabled,
+        onToggle: (newState) => {
+          this.terrainEnabled = newState
+          if (newState) {
+            this.setupTerrain()
+          } else {
+            this.removeTerrain()
+          }
+        }
+      })
+      
+      this.map.addControl(terrainControl, 'top-left')
+    },
+    setupTerrain() {
+      if (!this.maptilerConfig) return
+      
+      maptilerSetupTerrain(this.map, this.maptilerConfig)
+      this.addHillshadeIfNeeded()
+    },
+    removeTerrain() {
+      this.removeHillshade()
+      maptilerRemoveTerrain(this.map)
+    },
+    addHillshadeIfNeeded() {
+      if (!this.map || !this.maptilerConfig) return
+      
+      // Get current tile source configuration
+      const currentLayer = this.currentMapLayer
+      const tileSource = this.$store.state.tileSources?.find(
+        (source) => source.id === currentLayer
+      )
+      
+      // Check if this tile source needs hillshade for 3D
+      if (!tileSource || !tileSource.needs_hillshade) {
+        return
+      }
+      
+      // Check if terrain is enabled
+      if (!this.map.getTerrain()) {
+        return
+      }
+      
+      addHillshade(this.map, this.maptilerConfig, 'feature-layer')
+    },
+    removeHillshade() {
+      maptilerRemoveHillshade(this.map)
     },
     async fetchAvailableTags() {
       if (!this.$store.state.userInfo) return
@@ -852,47 +916,191 @@ export default {
     updateMapLayer(layerValue) {
       if (!this.map) return
 
+      // Use local terrain state (not user setting)
+      const terrainEnabled = this.terrainEnabled && this.maptilerConfig?.isAvailable()
+
       this.selectedLayer = layerValue
       const tileSource = this.tileSources.find(s => s.id === layerValue)
       if (!tileSource) return
 
       const clientConfig = tileSource.client_config || {}
 
-      // Remove existing raster layer
-      if (this.map.getLayer('osm-layer')) {
-        this.map.removeLayer('osm-layer')
-      }
-      if (this.map.getSource('osm')) {
-        this.map.removeSource('osm')
-      }
+      // Remove hillshade before removing base layer
+      this.removeHillshade()
 
-      // Add new source and layer
-      if (clientConfig.type === 'osm' || tileSource.type === 'osm') {
-        this.map.addSource('osm', {
-          type: 'raster',
-          tiles: ['https://tile.openstreetmap.org/{z}/{x}/{y}.png'],
-          tileSize: 256,
-          attribution: '© OpenStreetMap contributors'
+      // Remove existing raster layers (generic)
+      const existingRasterLayers = ['osm-layer', 'tile-layer', 'raster-layer']
+      existingRasterLayers.forEach(layerId => {
+        if (this.map.getLayer(layerId)) {
+          this.map.removeLayer(layerId)
+        }
+      })
+      
+      // Remove existing raster sources (generic)
+      const existingRasterSources = ['osm', 'tile-source', 'raster-source']
+      existingRasterSources.forEach(sourceId => {
+        if (this.map.getSource(sourceId)) {
+          this.map.removeSource(sourceId)
+        }
+      })
+
+      // Check if this is a style-based source (MapTiler) or raster-based
+      const isStyleBased = clientConfig.style_url || clientConfig.type === 'maptiler'
+      
+      if (isStyleBased) {
+        // Style-based source (e.g., MapTiler) - replaces entire style
+        const styleUrl = clientConfig.style_url
+        
+        // Save current state before switching styles
+        const geojsonSource = this.map.getSource('geojson-data')
+        let geojsonData = null
+        if (geojsonSource && geojsonSource._data) {
+          geojsonData = geojsonSource._data
+        }
+        
+        // Load the new style
+        this.map.setStyle(styleUrl)
+        
+        // Restore GeoJSON data and terrain after style loads
+        this.map.once('styledata', async () => {
+          // Wait a bit to ensure style is fully loaded
+          await new Promise(resolve => setTimeout(resolve, 100))
+          
+          // Restore GeoJSON source and features
+          if (geojsonData) {
+            // Add GeoJSON source directly
+            if (!this.map.getSource('geojson-data')) {
+              this.map.addSource('geojson-data', {
+                type: 'geojson',
+                data: {
+                  type: 'FeatureCollection',
+                  features: []
+                }
+              })
+            }
+            
+            // Add layers first (they need to exist before adding features)
+            ensureLayersExist(this.map, this.showAllLabels)
+            
+            // Re-add features to the map with proper styling and icons
+            await addFeaturesToMap(this.map, geojsonData, this.showAllLabels, this.currentZoom)
+            
+            // Update label markers if labels are visible
+            if (this.showAllLabels && this.labelMarkerManager) {
+              const source = this.map.getSource('geojson-data')
+              if (source && source._data && source._data.features) {
+                this.labelMarkerManager.updateMarkers(source._data.features)
+              }
+            }
+          }
+          
+          // Re-apply terrain if it was enabled
+          if (terrainEnabled) {
+            this.setupTerrain()
+          }
         })
-        this.map.addLayer({
-          id: 'osm-layer',
-          type: 'raster',
-          source: 'osm',
-          minzoom: 0,
-          maxzoom: 19
-        })
-      } else if (clientConfig.type === 'xyz' || tileSource.type === 'xyz') {
+      } else {
+        // Raster-based source - need to reset style if coming from a style-based source
+        const currentStyle = this.map.getStyle()
+        const needsStyleReset = currentStyle && currentStyle.name // MapTiler styles have a name property
+        
         const url = clientConfig.url || `/api/tiles/${layerValue}/{z}/{x}/{y}`
-        this.map.addSource('tile-source', {
-          type: 'raster',
-          tiles: [url],
-          tileSize: 256
-        })
-        this.map.addLayer({
-          id: 'tile-layer',
-          type: 'raster',
-          source: 'tile-source'
-        })
+        
+        // Handle tile subdomains if provided
+        let tiles
+        if (clientConfig.tileSubdomains && Array.isArray(clientConfig.tileSubdomains)) {
+          tiles = clientConfig.tileSubdomains.map(subdomain =>
+            url.replace('{s}', subdomain)
+          )
+        } else {
+          tiles = [url.replace('{s}', clientConfig.tileSubdomains?.[0] || 'a')]
+        }
+        
+        if (needsStyleReset) {
+          // Coming from a style-based source - reset to blank style first
+          const geojsonSource = this.map.getSource('geojson-data')
+          let geojsonData = null
+          if (geojsonSource && geojsonSource._data) {
+            geojsonData = geojsonSource._data
+          }
+          
+          // Reset to blank style
+          this.map.setStyle({
+            version: 8,
+            glyphs: '/api/fonts/{fontstack}/{range}.pbf',
+            sources: {},
+            layers: []
+          })
+          
+          // Wait for style to load, then add raster layer and restore GeoJSON
+          this.map.once('styledata', async () => {
+            await new Promise(resolve => setTimeout(resolve, 100))
+            
+            // Add raster source and layer
+            this.map.addSource('raster-source', {
+              type: 'raster',
+              tiles: tiles,
+              tileSize: clientConfig.tileSize || 256
+            })
+            this.map.addLayer({
+              id: 'raster-layer',
+              type: 'raster',
+              source: 'raster-source',
+              minzoom: clientConfig.minzoom || 0,
+              maxzoom: clientConfig.maxzoom || 22
+            })
+            
+            // Restore GeoJSON if we had data
+            if (geojsonData) {
+              if (!this.map.getSource('geojson-data')) {
+                this.map.addSource('geojson-data', {
+                  type: 'geojson',
+                  data: {
+                    type: 'FeatureCollection',
+                    features: []
+                  }
+                })
+              }
+              
+              ensureLayersExist(this.map, this.showAllLabels)
+              await addFeaturesToMap(this.map, geojsonData, this.showAllLabels, this.currentZoom)
+              
+              if (this.showAllLabels && this.labelMarkerManager) {
+                const source = this.map.getSource('geojson-data')
+                if (source && source._data && source._data.features) {
+                  this.labelMarkerManager.updateMarkers(source._data.features)
+                }
+              }
+            }
+            
+            // Re-apply terrain if it was enabled
+            if (terrainEnabled) {
+              this.setupTerrain()
+            }
+          })
+        } else {
+          // Not coming from a style-based source - just add raster layer
+          this.map.addSource('raster-source', {
+            type: 'raster',
+            tiles: tiles,
+            tileSize: clientConfig.tileSize || 256
+          })
+          this.map.addLayer({
+            id: 'raster-layer',
+            type: 'raster',
+            source: 'raster-source',
+            minzoom: clientConfig.minzoom || 0,
+            maxzoom: clientConfig.maxzoom || 22
+          })
+          
+          // Ensure GeoJSON layers exist and are on top
+          ensureLayersExist(this.map, this.showAllLabels)
+          
+          // Add hillshade if terrain is enabled and this layer needs it
+          if (terrainEnabled) {
+            this.addHillshadeIfNeeded()
+          }
+        }
       }
     },
     centerToUserLocation() {
@@ -910,6 +1118,8 @@ export default {
           this.map.flyTo({
             center: [longitude, latitude],
             zoom: stateLevelZoom,
+            pitch: 0,  // Reset tilt to flat
+            bearing: 0,  // Reset rotation to north
             duration: 500
           })
           return
@@ -919,6 +1129,8 @@ export default {
       // Fallback: just zoom to state level at current center
       this.map.flyTo({
         zoom: stateLevelZoom,
+        pitch: 0,  // Reset tilt to flat
+        bearing: 0,  // Reset rotation to north
         duration: 500
       })
     },
@@ -1461,8 +1673,8 @@ export default {
       return
     }
 
-    // Fetch tile sources and available tags in parallel
-    const initPromises = [this.fetchTileSources()]
+    // Fetch tile sources, MapTiler API key, and available tags in parallel
+    const initPromises = [this.fetchTileSources(), this.fetchMaptilerConfig()]
 
     // Fetch available tags for child components (only for authenticated users)
     if (this.$store.state.userInfo) {
@@ -1494,6 +1706,20 @@ export default {
     if (this.selectedLayer && this.tileSources.length > 0) {
       this.updateMapLayer(this.selectedLayer)
     }
+
+    // Setup terrain based on user's default preference (after baselayer is configured)
+    const userSettings = this.$store.state.userSettings || {}
+    const defaultTerrainOn = userSettings.map?.enable_3d_terrain || false
+    
+    if (defaultTerrainOn && this.maptilerConfig?.isAvailable()) {
+      this.terrainEnabled = true
+      this.setupTerrain()
+    } else {
+      this.terrainEnabled = false
+    }
+
+    // Add 3D terrain toggle control AFTER setting terrainEnabled (only if MapTiler is configured)
+    this.add3DTerrainControl()
 
     // Check for collection query parameter
     if (this.collectionId) {
@@ -1532,5 +1758,36 @@ export default {
 
 <style>
 @import 'maplibre-gl/dist/maplibre-gl.css';
+
+/* 3D Terrain toggle button styling */
+.maplibregl-ctrl-terrain {
+  background-color: #fff;
+  background-repeat: no-repeat;
+  background-position: center;
+  width: 29px;
+  height: 29px;
+  /* Default state (OFF) - dark gray */
+  background-image: url("data:image/svg+xml;charset=utf-8,%3Csvg xmlns='http://www.w3.org/2000/svg' width='22' height='22' fill='%23333' viewBox='0 0 22 22'%3E%3Cpath d='m1.754 13.406 4.453-4.851 3.09 3.09 3.281 3.277.969-.969-3.309-3.312 3.844-4.121 6.148 6.886h1.082v-.855l-7.207-8.07-4.84 5.187L6.169 6.57l-5.48 5.965v.871ZM.688 16.844h20.625v1.375H.688Zm0 0'/%3E%3C/svg%3E");
+}
+
+.maplibregl-ctrl-terrain:hover {
+  /* Hover state when OFF - slightly lighter gray */
+  background-image: url("data:image/svg+xml;charset=utf-8,%3Csvg xmlns='http://www.w3.org/2000/svg' width='22' height='22' fill='%23555' viewBox='0 0 22 22'%3E%3Cpath d='m1.754 13.406 4.453-4.851 3.09 3.09 3.281 3.277.969-.969-3.309-3.312 3.844-4.121 6.148 6.886h1.082v-.855l-7.207-8.07-4.84 5.187L6.169 6.57l-5.48 5.965v.871ZM.688 16.844h20.625v1.375H.688Zm0 0'/%3E%3C/svg%3E");
+}
+
+.maplibregl-ctrl-terrain.maplibregl-ctrl-terrain-enabled {
+  /* Enabled state (ON) - light blue */
+  background-image: url("data:image/svg+xml;charset=utf-8,%3Csvg xmlns='http://www.w3.org/2000/svg' width='22' height='22' fill='%2333b5e5' viewBox='0 0 22 22'%3E%3Cpath d='m1.754 13.406 4.453-4.851 3.09 3.09 3.281 3.277.969-.969-3.309-3.312 3.844-4.121 6.148 6.886h1.082v-.855l-7.207-8.07-4.84 5.187L6.169 6.57l-5.48 5.965v.871ZM.688 16.844h20.625v1.375H.688Zm0 0'/%3E%3C/svg%3E");
+}
+
+.maplibregl-ctrl-terrain.maplibregl-ctrl-terrain-enabled:hover {
+  /* Hover state when ON - brighter light blue */
+  background-image: url("data:image/svg+xml;charset=utf-8,%3Csvg xmlns='http://www.w3.org/2000/svg' width='22' height='22' fill='%2350c8ff' viewBox='0 0 22 22'%3E%3Cpath d='m1.754 13.406 4.453-4.851 3.09 3.09 3.281 3.277.969-.969-3.309-3.312 3.844-4.121 6.148 6.886h1.082v-.855l-7.207-8.07-4.84 5.187L6.169 6.57l-5.48 5.965v.871ZM.688 16.844h20.625v1.375H.688Zm0 0'/%3E%3C/svg%3E");
+}
+
+.maplibregl-ctrl-terrain:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
 </style>
 

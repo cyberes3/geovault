@@ -49,7 +49,7 @@ redis:
   port: 6379
 
 
-tiles:
+tilesources:
   # Directory where proxied tiles will be cached on disk
   cache_dir: /tmp/geovault-tiles
 
@@ -58,6 +58,27 @@ tiles:
 
   # Number of days before cached tiles expire
   cache_expiry_days: 30
+
+  # MapTiler maps configuration
+  maptiles:
+    # MapTiler API key for accessing MapTiler maps and 3D terrain tiles
+    # Can be overridden with MAPTILER_API_KEY environment variable
+    # Get your API key from https://www.maptiler.com/
+    # Leave empty if you don't need MapTiler functionality
+    api_key:
+
+    # Proxy MapTiler tiles through the server with caching
+    # Helps conserve API usage for free plans by caching tiles locally
+    # Default: false (tiles loaded directly from MapTiler)
+    proxy: false
+
+    # List of MapTiler map IDs to include as tile sources
+    # Get map IDs from https://cloud.maptiler.com/maps/
+    maps:
+#       - topo-v4 # General purpose topo map
+#       - outdoor-v4 # Topo map with trails highlighted
+#       - satellite
+#       - streets
 
 
 icons:

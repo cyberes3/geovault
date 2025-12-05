@@ -10,11 +10,14 @@ from . import register_tile_source
 OSM_CONFIG = {
     'id': 'osm',
     'name': 'OpenStreetMap',
-    'type': 'osm',
+    'type': 'xyz',  # OSM is a raster/XYZ tile source
     'requires_proxy': False,
     'url_template': 'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
     'client_config': {
-        'type': 'osm'
+        'type': 'xyz',
+        'url': 'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
+        'tileSize': 256,
+        'attribution': '© OpenStreetMap contributors'
     }
 }
 

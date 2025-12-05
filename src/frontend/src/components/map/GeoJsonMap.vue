@@ -546,7 +546,8 @@ export default {
         const data = await response.json()
 
         if (data.sources && Array.isArray(data.sources)) {
-          this.tileSources = data.sources
+          // Filter out hidden sources (utility sources like terrain/hillshade)
+          this.tileSources = data.sources.filter(source => !source.hidden)
 
           // Get user's default basemap preference from settings
           const userSettings = this.$store.state.userSettings || {}

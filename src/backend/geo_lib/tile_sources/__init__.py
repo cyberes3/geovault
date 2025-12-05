@@ -47,6 +47,7 @@ def get_tile_sources_for_client():
     """
     Get tile source configurations formatted for client consumption.
     Only includes information needed by the frontend.
+    Includes all sources (even hidden utility sources like terrain/hillshade).
     
     Returns:
         List of dictionaries with client-safe tile source configurations
@@ -58,8 +59,18 @@ def get_tile_sources_for_client():
             'name': config.get('name', source_id),
             'type': config.get('type', 'xyz'),
             'requires_proxy': config.get('requires_proxy', False),
+            'needs_hillshade': config.get('needs_hillshade', False),
+            'hidden': config.get('hidden', False),
             'client_config': config.get('client_config', {})
         }
+        
+        # Include additional properties for hidden sources (terrain/hillshade)
+        if config.get('hidden'):
+            if 'exaggeration' in config:
+                client_config['exaggeration'] = config['exaggeration']
+            if 'opacity' in config:
+                client_config['opacity'] = config['opacity']
+        
         sources.append(client_config)
     return sources
 
@@ -69,4 +80,7 @@ from . import osm
 from . import mb_topo
 from . import global_imagery
 from . import opentopomap
+from . import maptiles
+from . import maptiler_terrain
+from . import maptiler_hillshade
 
