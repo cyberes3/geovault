@@ -9,13 +9,16 @@ import { calculatePolygonCentroid, calculateLineCenter } from './labelPlacement.
 // Web Mercator constants
 const EARTH_CIRCUMFERENCE = 40075016.686 // meters at equator
 
+// Maximum number of visible labels to prevent clutter
+const MAX_VISIBLE_LABELS = 200
+
 /**
  * Convert MapLibre zoom level to resolution (meters per pixel)
  * Uses Web Mercator projection formula
  * @param {number} zoom - MapLibre zoom level
  * @returns {number} Resolution in meters per pixel
  */
-function getResolutionFromZoom(zoom) {
+export function getResolutionFromZoom(zoom) {
   // Resolution = Earth circumference / (tile size * 2^zoom)
   // Tile size in MapLibre is 512 pixels (at scale 1)
   return EARTH_CIRCUMFERENCE / (512 * Math.pow(2, zoom))
@@ -110,7 +113,7 @@ function calculateLineLength(geometry) {
  * @param {number} strokeWidth - Stroke width in pixels (default: 2)
  * @returns {boolean} True if label would intersect with border
  */
-function checkLabelBorderIntersection(geometry, labelPosition, text, resolution, strokeWidth = 2) {
+export function checkLabelBorderIntersection(geometry, labelPosition, text, resolution, strokeWidth = 2) {
   if (!geometry || !labelPosition || resolution <= 0) {
     return false
   }
@@ -194,6 +197,45 @@ function checkLabelBorderIntersection(geometry, labelPosition, text, resolution,
 }
 
 /**
+ * Calculate extent of a polygon geometry
+ * @param {Object} geometry - GeoJSON geometry
+ * @returns {Array<number>|null} Extent [minLon, minLat, maxLon, maxLat] or null
+ */
+function calculatePolygonExtent(geometry) {
+  if (!geometry || !geometry.coordinates) return null
+  
+  let allCoords = []
+  if (geometry.type === 'Polygon') {
+    allCoords = geometry.coordinates[0] || []
+  } else if (geometry.type === 'MultiPolygon') {
+    geometry.coordinates.forEach(polygon => {
+      if (polygon[0]) {
+        allCoords = allCoords.concat(polygon[0])
+      }
+    })
+  }
+  
+  if (allCoords.length === 0) return null
+  
+  let minLon = Infinity, minLat = Infinity, maxLon = -Infinity, maxLat = -Infinity
+  allCoords.forEach(coord => {
+    const [lon, lat] = coord
+    if (isFinite(lon) && isFinite(lat)) {
+      minLon = Math.min(minLon, lon)
+      minLat = Math.min(minLat, lat)
+      maxLon = Math.max(maxLon, lon)
+      maxLat = Math.max(maxLat, lat)
+    }
+  })
+  
+  if (!isFinite(minLon) || !isFinite(minLat) || !isFinite(maxLon) || !isFinite(maxLat)) {
+    return null
+  }
+  
+  return [minLon, minLat, maxLon, maxLat]
+}
+
+/**
  * Check if a feature's label should be visible at the current zoom level
  * Based on feature size and zoom thresholds from OpenLayers implementation
  * @param {Object} feature - GeoJSON feature
@@ -212,17 +254,45 @@ function shouldShowLabel(feature, labelPosition, zoom) {
     return zoom > 8
   }
 
-  // For polygons, check if label would intersect with border
+  // For polygons, check size and border intersection
   if (geometry.type === 'Polygon' || geometry.type === 'MultiPolygon') {
     const name = feature.properties?.name || ''
     if (!name || !labelPosition) return false
     
-    // Get stroke width from feature properties (default 2)
-    const strokeWidth = feature.properties?.['stroke-width'] || 2
+    // Calculate polygon screen size
+    const extent = calculatePolygonExtent(geometry)
+    if (!extent) return false
+    
+    const widthDegrees = extent[2] - extent[0]
+    const heightDegrees = extent[3] - extent[1]
+    
+    // Convert to pixels
+    const tileSize = 256
+    const worldWidthPixels = tileSize * Math.pow(2, zoom)
+    const pixelsPerDegree = worldWidthPixels / 360
+    
+    const widthPixels = widthDegrees * pixelsPerDegree
+    const heightPixels = heightDegrees * pixelsPerDegree
+    
+    // Hide text for polygons < 50 pixels when zoomed out
+    // Threshold is approx Zoom 13 (19.1 m/px)
+    const minPolygonSizePixels = 50
+    const maxResolutionForSmallPolygons = 19.1 // meters per pixel (approx Zoom 13)
+    
+    const minDimensionPixels = Math.min(widthPixels, heightPixels)
+    if (minDimensionPixels < minPolygonSizePixels && resolution > maxResolutionForSmallPolygons) {
+      return false // Hide text for small polygons (including dots) when zoomed out
+    }
     
     // Check if label would intersect with polygon border
+    // If it would, the label will be placed below the polygon (handled in feature processing)
+    // So we return true here - don't hide the label
+    const strokeWidth = feature.properties?.['stroke-width'] || 2
     const wouldIntersect = checkLabelBorderIntersection(geometry, labelPosition, name, resolution, strokeWidth)
-    return !wouldIntersect
+    
+    // Always return true for polygons that pass the size check
+    // Border intersection is handled by placing label below polygon (via _placeLabelBelow flag)
+    return true
   }
 
   // For lines, check if they're too small when zoomed out
@@ -304,27 +374,23 @@ function getLabelPosition(feature) {
     return geometry.coordinates
   }
 
-  // For polygons, calculate centroid
-  if (geometry.type === 'Polygon' || geometry.type === 'MultiPolygon') {
-    return calculatePolygonCentroid(geometry)
-  }
-
-  // For lines, calculate center
-  if (geometry.type === 'LineString' || geometry.type === 'MultiLineString') {
-    return calculateLineCenter(geometry)
-  }
-
+  // Polygons and lines should ONLY use label points - never reach here
+  // This function is only for getting positions from points and label points
   return null
 }
 
 /**
- * Label marker manager
+ * Label marker manager with performance optimizations
  */
 export class LabelMarkerManager {
   constructor(map) {
     this.map = map
-    this.markers = new Map() // Map of featureId -> { marker, isLabelPoint }
+    this.markers = new Map() // Map of featureId -> { marker, isLabelPoint, text, position }
     this.showAllLabels = true
+    this.updateTimeout = null // Debounce updates
+    this.isUpdating = false // Prevent concurrent updates
+    this.lastZoom = null // Track zoom changes
+    this.lastUpdateTime = 0 // Track last update time for throttling
   }
 
   /**
@@ -333,95 +399,205 @@ export class LabelMarkerManager {
    */
   setVisibility(show) {
     this.showAllLabels = show
-    // Update all existing markers
+    // Batch visibility updates using CSS
+    const display = show ? 'block' : 'none'
     this.markers.forEach(({ marker }) => {
-      marker.getElement().style.display = show ? 'block' : 'none'
+      const el = marker.getElement()
+      if (el) el.style.display = display
     })
   }
 
   /**
-   * Update markers based on features
+   * Update markers based on features (debounced for performance)
    * @param {Array} features - Array of GeoJSON features
    */
   updateMarkers(features) {
-    if (!this.map) return
-
-    const zoom = this.map.getZoom()
-    const featureMap = new Map()
-    const labelPoints = new Map()
-
-    // Separate regular features from label points
-    features.forEach(f => {
-      if (f.properties?._isLabelPoint) {
-        const originalId = f.properties?._originalFeatureId
-        if (originalId) {
-          labelPoints.set(String(originalId), f)
+    const now = Date.now()
+    const currentZoom = this.map ? Math.round(this.map.getZoom()) : null
+    
+    // Throttle updates during zoom - only update if zoom level actually changed significantly
+    if (this.lastZoom !== null && currentZoom !== null) {
+      const zoomDiff = Math.abs(currentZoom - this.lastZoom)
+      
+      // If zooming and less than 150ms since last update, use longer debounce
+      if (zoomDiff > 0 && (now - this.lastUpdateTime) < 150) {
+        // Clear existing timeout and set a longer one during active zoom
+        if (this.updateTimeout) {
+          clearTimeout(this.updateTimeout)
         }
-      } else {
-        const id = f.properties?.database_id
-        if (id) {
-          featureMap.set(String(id), f)
-        }
-      }
-    })
-
-    // Track which features should have markers
-    const shouldHaveMarker = new Set()
-
-    // Process label points first (for polygons/lines)
-    labelPoints.forEach((labelPoint, originalId) => {
-      const position = getLabelPosition(labelPoint)
-      if (position) {
-        // Get the original feature to check its geometry for size filtering
-        const originalFeature = featureMap.get(originalId)
         
-        // Check if label should be visible based on zoom and feature size
-        if (originalFeature && !shouldShowLabel(originalFeature, position, zoom)) {
-          // Skip this label - it would intersect with border or is too small
+        this.updateTimeout = setTimeout(() => {
+          this.lastZoom = currentZoom
+          this.performUpdate(features)
+        }, 200) // Longer debounce during zoom
+        return
+      }
+    }
+    
+    // Debounce updates to avoid excessive re-renders during zoom/pan
+    if (this.updateTimeout) {
+      clearTimeout(this.updateTimeout)
+    }
+    
+    this.updateTimeout = setTimeout(() => {
+      this.lastZoom = currentZoom
+      this.performUpdate(features)
+    }, 50) // Short debounce for normal updates
+  }
+
+  /**
+   * Perform the actual marker update
+   * @param {Array} features - Array of GeoJSON features
+   */
+  performUpdate(features) {
+    if (!this.map || this.isUpdating) return
+    
+    // Use requestAnimationFrame for smooth rendering
+    requestAnimationFrame(() => {
+      this.isUpdating = true
+      this.lastUpdateTime = Date.now()
+      
+      try {
+        const zoom = this.map.getZoom()
+        const bounds = this.map.getBounds()
+        
+        // Early exit if no features
+        if (!features || features.length === 0) {
+          this.clearAllMarkers()
           return
         }
-        
-        shouldHaveMarker.add(originalId)
-        const name = labelPoint.properties?.name || ''
-        // Label points (polygons/lines) should be centered
-        this.ensureMarker(originalId, name, position, true)
-      }
-    })
 
-    // Process regular features (points with names)
-    featureMap.forEach((feature, id) => {
-      // Skip if this feature already has a label point marker
-      if (shouldHaveMarker.has(id)) return
+        const featureMap = new Map()
+        const labelPoints = new Map()
 
-      const position = getLabelPosition(feature)
-      if (position) {
-        // Check if label should be visible based on zoom and feature size
-        if (!shouldShowLabel(feature, position, zoom)) {
-          // Skip this label - it's too small at this zoom level
-          return
+        // Separate regular features from label points
+        for (const f of features) {
+          if (f.properties?._isLabelPoint) {
+            const originalId = f.properties?._originalFeatureId
+            if (originalId) {
+              labelPoints.set(String(originalId), f)
+            }
+          } else {
+            const id = f.properties?.database_id
+            if (id) {
+              featureMap.set(String(id), f)
+            }
+          }
         }
-        
-        shouldHaveMarker.add(id)
-        // Regular points should have label below (anchor: bottom)
-        this.ensureMarker(id, feature.properties?.name || '', position, false)
-      }
-    })
 
-    // Remove markers for features that no longer exist
-    const markersToRemove = []
-    this.markers.forEach((data, featureId) => {
-      if (!shouldHaveMarker.has(featureId)) {
-        markersToRemove.push(featureId)
-      }
-    })
+        // Track which features should have markers
+        const shouldHaveMarker = new Set()
+        const candidateLabels = []
 
-    markersToRemove.forEach(featureId => {
-      this.removeMarker(featureId)
+        // Process label points first (for polygons/lines)
+        labelPoints.forEach((labelPoint, originalId) => {
+          const position = getLabelPosition(labelPoint)
+          if (!position) return
+          
+          // Quick viewport check
+          if (position[0] < bounds.getWest() || position[0] > bounds.getEast() ||
+              position[1] < bounds.getSouth() || position[1] > bounds.getNorth()) {
+            return // Skip labels outside viewport
+          }
+
+          // Get the original feature to check its geometry for size filtering
+          const originalFeature = featureMap.get(originalId)
+          
+          // Check if label should be visible based on zoom and feature size
+          if (originalFeature && !shouldShowLabel(originalFeature, position, zoom)) {
+            return // Skip this label - it would intersect with border or is too small
+          }
+          
+          const name = labelPoint.properties?.name
+          if (!name || name.trim() === '') return
+          
+          candidateLabels.push({
+            id: originalId,
+            name,
+            position,
+            isLabelPoint: true
+          })
+        })
+
+        // Process regular features (points with names)
+        featureMap.forEach((feature, id) => {
+          // Skip if this feature already has a label point marker
+          if (candidateLabels.some(l => l.id === id)) return
+          
+          // Skip polygons and lines - they should only use label points
+          const geometryType = feature.geometry?.type
+          if (geometryType === 'Polygon' || geometryType === 'MultiPolygon' ||
+              geometryType === 'LineString' || geometryType === 'MultiLineString') {
+            return
+          }
+          
+          // Skip small feature replacement points - they shouldn't have labels
+          if (feature.properties?._isSmallFeatureReplacement) {
+            return
+          }
+
+          const position = getLabelPosition(feature)
+          if (!position) return
+          
+          // Quick viewport check
+          if (position[0] < bounds.getWest() || position[0] > bounds.getEast() ||
+              position[1] < bounds.getSouth() || position[1] > bounds.getNorth()) {
+            return // Skip labels outside viewport
+          }
+
+          // Check if label should be visible based on zoom and feature size
+          if (!shouldShowLabel(feature, position, zoom)) {
+            return // Skip this label - it's too small at this zoom level
+          }
+          
+          const name = feature.properties?.name
+          if (!name || name.trim() === '') return
+          
+          candidateLabels.push({
+            id,
+            name,
+            position,
+            isLabelPoint: false
+          })
+        })
+
+        // Limit to MAX_VISIBLE_LABELS and batch process
+        const labelsToShow = candidateLabels.slice(0, MAX_VISIBLE_LABELS)
+
+        // Batch create/update markers
+        labelsToShow.forEach(({ id, name, position, isLabelPoint }) => {
+          shouldHaveMarker.add(id)
+          this.ensureMarker(id, name, position, isLabelPoint)
+        })
+
+        // Batch remove markers that are no longer needed
+        const markersToRemove = []
+        this.markers.forEach((data, featureId) => {
+          if (!shouldHaveMarker.has(featureId)) {
+            markersToRemove.push(featureId)
+          }
+        })
+
+        // Remove in batch
+        for (const featureId of markersToRemove) {
+          this.removeMarker(featureId)
+        }
+      } finally {
+        this.isUpdating = false
+      }
     })
   }
 
   /**
-   * Ensure a marker exists for a feature
+   * Clear all markers efficiently
+   */
+  clearAllMarkers() {
+    this.markers.forEach(({ marker }) => marker.remove())
+    this.markers.clear()
+  }
+
+  /**
+   * Ensure a marker exists for a feature (optimized for performance)
    * @param {string} featureId - Feature ID
    * @param {string} text - Label text
    * @param {Array<number>} position - [lon, lat] coordinates
@@ -430,11 +606,23 @@ export class LabelMarkerManager {
   ensureMarker(featureId, text, position, isLabelPoint = false) {
     if (!this.map || !position || !text || text.trim() === '') return
 
-    if (this.markers.has(featureId)) {
-      const { marker, isLabelPoint: existingIsLabelPoint } = this.markers.get(featureId)
+    const existingMarker = this.markers.get(featureId)
+    
+    if (existingMarker) {
+      const { marker, isLabelPoint: existingIsLabelPoint, text: existingText, position: existingPosition } = existingMarker
+      
+      // Check if anything actually changed to avoid unnecessary DOM updates
+      const positionChanged = existingPosition[0] !== position[0] || existingPosition[1] !== position[1]
+      const textChanged = existingText !== text
+      const anchorChanged = existingIsLabelPoint !== isLabelPoint
+      
+      if (!positionChanged && !textChanged && !anchorChanged) {
+        // Nothing changed, skip update
+        return
+      }
       
       // If anchor type changed, recreate the marker
-      if (existingIsLabelPoint !== isLabelPoint) {
+      if (anchorChanged) {
         marker.remove()
         const newEl = createLabelElement(text, isLabelPoint)
         newEl.style.display = this.showAllLabels ? 'block' : 'none'
@@ -447,17 +635,27 @@ export class LabelMarkerManager {
         })
           .setLngLat(position)
           .addTo(this.map)
-        this.markers.set(featureId, { marker: newMarker, isLabelPoint })
+        this.markers.set(featureId, { marker: newMarker, isLabelPoint, text, position: [...position] })
         return
       }
       
-      // Update existing marker position and text
-      marker.setLngLat(position)
-      const el = marker.getElement()
-      if (el.textContent !== text) {
-        el.textContent = text
+      // Update position if changed
+      if (positionChanged) {
+        marker.setLngLat(position)
       }
-      el.style.display = this.showAllLabels ? 'block' : 'none'
+      
+      // Update text if changed
+      if (textChanged) {
+        const el = marker.getElement()
+        if (el) el.textContent = text
+      }
+      
+      // Update stored data
+      this.markers.set(featureId, { marker, isLabelPoint, text, position: [...position] })
+      
+      // Ensure visibility is correct
+      const el = marker.getElement()
+      if (el) el.style.display = this.showAllLabels ? 'block' : 'none'
     } else {
       // Create new marker
       const el = createLabelElement(text, isLabelPoint)
@@ -473,7 +671,7 @@ export class LabelMarkerManager {
         .setLngLat(position)
         .addTo(this.map)
 
-      this.markers.set(featureId, { marker, isLabelPoint })
+      this.markers.set(featureId, { marker, isLabelPoint, text, position: [...position] })
     }
   }
 
@@ -493,8 +691,12 @@ export class LabelMarkerManager {
    * Remove all markers
    */
   clear() {
-    this.markers.forEach(({ marker }) => marker.remove())
-    this.markers.clear()
+    // Cancel any pending updates
+    if (this.updateTimeout) {
+      clearTimeout(this.updateTimeout)
+      this.updateTimeout = null
+    }
+    this.clearAllMarkers()
   }
 
   /**

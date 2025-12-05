@@ -90,6 +90,7 @@ export const defaultFeatureStyles = {
 
 /**
  * Get point layer configuration (for circles, when no icon or at low zoom)
+ * Includes replacement points for small polygons/lines
  * @param {Object} overrides - Style overrides
  * @returns {Object} Point layer configuration
  */
@@ -105,6 +106,13 @@ export function getPointLayerConfig(overrides = {}) {
     ],
     paint: {
       ...defaultFeatureStyles.points.paint,
+      // Use a smaller radius for small feature replacements
+      'circle-radius': [
+        'case',
+        ['has', '_isSmallFeatureReplacement'],
+        3, // Smaller dot for small polygon/line replacements
+        4  // Normal size for regular points
+      ],
       ...overrides.paint
     }
   }
@@ -151,7 +159,11 @@ export function getPointIconLayerConfig(overrides = {}) {
  * @returns {Object} Line layer configuration
  */
 export function getLineLayerConfig(overrides = {}) {
-  const lineFilter = ['any', ['==', ['geometry-type'], 'LineString'], ['==', ['geometry-type'], 'MultiLineString']]
+  // Filter out lines that are too small (they'll be shown as points instead)
+  const lineFilter = ['all',
+    ['any', ['==', ['geometry-type'], 'LineString'], ['==', ['geometry-type'], 'MultiLineString']],
+    ['!', ['has', '_isTooSmall']] // Hide lines that are too small
+  ]
   return {
     id: 'lines',
     type: 'line',
@@ -174,7 +186,11 @@ export function getLineLayerConfig(overrides = {}) {
  * @returns {Object} Polygon layer configuration
  */
 export function getPolygonLayerConfig(overrides = {}) {
-  const polygonFilter = ['any', ['==', ['geometry-type'], 'Polygon'], ['==', ['geometry-type'], 'MultiPolygon']]
+  // Filter out polygons that are too small (they'll be shown as points instead)
+  const polygonFilter = ['all',
+    ['any', ['==', ['geometry-type'], 'Polygon'], ['==', ['geometry-type'], 'MultiPolygon']],
+    ['!', ['has', '_isTooSmall']] // Hide polygons that are too small
+  ]
   return {
     id: 'polygons',
     type: 'fill',
@@ -193,7 +209,11 @@ export function getPolygonLayerConfig(overrides = {}) {
  * @returns {Object} Polygon outline layer configuration
  */
 export function getPolygonOutlineLayerConfig(overrides = {}) {
-  const polygonFilter = ['any', ['==', ['geometry-type'], 'Polygon'], ['==', ['geometry-type'], 'MultiPolygon']]
+  // Filter out polygon outlines that are too small (they'll be shown as points instead)
+  const polygonFilter = ['all',
+    ['any', ['==', ['geometry-type'], 'Polygon'], ['==', ['geometry-type'], 'MultiPolygon']],
+    ['!', ['has', '_isTooSmall']] // Hide polygon outlines that are too small
+  ]
   return {
     id: 'polygon-outlines',
     type: 'line',

@@ -67,11 +67,18 @@ export function filterPointsOnBorders(features, tolerance = 10) {
   const lines = []
   const polygons = []
   const labelPoints = [] // Keep label points separate - they should never be filtered
+  const replacementPoints = [] // Keep replacement points separate - they should never be filtered
   
   features.forEach(f => {
     // Skip label points - they should never be filtered
     if (f.properties?._isLabelPoint) {
       labelPoints.push(f)
+      return
+    }
+    
+    // Skip small feature replacement points - they should never be filtered
+    if (f.properties?._isSmallFeatureReplacement) {
+      replacementPoints.push(f)
       return
     }
     
@@ -149,7 +156,7 @@ export function filterPointsOnBorders(features, tolerance = 10) {
     }
   })
 
-  // Return all non-point features plus filtered points and label points
-  return [...lines, ...polygons, ...filteredPoints, ...labelPoints]
+  // Return all non-point features plus filtered points, label points, and replacement points
+  return [...lines, ...polygons, ...filteredPoints, ...labelPoints, ...replacementPoints]
 }
 

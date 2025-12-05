@@ -214,7 +214,8 @@ import {
   setupMapEventListeners,
   addFeaturesToMap,
   updateMapLayerSource,
-  filterPointsOnBorders
+  filterPointsOnBorders,
+  updateSmallFeatureFlags
 } from '@/utils/map/maplibre'
 import { 
   MapTilerConfig,
@@ -332,6 +333,7 @@ export default {
       selectedLayer: 'osm',
       featuresInExtent: [],
       featureListUpdateTimeout: null,
+      featureCleanupTimeout: null,
       selectedFeature: null,
       tileSources: [],
       // Configuration
@@ -371,6 +373,11 @@ export default {
       tooltipShown: false, // Track if 3D tooltip has been shown
       terrainTooltipElement: null, // Reference to tooltip element
       hillshadeEnabled: false, // Current state of hillshade (on/off)
+      // Saved map state for restoration after destruction
+      savedMapCenter: null,
+      savedMapZoom: null,
+      savedMapPitch: null,
+      savedMapBearing: null,
     }
   },
   methods: {
@@ -434,6 +441,13 @@ export default {
       // Setup GeoJSON source
       setupGeoJsonSource(this.map, () => {
         this.isMapInitializing = false
+        
+        // Resize map to ensure proper rendering
+        if (this.map) {
+          setTimeout(() => {
+            this.map.resize()
+          }, 100)
+        }
         
         // Trigger initial data load after map is fully loaded
         if (this.isInitialLoad && !this.collectionId && !this.isTagFilterActive) {
@@ -515,6 +529,9 @@ export default {
 
       // Add immediate zoom event listener for responsive label and icon updates
       this.map.on('zoom', () => {
+        // Get current zoom for all updates
+        const currentZoom = this.map.getZoom()
+        
         // Update label markers only if labels are visible
         // Skip expensive label processing when labels are hidden
         if (this.showAllLabels && this.labelMarkerManager) {
@@ -523,6 +540,10 @@ export default {
             this.labelMarkerManager.updateMarkers(source._data.features)
           }
         }
+        
+        // Update small feature flags immediately (synchronous, fast)
+        // This handles polygon/line -> point transitions
+        updateSmallFeatureFlags(this.map, currentZoom)
         
         // Also update icon visibility immediately during zoom
         // This prevents the delay when switching between icons and circles
@@ -764,10 +785,13 @@ export default {
       const data = source._data || { type: 'FeatureCollection', features: [] }
       const features = data.features || []
 
-      // Filter features in current bounds and exclude label points
+      // Filter features in current bounds and exclude label points and replacement points
       const featuresInBounds = features.filter(f => {
         // Skip label points - they're internal features for label rendering
         if (f.properties?._isLabelPoint) return false
+        
+        // Skip small feature replacement points - they're internal features for rendering
+        if (f.properties?._isSmallFeatureReplacement) return false
         
         if (!f.geometry) return false
         const coords = this.getFeatureCoordinates(f.geometry)
@@ -781,6 +805,73 @@ export default {
       // Convert to format expected by FeatureListSidebar
       // Use markRaw to prevent Vue reactivity on feature objects for performance
       this.featuresInExtent = featuresInBounds.map(f => markRaw(this.convertMapLibreFeature(f)))
+      
+      // Clean up features far outside viewport (debounced)
+      this.debouncedCleanupDistantFeatures()
+    },
+    debouncedCleanupDistantFeatures() {
+      // Debounce cleanup to avoid running it too often
+      if (this.featureCleanupTimeout) {
+        clearTimeout(this.featureCleanupTimeout)
+      }
+      
+      this.featureCleanupTimeout = setTimeout(() => {
+        this.cleanupDistantFeatures()
+      }, 2000) // Run 2 seconds after map movement stops
+    },
+    cleanupDistantFeatures() {
+      if (!this.map || !this.map.getSource('geojson-data')) return
+      
+      const bounds = this.map.getBounds()
+      const source = this.map.getSource('geojson-data')
+      const data = source._data || { type: 'FeatureCollection', features: [] }
+      const features = data.features || []
+      
+      // 500 miles = 804,672 meters
+      // Convert to degrees (approximate at equator: 1 degree ≈ 111,320 meters)
+      const bufferDegrees = 804672 / 111320 // ≈ 7.23 degrees
+      
+      // Create buffered bounds (500 miles in each direction)
+      const bufferedBounds = {
+        west: bounds.getWest() - bufferDegrees,
+        east: bounds.getEast() + bufferDegrees,
+        south: bounds.getSouth() - bufferDegrees,
+        north: bounds.getNorth() + bufferDegrees
+      }
+      
+      // Filter to keep only features within the buffer
+      const featuresWithinBuffer = features.filter(f => {
+        if (!f.geometry) return false
+        
+        const coords = this.getFeatureCoordinates(f.geometry)
+        
+        // Check if any coordinate is within the buffered bounds
+        return coords.some(coord => {
+          const [lon, lat] = coord
+          return lon >= bufferedBounds.west && lon <= bufferedBounds.east &&
+                 lat >= bufferedBounds.south && lat <= bufferedBounds.north
+        })
+      })
+      
+      // Only update if we actually removed features
+      if (featuresWithinBuffer.length < features.length) {
+        const removed = features.length - featuresWithinBuffer.length
+        console.log(`Cleaned up ${removed} features more than 500 miles outside viewport`)
+        
+        // Update the source with filtered features
+        source.setData(markRaw({
+          type: 'FeatureCollection',
+          features: featuresWithinBuffer
+        }))
+        
+        // Update feature count
+        this.updateFeatureCount()
+        
+        // Update label markers
+        if (this.showAllLabels && this.labelMarkerManager) {
+          this.labelMarkerManager.updateMarkers(featuresWithinBuffer)
+        }
+      }
     },
     getFeatureCoordinates(geometry) {
       return getFeatureCoordinates(geometry)
@@ -1049,7 +1140,8 @@ export default {
             ensureLayersExist(this.map, this.showAllLabels)
             
             // Re-add features to the map with proper styling and icons
-            await addFeaturesToMap(this.map, geojsonData, this.showAllLabels, this.currentZoom)
+            const zoom = this.map ? this.map.getZoom() : null
+            await addFeaturesToMap(this.map, geojsonData, this.showAllLabels, zoom)
             
             // Update label markers if labels are visible
             if (this.showAllLabels && this.labelMarkerManager) {
@@ -1134,7 +1226,8 @@ export default {
               }
               
               ensureLayersExist(this.map, this.showAllLabels)
-              await addFeaturesToMap(this.map, geojsonData, this.showAllLabels, this.currentZoom)
+              const zoom = this.map ? this.map.getZoom() : null
+              await addFeaturesToMap(this.map, geojsonData, this.showAllLabels, zoom)
               
               if (this.showAllLabels && this.labelMarkerManager) {
                 const source = this.map.getSource('geojson-data')
@@ -1628,15 +1721,87 @@ export default {
     },
     handleElevationProfileClose() {
       this.showElevationProfile = false
+      this.handleHoverClear() // Clear hover marker when dialog closes
     },
     handleHoverPoint(point) {
-      // Implementation will be added
+      if (!this.map || !point) return
+      
+      // Parse point coordinates
+      let coordinates
+      if (Array.isArray(point) && point.length >= 2) {
+        coordinates = point // [lon, lat]
+      } else if (point.coordinates && Array.isArray(point.coordinates)) {
+        coordinates = point.coordinates
+      } else if (typeof point === 'object' && point.lon !== undefined && point.lat !== undefined) {
+        coordinates = [point.lon, point.lat]
+      } else {
+        return
+      }
+
+      // Remove existing hover marker if any
+      if (this.hoverMarker) {
+        this.hoverMarker.remove()
+        this.hoverMarker = null
+      }
+
+      // Get feature stroke color
+      let markerColor = '#ff0000' // Default red
+      if (this.selectedFeature) {
+        const properties = this.selectedFeature.properties || this.selectedFeature.get?.('properties') || {}
+        const strokeColor = properties.stroke || '#ff0000'
+        markerColor = strokeColor
+      }
+
+      // Calculate inverse color for border
+      const borderColor = getInverseColor(markerColor)
+
+      // Create custom marker element
+      const el = document.createElement('div')
+      el.style.width = '11px'
+      el.style.height = '11px'
+      el.style.borderRadius = '50%'
+      el.style.backgroundColor = markerColor
+      el.style.border = `1px solid ${borderColor}`
+      el.style.boxSizing = 'border-box'
+
+      // Create and add MapLibre marker
+      this.hoverMarker = new maplibregl.Marker({
+        element: el,
+        anchor: 'center'
+      })
+        .setLngLat([coordinates[0], coordinates[1]])
+        .addTo(this.map)
     },
     handleHoverClear() {
-      // Implementation will be added
+      if (this.hoverMarker) {
+        this.hoverMarker.remove()
+        this.hoverMarker = null
+      }
     },
     handleClickPoint(point) {
-      // Implementation will be added
+      if (!this.map || !point) return
+      
+      // Parse point coordinates
+      let coordinates
+      if (Array.isArray(point) && point.length >= 2) {
+        coordinates = point
+      } else if (point.coordinates && Array.isArray(point.coordinates)) {
+        coordinates = point.coordinates
+      } else if (typeof point === 'object' && point.lon !== undefined && point.lat !== undefined) {
+        coordinates = [point.lon, point.lat]
+      } else {
+        return
+      }
+
+      // Get current zoom level to preserve it
+      const currentZoom = this.map.getZoom()
+
+      // Center the map on the point without changing zoom
+      this.map.flyTo({
+        center: [coordinates[0], coordinates[1]],
+        zoom: currentZoom,
+        duration: 500
+      })
     },
     async handleCollectionFilter(collectionId) {
       if (!this.map || !collectionId) {
@@ -1749,6 +1914,302 @@ export default {
         query: query
       })
     },
+    // Map Destruction Abstraction Layer
+    performMapDestruction() {
+      // Save current map position and zoom before destruction (if not already saved)
+      if (this.map && !this.savedMapCenter) {
+        this.savedMapCenter = this.map.getCenter()
+        this.savedMapZoom = this.map.getZoom()
+        this.savedMapPitch = this.map.getPitch()
+        this.savedMapBearing = this.map.getBearing()
+      }
+      
+      // Clear label marker manager
+      if (this.labelMarkerManager) {
+        this.labelMarkerManager.clear()
+        this.labelMarkerManager = null
+      }
+      
+      // Clear data caches
+      this.loadedBounds.clear()
+      this.featuresInExtent = []
+      
+      // Destroy map
+      if (this.map) {
+        this.map.remove()
+        this.map = null
+      }
+      
+      // Mark as destroyed for restoration
+      this.mapWasDestroyed = true
+    },
+    cleanupOnNavigateAway() {
+      // Save current map position BEFORE any cleanup
+      // This must be done first, before flyTo or any map modifications
+      if (this.map) {
+        this.savedMapCenter = this.map.getCenter()
+        this.savedMapZoom = this.map.getZoom()
+        this.savedMapPitch = this.map.getPitch()
+        this.savedMapBearing = this.map.getBearing()
+      }
+
+      // Clear all features from map source
+      if (this.map && this.map.getSource('geojson-data')) {
+        const source = this.map.getSource('geojson-data')
+        source.setData({ type: 'FeatureCollection', features: [] })
+      }
+
+      // Reset feature-related state
+      this.featuresInExtent = []
+      this.featureTimestamps = {}
+      this.loadedBounds.clear()
+      this.selectedFeature = null
+      this.isEditingFeature = false
+      this.showElevationProfile = false
+
+      // Clean up any pending timeouts
+      if (this.loadTimeout) {
+        clearTimeout(this.loadTimeout)
+        this.loadTimeout = null
+      }
+      if (this.featureListUpdateTimeout) {
+        clearTimeout(this.featureListUpdateTimeout)
+        this.featureListUpdateTimeout = null
+      }
+      if (this.featureCleanupTimeout) {
+        clearTimeout(this.featureCleanupTimeout)
+        this.featureCleanupTimeout = null
+      }
+
+      // Cancel any pending API request
+      if (this.currentAbortController) {
+        this.currentAbortController.abort()
+        this.currentAbortController = null
+      }
+
+      // Clear hover marker
+      this.handleHoverClear()
+
+      // Always destroy map when navigating away (state already saved above)
+      this.performMapDestruction()
+
+      // After cleanup, reset feature counters
+      this.featureCount = 0
+      this.featureCountUpdatePending = false
+    },
+    async restoreMap() {
+      if (this.map) return
+
+      this.isMapInitializing = true
+      this.isRestoring = true
+
+      // Ensure map container is available
+      await this.$nextTick()
+      if (!this.$refs.mapContainer) {
+        console.error('Map container not available for restore')
+        this.isMapInitializing = false
+        this.isRestoring = false
+        return
+      }
+
+      try {
+        // Determine map config - use saved state if available, otherwise use default
+        let mapConfig
+        if (this.savedMapCenter && this.savedMapZoom !== null) {
+          mapConfig = {
+            center: [this.savedMapCenter.lng, this.savedMapCenter.lat],
+            zoom: this.savedMapZoom,
+            pitch: this.savedMapPitch || 0,
+            bearing: this.savedMapBearing || 0
+          }
+        } else {
+          mapConfig = this.getInitialMapConfig()
+          mapConfig.pitch = 0
+          mapConfig.bearing = 0
+        }
+
+        // Create MapLibre map with saved or default position
+        this.map = markRaw(initializeMap(this.$refs.mapContainer, {
+          center: mapConfig.center,
+          zoom: mapConfig.zoom,
+          pitch: mapConfig.pitch,
+          bearing: mapConfig.bearing,
+          glyphsUrl: '/api/fonts/{fontstack}/{range}.pbf'
+        }))
+
+        // Add navigation controls
+        this.map.addControl(
+          new maplibregl.NavigationControl({
+            visualizePitch: true,
+            showCompass: true,
+            showZoom: true
+          }),
+          'top-left'
+        )
+
+        // Initialize label marker manager
+        this.labelMarkerManager = new LabelMarkerManager(this.map)
+        this.labelMarkerManager.setVisibility(this.showAllLabels)
+
+        // Setup GeoJSON source
+        setupGeoJsonSource(this.map, () => {
+          // Map loaded
+        })
+
+        // Setup event listeners
+        setupMapEventListeners(this.map, {
+          onMoveEnd: () => {
+            this.debouncedLoadData()
+            this.debouncedUpdateFeaturesInExtent()
+          },
+          onZoomEnd: () => {
+            this.debouncedLoadData()
+            this.debouncedUpdateFeaturesInExtent()
+            this.reprocessFeaturesForZoom()
+          },
+          onClick: (e) => {
+            const layersToQuery = ['points', 'point-icons', 'lines', 'polygons', 'polygon-outlines']
+              .filter(layerId => this.map.getLayer(layerId))
+            
+            if (layersToQuery.length === 0) return
+            
+            const bbox = [
+              [e.point.x - 15, e.point.y - 15],
+              [e.point.x + 15, e.point.y + 15]
+            ]
+            const features = this.map.queryRenderedFeatures(bbox, {
+              layers: layersToQuery
+            })
+
+            const clickableFeatures = features.filter(f => !f.properties?._isLabelPoint)
+            const uniqueFeatures = []
+            const seenIds = new Set()
+            
+            for (const feature of clickableFeatures) {
+              const featureId = feature.properties?.database_id
+              if (featureId && !seenIds.has(featureId)) {
+                seenIds.add(featureId)
+                uniqueFeatures.push(feature)
+              } else if (!featureId) {
+                uniqueFeatures.push(feature)
+              }
+            }
+
+            if (uniqueFeatures.length === 0) {
+              this.selectedFeature = null
+              this.isEditingFeature = false
+              this.showFeaturePopup = false
+            } else if (uniqueFeatures.length === 1) {
+              const feature = markRaw(convertMapLibreFeature(uniqueFeatures[0]))
+              this.selectedFeature = feature
+              this.isEditingFeature = false
+            } else {
+              const convertedFeatures = uniqueFeatures.map(f => markRaw(convertMapLibreFeature(f)))
+              this.overlappingFeatures = convertedFeatures
+              this.popupPosition = {
+                x: e.point.x,
+                y: e.point.y,
+                containerWidth: this.$refs.mapContainer?.clientWidth || 0,
+                containerHeight: this.$refs.mapContainer?.clientHeight || 0
+              }
+              this.showFeaturePopup = true
+            }
+          }
+        })
+
+        // Add zoom event listener for responsive label updates
+        this.map.on('zoom', () => {
+          const currentZoom = this.map.getZoom()
+          
+          if (this.showAllLabels && this.labelMarkerManager) {
+            const source = this.map.getSource('geojson-data')
+            if (source && source._data && source._data.features) {
+              this.labelMarkerManager.updateMarkers(source._data.features)
+            }
+          }
+          
+          // Update small feature flags immediately
+          updateSmallFeatureFlags(this.map, currentZoom)
+          
+          this.reprocessFeaturesForZoom()
+        })
+
+        // Add hover cursor change
+        this.map.on('mousemove', (e) => {
+          const layersToQuery = ['points', 'point-icons', 'lines', 'polygons', 'polygon-outlines']
+            .filter(layerId => this.map.getLayer(layerId))
+          
+          if (layersToQuery.length === 0) return
+          
+          const bbox = [
+            [e.point.x - 5, e.point.y - 5],
+            [e.point.x + 5, e.point.y + 5]
+          ]
+          const features = this.map.queryRenderedFeatures(bbox, {
+            layers: layersToQuery
+          })
+
+          const hoverableFeatures = features.filter(f => !f.properties?._isLabelPoint)
+          this.map.getCanvas().style.cursor = hoverableFeatures.length > 0 ? 'pointer' : ''
+        })
+
+        this.map.on('mouseout', () => {
+          this.map.getCanvas().style.cursor = ''
+        })
+
+        // Wait for map to load
+        await new Promise((resolve) => {
+          if (this.map.loaded()) {
+            resolve()
+          } else {
+            this.map.once('load', resolve)
+          }
+        })
+
+        // Restore layer selection
+        if (this.selectedLayer && this.tileSources.length > 0) {
+          this.updateMapLayer(this.selectedLayer)
+        }
+
+        // Restore terrain state if it was enabled
+        if (this.terrainEnabled && this.maptilerConfig?.isAvailable()) {
+          this.setupTerrain()
+        }
+
+        // Restore hillshade state if it was enabled
+        if (this.hillshadeEnabled && this.maptilerConfig?.isAvailable()) {
+          this.addHillshadeIfNeeded()
+        }
+
+        // Add 3D terrain control
+        this.add3DTerrainControl()
+
+        // Reload data
+        if (this.collectionId) {
+          await this.handleCollectionFilter(this.collectionId)
+        } else {
+          await this.loadDataForCurrentView()
+        }
+
+        // Update map size
+        await this.$nextTick()
+        if (this.map) {
+          setTimeout(() => {
+            this.map.resize()
+          }, 100)
+        }
+
+        // Initial feature list update
+        this.updateFeaturesInExtent()
+
+      } catch (error) {
+        console.error('Error restoring map:', error)
+        this.loadError = error.message || 'Failed to restore map'
+      } finally {
+        this.isMapInitializing = false
+        this.isRestoring = false
+      }
+    },
   },
   async mounted() {
     this.isMapInitializing = true
@@ -1854,6 +2315,68 @@ export default {
 
     // Initial feature list update
     this.updateFeaturesInExtent()
+  },
+  activated() {
+    // Clear current features and feature-related state
+    if (this.map && this.map.getSource('geojson-data')) {
+      const source = this.map.getSource('geojson-data')
+      source.setData({ type: 'FeatureCollection', features: [] })
+    }
+    this.featuresInExtent = []
+    this.featureTimestamps = {}
+    this.loadedBounds.clear()
+    this.selectedFeature = null
+    this.isEditingFeature = false
+    this.showElevationProfile = false
+
+    // Clear any active tag filter state
+    this.isTagFilterActive = false
+    this.tagFilteredFeatures = []
+    this.isTagFilterLoading = false
+
+    // Treat this as a fresh initial load
+    this.isInitialLoad = true
+
+    // Remount sidebar to clear internal state
+    this.sidebarKey += 1
+
+    // If map was destroyed, restore it
+    if (this.mapWasDestroyed) {
+      this.restoreMap()
+      this.mapWasDestroyed = false
+      return
+    }
+
+    const hasTagQuery = !!this.$route.query.tag
+    const hasCollectionQuery = !!this.$route.query.collection
+
+    // Reload data based on route query parameters
+    if (this.map) {
+      if (hasCollectionQuery) {
+        // Collection mode - load collection features
+        this.handleCollectionFilter(this.collectionId)
+      } else if (!hasTagQuery) {
+        // Normal view - reload bbox data
+        this.isMapInitializing = true
+        this.loadDataForCurrentView().then(() => {
+          this.isMapInitializing = false
+          this.updateFeaturesInExtent()
+          // Resize map after data loads
+          if (this.map) {
+            setTimeout(() => {
+              this.map.resize()
+            }, 100)
+          }
+        })
+      } else {
+        // Tag filter mode - sidebar will handle loading
+        this.updateFeaturesInExtent()
+      }
+    }
+  },
+  deactivated() {
+    // Run cleanup when navigating away
+    this.cleanupOnNavigateAway()
   },
   beforeUnmount() {
     if (this.labelMarkerManager) {

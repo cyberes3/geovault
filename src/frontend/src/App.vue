@@ -198,12 +198,37 @@
     <!-- Main Content -->
     <main
         :class="isMapRoute ? 'w-full h-[calc(100vh-4rem)] overflow-hidden' : 'max-w-7xl mx-auto py-6 px-4 sm:px-6 lg:px-8'">
+      <!-- Show error state if loading failed -->
+      <div v-if="loadingError" class="flex items-center justify-center min-h-[400px]">
+        <div class="bg-red-50 border border-red-200 rounded-lg shadow-md p-8 max-w-md w-full mx-4">
+          <div class="flex flex-col items-center text-center">
+            <div class="flex-shrink-0 mb-4">
+              <svg class="h-16 w-16 text-red-400" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor">
+                <path stroke-linecap="round" stroke-linejoin="round" d="M12 9v3.75m-9.303 3.376c-.866 1.5.217 3.374 1.948 3.374h14.71c1.73 0 2.813-1.874 1.948-3.374L13.949 3.378c-.866-1.5-3.032-1.5-3.898 0L2.697 16.126zM12 15.75h.007v.008H12v-.008z" />
+              </svg>
+            </div>
+            <h2 class="text-xl font-semibold text-red-900 mb-2">Unable to connect to the server</h2>
+            <p class="text-sm text-red-700 mb-6">
+              {{ errorMessage }} Please refresh the page and try again.
+            </p>
+            <button
+              @click="refreshPage"
+              class="inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md shadow-sm text-white bg-red-600 hover:bg-red-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-red-500 transition-colors"
+            >
+              <svg class="mr-2 h-4 w-4" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor">
+                <path stroke-linecap="round" stroke-linejoin="round" d="M16.023 9.348h4.992v-.001M2.985 19.644v-4.992m0 0h4.992m-4.993 0l3.181 3.183a8.25 8.25 0 0013.803-3.7M4.031 9.865a8.25 8.25 0 0113.803-3.7l3.181 3.182m0-4.991v4.99" />
+              </svg>
+              Refresh Page
+            </button>
+          </div>
+        </div>
+      </div>
       <!-- Show loading state while checking authentication for protected routes -->
-      <div v-if="userInfoLoading && !isPublicShareRoute" class="flex items-center justify-center min-h-[400px]">
+      <div v-else-if="userInfoLoading && !isPublicShareRoute" class="flex items-center justify-center min-h-[400px]">
         <Loader layout="centered" />
       </div>
-      <!-- Render router-view only after auth check completes (or immediately for public routes) -->
-      <router-view v-if="!userInfoLoading || isPublicShareRoute" v-slot="{ Component }">
+      <!-- Render router-view only after auth check completes (or immediately for public routes) and no error occurred -->
+      <router-view v-else-if="!userInfoLoading || isPublicShareRoute" v-slot="{ Component }">
         <keep-alive>
           <component :is="Component"/>
         </keep-alive>
@@ -233,7 +258,9 @@ export default {
       realtimeListenersAdded: false,
       userMenuOpen: false,
       mobileMenuOpen: false,
-      userInfoLoading: true
+      userInfoLoading: true,
+      loadingError: false,
+      errorMessage: ''
     }
   },
   computed: {
@@ -456,11 +483,34 @@ export default {
         this.userMenuOpen = false;
       }
     },
+    refreshPage() {
+      window.location.reload();
+    },
   },
   async created() {
-    // Always check authentication (even on public share routes) to set userInfo if logged in
-    await this.checkAuth();
-    // WebSocket connection is now handled in checkAuth() after userInfo is set
+    // Wrap checkAuth with a timeout
+    const timeoutDuration = 10000; // 10 seconds
+    const timeoutPromise = new Promise((_, reject) => {
+      setTimeout(() => reject(new Error('Connection timeout')), timeoutDuration);
+    });
+
+    try {
+      // Race between checkAuth and timeout
+      await Promise.race([this.checkAuth(), timeoutPromise]);
+    } catch (error) {
+      console.error('Error during initial load:', error);
+      this.loadingError = true;
+      this.userInfoLoading = false;
+      
+      // Set appropriate error message based on error type
+      if (error.message === 'Connection timeout') {
+        this.errorMessage = 'The connection to the server timed out.';
+      } else if (error.message && error.message.includes('fetch')) {
+        this.errorMessage = 'Unable to reach the server.';
+      } else {
+        this.errorMessage = 'An unexpected error occurred.';
+      }
+    }
   },
   mounted() {
     // WebSocket connection is managed globally and persists across page navigation
