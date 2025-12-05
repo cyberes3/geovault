@@ -37,11 +37,19 @@
   },
   {
     "key": "map.enable_3d_terrain",
-    "title": "Default 3D Terrain to On",
+    "title": "3D Terrain Enabled by Default",
     "type": "toggle",
     "section": "map",
     "defaultValue": false,
     "description": "When enabled, 3D terrain will be turned on by default when you load the map. You can still toggle it on/off using the map control button."
+  },
+  {
+    "key": "map.enable_hillshade",
+    "title": "Hillshade Enabled by Default",
+    "type": "toggle",
+    "section": "map",
+    "defaultValue": false,
+    "description": "When enabled, hillshade will be turned on by default when you load the map. You can still toggle it on/off using the map control."
   },
   {
     "key": "import.overwrite_single_track_name_with_filename",

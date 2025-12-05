@@ -84,6 +84,29 @@
       </div>
     </div>
 
+    <!-- Hillshade Toggle (only show if available) -->
+    <div v-if="hillshadeAvailable" class="mb-4 lg:mb-3 xl:mb-4">
+      <div class="flex items-start gap-3">
+        <div class="flex-1 min-w-0">
+          <div class="flex items-center justify-between gap-3">
+            <div class="flex-1 min-w-0">
+              <span class="block text-sm font-medium text-gray-700 lg:text-xs xl:text-sm">
+                Hillshade
+              </span>
+              <span class="block text-xs text-gray-500 lg:text-[11px] xl:text-xs mt-1">
+                Add shading to show terrain relief
+              </span>
+            </div>
+            <ToggleButton
+              :model-value="hillshadeEnabled"
+              label="Enable hillshade"
+              @update:model-value="$emit('hillshade-change', $event)"
+            />
+          </div>
+        </div>
+      </div>
+    </div>
+
     <!-- Hidden Features Summary & Feature Stats -->
     <div class="mt-auto text-xs text-gray-600 mb-4 space-y-3 lg:text-[11px] lg:mb-3 lg:space-y-2 xl:text-xs xl:mb-4 xl:space-y-3">
       <!-- Hidden features summary (account-level, main map only) -->
@@ -203,9 +226,17 @@ export default {
     showAllLabels: {
       type: Boolean,
       default: true
+    },
+    hillshadeAvailable: {
+      type: Boolean,
+      default: false
+    },
+    hillshadeEnabled: {
+      type: Boolean,
+      default: false
     }
   },
-  emits: ['layer-change', 'close', 'unhide-feature', 'unhide-all', 'labels-visibility-change'],
+  emits: ['layer-change', 'close', 'unhide-feature', 'unhide-all', 'labels-visibility-change', 'hillshade-change'],
   methods: {
     handleDownload() {
       if (!this.shareId) {

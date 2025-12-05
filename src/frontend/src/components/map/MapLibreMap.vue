@@ -169,11 +169,14 @@
         :view-context="viewContext"
         :can-manage-hidden="isMainMapRoute && !isPublicShareMode && !!$store.state.userInfo"
         :show-all-labels="showAllLabels"
+        :hillshade-available="maptilerConfig && maptilerConfig.isAvailable()"
+        :hillshade-enabled="hillshadeEnabled"
         @close="activeMobileSidebar = null"
         @layer-change="updateMapLayer"
         @unhide-feature="handleUnhideFeature"
         @unhide-all="handleUnhideAllHidden"
         @labels-visibility-change="handleLabelsVisibilityChange"
+        @hillshade-change="handleHillshadeChange"
     />
   </div>
 </template>
@@ -365,6 +368,9 @@ export default {
       labelMarkerManager: null,
       maptilerConfig: null, // MapTilerConfig instance
       terrainEnabled: false, // Current state of terrain (on/off)
+      tooltipShown: false, // Track if 3D tooltip has been shown
+      terrainTooltipElement: null, // Reference to tooltip element
+      hillshadeEnabled: false, // Current state of hillshade (on/off)
     }
   },
   methods: {
@@ -843,19 +849,89 @@ export default {
         return
       }
 
-      const terrainControl = createTerrainControl({
-        initialState: this.terrainEnabled,
-        onToggle: (newState) => {
-          this.terrainEnabled = newState
-          if (newState) {
-            this.setupTerrain()
-          } else {
-            this.removeTerrain()
+      // Create custom control with tooltip support
+      const self = this
+      const terrainControl = {
+        onAdd: (map) => {
+          const container = document.createElement('div')
+          container.className = 'maplibregl-ctrl maplibregl-ctrl-group'
+          container.style.position = 'relative'
+
+          const button = document.createElement('button')
+          button.className = 'maplibregl-ctrl-terrain'
+          button.type = 'button'
+          button.title = 'Toggle 3D Terrain'
+          button.setAttribute('aria-label', 'Toggle 3D Terrain')
+
+          // Set initial state
+          if (self.terrainEnabled) {
+            button.classList.add('maplibregl-ctrl-terrain-enabled')
           }
+
+          // Create tooltip element
+          const tooltip = document.createElement('div')
+          tooltip.className = 'maplibregl-ctrl-terrain-tooltip'
+          tooltip.style.display = 'none'
+          
+          // Detect mobile vs desktop
+          const isMobile = window.innerWidth < 768 || 'ontouchstart' in window
+          tooltip.textContent = isMobile 
+            ? 'Use gestures to tilt and rotate.' 
+            : 'Use the left mouse button to tilt and rotate.'
+          
+          container.appendChild(button)
+          container.appendChild(tooltip)
+          
+          // Store reference to tooltip for initial load
+          self.terrainTooltipElement = tooltip
+
+          // Click handler
+          button.onclick = () => {
+            const isEnabled = button.classList.contains('maplibregl-ctrl-terrain-enabled')
+            const newState = !isEnabled
+
+            if (newState) {
+              button.classList.add('maplibregl-ctrl-terrain-enabled')
+              // Enable 3D: add terrain and tilt the map
+              self.setupTerrain()
+              self.map.easeTo({ pitch: 50, duration: 800 })
+              
+              // Show tooltip if not shown before
+              if (!self.tooltipShown) {
+                self.showTooltip(tooltip)
+                self.tooltipShown = true
+              }
+            } else {
+              button.classList.remove('maplibregl-ctrl-terrain-enabled')
+              // Disable 3D: remove terrain and reset tilt
+              self.removeTerrain()
+              self.map.easeTo({ pitch: 0, duration: 800 })
+            }
+          }
+
+          return container
+        },
+        onRemove: () => {
+          // Cleanup handled by MapLibre
         }
-      })
+      }
       
       this.map.addControl(terrainControl, 'top-left')
+    },
+    showTooltip(tooltipElement) {
+      // Show tooltip
+      tooltipElement.style.display = 'block'
+      // Force reflow to trigger transition
+      tooltipElement.offsetHeight
+      tooltipElement.classList.add('maplibregl-ctrl-terrain-tooltip-visible')
+      
+      // Hide after 3 seconds
+      setTimeout(() => {
+        tooltipElement.classList.remove('maplibregl-ctrl-terrain-tooltip-visible')
+        setTimeout(() => {
+          tooltipElement.style.display = 'none'
+        }, 300) // Wait for fade-out transition
+      }, 3000)
     },
     setupTerrain() {
       if (!this.maptilerConfig) return
@@ -870,19 +946,8 @@ export default {
     addHillshadeIfNeeded() {
       if (!this.map || !this.maptilerConfig) return
       
-      // Get current tile source configuration
-      const currentLayer = this.currentMapLayer
-      const tileSource = this.$store.state.tileSources?.find(
-        (source) => source.id === currentLayer
-      )
-      
-      // Check if this tile source needs hillshade for 3D
-      if (!tileSource || !tileSource.needs_hillshade) {
-        return
-      }
-      
-      // Check if terrain is enabled
-      if (!this.map.getTerrain()) {
+      // Only add hillshade if explicitly enabled via the toggle
+      if (!this.hillshadeEnabled) {
         return
       }
       
@@ -916,8 +981,9 @@ export default {
     updateMapLayer(layerValue) {
       if (!this.map) return
 
-      // Use local terrain state (not user setting)
+      // Save current states to reapply after layer switch
       const terrainEnabled = this.terrainEnabled && this.maptilerConfig?.isAvailable()
+      const hillshadeEnabled = this.hillshadeEnabled
 
       this.selectedLayer = layerValue
       const tileSource = this.tileSources.find(s => s.id === layerValue)
@@ -998,6 +1064,11 @@ export default {
           if (terrainEnabled) {
             this.setupTerrain()
           }
+          
+          // Re-apply hillshade if it was enabled
+          if (hillshadeEnabled) {
+            this.addHillshadeIfNeeded()
+          }
         })
       } else {
         // Raster-based source - need to reset style if coming from a style-based source
@@ -1077,6 +1148,11 @@ export default {
             if (terrainEnabled) {
               this.setupTerrain()
             }
+            
+            // Re-apply hillshade if it was enabled
+            if (hillshadeEnabled) {
+              this.addHillshadeIfNeeded()
+            }
           })
         } else {
           // Not coming from a style-based source - just add raster layer
@@ -1096,8 +1172,13 @@ export default {
           // Ensure GeoJSON layers exist and are on top
           ensureLayersExist(this.map, this.showAllLabels)
           
-          // Add hillshade if terrain is enabled and this layer needs it
+          // Re-apply terrain if it was enabled
           if (terrainEnabled) {
+            this.setupTerrain()
+          }
+          
+          // Re-apply hillshade if it was enabled
+          if (hillshadeEnabled) {
             this.addHillshadeIfNeeded()
           }
         }
@@ -1365,6 +1446,16 @@ export default {
       this.selectedFeature = feature
       this.isEditingFeature = false
       this.showFeaturePopup = false
+    },
+    handleHillshadeChange(enabled) {
+      this.hillshadeEnabled = enabled
+      if (enabled) {
+        // Add hillshade
+        addHillshade(this.map, this.maptilerConfig, 'feature-layer')
+      } else {
+        // Remove hillshade
+        maptilerRemoveHillshade(this.map)
+      }
     },
     async handleLabelsVisibilityChange(showLabels) {
       this.showAllLabels = showLabels
@@ -1710,16 +1801,37 @@ export default {
     // Setup terrain based on user's default preference (after baselayer is configured)
     const userSettings = this.$store.state.userSettings || {}
     const defaultTerrainOn = userSettings.map?.enable_3d_terrain || false
+    const defaultHillshadeOn = userSettings.map?.enable_hillshade || false
     
     if (defaultTerrainOn && this.maptilerConfig?.isAvailable()) {
       this.terrainEnabled = true
       this.setupTerrain()
+      // Tilt the map for 3D view
+      this.map.setPitch(50)
     } else {
       this.terrainEnabled = false
+    }
+    
+    // Setup hillshade based on user's default preference (after baselayer is configured)
+    if (defaultHillshadeOn && this.maptilerConfig?.isAvailable()) {
+      this.hillshadeEnabled = true
+      this.addHillshadeIfNeeded()
+    } else {
+      this.hillshadeEnabled = false
     }
 
     // Add 3D terrain toggle control AFTER setting terrainEnabled (only if MapTiler is configured)
     this.add3DTerrainControl()
+    
+    // Show tooltip on initial load if terrain is enabled
+    if (defaultTerrainOn && this.terrainEnabled && !this.tooltipShown) {
+      this.$nextTick(() => {
+        if (this.terrainTooltipElement) {
+          this.showTooltip(this.terrainTooltipElement)
+          this.tooltipShown = true
+        }
+      })
+    }
 
     // Check for collection query parameter
     if (this.collectionId) {
@@ -1788,6 +1900,29 @@ export default {
 .maplibregl-ctrl-terrain:disabled {
   opacity: 0.5;
   cursor: not-allowed;
+}
+
+/* 3D Terrain tooltip styling */
+.maplibregl-ctrl-terrain-tooltip {
+  position: absolute;
+  left: 38px;
+  top: 0;
+  background-color: #fff;
+  border: 1px solid rgba(0, 0, 0, 0.1);
+  border-radius: 4px;
+  padding: 6px 10px;
+  font-size: 12px;
+  color: #333;
+  white-space: nowrap;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.1);
+  pointer-events: none;
+  z-index: 1;
+  opacity: 0;
+  transition: opacity 0.3s ease-in-out;
+}
+
+.maplibregl-ctrl-terrain-tooltip-visible {
+  opacity: 1;
 }
 </style>
 

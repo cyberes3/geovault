@@ -50,6 +50,11 @@ class MapSettings(BaseModel):
         description="Default 3D terrain to on when loading the map. User can still toggle it on/off with the map control button."
     )
     
+    enable_hillshade: Optional[bool] = Field(
+        default=False,
+        description="Default hillshade to on when loading the map. User can still toggle it on/off with the map control."
+    )
+    
     @field_validator('default_basemap')
     @classmethod
     def validate_default_basemap(cls, v):

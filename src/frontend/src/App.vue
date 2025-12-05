@@ -2,8 +2,8 @@
   <div :class="isMapRoute ? 'h-screen bg-gray-50 overflow-hidden' : 'min-h-screen bg-gray-50'">
     <!-- Navigation Header -->
     <nav class="bg-white shadow-sm border-b border-gray-200 relative z-50">
-      <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-        <div class="flex justify-between h-16">
+      <div class="w-full px-4 sm:px-6 lg:px-8">
+        <div class="flex items-center justify-between h-16">
           
           <!-- Logo & Hamburger Container -->
           <div class="flex items-center justify-between w-full md:w-auto">
@@ -11,7 +11,7 @@
             <div class="flex-shrink-0 flex items-center">
               <router-link class="flex items-center space-x-2 hover:opacity-80 transition-opacity" to="/">
                 <img alt="GeoVault Logo" class="h-8 w-auto" src="/images/logo.svg"/>
-                <h1 class="text-xl font-bold text-gray-900">GeoVault</h1>
+                <h1 class="text-xl font-bold text-gray-900 whitespace-nowrap">GeoVault</h1>
               </router-link>
             </div>
             
@@ -42,19 +42,19 @@
           <div 
             v-if="!userInfoLoading"
             :class="[
-              'md:flex md:items-center md:ml-6 md:flex-1',
+              'md:flex md:items-center md:ml-6 md:flex-1 md:h-full',
               mobileMenuOpen && userInfo ? 'fixed inset-x-0 top-16 z-50 flex flex-col bg-white shadow-lg p-4 sm:p-6 space-y-4 rounded-b-lg overflow-y-auto border-b border-gray-200' : 'hidden'
             ]"
           >
             
             <!-- Navigation Links -->
-            <div v-if="userInfo" class="flex flex-col md:flex-row md:space-x-8 space-y-2 md:space-y-0">
+            <div v-if="userInfo" class="flex flex-col md:flex-row md:space-x-4 lg:space-x-6 xl:space-x-8 space-y-2 md:space-y-0 md:h-full md:items-center">
               <router-link
                   :class="[
                     $route.path === '/dashboard' || $route.path === '/' 
                       ? 'text-blue-600 border-blue-500 bg-blue-50 md:bg-transparent' 
                       : 'text-gray-500 border-transparent hover:text-gray-700 hover:border-gray-300 hover:bg-gray-50 md:hover:bg-transparent',
-                    'block md:inline-flex items-center px-3 md:px-1 py-2 md:pt-1 text-base md:text-sm font-medium border-l-4 md:border-l-0 md:border-b-2 transition-colors duration-200 rounded-r-md md:rounded-none'
+                    'block md:inline-flex md:items-center px-3 md:px-1 py-2 md:py-0 md:h-full text-base md:text-sm font-medium border-l-4 md:border-l-0 md:border-b-2 transition-colors duration-200 rounded-r-md md:rounded-none whitespace-nowrap'
                   ]"
                   to="/dashboard"
                   @click="closeMobileMenu"
@@ -66,7 +66,7 @@
                     $route.path.startsWith('/import')
                       ? 'text-blue-600 border-blue-500 bg-blue-50 md:bg-transparent' 
                       : 'text-gray-500 border-transparent hover:text-gray-700 hover:border-gray-300 hover:bg-gray-50 md:hover:bg-transparent',
-                    'block md:inline-flex items-center px-3 md:px-1 py-2 md:pt-1 text-base md:text-sm font-medium border-l-4 md:border-l-0 md:border-b-2 transition-colors duration-200 rounded-r-md md:rounded-none'
+                    'block md:inline-flex md:items-center px-3 md:px-1 py-2 md:py-0 md:h-full text-base md:text-sm font-medium border-l-4 md:border-l-0 md:border-b-2 transition-colors duration-200 rounded-r-md md:rounded-none whitespace-nowrap'
                   ]"
                   to="/import"
                   @click="closeMobileMenu"
@@ -78,7 +78,7 @@
                     $route.path === '/tags'
                       ? 'text-blue-600 border-blue-500 bg-blue-50 md:bg-transparent' 
                       : 'text-gray-500 border-transparent hover:text-gray-700 hover:border-gray-300 hover:bg-gray-50 md:hover:bg-transparent',
-                    'block md:inline-flex items-center px-3 md:px-1 py-2 md:pt-1 text-base md:text-sm font-medium border-l-4 md:border-l-0 md:border-b-2 transition-colors duration-200 rounded-r-md md:rounded-none'
+                    'block md:inline-flex md:items-center px-3 md:px-1 py-2 md:py-0 md:h-full text-base md:text-sm font-medium border-l-4 md:border-l-0 md:border-b-2 transition-colors duration-200 rounded-r-md md:rounded-none whitespace-nowrap'
                   ]"
                   to="/tags"
                   @click="closeMobileMenu"
@@ -90,7 +90,7 @@
                     $route.path === '/collections'
                       ? 'text-blue-600 border-blue-500 bg-blue-50 md:bg-transparent' 
                       : 'text-gray-500 border-transparent hover:text-gray-700 hover:border-gray-300 hover:bg-gray-50 md:hover:bg-transparent',
-                    'block md:inline-flex items-center px-3 md:px-1 py-2 md:pt-1 text-base md:text-sm font-medium border-l-4 md:border-l-0 md:border-b-2 transition-colors duration-200 rounded-r-md md:rounded-none'
+                    'block md:inline-flex md:items-center px-3 md:px-1 py-2 md:py-0 md:h-full text-base md:text-sm font-medium border-l-4 md:border-l-0 md:border-b-2 transition-colors duration-200 rounded-r-md md:rounded-none whitespace-nowrap'
                   ]"
                   to="/collections"
                   @click="closeMobileMenu"
@@ -102,7 +102,7 @@
                     $route.path === '/map'
                       ? 'text-blue-600 border-blue-500 bg-blue-50 md:bg-transparent' 
                       : 'text-gray-500 border-transparent hover:text-gray-700 hover:border-gray-300 hover:bg-gray-50 md:hover:bg-transparent',
-                    'block md:inline-flex items-center px-3 md:px-1 py-2 md:pt-1 text-base md:text-sm font-medium border-l-4 md:border-l-0 md:border-b-2 transition-colors duration-200 rounded-r-md md:rounded-none'
+                    'block md:inline-flex md:items-center px-3 md:px-1 py-2 md:py-0 md:h-full text-base md:text-sm font-medium border-l-4 md:border-l-0 md:border-b-2 transition-colors duration-200 rounded-r-md md:rounded-none whitespace-nowrap'
                   ]"
                   to="/map"
                   @click="closeMobileMenu"
@@ -112,9 +112,9 @@
             </div>
 
             <!-- Account Section -->
-            <div class="flex items-center md:ml-auto">
+            <div class="flex items-center md:ml-auto md:h-full">
               <!-- Logged In -->
-              <div v-if="userInfo" class="w-full md:w-auto relative md:ml-3" ref="userMenuRef">
+              <div v-if="userInfo" class="w-full md:w-auto relative md:ml-3 md:h-full md:flex md:items-center" ref="userMenuRef">
                 
                 <!-- Desktop Trigger -->
                 <button
