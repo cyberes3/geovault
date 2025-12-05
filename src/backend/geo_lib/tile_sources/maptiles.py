@@ -5,8 +5,37 @@ This module dynamically registers MapTiler maps as tile sources based on configu
 MapTiler maps are vector tile sources that can be used directly without a proxy.
 """
 
+import requests
 from . import register_tile_source
 from website.config_loader import get_config_loader
+
+
+def fetch_map_name(map_id, api_key):
+    """
+    Fetch the display name for a MapTiler map from its style.json.
+    
+    Args:
+        map_id: MapTiler map ID
+        api_key: MapTiler API key
+        
+    Returns:
+        Display name from the style.json, or a formatted fallback name
+    """
+    try:
+        style_url = f'https://api.maptiler.com/maps/{map_id}/style.json?key={api_key}'
+        response = requests.get(style_url, timeout=5)
+        
+        if response.status_code == 200:
+            style_data = response.json()
+            # Get the name from the style.json
+            if 'name' in style_data:
+                return f"MapTiler {style_data['name']}"
+    except Exception as e:
+        # Log error but continue with fallback name
+        print(f"Warning: Could not fetch name for map '{map_id}': {e}")
+    
+    # Fallback: format the map ID as a display name
+    return f"MapTiler {map_id.replace('-', ' ').title()}"
 
 
 def register_maptiler_maps():
@@ -35,28 +64,13 @@ def register_maptiler_maps():
     if not map_ids:
         return
     
-    # Map ID to display name mapping (common MapTiler maps)
-    map_names = {
-        'winter-v2': 'MapTiler Winter',
-        'streets-v2': 'MapTiler Streets',
-        'satellite': 'MapTiler Satellite',
-        'outdoor-v2': 'MapTiler Outdoor',
-        'basic-v2': 'MapTiler Basic',
-        'bright-v2': 'MapTiler Bright',
-        'dark-v2': 'MapTiler Dark',
-        'topo-v2': 'MapTiler Topo',
-        'hybrid': 'MapTiler Hybrid',
-        'positron': 'MapTiler Positron',
-        'toner': 'MapTiler Toner',
-    }
-    
     # Register each map as a tile source
     for map_id in map_ids:
         if not map_id or not isinstance(map_id, str):
             continue
         
-        # Generate display name (use mapping if available, otherwise format the ID)
-        display_name = map_names.get(map_id, f"MapTiler {map_id.replace('-', ' ').title()}")
+        # Fetch display name from MapTiler's style.json
+        display_name = fetch_map_name(map_id, api_key)
         
         # Create tile source configuration
         # MapTiler maps use vector tiles accessed via style.json
