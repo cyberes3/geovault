@@ -162,7 +162,6 @@
         :is-mobile-open="activeMobileSidebar === 'controls'"
         :is-public-share-mode="isPublicShareMode"
         :location-display-name="getLocationDisplayName()"
-        :max-features="MAX_FEATURES"
         :selected-layer="selectedLayer"
         :share-id="shareId"
         :tile-sources="tileSources"
@@ -329,7 +328,6 @@ export default {
       SHARE_API_BASE_URL: '/api/sharing/public/',
       LOCATION_API_URL: '/api/location/user/',
       TILE_SOURCES_API_URL: '/api/tiles/sources/',
-      MAX_FEATURES: 5000,
       featureTimestamps: {},
       featureIdCounter: 0,
       currentZoom: null,

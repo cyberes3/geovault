@@ -101,7 +101,7 @@
       <div v-if="allowedOptions.featureStats || allowedOptions.userLocation">
         <div class="space-y-1">
           <div v-if="allowedOptions.featureStats">
-            Features: <span class="font-medium">{{ featureCount }}</span> / <span class="font-medium">{{ maxFeatures }}</span>
+            Features: <span class="font-medium">{{ featureCount }}</span>
           </div>
           <div v-if="allowedOptions.userLocation && userLocation" class="text-gray-600">
             📍 {{ locationDisplayName }}
@@ -155,11 +155,6 @@ export default {
       type: Number,
       required: true,
       default: 0
-    },
-    maxFeatures: {
-      type: Number,
-      required: true,
-      default: 5000
     },
     userLocation: {
       type: Object,
