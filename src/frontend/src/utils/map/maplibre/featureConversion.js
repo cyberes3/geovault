@@ -24,13 +24,22 @@ export function convertMapLibreFeature(mlFeature) {
       if (coords.length === 0) return [0, 0, 0, 0]
       
       let minLon = Infinity, minLat = Infinity, maxLon = -Infinity, maxLat = -Infinity
-      coords.forEach(([lon, lat]) => {
-        minLon = Math.min(minLon, lon)
-        minLat = Math.min(minLat, lat)
-        maxLon = Math.max(maxLon, lon)
-        maxLat = Math.max(maxLat, lat)
+      coords.forEach((coord) => {
+        // Handle both [lon, lat] and nested arrays
+        const [lon, lat] = Array.isArray(coord) && coord.length >= 2 ? coord : [null, null]
+        if (lon != null && lat != null && isFinite(lon) && isFinite(lat)) {
+          minLon = Math.min(minLon, lon)
+          minLat = Math.min(minLat, lat)
+          maxLon = Math.max(maxLon, lon)
+          maxLat = Math.max(maxLat, lat)
+        }
       })
-      return [minLon, minLat, maxLon, maxLat]
+      
+      // Return valid extent or default
+      if (isFinite(minLon) && isFinite(minLat) && isFinite(maxLon) && isFinite(maxLat)) {
+        return [minLon, minLat, maxLon, maxLat]
+      }
+      return [0, 0, 0, 0]
     }
   }
   

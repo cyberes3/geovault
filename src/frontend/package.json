@@ -5,6 +5,7 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
+    "dev:full": "concurrently -n \"Django,Vite\" -c \"blue,green\" \"cd ../backend && ./server-dev.sh\" \"npm run dev\"",
     "build": "vite build",
     "preview": "vite preview",
     "lint": "eslint src --ext .vue,.js,.ts --fix",
@@ -34,6 +35,7 @@
     "@vitejs/plugin-vue": "^5.0.4",
     "@vue/eslint-config-typescript": "^14.6.0",
     "autoprefixer": "^10.4.19",
+    "concurrently": "^9.2.1",
     "eslint": "^9.37.0",
     "eslint-plugin-vue": "^10.5.0",
     "postcss": "^8.4.38",

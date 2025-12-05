@@ -182,6 +182,7 @@
 <script>
 import {markRaw} from 'vue'
 import 'maplibre-gl/dist/maplibre-gl.css'
+import maplibregl from 'maplibre-gl'
 import {getInitialMapConfig, getLocationDisplayName} from '@/utils/map/mapConfigUtils'
 import { sortTagsByPriority, sortUserTagsAlphabetically, isSystemTag } from '@/utils/tagUtils.js'
 import {getInverseColor} from '@/utils/map/colorUtils'
@@ -441,10 +442,12 @@ export default {
         onZoomEnd: () => {
           this.debouncedLoadData()
           this.debouncedUpdateFeaturesInExtent()
+          // Reprocess existing features for icon visibility at new zoom level
+          this.reprocessFeaturesForZoom()
         },
         onClick: (e) => {
           const features = this.map.queryRenderedFeatures(e.point, {
-            layers: ['points', 'lines', 'polygons', 'polygon-outlines', 'labels']
+            layers: ['points', 'point-icons', 'lines', 'polygons', 'polygon-outlines', 'labels']
           })
 
           if (features.length === 0) {
@@ -614,8 +617,31 @@ export default {
         }
       }
     },
-    addFeaturesToMap(geojsonData) {
-      addFeaturesToMap(this.map, geojsonData, this.showAllLabels)
+    async addFeaturesToMap(geojsonData) {
+      const zoom = this.map ? this.map.getZoom() : null
+      const userSettings = this.$store.state.userSettings || {}
+      const replaceIconsLowZoom = userSettings.map?.replace_icons_low_zoom !== undefined 
+        ? userSettings.map.replace_icons_low_zoom 
+        : true
+      await addFeaturesToMap(this.map, geojsonData, this.showAllLabels, zoom, replaceIconsLowZoom)
+    },
+    async reprocessFeaturesForZoom() {
+      if (!this.map || !this.map.getSource('geojson-data')) return
+      
+      const source = this.map.getSource('geojson-data')
+      const currentData = source._data || { type: 'FeatureCollection', features: [] }
+      const features = currentData.features || []
+      
+      if (features.length === 0) return
+      
+      const zoom = this.map.getZoom()
+      const userSettings = this.$store.state.userSettings || {}
+      const replaceIconsLowZoom = userSettings.map?.replace_icons_low_zoom !== undefined 
+        ? userSettings.map.replace_icons_low_zoom 
+        : true
+      
+      // Reprocess features with new zoom level
+      await addFeaturesToMap(this.map, { type: 'FeatureCollection', features }, this.showAllLabels, zoom, replaceIconsLowZoom)
     },
     updateFeaturesInExtent() {
       if (!this.map || !this.map.getSource('geojson-data')) {
@@ -760,55 +786,208 @@ export default {
       }
     },
     centerToUserLocation() {
-      if (!this.map || !this.userLocation) return
+      if (!this.map) return
 
-      const latitude = this.userLocation.latitude
-      const longitude = this.userLocation.longitude
+      // State level zoom (shows entire state)
+      const stateLevelZoom = 6
 
-      if (latitude == null || longitude == null) return
+      // If we have user location, center on it; otherwise just zoom to state level
+      if (this.userLocation) {
+        const latitude = this.userLocation.latitude
+        const longitude = this.userLocation.longitude
 
-      const currentZoom = this.map.getZoom()
-      const maxReasonableZoom = 12
-      const reasonableZoom = 10
-
-      if (currentZoom > maxReasonableZoom) {
-        this.map.flyTo({
-          center: [longitude, latitude],
-          zoom: reasonableZoom,
-          duration: 500
-        })
-      } else {
-        this.map.flyTo({
-          center: [longitude, latitude],
-          duration: 500
-        })
+        if (latitude != null && longitude != null) {
+          this.map.flyTo({
+            center: [longitude, latitude],
+            zoom: stateLevelZoom,
+            duration: 500
+          })
+          return
+        }
       }
+
+      // Fallback: just zoom to state level at current center
+      this.map.flyTo({
+        zoom: stateLevelZoom,
+        duration: 500
+      })
     },
     zoomToFeature(feature) {
-      if (!this.map || !feature) return
+      if (!this.map || !feature) {
+        console.warn('zoomToFeature: Missing map or feature', { map: !!this.map, feature: !!feature })
+        return
+      }
 
-      // Get feature geometry and calculate bounds
-      const geometry = feature.geometry || feature.get?.('geometry')
-      if (!geometry) return
+      console.log('zoomToFeature called with feature:', feature)
 
+      // Get feature geometry - handle both converted MapLibre features and raw features
+      let geometry = null
+      
+      // Try to get geometry from converted feature (has getGeometry method)
+      if (feature.getGeometry && typeof feature.getGeometry === 'function') {
+        const mockGeometry = feature.getGeometry()
+        console.log('zoomToFeature: Got mockGeometry:', mockGeometry)
+        if (mockGeometry && mockGeometry.getExtent) {
+          // Use the extent from the mock geometry
+          const extent = mockGeometry.getExtent()
+          console.log('zoomToFeature: Got extent from mockGeometry:', extent)
+          if (extent && extent.length === 4) {
+            const [minLon, minLat, maxLon, maxLat] = extent
+            
+            // Validate all values are finite
+            if (extent.every(v => isFinite(v))) {
+              // Check if bounds are valid (not all zeros)
+              const isNotAllZeros = !(minLon === 0 && minLat === 0 && maxLon === 0 && maxLat === 0)
+              
+              console.log('zoomToFeature: Extent validation', { 
+                isFinite: extent.every(v => isFinite(v)),
+                isNotAllZeros,
+                extent: [minLon, minLat, maxLon, maxLat],
+                isPoint: minLon === maxLon && minLat === maxLat
+              })
+              
+              if (isNotAllZeros) {
+                // For points (degenerate bounds), use center + zoom
+                if (minLon === maxLon && minLat === maxLat) {
+                  console.log('zoomToFeature: Zooming to point')
+                  this.map.flyTo({
+                    center: [minLon, minLat],
+                    zoom: Math.max(this.map.getZoom(), 15),
+                    duration: 500
+                  })
+                } else {
+                  // For lines and polygons, use bounds
+                  // MapLibre LngLatBounds takes southwest and northeast corners
+                  console.log('zoomToFeature: Zooming to bounds', { minLon, minLat, maxLon, maxLat })
+                  try {
+                    // Create LngLatBounds: sw corner [minLon, minLat], ne corner [maxLon, maxLat]
+                    const bounds = new maplibregl.LngLatBounds(
+                      [minLon, minLat], // southwest corner
+                      [maxLon, maxLat]  // northeast corner
+                    )
+                    console.log('zoomToFeature: Created LngLatBounds', bounds)
+                    // Use fitBounds which is more reliable for bounds
+                    this.map.fitBounds(bounds, {
+                      padding: { top: 50, bottom: 50, left: 50, right: 50 },
+                      duration: 500
+                    })
+                    console.log('zoomToFeature: Called fitBounds successfully')
+                  } catch (error) {
+                    console.error('zoomToFeature: Error fitting bounds', error, error.stack)
+                    // Fallback: try flyTo
+                    try {
+                      const bounds = new maplibregl.LngLatBounds([minLon, minLat], [maxLon, maxLat])
+                      this.map.flyTo({
+                        bounds: bounds,
+                        padding: 50,
+                        duration: 500
+                      })
+                    } catch (error2) {
+                      console.error('zoomToFeature: Error with flyTo fallback', error2)
+                    }
+                  }
+                }
+                return
+              } else {
+                console.warn('zoomToFeature: Extent is all zeros, trying fallback')
+              }
+            } else {
+              console.warn('zoomToFeature: Extent contains non-finite values', extent)
+            }
+          } else {
+            console.warn('zoomToFeature: Invalid extent format', extent)
+          }
+        } else {
+          console.warn('zoomToFeature: MockGeometry missing getExtent', mockGeometry)
+        }
+        // Fallback: get raw geometry from converted feature
+        geometry = feature.geometry
+      } else {
+        // Try direct geometry access
+        geometry = feature.geometry || feature.get?.('geometry')
+      }
+
+      console.log('zoomToFeature: Using fallback geometry extraction', { geometry, hasGeometry: !!geometry })
+
+      if (!geometry || !geometry.type || !geometry.coordinates) {
+        console.warn('zoomToFeature: Invalid geometry', { 
+          hasGeometry: !!geometry, 
+          geometryType: geometry?.type,
+          hasCoordinates: !!geometry?.coordinates,
+          feature 
+        })
+        return
+      }
+
+      // Extract coordinates from geometry
       const coords = this.getFeatureCoordinates(geometry)
-      if (coords.length === 0) return
+      console.log('zoomToFeature: Extracted coordinates', { coordsCount: coords.length, geometryType: geometry.type })
+      if (coords.length === 0) {
+        console.warn('zoomToFeature: No coordinates found in geometry', geometry)
+        return
+      }
 
       // Calculate bounding box
       let minLon = Infinity, minLat = Infinity, maxLon = -Infinity, maxLat = -Infinity
-      coords.forEach(([lon, lat]) => {
-        minLon = Math.min(minLon, lon)
-        minLat = Math.min(minLat, lat)
-        maxLon = Math.max(maxLon, lon)
-        maxLat = Math.max(maxLat, lat)
+      coords.forEach((coord) => {
+        const [lon, lat] = Array.isArray(coord) && coord.length >= 2 ? coord : [null, null]
+        if (lon != null && lat != null && isFinite(lon) && isFinite(lat)) {
+          minLon = Math.min(minLon, lon)
+          minLat = Math.min(minLat, lat)
+          maxLon = Math.max(maxLon, lon)
+          maxLat = Math.max(maxLat, lat)
+        }
       })
 
+      console.log('zoomToFeature: Calculated bounds', { minLon, minLat, maxLon, maxLat })
+
+      // Ensure we have valid bounds
+      if (!isFinite(minLon) || !isFinite(minLat) || !isFinite(maxLon) || !isFinite(maxLat)) {
+        console.warn('zoomToFeature: Invalid bounds calculated', { minLon, minLat, maxLon, maxLat, coords })
+        return
+      }
+
+      // Ensure bounds are not degenerate (same point)
+      if (minLon === maxLon && minLat === maxLat) {
+        // For points, zoom to a reasonable zoom level
+        console.log('zoomToFeature: Zooming to point (fallback)')
+        this.map.flyTo({
+          center: [minLon, minLat],
+          zoom: Math.max(this.map.getZoom(), 15),
+          duration: 500
+        })
+        return
+      }
+
       // Fly to feature
-      this.map.flyTo({
-        bounds: [[minLon, minLat], [maxLon, maxLat]],
-        padding: 50,
-        duration: 500
-      })
+      console.log('zoomToFeature: Zooming to bounds (fallback)', { minLon, minLat, maxLon, maxLat })
+      try {
+        // Create LngLatBounds: sw corner [minLon, minLat], ne corner [maxLon, maxLat]
+        const bounds = new maplibregl.LngLatBounds(
+          [minLon, minLat], // southwest corner
+          [maxLon, maxLat]  // northeast corner
+        )
+        console.log('zoomToFeature: Created LngLatBounds (fallback)', bounds)
+        // Use fitBounds which is more reliable for bounds
+        this.map.fitBounds(bounds, {
+          padding: { top: 50, bottom: 50, left: 50, right: 50 },
+          duration: 500
+        })
+        console.log('zoomToFeature: Called fitBounds successfully (fallback)')
+      } catch (error) {
+        console.error('zoomToFeature: Error fitting bounds (fallback)', error, error.stack)
+        // Final fallback: try flyTo
+        try {
+          const bounds = new maplibregl.LngLatBounds([minLon, minLat], [maxLon, maxLat])
+          this.map.flyTo({
+            bounds: bounds,
+            padding: 50,
+            duration: 500
+          })
+        } catch (error2) {
+          console.error('zoomToFeature: Error with flyTo fallback (fallback)', error2)
+        }
+      }
     },
     handlePublicShareError(errorMessage) {
       this.publicShareError = errorMessage || 'Invalid share link'
