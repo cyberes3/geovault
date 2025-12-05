@@ -66,8 +66,15 @@ export function filterPointsOnBorders(features, tolerance = 10) {
   const points = []
   const lines = []
   const polygons = []
+  const labelPoints = [] // Keep label points separate - they should never be filtered
   
   features.forEach(f => {
+    // Skip label points - they should never be filtered
+    if (f.properties?._isLabelPoint) {
+      labelPoints.push(f)
+      return
+    }
+    
     const geomType = f.geometry?.type
     if (geomType === 'Point') {
       points.push(f)
@@ -142,7 +149,7 @@ export function filterPointsOnBorders(features, tolerance = 10) {
     }
   })
 
-  // Return all non-point features plus filtered points
-  return [...lines, ...polygons, ...filteredPoints]
+  // Return all non-point features plus filtered points and label points
+  return [...lines, ...polygons, ...filteredPoints, ...labelPoints]
 }
 

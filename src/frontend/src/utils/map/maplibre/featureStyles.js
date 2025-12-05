@@ -68,6 +68,23 @@ export const defaultFeatureStyles = {
       'text-halo-color': '#ffffff',
       'text-halo-width': 2
     }
+  },
+  labelPoints: {
+    layout: {
+      'text-field': ['coalesce', ['get', 'name'], ''],
+      'text-font': ['Noto Sans Regular', 'Arial Unicode MS Regular'],
+      'text-size': 12,
+      'text-offset': [0, 1.25], // Offset below the point
+      'text-anchor': 'top', // Anchor at top of text
+      'text-allow-overlap': true, // Always show, even if overlapping
+      'text-ignore-placement': true, // Don't move for other features
+      'text-optional': false // Always show text, don't hide it
+    },
+    paint: {
+      'text-color': '#000000',
+      'text-halo-color': '#ffffff',
+      'text-halo-width': 2
+    }
   }
 }
 
@@ -81,7 +98,11 @@ export function getPointLayerConfig(overrides = {}) {
     id: 'points',
     type: 'circle',
     source: 'geojson-data',
-    filter: ['all', ['==', ['geometry-type'], 'Point'], ['!', ['has', '_on_border']]],
+    filter: ['all', 
+      ['==', ['geometry-type'], 'Point'], 
+      ['!', ['has', '_on_border']],
+      ['!', ['has', '_isLabelPoint']] // Exclude label points
+    ],
     paint: {
       ...defaultFeatureStyles.points.paint,
       ...overrides.paint
@@ -99,7 +120,12 @@ export function getPointIconLayerConfig(overrides = {}) {
     id: 'point-icons',
     type: 'symbol',
     source: 'geojson-data',
-    filter: ['all', ['==', ['geometry-type'], 'Point'], ['!', ['has', '_on_border']]],
+    filter: ['all', 
+      ['==', ['geometry-type'], 'Point'], 
+      ['!', ['has', '_on_border']],
+      ['!', ['has', '_isLabelPoint']], // Exclude label points
+      ['has', '_icon-id'] // Only show features with icons
+    ],
     layout: {
       'icon-image': [
         'coalesce',
@@ -185,7 +211,7 @@ export function getPolygonOutlineLayerConfig(overrides = {}) {
 }
 
 /**
- * Get labels layer configuration
+ * Get labels layer configuration (for regular points with collision detection)
  * @param {boolean} showAllLabels - Whether to show labels
  * @param {Object} overrides - Style overrides
  * @returns {Object} Labels layer configuration
@@ -197,6 +223,17 @@ export function getLabelsLayerConfig(showAllLabels = true, overrides = {}) {
     source: 'geojson-data',
     layout: {
       ...defaultFeatureStyles.labels.layout,
+      'text-offset': [
+        'case',
+        // For regular points, check if they have an icon
+        ['all', ['==', ['geometry-type'], 'Point'], ['has', '_icon-id']],
+        ['literal', [0, 1.25]], // Points with icons: offset below icon
+        // For regular points without icons (circles), offset more
+        ['==', ['geometry-type'], 'Point'],
+        ['literal', [0, 1.75]], // Points without icons: offset below circle
+        // Default for other types
+        ['literal', [0, 1.25]]
+      ],
       'visibility': showAllLabels ? 'visible' : 'none',
       ...overrides.layout
     },
@@ -204,7 +241,39 @@ export function getLabelsLayerConfig(showAllLabels = true, overrides = {}) {
       ...defaultFeatureStyles.labels.paint,
       ...overrides.paint
     },
-    filter: ['!=', ['get', 'name'], '']
+    // Show labels for regular points (not label points)
+    filter: ['all',
+      ['!=', ['coalesce', ['get', 'name'], ''], ''],
+      ['!', ['has', '_isLabelPoint']] // Exclude label points
+    ]
+  }
+}
+
+/**
+ * Get label points layer configuration (for polygons/lines - static positioning)
+ * @param {boolean} showAllLabels - Whether to show labels
+ * @param {Object} overrides - Style overrides
+ * @returns {Object} Label points layer configuration
+ */
+export function getLabelPointsLayerConfig(showAllLabels = true, overrides = {}) {
+  return {
+    id: 'label-points',
+    type: 'symbol',
+    source: 'geojson-data',
+    layout: {
+      ...defaultFeatureStyles.labelPoints.layout,
+      'visibility': showAllLabels ? 'visible' : 'none',
+      ...overrides.layout
+    },
+    paint: {
+      ...defaultFeatureStyles.labelPoints.paint,
+      ...overrides.paint
+    },
+    // Show labels only for label points (polygons/lines)
+    filter: ['all',
+      ['has', '_isLabelPoint'],
+      ['!=', ['coalesce', ['get', 'name'], ''], '']
+    ]
   }
 }
 

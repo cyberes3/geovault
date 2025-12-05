@@ -183,6 +183,7 @@
 import {markRaw} from 'vue'
 import 'maplibre-gl/dist/maplibre-gl.css'
 import maplibregl from 'maplibre-gl'
+import { LabelMarkerManager } from '@/utils/map/maplibre/labelMarkers.js'
 import {getInitialMapConfig, getLocationDisplayName} from '@/utils/map/mapConfigUtils'
 import { sortTagsByPriority, sortUserTagsAlphabetically, isSystemTag } from '@/utils/tagUtils.js'
 import {getInverseColor} from '@/utils/map/colorUtils'
@@ -355,6 +356,7 @@ export default {
       activeMobileSidebar: null,
       mapWasDestroyed: false,
       showAllLabels: true,
+      labelMarkerManager: null,
     }
   },
   methods: {
@@ -421,6 +423,10 @@ export default {
         glyphsUrl: '/api/fonts/{fontstack}/{range}.pbf'
       }))
 
+      // Initialize label marker manager
+      this.labelMarkerManager = new LabelMarkerManager(this.map)
+      this.labelMarkerManager.setVisibility(this.showAllLabels)
+
       // Setup GeoJSON source
       setupGeoJsonSource(this.map, () => {
         this.isMapInitializing = false
@@ -446,20 +452,51 @@ export default {
           this.reprocessFeaturesForZoom()
         },
         onClick: (e) => {
-          const features = this.map.queryRenderedFeatures(e.point, {
-            layers: ['points', 'point-icons', 'lines', 'polygons', 'polygon-outlines', 'labels']
+          // Check if layers exist before querying
+          const layersToQuery = ['points', 'point-icons', 'lines', 'polygons', 'polygon-outlines']
+            .filter(layerId => this.map.getLayer(layerId))
+          
+          if (layersToQuery.length === 0) {
+            return
+          }
+          
+          // Query features with a larger radius (15 pixels) to make clicking easier
+          const bbox = [
+            [e.point.x - 15, e.point.y - 15],
+            [e.point.x + 15, e.point.y + 15]
+          ]
+          const features = this.map.queryRenderedFeatures(bbox, {
+            layers: layersToQuery
           })
 
-          if (features.length === 0) {
+          // Filter out label points - they shouldn't be clickable
+          const clickableFeatures = features.filter(f => !f.properties?._isLabelPoint)
+
+          // Deduplicate features by database_id (same feature can appear in multiple layers)
+          const uniqueFeatures = []
+          const seenIds = new Set()
+          
+          for (const feature of clickableFeatures) {
+            const featureId = feature.properties?.database_id
+            if (featureId && !seenIds.has(featureId)) {
+              seenIds.add(featureId)
+              uniqueFeatures.push(feature)
+            } else if (!featureId) {
+              // If no database_id, include it anyway
+              uniqueFeatures.push(feature)
+            }
+          }
+
+          if (uniqueFeatures.length === 0) {
             this.selectedFeature = null
             this.isEditingFeature = false
             this.showFeaturePopup = false
-          } else if (features.length === 1) {
-            const feature = convertMapLibreFeature(features[0])
+          } else if (uniqueFeatures.length === 1) {
+            const feature = markRaw(convertMapLibreFeature(uniqueFeatures[0]))
             this.selectedFeature = feature
             this.isEditingFeature = false
           } else {
-            const convertedFeatures = features.map(f => convertMapLibreFeature(f))
+            const convertedFeatures = uniqueFeatures.map(f => markRaw(convertMapLibreFeature(f)))
             this.overlappingFeatures = convertedFeatures
             this.popupPosition = {
               x: e.point.x,
@@ -470,6 +507,53 @@ export default {
             this.showFeaturePopup = true
           }
         }
+      })
+
+      // Add immediate zoom event listener for responsive label and icon updates
+      this.map.on('zoom', () => {
+        // Update label markers only if labels are visible
+        // Skip expensive label processing when labels are hidden
+        if (this.showAllLabels && this.labelMarkerManager) {
+          const source = this.map.getSource('geojson-data')
+          if (source && source._data && source._data.features) {
+            this.labelMarkerManager.updateMarkers(source._data.features)
+          }
+        }
+        
+        // Also update icon visibility immediately during zoom
+        // This prevents the delay when switching between icons and circles
+        this.reprocessFeaturesForZoom()
+      })
+
+      // Add hover event listener to change cursor to pointer over features
+      this.map.on('mousemove', (e) => {
+        // Check if layers exist before querying
+        const layersToQuery = ['points', 'point-icons', 'lines', 'polygons', 'polygon-outlines']
+          .filter(layerId => this.map.getLayer(layerId))
+        
+        if (layersToQuery.length === 0) {
+          return
+        }
+        
+        // Query features with a small radius for hover detection
+        const bbox = [
+          [e.point.x - 5, e.point.y - 5],
+          [e.point.x + 5, e.point.y + 5]
+        ]
+        const features = this.map.queryRenderedFeatures(bbox, {
+          layers: layersToQuery
+        })
+
+        // Filter out label points
+        const hoverableFeatures = features.filter(f => !f.properties?._isLabelPoint)
+
+        // Change cursor to pointer if hovering over a feature
+        this.map.getCanvas().style.cursor = hoverableFeatures.length > 0 ? 'pointer' : ''
+      })
+
+      // Reset cursor when leaving the map
+      this.map.on('mouseout', () => {
+        this.map.getCanvas().style.cursor = ''
       })
     },
     convertMapLibreFeature(mlFeature) {
@@ -603,7 +687,10 @@ export default {
         if (data.data && data.data.features) {
           this.loadedBounds.add(bboxKey)
           this.updateFeatureCount()
-          this.addFeaturesToMap(data.data)
+          // Use markRaw to prevent Vue from making features reactive
+          // This is critical for performance with complex geometries
+          const rawData = markRaw(data.data)
+          this.addFeaturesToMap(rawData)
         }
       } catch (error) {
         if (error.name === 'AbortError') return
@@ -624,6 +711,16 @@ export default {
         ? userSettings.map.replace_icons_low_zoom 
         : true
       await addFeaturesToMap(this.map, geojsonData, this.showAllLabels, zoom, replaceIconsLowZoom)
+      
+      // Update label markers only if labels are visible
+      // Skip expensive label processing when labels are hidden
+      if (this.showAllLabels && this.labelMarkerManager && geojsonData && geojsonData.features) {
+        // Get all features from the source (including label points if they exist)
+        const source = this.map.getSource('geojson-data')
+        if (source && source._data && source._data.features) {
+          this.labelMarkerManager.updateMarkers(source._data.features)
+        }
+      }
     },
     async reprocessFeaturesForZoom() {
       if (!this.map || !this.map.getSource('geojson-data')) return
@@ -642,6 +739,15 @@ export default {
       
       // Reprocess features with new zoom level
       await addFeaturesToMap(this.map, { type: 'FeatureCollection', features }, this.showAllLabels, zoom, replaceIconsLowZoom)
+      
+      // Update label markers only if labels are visible
+      // Skip expensive label processing when labels are hidden
+      if (this.showAllLabels && this.labelMarkerManager) {
+        const source = this.map.getSource('geojson-data')
+        if (source && source._data && source._data.features) {
+          this.labelMarkerManager.updateMarkers(source._data.features)
+        }
+      }
     },
     updateFeaturesInExtent() {
       if (!this.map || !this.map.getSource('geojson-data')) {
@@ -654,8 +760,11 @@ export default {
       const data = source._data || { type: 'FeatureCollection', features: [] }
       const features = data.features || []
 
-      // Filter features in current bounds
+      // Filter features in current bounds and exclude label points
       const featuresInBounds = features.filter(f => {
+        // Skip label points - they're internal features for label rendering
+        if (f.properties?._isLabelPoint) return false
+        
         if (!f.geometry) return false
         const coords = this.getFeatureCoordinates(f.geometry)
         return coords.some(coord => {
@@ -666,7 +775,8 @@ export default {
       })
 
       // Convert to format expected by FeatureListSidebar
-      this.featuresInExtent = featuresInBounds.map(f => this.convertMapLibreFeature(f))
+      // Use markRaw to prevent Vue reactivity on feature objects for performance
+      this.featuresInExtent = featuresInBounds.map(f => markRaw(this.convertMapLibreFeature(f)))
     },
     getFeatureCoordinates(geometry) {
       return getFeatureCoordinates(geometry)
@@ -679,7 +789,9 @@ export default {
         if (this.map && this.map.getSource('geojson-data')) {
           const source = this.map.getSource('geojson-data')
           const data = source._data || { type: 'FeatureCollection', features: [] }
-          this.featureCount = data.features?.length || 0
+          // Count only real features, not label points
+          const realFeatures = (data.features || []).filter(f => !f.properties?._isLabelPoint)
+          this.featureCount = realFeatures.length
         }
         this.featureCountUpdatePending = false
       })
@@ -1039,19 +1151,42 @@ export default {
       this.isEditingFeature = false
     },
     handleFeatureSelect(feature) {
+      // Feature is already markRaw from overlappingFeatures
       this.selectedFeature = feature
       this.isEditingFeature = false
       this.showFeaturePopup = false
     },
-    handleLabelsVisibilityChange(showLabels) {
+    async handleLabelsVisibilityChange(showLabels) {
       this.showAllLabels = showLabels
-      if (this.map) {
-        const labelsLayer = this.map.getLayer('labels')
-        if (labelsLayer) {
-          this.map.setLayoutProperty('labels', 'visibility', showLabels ? 'visible' : 'none')
-        } else if (showLabels) {
-          // Create labels layer if it doesn't exist and labels should be shown
-          ensureLayersExist(this.map, this.showAllLabels)
+      if (this.labelMarkerManager) {
+        this.labelMarkerManager.setVisibility(showLabels)
+        
+        // If turning labels ON, we need to regenerate label points and update markers
+        // If turning labels OFF, clear all label points to improve performance
+        if (showLabels) {
+          // Regenerate label points by reprocessing all features
+          // This is necessary because label points were not created when labels were off
+          this.loadedBounds.clear()
+          await this.loadDataForCurrentView()
+        } else {
+          // Remove all label points from the map to improve performance
+          if (this.map && this.map.getSource('geojson-data')) {
+            const source = this.map.getSource('geojson-data')
+            const currentData = source._data || { type: 'FeatureCollection', features: [] }
+            
+            // Filter out label points
+            const featuresWithoutLabelPoints = (currentData.features || []).filter(f => 
+              !f.properties?._isLabelPoint
+            )
+            
+            // Update source with features (without label points)
+            source.setData(markRaw({
+              type: 'FeatureCollection',
+              features: featuresWithoutLabelPoints.map(f => markRaw(f))
+            }))
+            
+            this.updateFeatureCount()
+          }
         }
       }
     },
@@ -1114,21 +1249,22 @@ export default {
       const geojsonFeatures = filteredFeatures.map(f => {
         const props = f.properties || f.get?.('properties') || {}
         const geom = f.geometry || f.getGeometry?.()
-        return {
+        return markRaw({
           type: 'Feature',
           properties: props,
           geometry: geom || null
-        }
+        })
       })
 
       // Filter out points on borders
       const filteredGeojsonFeatures = filterPointsOnBorders(geojsonFeatures)
 
       const source = this.map.getSource('geojson-data')
-      source.setData({
+      // Mark the entire data structure as raw to prevent Vue reactivity
+      source.setData(markRaw({
         type: 'FeatureCollection',
-        features: filteredGeojsonFeatures
-      })
+        features: filteredGeojsonFeatures.map(f => markRaw(f))
+      }))
 
       this.updateFeatureCount()
       this.updateFeaturesInExtent()
@@ -1296,7 +1432,7 @@ export default {
         // Zoom to feature
         await this.$nextTick()
         setTimeout(() => {
-          this.zoomToFeature(this.convertMapLibreFeature(feature))
+          this.zoomToFeature(markRaw(this.convertMapLibreFeature(feature)))
           this.removeFeatureIdFromUrl()
         }, 100)
       } catch (error) {
@@ -1384,6 +1520,10 @@ export default {
     this.updateFeaturesInExtent()
   },
   beforeUnmount() {
+    if (this.labelMarkerManager) {
+      this.labelMarkerManager.clear()
+      this.labelMarkerManager = null
+    }
     if (this.map) {
       this.map.remove()
       this.map = null

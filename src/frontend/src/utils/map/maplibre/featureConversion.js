@@ -14,10 +14,34 @@ export function convertMapLibreFeature(mlFeature) {
   const geometry = mlFeature.geometry || {}
   const geometryType = geometry.type || 'Unknown'
   
-  // Create a mock geometry object with getType() method
+  // Create a mock geometry object with OpenLayers-compatible methods
   const mockGeometry = {
     type: geometryType,
+    coordinates: geometry.coordinates,
     getType: () => geometryType,
+    getCoordinates: () => geometry.coordinates,
+    clone: function() {
+      // Return a clone of this geometry object with all necessary methods
+      const cloned = {
+        type: this.type,
+        coordinates: JSON.parse(JSON.stringify(geometry.coordinates)),
+        getType: this.getType,
+        getCoordinates: this.getCoordinates,
+        getExtent: this.getExtent,
+        clone: this.clone,
+        transform: this.transform,
+        applyTransform: this.applyTransform
+      }
+      return cloned
+    },
+    transform: function() {
+      // Transform is a no-op for GeoJSON (already in EPSG:4326)
+      return this
+    },
+    applyTransform: function() {
+      // applyTransform is a no-op for GeoJSON (already in EPSG:4326)
+      // This method is used by OpenLayers for coordinate transformations
+    },
     getExtent: () => {
       // Calculate extent from coordinates
       const coords = getFeatureCoordinates(geometry)

@@ -7,8 +7,7 @@ import {
   getPointIconLayerConfig,
   getLineLayerConfig,
   getPolygonLayerConfig,
-  getPolygonOutlineLayerConfig,
-  getLabelsLayerConfig
+  getPolygonOutlineLayerConfig
 } from './featureStyles.js'
 
 /**
@@ -23,84 +22,107 @@ export function ensureLayersExist(map, showAllLabels = true) {
   if (!map || !map.getSource('geojson-data')) return
 
   // Desired order from bottom to top: polygons, polygon-outlines, lines, points, point-icons, labels
-  // MapLibre's addLayer(layer, beforeId) adds layer BEFORE beforeId
-  // So we add from top to bottom to get correct stacking
+  // We'll add layers in this order, using beforeId only if the target layer exists
 
-  // 5. Labels layer (top) - add first (goes to end, appears on top)
-  const labelsConfig = getLabelsLayerConfig(showAllLabels)
-  if (!map.getLayer('labels')) {
-    map.addLayer(labelsConfig)
+  // 1. Polygons fill layer (bottom) - add first
+  const polygonConfig = getPolygonLayerConfig()
+  if (!map.getLayer('polygons')) {
+    map.addLayer(polygonConfig)
   } else {
-    map.setLayoutProperty('labels', 'visibility', labelsConfig.layout.visibility)
+    map.setFilter('polygons', polygonConfig.filter)
   }
 
-  // 4a. Point icons layer (for features with icons) - add before labels
-  const pointIconConfig = getPointIconLayerConfig()
-  if (!map.getLayer('point-icons')) {
-    // Only show icons for features that have _icon-id property
-    const iconFilter = ['all', ['==', ['geometry-type'], 'Point'], ['!', ['has', '_on_border']], ['has', '_icon-id']]
-    pointIconConfig.filter = iconFilter
-    map.addLayer(pointIconConfig, 'labels')
-  } else {
-    const iconFilter = ['all', ['==', ['geometry-type'], 'Point'], ['!', ['has', '_on_border']], ['has', '_icon-id']]
-    map.setFilter('point-icons', iconFilter)
-  }
-
-  // 4b. Points layer (for features without icons or at low zoom) - add before point-icons
-  const pointConfig = getPointLayerConfig()
-  if (!map.getLayer('points')) {
-    // Only show circles for features that don't have _icon-id property
-    const circleFilter = ['all', ['==', ['geometry-type'], 'Point'], ['!', ['has', '_on_border']], ['!', ['has', '_icon-id']]]
-    pointConfig.filter = circleFilter
-    map.addLayer(pointConfig, 'point-icons')
-  } else {
-    const circleFilter = ['all', ['==', ['geometry-type'], 'Point'], ['!', ['has', '_on_border']], ['!', ['has', '_icon-id']]]
-    map.setFilter('points', circleFilter)
-  }
-
-  // 3. Lines layer - add before points
-  const lineConfig = getLineLayerConfig()
-  if (!map.getLayer('lines')) {
-    map.addLayer(lineConfig, 'points')
-  } else {
-    map.setFilter('lines', lineConfig.filter)
-    map.setLayoutProperty('lines', 'line-cap', lineConfig.layout['line-cap'])
-    map.setLayoutProperty('lines', 'line-join', lineConfig.layout['line-join'])
-  }
-
-  // 2. Polygon outlines layer - add before lines
+  // 2. Polygon outlines layer - add after polygons
   const polygonOutlineConfig = getPolygonOutlineLayerConfig()
   if (!map.getLayer('polygon-outlines')) {
-    map.addLayer(polygonOutlineConfig, 'lines')
+    // Add after polygons if it exists, otherwise just add
+    if (map.getLayer('polygons')) {
+      map.addLayer(polygonOutlineConfig, 'polygons')
+    } else {
+      map.addLayer(polygonOutlineConfig)
+    }
   } else {
     map.setFilter('polygon-outlines', polygonOutlineConfig.filter)
     map.setLayoutProperty('polygon-outlines', 'line-cap', polygonOutlineConfig.layout['line-cap'])
     map.setLayoutProperty('polygon-outlines', 'line-join', polygonOutlineConfig.layout['line-join'])
   }
 
-  // 1. Polygons fill layer (bottom) - add before polygon-outlines
-  const polygonConfig = getPolygonLayerConfig()
-  if (!map.getLayer('polygons')) {
-    map.addLayer(polygonConfig, 'polygon-outlines')
+  // 3. Lines layer - add after polygon-outlines
+  const lineConfig = getLineLayerConfig()
+  if (!map.getLayer('lines')) {
+    if (map.getLayer('polygon-outlines')) {
+      map.addLayer(lineConfig, 'polygon-outlines')
+    } else if (map.getLayer('polygons')) {
+      map.addLayer(lineConfig, 'polygons')
+    } else {
+      map.addLayer(lineConfig)
+    }
   } else {
-    map.setFilter('polygons', polygonConfig.filter)
+    map.setFilter('lines', lineConfig.filter)
+    map.setLayoutProperty('lines', 'line-cap', lineConfig.layout['line-cap'])
+    map.setLayoutProperty('lines', 'line-join', lineConfig.layout['line-join'])
   }
 
-  // Force correct layer ordering after all layers are set up (in case layers already existed)
+  // 4b. Points layer (for features without icons or at low zoom) - add after lines
+  const pointConfig = getPointLayerConfig()
+  if (!map.getLayer('points')) {
+    // Filter is already set in getPointLayerConfig, but we need to add the _icon-id check
+    const circleFilter = ['all', 
+      ['==', ['geometry-type'], 'Point'], 
+      ['!', ['has', '_on_border']], 
+      ['!', ['has', '_isLabelPoint']], // Exclude label points
+      ['!', ['has', '_icon-id']] // Only show features without icons
+    ]
+    pointConfig.filter = circleFilter
+    if (map.getLayer('lines')) {
+      map.addLayer(pointConfig, 'lines')
+    } else if (map.getLayer('polygon-outlines')) {
+      map.addLayer(pointConfig, 'polygon-outlines')
+    } else {
+      map.addLayer(pointConfig)
+    }
+  } else {
+    const circleFilter = ['all', 
+      ['==', ['geometry-type'], 'Point'], 
+      ['!', ['has', '_on_border']], 
+      ['!', ['has', '_isLabelPoint']], // Exclude label points
+      ['!', ['has', '_icon-id']] // Only show features without icons
+    ]
+    map.setFilter('points', circleFilter)
+  }
+
+  // 4a. Point icons layer (for features with icons) - add after points
+  const pointIconConfig = getPointIconLayerConfig()
+  if (!map.getLayer('point-icons')) {
+    // Filter is already set in getPointIconLayerConfig
+    if (map.getLayer('points')) {
+      map.addLayer(pointIconConfig, 'points')
+    } else if (map.getLayer('lines')) {
+      map.addLayer(pointIconConfig, 'lines')
+    } else {
+      map.addLayer(pointIconConfig)
+    }
+  } else {
+    // Filter is already correct in getPointIconLayerConfig
+    const iconFilter = pointIconConfig.filter
+    map.setFilter('point-icons', iconFilter)
+  }
+
+  // Labels are now handled by HTML markers (labelMarkers.js), not symbol layers
+
+  // Force correct layer ordering after all layers are set up
   enforceLayerOrder(map, showAllLabels)
   
   // Debug: log final layer order
   const finalStyle = map.getStyle()
   if (finalStyle && finalStyle.layers) {
-    const ourLayers = ['polygons', 'polygon-outlines', 'lines', 'points', 'labels']
+    const ourLayers = ['polygons', 'polygon-outlines', 'lines', 'points', 'point-icons']
       .filter(id => map.getLayer(id))
       .map(id => {
         const index = finalStyle.layers.findIndex(l => l.id === id)
         return { id, index }
       })
       .sort((a, b) => a.index - b.index)
-    
-    console.log('[ensureLayersExist] Final layer order (bottom to top):', ourLayers.map(l => l.id).join(' -> '))
   }
 }
 
@@ -161,8 +183,8 @@ function enforceLayerOrder(map, showAllLabels = true) {
   const style = map.getStyle()
   if (!style || !style.layers) return
 
-  // Desired order from bottom to top
-  const desiredOrder = ['polygons', 'polygon-outlines', 'lines', 'points', 'point-icons', 'labels']
+  // Desired order from bottom to top (labels are now HTML markers, not layers)
+  const desiredOrder = ['polygons', 'polygon-outlines', 'lines', 'points', 'point-icons']
   
   // Get current indices of our layers
   const layerIndices = {}

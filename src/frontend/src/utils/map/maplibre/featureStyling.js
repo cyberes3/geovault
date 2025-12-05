@@ -3,7 +3,7 @@
  * Implements the same styling logic as OpenLayers map
  */
 
-import { getIconUrl, resolveIconUrl, isSystemIcon } from '@/utils/map/iconUtils'
+import { getIconUrl, resolveIconUrl, isSystemIcon, detectPrimaryColor } from '@/utils/map/iconUtils'
 import { APIHOST } from '@/config'
 
 /**
@@ -64,11 +64,16 @@ export function getColorExpression(propertyName, defaultColor = '#ff0000') {
 
 /**
  * Get MapLibre expression for point circle color
- * Checks marker-color property with fallback to red
+ * Checks _detectedIconColor (for replaced icons), then marker-color property, with fallback to red
  * @returns {Array} MapLibre expression array
  */
 export function getPointColorExpression() {
-  return getColorExpression('marker-color', '#ff0000')
+  return [
+    'coalesce',
+    ['get', '_detectedIconColor'], // Use detected color from icon if available
+    ['get', 'marker-color'],       // Fall back to marker-color property
+    '#ff0000'                      // Default to red
+  ]
 }
 
 /**
@@ -208,10 +213,18 @@ export async function loadIconImage(map, iconId, iconUrl) {
     
     img.onload = () => {
       try {
-        map.addImage(iconId, img)
+        // Double-check if image was added by another call while loading
+        if (!map.hasImage(iconId)) {
+          map.addImage(iconId, img)
+        }
         resolve()
       } catch (error) {
-        reject(error)
+        // If error is about duplicate image, that's ok - another call added it
+        if (error.message && error.message.includes('already exists')) {
+          resolve()
+        } else {
+          reject(error)
+        }
       }
     }
     

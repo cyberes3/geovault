@@ -93,22 +93,27 @@
       </div>
 
       <!-- Feature List -->
-      <div v-else class="flex-1 overflow-y-auto select-none min-h-0">
+      <div v-else class="flex-1 select-none min-h-0">
         <div v-if="displayFeatures.length === 0" class="text-xs text-gray-500 text-center py-3">
           {{ isSearchMode ? 'No results found' : 'No features' }}
         </div>
-        <div v-else class="space-y-0.5">
+        <RecycleScroller
+          v-else
+          class="scroller"
+          :items="displayFeatures"
+          :item-size="32"
+          key-field="_geoJsonMapId"
+          v-slot="{ item }"
+        >
           <div
-            v-for="feature in displayFeatures"
-            :key="getFeatureId(feature)"
-            @click="handleFeatureClick(feature)"
-            @contextmenu.prevent="handleFeatureContextMenu(feature)"
-            class="px-1.5 py-2.5 bg-gray-50 hover:bg-gray-100 transition-colors flex items-center cursor-pointer lg:px-1 lg:py-2 xl:px-1.5 xl:py-1"
-            :style="{ borderLeft: `3px solid ${getGeometryTypeColor(feature)}` }"
+            @click="handleFeatureClick(item)"
+            @contextmenu.prevent="handleFeatureContextMenu(item)"
+            class="px-1.5 py-1.5 bg-gray-50 hover:bg-gray-100 transition-colors flex items-center cursor-pointer lg:px-1 lg:py-1 xl:px-1.5 xl:py-1.5"
+            :style="{ borderLeft: `3px solid ${getGeometryTypeColor(item)}` }"
           >
             <div class="flex-1 min-w-0">
               <div class="text-xs text-gray-900 truncate">
-                {{ getFeatureName(feature) }}
+                {{ getFeatureName(item) }}
               </div>
             </div>
             <!-- Mobile/Tablet hide icon -->
@@ -117,12 +122,12 @@
               type="button"
               class="ml-1 text-gray-400 hover:text-gray-600 p-1 xl:hidden"
               title="Hide this feature from the main map"
-              @click.stop.prevent="emitHideFeature(feature)"
+              @click.stop.prevent="emitHideFeature(item)"
             >
               <EyeSlashIcon class="w-4 h-4" />
             </button>
           </div>
-        </div>
+        </RecycleScroller>
       </div>
 
       <!-- Footer Count -->
@@ -185,7 +190,7 @@
       </div>
 
       <!-- Available Tags List -->
-      <div class="flex-1 overflow-y-auto min-h-0">
+      <div class="flex-1 min-h-0">
         <!-- Initial Loading Indicator -->
         <div v-if="showInitialTagsLoader" class="flex items-center justify-center h-full">
           <Loader size="md" layout="centered" message="Loading tags..." />
@@ -196,17 +201,22 @@
         <div v-else-if="filteredAvailableTags.length === 0" class="text-xs text-gray-500 text-center py-3">
           No tags match your search
         </div>
-        <div v-else class="space-y-0.5">
+        <RecycleScroller
+          v-else
+          class="scroller"
+          :items="filteredAvailableTagsWithKeys"
+          :item-size="28"
+          key-field="key"
+          v-slot="{ item }"
+        >
           <button
-            v-for="tag in filteredAvailableTags"
-            :key="tag"
-            @click="toggleTag(tag)"
+            @click="toggleTag(item.tag)"
             class="w-full px-1.5 py-1 text-left text-xs rounded transition-colors bg-gray-50 hover:bg-gray-100 text-gray-900"
             title="Toggle tag filter"
           >
-            {{ tag }}
+            {{ item.tag }}
           </button>
-        </div>
+        </RecycleScroller>
       </div>
     </div>
   </div>
@@ -219,6 +229,8 @@ import { FunnelIcon, XMarkIcon, EyeSlashIcon } from '@heroicons/vue/24/outline'
 import Loader from '@/components/parts/Loader.vue'
 import { getGeometryTypeColor } from '@/utils/geometryColors.js'
 import { sortTagsByPriority, sortUserTagsAlphabetically, isSystemTag } from '@/utils/tagUtils.js'
+import { RecycleScroller } from 'vue-virtual-scroller'
+import 'vue-virtual-scroller/dist/vue-virtual-scroller.css'
 
 export default {
   name: 'FeatureListSidebar',
@@ -226,7 +238,8 @@ export default {
     Loader,
     FunnelIcon,
     XMarkIcon,
-    EyeSlashIcon
+    EyeSlashIcon,
+    RecycleScroller
   },
   props: {
     features: {
@@ -308,6 +321,13 @@ export default {
       
       // Return user tags first, then system tags
       return [...sortedUserTags, ...sortedSystemTags]
+    },
+    filteredAvailableTagsWithKeys() {
+      // Convert tags to objects with keys for RecycleScroller
+      return this.filteredAvailableTags.map((tag, index) => ({
+        key: `tag-${index}-${tag}`,
+        tag: tag
+      }))
     }
   },
   watch: {
@@ -329,6 +349,15 @@ export default {
           this.selectedTags = [...tagsArray]
           this.activeTab = 'tag-filter'
         }
+      }
+    },
+    // Ensure all features have IDs for virtual scrolling
+    displayFeatures: {
+      immediate: true,
+      handler(features) {
+        features.forEach(feature => {
+          this.getFeatureId(feature)
+        })
       }
     }
   },
@@ -579,3 +608,8 @@ export default {
 }
 </script>
 
+<style scoped>
+.scroller {
+  height: 100%;
+}
+</style>

@@ -41,7 +41,8 @@ export function initializeMap(container, config) {
     },
     center: center, // [lon, lat]
     zoom: zoom,
-    maxZoom: 20
+    maxZoom: 20,
+    attributionControl: false
   })
 
   return map
