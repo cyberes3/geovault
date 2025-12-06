@@ -171,7 +171,7 @@
 import { getCookie } from "@/assets/js/auth.js";
 import CollectionDialog from "./CollectionDialog.vue";
 import CollectionShareDialog from "./CollectionShareDialog.vue";
-import Loader from "./parts/Loader.vue";
+import Loader from "../parts/Loader.vue";
 import BulkStylingModal from "@/components/import/parts/BulkStylingModal.vue";
 import { createEmptyBulkOperations, cloneBulkOperations } from "@/utils/bulkOperations.js";
 import { PlusIcon, ExclamationCircleIcon, FolderIcon, ShareIcon, ArrowDownTrayIcon, PencilIcon, TrashIcon, TagIcon, MapIcon, RectangleStackIcon } from '@heroicons/vue/24/outline';

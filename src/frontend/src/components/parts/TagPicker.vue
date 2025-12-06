@@ -111,7 +111,7 @@
 </template>
 
 <script>
-import { isSystemTag, sortTagsByPriority, sortUserTagsAlphabetically } from '@/utils/tagUtils'
+import { isSystemTag, sortTagsByPriority, sortUserTagsAlphabetically } from '@/utils/tagUtils.js'
 import { XMarkIcon, CheckIcon } from '@heroicons/vue/24/outline'
 import { APIHOST } from '@/config.js'
 

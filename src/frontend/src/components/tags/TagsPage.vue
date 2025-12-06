@@ -360,7 +360,7 @@
 
 <script>
 import TagShareDialog from "./TagShareDialog.vue";
-import Loader from "./parts/Loader.vue";
+import Loader from "../parts/Loader.vue";
 import BulkStylingModal from "@/components/import/parts/BulkStylingModal.vue";
 import { createEmptyBulkOperations, cloneBulkOperations } from "@/utils/bulkOperations.js";
 import { sortTagsByPriority, sortUserTagsAlphabetically, isSystemTag } from "@/utils/tagUtils.js";
