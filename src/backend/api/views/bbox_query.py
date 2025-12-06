@@ -106,11 +106,14 @@ def _validate_bbox_params(request) -> Union[Tuple[Tuple[float, ...], int], JsonR
             'code': 400
         }, status=400)
 
-    # Validate zoom parameter
+    # Validate and clamp zoom parameter
     try:
         zoom_level = int(zoom_str)
-        if zoom_level < 1 or zoom_level > 20:
-            raise ValueError("Zoom level out of range")
+        # Clamp zoom level to valid range (1-20)
+        if zoom_level < 1:
+            zoom_level = 1
+        elif zoom_level > 20:
+            zoom_level = 20
     except ValueError:
         return JsonResponse({
             'error': 'Invalid zoom level. Expected integer between 1 and 20',

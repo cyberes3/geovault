@@ -294,23 +294,27 @@ class TestZoomLevelBoundaries(TestCase):
         self.assertEqual(data['zoom_level'], 20)
 
     def test_zoom_level_below_minimum(self):
-        """Test zoom level below minimum."""
+        """Test zoom level below minimum (should be clamped to 1)."""
         response = self.client.get(
             '/api/geojson/',
             {'bbox': '-123,37,-122,38', 'zoom': '0'}
         )
-        self.assertEqual(response.status_code, 400)
+        self.assertEqual(response.status_code, 200)
+        data = json.loads(response.content)
+        self.assertEqual(data['zoom_level'], 1)
 
     def test_zoom_level_above_maximum(self):
-        """Test zoom level above maximum."""
+        """Test zoom level above maximum (should be clamped to 20)."""
         response = self.client.get(
             '/api/geojson/',
             {'bbox': '-123,37,-122,38', 'zoom': '21'}
         )
-        self.assertEqual(response.status_code, 400)
+        self.assertEqual(response.status_code, 200)
+        data = json.loads(response.content)
+        self.assertEqual(data['zoom_level'], 20)
 
     def test_zoom_level_invalid(self):
-        """Test invalid zoom level."""
+        """Test invalid zoom level (non-integer should still return error)."""
         response = self.client.get(
             '/api/geojson/',
             {'bbox': '-123,37,-122,38', 'zoom': 'invalid'}
@@ -318,12 +322,14 @@ class TestZoomLevelBoundaries(TestCase):
         self.assertEqual(response.status_code, 400)
 
     def test_zoom_level_negative(self):
-        """Test negative zoom level."""
+        """Test negative zoom level (should be clamped to 1)."""
         response = self.client.get(
             '/api/geojson/',
             {'bbox': '-123,37,-122,38', 'zoom': '-5'}
         )
-        self.assertEqual(response.status_code, 400)
+        self.assertEqual(response.status_code, 200)
+        data = json.loads(response.content)
+        self.assertEqual(data['zoom_level'], 1)
 
 
 class TestMaxFeaturesLimit(TestCase):
