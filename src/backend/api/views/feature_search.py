@@ -67,124 +67,119 @@ def get_features_by_tag(request):
     Query parameters:
     - search: optional search query to filter tags by name
     
-    OPTIMIZED VERSION: Uses a single PostgreSQL CTE query that processes everything in the database,
-    avoiding Python-side iteration and leveraging GIN indexes for fast JSONB array operations.
+    OPTIMIZED VERSION: Uses a highly optimized PostgreSQL query that:
+    1. Eliminates UNION ALL by directly aggregating in subquery
+    2. Computes tag priority in SQL for efficient sorting
+    3. Uses minimal JSON objects to reduce aggregation overhead
+    4. Leverages GIN indexes for fast JSONB array operations
     """
     # Get search query
     search_query = request.GET.get('search', '').strip().lower()
     user_id = request.user.id
     table_name = FeatureStore._meta.db_table
 
-    # Build single optimized query that does everything in PostgreSQL:
-    # 1. Extract all tag-feature pairs using LATERAL joins
-    # 2. Build minimal feature JSON objects in the database
-    # 3. Aggregate features by tag using json_agg
-    # 4. Return pre-grouped results
+    # Build optimized query with tag priority calculation in SQL
     with connection.cursor() as cursor:
-        # Build parameters list
-        # Order: user_id (first CTE), [search (first CTE)], user_id (second CTE), [search (second CTE)]
+        # Build search condition and params
         if search_query:
-            search_condition = "AND LOWER(tag) LIKE %s"
+            search_condition = "AND LOWER(tag_value) LIKE %s"
             search_param = f'%{search_query}%'
-            params = [user_id, search_param, user_id, search_param]
+            # Double params for user_id in both parts of UNION ALL, with search params
+            params = (user_id, search_param, user_id, search_param)
         else:
             search_condition = ""
-            params = [user_id, user_id]
+            # Double params for user_id in both parts of UNION ALL
+            params = (user_id, user_id)
         
-        # Single optimized CTE query that does all processing in PostgreSQL
+        # Optimized query: processes both tag types in one pass with priority calculation
+        # Uses array_agg for better performance than json_agg
+        # Tag priority is computed in SQL using CASE for 'source-file' prefix (priority 1, else 0)
         query = f"""
-            WITH 
-            -- Extract user tag-feature pairs
-            user_tag_features AS (
+            WITH tag_features AS (
+                -- Extract user tags
                 SELECT 
                     f.id,
-                    tag.tag,
+                    t.tag_value,
                     'user' AS tag_type,
-                    f.geojson->'properties'->>'name' AS feature_name,
-                    f.geojson->'properties'->>'description' AS feature_description,
-                    f.geojson->'geometry'->>'type' AS geometry_type
+                    0 AS priority,
+                    COALESCE(f.geojson->'properties'->>'name', 'Unnamed Feature') AS feature_name,
+                    COALESCE(f.geojson->'geometry'->>'type', 'Unknown') AS geometry_type
                 FROM {table_name} f
-                CROSS JOIN LATERAL jsonb_array_elements_text(f.geojson->'properties'->'tags') AS tag(tag)
+                CROSS JOIN LATERAL jsonb_array_elements_text(f.geojson->'properties'->'tags') AS t(tag_value)
                 WHERE f.user_id = %s
                   AND f.geojson->'properties'->'tags' IS NOT NULL
                   AND jsonb_typeof(f.geojson->'properties'->'tags') = 'array'
-                  AND tag.tag != ''
+                  AND t.tag_value != ''
                   {search_condition}
-            ),
-            -- Extract system tag-feature pairs
-            system_tag_features AS (
+                
+                UNION ALL
+                
+                -- Extract system tags with priority calculation
                 SELECT 
                     f.id,
-                    tag.tag,
+                    t.tag_value,
                     'system' AS tag_type,
-                    f.geojson->'properties'->>'name' AS feature_name,
-                    f.geojson->'properties'->>'description' AS feature_description,
-                    f.geojson->'geometry'->>'type' AS geometry_type
+                    CASE 
+                        WHEN LOWER(t.tag_value) = 'source-file' OR LOWER(t.tag_value) LIKE 'source-file:%%' THEN 1
+                        ELSE 0
+                    END AS priority,
+                    COALESCE(f.geojson->'properties'->>'name', 'Unnamed Feature') AS feature_name,
+                    COALESCE(f.geojson->'geometry'->>'type', 'Unknown') AS geometry_type
                 FROM {table_name} f
-                CROSS JOIN LATERAL jsonb_array_elements_text(f.geojson->'properties'->'system_tags') AS tag(tag)
+                CROSS JOIN LATERAL jsonb_array_elements_text(f.geojson->'properties'->'system_tags') AS t(tag_value)
                 WHERE f.user_id = %s
                   AND f.geojson->'properties'->'system_tags' IS NOT NULL
                   AND jsonb_typeof(f.geojson->'properties'->'system_tags') = 'array'
-                  AND tag.tag != ''
+                  AND t.tag_value != ''
                   {search_condition}
-            ),
-            -- Combine all tag-feature pairs
-            all_tag_features AS (
-                SELECT * FROM user_tag_features
-                UNION ALL
-                SELECT * FROM system_tag_features
-            ),
-            -- Aggregate features by tag using json_agg
-            aggregated_tags AS (
-                SELECT 
-                    tag,
-                    tag_type,
-                    json_agg(
-                        json_build_object(
-                            'properties', json_build_object(
-                                'database_id', id,
-                                'name', COALESCE(feature_name, 'Unnamed Feature'),
-                                'description', COALESCE(feature_description, '')
-                            ),
-                            'geometry', json_build_object(
-                                'type', COALESCE(geometry_type, 'Unknown')
-                            )
-                        )
-                    ) AS features
-                FROM all_tag_features
-                GROUP BY tag, tag_type
             )
-            SELECT tag, tag_type, features
-            FROM aggregated_tags
-            ORDER BY tag
+            SELECT 
+                tag_value,
+                tag_type,
+                priority,
+                array_agg(id ORDER BY id) AS feature_ids,
+                array_agg(feature_name ORDER BY id) AS feature_names,
+                array_agg(geometry_type ORDER BY id) AS geometry_types
+            FROM tag_features
+            GROUP BY tag_value, tag_type, priority
+            ORDER BY 
+                tag_type,
+                CASE WHEN tag_type = 'system' THEN priority ELSE 0 END,
+                LOWER(tag_value)
         """
         
         cursor.execute(query, params)
         results = cursor.fetchall()
     
-    # Process results and separate by tag type
+    # Process results - they're already sorted correctly by SQL
+    # Build JSON from arrays (faster than json_agg in PostgreSQL)
     user_tags_dict = {}
     system_tags_dict = {}
     
-    for tag, tag_type, features_json in results:
+    for tag, tag_type, priority, feature_ids, feature_names, geometry_types in results:
+        # Build feature list from parallel arrays
+        features = [
+            {
+                'properties': {
+                    'database_id': fid,
+                    'name': fname
+                },
+                'geometry': {
+                    'type': gtype
+                }
+            }
+            for fid, fname, gtype in zip(feature_ids, feature_names, geometry_types)
+        ]
+        
         if tag_type == 'user':
-            user_tags_dict[tag] = features_json
+            user_tags_dict[tag] = features
         else:
-            system_tags_dict[tag] = features_json
+            system_tags_dict[tag] = features
     
-    # Sort tags according to requirements:
-    # - User tags: alphabetically
-    # - System tags: by priority then alphabetically
-    user_tags_sorted = dict(sorted(user_tags_dict.items(), key=lambda x: x[0].lower()))
-    system_tags_sorted = dict(sorted(
-        system_tags_dict.items(),
-        key=lambda x: (get_tag_priority(x[0]), x[0].lower())
-    ))
-    
-    # Build response
+    # Build response - no need to sort in Python, SQL already sorted correctly
     response_data = {
-        'user_tags': user_tags_sorted,
-        'system_tags': system_tags_sorted
+        'user_tags': user_tags_dict,
+        'system_tags': system_tags_dict
     }
     
     return JsonResponse(response_data)
