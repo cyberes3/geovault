@@ -8,22 +8,22 @@ const routes = [
     {
         path: '/dashboard',
         name: 'Dashboard',
-        component: () => import('./components/dashboard/Dashboard.vue'),
+        component: () => import('./components/dashboard/DashboardPage.vue'),
     },
         {
         path: '/import',
         name: 'Import',
-        component: () => import('./components/import/ImportHome.vue'),
+        component: () => import('./components/import/ImportHomePage.vue'),
     },
     {
         path: '/import/upload',
         name: 'Import Data',
-        component: () => import('./components/import/ImportUpload.vue'),
+        component: () => import('./components/import/ImportUploadPage.vue'),
     },
     {
         path: '/import/process/:id',
         name: 'Process Data',
-        component: () => import('./components/import/ImportProcess.vue'),
+        component: () => import('./components/import/ImportProcessPage.vue'),
         props: true
     },
     {
@@ -49,12 +49,12 @@ const routes = [
     {
         path: '/settings',
         name: 'Settings',
-        component: () => import('./components/settings/Settings.vue'),
+        component: () => import('./components/settings/SettingsPage.vue'),
     },
     {
         path: '/admin',
         name: 'Admin',
-        component: () => import('./components/admin/AdminPanel.vue'),
+        component: () => import('./components/admin/AdminPanelPage.vue'),
         meta: { requiresAdmin: true }
     }
 ]
