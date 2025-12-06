@@ -23,7 +23,6 @@ def get_user_location(request):
         JSON response with location information including:
         - city, state, country
         - latitude, longitude for map centering
-        - timezone information
     """
     try:
         # Get the geolocation service
@@ -35,39 +34,21 @@ def get_user_location(request):
         # Get location data
         location_data = geo_service.get_location_from_ip(client_ip)
 
-        # Check if MaxMind database is available
-        maxmind_available = geo_service.reader is not None
-
         if location_data is None:
             return JsonResponse({
                 'error': 'Unable to determine location from IP address',
-                'location': None,
-                'ip_info': {
-                    'ip': client_ip,
-                    'accuracy_radius': None
-                },
-                'maxmind_available': maxmind_available
+                'location': None
             }, status=404)
 
-        # Prepare response data
+        # Prepare response data - only include fields used by frontend
         response_data = {
             'location': {
                 'city': location_data.get('city'),
                 'state': location_data.get('state'),
-                'state_code': location_data.get('state_code'),
                 'country': location_data.get('country'),
-                'country_code': location_data.get('country_code'),
                 'latitude': location_data.get('latitude'),
-                'longitude': location_data.get('longitude'),
-                'timezone': location_data.get('timezone'),
-                'postal_code': location_data.get('postal_code'),
-                'is_default': location_data.get('is_default', False)
-            },
-            'ip_info': {
-                'ip': location_data.get('ip'),
-                'accuracy_radius': location_data.get('accuracy_radius')
-            },
-            'maxmind_available': maxmind_available
+                'longitude': location_data.get('longitude')
+            }
         }
 
         return JsonResponse(response_data)

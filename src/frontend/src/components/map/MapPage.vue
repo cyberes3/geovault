@@ -618,6 +618,7 @@ export default {
 
         if (response.ok && data.location) {
           this.userLocation = data.location
+          console.log('User detected location:', data.location)
         } else {
           this.userLocation = null
         }
