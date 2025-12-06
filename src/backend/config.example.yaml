@@ -79,10 +79,10 @@ tilesources:
     # generate a new one and set the allowed orgin to your site or else someone can
     # steal your key.
     maps:
-#       - topo-v4 # General purpose topo map
-#       - outdoor-v4 # Topo map with trails highlighted
-#       - satellite
-#       - streets
+      - topo-v4 # General purpose topo map
+      - outdoor-v4 # Topo map with trails highlighted
+      - satellite
+      - streets
 
 
 icons:
