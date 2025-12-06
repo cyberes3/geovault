@@ -772,7 +772,7 @@ export default {
       // Points need more context, so limit zoom more
       let maxZoom = 15
       if (geometryType === 'Point' || geometryType === 'MultiPoint') {
-        maxZoom = 14 // Limit zoom for points to show surrounding area
+        maxZoom = 10 // Limit zoom for points to show surrounding area
       }
 
       // Adjust padding for mobile/tablet to position feature in upper half (avoiding info box)

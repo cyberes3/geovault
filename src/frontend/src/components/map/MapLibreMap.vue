@@ -185,6 +185,7 @@
 import {markRaw} from 'vue'
 import 'maplibre-gl/dist/maplibre-gl.css'
 import maplibregl from 'maplibre-gl'
+import {GeoJSON} from 'ol/format'
 import { LabelMarkerManager } from '@/utils/map/maplibre/labelMarkers.js'
 import {getInitialMapConfig, getLocationDisplayName} from '@/utils/map/mapConfigUtils'
 import { sortTagsByPriority, sortUserTagsAlphabetically, isSystemTag } from '@/utils/tagUtils.js'
@@ -217,7 +218,7 @@ import {
   filterPointsOnBorders,
   updateSmallFeatureFlags
 } from '@/utils/map/maplibre'
-import { getIconSourceUrl, getFeatureIconUrl, loadIconImage } from '@/utils/map/maplibre/featureStyling.js'
+import { getIconSourceUrl, getFeatureIconUrl, loadIconImage, shouldUseIcon } from '@/utils/map/maplibre/featureStyling.js'
 import { 
   MapTilerConfig,
   setupTerrain as maptilerSetupTerrain,
@@ -383,6 +384,208 @@ export default {
     }
   },
   methods: {
+    // Helper method to handle missing icons
+    handleStyleImageMissing(iconId) {
+      // Extract the URL from the icon ID (format: icon-{encoded_url})
+      if (iconId && iconId.startsWith('icon-')) {
+        // Reconstruct URL from icon ID
+        // The URL was encoded by replacing non-alphanumeric chars with underscores
+        // We need to find it from the features on the map
+        const source = this.map.getSource('geojson-data')
+        if (source && source._data && source._data.features) {
+          for (const feature of source._data.features) {
+            if (feature.properties && feature.properties['_icon-id'] === iconId) {
+              // Found the feature with this icon, get its icon URL
+              const iconUrl = getFeatureIconUrl(feature.properties)
+              if (iconUrl) {
+                const resolvedUrl = getIconSourceUrl(iconUrl, feature.properties)
+                // Load the icon
+                loadIconImage(this.map, iconId, resolvedUrl).catch(err => {
+                  console.warn(`Failed to load missing icon ${iconId}:`, err)
+                })
+                return
+              }
+            }
+          }
+        }
+        console.warn(`Could not find feature for missing icon: ${iconId}`)
+      }
+    },
+    // Create and configure map instance with controls and sources
+    createMapInstance(mapConfig) {
+      // Create MapLibre map
+      this.map = markRaw(initializeMap(this.$refs.mapContainer, {
+        center: mapConfig.center,
+        zoom: mapConfig.zoom,
+        pitch: mapConfig.pitch || 0,
+        bearing: mapConfig.bearing || 0,
+        glyphsUrl: '/api/fonts/{fontstack}/{range}.pbf'
+      }))
+
+      // Add navigation controls
+      this.map.addControl(
+        new maplibregl.NavigationControl({
+          visualizePitch: true,
+          showCompass: true,
+          showZoom: true
+        }),
+        'top-left'
+      )
+
+      // Initialize label marker manager
+      this.labelMarkerManager = new LabelMarkerManager(this.map)
+      this.labelMarkerManager.setVisibility(this.showAllLabels)
+
+      // Setup GeoJSON source
+      setupGeoJsonSource(this.map, () => {
+        // Map source loaded
+      })
+
+      // Setup all map event handlers
+      this.setupMapEventHandlers()
+    },
+    // Bootstrap method to set up all map event listeners
+    setupMapEventHandlers() {
+      if (!this.map) return
+      
+      // Setup basic event listeners (moveend, zoomend, click)
+      setupMapEventListeners(this.map, {
+        onMoveEnd: () => {
+          this.debouncedLoadData()
+          this.debouncedUpdateFeaturesInExtent()
+        },
+        onZoomEnd: () => {
+          this.debouncedLoadData()
+          this.debouncedUpdateFeaturesInExtent()
+          this.reprocessFeaturesForZoom()
+        },
+        onClick: (e) => {
+          // Check if layers exist before querying
+          const layersToQuery = ['points', 'point-icons', 'replacement-points', 'lines', 'polygons', 'polygon-outlines']
+            .filter(layerId => this.map.getLayer(layerId))
+          
+          if (layersToQuery.length === 0) return
+          
+          // Query features with a larger radius (15 pixels) to make clicking easier
+          const bbox = [
+            [e.point.x - 15, e.point.y - 15],
+            [e.point.x + 15, e.point.y + 15]
+          ]
+          const features = this.map.queryRenderedFeatures(bbox, {
+            layers: layersToQuery
+          })
+
+          // Filter out label points - they shouldn't be clickable
+          const clickableFeatures = features.filter(f => !f.properties?._isLabelPoint)
+
+          // Close elevation profile if open when clicking on another feature or empty space
+          if (this.showElevationProfile) {
+            this.showElevationProfile = false
+            this.handleHoverClear()
+          }
+
+          // For replacement points, find the original feature
+          const processedFeatures = clickableFeatures.map(f => {
+            if (f.properties?._isSmallFeatureReplacement) {
+              const originalId = f.properties._originalFeatureId
+              if (originalId) {
+                const source = this.map.getSource('geojson-data')
+                if (source && source._data && source._data.features) {
+                  const originalFeature = source._data.features.find(
+                    feature => feature.properties?.database_id === originalId && !feature.properties?._isSmallFeatureReplacement
+                  )
+                  if (originalFeature) return originalFeature
+                }
+              }
+            }
+            return f
+          })
+
+          // Deduplicate features by database_id
+          const uniqueFeatures = []
+          const seenIds = new Set()
+          
+          for (const feature of processedFeatures) {
+            const featureId = feature.properties?.database_id
+            if (featureId && !seenIds.has(featureId)) {
+              seenIds.add(featureId)
+              uniqueFeatures.push(feature)
+            } else if (!featureId) {
+              uniqueFeatures.push(feature)
+            }
+          }
+
+          if (uniqueFeatures.length === 0) {
+            this.selectedFeature = null
+            this.isEditingFeature = false
+            this.showFeaturePopup = false
+            this.handleHoverClear()
+          } else if (uniqueFeatures.length === 1) {
+            const mlFeature = uniqueFeatures[0]
+            this.selectedFeature = markRaw(convertMapLibreFeature(mlFeature))
+            this.isEditingFeature = false
+            this.showFeaturePopup = false
+          } else {
+            this.overlappingFeatures = uniqueFeatures.map(f => markRaw(convertMapLibreFeature(f)))
+            this.popupPosition = {
+              x: e.point.x,
+              y: e.point.y,
+              containerWidth: this.$refs.mapContainer?.clientWidth || 0,
+              containerHeight: this.$refs.mapContainer?.clientHeight || 0
+            }
+            this.showFeaturePopup = true
+          }
+        }
+      })
+
+      // Add immediate zoom event listener for responsive label and icon updates
+      this.map.on('zoom', async () => {
+        const currentZoom = this.map.getZoom()
+        
+        // Update label markers only if labels are visible
+        if (this.showAllLabels && this.labelMarkerManager) {
+          const source = this.map.getSource('geojson-data')
+          if (source && source._data && source._data.features) {
+            this.labelMarkerManager.updateMarkers(source._data.features)
+          }
+        }
+        
+        // Update small feature flags first (synchronous, fast)
+        updateSmallFeatureFlags(this.map, currentZoom)
+        
+        // Then update icon visibility after small feature flags are set
+        await this.reprocessFeaturesForZoom()
+      })
+
+      // Add styleimagemissing event handler to load icons on-demand
+      this.map.on('styleimagemissing', (e) => {
+        this.handleStyleImageMissing(e.id)
+      })
+
+      // Add hover event listener to change cursor to pointer over features
+      this.map.on('mousemove', (e) => {
+        const layersToQuery = ['points', 'point-icons', 'replacement-points', 'lines', 'polygons', 'polygon-outlines']
+          .filter(layerId => this.map.getLayer(layerId))
+        
+        if (layersToQuery.length === 0) return
+        
+        const bbox = [
+          [e.point.x - 5, e.point.y - 5],
+          [e.point.x + 5, e.point.y + 5]
+        ]
+        const features = this.map.queryRenderedFeatures(bbox, {
+          layers: layersToQuery
+        })
+
+        const hoverableFeatures = features.filter(f => !f.properties?._isLabelPoint)
+        this.map.getCanvas().style.cursor = hoverableFeatures.length > 0 ? 'pointer' : ''
+      })
+
+      // Reset cursor when leaving the map
+      this.map.on('mouseout', () => {
+        this.map.getCanvas().style.cursor = ''
+      })
+    },
     getLocationDisplayName() {
       return getLocationDisplayName(this.userLocation)
     },
@@ -422,193 +625,15 @@ export default {
       // Determine initial map center and zoom based on user location
       const mapConfig = this.getInitialMapConfig()
 
-      // Create MapLibre map with OSM base layer and glyphs for text labels
-      this.map = markRaw(initializeMap(this.$refs.mapContainer, {
-        center: mapConfig.center, // [lon, lat]
-        zoom: mapConfig.zoom,
-        glyphsUrl: '/api/fonts/{fontstack}/{range}.pbf'
-      }))
-
-      // Add navigation controls (compass and pitch reset buttons)
-      this.map.addControl(
-        new maplibregl.NavigationControl({
-          visualizePitch: true, // Show pitch/tilt indicator
-          showCompass: true,    // Show compass for rotation
-          showZoom: true        // Show zoom buttons
-        }),
-        'top-left'
-      )
-
-      // Initialize label marker manager
-      this.labelMarkerManager = new LabelMarkerManager(this.map)
-      this.labelMarkerManager.setVisibility(this.showAllLabels)
-
-      // Setup GeoJSON source
-      setupGeoJsonSource(this.map, () => {
-        // Don't set isMapInitializing to false here - keep it true until initial data load completes
-        // This prevents duplicate API calls from map events during initialization
-        
-        // Resize map to ensure proper rendering
-        if (this.map) {
-          setTimeout(() => {
-            this.map.resize()
-          }, 100)
-        }
-      })
-
-      // Setup event listeners
-      setupMapEventListeners(this.map, {
-        onMoveEnd: () => {
-          this.debouncedLoadData()
-          this.debouncedUpdateFeaturesInExtent()
-        },
-        onZoomEnd: () => {
-          this.debouncedLoadData()
-          this.debouncedUpdateFeaturesInExtent()
-          // Reprocess existing features for icon visibility at new zoom level
-          this.reprocessFeaturesForZoom()
-        },
-        onClick: (e) => {
-          // Check if layers exist before querying
-          const layersToQuery = ['points', 'point-icons', 'replacement-points', 'lines', 'polygons', 'polygon-outlines']
-            .filter(layerId => this.map.getLayer(layerId))
-          
-          if (layersToQuery.length === 0) {
-            return
-          }
-          
-          // Query features with a larger radius (15 pixels) to make clicking easier
-          const bbox = [
-            [e.point.x - 15, e.point.y - 15],
-            [e.point.x + 15, e.point.y + 15]
-          ]
-          const features = this.map.queryRenderedFeatures(bbox, {
-            layers: layersToQuery
-          })
-
-          // Filter out label points - they shouldn't be clickable
-          const clickableFeatures = features.filter(f => !f.properties?._isLabelPoint)
-
-          // Close elevation profile if open when clicking on another feature or empty space
-          if (this.showElevationProfile) {
-            this.showElevationProfile = false
-            this.handleHoverClear() // Clear hover marker when dialog closes
-          }
-
-          // For replacement points, find the original feature
-          const processedFeatures = clickableFeatures.map(f => {
-            if (f.properties?._isSmallFeatureReplacement) {
-              const originalId = f.properties._originalFeatureId
-              if (originalId) {
-                // Query all features to find the original
-                const source = this.map.getSource('geojson-data')
-                if (source && source._data && source._data.features) {
-                  const originalFeature = source._data.features.find(
-                    feature => feature.properties?.database_id === originalId && !feature.properties?._isSmallFeatureReplacement
-                  )
-                  if (originalFeature) {
-                    return originalFeature
-                  }
-                }
-              }
-            }
-            return f
-          })
-
-          // Deduplicate features by database_id (same feature can appear in multiple layers)
-          const uniqueFeatures = []
-          const seenIds = new Set()
-          
-          for (const feature of processedFeatures) {
-            const featureId = feature.properties?.database_id
-            if (featureId && !seenIds.has(featureId)) {
-              seenIds.add(featureId)
-              uniqueFeatures.push(feature)
-            } else if (!featureId) {
-              // If no database_id, include it anyway
-              uniqueFeatures.push(feature)
-            }
-          }
-
-          if (uniqueFeatures.length === 0) {
-            this.selectedFeature = null
-            this.isEditingFeature = false
-            this.showFeaturePopup = false
-            this.handleHoverClear() // Clear hover marker when selection is cleared
-          } else if (uniqueFeatures.length === 1) {
-            const mlFeature = uniqueFeatures[0]
-
-            this.selectedFeature = markRaw(convertMapLibreFeature(mlFeature))
-            this.isEditingFeature = false
-            this.showFeaturePopup = false
-          } else {
-            this.overlappingFeatures = uniqueFeatures.map(f => markRaw(convertMapLibreFeature(f)))
-            this.popupPosition = {
-              x: e.point.x,
-              y: e.point.y,
-              containerWidth: this.$refs.mapContainer?.clientWidth || 0,
-              containerHeight: this.$refs.mapContainer?.clientHeight || 0
-            }
-            this.showFeaturePopup = true
-          }
-        }
-      })
-
-      // Add immediate zoom event listener for responsive label and icon updates
-      this.map.on('zoom', async () => {
-        // Get current zoom for all updates
-        const currentZoom = this.map.getZoom()
-        
-        // Update label markers only if labels are visible
-        // Skip expensive label processing when labels are hidden
-        if (this.showAllLabels && this.labelMarkerManager) {
-          const source = this.map.getSource('geojson-data')
-          if (source && source._data && source._data.features) {
-            this.labelMarkerManager.updateMarkers(source._data.features)
-          }
-        }
-        
-        // Update small feature flags first (synchronous, fast)
-        // This handles polygon/line -> point transitions
-        updateSmallFeatureFlags(this.map, currentZoom)
-        
-        // Then update icon visibility after small feature flags are set
-        // This prevents race conditions by ensuring operations complete in sequence
-        // Note: We await this even though the zoom handler is async, which means
-        // rapid zoom events will queue up but execute in order
-        await this.reprocessFeaturesForZoom()
-      })
-
-      // Add hover event listener to change cursor to pointer over features
-      this.map.on('mousemove', (e) => {
-        // Check if layers exist before querying
-        const layersToQuery = ['points', 'point-icons', 'replacement-points', 'lines', 'polygons', 'polygon-outlines']
-          .filter(layerId => this.map.getLayer(layerId))
-        
-        if (layersToQuery.length === 0) {
-          return
-        }
-        
-        // Query features with a small radius for hover detection
-        const bbox = [
-          [e.point.x - 5, e.point.y - 5],
-          [e.point.x + 5, e.point.y + 5]
-        ]
-        const features = this.map.queryRenderedFeatures(bbox, {
-          layers: layersToQuery
-        })
-
-        // Filter out label points
-        const hoverableFeatures = features.filter(f => !f.properties?._isLabelPoint)
-
-        // Change cursor to pointer if hovering over a feature
-        this.map.getCanvas().style.cursor = hoverableFeatures.length > 0 ? 'pointer' : ''
-      })
-
-      // Reset cursor when leaving the map
-      this.map.on('mouseout', () => {
-        this.map.getCanvas().style.cursor = ''
-      })
+      // Create map instance with controls and event handlers
+      this.createMapInstance(mapConfig)
+      
+      // Resize map to ensure proper rendering after initialization
+      if (this.map) {
+        setTimeout(() => {
+          this.map.resize()
+        }, 100)
+      }
     },
     convertMapLibreFeature(mlFeature) {
       return convertMapLibreFeature(mlFeature)
@@ -1406,20 +1431,141 @@ export default {
         return
       }
 
+      // Ensure feature is on the map (for search results that might not be loaded)
+      // Check if feature already exists by database_id to avoid duplicates
+      const properties = feature.get ? feature.get('properties') : feature.properties || {}
+      const featureId = properties.database_id
+      
+      if (featureId) {
+        const source = this.map.getSource('geojson-data')
+        if (source) {
+          const currentData = source._data || { type: 'FeatureCollection', features: [] }
+          const existingFeatures = currentData.features || []
+          
+          // Check if feature already exists
+          const exists = existingFeatures.some(f => f.properties?.database_id === featureId)
+          
+          if (!exists) {
+            // Convert OpenLayers feature to GeoJSON format for MapLibre
+            let geoJsonFeature = null
+            
+            if (feature.getGeometry && typeof feature.getGeometry === 'function') {
+              const geometry = feature.getGeometry()
+              
+              // Check if this is an OpenLayers geometry
+              if (geometry && typeof geometry.getCoordinates === 'function' && typeof geometry.getType === 'function') {
+                // Transform OpenLayers geometry to GeoJSON
+                try {
+                  const format = new GeoJSON()
+                  const geoJsonGeometry = format.writeGeometryObject(geometry, {
+                    featureProjection: 'EPSG:3857',
+                    dataProjection: 'EPSG:4326'
+                  })
+                  
+                  // Create a GeoJSON feature with the transformed geometry
+                  geoJsonFeature = {
+                    type: 'Feature',
+                    geometry: geoJsonGeometry,
+                    properties: properties
+                  }
+                } catch (error) {
+                  console.error('zoomToFeature: Error converting OpenLayers geometry to GeoJSON', error)
+                }
+              }
+            }
+            
+            // If we couldn't convert it, create a basic GeoJSON feature
+            if (!geoJsonFeature && feature.geometry) {
+              geoJsonFeature = {
+                type: 'Feature',
+                geometry: feature.geometry,
+                properties: properties
+              }
+            }
+            
+            // Add the feature to the map
+            if (geoJsonFeature) {
+              // Process icon if this is a Point feature
+              if (geoJsonFeature.geometry.type === 'Point') {
+                const iconUrl = getFeatureIconUrl(geoJsonFeature.properties)
+                const zoom = this.map.getZoom()
+                const replaceIconsLowZoom = this.$store.state.userSettings?.replace_icons_low_zoom ?? true
+                const shouldShowIcon = iconUrl && shouldUseIcon(zoom, iconUrl, replaceIconsLowZoom)
+                
+                if (shouldShowIcon) {
+                  const resolvedUrl = getIconSourceUrl(iconUrl, geoJsonFeature.properties)
+                  const iconId = `icon-${resolvedUrl.replace(/[^a-zA-Z0-9]/g, '_')}`
+                  geoJsonFeature.properties['_icon-id'] = iconId
+                  
+                  // Load icon if not already loaded
+                  if (!this.map.hasImage(iconId)) {
+                    loadIconImage(this.map, iconId, resolvedUrl).catch(err => {
+                      console.warn(`Failed to load icon ${iconId}:`, err)
+                      // Remove icon metadata on failure
+                      delete geoJsonFeature.properties['_icon-id']
+                    })
+                  }
+                }
+              }
+              
+              existingFeatures.push(geoJsonFeature)
+              source.setData({
+                type: 'FeatureCollection',
+                features: existingFeatures
+              })
+              
+              // Update label markers
+              if (this.labelMarkerManager) {
+                this.labelMarkerManager.updateMarkers(existingFeatures)
+              }
+            }
+          }
+        }
+      }
+
       // Get feature geometry - handle both converted MapLibre features and raw features
       let geometry = null
       
       // Try to get geometry from converted feature (has getGeometry method)
       if (feature.getGeometry && typeof feature.getGeometry === 'function') {
         const mockGeometry = feature.getGeometry()
-        if (mockGeometry && mockGeometry.getExtent) {
+        
+        // Check if this is an OpenLayers geometry (has getCoordinates and getType methods)
+        // OpenLayers geometries are in EPSG:3857 and need transformation
+        if (mockGeometry && typeof mockGeometry.getCoordinates === 'function' && typeof mockGeometry.getType === 'function') {
+          // This is an OpenLayers geometry - transform it to GeoJSON in EPSG:4326
+          try {
+            const format = new GeoJSON()
+            const geoJsonGeometry = format.writeGeometryObject(mockGeometry, {
+              featureProjection: 'EPSG:3857',
+              dataProjection: 'EPSG:4326'
+            })
+            geometry = geoJsonGeometry
+          } catch (error) {
+            console.error('zoomToFeature: Error converting OpenLayers geometry to GeoJSON', error)
+            // Fallback to raw geometry
+            geometry = feature.geometry
+          }
+        } else if (mockGeometry && mockGeometry.getExtent) {
+          // This is a mock geometry from convertMapLibreFeature (already in EPSG:4326)
           // Use the extent from the mock geometry
           const extent = mockGeometry.getExtent()
           if (extent && extent.length === 4) {
-            const [minLon, minLat, maxLon, maxLat] = extent
+            let [minLon, minLat, maxLon, maxLat] = extent
             
             // Validate all values are finite
             if (extent.every(v => isFinite(v))) {
+              // Validate coordinates are within valid ranges for MapLibre
+              // Longitude: -180 to 180, Latitude: -90 to 90
+              if (minLon < -180 || maxLon > 180 || minLat < -90 || maxLat > 90) {
+                console.warn('zoomToFeature: Extent out of valid range, clamping', { minLon, minLat, maxLon, maxLat })
+                // Clamp to valid ranges
+                minLon = Math.max(-180, Math.min(180, minLon))
+                minLat = Math.max(-90, Math.min(90, minLat))
+                maxLon = Math.max(-180, Math.min(180, maxLon))
+                maxLat = Math.max(-90, Math.min(90, maxLat))
+              }
+              
               // Check if bounds are valid (not all zeros)
               const isNotAllZeros = !(minLon === 0 && minLat === 0 && maxLon === 0 && maxLat === 0)
               
@@ -1428,7 +1574,7 @@ export default {
                 if (minLon === maxLon && minLat === maxLat) {
                   this.map.flyTo({
                     center: [minLon, minLat],
-                    zoom: Math.max(this.map.getZoom(), 15),
+                    zoom: 10,
                     duration: 500
                   })
                 } else {
@@ -1473,11 +1619,32 @@ export default {
         } else {
           console.warn('zoomToFeature: MockGeometry missing getExtent', mockGeometry)
         }
-        // Fallback: get raw geometry from converted feature
-        geometry = feature.geometry
+        
+        // If we haven't returned yet, fall through to coordinate extraction
+        if (!geometry) {
+          // Fallback: get raw geometry from converted feature
+          geometry = feature.geometry
+        }
       } else {
         // Try direct geometry access
         geometry = feature.geometry || feature.get?.('geometry')
+      }
+
+      // Check if this is an OpenLayers feature with OpenLayers geometry (not already converted)
+      // OpenLayers geometries have methods like getCoordinates() and getType()
+      if (geometry && typeof geometry.getCoordinates === 'function' && typeof geometry.getType === 'function') {
+        // This is an OpenLayers geometry - transform it to GeoJSON in EPSG:4326
+        try {
+          const format = new GeoJSON()
+          const geoJsonGeometry = format.writeGeometryObject(geometry, {
+            featureProjection: 'EPSG:3857',
+            dataProjection: 'EPSG:4326'
+          })
+          geometry = geoJsonGeometry
+        } catch (error) {
+          console.error('zoomToFeature: Error converting OpenLayers geometry to GeoJSON', error)
+          return
+        }
       }
 
       if (!geometry || !geometry.type || !geometry.coordinates) {
@@ -1502,10 +1669,16 @@ export default {
       coords.forEach((coord) => {
         const [lon, lat] = Array.isArray(coord) && coord.length >= 2 ? coord : [null, null]
         if (lon != null && lat != null && isFinite(lon) && isFinite(lat)) {
-          minLon = Math.min(minLon, lon)
-          minLat = Math.min(minLat, lat)
-          maxLon = Math.max(maxLon, lon)
-          maxLat = Math.max(maxLat, lat)
+          // Validate coordinates are within valid ranges for MapLibre
+          // Longitude: -180 to 180, Latitude: -90 to 90
+          if (lon >= -180 && lon <= 180 && lat >= -90 && lat <= 90) {
+            minLon = Math.min(minLon, lon)
+            minLat = Math.min(minLat, lat)
+            maxLon = Math.max(maxLon, lon)
+            maxLat = Math.max(maxLat, lat)
+          } else {
+            console.warn('zoomToFeature: Coordinate out of valid range', { lon, lat })
+          }
         }
       })
 
@@ -1515,12 +1688,22 @@ export default {
         return
       }
 
+      // Final validation: ensure bounds are within valid ranges
+      if (minLon < -180 || maxLon > 180 || minLat < -90 || maxLat > 90) {
+        console.warn('zoomToFeature: Bounds out of valid range', { minLon, minLat, maxLon, maxLat })
+        // Clamp to valid ranges
+        minLon = Math.max(-180, Math.min(180, minLon))
+        minLat = Math.max(-90, Math.min(90, minLat))
+        maxLon = Math.max(-180, Math.min(180, maxLon))
+        maxLat = Math.max(-90, Math.min(90, maxLat))
+      }
+
       // Ensure bounds are not degenerate (same point)
       if (minLon === maxLon && minLat === maxLat) {
-        // For points, zoom to a reasonable zoom level
+        // For points, zoom to a reasonable zoom level (limited to 10)
         this.map.flyTo({
           center: [minLon, minLat],
-          zoom: Math.max(this.map.getZoom(), 15),
+          zoom: 10,
           duration: 500
         })
         return
@@ -2105,164 +2288,8 @@ export default {
           mapConfig.bearing = 0
         }
 
-        // Create MapLibre map with saved or default position
-        this.map = markRaw(initializeMap(this.$refs.mapContainer, {
-          center: mapConfig.center,
-          zoom: mapConfig.zoom,
-          pitch: mapConfig.pitch,
-          bearing: mapConfig.bearing,
-          glyphsUrl: '/api/fonts/{fontstack}/{range}.pbf'
-        }))
-
-        // Add navigation controls
-        this.map.addControl(
-          new maplibregl.NavigationControl({
-            visualizePitch: true,
-            showCompass: true,
-            showZoom: true
-          }),
-          'top-left'
-        )
-
-        // Initialize label marker manager
-        this.labelMarkerManager = new LabelMarkerManager(this.map)
-        this.labelMarkerManager.setVisibility(this.showAllLabels)
-
-        // Setup GeoJSON source
-        setupGeoJsonSource(this.map, () => {
-          // Map loaded
-        })
-
-        // Setup event listeners
-        setupMapEventListeners(this.map, {
-          onMoveEnd: () => {
-            this.debouncedLoadData()
-            this.debouncedUpdateFeaturesInExtent()
-          },
-          onZoomEnd: () => {
-            this.debouncedLoadData()
-            this.debouncedUpdateFeaturesInExtent()
-            this.reprocessFeaturesForZoom()
-          },
-          onClick: (e) => {
-            const layersToQuery = ['points', 'point-icons', 'replacement-points', 'lines', 'polygons', 'polygon-outlines']
-              .filter(layerId => this.map.getLayer(layerId))
-            
-            if (layersToQuery.length === 0) return
-            
-            const bbox = [
-              [e.point.x - 15, e.point.y - 15],
-              [e.point.x + 15, e.point.y + 15]
-            ]
-            const features = this.map.queryRenderedFeatures(bbox, {
-              layers: layersToQuery
-            })
-
-            const clickableFeatures = features.filter(f => !f.properties?._isLabelPoint)
-            
-            // Close elevation profile if open when clicking on another feature or empty space
-            if (this.showElevationProfile) {
-              this.showElevationProfile = false
-              this.handleHoverClear() // Clear hover marker when dialog closes
-            }
-            
-            // For replacement points, find the original feature
-            const processedFeatures = clickableFeatures.map(f => {
-              if (f.properties?._isSmallFeatureReplacement) {
-                const originalId = f.properties._originalFeatureId
-                if (originalId) {
-                  // Query all features to find the original
-                  const source = this.map.getSource('geojson-data')
-                  if (source && source._data && source._data.features) {
-                    const originalFeature = source._data.features.find(
-                      feature => feature.properties?.database_id === originalId && !feature.properties?._isSmallFeatureReplacement
-                    )
-                    if (originalFeature) {
-                      return originalFeature
-                    }
-                  }
-                }
-              }
-              return f
-            })
-            
-            const uniqueFeatures = []
-            const seenIds = new Set()
-            
-            for (const feature of processedFeatures) {
-              const featureId = feature.properties?.database_id
-              if (featureId && !seenIds.has(featureId)) {
-                seenIds.add(featureId)
-                uniqueFeatures.push(feature)
-              } else if (!featureId) {
-                uniqueFeatures.push(feature)
-              }
-            }
-
-            if (uniqueFeatures.length === 0) {
-              this.selectedFeature = null
-              this.isEditingFeature = false
-              this.showFeaturePopup = false
-              this.handleHoverClear() // Clear hover marker when selection is cleared
-            } else if (uniqueFeatures.length === 1) {
-              const feature = markRaw(convertMapLibreFeature(uniqueFeatures[0]))
-              this.selectedFeature = feature
-              this.isEditingFeature = false
-              this.showFeaturePopup = false
-            } else {
-              const convertedFeatures = uniqueFeatures.map(f => markRaw(convertMapLibreFeature(f)))
-              this.overlappingFeatures = convertedFeatures
-              this.popupPosition = {
-                x: e.point.x,
-                y: e.point.y,
-                containerWidth: this.$refs.mapContainer?.clientWidth || 0,
-                containerHeight: this.$refs.mapContainer?.clientHeight || 0
-              }
-              this.showFeaturePopup = true
-            }
-          }
-        })
-
-        // Add zoom event listener for responsive label updates
-        this.map.on('zoom', async () => {
-          const currentZoom = this.map.getZoom()
-          
-          if (this.showAllLabels && this.labelMarkerManager) {
-            const source = this.map.getSource('geojson-data')
-            if (source && source._data && source._data.features) {
-              this.labelMarkerManager.updateMarkers(source._data.features)
-            }
-          }
-          
-          // Update small feature flags first (synchronous)
-          updateSmallFeatureFlags(this.map, currentZoom)
-          
-          // Then update icon visibility after small feature flags are set
-          await this.reprocessFeaturesForZoom()
-        })
-
-        // Add hover cursor change
-        this.map.on('mousemove', (e) => {
-          const layersToQuery = ['points', 'point-icons', 'replacement-points', 'lines', 'polygons', 'polygon-outlines']
-            .filter(layerId => this.map.getLayer(layerId))
-          
-          if (layersToQuery.length === 0) return
-          
-          const bbox = [
-            [e.point.x - 5, e.point.y - 5],
-            [e.point.x + 5, e.point.y + 5]
-          ]
-          const features = this.map.queryRenderedFeatures(bbox, {
-            layers: layersToQuery
-          })
-
-          const hoverableFeatures = features.filter(f => !f.properties?._isLabelPoint)
-          this.map.getCanvas().style.cursor = hoverableFeatures.length > 0 ? 'pointer' : ''
-        })
-
-        this.map.on('mouseout', () => {
-          this.map.getCanvas().style.cursor = ''
-        })
+        // Create map instance with controls and event handlers
+        this.createMapInstance(mapConfig)
 
         // Wait for map to load
         await new Promise((resolve) => {

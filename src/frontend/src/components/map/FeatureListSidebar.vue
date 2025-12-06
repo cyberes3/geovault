@@ -100,7 +100,7 @@
         <RecycleScroller
           v-else
           class="scroller"
-          :items="displayFeatures"
+          :items="displayFeaturesWithKeys"
           :item-size="32"
           key-field="database_id"
           v-slot="{ item }"
@@ -111,10 +111,18 @@
             class="px-1.5 py-1.5 bg-gray-50 hover:bg-gray-100 transition-colors flex items-center cursor-pointer lg:px-1 lg:py-1 xl:px-1.5 xl:py-1.5"
             :style="{ borderLeft: `3px solid ${getGeometryTypeColor(item)}` }"
           >
-            <div class="flex-1 min-w-0">
+            <div class="flex-1 min-w-0 flex items-center gap-1.5">
               <div class="text-xs text-gray-900 truncate">
                 {{ getFeatureName(item) }}
               </div>
+              <!-- Feature Icon -->
+              <img
+                v-if="getFeatureIconUrl(item)"
+                :src="getFeatureIconUrl(item)"
+                class="w-4 h-4 flex-shrink-0 object-contain"
+                :alt="`${getFeatureName(item)} icon`"
+                @error="$event.target.style.display = 'none'"
+              />
             </div>
             <!-- Mobile/Tablet hide icon -->
             <button
@@ -229,6 +237,7 @@ import { FunnelIcon, XMarkIcon, EyeSlashIcon } from '@heroicons/vue/24/outline'
 import Loader from '@/components/parts/Loader.vue'
 import { getGeometryTypeColor } from '@/utils/geometryColors.js'
 import { sortTagsByPriority, sortUserTagsAlphabetically, isSystemTag } from '@/utils/tagUtils.js'
+import { getIconUrl, resolveIconUrl, isSystemIcon } from '@/utils/map/iconUtils.ts'
 import { RecycleScroller } from 'vue-virtual-scroller'
 import 'vue-virtual-scroller/dist/vue-virtual-scroller.css'
 
@@ -294,6 +303,32 @@ export default {
     },
     displayFeatures() {
       return this.isSearchMode ? this.searchResults : this.features
+    },
+    displayFeaturesWithKeys() {
+      // Wrap features with database_id at top level for RecycleScroller
+      return this.displayFeatures.map((feature, index) => {
+        // If feature already has database_id at top level (from convertMapLibreFeature), use it
+        if (feature.database_id !== undefined) {
+          return feature
+        }
+        
+        // Otherwise, extract from properties and create wrapper
+        const properties = feature.get ? feature.get('properties') : feature.properties || {}
+        const databaseId = properties.database_id || properties.geojson_hash || `feature-${index}`
+        
+        // Create a wrapper that preserves the original feature but adds database_id
+        // Use Object.assign to properly handle OpenLayers Feature objects
+        const wrapper = Object.assign({}, feature, {
+          database_id: databaseId
+        })
+        
+        // Ensure methods are accessible (they should be via Object.assign, but be explicit)
+        if (feature.get) wrapper.get = feature.get.bind(feature)
+        if (feature.set) wrapper.set = feature.set.bind(feature)
+        if (feature.getGeometry) wrapper.getGeometry = feature.getGeometry.bind(feature)
+        
+        return wrapper
+      })
     },
     showInitialFeaturesLoader() {
       return this.isInitialLoad && this.features.length === 0 && !this.isSearching
@@ -365,6 +400,28 @@ export default {
     getGeometryTypeColor(feature) {
       const geometryType = this.getFeatureGeometryType(feature)
       return getGeometryTypeColor(geometryType)
+    },
+    getFeatureIconUrl(feature) {
+      const properties = feature.get('properties') || {}
+      const iconUrl = getIconUrl(properties)
+      
+      if (!iconUrl) {
+        return null
+      }
+      
+      // Get marker color for potential recoloring of system icons
+      const markerColor = properties['marker-color']
+      const builtInIcon = isSystemIcon(iconUrl)
+      
+      if (builtInIcon && markerColor) {
+        // Handle system icon recoloring
+        const iconPathForRecolor = iconUrl.replace('/api/icons/system/', '')
+        const encodedColor = encodeURIComponent(markerColor)
+        const encodedIcon = encodeURIComponent(iconPathForRecolor)
+        return `${APIHOST}/api/icons/recolor/?icon=${encodedIcon}&color=${encodedColor}`
+      }
+      
+      return resolveIconUrl(iconUrl)
     },
     handleFeatureContextMenu(feature) {
       // Right-click hide (desktop only)

@@ -197,6 +197,8 @@ async function processFeaturesForIcons(features, map, zoom, replaceIconsLowZoom 
 
   const processedFeatures = []
   const iconLoadPromises = []
+  const colorDetectionPromises = []
+  const featuresNeedingColorDetection = []
   const MIN_PIXEL_SIZE = 2 // Minimum size threshold in pixels
 
   for (const feature of features) {
@@ -300,62 +302,91 @@ async function processFeaturesForIcons(features, map, zoom, replaceIconsLowZoom 
           delete feature.properties['_icon-id']
         })
       )
+      
+      // Add the point feature after icon processing
+      processedFeatures.push(feature)
     } else if (iconUrl && !shouldUseIconImage) {
       // Icon exists but should be replaced with circle at low zoom
       // Detect primary color from icon image for the replacement circle
       const resolvedUrl = getIconSourceUrl(iconUrl, feature.properties)
       
       // Check if we already have a detected color stored
-      if (!feature.properties['_detectedIconColor'] && !feature.properties['_colorDetectionInProgress']) {
-        // Mark as in progress to avoid duplicate detection
-        feature.properties['_colorDetectionInProgress'] = true
-        
-        // Start color detection asynchronously
-        detectPrimaryColor(resolvedUrl)
-          .then(color => {
-            // Store detected color in feature properties
-            feature.properties['_detectedIconColor'] = color
-            feature.properties['_colorDetectionInProgress'] = false
-            
-            // Update the map source to trigger a re-render with the new color
-            if (map && map.getSource('geojson-data')) {
-              const source = map.getSource('geojson-data')
-              const currentData = source._data || { type: 'FeatureCollection', features: [] }
-              // Find and update this feature in the source data
-              if (currentData.features) {
-                const featureId = feature.properties?.database_id
-                const existingFeature = currentData.features.find(f => 
-                  f.properties?.database_id === featureId
-                )
-                if (existingFeature) {
-                  existingFeature.properties['_detectedIconColor'] = color
-                  existingFeature.properties['_colorDetectionInProgress'] = false
-                  // Trigger update
-                  source.setData(currentData)
-                }
+      if (feature.properties['_detectedIconColor']) {
+        // Color already detected, safe to add feature
+        delete feature.properties['_icon-id']
+        processedFeatures.push(feature)
+      } else {
+        // Need to detect color - don't add feature yet, wait for detection
+        // Check if detection is already in progress (from a previous call)
+        if (!feature.properties['_colorDetectionInProgress']) {
+          // Start new color detection
+          feature.properties['_colorDetectionInProgress'] = true
+          
+          // Start color detection asynchronously
+          const colorDetectionPromise = detectPrimaryColor(resolvedUrl)
+            .then(color => {
+              // Store detected color in feature properties
+              feature.properties['_detectedIconColor'] = color
+              feature.properties['_colorDetectionInProgress'] = false
+              return feature
+            })
+            .catch(() => {
+              // On error, use marker-color as fallback
+              feature.properties['_detectedIconColor'] = feature.properties['marker-color'] || '#ff0000'
+              feature.properties['_colorDetectionInProgress'] = false
+              return feature
+            })
+          
+          colorDetectionPromises.push(colorDetectionPromise)
+        } else {
+          // Color detection already in progress - create a promise that waits for it to complete
+          // by polling the feature properties
+          const colorDetectionPromise = new Promise((resolve) => {
+            const checkInterval = setInterval(() => {
+              if (feature.properties['_detectedIconColor'] && !feature.properties['_colorDetectionInProgress']) {
+                clearInterval(checkInterval)
+                resolve(feature)
               }
-            }
+            }, 50) // Check every 50ms
+            
+            // Timeout after 5 seconds to prevent infinite waiting
+            setTimeout(() => {
+              clearInterval(checkInterval)
+              // Use fallback color if detection takes too long
+              if (!feature.properties['_detectedIconColor']) {
+                feature.properties['_detectedIconColor'] = feature.properties['marker-color'] || '#ff0000'
+                feature.properties['_colorDetectionInProgress'] = false
+              }
+              resolve(feature)
+            }, 5000)
           })
-          .catch(() => {
-            // On error, use marker-color as fallback
-            feature.properties['_detectedIconColor'] = feature.properties['marker-color'] || '#ff0000'
-            feature.properties['_colorDetectionInProgress'] = false
-          })
+          
+          colorDetectionPromises.push(colorDetectionPromise)
+        }
+        
+        featuresNeedingColorDetection.push(feature)
+        
+        // Remove icon metadata since we're using a circle
+        delete feature.properties['_icon-id']
       }
-      
-      // Remove icon metadata since we're using a circle
-      delete feature.properties['_icon-id']
     } else {
       // No icon, remove icon metadata
       delete feature.properties['_icon-id']
+      // Add the point feature after icon processing
+      processedFeatures.push(feature)
     }
-
-    // Add the point feature after icon processing
-    processedFeatures.push(feature)
   }
 
-  // Wait for all icons to load
-  await Promise.all(iconLoadPromises)
+  // Wait for all icons to load and color detection to complete
+  await Promise.all([...iconLoadPromises, ...colorDetectionPromises])
+  
+  // Add features that were waiting for color detection
+  for (const feature of featuresNeedingColorDetection) {
+    // Only add if color detection completed (should always be true after Promise.all)
+    if (feature.properties['_detectedIconColor'] && !feature.properties['_colorDetectionInProgress']) {
+      processedFeatures.push(feature)
+    }
+  }
 
   return processedFeatures
 }
