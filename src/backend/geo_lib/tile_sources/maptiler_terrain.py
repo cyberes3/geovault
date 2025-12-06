@@ -64,7 +64,7 @@ def register_maptiler_terrain():
                 'type': 'raster-dem',
                 'url': f'https://api.maptiler.com/tiles/terrain-rgb-v2/tiles.json?key={api_key}'
             },
-            'exaggeration': 1.5
+            'exaggeration': 1
         }
     
     # Register the tile source

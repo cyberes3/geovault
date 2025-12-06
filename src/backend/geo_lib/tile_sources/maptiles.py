@@ -5,14 +5,18 @@ This module dynamically registers MapTiler maps as tile sources based on configu
 MapTiler maps are vector tile sources that can be used directly without a proxy.
 """
 
+import functools
 import requests
 from . import register_tile_source
 from website.config_loader import get_config_loader
 
 
+@functools.lru_cache(maxsize=None)
 def fetch_map_name(map_id, api_key):
     """
     Fetch the display name for a MapTiler map from its style.json.
+    
+    Cached for the lifetime of the server to avoid repeated API calls.
     
     Args:
         map_id: MapTiler map ID

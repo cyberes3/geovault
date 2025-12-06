@@ -50,7 +50,7 @@ def get_feature(request, feature_id):
 
 def _extract_coordinates_from_geojson(geojson_data: dict) -> List[Tuple[float, float]]:
     """
-    Extract all coordinates from a GeoJSON feature.
+    Extract all coordinates from a GeoJSON feature, ignoring elevation data.
     Returns a list of (lon, lat) tuples.
     """
     coordinates_list = []
@@ -70,6 +70,36 @@ def _extract_coordinates_from_geojson(geojson_data: dict) -> List[Tuple[float, f
                 for coord in line:
                     if len(coord) >= 2:
                         coordinates_list.append((float(coord[0]), float(coord[1])))
+    
+    return coordinates_list
+
+
+def _extract_coordinates_with_elevation_from_geojson(geojson_data: dict) -> List[Tuple[float, float, Optional[float]]]:
+    """
+    Extract all coordinates from a GeoJSON feature, including elevation data if present.
+    Returns a list of (lon, lat, elevation) tuples. Elevation will be None if not present.
+    """
+    coordinates_list = []
+    geometry = geojson_data.get('geometry', {})
+    geom_type = geometry.get('type', '').lower()
+    coords = geometry.get('coordinates', [])
+    
+    if geom_type == 'linestring':
+        # LineString: [[lon, lat], [lon, lat], ...] or [[lon, lat, ele], ...]
+        for coord in coords:
+            if len(coord) >= 3:
+                coordinates_list.append((float(coord[0]), float(coord[1]), float(coord[2])))
+            elif len(coord) >= 2:
+                coordinates_list.append((float(coord[0]), float(coord[1]), None))
+    elif geom_type == 'multilinestring':
+        # MultiLineString: [[[lon, lat], ...], [[lon, lat], ...], ...]
+        for line in coords:
+            if isinstance(line, list):
+                for coord in line:
+                    if len(coord) >= 3:
+                        coordinates_list.append((float(coord[0]), float(coord[1]), float(coord[2])))
+                    elif len(coord) >= 2:
+                        coordinates_list.append((float(coord[0]), float(coord[1]), None))
     
     return coordinates_list
 
@@ -145,9 +175,10 @@ def _fetch_elevations_from_api(coordinates: List[Tuple[float, float]]) -> List[O
 @api_or_login_required_401()
 @require_http_methods(["GET"])
 @handle_404
-def get_feature_elevations(request, feature_id):
+def get_feature_elevations_external(request, feature_id):
     """
     API endpoint to get elevations for a feature's coordinates from the external elevation API.
+    This fetches fresh elevation data from the external elevation service (e.g., racemap).
     
     URL parameter:
     - feature_id: ID of the feature to get elevations for
@@ -158,7 +189,7 @@ def get_feature_elevations(request, feature_id):
     # Get the feature from database and verify user ownership
     feature = get_object_or_404_for_user(FeatureStore, request.user, id=feature_id)
     
-    # Extract coordinates from the feature's GeoJSON
+    # Extract coordinates from the feature's GeoJSON (without elevation)
     geojson_data = feature.geojson
     coordinates = _extract_coordinates_from_geojson(geojson_data)
     
@@ -168,7 +199,7 @@ def get_feature_elevations(request, feature_id):
             'code': 400
         }, status=400)
     
-    # Fetch elevations from API
+    # Fetch elevations from external API
     elevations = _fetch_elevations_from_api(coordinates)
     
     # Combine coordinates with elevations: [lon, lat, elevation]
@@ -178,6 +209,48 @@ def get_feature_elevations(request, feature_id):
             coordinates_with_elevations.append([lon, lat, elevation])
         else:
             # If elevation fetch failed, include coordinate without elevation
+            coordinates_with_elevations.append([lon, lat])
+    
+    return JsonResponse({
+        'coordinates': coordinates_with_elevations
+    })
+
+
+@api_or_login_required_401()
+@require_http_methods(["GET"])
+@handle_404
+def get_feature_elevations_internal(request, feature_id):
+    """
+    API endpoint to get elevations for a feature's coordinates from the stored GPS data.
+    This returns the original elevation data that was imported with the feature (e.g., from GPX files).
+    
+    URL parameter:
+    - feature_id: ID of the feature to get elevations for
+    
+    Returns:
+    - coordinates: List of [lon, lat, elevation] arrays (elevation may be None if not stored)
+    """
+    # Get the feature from database and verify user ownership
+    feature = get_object_or_404_for_user(FeatureStore, request.user, id=feature_id)
+    
+    # Extract coordinates from the feature's GeoJSON (with elevation if present)
+    geojson_data = feature.geojson
+    coordinates = _extract_coordinates_with_elevation_from_geojson(geojson_data)
+    
+    if not coordinates:
+        return JsonResponse({
+            'error': 'Feature does not contain LineString or MultiLineString geometry',
+            'code': 400
+        }, status=400)
+    
+    # Convert to [lon, lat, elevation] format, including elevation if present
+    coordinates_with_elevations = []
+    for coord_tuple in coordinates:
+        lon, lat, elevation = coord_tuple
+        if elevation is not None and elevation != 0.0:  # Exclude 0.0 as it's a placeholder
+            coordinates_with_elevations.append([lon, lat, elevation])
+        else:
+            # No elevation data stored
             coordinates_with_elevations.append([lon, lat])
     
     return JsonResponse({

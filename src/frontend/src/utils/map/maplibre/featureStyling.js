@@ -215,7 +215,17 @@ export async function loadIconImage(map, iconId, iconUrl) {
       try {
         // Double-check if image was added by another call while loading
         if (!map.hasImage(iconId)) {
-          map.addImage(iconId, img)
+          // Normalize icon to 32x32 pixels
+          const canvas = document.createElement('canvas')
+          canvas.width = 32
+          canvas.height = 32
+          const ctx = canvas.getContext('2d')
+          
+          // Draw the image scaled to 32x32
+          ctx.drawImage(img, 0, 0, 32, 32)
+          
+          // Add the normalized image to the map
+          map.addImage(iconId, canvas)
         }
         resolve()
       } catch (error) {

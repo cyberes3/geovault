@@ -368,6 +368,7 @@ export default {
       mapWasDestroyed: false,
       showAllLabels: true,
       labelMarkerManager: null,
+      handleKeyDown: null, // Keyboard event handler for escape key
       maptilerConfig: null, // MapTilerConfig instance
       terrainEnabled: false, // Current state of terrain (on/off)
       tooltipShown: false, // Track if 3D tooltip has been shown
@@ -412,6 +413,11 @@ export default {
       // Get user location first (skip for public share mode)
       if (!this.isPublicShareMode) {
         await this.getUserLocation()
+      }
+
+      // Ensure map container is truly available and is an HTMLElement
+      if (!this.$refs.mapContainer || !(this.$refs.mapContainer instanceof HTMLElement)) {
+        throw new Error('Map container is not available or is not an HTMLElement')
       }
 
       // Determine initial map center and zoom based on user location
@@ -471,7 +477,7 @@ export default {
         },
         onClick: (e) => {
           // Check if layers exist before querying
-          const layersToQuery = ['points', 'point-icons', 'lines', 'polygons', 'polygon-outlines']
+          const layersToQuery = ['points', 'point-icons', 'replacement-points', 'lines', 'polygons', 'polygon-outlines']
             .filter(layerId => this.map.getLayer(layerId))
           
           if (layersToQuery.length === 0) {
@@ -490,11 +496,37 @@ export default {
           // Filter out label points - they shouldn't be clickable
           const clickableFeatures = features.filter(f => !f.properties?._isLabelPoint)
 
+          // Close elevation profile if open when clicking on another feature or empty space
+          if (this.showElevationProfile) {
+            this.showElevationProfile = false
+            this.handleHoverClear() // Clear hover marker when dialog closes
+          }
+
+          // For replacement points, find the original feature
+          const processedFeatures = clickableFeatures.map(f => {
+            if (f.properties?._isSmallFeatureReplacement) {
+              const originalId = f.properties._originalFeatureId
+              if (originalId) {
+                // Query all features to find the original
+                const source = this.map.getSource('geojson-data')
+                if (source && source._data && source._data.features) {
+                  const originalFeature = source._data.features.find(
+                    feature => feature.properties?.database_id === originalId && !feature.properties?._isSmallFeatureReplacement
+                  )
+                  if (originalFeature) {
+                    return originalFeature
+                  }
+                }
+              }
+            }
+            return f
+          })
+
           // Deduplicate features by database_id (same feature can appear in multiple layers)
           const uniqueFeatures = []
           const seenIds = new Set()
           
-          for (const feature of clickableFeatures) {
+          for (const feature of processedFeatures) {
             const featureId = feature.properties?.database_id
             if (featureId && !seenIds.has(featureId)) {
               seenIds.add(featureId)
@@ -509,13 +541,15 @@ export default {
             this.selectedFeature = null
             this.isEditingFeature = false
             this.showFeaturePopup = false
+            this.handleHoverClear() // Clear hover marker when selection is cleared
           } else if (uniqueFeatures.length === 1) {
-            const feature = markRaw(convertMapLibreFeature(uniqueFeatures[0]))
-            this.selectedFeature = feature
+            const mlFeature = uniqueFeatures[0]
+
+            this.selectedFeature = markRaw(convertMapLibreFeature(mlFeature))
             this.isEditingFeature = false
+            this.showFeaturePopup = false
           } else {
-            const convertedFeatures = uniqueFeatures.map(f => markRaw(convertMapLibreFeature(f)))
-            this.overlappingFeatures = convertedFeatures
+            this.overlappingFeatures = uniqueFeatures.map(f => markRaw(convertMapLibreFeature(f)))
             this.popupPosition = {
               x: e.point.x,
               y: e.point.y,
@@ -528,7 +562,7 @@ export default {
       })
 
       // Add immediate zoom event listener for responsive label and icon updates
-      this.map.on('zoom', () => {
+      this.map.on('zoom', async () => {
         // Get current zoom for all updates
         const currentZoom = this.map.getZoom()
         
@@ -541,19 +575,21 @@ export default {
           }
         }
         
-        // Update small feature flags immediately (synchronous, fast)
+        // Update small feature flags first (synchronous, fast)
         // This handles polygon/line -> point transitions
         updateSmallFeatureFlags(this.map, currentZoom)
         
-        // Also update icon visibility immediately during zoom
-        // This prevents the delay when switching between icons and circles
-        this.reprocessFeaturesForZoom()
+        // Then update icon visibility after small feature flags are set
+        // This prevents race conditions by ensuring operations complete in sequence
+        // Note: We await this even though the zoom handler is async, which means
+        // rapid zoom events will queue up but execute in order
+        await this.reprocessFeaturesForZoom()
       })
 
       // Add hover event listener to change cursor to pointer over features
       this.map.on('mousemove', (e) => {
         // Check if layers exist before querying
-        const layersToQuery = ['points', 'point-icons', 'lines', 'polygons', 'polygon-outlines']
+        const layersToQuery = ['points', 'point-icons', 'replacement-points', 'lines', 'polygons', 'polygon-outlines']
           .filter(layerId => this.map.getLayer(layerId))
         
         if (layersToQuery.length === 0) {
@@ -715,7 +751,10 @@ export default {
           // Use markRaw to prevent Vue from making features reactive
           // This is critical for performance with complex geometries
           const rawData = markRaw(data.data)
-          this.addFeaturesToMap(rawData)
+          await this.addFeaturesToMap(rawData)
+          
+          // Update features in extent list after data is loaded
+          this.debouncedUpdateFeaturesInExtent()
         }
       } catch (error) {
         if (error.name === 'AbortError') return
@@ -748,6 +787,10 @@ export default {
       }
     },
     async reprocessFeaturesForZoom() {
+      // This function updates icon metadata for features when zoom changes
+      // It does NOT re-add features - they're already in the source
+      // It only updates rendering properties like _icon-id
+      
       if (!this.map || !this.map.getSource('geojson-data')) return
       
       const source = this.map.getSource('geojson-data')
@@ -762,16 +805,68 @@ export default {
         ? userSettings.map.replace_icons_low_zoom 
         : true
       
-      // Reprocess features with new zoom level
-      await addFeaturesToMap(this.map, { type: 'FeatureCollection', features }, this.showAllLabels, zoom, replaceIconsLowZoom)
+      // Update icon metadata for point features
+      // Don't modify the feature list - just update properties in-place
+      let needsUpdate = false
+      
+      for (const feature of features) {
+        // Skip label points and replacement points
+        if (feature.properties?._isLabelPoint || feature.properties?._isSmallFeatureReplacement) {
+          continue
+        }
+        
+        const geometryType = feature.geometry?.type
+        if (geometryType !== 'Point') continue
+        
+        const iconUrl = feature.properties?.['marker-icon']
+        const hasIcon = iconUrl && iconUrl.trim() !== ''
+        
+        // Determine if we should show icon or circle based on zoom and settings
+        const shouldShowIcon = hasIcon && (!replaceIconsLowZoom || zoom >= 10)
+        
+        if (shouldShowIcon) {
+          // Update to show icon
+          if (!feature.properties['_icon-id']) {
+            const iconId = `icon-${feature.properties.database_id || Date.now()}`
+            feature.properties['_icon-id'] = iconId
+            needsUpdate = true
+            
+            // Ensure icon is loaded
+            if (this.map && !this.map.hasImage(iconId)) {
+              try {
+                const img = new Image()
+                img.crossOrigin = 'anonymous'
+                img.onload = () => {
+                  if (this.map && !this.map.hasImage(iconId)) {
+                    this.map.addImage(iconId, img, { sdf: false })
+                  }
+                }
+                img.src = iconUrl
+              } catch (e) {
+                console.warn(`Failed to load icon: ${iconUrl}`, e)
+              }
+            }
+          }
+        } else {
+          // Remove icon metadata to show as circle
+          if (feature.properties['_icon-id']) {
+            delete feature.properties['_icon-id']
+            needsUpdate = true
+          }
+        }
+      }
+      
+      // Only update source if we actually changed something
+      if (needsUpdate) {
+        source.setData(markRaw({
+          type: 'FeatureCollection',
+          features: features.map(f => markRaw(f))
+        }))
+      }
       
       // Update label markers only if labels are visible
-      // Skip expensive label processing when labels are hidden
       if (this.showAllLabels && this.labelMarkerManager) {
-        const source = this.map.getSource('geojson-data')
-        if (source && source._data && source._data.features) {
-          this.labelMarkerManager.updateMarkers(source._data.features)
-        }
+        this.labelMarkerManager.updateMarkers(features)
       }
     },
     updateFeaturesInExtent() {
@@ -861,7 +956,7 @@ export default {
         // Update the source with filtered features
         source.setData(markRaw({
           type: 'FeatureCollection',
-          features: featuresWithinBuffer
+          features: featuresWithinBuffer.map(f => markRaw(f))
         }))
         
         // Update feature count
@@ -1314,19 +1409,15 @@ export default {
         return
       }
 
-      console.log('zoomToFeature called with feature:', feature)
-
       // Get feature geometry - handle both converted MapLibre features and raw features
       let geometry = null
       
       // Try to get geometry from converted feature (has getGeometry method)
       if (feature.getGeometry && typeof feature.getGeometry === 'function') {
         const mockGeometry = feature.getGeometry()
-        console.log('zoomToFeature: Got mockGeometry:', mockGeometry)
         if (mockGeometry && mockGeometry.getExtent) {
           // Use the extent from the mock geometry
           const extent = mockGeometry.getExtent()
-          console.log('zoomToFeature: Got extent from mockGeometry:', extent)
           if (extent && extent.length === 4) {
             const [minLon, minLat, maxLon, maxLat] = extent
             
@@ -1335,17 +1426,9 @@ export default {
               // Check if bounds are valid (not all zeros)
               const isNotAllZeros = !(minLon === 0 && minLat === 0 && maxLon === 0 && maxLat === 0)
               
-              console.log('zoomToFeature: Extent validation', { 
-                isFinite: extent.every(v => isFinite(v)),
-                isNotAllZeros,
-                extent: [minLon, minLat, maxLon, maxLat],
-                isPoint: minLon === maxLon && minLat === maxLat
-              })
-              
               if (isNotAllZeros) {
                 // For points (degenerate bounds), use center + zoom
                 if (minLon === maxLon && minLat === maxLat) {
-                  console.log('zoomToFeature: Zooming to point')
                   this.map.flyTo({
                     center: [minLon, minLat],
                     zoom: Math.max(this.map.getZoom(), 15),
@@ -1354,20 +1437,17 @@ export default {
                 } else {
                   // For lines and polygons, use bounds
                   // MapLibre LngLatBounds takes southwest and northeast corners
-                  console.log('zoomToFeature: Zooming to bounds', { minLon, minLat, maxLon, maxLat })
                   try {
                     // Create LngLatBounds: sw corner [minLon, minLat], ne corner [maxLon, maxLat]
                     const bounds = new maplibregl.LngLatBounds(
                       [minLon, minLat], // southwest corner
                       [maxLon, maxLat]  // northeast corner
                     )
-                    console.log('zoomToFeature: Created LngLatBounds', bounds)
                     // Use fitBounds which is more reliable for bounds
                     this.map.fitBounds(bounds, {
                       padding: { top: 50, bottom: 50, left: 50, right: 50 },
                       duration: 500
                     })
-                    console.log('zoomToFeature: Called fitBounds successfully')
                   } catch (error) {
                     console.error('zoomToFeature: Error fitting bounds', error, error.stack)
                     // Fallback: try flyTo
@@ -1403,8 +1483,6 @@ export default {
         geometry = feature.geometry || feature.get?.('geometry')
       }
 
-      console.log('zoomToFeature: Using fallback geometry extraction', { geometry, hasGeometry: !!geometry })
-
       if (!geometry || !geometry.type || !geometry.coordinates) {
         console.warn('zoomToFeature: Invalid geometry', { 
           hasGeometry: !!geometry, 
@@ -1417,7 +1495,6 @@ export default {
 
       // Extract coordinates from geometry
       const coords = this.getFeatureCoordinates(geometry)
-      console.log('zoomToFeature: Extracted coordinates', { coordsCount: coords.length, geometryType: geometry.type })
       if (coords.length === 0) {
         console.warn('zoomToFeature: No coordinates found in geometry', geometry)
         return
@@ -1435,8 +1512,6 @@ export default {
         }
       })
 
-      console.log('zoomToFeature: Calculated bounds', { minLon, minLat, maxLon, maxLat })
-
       // Ensure we have valid bounds
       if (!isFinite(minLon) || !isFinite(minLat) || !isFinite(maxLon) || !isFinite(maxLat)) {
         console.warn('zoomToFeature: Invalid bounds calculated', { minLon, minLat, maxLon, maxLat, coords })
@@ -1446,7 +1521,6 @@ export default {
       // Ensure bounds are not degenerate (same point)
       if (minLon === maxLon && minLat === maxLat) {
         // For points, zoom to a reasonable zoom level
-        console.log('zoomToFeature: Zooming to point (fallback)')
         this.map.flyTo({
           center: [minLon, minLat],
           zoom: Math.max(this.map.getZoom(), 15),
@@ -1456,20 +1530,17 @@ export default {
       }
 
       // Fly to feature
-      console.log('zoomToFeature: Zooming to bounds (fallback)', { minLon, minLat, maxLon, maxLat })
       try {
         // Create LngLatBounds: sw corner [minLon, minLat], ne corner [maxLon, maxLat]
         const bounds = new maplibregl.LngLatBounds(
           [minLon, minLat], // southwest corner
           [maxLon, maxLat]  // northeast corner
         )
-        console.log('zoomToFeature: Created LngLatBounds (fallback)', bounds)
         // Use fitBounds which is more reliable for bounds
         this.map.fitBounds(bounds, {
           padding: { top: 50, bottom: 50, left: 50, right: 50 },
           duration: 500
         })
-        console.log('zoomToFeature: Called fitBounds successfully (fallback)')
       } catch (error) {
         console.error('zoomToFeature: Error fitting bounds (fallback)', error, error.stack)
         // Final fallback: try flyTo
@@ -2003,10 +2074,19 @@ export default {
       this.isMapInitializing = true
       this.isRestoring = true
 
-      // Ensure map container is available
+      // Ensure map container is available (with retry for hot reload scenarios)
       await this.$nextTick()
-      if (!this.$refs.mapContainer) {
-        console.error('Map container not available for restore')
+      
+      // Wait for container to be truly ready
+      let retries = 0
+      const maxRetries = 10
+      while ((!this.$refs.mapContainer || !(this.$refs.mapContainer instanceof HTMLElement)) && retries < maxRetries) {
+        await new Promise(resolve => setTimeout(resolve, 50))
+        retries++
+      }
+      
+      if (!this.$refs.mapContainer || !(this.$refs.mapContainer instanceof HTMLElement)) {
+        console.error('Map container not available for restore after retries')
         this.isMapInitializing = false
         this.isRestoring = false
         return
@@ -2068,7 +2148,7 @@ export default {
             this.reprocessFeaturesForZoom()
           },
           onClick: (e) => {
-            const layersToQuery = ['points', 'point-icons', 'lines', 'polygons', 'polygon-outlines']
+            const layersToQuery = ['points', 'point-icons', 'replacement-points', 'lines', 'polygons', 'polygon-outlines']
               .filter(layerId => this.map.getLayer(layerId))
             
             if (layersToQuery.length === 0) return
@@ -2082,10 +2162,37 @@ export default {
             })
 
             const clickableFeatures = features.filter(f => !f.properties?._isLabelPoint)
+            
+            // Close elevation profile if open when clicking on another feature or empty space
+            if (this.showElevationProfile) {
+              this.showElevationProfile = false
+              this.handleHoverClear() // Clear hover marker when dialog closes
+            }
+            
+            // For replacement points, find the original feature
+            const processedFeatures = clickableFeatures.map(f => {
+              if (f.properties?._isSmallFeatureReplacement) {
+                const originalId = f.properties._originalFeatureId
+                if (originalId) {
+                  // Query all features to find the original
+                  const source = this.map.getSource('geojson-data')
+                  if (source && source._data && source._data.features) {
+                    const originalFeature = source._data.features.find(
+                      feature => feature.properties?.database_id === originalId && !feature.properties?._isSmallFeatureReplacement
+                    )
+                    if (originalFeature) {
+                      return originalFeature
+                    }
+                  }
+                }
+              }
+              return f
+            })
+            
             const uniqueFeatures = []
             const seenIds = new Set()
             
-            for (const feature of clickableFeatures) {
+            for (const feature of processedFeatures) {
               const featureId = feature.properties?.database_id
               if (featureId && !seenIds.has(featureId)) {
                 seenIds.add(featureId)
@@ -2099,10 +2206,12 @@ export default {
               this.selectedFeature = null
               this.isEditingFeature = false
               this.showFeaturePopup = false
+              this.handleHoverClear() // Clear hover marker when selection is cleared
             } else if (uniqueFeatures.length === 1) {
               const feature = markRaw(convertMapLibreFeature(uniqueFeatures[0]))
               this.selectedFeature = feature
               this.isEditingFeature = false
+              this.showFeaturePopup = false
             } else {
               const convertedFeatures = uniqueFeatures.map(f => markRaw(convertMapLibreFeature(f)))
               this.overlappingFeatures = convertedFeatures
@@ -2118,7 +2227,7 @@ export default {
         })
 
         // Add zoom event listener for responsive label updates
-        this.map.on('zoom', () => {
+        this.map.on('zoom', async () => {
           const currentZoom = this.map.getZoom()
           
           if (this.showAllLabels && this.labelMarkerManager) {
@@ -2128,15 +2237,16 @@ export default {
             }
           }
           
-          // Update small feature flags immediately
+          // Update small feature flags first (synchronous)
           updateSmallFeatureFlags(this.map, currentZoom)
           
-          this.reprocessFeaturesForZoom()
+          // Then update icon visibility after small feature flags are set
+          await this.reprocessFeaturesForZoom()
         })
 
         // Add hover cursor change
         this.map.on('mousemove', (e) => {
-          const layersToQuery = ['points', 'point-icons', 'lines', 'polygons', 'polygon-outlines']
+          const layersToQuery = ['points', 'point-icons', 'replacement-points', 'lines', 'polygons', 'polygon-outlines']
             .filter(layerId => this.map.getLayer(layerId))
           
           if (layersToQuery.length === 0) return
@@ -2217,11 +2327,32 @@ export default {
     // Initialize featureTimestamps as empty object
     this.featureTimestamps = {}
 
-    // Ensure map container is available
+    // Add keyboard event listener for escape key
+    this.handleKeyDown = (event) => {
+      if (event.key === 'Escape' || event.key === 'Esc') {
+        // Only close info box if it's visible and edit box is not open
+        if (this.selectedFeature && !this.isEditingFeature) {
+          this.selectedFeature = null
+        }
+      }
+    }
+    window.addEventListener('keydown', this.handleKeyDown)
+
+    // Ensure map container is available (with retry for hot reload scenarios)
     await this.$nextTick()
-    if (!this.$refs.mapContainer) {
-      console.error('Map container not available')
+    
+    // Wait for container to be truly ready (important for hot reload)
+    let retries = 0
+    const maxRetries = 10
+    while ((!this.$refs.mapContainer || !(this.$refs.mapContainer instanceof HTMLElement)) && retries < maxRetries) {
+      await new Promise(resolve => setTimeout(resolve, 50))
+      retries++
+    }
+    
+    if (!this.$refs.mapContainer || !(this.$refs.mapContainer instanceof HTMLElement)) {
+      console.error('Map container not available after retries')
       this.isMapInitializing = false
+      this.loadError = 'Map container failed to initialize. Please refresh the page.'
       return
     }
 
@@ -2379,6 +2510,11 @@ export default {
     this.cleanupOnNavigateAway()
   },
   beforeUnmount() {
+    // Remove keyboard event listener
+    if (this.handleKeyDown) {
+      window.removeEventListener('keydown', this.handleKeyDown)
+    }
+    
     if (this.labelMarkerManager) {
       this.labelMarkerManager.clear()
       this.labelMarkerManager = null

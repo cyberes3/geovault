@@ -377,6 +377,7 @@ export default {
       activeMobileSidebar: null, // 'features', 'controls', or null
       mapWasDestroyed: false, // Track if map was fully destroyed for memory reasons
       showAllLabels: true, // Global toggle to show/hide all feature labels
+      handleKeyDown: null, // Keyboard event handler for escape key
     }
   },
   methods: {
@@ -1855,6 +1856,17 @@ export default {
     // Initialize featureTimestamps as empty object
     this.featureTimestamps = {}
 
+    // Add keyboard event listener for escape key
+    this.handleKeyDown = (event) => {
+      if (event.key === 'Escape' || event.key === 'Esc') {
+        // Only close info box if it's visible and edit box is not open
+        if (this.selectedFeature && !this.isEditingFeature) {
+          this.selectedFeature = null
+        }
+      }
+    }
+    window.addEventListener('keydown', this.handleKeyDown)
+
     // Ensure map container is available
     await this.$nextTick()
     if (!this.$refs.mapContainer) {
@@ -1988,6 +2000,11 @@ export default {
   },
 
   async beforeUnmount() {
+    // Remove keyboard event listener
+    if (this.handleKeyDown) {
+      window.removeEventListener('keydown', this.handleKeyDown)
+    }
+    
     // Flush any pending hidden feature updates before unmounting
     try {
       const hiddenFeaturesManager = (await import('@/utils/hiddenFeaturesManager.js')).default

@@ -4,103 +4,49 @@
  */
 
 import maplibregl from 'maplibre-gl'
+import * as turf from '@turf/turf'
 import { calculatePolygonCentroid, calculateLineCenter } from './labelPlacement.js'
 
 // Web Mercator constants
-const EARTH_CIRCUMFERENCE = 40075016.686 // meters at equator
+// Using the same formula as OpenLayers for consistency
+const WEB_MERCATOR_WORLD_SIZE = 156543.03392 // meters per pixel at zoom 0 (equator)
 
 // Maximum number of visible labels to prevent clutter
 const MAX_VISIBLE_LABELS = 200
 
 /**
  * Convert MapLibre zoom level to resolution (meters per pixel)
- * Uses Web Mercator projection formula
+ * Uses Web Mercator projection formula (matches OpenLayers)
  * @param {number} zoom - MapLibre zoom level
  * @returns {number} Resolution in meters per pixel
  */
 export function getResolutionFromZoom(zoom) {
-  // Resolution = Earth circumference / (tile size * 2^zoom)
-  // Tile size in MapLibre is 512 pixels (at scale 1)
-  return EARTH_CIRCUMFERENCE / (512 * Math.pow(2, zoom))
+  // Resolution = 156543.03392 / 2^zoom
+  // This matches OpenLayers' resolution calculation
+  return WEB_MERCATOR_WORLD_SIZE / Math.pow(2, zoom)
 }
 
 /**
- * Calculate distance from a point to a line segment
+ * Calculate distance from a point to a line segment using Turf.js
  * @param {Array<number>} point - Point [lon, lat]
  * @param {Array<number>} lineStart - Line segment start [lon, lat]
  * @param {Array<number>} lineEnd - Line segment end [lon, lat]
  * @returns {number} Distance in meters
  */
 function distanceToLineSegment(point, lineStart, lineEnd) {
-  const [px, py] = point
-  const [x1, y1] = lineStart
-  const [x2, y2] = lineEnd
-  
-  const dx = x2 - x1
-  const dy = y2 - y1
-  const lengthSquared = dx * dx + dy * dy
-
-  if (lengthSquared === 0) {
-    // Line segment is a point
-    const dx2 = px - x1
-    const dy2 = py - y1
-    // Convert to meters
-    const dxMeters = dx2 * 111320 * Math.cos((py * Math.PI) / 180)
-    const dyMeters = dy2 * 110540
-    return Math.sqrt(dxMeters * dxMeters + dyMeters * dyMeters)
-  }
-
-  // Calculate parameter t (position along line segment)
-  const t = Math.max(0, Math.min(1,
-    ((px - x1) * dx + (py - y1) * dy) / lengthSquared
-  ))
-
-  // Find closest point on line segment
-  const closestX = x1 + t * dx
-  const closestY = y1 + t * dy
-
-  // Calculate distance in meters
-  const dx2 = px - closestX
-  const dy2 = py - closestY
-  const dxMeters = dx2 * 111320 * Math.cos(((py + closestY) / 2 * Math.PI) / 180)
-  const dyMeters = dy2 * 110540
-  return Math.sqrt(dxMeters * dxMeters + dyMeters * dyMeters)
+    const pointFeature = turf.point(point)
+    const lineFeature = turf.lineString([lineStart, lineEnd])
+    return turf.pointToLineDistance(pointFeature, lineFeature, { units: 'meters' })
 }
 
 /**
- * Calculate the length of a LineString or MultiLineString in meters
- * Uses simple Euclidean distance in Web Mercator projection
+ * Calculate the length of a LineString or MultiLineString in meters using Turf.js
  * @param {Object} geometry - GeoJSON LineString or MultiLineString geometry
  * @returns {number} Length in meters
  */
 function calculateLineLength(geometry) {
   if (!geometry || !geometry.coordinates) return 0
-
-  const calculateSegmentLength = (coords) => {
-    let length = 0
-    for (let i = 1; i < coords.length; i++) {
-      const [lon1, lat1] = coords[i - 1]
-      const [lon2, lat2] = coords[i]
-      // Simple Euclidean distance in degrees, converted to meters
-      // This is approximate but sufficient for label visibility decisions
-      const dx = (lon2 - lon1) * 111320 * Math.cos((lat1 * Math.PI) / 180)
-      const dy = (lat2 - lat1) * 110540
-      length += Math.sqrt(dx * dx + dy * dy)
-    }
-    return length
-  }
-
-  if (geometry.type === 'LineString') {
-    return calculateSegmentLength(geometry.coordinates)
-  } else if (geometry.type === 'MultiLineString') {
-    let totalLength = 0
-    geometry.coordinates.forEach(coords => {
-      totalLength += calculateSegmentLength(coords)
-    })
-    return totalLength
-  }
-
-  return 0
+  return turf.length(geometry, { units: 'meters' })
 }
 
 /**
@@ -314,12 +260,59 @@ function shouldShowLabel(feature, labelPosition, zoom) {
 }
 
 /**
+ * Calculate point radius at a given zoom level (matches featureStyles.js and OpenLayers behavior)
+ * Icons/points stay at full size at zoom 10+, only scale down when zoomed out
+ * @param {number} zoom - Current zoom level
+ * @param {boolean} hasIcon - Whether the point has an icon
+ * @returns {number} Point radius in pixels
+ */
+function getPointRadiusAtZoom(zoom, hasIcon = false) {
+  const baseZoom = 10
+  const scaleFactor = 0.6
+  
+  // For points with icons, use icon size calculation
+  if (hasIcon) {
+    // Icon base scale is 1.0 at zoom 10+, min scale 0.5
+    // Icons are typically 32x32px, so effective size is scale * 32
+    const baseScale = 1.0
+    const minScale = 0.5
+    
+    // At zoom 10 and above, icons stay at full size (OpenLayers behavior)
+    if (zoom >= baseZoom) {
+      return baseScale * 32 / 2 // Half of icon size for spacing calculation
+    }
+    
+    // When zoomed out below zoom 10, apply exponential scaling
+    const scale = Math.pow(2, (zoom - baseZoom) * scaleFactor)
+    const clampedScale = Math.max(minScale, baseScale * scale)
+    return clampedScale * 32 / 2
+  }
+  
+  // For circles (no icon), use circle radius calculation
+  // Base radius is 4px at zoom 10+, min radius 2px
+  const baseRadius = 4
+  const minRadius = 2
+  
+  // At zoom 10 and above, circles stay at full size (OpenLayers behavior)
+  if (zoom >= baseZoom) {
+    return baseRadius
+  }
+  
+  // When zoomed out below zoom 10, apply exponential scaling
+  const radiusMultiplier = Math.pow(2, (zoom - baseZoom) * scaleFactor)
+  return Math.max(minRadius, baseRadius * radiusMultiplier)
+}
+
+/**
  * Create an HTML element for a label marker
  * @param {string} text - Label text
  * @param {boolean} isLabelPoint - Whether this is a label point (polygon/line)
+ * @param {number} zoom - Current zoom level
+ * @param {boolean} hasIcon - Whether the point has an icon
+ * @param {boolean} placeLabelBelow - Whether to place label below (for small polygons)
  * @returns {HTMLElement} HTML element for the marker
  */
-function createLabelElement(text, isLabelPoint = false) {
+function createLabelElement(text, isLabelPoint = false, zoom = 10, hasIcon = false, placeLabelBelow = false) {
   // Create white text outline using multiple text-shadows
   const textOutline = `
     -1px -1px 0 #ffffff,
@@ -337,9 +330,28 @@ function createLabelElement(text, isLabelPoint = false) {
   el.className = 'maplibre-label-marker'
   el.textContent = text
   
+  // Calculate margin-top based on point size at current zoom
+  let marginTop
+  if (isLabelPoint && !placeLabelBelow) {
+    // Regular label point (at centroid) - no offset
+    marginTop = '0'
+  } else if (isLabelPoint && placeLabelBelow) {
+    // Label point placed below polygon - offset like points
+    // Use 15px offset to match OpenLayers behavior for small polygons
+    marginTop = '15px'
+  } else {
+    // Regular point - offset below based on icon/circle size
+    // Get point radius/size at current zoom
+    const pointSize = getPointRadiusAtZoom(zoom, hasIcon)
+    // Add spacing: point size + 4px buffer
+    const spacing = pointSize + 4
+    marginTop = `${spacing}px`
+  }
+  
   el.style.cssText = `
     padding: 0;
     margin: 0;
+    margin-top: ${marginTop};
     font-size: 12px;
     font-family: 'Noto Sans Regular', 'Arial Unicode MS Regular', sans-serif;
     color: #000000;
@@ -385,7 +397,7 @@ function getLabelPosition(feature) {
 export class LabelMarkerManager {
   constructor(map) {
     this.map = map
-    this.markers = new Map() // Map of featureId -> { marker, isLabelPoint, text, position }
+    this.markers = new Map() // Map of featureId -> { marker, isLabelPoint, text, position, hasIcon, zoom }
     this.showAllLabels = true
     this.updateTimeout = null // Debounce updates
     this.isUpdating = false // Prevent concurrent updates
@@ -511,11 +523,16 @@ export class LabelMarkerManager {
           const name = labelPoint.properties?.name
           if (!name || name.trim() === '') return
           
+          // Check if this label should be placed below the polygon
+          const placeLabelBelow = labelPoint.properties?._placeLabelBelow || false
+          
           candidateLabels.push({
             id: originalId,
             name,
             position,
-            isLabelPoint: true
+            isLabelPoint: true,
+            hasIcon: false, // Label points don't have icons
+            placeLabelBelow: placeLabelBelow
           })
         })
 
@@ -557,7 +574,9 @@ export class LabelMarkerManager {
             id,
             name,
             position,
-            isLabelPoint: false
+            isLabelPoint: false,
+            hasIcon: !!feature.properties?._iconId, // Track if feature has an icon
+            placeLabelBelow: false // Regular points don't use this flag
           })
         })
 
@@ -565,9 +584,9 @@ export class LabelMarkerManager {
         const labelsToShow = candidateLabels.slice(0, MAX_VISIBLE_LABELS)
 
         // Batch create/update markers
-        labelsToShow.forEach(({ id, name, position, isLabelPoint }) => {
+        labelsToShow.forEach(({ id, name, position, isLabelPoint, hasIcon, placeLabelBelow }) => {
           shouldHaveMarker.add(id)
-          this.ensureMarker(id, name, position, isLabelPoint)
+          this.ensureMarker(id, name, position, isLabelPoint, hasIcon, zoom, placeLabelBelow)
         })
 
         // Batch remove markers that are no longer needed
@@ -602,32 +621,49 @@ export class LabelMarkerManager {
    * @param {string} text - Label text
    * @param {Array<number>} position - [lon, lat] coordinates
    * @param {boolean} isLabelPoint - Whether this is a label point (polygon/line) or regular point
+   * @param {boolean} hasIcon - Whether the feature has an icon
+   * @param {number} zoom - Current zoom level
+   * @param {boolean} placeLabelBelow - Whether to place label below (for small polygons)
    */
-  ensureMarker(featureId, text, position, isLabelPoint = false) {
+  ensureMarker(featureId, text, position, isLabelPoint = false, hasIcon = false, zoom = 10, placeLabelBelow = false) {
     if (!this.map || !position || !text || text.trim() === '') return
 
     const existingMarker = this.markers.get(featureId)
     
     if (existingMarker) {
-      const { marker, isLabelPoint: existingIsLabelPoint, text: existingText, position: existingPosition } = existingMarker
+      const { marker, isLabelPoint: existingIsLabelPoint, text: existingText, position: existingPosition, hasIcon: existingHasIcon, zoom: existingZoom, placeLabelBelow: existingPlaceLabelBelow } = existingMarker
       
       // Check if anything actually changed to avoid unnecessary DOM updates
       const positionChanged = existingPosition[0] !== position[0] || existingPosition[1] !== position[1]
       const textChanged = existingText !== text
       const anchorChanged = existingIsLabelPoint !== isLabelPoint
+      const iconChanged = existingHasIcon !== hasIcon
+      const zoomChanged = Math.abs((existingZoom || 10) - zoom) > 0.5 // Only recreate if zoom changed significantly
+      const placementChanged = existingPlaceLabelBelow !== placeLabelBelow
       
-      if (!positionChanged && !textChanged && !anchorChanged) {
+      // For label points, styling doesn't change with zoom (offset is fixed)
+      // For regular points, styling changes with zoom (offset based on icon/circle size)
+      // Only recreate marker if styling actually needs to change
+      const needsRecreate = anchorChanged || iconChanged || placementChanged || 
+        (!isLabelPoint && zoomChanged) // Only regular points need recreation on zoom change
+      
+      if (!positionChanged && !textChanged && !needsRecreate) {
         // Nothing changed, skip update
+        // Update stored zoom for tracking, but don't recreate marker
+        this.markers.set(featureId, { marker, isLabelPoint, text, position: [...position], hasIcon, zoom, placeLabelBelow })
         return
       }
       
-      // If anchor type changed, recreate the marker
-      if (anchorChanged) {
+      // If anchor type, icon status, placement changed, or regular point zoom changed, recreate the marker
+      if (needsRecreate) {
         marker.remove()
-        const newEl = createLabelElement(text, isLabelPoint)
+        const newEl = createLabelElement(text, isLabelPoint, zoom, hasIcon, placeLabelBelow)
         newEl.style.display = this.showAllLabels ? 'block' : 'none'
         
-        const finalAnchor = isLabelPoint ? 'center' : 'bottom'
+        // For label points placed below polygon, use 'top' anchor (like regular points)
+        // For label points at centroid, use 'center' anchor
+        // For regular points, use 'top' anchor
+        const finalAnchor = (isLabelPoint && !placeLabelBelow) ? 'center' : 'top'
         
         const newMarker = new maplibregl.Marker({
           element: newEl,
@@ -635,7 +671,7 @@ export class LabelMarkerManager {
         })
           .setLngLat(position)
           .addTo(this.map)
-        this.markers.set(featureId, { marker: newMarker, isLabelPoint, text, position: [...position] })
+        this.markers.set(featureId, { marker: newMarker, isLabelPoint, text, position: [...position], hasIcon, zoom, placeLabelBelow })
         return
       }
       
@@ -651,18 +687,20 @@ export class LabelMarkerManager {
       }
       
       // Update stored data
-      this.markers.set(featureId, { marker, isLabelPoint, text, position: [...position] })
+      this.markers.set(featureId, { marker, isLabelPoint, text, position: [...position], hasIcon, zoom, placeLabelBelow })
       
       // Ensure visibility is correct
       const el = marker.getElement()
       if (el) el.style.display = this.showAllLabels ? 'block' : 'none'
     } else {
       // Create new marker
-      const el = createLabelElement(text, isLabelPoint)
+      const el = createLabelElement(text, isLabelPoint, zoom, hasIcon, placeLabelBelow)
       el.style.display = this.showAllLabels ? 'block' : 'none'
       
-      // For label points (polygons/lines), use center anchor; for points, use bottom anchor
-      const anchor = isLabelPoint ? 'center' : 'bottom'
+      // For label points placed below polygon, use 'top' anchor (like regular points)
+      // For label points at centroid, use 'center' anchor
+      // For regular points, use 'top' anchor
+      const anchor = (isLabelPoint && !placeLabelBelow) ? 'center' : 'top'
       
       const marker = new maplibregl.Marker({
         element: el,
@@ -671,7 +709,7 @@ export class LabelMarkerManager {
         .setLngLat(position)
         .addTo(this.map)
 
-      this.markers.set(featureId, { marker, isLabelPoint, text, position: [...position] })
+      this.markers.set(featureId, { marker, isLabelPoint, text, position: [...position], hasIcon, zoom, placeLabelBelow })
     }
   }
 

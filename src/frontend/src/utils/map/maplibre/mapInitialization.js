@@ -14,6 +14,11 @@ import maplibregl from 'maplibre-gl'
  * @returns {Object} MapLibre map instance
  */
 export function initializeMap(container, config) {
+  // Validate container before attempting to initialize
+  if (!container || !(container instanceof HTMLElement)) {
+    throw new Error('Invalid container: must be an HTMLElement')
+  }
+
   const { center, zoom, glyphsUrl = '/api/fonts/{fontstack}/{range}.pbf' } = config
 
   const map = new maplibregl.Map({

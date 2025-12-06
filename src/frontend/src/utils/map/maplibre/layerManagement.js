@@ -4,6 +4,7 @@
 
 import {
   getPointLayerConfig,
+  getReplacementPointLayerConfig,
   getPointIconLayerConfig,
   getLineLayerConfig,
   getPolygonLayerConfig,
@@ -71,6 +72,7 @@ export function ensureLayersExist(map, showAllLabels = true) {
       ['==', ['geometry-type'], 'Point'], 
       ['!', ['has', '_on_border']], 
       ['!', ['has', '_isLabelPoint']], // Exclude label points
+      ['!', ['has', '_isSmallFeatureReplacement']], // Exclude replacement points (separate layer)
       ['!', ['has', '_icon-id']] // Only show features without icons
     ]
     pointConfig.filter = circleFilter
@@ -86,16 +88,35 @@ export function ensureLayersExist(map, showAllLabels = true) {
       ['==', ['geometry-type'], 'Point'], 
       ['!', ['has', '_on_border']], 
       ['!', ['has', '_isLabelPoint']], // Exclude label points
+      ['!', ['has', '_isSmallFeatureReplacement']], // Exclude replacement points (separate layer)
       ['!', ['has', '_icon-id']] // Only show features without icons
     ]
     map.setFilter('points', circleFilter)
   }
 
-  // 4a. Point icons layer (for features with icons) - add after points
+  // 4c. Replacement points layer (for small polygons/lines) - add after regular points
+  const replacementPointConfig = getReplacementPointLayerConfig()
+  if (!map.getLayer('replacement-points')) {
+    // Filter is already set in getReplacementPointLayerConfig
+    if (map.getLayer('points')) {
+      map.addLayer(replacementPointConfig, 'points')
+    } else if (map.getLayer('lines')) {
+      map.addLayer(replacementPointConfig, 'lines')
+    } else {
+      map.addLayer(replacementPointConfig)
+    }
+  } else {
+    // Filter is already correct in getReplacementPointLayerConfig
+    map.setFilter('replacement-points', replacementPointConfig.filter)
+  }
+
+  // 4a. Point icons layer (for features with icons) - add after replacement-points
   const pointIconConfig = getPointIconLayerConfig()
   if (!map.getLayer('point-icons')) {
     // Filter is already set in getPointIconLayerConfig
-    if (map.getLayer('points')) {
+    if (map.getLayer('replacement-points')) {
+      map.addLayer(pointIconConfig, 'replacement-points')
+    } else if (map.getLayer('points')) {
       map.addLayer(pointIconConfig, 'points')
     } else if (map.getLayer('lines')) {
       map.addLayer(pointIconConfig, 'lines')
@@ -116,7 +137,7 @@ export function ensureLayersExist(map, showAllLabels = true) {
   // Debug: log final layer order
   const finalStyle = map.getStyle()
   if (finalStyle && finalStyle.layers) {
-    const ourLayers = ['polygons', 'polygon-outlines', 'lines', 'points', 'point-icons']
+    const ourLayers = ['polygons', 'polygon-outlines', 'lines', 'points', 'replacement-points', 'point-icons']
       .filter(id => map.getLayer(id))
       .map(id => {
         const index = finalStyle.layers.findIndex(l => l.id === id)
@@ -172,7 +193,7 @@ function ensureLayerOrder(map, beforeLayerId, afterLayerId) {
 
 /**
  * Force correct layer ordering
- * Desired order (bottom to top): polygons, polygon-outlines, lines, points, labels
+ * Desired order (bottom to top): polygons, polygon-outlines, lines, points, replacement-points, point-icons, labels
  * MapLibre renders layers in order, with later layers on top
  * @param {Object} map - MapLibre map instance
  * @param {boolean} showAllLabels - Whether to show labels
@@ -184,7 +205,7 @@ function enforceLayerOrder(map, showAllLabels = true) {
   if (!style || !style.layers) return
 
   // Desired order from bottom to top (labels are now HTML markers, not layers)
-  const desiredOrder = ['polygons', 'polygon-outlines', 'lines', 'points', 'point-icons']
+  const desiredOrder = ['polygons', 'polygon-outlines', 'lines', 'points', 'replacement-points', 'point-icons']
   
   // Get current indices of our layers
   const layerIndices = {}

@@ -506,10 +506,16 @@ export default {
 
     /**
      * Fetch elevations from API for a feature
+     * @param {string} featureId - The feature database ID or hash
+     * @param {string} source - Either 'external' for external elevation API or 'internal' for GPS elevations
      */
-    async fetchElevationsFromAPI(featureId) {
+    async fetchElevationsFromAPI(featureId, source = 'external') {
       try {
-        const response = await axios.get(`/api/feature/${featureId}/elevations/`, {
+        const endpoint = source === 'external' 
+          ? `/api/feature/${featureId}/elevations/external/`
+          : `/api/feature/${featureId}/elevations/internal/`
+          
+        const response = await axios.get(endpoint, {
           headers: {
             'X-CSRFToken': getCookie('csrftoken')
           }
@@ -519,7 +525,7 @@ export default {
         }
         return null
       } catch (error) {
-        console.error('Error fetching elevations from API:', error)
+        console.error(`Error fetching elevations from API (${source}):`, error)
         return null
       }
     },
@@ -560,7 +566,7 @@ export default {
         return
       }
 
-      // Extract coordinates
+      // Extract base coordinates from geometry
       let coordinates = extractCoordinates(geometry)
       if (coordinates.length === 0) {
         this.hasElevationData = false
@@ -569,25 +575,59 @@ export default {
         return
       }
 
-      // If using API elevations, fetch them
+      // Check if coordinates have elevation data (3rd element)
+      // MapLibre strips Z coordinates, so coordinates may only have [lon, lat]
+      const hasElevationInCoords = coordinates.length > 0 && coordinates[0].length >= 3
+      const featureId = this.feature.get('properties')?.database_id || this.feature.get('properties')?.geojson_hash
+      
+      // Determine elevation source and fetch coordinates with elevation data
       if (this.elevationProfileSource === 'api') {
-        const featureId = this.feature.get('properties')?.database_id || this.feature.get('properties')?.geojson_hash
-        if (featureId) {
-          const apiCoordinates = await this.fetchElevationsFromAPI(featureId)
-          if (apiCoordinates && apiCoordinates.length > 0) {
-            // Use API coordinates (they already have elevations)
-            coordinates = apiCoordinates
-          } else {
-            // API fetch failed, fallback to GPS elevations
-            console.warn('Failed to fetch elevations from API, falling back to GPS elevations')
-            // coordinates already contains GPS elevations, continue with them
-          }
-        } else {
-          // No feature ID available, use GPS elevations
-          console.warn('No feature ID available, using GPS elevations')
+        // === EXTERNAL ELEVATION SOURCE ===
+        // User explicitly wants elevations from the external elevation API
+        
+        if (!featureId) {
+          console.warn('Cannot fetch external elevations: no feature ID available')
+          this.hasElevationData = false
+          this.stats = null
+          this.isUpdatingChart = false
+          return
         }
+
+        const apiCoordinates = await this.fetchElevationsFromAPI(featureId, 'external')
+        if (apiCoordinates && apiCoordinates.length > 0) {
+          coordinates = apiCoordinates
+        } else {
+          console.warn('Failed to fetch elevations from external API')
+          this.hasElevationData = false
+          this.stats = null
+          this.isUpdatingChart = false
+          return
+        }
+      } else {
+        // === GPS ELEVATION SOURCE ===
+        // User wants GPS elevations from the original imported data
+        
+        if (!hasElevationInCoords) {
+          // GPS elevations not available in geometry
+          // (MapLibre strips Z coordinates for rendering - this is expected behavior)
+          // Fetch the original GPS elevations from the database via API
+          if (featureId) {
+            const apiCoordinates = await this.fetchElevationsFromAPI(featureId, 'internal')
+            if (apiCoordinates && apiCoordinates.length > 0) {
+              coordinates = apiCoordinates
+            } else {
+              console.warn('GPS elevations unavailable')
+              this.hasElevationData = false
+              this.stats = null
+              this.isUpdatingChart = false
+              return
+            }
+          } else {
+            throw new Error('GPS elevations unavailable and no feature ID for API fallback')
+          }
+        }
+        // else: GPS elevations are available in coordinates, use them as-is
       }
-      // If using GPS elevations, coordinates already contain them from extractCoordinates
 
       // Extract timestamps from coordinateProperties
       const timestamps = extractTimestamps(this.feature)

@@ -102,7 +102,7 @@
           class="scroller"
           :items="displayFeatures"
           :item-size="32"
-          key-field="_geoJsonMapId"
+          key-field="database_id"
           v-slot="{ item }"
         >
           <div
@@ -350,24 +350,9 @@ export default {
           this.activeTab = 'tag-filter'
         }
       }
-    },
-    // Ensure all features have IDs for virtual scrolling
-    displayFeatures: {
-      immediate: true,
-      handler(features) {
-        features.forEach(feature => {
-          this.getFeatureId(feature)
-        })
-      }
     }
   },
   methods: {
-    getFeatureId(feature) {
-      if (!feature._geoJsonMapId) {
-        feature._geoJsonMapId = `feature_${Date.now()}_${Math.random()}`
-      }
-      return feature._geoJsonMapId
-    },
     getFeatureName(feature) {
       const properties = feature.get('properties') || {}
       return properties.name || 'Unnamed Feature'

@@ -14,6 +14,58 @@ import {
 } from './featureStyling.js'
 
 /**
+ * Create zoom-based radius expression with exponential scaling
+ * Applies minimum size constraint for visibility at low zoom levels
+ * @param {number} baseRadius - Full size radius at zoom >= 10
+ * @param {number} minRadius - Minimum radius at low zoom levels
+ * @param {number} baseZoom - Zoom level where full size is reached (default: 10)
+ * @param {number} scaleFactor - Exponential scaling factor (default: 0.6)
+ * @returns {Array} MapLibre expression for circle-radius
+ */
+function createZoomBasedRadiusExpression(baseRadius, minRadius, baseZoom = 10, scaleFactor = 0.6) {
+  const exponentialBase = Math.pow(2, scaleFactor) // 2^0.6 ≈ 1.516
+  
+  // Calculate zoom level where we hit minimum radius
+  // Formula: minRadius = baseRadius * 2^((zoomMin - baseZoom) * scaleFactor)
+  // Solving: zoomMin = baseZoom + log2(minRadius / baseRadius) / scaleFactor
+  const zoomAtMin = baseZoom + Math.log2(minRadius / baseRadius) / scaleFactor
+
+  return [
+    'interpolate',
+    ['exponential', exponentialBase],
+    ['zoom'],
+    zoomAtMin, minRadius,  // At calculated zoom: minimum size
+    baseZoom, baseRadius,  // At base zoom: full size
+    22, baseRadius         // At zoom 22: stays at full size
+  ]
+}
+
+/**
+ * Create zoom-based icon scale expression with exponential scaling
+ * Matches OpenLayers behavior: icons stay at full size at zoom 10+, only scale down when zoomed out
+ * @param {number} baseScale - Full size scale at zoom >= 10
+ * @param {number} minScale - Minimum scale at low zoom levels
+ * @param {number} baseZoom - Zoom level where full size is reached (default: 10)
+ * @param {number} scaleFactor - Exponential scaling factor (default: 0.6)
+ * @returns {Array} MapLibre expression for icon-size
+ */
+function createZoomBasedScaleExpression(baseScale, minScale, baseZoom = 10, scaleFactor = 0.6) {
+  const exponentialBase = Math.pow(2, scaleFactor) // 2^0.6 ≈ 1.516
+  
+  // Calculate zoom level where we hit minimum scale
+  const zoomAtMin = baseZoom + Math.log2(minScale / baseScale) / scaleFactor
+
+  return [
+    'interpolate',
+    ['exponential', exponentialBase],
+    ['zoom'],
+    zoomAtMin, minScale,  // At calculated zoom: minimum size
+    baseZoom, baseScale,  // At base zoom (10): full size
+    22, baseScale         // At zoom 22: stays at full size (no further scaling when zoomed in)
+  ]
+}
+
+/**
  * Default feature styles with data-driven expressions
  */
 export const defaultFeatureStyles = {
@@ -90,7 +142,8 @@ export const defaultFeatureStyles = {
 
 /**
  * Get point layer configuration (for circles, when no icon or at low zoom)
- * Includes replacement points for small polygons/lines
+ * For regular points only (not replacements)
+ * Applies zoom-based exponential scaling matching OpenLayers behavior
  * @param {Object} overrides - Style overrides
  * @returns {Object} Point layer configuration
  */
@@ -102,17 +155,37 @@ export function getPointLayerConfig(overrides = {}) {
     filter: ['all', 
       ['==', ['geometry-type'], 'Point'], 
       ['!', ['has', '_on_border']],
-      ['!', ['has', '_isLabelPoint']] // Exclude label points
+      ['!', ['has', '_isLabelPoint']], // Exclude label points
+      ['!', ['has', '_isSmallFeatureReplacement']] // Exclude replacement points (separate layer)
     ],
     paint: {
       ...defaultFeatureStyles.points.paint,
-      // Use a smaller radius for small feature replacements
-      'circle-radius': [
-        'case',
-        ['has', '_isSmallFeatureReplacement'],
-        3, // Smaller dot for small polygon/line replacements
-        4  // Normal size for regular points
-      ],
+      // Zoom-based radius: 2px minimum, 4px at zoom 10+
+      'circle-radius': createZoomBasedRadiusExpression(4, 2),
+      ...overrides.paint
+    }
+  }
+}
+
+/**
+ * Get replacement point layer configuration (for small polygons/lines)
+ * Applies zoom-based exponential scaling matching OpenLayers behavior
+ * @param {Object} overrides - Style overrides
+ * @returns {Object} Replacement point layer configuration
+ */
+export function getReplacementPointLayerConfig(overrides = {}) {
+  return {
+    id: 'replacement-points',
+    type: 'circle',
+    source: 'geojson-data',
+    filter: ['all', 
+      ['==', ['geometry-type'], 'Point'], 
+      ['has', '_isSmallFeatureReplacement'] // Only replacement points
+    ],
+    paint: {
+      ...defaultFeatureStyles.points.paint,
+      // Zoom-based radius: 1.5px minimum, 3px at zoom 10+
+      'circle-radius': createZoomBasedRadiusExpression(3, 1.5),
       ...overrides.paint
     }
   }
@@ -120,6 +193,7 @@ export function getPointLayerConfig(overrides = {}) {
 
 /**
  * Get point icon layer configuration (for icons at high zoom)
+ * Applies zoom-based exponential scaling matching OpenLayers behavior
  * @param {Object} overrides - Style overrides
  * @returns {Object} Point icon layer configuration
  */
@@ -140,11 +214,8 @@ export function getPointIconLayerConfig(overrides = {}) {
         ['get', '_icon-id'],
         ''
       ],
-      'icon-size': [
-        'coalesce',
-        ['get', '_icon-scale'],
-        0.4
-      ],
+      // Zoom-based scale: 0.5 minimum (50% of full size, matching point scaling), 1.0 at zoom 10+
+      'icon-size': createZoomBasedScaleExpression(1.0, 0.5),
       'icon-anchor': 'bottom',
       'icon-allow-overlap': true,
       'icon-ignore-placement': true

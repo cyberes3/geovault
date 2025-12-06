@@ -4,7 +4,7 @@ from api.views.bbox_query import get_geojson_data
 from api.views.config import get_config
 from api.views.health import health_check
 from api.views.feature_delete import delete_feature
-from api.views.feature_retrieval import get_feature, get_feature_elevations
+from api.views.feature_retrieval import get_feature, get_feature_elevations_external, get_feature_elevations_internal
 from api.views.feature_search import (
     get_features_by_tag,
     get_user_tags,
@@ -53,7 +53,8 @@ urlpatterns = [
     path('features/bulk-update-metadata/', bulk_update_features_metadata),
     path('features/bulk-operations/by-tag/<str:tag_name>/', apply_bulk_operations_to_tag),
     path('feature/<int:feature_id>/', get_feature),
-    path('feature/<int:feature_id>/elevations/', get_feature_elevations),
+    path('feature/<int:feature_id>/elevations/external/', get_feature_elevations_external),
+    path('feature/<int:feature_id>/elevations/internal/', get_feature_elevations_internal),
     path('feature/<int:feature_id>/update/', update_feature),
     path('feature/<int:feature_id>/update-metadata/', update_feature_metadata),
     path('feature/<int:feature_id>/apply-replacement/', apply_replacement_geometry),

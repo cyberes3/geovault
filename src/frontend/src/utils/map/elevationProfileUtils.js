@@ -169,8 +169,9 @@ export function processElevationData(coordinates, timestamps = null) {
     const coord = coordinates[idx]
     if (Array.isArray(coord) && coord.length >= 3) {
       const elevation = coord[2]
-      // Check if elevation exists and is not 0 (0 might be a placeholder)
-      if (elevation !== null && elevation !== undefined && elevation !== 0) {
+      // Check if elevation exists (note: 0 is a valid elevation for sea level)
+      // Only reject null, undefined, or coordinates without a third element
+      if (elevation !== null && elevation !== undefined) {
         validPoints.push(coord)
         originalIndices.push(idx)
         // Store corresponding timestamp if available
@@ -182,6 +183,14 @@ export function processElevationData(coordinates, timestamps = null) {
   }
 
   if (validPoints.length === 0) {
+    return { distances: [], distancesMeters: [], elevations: [], coordinateMapping: [], timestamps: [] }
+  }
+
+  // Check if all elevations are effectively 0 (placeholder values from backend)
+  // If all elevations are 0, treat this as "no elevation data" since 0 is used as a placeholder
+  // for missing data in the backend when elevation API fails or coordinates lack elevation
+  const allElevationsZero = validPoints.every(coord => Math.abs(coord[2]) < 0.01)
+  if (allElevationsZero) {
     return { distances: [], distancesMeters: [], elevations: [], coordinateMapping: [], timestamps: [] }
   }
 

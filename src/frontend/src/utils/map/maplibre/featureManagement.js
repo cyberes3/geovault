@@ -3,6 +3,7 @@
  */
 
 import { markRaw } from 'vue'
+import * as turf from '@turf/turf'
 import { filterPointsOnBorders } from './featureFiltering.js'
 import { ensureLayersExist } from './layerManagement.js'
 import {
@@ -15,8 +16,11 @@ import { detectPrimaryColor } from '@/utils/map/iconUtils'
 import { calculatePolygonCentroid, calculateLineCenter, calculatePolygonBottomCenter } from './labelPlacement.js'
 import { checkLabelBorderIntersection, getResolutionFromZoom } from './labelMarkers.js'
 
+// Web Mercator constant (matches OpenLayers)
+const WEB_MERCATOR_WORLD_SIZE = 156543.03392 // meters per pixel at zoom 0
+
 /**
- * Calculate the screen size of a polygon in pixels
+ * Calculate the screen size of a polygon in pixels using Turf.js for accuracy
  * @param {Object} geometry - GeoJSON geometry
  * @param {number} zoom - Current zoom level
  * @returns {Object} Object with width and height in pixels
@@ -26,59 +30,34 @@ function calculatePolygonScreenSize(geometry, zoom) {
     return { widthPixels: 0, heightPixels: 0 }
   }
 
-  // Get all coordinates from the polygon
-  let allCoords = []
-  if (geometry.type === 'Polygon') {
-    // For Polygon, coordinates[0] is the outer ring
-    allCoords = geometry.coordinates[0] || []
-  } else if (geometry.type === 'MultiPolygon') {
-    // For MultiPolygon, get all outer rings
-    geometry.coordinates.forEach(polygon => {
-      if (polygon[0]) {
-        allCoords = allCoords.concat(polygon[0])
-      }
-    })
-  }
+  try {
+    // Use Turf.js to get bbox (returns [minLon, minLat, maxLon, maxLat])
+    const bbox = turf.bbox(geometry)
+    const [minLon, minLat, maxLon, maxLat] = bbox
 
-  if (allCoords.length === 0) {
+    // Create points at the bbox corners to measure distances
+    const bottomLeft = turf.point([minLon, minLat])
+    const bottomRight = turf.point([maxLon, minLat])
+    const topLeft = turf.point([minLon, maxLat])
+
+    // Calculate geodesic distances in meters
+    const widthMeters = turf.distance(bottomLeft, bottomRight, { units: 'meters' })
+    const heightMeters = turf.distance(bottomLeft, topLeft, { units: 'meters' })
+
+    // Convert to pixels using Web Mercator resolution
+    const resolution = WEB_MERCATOR_WORLD_SIZE / Math.pow(2, zoom)
+    const widthPixels = widthMeters / resolution
+    const heightPixels = heightMeters / resolution
+
+    return { widthPixels, heightPixels }
+  } catch (e) {
+    console.warn('Error calculating polygon screen size:', e)
     return { widthPixels: 0, heightPixels: 0 }
   }
-
-  // Calculate extent in degrees
-  let minLon = Infinity, minLat = Infinity, maxLon = -Infinity, maxLat = -Infinity
-  allCoords.forEach(coord => {
-    const [lon, lat] = coord
-    if (isFinite(lon) && isFinite(lat)) {
-      minLon = Math.min(minLon, lon)
-      minLat = Math.min(minLat, lat)
-      maxLon = Math.max(maxLon, lon)
-      maxLat = Math.max(maxLat, lat)
-    }
-  })
-
-  if (!isFinite(minLon) || !isFinite(minLat) || !isFinite(maxLon) || !isFinite(maxLat)) {
-    return { widthPixels: 0, heightPixels: 0 }
-  }
-
-  const widthDegrees = maxLon - minLon
-  const heightDegrees = maxLat - minLat
-
-  // Convert degrees to pixels at the given zoom level
-  // At zoom level 0, the world is 256 pixels wide (one tile)
-  // Each zoom level doubles the pixel width
-  // The world width in degrees is 360
-  const tileSize = 256
-  const worldWidthPixels = tileSize * Math.pow(2, zoom)
-  const pixelsPerDegree = worldWidthPixels / 360
-
-  const widthPixels = widthDegrees * pixelsPerDegree
-  const heightPixels = heightDegrees * pixelsPerDegree
-
-  return { widthPixels, heightPixels }
 }
 
 /**
- * Calculate the screen size of a line in pixels
+ * Calculate the screen size of a line in pixels using Turf.js for accuracy
  * @param {Object} geometry - GeoJSON geometry
  * @param {number} zoom - Current zoom level
  * @returns {number} Length in pixels
@@ -88,41 +67,19 @@ function calculateLineScreenSize(geometry, zoom) {
     return 0
   }
 
-  // Get all coordinates from the line
-  let allCoords = []
-  if (geometry.type === 'LineString') {
-    allCoords = geometry.coordinates || []
-  } else if (geometry.type === 'MultiLineString') {
-    geometry.coordinates.forEach(line => {
-      allCoords = allCoords.concat(line)
-    })
-  }
+  try {
+    // Use Turf.js to calculate geodesic length in meters
+    const lengthMeters = turf.length(geometry, { units: 'meters' })
 
-  if (allCoords.length < 2) {
+    // Convert to pixels using Web Mercator resolution
+    const resolution = WEB_MERCATOR_WORLD_SIZE / Math.pow(2, zoom)
+    const lengthPixels = lengthMeters / resolution
+
+    return lengthPixels
+  } catch (e) {
+    console.warn('Error calculating line screen size:', e)
     return 0
   }
-
-  // Calculate total length by summing segments
-  let totalLengthDegrees = 0
-  for (let i = 0; i < allCoords.length - 1; i++) {
-    const [lon1, lat1] = allCoords[i]
-    const [lon2, lat2] = allCoords[i + 1]
-    
-    if (isFinite(lon1) && isFinite(lat1) && isFinite(lon2) && isFinite(lat2)) {
-      // Simple Euclidean distance in degrees (good enough for screen size estimation)
-      const dx = lon2 - lon1
-      const dy = lat2 - lat1
-      const segmentLength = Math.sqrt(dx * dx + dy * dy)
-      totalLengthDegrees += segmentLength
-    }
-  }
-
-  // Convert degrees to pixels at the given zoom level
-  const tileSize = 256
-  const worldWidthPixels = tileSize * Math.pow(2, zoom)
-  const pixelsPerDegree = worldWidthPixels / 360
-
-  return totalLengthDegrees * pixelsPerDegree
 }
 
 /**
@@ -291,11 +248,11 @@ async function processFeaturesForIcons(features, map, zoom, replaceIconsLowZoom 
       delete feature.properties._isTooSmall
     }
 
-    // Add the original feature
-    processedFeatures.push(feature)
-
-    // If we need a replacement point, create it alongside the original
+    // If we need a replacement point, add both the original feature and replacement
     if (isSmallFeature && replacementCenter) {
+      // Add the original feature
+      processedFeatures.push(feature)
+      
       const replacementFeature = {
         type: 'Feature',
         properties: {
@@ -317,81 +274,83 @@ async function processFeaturesForIcons(features, map, zoom, replaceIconsLowZoom 
       continue
     }
 
-    // Normal icon processing for point features
-    if (geometryType === 'Point') {
-      const iconUrl = getFeatureIconUrl(feature.properties)
-      const shouldUseIconImage = iconUrl && shouldUseIcon(zoom, iconUrl, replaceIconsLowZoom)
-
-      if (shouldUseIconImage) {
-        // Add icon metadata to feature
-        const resolvedUrl = getIconSourceUrl(iconUrl, feature.properties)
-        const iconId = `icon-${resolvedUrl.replace(/[^a-zA-Z0-9]/g, '_')}`
-        
-        // Store icon ID and scale in feature properties for MapLibre expressions
-        feature.properties['_icon-id'] = iconId
-        feature.properties['_icon-scale'] = 0.4 // Default scale, can be adjusted
-        
-        // Load icon image
-        iconLoadPromises.push(
-          loadIconImage(map, iconId, resolvedUrl).catch(err => {
-            console.warn(`Failed to load icon ${iconId}:`, err)
-            // Remove icon metadata on failure
-            delete feature.properties['_icon-id']
-          })
-        )
-      } else if (iconUrl && !shouldUseIconImage) {
-        // Icon exists but should be replaced with circle at low zoom
-        // Detect primary color from icon image for the replacement circle
-        const resolvedUrl = getIconSourceUrl(iconUrl, feature.properties)
-        
-        // Check if we already have a detected color stored
-        if (!feature.properties['_detectedIconColor'] && !feature.properties['_colorDetectionInProgress']) {
-          // Mark as in progress to avoid duplicate detection
-          feature.properties['_colorDetectionInProgress'] = true
-          
-          // Start color detection asynchronously
-          detectPrimaryColor(resolvedUrl)
-            .then(color => {
-              // Store detected color in feature properties
-              feature.properties['_detectedIconColor'] = color
-              feature.properties['_colorDetectionInProgress'] = false
-              
-              // Update the map source to trigger a re-render with the new color
-              if (map && map.getSource('geojson-data')) {
-                const source = map.getSource('geojson-data')
-                const currentData = source._data || { type: 'FeatureCollection', features: [] }
-                // Find and update this feature in the source data
-                if (currentData.features) {
-                  const featureId = feature.properties?.database_id
-                  const existingFeature = currentData.features.find(f => 
-                    f.properties?.database_id === featureId
-                  )
-                  if (existingFeature) {
-                    existingFeature.properties['_detectedIconColor'] = color
-                    existingFeature.properties['_colorDetectionInProgress'] = false
-                    // Trigger update
-                    source.setData(currentData)
-                  }
-                }
-              }
-            })
-            .catch(() => {
-              // On error, use marker-color as fallback
-              feature.properties['_detectedIconColor'] = feature.properties['marker-color'] || '#ff0000'
-              feature.properties['_colorDetectionInProgress'] = false
-            })
-        }
-        
-        // Remove icon metadata since we're using a circle
-        delete feature.properties['_icon-id']
-        delete feature.properties['_icon-scale']
-      } else {
-        // No icon, remove icon metadata
-        delete feature.properties['_icon-id']
-        delete feature.properties['_icon-scale']
-      }
+    // For non-small polygons/lines, just add the feature
+    if (geometryType !== 'Point') {
+      processedFeatures.push(feature)
+      continue
     }
 
+    // Normal icon processing for point features only
+    const iconUrl = getFeatureIconUrl(feature.properties)
+    const shouldUseIconImage = iconUrl && shouldUseIcon(zoom, iconUrl, replaceIconsLowZoom)
+
+    if (shouldUseIconImage) {
+      // Add icon metadata to feature
+      const resolvedUrl = getIconSourceUrl(iconUrl, feature.properties)
+      const iconId = `icon-${resolvedUrl.replace(/[^a-zA-Z0-9]/g, '_')}`
+      
+      // Store icon ID in feature properties for MapLibre expressions
+      feature.properties['_icon-id'] = iconId
+      
+      // Load icon image
+      iconLoadPromises.push(
+        loadIconImage(map, iconId, resolvedUrl).catch(err => {
+          console.warn(`Failed to load icon ${iconId}:`, err)
+          // Remove icon metadata on failure
+          delete feature.properties['_icon-id']
+        })
+      )
+    } else if (iconUrl && !shouldUseIconImage) {
+      // Icon exists but should be replaced with circle at low zoom
+      // Detect primary color from icon image for the replacement circle
+      const resolvedUrl = getIconSourceUrl(iconUrl, feature.properties)
+      
+      // Check if we already have a detected color stored
+      if (!feature.properties['_detectedIconColor'] && !feature.properties['_colorDetectionInProgress']) {
+        // Mark as in progress to avoid duplicate detection
+        feature.properties['_colorDetectionInProgress'] = true
+        
+        // Start color detection asynchronously
+        detectPrimaryColor(resolvedUrl)
+          .then(color => {
+            // Store detected color in feature properties
+            feature.properties['_detectedIconColor'] = color
+            feature.properties['_colorDetectionInProgress'] = false
+            
+            // Update the map source to trigger a re-render with the new color
+            if (map && map.getSource('geojson-data')) {
+              const source = map.getSource('geojson-data')
+              const currentData = source._data || { type: 'FeatureCollection', features: [] }
+              // Find and update this feature in the source data
+              if (currentData.features) {
+                const featureId = feature.properties?.database_id
+                const existingFeature = currentData.features.find(f => 
+                  f.properties?.database_id === featureId
+                )
+                if (existingFeature) {
+                  existingFeature.properties['_detectedIconColor'] = color
+                  existingFeature.properties['_colorDetectionInProgress'] = false
+                  // Trigger update
+                  source.setData(currentData)
+                }
+              }
+            }
+          })
+          .catch(() => {
+            // On error, use marker-color as fallback
+            feature.properties['_detectedIconColor'] = feature.properties['marker-color'] || '#ff0000'
+            feature.properties['_colorDetectionInProgress'] = false
+          })
+      }
+      
+      // Remove icon metadata since we're using a circle
+      delete feature.properties['_icon-id']
+    } else {
+      // No icon, remove icon metadata
+      delete feature.properties['_icon-id']
+    }
+
+    // Add the point feature after icon processing
     processedFeatures.push(feature)
   }
 
@@ -501,32 +460,38 @@ export async function addFeaturesToMap(map, geojsonData, showAllLabels = true, z
           } else if (isNewFeature) {
             // Create a new label point for new features only
             let labelPoint = null
+            let placeLabelBelow = false
             
             if (geometry.type === 'Polygon' || geometry.type === 'MultiPolygon') {
-              // First, calculate centroid for polygon
+              // Calculate centroid for polygon
               const centroid = calculatePolygonCentroid(geometry)
               
-              if (centroid && zoom !== null) {
-                // Check if label at centroid would intersect with border
-                const resolution = getResolutionFromZoom(zoom)
-                const strokeWidth = feature.properties?.['stroke-width'] || 2
-                const wouldIntersect = checkLabelBorderIntersection(
+              // Check if label would intersect with polygon border
+              // Use a fixed zoom level (10) for consistent positioning across all zoom levels
+              // This ensures label positions are stable and don't move when zooming
+              // Zoom 10 is the base zoom where features are at full size
+              if (centroid && feature.properties?.name) {
+                const fixedZoom = 10 // Use fixed zoom for consistent label placement
+                const resolution = getResolutionFromZoom(fixedZoom)
+                const strokeWidth = feature.properties['stroke-width'] || 2
+                const shouldPlaceBelow = checkLabelBorderIntersection(
                   geometry,
                   centroid,
-                  name,
+                  feature.properties.name,
                   resolution,
                   strokeWidth
                 )
                 
-                if (wouldIntersect) {
-                  // Place label below polygon instead
+                if (shouldPlaceBelow) {
+                  // Place label below polygon at bottom center
                   labelPoint = calculatePolygonBottomCenter(geometry)
+                  placeLabelBelow = true
                 } else {
-                  // Use centroid
+                  // Place label at centroid
                   labelPoint = centroid
                 }
               } else {
-                // Fallback to centroid if zoom not available
+                // Fallback to centroid if name not available
                 labelPoint = centroid
               }
             } else if (geometry.type === 'LineString' || geometry.type === 'MultiLineString') {
@@ -540,7 +505,8 @@ export async function addFeaturesToMap(map, geojsonData, showAllLabels = true, z
                 properties: {
                   ...feature.properties,
                   _isLabelPoint: true,
-                  _originalFeatureId: featureId
+                  _originalFeatureId: featureId,
+                  _placeLabelBelow: placeLabelBelow
                 },
                 geometry: {
                   type: 'Point',
@@ -572,7 +538,7 @@ export async function addFeaturesToMap(map, geojsonData, showAllLabels = true, z
   // Wrap each feature in markRaw to prevent Vue reactivity
   // This is critical for performance with complex geometries (many coordinates)
   const rawFeatures = processedFeatures.map(f => markRaw(f))
-
+  
   // Update source with processed features
   // Also wrap the entire data object to prevent any Vue reactivity
   source.setData(markRaw({
