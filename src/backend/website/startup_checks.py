@@ -2,14 +2,15 @@
 Startup checks for the GeoVault Django application.
 
 This module performs essential checks when the server starts up:
-1. Database connection
-2. Required tables exist
-3. PostGIS extension is installed
-4. Redis connection
-5. Writable directories (tile cache, icon storage)
-6. Frontend static files are built
-7. togeojson Node.js converter is installed
-8. Site configuration (for email confirmation URLs)
+1. Python version (requires 3.12)
+2. Database connection
+3. Required tables exist
+4. PostGIS extension is installed
+5. Redis connection
+6. Writable directories (tile cache, icon storage)
+7. Frontend static files are built
+8. togeojson Node.js converter is installed
+9. Site configuration (for email confirmation URLs)
 
 Warning checks (don't fail startup):
 - Configuration file exists
@@ -36,6 +37,28 @@ from website.config_loader import get_config_loader
 from website.settings_utils import get_required_setting
 
 logger = get_startup_logger()
+
+
+def check_python_version():
+    """
+    Check if Python version is 3.12.
+    
+    Returns:
+        bool: True if Python 3.12 is being used, False otherwise
+    """
+    try:
+        if sys.version_info[:2] != (3, 12):
+            current_version = f"{sys.version_info.major}.{sys.version_info.minor}.{sys.version_info.micro}"
+            logger.error(f"✗ Python version check failed: requires Python 3.12, but found {current_version}")
+            logger.error(f"  Full version info: {sys.version}")
+            logger.error("  Please install Python 3.12 and ensure it's being used")
+            return False
+        else:
+            logger.info(f"✓ Python version check passed: {sys.version_info.major}.{sys.version_info.minor}.{sys.version_info.micro}")
+            return True
+    except Exception as e:
+        logger.error(f"✗ Python version check failed: {e}")
+        return False
 
 
 def check_database_connection():
@@ -688,17 +711,18 @@ def run_startup_checks():
     Run all startup checks and exit if any fail.
     
     This function will:
-    1. Check database connection
-    2. Verify PostGIS installation
-    3. Check required tables exist
-    4. Verify spatial table configuration
-    5. Check Redis connection
-    6. Check writable directories (create if needed)
-    7. Check frontend files are built
-    8. Check togeojson installation
-    9. Validate file type max_size values (< 200MB)
-    10. Verify Site configuration (for email confirmation URLs)
-    11. Clean up stale Redis processing locks
+    1. Check Python version (requires 3.12)
+    2. Check database connection
+    3. Verify PostGIS installation
+    4. Check required tables exist
+    5. Verify spatial table configuration
+    6. Check Redis connection
+    7. Check writable directories (create if needed)
+    8. Check frontend files are built
+    9. Check togeojson installation
+    10. Validate file type max_size values (< 200MB)
+    11. Verify Site configuration (for email confirmation URLs)
+    12. Clean up stale Redis processing locks
     
     Warning checks (don't fail startup):
     - Configuration file
@@ -713,6 +737,7 @@ def run_startup_checks():
     
     # Critical checks that will fail startup
     critical_checks = [
+        ("Python Version", check_python_version),
         ("Database Connection", check_database_connection),
         ("PostGIS Installation", check_postgis_installation),
         ("Required Tables", check_required_tables),
@@ -754,6 +779,7 @@ def run_startup_checks():
         logger.error("")
         logger.error("Please fix the issues above before starting the server.")
         logger.error("Common solutions:")
+        logger.error("  - Install Python 3.12 and ensure it's being used")
         logger.error("  - Ensure PostgreSQL is running")
         logger.error("  - Install PostGIS extension: CREATE EXTENSION postgis;")
         logger.error("  - Run migrations: python manage.py migrate")

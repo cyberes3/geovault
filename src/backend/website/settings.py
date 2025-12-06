@@ -181,7 +181,9 @@ STATICFILES_STORAGE = 'django.contrib.staticfiles.storage.StaticFilesStorage'
 
 # WhiteNoise settings - serves files directly from source directories
 WHITENOISE_USE_FINDERS = True  # Serve directly from STATICFILES_DIRS (no collectstatic needed!)
-WHITENOISE_AUTOREFRESH = DEBUG  # Auto-refresh in debug mode
+# Disable auto-refresh in development to improve performance (file watching is handled by runserver)
+# Static files are still served, but changes won't trigger automatic reload
+WHITENOISE_AUTOREFRESH = False  # Disabled for better dev server performance
 WHITENOISE_MANIFEST_STRICT = False  # Don't require manifest file
 # WHITENOISE_ROOT serves files at the root URL (e.g., /favicon.ico, /apple-touch-icon.png)
 WHITENOISE_ROOT = os.path.join(BASE_DIR, '../frontend/dist')

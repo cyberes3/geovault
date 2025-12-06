@@ -199,7 +199,7 @@ import { XMarkIcon, PhotoIcon } from '@heroicons/vue/24/outline'
 import TagPicker from '@/components/parts/TagPicker.vue'
 import IconPickerDialog from '@/components/map/IconPickerDialog.vue'
 import ToggleButton from '@/components/parts/ToggleButton.vue'
-import ColorPicker from '@/components/parts/ColorPicker.vue'
+import ColorPickerElement from '@/components/parts/ColorPickerElement.vue'
 import { APIHOST } from '@/config.js'
 
 export default {
@@ -210,7 +210,7 @@ export default {
     TagPicker,
     IconPickerDialog,
     ToggleButton,
-    ColorPicker
+    ColorPicker: ColorPickerElement
   },
   props: {
     isOpen: {

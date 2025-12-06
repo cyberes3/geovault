@@ -696,7 +696,7 @@ import ImportControls from "@/components/import/parts/ImportControls.vue";
 import BulkStylingModal from "@/components/import/parts/BulkStylingModal.vue";
 import DuplicateWarning from "@/components/import/parts/DuplicateWarning.vue";
 import TagPicker from "@/components/parts/TagPicker.vue";
-import ColorPicker from "@/components/parts/ColorPicker.vue";
+import ColorPickerElement from "@/components/parts/ColorPickerElement.vue";
 import IconSelector from "@/components/parts/IconSelector.vue";
 import { DEFAULT_BULK_OPERATIONS, hasBulkOperationsConfigured, areBulkOperationsEqual, cloneBulkOperations } from "@/utils/bulkOperations.js";
 import { CheckIcon, ExclamationCircleIcon, ArrowTopRightOnSquareIcon, DocumentIcon, ExclamationTriangleIcon, ArrowDownTrayIcon, ArrowUpTrayIcon, XMarkIcon, MapIcon, ArrowPathIcon, MagnifyingGlassIcon, RectangleStackIcon, ChevronLeftIcon, ChevronRightIcon } from '@heroicons/vue/24/outline';
@@ -831,7 +831,7 @@ export default {
     BulkStylingModal,
     DuplicateWarning,
     TagPicker,
-    ColorPicker,
+    ColorPicker: ColorPickerElement,
     IconSelector,
     CheckIcon,
     ExclamationCircleIcon,

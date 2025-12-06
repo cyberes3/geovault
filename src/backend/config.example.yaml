@@ -76,7 +76,7 @@ tilesources:
     # List of MapTiler map IDs to include as tile sources
     # Get map IDs from https://cloud.maptiler.com/maps/
     # Important: DO NOT use the default API key that your account comes with! Instead,
-    # generate a new one and set the allowed orgin to your site or else someone can
+    # generate a new one and set the "Allowed HTTP Origins" to your domain or else someone can
     # steal your key.
     maps:
       - topo-v4 # General purpose topo map

@@ -119,18 +119,6 @@
         @unhide="$emit('unhide-feature', $event)"
         @unhide-all="$emit('unhide-all')"
       />
-
-      <!-- Feature Stats -->
-      <div v-if="allowedOptions.featureStats || allowedOptions.userLocation">
-        <div class="space-y-1">
-          <div v-if="allowedOptions.featureStats">
-            Features: <span class="font-medium">{{ featureCount }}</span>
-          </div>
-          <div v-if="allowedOptions.userLocation && userLocation" class="text-gray-600">
-            📍 {{ locationDisplayName }}
-          </div>
-        </div>
-      </div>
     </div>
 
     <!-- Download Button (for public shares with downloads enabled) -->

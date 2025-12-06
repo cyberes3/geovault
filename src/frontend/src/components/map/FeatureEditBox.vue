@@ -259,7 +259,7 @@
 import {APIHOST} from '@/config.js'
 import ReplacementFeatureDialog from './ReplacementFeatureDialog.vue'
 import TagPicker from '@/components/parts/TagPicker.vue'
-import ColorPicker from '@/components/parts/ColorPicker.vue'
+import ColorPickerElement from '@/components/parts/ColorPickerElement.vue'
 import IconSelector from '@/components/parts/IconSelector.vue'
 import { XMarkIcon, MapIcon, ArrowUpTrayIcon } from '@heroicons/vue/24/outline'
 import { sortTagsByPriority } from '@/utils/tagUtils.js'
@@ -278,7 +278,7 @@ export default {
   components: {
     ReplacementFeatureDialog,
     TagPicker,
-    ColorPicker,
+    ColorPicker: ColorPickerElement,
     IconSelector,
     XMarkIcon,
     MapIcon,

@@ -3725,6 +3725,12 @@
       "base_name": "photo"
     },
     {
+      "url": "/api/icons/system/pickaxe.png",
+      "filename": "pickaxe",
+      "style": "standard",
+      "base_name": "pickaxe"
+    },
+    {
       "url": "/api/icons/system/caltopo/picnicbench_circle.png",
       "filename": "picnicbench_circle",
       "style": "circle",

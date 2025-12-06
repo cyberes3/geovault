@@ -31,6 +31,22 @@ export default defineConfig({
         chunkSizeWarningLimit: 1000, // Increase limit to 1MB for map libraries
     },
     server: {
+        watch: {
+            // Ignore large directories to improve dev server performance
+            // These patterns are relative to the project root (where start-dev.sh runs)
+            ignored: [
+                '**/node_modules/**',
+                '**/dist/**',
+                '**/.git/**',
+                '**/__pycache__/**',
+                '**/venv/**',
+                '**/src/backend/assets/icons/caltopo/**',
+                '**/src/backend/data/**',
+                '**/src/backend/venv/**',
+                '**/src/backend/__pycache__/**',
+                '**/src/tests/**',
+            ],
+        },
         proxy: {
             '/api': {
                 target: 'http://127.0.0.1:8000',

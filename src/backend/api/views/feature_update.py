@@ -703,6 +703,9 @@ def update_feature(request, feature_id):
                 if geom_data['type'] == 'Point':
                     if len(coords) == 2:
                         coords = [coords[0], coords[1], 0.0]
+                    elif len(coords) == 3:
+                        coords = [coords[0], coords[1], coords[2]]
+                    geom_data['coordinates'] = coords
                 elif geom_data['type'] == 'LineString':
                     geom_data['coordinates'] = [
                         [coord[0], coord[1], coord[2] if len(coord) > 2 else 0.0]
@@ -875,6 +878,9 @@ def apply_replacement_geometry(request, feature_id, validated_data):
                 if geom_data['type'] == 'Point':
                     if len(coords) == 2:
                         coords = [coords[0], coords[1], 0.0]
+                    elif len(coords) == 3:
+                        coords = [coords[0], coords[1], coords[2]]
+                    geom_data['coordinates'] = coords
                 elif geom_data['type'] == 'LineString':
                     geom_data['coordinates'] = [
                         [coord[0], coord[1], coord[2] if len(coord) > 2 else 0.0]
