@@ -171,7 +171,7 @@ export default {
       default: null
     }
   },
-          emits: ['close', 'hover-point', 'hover-clear', 'click-point'],
+  emits: ['close', 'hover-point', 'hover-clear', 'click-point'],
   components: {
     Loader,
     XMarkIcon,
@@ -352,7 +352,7 @@ export default {
      */
     getFeatureName(feature) {
       if (!feature) return 'Unnamed Feature'
-      const properties = feature.get('properties') || {}
+      const properties = feature.properties || {}
       return properties.name || 'Unnamed Feature'
     },
 
@@ -365,7 +365,7 @@ export default {
         return 'rgb(20, 184, 166)' // Default teal
       }
 
-      const properties = this.feature.get('properties') || {}
+      const properties = this.feature.properties || {}
       const strokeColor = properties.stroke || '#ff0000'
 
       // Convert hex to RGB
@@ -558,7 +558,7 @@ export default {
         return
       }
 
-      const geometry = this.feature.getGeometry()
+      const geometry = this.feature.geometry
       if (!geometry) {
         this.hasElevationData = false
         this.stats = null
@@ -578,7 +578,7 @@ export default {
       // Check if coordinates have elevation data (3rd element)
       // MapLibre strips Z coordinates, so coordinates may only have [lon, lat]
       const hasElevationInCoords = coordinates.length > 0 && coordinates[0].length >= 3
-      const featureId = this.feature.get('properties')?.database_id || this.feature.get('properties')?.geojson_hash
+      const featureId = this.feature.properties?.database_id || this.feature.properties?.geojson_hash
       
       // Determine elevation source and fetch coordinates with elevation data
       if (this.elevationProfileSource === 'api') {

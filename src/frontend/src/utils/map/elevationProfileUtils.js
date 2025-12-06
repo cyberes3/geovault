@@ -5,7 +5,6 @@
  * for elevation profile charts.
  */
 
-import { GeoJSON } from 'ol/format'
 import {
   getElevationMultiplier,
   getDistanceMultiplier,
@@ -38,22 +37,16 @@ export function haversineDistance(lat1, lon1, lat2, lon2) {
 }
 
 /**
- * Extract coordinates from OpenLayers geometry
+ * Extract coordinates from GeoJSON geometry
  * Returns array of [lon, lat, elevation] coordinates
- * @param {Object} geometry - OpenLayers geometry object
+ * @param {Object} geometry - GeoJSON geometry object
  * @returns {Array} Array of [lon, lat, elevation] coordinates
  */
 export function extractCoordinates(geometry) {
   if (!geometry) return []
 
-  const format = new GeoJSON()
-  const geometryJson = format.writeGeometryObject(geometry, {
-    featureProjection: 'EPSG:3857',
-    dataProjection: 'EPSG:4326'
-  })
-
-  const geomType = geometryJson.type
-  const coords = geometryJson.coordinates
+  const geomType = geometry.type
+  const coords = geometry.coordinates
 
   if (geomType === 'LineString') {
     // LineString: [[lon, lat, ele], ...]
@@ -90,13 +83,13 @@ export function extractCoordinates(geometry) {
  * - Features imported from formats without time data
  * - Some converted/processed features where timestamps were lost
  * 
- * @param {Object} feature - OpenLayers feature object
+ * @param {Object} feature - GeoJSON feature object
  * @returns {Array|null} Array of timestamps or null if not available
  */
 export function extractTimestamps(feature) {
   if (!feature) return null
 
-  const properties = feature.get('properties') || {}
+  const properties = feature.properties || {}
   const coordinateProperties = properties.coordinateProperties
 
   // Timestamps are stored in coordinateProperties.times for GPX tracks
@@ -111,16 +104,10 @@ export function extractTimestamps(feature) {
     return null
   }
 
-  const geometry = feature.getGeometry()
+  const geometry = feature.geometry
   if (!geometry) return null
 
-  const format = new GeoJSON()
-  const geometryJson = format.writeGeometryObject(geometry, {
-    featureProjection: 'EPSG:3857',
-    dataProjection: 'EPSG:4326'
-  })
-
-  const geomType = geometryJson.type
+  const geomType = geometry.type
 
   if (geomType === 'LineString') {
     // LineString: times is a flat array
