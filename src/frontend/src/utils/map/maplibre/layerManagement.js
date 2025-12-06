@@ -22,12 +22,27 @@ import {
 export function ensureLayersExist(map, showAllLabels = true) {
   if (!map || !map.getSource('geojson-data')) return
 
-  // Desired order from bottom to top: polygons, polygon-outlines, lines, points, point-icons, labels
+  // Desired order from bottom to top: base tiles, polygons, polygon-outlines, lines, points, point-icons, labels
   // We'll add layers in this order, using beforeId only if the target layer exists
+  
+  // Find if there's a base tile layer that we should position features after
+  const style = map.getStyle()
+  const baseTileLayerIds = ['raster-layer', 'tile-layer', 'osm-layer']
+  let baseTileLayer = null
+  if (style && style.layers) {
+    for (const baseTileId of baseTileLayerIds) {
+      if (map.getLayer(baseTileId)) {
+        baseTileLayer = baseTileId
+        break
+      }
+    }
+  }
 
-  // 1. Polygons fill layer (bottom) - add first
+  // 1. Polygons fill layer (bottom of feature layers, but after base tiles) - add first
   const polygonConfig = getPolygonLayerConfig()
   if (!map.getLayer('polygons')) {
+    // If there's a base tile layer, don't use beforeId - we want polygons after it
+    // If no base tile layer, just add normally
     map.addLayer(polygonConfig)
   } else {
     map.setFilter('polygons', polygonConfig.filter)
@@ -193,7 +208,7 @@ function ensureLayerOrder(map, beforeLayerId, afterLayerId) {
 
 /**
  * Force correct layer ordering
- * Desired order (bottom to top): polygons, polygon-outlines, lines, points, replacement-points, point-icons, labels
+ * Desired order (bottom to top): base tiles/style layers, polygons, polygon-outlines, lines, points, replacement-points, point-icons, labels
  * MapLibre renders layers in order, with later layers on top
  * @param {Object} map - MapLibre map instance
  * @param {boolean} showAllLabels - Whether to show labels
@@ -204,46 +219,124 @@ function enforceLayerOrder(map, showAllLabels = true) {
   const style = map.getStyle()
   if (!style || !style.layers) return
 
-  // Desired order from bottom to top (labels are now HTML markers, not layers)
-  const desiredOrder = ['polygons', 'polygon-outlines', 'lines', 'points', 'replacement-points', 'point-icons']
+  // Base tile layer IDs (should be at the bottom)
+  const baseTileLayerIds = ['osm-layer', 'tile-layer', 'raster-layer']
   
-  // Get current indices of our layers
-  const layerIndices = {}
-  desiredOrder.forEach(id => {
-    if (map.getLayer(id)) {
-      const index = style.layers.findIndex(l => l.id === id)
-      if (index >= 0) {
-        layerIndices[id] = index
+  // Feature layer IDs (should be above base tiles and style layers)
+  const featureLayerIds = ['polygons', 'polygon-outlines', 'lines', 'points', 'replacement-points', 'point-icons']
+  
+  // First, ensure any base tile layers are positioned at the very bottom
+  baseTileLayerIds.forEach(baseTileId => {
+    if (map.getLayer(baseTileId)) {
+      // Move base tile layer to the very beginning (before all layers)
+      const firstLayer = style.layers[0]
+      if (firstLayer && firstLayer.id !== baseTileId) {
+        map.moveLayer(baseTileId, firstLayer.id)
       }
     }
   })
-
-  // Work from top to bottom, ensuring each layer is after the previous one
-  // moveLayer(layerId, beforeId) moves layerId to be before beforeId
-  for (let i = desiredOrder.length - 1; i > 0; i--) {
-    const topLayerId = desiredOrder[i]
-    const bottomLayerId = desiredOrder[i - 1]
+  
+  // Get updated style after moving base tiles
+  const updatedStyle = map.getStyle()
+  if (!updatedStyle || !updatedStyle.layers) return
+  
+  // Ensure feature layers are positioned AFTER all style-based layers (MapTiler, etc.)
+  // Find if there are any non-feature layers (style layers from MapTiler, etc.)
+  const nonFeatureLayers = updatedStyle.layers.filter(l => {
+    // Exclude our feature layers and base tile layers
+    return !featureLayerIds.includes(l.id) && !baseTileLayerIds.includes(l.id)
+  })
+  
+  // If there are style layers (e.g., from MapTiler), ensure our features are on top
+  if (nonFeatureLayers.length > 0) {
+    // Move all our feature layers to the end (on top of everything)
+    featureLayerIds.forEach(layerId => {
+      if (map.getLayer(layerId)) {
+        map.moveLayer(layerId)
+      }
+    })
     
-    if (!map.getLayer(topLayerId) || !map.getLayer(bottomLayerId)) continue
-
-    const topIndex = layerIndices[topLayerId]
-    const bottomIndex = layerIndices[bottomLayerId]
-
-    // If top layer is not after bottom layer, fix it
-    if (topIndex <= bottomIndex) {
-      // Find what comes after bottomLayerId
-      const bottomLayerIndex = style.layers.findIndex(l => l.id === bottomLayerId)
-      if (bottomLayerIndex >= 0 && bottomLayerIndex < style.layers.length - 1) {
-        const nextLayer = style.layers[bottomLayerIndex + 1]
-        if (nextLayer && nextLayer.id !== topLayerId) {
-          // Move topLayer to be right after bottomLayer
-          map.moveLayer(topLayerId, nextLayer.id)
-          // Update index
-          layerIndices[topLayerId] = bottomLayerIndex + 1
+    // Refresh style reference after moving
+    const refreshedStyle = map.getStyle()
+    if (!refreshedStyle || !refreshedStyle.layers) return
+    
+    // Now ensure proper ordering among our feature layers
+    const layerIndices = {}
+    featureLayerIds.forEach(id => {
+      if (map.getLayer(id)) {
+        const index = refreshedStyle.layers.findIndex(l => l.id === id)
+        if (index >= 0) {
+          layerIndices[id] = index
         }
-      } else {
-        // bottomLayer is last, move topLayer to end
-        map.moveLayer(topLayerId)
+      }
+    })
+
+    // Work from top to bottom, ensuring each feature layer is after the previous one
+    for (let i = featureLayerIds.length - 1; i > 0; i--) {
+      const topLayerId = featureLayerIds[i]
+      const bottomLayerId = featureLayerIds[i - 1]
+      
+      if (!map.getLayer(topLayerId) || !map.getLayer(bottomLayerId)) continue
+
+      const topIndex = layerIndices[topLayerId]
+      const bottomIndex = layerIndices[bottomLayerId]
+
+      // If top layer is not after bottom layer, fix it
+      if (topIndex <= bottomIndex) {
+        // Find what comes after bottomLayerId
+        const bottomLayerIndex = refreshedStyle.layers.findIndex(l => l.id === bottomLayerId)
+        if (bottomLayerIndex >= 0 && bottomLayerIndex < refreshedStyle.layers.length - 1) {
+          const nextLayer = refreshedStyle.layers[bottomLayerIndex + 1]
+          if (nextLayer && nextLayer.id !== topLayerId) {
+            // Move topLayer to be right after bottomLayer
+            map.moveLayer(topLayerId, nextLayer.id)
+            // Update index
+            layerIndices[topLayerId] = bottomLayerIndex + 1
+          }
+        } else {
+          // bottomLayer is last, move topLayer to end
+          map.moveLayer(topLayerId)
+        }
+      }
+    }
+  } else {
+    // No style layers, just ensure ordering among feature layers
+    const layerIndices = {}
+    featureLayerIds.forEach(id => {
+      if (map.getLayer(id)) {
+        const index = updatedStyle.layers.findIndex(l => l.id === id)
+        if (index >= 0) {
+          layerIndices[id] = index
+        }
+      }
+    })
+
+    // Work from top to bottom, ensuring each feature layer is after the previous one
+    for (let i = featureLayerIds.length - 1; i > 0; i--) {
+      const topLayerId = featureLayerIds[i]
+      const bottomLayerId = featureLayerIds[i - 1]
+      
+      if (!map.getLayer(topLayerId) || !map.getLayer(bottomLayerId)) continue
+
+      const topIndex = layerIndices[topLayerId]
+      const bottomIndex = layerIndices[bottomLayerId]
+
+      // If top layer is not after bottom layer, fix it
+      if (topIndex <= bottomIndex) {
+        // Find what comes after bottomLayerId
+        const bottomLayerIndex = updatedStyle.layers.findIndex(l => l.id === bottomLayerId)
+        if (bottomLayerIndex >= 0 && bottomLayerIndex < updatedStyle.layers.length - 1) {
+          const nextLayer = updatedStyle.layers[bottomLayerIndex + 1]
+          if (nextLayer && nextLayer.id !== topLayerId) {
+            // Move topLayer to be right after bottomLayer
+            map.moveLayer(topLayerId, nextLayer.id)
+            // Update index
+            layerIndices[topLayerId] = bottomLayerIndex + 1
+          }
+        } else {
+          // bottomLayer is last, move topLayer to end
+          map.moveLayer(topLayerId)
+        }
       }
     }
   }

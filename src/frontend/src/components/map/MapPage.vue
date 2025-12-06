@@ -1256,6 +1256,27 @@ export default {
             // Add layers first (they need to exist before adding features)
             ensureLayersExist(this.map, this.showAllLabels)
             
+            // Ensure feature layers are positioned AFTER all MapTiler base layers
+            // MapTiler styles include their own base layers (roads, water, buildings, etc.)
+            // We need our features to render on top of these
+            const style = this.map.getStyle()
+            if (style && style.layers) {
+              // Find the topmost MapTiler layer (anything that's not our feature layers)
+              const ourFeatureLayers = ['polygons', 'polygon-outlines', 'lines', 'points', 'replacement-points', 'point-icons']
+              const maptilerLayers = style.layers.filter(l => !ourFeatureLayers.includes(l.id))
+              
+              if (maptilerLayers.length > 0) {
+                // Move each of our feature layers to be after all MapTiler layers
+                // Start with the first feature layer and move them in order
+                ourFeatureLayers.forEach(layerId => {
+                  if (this.map.getLayer(layerId)) {
+                    // Move to the very end (on top of everything)
+                    this.map.moveLayer(layerId)
+                  }
+                })
+              }
+            }
+            
             // Re-add features to the map with proper styling and icons
             const zoom = this.map ? this.map.getZoom() : null
             await addFeaturesToMap(this.map, geojsonData, this.showAllLabels, zoom)
@@ -1330,6 +1351,17 @@ export default {
               maxzoom: clientConfig.maxzoom || 22
             })
             
+            // Ensure raster layer is at the bottom (before all other layers)
+            // This is critical: layers render in order, so raster must be first
+            const style = this.map.getStyle()
+            if (style && style.layers && style.layers.length > 1) {
+              // Find the first non-raster layer to position raster before it
+              const firstLayer = style.layers.find(l => l.id !== 'raster-layer')
+              if (firstLayer) {
+                this.map.moveLayer('raster-layer', firstLayer.id)
+              }
+            }
+            
             // Restore GeoJSON if we had data
             if (geojsonData) {
               if (!this.map.getSource('geojson-data')) {
@@ -1378,6 +1410,17 @@ export default {
             minzoom: clientConfig.minzoom || 0,
             maxzoom: clientConfig.maxzoom || 22
           })
+          
+          // Ensure raster layer is at the bottom (before all other layers)
+          // This is critical: layers render in order, so raster must be first
+          const style = this.map.getStyle()
+          if (style && style.layers && style.layers.length > 1) {
+            // Find the first non-raster layer to position raster before it
+            const firstLayer = style.layers.find(l => l.id !== 'raster-layer')
+            if (firstLayer) {
+              this.map.moveLayer('raster-layer', firstLayer.id)
+            }
+          }
           
           // Ensure GeoJSON layers exist and are on top
           ensureLayersExist(this.map, this.showAllLabels)
