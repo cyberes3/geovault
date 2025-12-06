@@ -155,7 +155,7 @@ def serve_user_icon(request, icon_hash):
 
         # Create response with appropriate headers
         response = HttpResponse(icon_data, content_type=content_type)
-        response['Cache-Control'] = 'public, max-age=31536000'  # Cache for 1 year
+        response['Cache-Control'] = 'public, max-age=31536000, immutable'  # Cache for 1 year, immutable
         return response
 
     except Http404:
@@ -215,7 +215,7 @@ def serve_system_icon(request, path):
         
         # Create response with appropriate headers
         response = HttpResponse(icon_data, content_type=content_type)
-        response['Cache-Control'] = 'public, max-age=31536000'  # Cache for 1 year
+        response['Cache-Control'] = 'public, max-age=31536000, immutable'  # Cache for 1 year, immutable
         return response
         
     except Http404:

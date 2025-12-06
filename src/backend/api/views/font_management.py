@@ -99,7 +99,7 @@ def serve_font_glyph(request, fontstack, range_str):
         # PBF files are Protocol Buffer Format, served as application/x-protobuf
         # or application/octet-stream
         response = HttpResponse(font_data, content_type='application/x-protobuf')
-        response['Cache-Control'] = 'public, max-age=31536000'  # Cache for 1 year
+        response['Cache-Control'] = 'public, max-age=31536000, immutable'  # Cache for 1 year, immutable
         response['Access-Control-Allow-Origin'] = '*'  # Allow CORS for font requests
         return response
         

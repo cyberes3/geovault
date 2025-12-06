@@ -21,6 +21,10 @@ export default defineConfig({
                     'maplibre-gl': ['maplibre-gl'],
                     // Split OpenLayers into its own chunk (for the original map)
                     'openlayers': ['ol'],
+                    // Split Chart.js into its own chunk
+                    'chart.js': ['chart.js'],
+                    // Split Turf.js into its own chunk
+                    'turf': ['@turf/turf'],
                 }
             }
         },
