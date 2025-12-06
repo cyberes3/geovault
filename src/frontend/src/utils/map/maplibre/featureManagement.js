@@ -92,7 +92,10 @@ export function updateSmallFeatureFlags(map, zoom) {
   if (!map || !map.getSource('geojson-data') || zoom === null) return
 
   const source = map.getSource('geojson-data')
-  const currentData = source._data || { type: 'FeatureCollection', features: [] }
+  
+  // Use serialize() method for MapLibre v5 compatibility
+  const serialized = source.serialize()
+  const currentData = serialized.data || { type: 'FeatureCollection', features: [] }
   const features = currentData.features || []
   
   if (features.length === 0) return
@@ -404,7 +407,11 @@ export async function addFeaturesToMap(map, geojsonData, showAllLabels = true, z
   if (!map || !map.getSource('geojson-data')) return
 
   const source = map.getSource('geojson-data')
-  const currentData = source._data || { type: 'FeatureCollection', features: [] }
+  
+  // Use serialize() method for MapLibre v5 compatibility
+  const serialized = source.serialize()
+  const currentData = serialized.data || { type: 'FeatureCollection', features: [] }
+  
   const existingFeatures = new Map()
   const existingLabelPoints = new Map() // Track existing label points
   

@@ -392,18 +392,24 @@ export default {
         // The URL was encoded by replacing non-alphanumeric chars with underscores
         // We need to find it from the features on the map
         const source = this.map.getSource('geojson-data')
-        if (source && source._data && source._data.features) {
-          for (const feature of source._data.features) {
-            if (feature.properties && feature.properties['_icon-id'] === iconId) {
-              // Found the feature with this icon, get its icon URL
-              const iconUrl = getFeatureIconUrl(feature.properties)
-              if (iconUrl) {
-                const resolvedUrl = getIconSourceUrl(iconUrl, feature.properties)
-                // Load the icon
-                loadIconImage(this.map, iconId, resolvedUrl).catch(err => {
-                  console.warn(`Failed to load missing icon ${iconId}:`, err)
-                })
-                return
+        if (source) {
+          // Use serialize() method for MapLibre v5 compatibility
+          const serialized = source.serialize()
+          const data = serialized.data
+          
+          if (data && data.features) {
+            for (const feature of data.features) {
+              if (feature.properties && feature.properties['_icon-id'] === iconId) {
+                // Found the feature with this icon, get its icon URL
+                const iconUrl = getFeatureIconUrl(feature.properties)
+                if (iconUrl) {
+                  const resolvedUrl = getIconSourceUrl(iconUrl, feature.properties)
+                  // Load the icon
+                  loadIconImage(this.map, iconId, resolvedUrl).catch(err => {
+                    console.warn(`Failed to load missing icon ${iconId}:`, err)
+                  })
+                  return
+                }
               }
             }
           }
@@ -490,8 +496,10 @@ export default {
               const originalId = f.properties._originalFeatureId
               if (originalId) {
                 const source = this.map.getSource('geojson-data')
-                if (source && source._data && source._data.features) {
-                  const originalFeature = source._data.features.find(
+                const serialized = source.serialize()
+                const data = serialized.data
+                if (data && data.features) {
+                  const originalFeature = data.features.find(
                     feature => feature.properties?.database_id === originalId && !feature.properties?._isSmallFeatureReplacement
                   )
                   if (originalFeature) return originalFeature
@@ -545,8 +553,12 @@ export default {
         // Update label markers only if labels are visible
         if (this.showAllLabels && this.labelMarkerManager) {
           const source = this.map.getSource('geojson-data')
-          if (source && source._data && source._data.features) {
-            this.labelMarkerManager.updateMarkers(source._data.features)
+          if (source) {
+            const serialized = source.serialize()
+            const data = serialized.data
+            if (data && data.features) {
+              this.labelMarkerManager.updateMarkers(data.features)
+            }
           }
         }
         
@@ -804,8 +816,12 @@ export default {
       if (this.showAllLabels && this.labelMarkerManager && geojsonData && geojsonData.features) {
         // Get all features from the source (including label points if they exist)
         const source = this.map.getSource('geojson-data')
-        if (source && source._data && source._data.features) {
-          this.labelMarkerManager.updateMarkers(source._data.features)
+        if (source) {
+          const serialized = source.serialize()
+          const data = serialized.data
+          if (data && data.features) {
+            this.labelMarkerManager.updateMarkers(data.features)
+          }
         }
       }
     },
@@ -817,7 +833,8 @@ export default {
       if (!this.map || !this.map.getSource('geojson-data')) return
       
       const source = this.map.getSource('geojson-data')
-      const currentData = source._data || { type: 'FeatureCollection', features: [] }
+      const serialized = source.serialize()
+      const currentData = serialized.data || { type: 'FeatureCollection', features: [] }
       const features = currentData.features || []
       
       if (features.length === 0) return
@@ -894,7 +911,10 @@ export default {
 
       const bounds = this.map.getBounds()
       const source = this.map.getSource('geojson-data')
-      const data = source._data || { type: 'FeatureCollection', features: [] }
+      
+      // Use serialize() method for MapLibre v5 compatibility
+      const serialized = source.serialize()
+      const data = serialized.data || { type: 'FeatureCollection', features: [] }
       const features = data.features || []
 
       // Filter features in current bounds and exclude label points and replacement points
@@ -936,7 +956,10 @@ export default {
       
       const bounds = this.map.getBounds()
       const source = this.map.getSource('geojson-data')
-      const data = source._data || { type: 'FeatureCollection', features: [] }
+      
+      // Use serialize() method for MapLibre v5 compatibility
+      const serialized = source.serialize()
+      const data = serialized.data || { type: 'FeatureCollection', features: [] }
       const features = data.features || []
       
       // 500 miles = 804,672 meters
@@ -995,7 +1018,8 @@ export default {
       this.$nextTick(() => {
         if (this.map && this.map.getSource('geojson-data')) {
           const source = this.map.getSource('geojson-data')
-          const data = source._data || { type: 'FeatureCollection', features: [] }
+          const serialized = source.serialize()
+          const data = serialized.data || { type: 'FeatureCollection', features: [] }
           // Count only real features, not label points
           const realFeatures = (data.features || []).filter(f => !f.properties?._isLabelPoint)
           this.featureCount = realFeatures.length
@@ -1228,8 +1252,9 @@ export default {
         // Save current state before switching styles
         const geojsonSource = this.map.getSource('geojson-data')
         let geojsonData = null
-        if (geojsonSource && geojsonSource._data) {
-          geojsonData = geojsonSource._data
+        if (geojsonSource) {
+          const serialized = geojsonSource.serialize()
+          geojsonData = serialized.data
         }
         
         // Load the new style
@@ -1284,8 +1309,12 @@ export default {
             // Update label markers if labels are visible
             if (this.showAllLabels && this.labelMarkerManager) {
               const source = this.map.getSource('geojson-data')
-              if (source && source._data && source._data.features) {
-                this.labelMarkerManager.updateMarkers(source._data.features)
+              if (source) {
+                const serialized = source.serialize()
+                const data = serialized.data
+                if (data && data.features) {
+                  this.labelMarkerManager.updateMarkers(data.features)
+                }
               }
             }
           }
@@ -1321,8 +1350,9 @@ export default {
           // Coming from a style-based source - reset to blank style first
           const geojsonSource = this.map.getSource('geojson-data')
           let geojsonData = null
-          if (geojsonSource && geojsonSource._data) {
-            geojsonData = geojsonSource._data
+          if (geojsonSource) {
+            const serialized = geojsonSource.serialize()
+            geojsonData = serialized.data
           }
           
           // Reset to blank style
@@ -1380,8 +1410,12 @@ export default {
               
               if (this.showAllLabels && this.labelMarkerManager) {
                 const source = this.map.getSource('geojson-data')
-                if (source && source._data && source._data.features) {
-                  this.labelMarkerManager.updateMarkers(source._data.features)
+                if (source) {
+                  const serialized = source.serialize()
+                  const data = serialized.data
+                  if (data && data.features) {
+                    this.labelMarkerManager.updateMarkers(data.features)
+                  }
                 }
               }
             }
@@ -1515,55 +1549,54 @@ export default {
       
       if (featureId) {
         const source = this.map.getSource('geojson-data')
-        if (source) {
-          const currentData = source._data || { type: 'FeatureCollection', features: [] }
-          const existingFeatures = currentData.features || []
+        const serialized = source.serialize()
+        const currentData = serialized.data || { type: 'FeatureCollection', features: [] }
+        const existingFeatures = currentData.features || []
+        
+        // Check if feature already exists
+        const exists = existingFeatures.some(f => f.properties?.database_id === featureId)
+        
+        if (!exists) {
+          // Feature is already GeoJSON, just ensure it has the right structure
+          const geoJsonFeature = {
+            type: 'Feature',
+            geometry: feature.geometry,
+            properties: properties
+          }
           
-          // Check if feature already exists
-          const exists = existingFeatures.some(f => f.properties?.database_id === featureId)
-          
-          if (!exists) {
-            // Feature is already GeoJSON, just ensure it has the right structure
-            const geoJsonFeature = {
-              type: 'Feature',
-              geometry: feature.geometry,
-              properties: properties
-            }
+          // Add the feature to the map
+          // Process icon if this is a Point feature
+          if (geoJsonFeature.geometry.type === 'Point') {
+            const iconUrl = getFeatureIconUrl(geoJsonFeature.properties)
+            const zoom = this.map.getZoom()
+            const replaceIconsLowZoom = this.$store.state.userSettings?.replace_icons_low_zoom ?? true
+            const shouldShowIcon = iconUrl && shouldUseIcon(zoom, iconUrl, replaceIconsLowZoom)
             
-            // Add the feature to the map
-            // Process icon if this is a Point feature
-            if (geoJsonFeature.geometry.type === 'Point') {
-                const iconUrl = getFeatureIconUrl(geoJsonFeature.properties)
-                const zoom = this.map.getZoom()
-                const replaceIconsLowZoom = this.$store.state.userSettings?.replace_icons_low_zoom ?? true
-                const shouldShowIcon = iconUrl && shouldUseIcon(zoom, iconUrl, replaceIconsLowZoom)
-                
-                if (shouldShowIcon) {
-                  const resolvedUrl = getIconSourceUrl(iconUrl, geoJsonFeature.properties)
-                  const iconId = `icon-${resolvedUrl.replace(/[^a-zA-Z0-9]/g, '_')}`
-                  geoJsonFeature.properties['_icon-id'] = iconId
-                  
-                  // Load icon if not already loaded
-                  if (!this.map.hasImage(iconId)) {
-                    loadIconImage(this.map, iconId, resolvedUrl).catch(err => {
-                      console.warn(`Failed to load icon ${iconId}:`, err)
-                      // Remove icon metadata on failure
-                      delete geoJsonFeature.properties['_icon-id']
-                    })
-                  }
-                }
-              }
+            if (shouldShowIcon) {
+              const resolvedUrl = getIconSourceUrl(iconUrl, geoJsonFeature.properties)
+              const iconId = `icon-${resolvedUrl.replace(/[^a-zA-Z0-9]/g, '_')}`
+              geoJsonFeature.properties['_icon-id'] = iconId
               
-              existingFeatures.push(geoJsonFeature)
-              source.setData({
-                type: 'FeatureCollection',
-                features: existingFeatures
-              })
-              
-              // Update label markers
-              if (this.labelMarkerManager) {
-                this.labelMarkerManager.updateMarkers(existingFeatures)
+              // Load icon if not already loaded
+              if (!this.map.hasImage(iconId)) {
+                loadIconImage(this.map, iconId, resolvedUrl).catch(err => {
+                  console.warn(`Failed to load icon ${iconId}:`, err)
+                  // Remove icon metadata on failure
+                  delete geoJsonFeature.properties['_icon-id']
+                })
               }
+            }
+          }
+          
+          existingFeatures.push(geoJsonFeature)
+          source.setData({
+            type: 'FeatureCollection',
+            features: existingFeatures
+          })
+          
+          // Update label markers
+          if (this.labelMarkerManager) {
+            this.labelMarkerManager.updateMarkers(existingFeatures)
           }
         }
       }
@@ -1693,7 +1726,8 @@ export default {
       // Remove feature from map
       if (this.map && this.map.getSource('geojson-data')) {
         const source = this.map.getSource('geojson-data')
-        const data = source._data || { type: 'FeatureCollection', features: [] }
+        const serialized = source.serialize()
+        const data = serialized.data || { type: 'FeatureCollection', features: [] }
         const properties = feature.properties || feature.get?.('properties') || {}
         const featureId = properties.database_id
 
@@ -1745,7 +1779,8 @@ export default {
           // Remove all label points from the map to improve performance
           if (this.map && this.map.getSource('geojson-data')) {
             const source = this.map.getSource('geojson-data')
-            const currentData = source._data || { type: 'FeatureCollection', features: [] }
+            const serialized = source.serialize()
+            const currentData = serialized.data || { type: 'FeatureCollection', features: [] }
             
             // Filter out label points
             const featuresWithoutLabelPoints = (currentData.features || []).filter(f => 
@@ -1806,7 +1841,8 @@ export default {
       this.isTagFilterActive = true
 
       const source = this.map.getSource('geojson-data')
-      const data = source._data || { type: 'FeatureCollection', features: [] }
+      const serialized = source.serialize()
+      const data = serialized.data || { type: 'FeatureCollection', features: [] }
       const allFeatures = data.features || []
 
       // Filter features that match all selected tags
@@ -1942,7 +1978,8 @@ export default {
         // Remove from map
         if (this.map && this.map.getSource('geojson-data')) {
           const source = this.map.getSource('geojson-data')
-          const data = source._data || { type: 'FeatureCollection', features: [] }
+          const serialized = source.serialize()
+          const data = serialized.data || { type: 'FeatureCollection', features: [] }
           if (data.features) {
             data.features = data.features.filter(f => f.properties?.database_id !== featureId)
             source.setData(data)
@@ -2136,7 +2173,8 @@ export default {
         // Add feature to map
         if (this.map && this.map.getSource('geojson-data')) {
           const source = this.map.getSource('geojson-data')
-          const currentData = source._data || { type: 'FeatureCollection', features: [] }
+          const serialized = source.serialize()
+          const currentData = serialized.data || { type: 'FeatureCollection', features: [] }
           const existingFeatures = currentData.features || []
           
           // Check if feature already exists
