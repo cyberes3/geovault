@@ -280,7 +280,7 @@ export default {
       default: false
     }
   },
-  emits: ['feature-click', 'feature-hide', 'tag-filter-change', 'tag-filter-loading-change', 'close'],
+  emits: ['feature-click', 'feature-hide', 'tag-filter-change', 'tag-filter-loading-change', 'tag-filter-start', 'close'],
   data() {
     return {
       activeTab: 'features-in-vicinity',
@@ -579,6 +579,10 @@ export default {
       }
 
       this.isFiltering = true
+      
+      // Emit tags for immediate filtering of existing features
+      this.$emit('tag-filter-start', this.selectedTags)
+      this.$emit('tag-filter-loading-change', true)
 
       try {
         // Build URL with multiple tag parameters

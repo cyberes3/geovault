@@ -15,6 +15,7 @@
         @feature-hide="handleHideFeature"
         @tag-filter-change="handleTagFilterChange"
         @tag-filter-loading-change="isTagFilterLoading = $event"
+        @tag-filter-start="filterExistingFeaturesByTags"
     />
 
     <!-- Center - Map -->
@@ -1869,6 +1870,82 @@ export default {
         console.error('Error clearing hidden features:', error)
       }
     },
+    filterExistingFeaturesByTags(selectedTags) {
+      if (!this.map || !this.map.getSource('geojson-data') || !selectedTags || selectedTags.length === 0) {
+        return
+      }
+
+      // Mark tag filter as active for immediate filtering
+      this.isTagFilterActive = true
+
+      const source = this.map.getSource('geojson-data')
+      const data = source._data || { type: 'FeatureCollection', features: [] }
+      const allFeatures = data.features || []
+
+      // Filter features that match all selected tags
+      const filteredFeatures = allFeatures.filter(f => {
+        // Skip label points and replacement points
+        if (f.properties?._isLabelPoint || f.properties?._isSmallFeatureReplacement) {
+          return false
+        }
+
+        const props = f.properties || {}
+        
+        // Get tags - handle both array and JSON string formats
+        let tags = props.tags || []
+        if (typeof tags === 'string') {
+          try {
+            tags = JSON.parse(tags)
+          } catch (e) {
+            tags = []
+          }
+        }
+        if (!Array.isArray(tags)) {
+          tags = []
+        }
+
+        // Get system_tags - handle both array and JSON string formats
+        let systemTags = props.system_tags || []
+        if (typeof systemTags === 'string') {
+          try {
+            systemTags = JSON.parse(systemTags)
+          } catch (e) {
+            systemTags = []
+          }
+        }
+        if (!Array.isArray(systemTags)) {
+          systemTags = []
+        }
+
+        // Combine all tags
+        const allFeatureTags = [...tags, ...systemTags]
+
+        // Check if feature has all selected tags
+        return selectedTags.every(tag => allFeatureTags.includes(tag))
+      })
+
+      // Update the map with filtered features immediately
+      if (filteredFeatures.length > 0) {
+        // Filter out points on borders
+        const filteredGeojsonFeatures = filterPointsOnBorders(filteredFeatures)
+
+        source.setData(markRaw({
+          type: 'FeatureCollection',
+          features: filteredGeojsonFeatures.map(f => markRaw(f))
+        }))
+
+        this.updateFeatureCount()
+        this.updateFeaturesInExtent()
+      } else {
+        // No matching features in memory
+        source.setData(markRaw({
+          type: 'FeatureCollection',
+          features: []
+        }))
+        this.updateFeatureCount()
+        this.updateFeaturesInExtent()
+      }
+    },
     handleTagFilterChange(filteredFeatures) {
       if (!this.map || !this.map.getSource('geojson-data')) {
         return
@@ -1891,13 +1968,28 @@ export default {
       this.tagFilteredFeatures = filteredFeatures
 
       // Convert OpenLayers features to GeoJSON
+      const format = new GeoJSON()
       const geojsonFeatures = filteredFeatures.map(f => {
         const props = f.properties || f.get?.('properties') || {}
         const geom = f.geometry || f.getGeometry?.()
+        
+        // Properly serialize OpenLayers geometry to GeoJSON geometry object
+        let geojsonGeometry = null
+        if (geom) {
+          try {
+            geojsonGeometry = format.writeGeometryObject(geom, {
+              featureProjection: 'EPSG:3857',
+              dataProjection: 'EPSG:4326'
+            })
+          } catch (error) {
+            console.error('Error converting geometry to GeoJSON:', error)
+          }
+        }
+        
         return markRaw({
           type: 'Feature',
           properties: props,
-          geometry: geom || null
+          geometry: geojsonGeometry
         })
       })
 
