@@ -1,3 +1,4 @@
+import time
 import traceback
 from urllib.parse import urlparse
 
@@ -10,6 +11,12 @@ from users.models import UserProfile
 from website.settings import get_tile_source_origins
 
 access_logger = get_access_logger()
+
+# In-memory cache for activity tracking throttling
+# Format: {user_id: last_update_timestamp}
+_activity_tracking_cache = {}
+# Throttle activity updates to at most once per 30 seconds per user
+ACTIVITY_TRACKING_THROTTLE_SECONDS = 30
 
 
 def _get_content_length(response):
@@ -122,14 +129,25 @@ class ActivityTrackingMiddleware:
         response = self.get_response(request)
         
         # Update activity for authenticated users
-        # Skip static files and other non-user-interactive paths
+        # Skip static files, icons, fonts, and other non-user-interactive paths
+        # Icon and font requests are static assets and shouldn't trigger activity tracking
         if (request.user and 
             not isinstance(request.user, AnonymousUser) and
             not request.path.startswith('/static/') and
+            not request.path.startswith('/api/icons/') and
+            not request.path.startswith('/api/fonts/') and
             request.path != '/favicon.ico'):
             try:
-                profile, _ = UserProfile.get_or_create_profile(request.user)
-                profile.update_activity()
+                # Throttle activity updates to reduce database load
+                # Only update if enough time has passed since last update for this user
+                user_id = request.user.id
+                current_time = time.time()
+                last_update = _activity_tracking_cache.get(user_id, 0)
+                
+                if current_time - last_update >= ACTIVITY_TRACKING_THROTTLE_SECONDS:
+                    profile, _ = UserProfile.get_or_create_profile(request.user)
+                    profile.update_activity()
+                    _activity_tracking_cache[user_id] = current_time
             except Exception as e:
                 # Log but don't break the request if activity tracking fails
                 user_identifier = get_user_identifier(request)

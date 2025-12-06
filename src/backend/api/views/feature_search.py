@@ -1,4 +1,5 @@
 import traceback
+import json
 
 from django.db import connection
 from django.db.models import Q
@@ -231,7 +232,11 @@ def search_features(request):
     Query parameters:
     - query: search text (required)
     
-    NOTE: Tag searches benefit from GIN index on geojson field for fast JSONB operations.
+    OPTIMIZED VERSION: Uses raw SQL with native PostgreSQL operators for maximum performance.
+    - Selects only needed fields (id, geojson, geojson_hash) to avoid fetching large geometry field
+    - Uses ILIKE with ->> operator for efficient JSONB text search
+    - Hard-coded limit of 100 features to prevent excessive data transfer
+    - GIN index on geojson field accelerates tag searches
     """
     # Get query parameter
     query = request.GET.get('query', '').strip()
@@ -243,35 +248,48 @@ def search_features(request):
         }, status=400)
 
     try:
-        # Base query for user's features
-        base_query = FeatureStore.objects.filter(user=request.user).exclude(geometry__isnull=True)
-
-        # Build search query using Q objects for OR conditions
-        # Search in name, description, tags, and system_tags fields
-        # Use PostgreSQL JSON field lookups with case-insensitive contains
-        # The GIN index on geojson field accelerates tag searches
-        search_q = (
-                Q(geojson__properties__name__icontains=query) |
-                Q(geojson__properties__description__icontains=query) |
-                Q(geojson__properties__tags__icontains=query) |
-                Q(geojson__properties__system_tags__icontains=query)
-        )
-
-        # Apply search filter
-        features_query = base_query.filter(search_q).order_by('id')
-
-        # Convert to GeoJSON format
+        user_id = request.user.id
+        table_name = FeatureStore._meta.db_table
+        search_pattern = f'%{query}%'
+        
+        # Raw SQL query for maximum performance
+        # Searches in name, description, tags array (as text), and system_tags array (as text)
+        # For arrays, we convert to text with explicit casting: (geojson->'properties'->'tags')::text
+        # LIMIT 100 applied at database level for efficiency
+        sql_query = f"""
+            SELECT id, geojson, geojson_hash
+            FROM {table_name}
+            WHERE user_id = %s
+              AND geometry IS NOT NULL
+              AND (
+                geojson->'properties'->>'name' ILIKE %s OR
+                geojson->'properties'->>'description' ILIKE %s OR
+                (geojson->'properties'->'tags')::text ILIKE %s OR
+                (geojson->'properties'->'system_tags')::text ILIKE %s
+              )
+            ORDER BY id
+            LIMIT 100
+        """
+        
+        with connection.cursor() as cursor:
+            cursor.execute(sql_query, (user_id, search_pattern, search_pattern, search_pattern, search_pattern))
+            results = cursor.fetchall()
+        
+        # Convert results to GeoJSON format
         geojson_features = []
-        for feature in features_query:
-            geojson_data = feature.geojson
+        for feature_id, geojson_data, geojson_hash in results:
+            # Parse JSON if it's a string (depends on psycopg2 configuration)
+            if isinstance(geojson_data, str):
+                geojson_data = json.loads(geojson_data)
+            
             if geojson_data and 'geometry' in geojson_data:
                 properties = geojson_data.get('properties', {}).copy()
-                properties['database_id'] = feature.id
+                properties['database_id'] = feature_id
                 geojson_features.append({
                     "type": "Feature",
                     "geometry": geojson_data.get('geometry'),
                     "properties": properties,
-                    "geojson_hash": feature.geojson_hash
+                    "geojson_hash": geojson_hash
                 })
 
         # Create GeoJSON FeatureCollection

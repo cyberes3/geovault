@@ -125,6 +125,10 @@ DATABASES = {
         'PASSWORD': config.get_with_env_override('database.password', 'DB_PASSWORD', ''),
         'HOST': config.get_str('database.host', 'localhost'),
         'PORT': config.get_str('database.port', '5432'),
+        # Connection pooling: reuse connections for up to 600 seconds (10 minutes)
+        # This prevents connection exhaustion and improves performance
+        # Set to 0 to disable pooling (close connection after each request)
+        'CONN_MAX_AGE': config.get_int('database.conn_max_age', 600),
         # Test database configuration - hardcoded for test environment
         # Uses existing database (gv_tests) and drops all tables instead of creating new DB
         # The --reuse-db flag in pytest ensures the database is not created/destroyed

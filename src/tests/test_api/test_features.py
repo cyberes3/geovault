@@ -418,6 +418,38 @@ class TestFeatureAPI(TestCase):
         response = self.client.get('/api/features/search/')
         self.assertEqual(response.status_code, 400)
 
+    def test_search_features_limit(self):
+        """Test that search results are limited to 100 features."""
+        # Create 150 features that all match the search query
+        for i in range(150):
+            feature_data = {
+                'type': 'Feature',
+                'geometry': {
+                    'type': 'Point',
+                    'coordinates': [-122.4194 + i * 0.001, 37.7749 + i * 0.001, 0.0]
+                },
+                'properties': {
+                    'name': f'Searchable Feature {i}',
+                    'description': 'This is searchable',
+                    'tags': ['searchable']
+                }
+            }
+            FeatureStore.objects.create(
+                user=self.user,
+                geojson=feature_data,
+                geometry=Point(-122.4194 + i * 0.001, 37.7749 + i * 0.001, 0.0),
+                geojson_hash=generate_geojson_hash(feature_data)
+            )
+        
+        # Search for features - should return max 100
+        response = self.client.get('/api/features/search/', {'query': 'Searchable'})
+        self.assertEqual(response.status_code, 200)
+        data = json.loads(response.content)
+        self.assertIn('data', data)
+        # Should be limited to 100 features
+        self.assertEqual(data['feature_count'], 100)
+        self.assertEqual(len(data['data']['features']), 100)
+
     def test_get_features_by_tag(self):
         """Test getting features grouped by tags."""
         response = self.client.get('/api/features/by-tag/')

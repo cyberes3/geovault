@@ -6,7 +6,6 @@ Runs every minute to remove replacement uploads that are 10 minutes old or older
 import threading
 from datetime import timedelta
 
-from django.db import connections
 from django.utils import timezone
 
 from api.models import ImportQueue
@@ -57,9 +56,6 @@ class ReplacementCleanupService:
     def _run_cleanup(self):
         """Execute the cleanup logic and schedule the next run."""
         try:
-            # Ensure database connection is ready
-            connections.close_all()
-
             # Calculate cutoff time (10 minutes ago)
             cutoff_time = timezone.now() - timedelta(minutes=10)
 
