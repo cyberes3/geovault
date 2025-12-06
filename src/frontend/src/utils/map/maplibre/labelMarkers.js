@@ -583,8 +583,11 @@ export class LabelMarkerManager {
         // Limit to MAX_VISIBLE_LABELS and batch process
         const labelsToShow = candidateLabels.slice(0, MAX_VISIBLE_LABELS)
 
+        // Apply collision detection to filter out overlapping labels
+        const visibleLabels = this.detectLabelCollisions(labelsToShow, zoom)
+
         // Batch create/update markers
-        labelsToShow.forEach(({ id, name, position, isLabelPoint, hasIcon, placeLabelBelow }) => {
+        visibleLabels.forEach(({ id, name, position, isLabelPoint, hasIcon, placeLabelBelow }) => {
           shouldHaveMarker.add(id)
           this.ensureMarker(id, name, position, isLabelPoint, hasIcon, zoom, placeLabelBelow)
         })
@@ -605,6 +608,129 @@ export class LabelMarkerManager {
         this.isUpdating = false
       }
     })
+  }
+
+  /**
+   * Detect label collisions and return only non-overlapping labels
+   * Uses screen-space bounding boxes to check for overlaps
+   * @param {Array} labels - Array of label candidates with { id, name, position, isLabelPoint, hasIcon, placeLabelBelow }
+   * @param {number} zoom - Current zoom level
+   * @returns {Array} Filtered array of labels without collisions
+   */
+  detectLabelCollisions(labels, zoom) {
+    if (!this.map || labels.length === 0) return labels
+
+    // Estimate label dimensions in pixels
+    // Font is 12px, approximate character width is 7px, height is 12px
+    const fontHeightPixels = 12
+    const avgCharWidthPixels = 7
+    const paddingPixels = 4 // Padding around label to prevent tight overlaps
+
+    // Convert labels to screen coordinates with bounding boxes
+    const labelBoxes = labels.map(label => {
+      const { name, position } = label
+      const textWidthPixels = name.length * avgCharWidthPixels
+      const textHeightPixels = fontHeightPixels
+      
+      // Convert geographic position to screen pixel coordinates
+      const point = this.map.project([position[0], position[1]])
+      
+      // Calculate bounding box in screen space
+      // Labels are positioned relative to the point based on their type
+      let labelCenterY
+      if (label.isLabelPoint && !label.placeLabelBelow) {
+        // Centered label points - text is centered on the point
+        labelCenterY = point.y
+      } else if (label.isLabelPoint && label.placeLabelBelow) {
+        // Label points placed below polygon - offset 15px below point
+        labelCenterY = point.y + 15
+      } else {
+        // Regular points - offset below based on icon/circle size
+        const pointSize = getPointRadiusAtZoom(zoom, label.hasIcon)
+        labelCenterY = point.y + pointSize + 4
+      }
+      
+      const x = point.x
+      const y = labelCenterY
+      
+      // Bounding box: [left, top, right, bottom]
+      // For centered labels, text is centered vertically on y
+      // For offset labels, text starts at y (top anchor)
+      const topOffset = label.isLabelPoint && !label.placeLabelBelow 
+        ? textHeightPixels / 2 // Centered: half height above center
+        : 0 // Offset: text starts at y
+      
+      const left = x - (textWidthPixels / 2) - paddingPixels
+      const top = y - topOffset - paddingPixels
+      const right = x + (textWidthPixels / 2) + paddingPixels
+      const bottom = y - topOffset + textHeightPixels + paddingPixels
+      
+      return {
+        ...label,
+        bbox: [left, top, right, bottom],
+        area: (right - left) * (bottom - top) // Larger labels have priority
+      }
+    })
+
+    // Sort by area (larger labels first) and then by position (top to bottom, left to right)
+    // This ensures more important/visible labels are kept
+    labelBoxes.sort((a, b) => {
+      // First sort by area (descending)
+      if (Math.abs(b.area - a.area) > 100) {
+        return b.area - a.area
+      }
+      // Then by vertical position (top to bottom)
+      if (Math.abs(a.bbox[1] - b.bbox[1]) > 5) {
+        return a.bbox[1] - b.bbox[1]
+      }
+      // Finally by horizontal position (left to right)
+      return a.bbox[0] - b.bbox[0]
+    })
+
+    // Check for collisions and keep only non-overlapping labels
+    const visibleLabels = []
+    const occupiedBoxes = []
+
+    for (const labelBox of labelBoxes) {
+      let hasCollision = false
+      
+      // Check against all previously placed labels
+      for (const occupied of occupiedBoxes) {
+        if (this.boxesOverlap(labelBox.bbox, occupied.bbox)) {
+          hasCollision = true
+          break
+        }
+      }
+      
+      if (!hasCollision) {
+        visibleLabels.push({
+          id: labelBox.id,
+          name: labelBox.name,
+          position: labelBox.position,
+          isLabelPoint: labelBox.isLabelPoint,
+          hasIcon: labelBox.hasIcon,
+          placeLabelBelow: labelBox.placeLabelBelow
+        })
+        occupiedBoxes.push(labelBox)
+      }
+    }
+
+    return visibleLabels
+  }
+
+  /**
+   * Check if two bounding boxes overlap
+   * @param {Array} bbox1 - [left, top, right, bottom]
+   * @param {Array} bbox2 - [left, top, right, bottom]
+   * @returns {boolean} True if boxes overlap
+   */
+  boxesOverlap(bbox1, bbox2) {
+    const [left1, top1, right1, bottom1] = bbox1
+    const [left2, top2, right2, bottom2] = bbox2
+    
+    // Check if boxes don't overlap (inverse check)
+    // Boxes don't overlap if one is completely to the left, right, above, or below the other
+    return !(right1 < left2 || left1 > right2 || bottom1 < top2 || top1 > bottom2)
   }
 
   /**
