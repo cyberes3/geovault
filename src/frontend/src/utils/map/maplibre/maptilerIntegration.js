@@ -126,6 +126,9 @@ export function setupTerrain(map, config) {
         exaggeration: config.terrainExaggeration
       })
     }
+
+    // Add atmospheric fog effect for enhanced 3D visualization
+    setupAtmosphere(map)
   } catch (error) {
     console.error('Error setting up terrain:', error)
   }
@@ -141,6 +144,9 @@ export function removeTerrain(map) {
   }
 
   try {
+    // Remove atmospheric fog effect
+    removeAtmosphere(map)
+
     // Remove terrain configuration
     if (map.getStyle()) {
       map.setTerrain(null)
@@ -220,6 +226,50 @@ export function removeHillshade(map) {
     }
   } catch (error) {
     console.error('Error removing hillshade:', error)
+  }
+}
+
+/**
+ * Setup atmospheric sky and fog effect for enhanced 3D visualization
+ * Uses MapLibre's setSky() method to add realistic atmosphere
+ * @param {Object} map - MapLibre map instance
+ */
+export function setupAtmosphere(map) {
+  if (!map) {
+    return
+  }
+
+  try {
+    // Add sky and fog effect using MapLibre's setSky() method
+    // This creates a realistic atmosphere with sky, horizon, and fog colors
+    // Reference: https://maplibre.org/maplibre-gl-js/docs/examples/sky-fog-terrain/
+    map.setSky({
+      'sky-color': '#80b3ff',           // Light blue sky color
+      'sky-horizon-blend': 0.5,         // Smooth blend between sky and horizon (0-1)
+      'horizon-color': '#d1e7ff',       // Lighter blue horizon color
+      'horizon-fog-blend': 0.5,         // Blend between horizon and fog (0-1)
+      'fog-color': '#c0d8f0',           // Soft blue-gray fog color
+      'fog-ground-blend': 0.1           // How fog blends with ground (0-1)
+    })
+  } catch (error) {
+    console.error('Error setting up atmosphere:', error)
+  }
+}
+
+/**
+ * Remove atmospheric sky and fog effect from the map
+ * @param {Object} map - MapLibre map instance
+ */
+export function removeAtmosphere(map) {
+  if (!map) {
+    return
+  }
+
+  try {
+    // Remove sky and fog effect by passing undefined
+    map.setSky(undefined)
+  } catch (error) {
+    console.error('Error removing atmosphere:', error)
   }
 }
 
