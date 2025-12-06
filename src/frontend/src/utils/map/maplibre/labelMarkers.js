@@ -273,19 +273,19 @@ function getPointRadiusAtZoom(zoom, hasIcon = false) {
   // For points with icons, use icon size calculation
   if (hasIcon) {
     // Icon base scale is 1.0 at zoom 10+, min scale 0.5
-    // Icons are typically 32x32px, so effective size is scale * 32
+    // Icons are normalized to 20x20px, so effective size is scale * 20
     const baseScale = 1.0
     const minScale = 0.5
     
     // At zoom 10 and above, icons stay at full size (OpenLayers behavior)
     if (zoom >= baseZoom) {
-      return baseScale * 32 / 2 // Half of icon size for spacing calculation
+      return baseScale * 20 / 2 // Half of icon size for spacing calculation
     }
     
     // When zoomed out below zoom 10, apply exponential scaling
     const scale = Math.pow(2, (zoom - baseZoom) * scaleFactor)
     const clampedScale = Math.max(minScale, baseScale * scale)
-    return clampedScale * 32 / 2
+    return clampedScale * 20 / 2
   }
   
   // For circles (no icon), use circle radius calculation

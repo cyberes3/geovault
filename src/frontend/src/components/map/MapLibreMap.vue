@@ -217,6 +217,7 @@ import {
   filterPointsOnBorders,
   updateSmallFeatureFlags
 } from '@/utils/map/maplibre'
+import { getIconSourceUrl, getFeatureIconUrl, loadIconImage } from '@/utils/map/maplibre/featureStyling.js'
 import { 
   MapTilerConfig,
   setupTerrain as maptilerSetupTerrain,
@@ -818,33 +819,27 @@ export default {
         const geometryType = feature.geometry?.type
         if (geometryType !== 'Point') continue
         
-        const iconUrl = feature.properties?.['marker-icon']
+        // Use getFeatureIconUrl helper to check all icon property names
+        const iconUrl = getFeatureIconUrl(feature.properties)
         const hasIcon = iconUrl && iconUrl.trim() !== ''
         
         // Determine if we should show icon or circle based on zoom and settings
-        const shouldShowIcon = hasIcon && (!replaceIconsLowZoom || zoom >= 10)
+        const shouldShowIcon = hasIcon && (!replaceIconsLowZoom || zoom > 8)
         
         if (shouldShowIcon) {
           // Update to show icon
           if (!feature.properties['_icon-id']) {
-            const iconId = `icon-${feature.properties.database_id || Date.now()}`
+            // Use same icon ID generation as initial processing
+            const resolvedUrl = getIconSourceUrl(iconUrl, feature.properties)
+            const iconId = `icon-${resolvedUrl.replace(/[^a-zA-Z0-9]/g, '_')}`
             feature.properties['_icon-id'] = iconId
             needsUpdate = true
             
-            // Ensure icon is loaded
+            // Ensure icon is loaded using shared function
             if (this.map && !this.map.hasImage(iconId)) {
-              try {
-                const img = new Image()
-                img.crossOrigin = 'anonymous'
-                img.onload = () => {
-                  if (this.map && !this.map.hasImage(iconId)) {
-                    this.map.addImage(iconId, img, { sdf: false })
-                  }
-                }
-                img.src = iconUrl
-              } catch (e) {
-                console.warn(`Failed to load icon: ${iconUrl}`, e)
-              }
+              loadIconImage(this.map, iconId, resolvedUrl).catch(err => {
+                console.warn(`Failed to load icon ${iconId}:`, err)
+              })
             }
           }
         } else {

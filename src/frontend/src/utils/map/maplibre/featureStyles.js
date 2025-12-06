@@ -214,8 +214,8 @@ export function getPointIconLayerConfig(overrides = {}) {
         ['get', '_icon-id'],
         ''
       ],
-      // Zoom-based scale: 0.5 minimum (50% of full size, matching point scaling), 1.0 at zoom 10+
-      'icon-size': createZoomBasedScaleExpression(1.0, 0.5),
+      // Fixed size: 1.0 (no scaling, always 20px since icons are normalized to 20x20)
+      'icon-size': 1.0,
       'icon-anchor': 'bottom',
       'icon-allow-overlap': true,
       'icon-ignore-placement': true
