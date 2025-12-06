@@ -12,6 +12,7 @@ RUN apt-get update && apt-get install -y \
     postgresql-client \
     redis-tools \
     curl \
+    git \
     && rm -rf /var/lib/apt/lists/*
 
 # Install Node.js 22.x
@@ -39,6 +40,10 @@ RUN npm install
 # Copy the rest of the application (source files)
 WORKDIR /app
 COPY src/ /app/src/
+
+# Make generate-map-fonts.sh executable and run it to generate font assets
+WORKDIR /app/src/backend
+RUN chmod +x generate-map-fonts.sh && ./generate-map-fonts.sh
 
 # Build frontend now that all source files are in place
 WORKDIR /app/src/frontend
