@@ -196,7 +196,7 @@
 
 <script>
 import { XMarkIcon, PhotoIcon } from '@heroicons/vue/24/outline'
-import TagPicker from '@/components/TagPicker.vue'
+import TagPicker from '@/components/parts/TagPicker.vue'
 import IconPickerDialog from '@/components/map/IconPickerDialog.vue'
 import ToggleButton from '@/components/parts/ToggleButton.vue'
 import ColorPicker from '@/components/parts/ColorPicker.vue'

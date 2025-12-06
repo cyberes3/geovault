@@ -39,12 +39,12 @@ const routes = [
     {
         path: '/tags',
         name: 'Tags',
-        component: () => import('./components/TagsPage.vue'),
+        component: () => import('./components/tags/TagsPage.vue'),
     },
     {
         path: '/collections',
         name: 'Collections',
-        component: () => import('./components/CollectionsPage.vue'),
+        component: () => import('./components/collections/CollectionsPage.vue'),
     },
     {
         path: '/settings',
@@ -56,6 +56,11 @@ const routes = [
         name: 'Admin',
         component: () => import('./components/admin/AdminPanelPage.vue'),
         meta: { requiresAdmin: true }
+    },
+    {
+        path: '/:pathMatch(.*)*',
+        name: 'NotFound',
+        component: () => import('./components/NotFoundPage.vue'),
     }
 ]
 

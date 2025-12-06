@@ -695,7 +695,7 @@ import LogViewModal from "@/components/import/parts/LogViewModal.vue";
 import ImportControls from "@/components/import/parts/ImportControls.vue";
 import BulkStylingModal from "@/components/import/parts/BulkStylingModal.vue";
 import DuplicateWarning from "@/components/import/parts/DuplicateWarning.vue";
-import TagPicker from "@/components/TagPicker.vue";
+import TagPicker from "@/components/parts/TagPicker.vue";
 import ColorPicker from "@/components/parts/ColorPicker.vue";
 import IconSelector from "@/components/parts/IconSelector.vue";
 import { DEFAULT_BULK_OPERATIONS, hasBulkOperationsConfigured, areBulkOperationsEqual, cloneBulkOperations } from "@/utils/bulkOperations.js";
