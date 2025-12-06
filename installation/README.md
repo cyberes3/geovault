@@ -49,7 +49,7 @@ systemctl enable --now redis-server
 
 
 
-## Clone Repository
+## Setup
 
 ```shell
 adduser --system geovault --home /srv/geovault
@@ -64,6 +64,10 @@ git clone https://git.evulid.cc/cyberes/geovault.git
 cd geovault/src/backend
 python3 -m venv venv
 ./venv/bin/pip install -r requirements.txt
+```
+
+```shell
+./generate-map-fonts.sh
 ```
 
 
