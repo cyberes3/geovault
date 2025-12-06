@@ -907,6 +907,11 @@ export default {
                   this.iconRemoved = false
                 }
               }
+
+              // Emit saved event with updated feature data for in-memory map update
+              this.isSaving = false
+              this.$emit('saved', updatedFeature)
+              return
             }
           }
         } catch (fetchError) {
@@ -916,9 +921,21 @@ export default {
           Object.assign(properties, formFieldUpdates)
           properties.database_id = featureId
           this.feature.properties = properties
+          
+          // Create updated feature from local data
+          const updatedFeature = {
+            type: 'Feature',
+            geometry: this.feature.geometry,
+            properties: this.feature.properties
+          }
+          
+          // Emit saved event with locally updated feature
+          this.isSaving = false
+          this.$emit('saved', updatedFeature)
+          return
         }
 
-        // Close dialog immediately on success (no message)
+        // Fallback: emit saved event without feature data (will trigger reload)
         this.isSaving = false
         this.$emit('saved')
 

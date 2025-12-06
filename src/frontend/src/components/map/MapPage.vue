@@ -1743,10 +1743,103 @@ export default {
       this.selectedFeature = null
       this.isEditingFeature = false
     },
-    handleFeatureSaved(feature) {
-      // Feature was updated, reload data for current view
-      this.loadedBounds.clear()
-      this.loadDataForCurrentView()
+    handleFeatureSaved(updatedFeature) {
+      // If updated feature data is provided, update in-memory without network call
+      if (updatedFeature && updatedFeature.properties?.database_id) {
+        const featureId = updatedFeature.properties.database_id
+        
+        if (this.map && this.map.getSource('geojson-data')) {
+          const source = this.map.getSource('geojson-data')
+          const serialized = source.serialize()
+          const currentData = serialized.data || { type: 'FeatureCollection', features: [] }
+          const features = currentData.features || []
+          
+          // Find the feature on the map by database_id
+          const featureIndex = features.findIndex(f => 
+            f.properties?.database_id === featureId && 
+            !f.properties?._isLabelPoint && 
+            !f.properties?._isSmallFeatureReplacement
+          )
+          
+          if (featureIndex !== -1) {
+            // Feature exists on map - update it in-place
+            const existingFeature = features[featureIndex]
+            
+            // Create a deep copy of the updated feature to avoid reference issues
+            const updatedFeatureCopy = JSON.parse(JSON.stringify(updatedFeature))
+            
+            // Ensure database_id is preserved
+            updatedFeatureCopy.properties.database_id = featureId
+            
+            // Process icon if this is a Point feature
+            if (updatedFeatureCopy.geometry?.type === 'Point') {
+              const iconUrl = getFeatureIconUrl(updatedFeatureCopy.properties)
+              const zoom = this.map.getZoom()
+              const userSettings = this.$store.state.userSettings || {}
+              const replaceIconsLowZoom = userSettings.map?.replace_icons_low_zoom !== undefined 
+                ? userSettings.map.replace_icons_low_zoom 
+                : true
+              const shouldShowIcon = iconUrl && shouldUseIcon(zoom, iconUrl, replaceIconsLowZoom)
+              
+              if (shouldShowIcon) {
+                const resolvedUrl = getIconSourceUrl(iconUrl, updatedFeatureCopy.properties)
+                const iconId = `icon-${resolvedUrl.replace(/[^a-zA-Z0-9]/g, '_')}`
+                updatedFeatureCopy.properties['_icon-id'] = iconId
+                
+                // Load icon if not already loaded
+                if (!this.map.hasImage(iconId)) {
+                  loadIconImage(this.map, iconId, resolvedUrl).catch(err => {
+                    console.warn(`Failed to load icon ${iconId}:`, err)
+                    // Remove icon metadata on failure
+                    delete updatedFeatureCopy.properties['_icon-id']
+                  })
+                }
+              } else {
+                // Remove icon metadata to show as circle
+                delete updatedFeatureCopy.properties['_icon-id']
+              }
+            } else {
+              // Remove icon metadata for non-point features
+              delete updatedFeatureCopy.properties['_icon-id']
+            }
+            
+            // Replace the feature in the array
+            features[featureIndex] = markRaw(updatedFeatureCopy)
+            
+            // Update the source with the modified features
+            source.setData(markRaw({
+              type: 'FeatureCollection',
+              features: features.map(f => markRaw(f))
+            }))
+            
+            // Update label markers if labels are visible
+            if (this.showAllLabels && this.labelMarkerManager) {
+              this.labelMarkerManager.updateMarkers(features)
+            }
+            
+            // Update features in extent and feature count
+            this.updateFeaturesInExtent()
+            this.updateFeatureCount()
+            
+            // Update selected feature if it's the one that was saved
+            if (this.selectedFeature && 
+                (this.selectedFeature.properties?.database_id === featureId || 
+                 this.selectedFeature.get?.('properties')?.database_id === featureId)) {
+              // Update the selected feature reference
+              this.selectedFeature = markRaw(convertMapLibreFeature(updatedFeatureCopy))
+            }
+          } else {
+            // Feature not on map - reload to get it (or do nothing)
+            // For now, we'll do nothing since the feature isn't visible
+            console.log(`Feature ${featureId} not found on map, skipping update`)
+          }
+        }
+      } else {
+        // No updated feature data provided - fall back to reload
+        this.loadedBounds.clear()
+        this.loadDataForCurrentView()
+      }
+      
       this.isEditingFeature = false
     },
     handleFeatureSelect(feature) {

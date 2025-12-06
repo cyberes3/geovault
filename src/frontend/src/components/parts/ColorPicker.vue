@@ -175,6 +175,11 @@ export default {
   justify-content: center !important;
 }
 
+/* Make hex input uppercase */
+.color-picker-wrapper :deep(.field_double input) {
+  text-transform: uppercase !important;
+}
+
 .color-picker-wrapper :deep(.field_double) {
   width: 75% !important;
   max-width: 75% !important;
