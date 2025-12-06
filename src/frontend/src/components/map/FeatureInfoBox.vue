@@ -142,8 +142,7 @@
 
 <script>
 import { marked } from 'marked'
-import { GeoJSON } from 'ol/format'
-import { getLength, getArea } from 'ol/sphere'
+import * as turf from '@turf/turf'
 import { ChartBarIcon, ArrowDownTrayIcon, PencilSquareIcon, MapPinIcon, XMarkIcon, CalendarDaysIcon } from '@heroicons/vue/24/outline'
 import { formatElevation, formatDistance, formatArea } from '@/utils/units'
 import MeasurementIcon from '@/components/icons/MeasurementIcon.vue'
@@ -193,34 +192,55 @@ export default {
   computed: {
     isLineOrTrack() {
       if (!this.feature) return false
-      const geometry = this.feature.getGeometry()
+      // Pure GeoJSON features only
+      const geometry = this.feature.geometry
       if (!geometry) return false
-      const geomType = geometry.getType()
+      const geomType = geometry.type
       return geomType === 'LineString' || geomType === 'MultiLineString'
     },
     isPointOrMultiPoint() {
       if (!this.feature) return false
-      const geometry = this.feature.getGeometry()
+      // Pure GeoJSON features only
+      const geometry = this.feature.geometry
       if (!geometry) return false
-      const geomType = geometry.getType()
+      const geomType = geometry.type
       return geomType === 'Point' || geomType === 'MultiPoint'
     },
     isPolygon() {
       if (!this.feature) return false
-      const geometry = this.feature.getGeometry()
+      // Pure GeoJSON features only
+      const geometry = this.feature.geometry
       if (!geometry) return false
-      const geomType = geometry.getType()
+      const geomType = geometry.type
       return geomType === 'Polygon' || geomType === 'MultiPolygon'
     },
     featureLength() {
       if (!this.isLineOrTrack) return null
-      const geometry = this.feature.getGeometry()
-      return getLength(geometry, { projection: 'EPSG:3857' })
+      // Pure GeoJSON features only
+      const geometry = this.feature.geometry
+      if (!geometry) return null
+      
+      try {
+        // Use Turf.js to calculate length in meters
+        return turf.length(geometry, { units: 'meters' })
+      } catch (error) {
+        console.error('Error calculating feature length:', error)
+        return null
+      }
     },
     featureArea() {
       if (!this.isPolygon) return null
-      const geometry = this.feature.getGeometry()
-      return getArea(geometry, { projection: 'EPSG:3857' })
+      // Pure GeoJSON features only
+      const geometry = this.feature.geometry
+      if (!geometry) return null
+      
+      try {
+        // Use Turf.js to calculate area in square meters
+        return turf.area(geometry)
+      } catch (error) {
+        console.error('Error calculating feature area:', error)
+        return null
+      }
     }
   },
   mounted() {
@@ -289,20 +309,24 @@ export default {
       }
     },
     getFeatureName(feature) {
-      const properties = feature.get('properties') || {}
+      // Pure GeoJSON features only
+      const properties = feature.properties || {}
       return properties.name || 'Unnamed Feature'
     },
     getFeatureGeometryType(feature) {
-      const geometry = feature.getGeometry()
+      // Pure GeoJSON features only
+      const geometry = feature.geometry
       if (!geometry) return 'Unknown'
-      return geometry.getType()
+      return geometry.type
     },
     getFeatureDescription(feature) {
-      const properties = feature.get('properties') || {}
+      // Pure GeoJSON features only
+      const properties = feature.properties || {}
       return properties.description || null
     },
     getFeatureTags(feature) {
-      const properties = feature.get('properties') || {}
+      // Pure GeoJSON features only
+      const properties = feature.properties || {}
       const userTags = Array.isArray(properties.tags)
         ? properties.tags.filter(tag => tag && tag.trim() !== '')
         : []
@@ -321,10 +345,11 @@ export default {
     },
     getFeatureElevation(feature) {
       if (!feature) return null
-      const geometry = feature.getGeometry()
+      // Pure GeoJSON features only
+      const geometry = feature.geometry
       if (!geometry) return null
 
-      const geomType = geometry.getType()
+      const geomType = geometry.type
 
       // Only process Point and MultiPoint features
       if (geomType !== 'Point' && geomType !== 'MultiPoint') {
@@ -332,12 +357,7 @@ export default {
       }
 
       try {
-        // Convert OpenLayers geometry to GeoJSON format
-        const format = new GeoJSON()
-        const geometryJson = format.writeGeometryObject(geometry, {
-          featureProjection: 'EPSG:3857',
-          dataProjection: 'EPSG:4326'
-        })
+        const geometryJson = geometry
 
         const coords = geometryJson.coordinates
 
@@ -379,14 +399,16 @@ export default {
     },
     getFeatureColor() {
       if (!this.feature) return '#d1d5db'
-      const geometry = this.feature.getGeometry()
+      // Pure GeoJSON features only
+      const geometry = this.feature.geometry
       if (!geometry) return '#d1d5db'
-      const geometryType = geometry.getType()
+      const geometryType = geometry.type
       return getGeometryTypeColor(geometryType)
     },
     getFeatureCreatedDate(feature) {
       if (!feature) return null
-      const properties = feature.get('properties') || {}
+      // Pure GeoJSON features only
+      const properties = feature.properties || {}
       return properties.created || null
     },
     formatCreatedDate(dateString) {

@@ -257,7 +257,6 @@
 
 <script>
 import {APIHOST} from '@/config.js'
-import {GeoJSON} from 'ol/format'
 import ReplacementFeatureDialog from './ReplacementFeatureDialog.vue'
 import TagPicker from '@/components/TagPicker.vue'
 import ColorPicker from '@/components/parts/ColorPicker.vue'
@@ -335,14 +334,14 @@ export default {
   computed: {
     featureId() {
       if (!this.feature) return null
-      const properties = this.feature.get('properties') || {}
+      const properties = this.feature.properties || {}
       return properties.database_id
     },
     geometryType() {
       if (!this.feature) return null
-      const geometry = this.feature.getGeometry()
+      const geometry = this.feature.geometry
       if (!geometry) return null
-      return geometry.getType()
+      return geometry.type
     },
     // Note: MultiPoint and MultiPolygon should not appear in processed features.
     // KML's MultiGeometry converts to GeometryCollection (not MultiPoint/MultiPolygon).
@@ -367,7 +366,7 @@ export default {
     },
     systemTags() {
       if (!this.feature) return []
-      const properties = this.feature.get('properties') || {}
+      const properties = this.feature.properties || {}
       const tags = Array.isArray(properties.system_tags)
         ? properties.system_tags.filter(tag => tag && tag.trim() !== '')
         : []
@@ -390,7 +389,7 @@ export default {
     initializeForm() {
       if (!this.feature) return
 
-      const properties = this.feature.get('properties') || {}
+      const properties = this.feature.properties || {}
 
       // Initialize form data
       this.formData.name = properties.name || ''
@@ -598,23 +597,17 @@ export default {
     updateRawJson() {
       if (!this.feature) return
 
-      const geometry = this.feature.getGeometry()
+      // Pure GeoJSON features only
+      const geometry = this.feature.geometry
       if (!geometry) return
 
-      // Convert OpenLayers geometry to GeoJSON (geometry only, not full feature)
-      const format = new GeoJSON()
-      const geometryJson = format.writeGeometryObject(geometry, {
-        featureProjection: 'EPSG:3857',
-        dataProjection: 'EPSG:4326'
-      })
-
       // Extract only coordinates (or geometries for GeometryCollection)
-      if (geometryJson.type === 'GeometryCollection') {
+      if (geometry.type === 'GeometryCollection') {
         // For GeometryCollection, show geometries array
-        this.rawJsonInput = JSON.stringify(geometryJson.geometries || [], null, 2)
+        this.rawJsonInput = JSON.stringify(geometry.geometries || [], null, 2)
       } else {
         // For all other types, show coordinates array
-        this.rawJsonInput = JSON.stringify(geometryJson.coordinates || [], null, 2)
+        this.rawJsonInput = JSON.stringify(geometry.coordinates || [], null, 2)
       }
     },
 
@@ -670,7 +663,7 @@ export default {
 
       try {
         // Get feature ID from original feature properties
-        const originalProperties = this.feature.get('properties') || {}
+        const originalProperties = this.feature.properties || {}
         const featureId = originalProperties.database_id
         if (!featureId) {
           this.errorMessage = 'Feature ID not found. Cannot update feature.'
@@ -690,18 +683,20 @@ export default {
         }
 
         // Build feature from form data and current feature
-        const geometry = this.feature.getGeometry()
+        // Pure GeoJSON features only
+        const geometry = this.feature.geometry
         if (!geometry) {
           this.errorMessage = 'Feature has no geometry'
           this.isSaving = false
           return
         }
 
-        const format = new GeoJSON()
-        let featureData = format.writeFeatureObject(this.feature, {
-          featureProjection: 'EPSG:3857',
-          dataProjection: 'EPSG:4326'
-        })
+        // Create GeoJSON feature format
+        let featureData = {
+          type: 'Feature',
+          geometry: this.feature.geometry,
+          properties: this.feature.properties || {}
+        }
 
         // Parse raw JSON if provided to update only the coordinates
         if (this.rawJsonInput && this.rawJsonInput.trim()) {
@@ -874,33 +869,28 @@ export default {
           if (fetchResponse.ok) {
             const fetchData = await fetchResponse.json()
             if (fetchResponse.ok && fetchData.feature) {
-              // Update the feature with fresh data from the server
-              const format = new GeoJSON()
+              // Get the updated GeoJSON feature from the server
               const geojsonData = fetchData.feature.geojson
 
-              // Read the updated feature from GeoJSON
-              const updatedFeature = format.readFeature(geojsonData, {
-                featureProjection: 'EPSG:3857',
-                dataProjection: 'EPSG:4326'
-              })
+              // Use the GeoJSON directly (pure GeoJSON, no OpenLayers compatibility)
+              const updatedFeature = geojsonData
 
-              // Preserve properties from the GeoJSON data
-              const properties = geojsonData && geojsonData.properties
-                  ? {...geojsonData.properties}
-                  : {}
+              // Ensure properties exist
+              if (!updatedFeature.properties) {
+                updatedFeature.properties = {}
+              }
 
               // Add the _id to properties
-              properties.database_id = featureId
-              updatedFeature.set('properties', properties)
+              updatedFeature.properties.database_id = featureId
 
               // Preserve geojson_hash if available
               if (fetchData.feature.geojson_hash) {
-                updatedFeature.set('geojson_hash', fetchData.feature.geojson_hash)
+                updatedFeature.geojson_hash = fetchData.feature.geojson_hash
               }
 
-              // Update the feature's geometry and properties
-              this.feature.setGeometry(updatedFeature.getGeometry())
-              this.feature.set('properties', properties)
+              // Update the feature (pure GeoJSON)
+              this.feature.geometry = updatedFeature.geometry
+              this.feature.properties = updatedFeature.properties
 
               // Update icon state if icon was uploaded or removed
               if (this.isPoint) {
@@ -917,19 +907,15 @@ export default {
                   this.iconRemoved = false
                 }
               }
-
-              // Trigger feature change to update any listeners
-              this.feature.changed()
             }
           }
         } catch (fetchError) {
           console.error('Error fetching updated feature:', fetchError)
           // Fall back to local update if fetch fails
-          const properties = this.feature.get('properties') || {}
+          const properties = this.feature.properties || {}
           Object.assign(properties, formFieldUpdates)
           properties.database_id = featureId
-          this.feature.set('properties', properties)
-          this.feature.changed()
+          this.feature.properties = properties
         }
 
         // Close dialog immediately on success (no message)
@@ -945,7 +931,7 @@ export default {
 
     async handleDelete() {
       // Get feature ID
-      const originalProperties = this.feature.get('properties') || {}
+      const originalProperties = this.feature.properties || {}
       const featureId = originalProperties.database_id
       if (!featureId) {
         this.errorMessage = 'Feature ID not found. Cannot delete feature.'

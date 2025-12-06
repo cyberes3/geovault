@@ -29,17 +29,12 @@ const routes = [
     {
         path: '/map',
         name: 'Map',
-        component: () => import('./components/map/GeoJsonMap.vue'),
-    },
-    {
-        path: '/maplibre',
-        name: 'MapLibre',
-        component: () => import('./components/map/MapLibreMap.vue'),
+        component: () => import('./components/map/MapPage.vue'),
     },
     {
         path: '/mapshare',
         name: 'MapShare',
-        component: () => import('./components/map/GeoJsonMap.vue'),
+        component: () => import('./components/map/MapPage.vue'),
     },
     {
         path: '/tags',

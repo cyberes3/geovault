@@ -231,7 +231,6 @@
 </template>
 
 <script>
-import {GeoJSON} from 'ol/format'
 import {APIHOST} from '@/config.js'
 import { FunnelIcon, XMarkIcon, EyeSlashIcon } from '@heroicons/vue/24/outline'
 import Loader from '@/components/parts/Loader.vue'
@@ -307,27 +306,21 @@ export default {
     displayFeaturesWithKeys() {
       // Wrap features with database_id at top level for RecycleScroller
       return this.displayFeatures.map((feature, index) => {
-        // If feature already has database_id at top level (from convertMapLibreFeature), use it
+        // If feature already has database_id at top level, use it
         if (feature.database_id !== undefined) {
           return feature
         }
         
-        // Otherwise, extract from properties and create wrapper
-        const properties = feature.get ? feature.get('properties') : feature.properties || {}
-        const databaseId = properties.database_id || properties.geojson_hash || `feature-${index}`
+        // Extract database_id from properties (native GeoJSON)
+        const properties = feature.properties || {}
+        const geojsonHash = feature.geojson_hash
+        const databaseId = properties.database_id || geojsonHash || `feature-${index}`
         
-        // Create a wrapper that preserves the original feature but adds database_id
-        // Use Object.assign to properly handle OpenLayers Feature objects
-        const wrapper = Object.assign({}, feature, {
+        // Return feature with database_id at top level
+        return {
+          ...feature,
           database_id: databaseId
-        })
-        
-        // Ensure methods are accessible (they should be via Object.assign, but be explicit)
-        if (feature.get) wrapper.get = feature.get.bind(feature)
-        if (feature.set) wrapper.set = feature.set.bind(feature)
-        if (feature.getGeometry) wrapper.getGeometry = feature.getGeometry.bind(feature)
-        
-        return wrapper
+        }
       })
     },
     showInitialFeaturesLoader() {
@@ -389,20 +382,24 @@ export default {
   },
   methods: {
     getFeatureName(feature) {
-      const properties = feature.get('properties') || {}
+      // Pure GeoJSON features only
+      const properties = feature.properties || {}
       return properties.name || 'Unnamed Feature'
     },
     getFeatureGeometryType(feature) {
-      const geometry = feature.getGeometry()
-      if (!geometry) return 'Unknown'
-      return geometry.getType()
+      // Pure GeoJSON features only
+      if (feature.geometry) {
+        return feature.geometry.type || 'Unknown'
+      }
+      return 'Unknown'
     },
     getGeometryTypeColor(feature) {
       const geometryType = this.getFeatureGeometryType(feature)
       return getGeometryTypeColor(geometryType)
     },
     getFeatureIconUrl(feature) {
-      const properties = feature.get('properties') || {}
+      // Pure GeoJSON features only
+      const properties = feature.properties || {}
       const iconUrl = getIconUrl(properties)
       
       if (!iconUrl) {
@@ -479,28 +476,13 @@ export default {
         const data = await response.json()
 
         if (response.ok && data.data && data.data.features) {
-          // Convert GeoJSON features to OpenLayers features
-          const format = new GeoJSON()
-          const features = format.readFeatures(data.data, {
-            featureProjection: 'EPSG:3857',
-            dataProjection: 'EPSG:4326'
-          })
-
-          // Preserve properties from original GeoJSON
-          features.forEach((feature, index) => {
-            const originalFeature = data.data.features[index]
-            if (originalFeature && originalFeature.properties) {
-              feature.set('properties', originalFeature.properties)
-            }
-            if (originalFeature && originalFeature.geojson_hash) {
-              feature.set('geojson_hash', originalFeature.geojson_hash)
-            }
-          })
+          // Use native GeoJSON features
+          const features = data.data.features
 
           // Sort features alphabetically by name
           features.sort((a, b) => {
-            const nameA = this.getFeatureName(a).toLowerCase()
-            const nameB = this.getFeatureName(b).toLowerCase()
+            const nameA = (a.properties?.name || 'Unnamed Feature').toLowerCase()
+            const nameB = (b.properties?.name || 'Unnamed Feature').toLowerCase()
             return nameA.localeCompare(nameB)
           })
 
@@ -592,28 +574,13 @@ export default {
         const data = await response.json()
 
         if (response.ok && data.data && data.data.features) {
-          // Convert GeoJSON features to OpenLayers features
-          const format = new GeoJSON()
-          const features = format.readFeatures(data.data, {
-            featureProjection: 'EPSG:3857',
-            dataProjection: 'EPSG:4326'
-          })
-
-          // Preserve properties from original GeoJSON
-          features.forEach((feature, index) => {
-            const originalFeature = data.data.features[index]
-            if (originalFeature && originalFeature.properties) {
-              feature.set('properties', originalFeature.properties)
-            }
-            if (originalFeature && originalFeature.geojson_hash) {
-              feature.set('geojson_hash', originalFeature.geojson_hash)
-            }
-          })
+          // Use native GeoJSON features
+          const features = data.data.features
 
           // Sort features alphabetically by name
           features.sort((a, b) => {
-            const nameA = this.getFeatureName(a).toLowerCase()
-            const nameB = this.getFeatureName(b).toLowerCase()
+            const nameA = (a.properties?.name || 'Unnamed Feature').toLowerCase()
+            const nameB = (b.properties?.name || 'Unnamed Feature').toLowerCase()
             return nameA.localeCompare(nameB)
           })
 

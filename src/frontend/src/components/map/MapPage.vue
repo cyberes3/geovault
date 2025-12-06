@@ -186,7 +186,6 @@
 import {markRaw} from 'vue'
 import 'maplibre-gl/dist/maplibre-gl.css'
 import maplibregl from 'maplibre-gl'
-import {GeoJSON} from 'ol/format'
 import { LabelMarkerManager } from '@/utils/map/maplibre/labelMarkers.js'
 import {getInitialMapConfig, getLocationDisplayName} from '@/utils/map/mapConfigUtils'
 import { sortTagsByPriority, sortUserTagsAlphabetically, isSystemTag } from '@/utils/tagUtils.js'
@@ -230,7 +229,7 @@ import {
 } from '@/utils/map/maplibre/maptilerIntegration.js'
 
 export default {
-  name: 'MapLibreMap',
+  name: 'MapPage',
   components: {
     FeatureListSidebar,
     MapControlsSidebar,
@@ -252,7 +251,7 @@ export default {
       const path = this.$route.path
       const hasCollection = !!this.$route.query.collection
       const hasTag = !!this.$route.query.tag
-      return path === '/maplibre' && !hasCollection && !hasTag
+      return path === '/map' && !hasCollection && !hasTag
     },
     hiddenFeatureIds() {
       const features = this.$store.state.hiddenFeatures || []
@@ -1434,7 +1433,7 @@ export default {
 
       // Ensure feature is on the map (for search results that might not be loaded)
       // Check if feature already exists by database_id to avoid duplicates
-      const properties = feature.get ? feature.get('properties') : feature.properties || {}
+      const properties = feature.properties || {}
       const featureId = properties.database_id
       
       if (featureId) {
@@ -1447,47 +1446,16 @@ export default {
           const exists = existingFeatures.some(f => f.properties?.database_id === featureId)
           
           if (!exists) {
-            // Convert OpenLayers feature to GeoJSON format for MapLibre
-            let geoJsonFeature = null
-            
-            if (feature.getGeometry && typeof feature.getGeometry === 'function') {
-              const geometry = feature.getGeometry()
-              
-              // Check if this is an OpenLayers geometry
-              if (geometry && typeof geometry.getCoordinates === 'function' && typeof geometry.getType === 'function') {
-                // Transform OpenLayers geometry to GeoJSON
-                try {
-                  const format = new GeoJSON()
-                  const geoJsonGeometry = format.writeGeometryObject(geometry, {
-                    featureProjection: 'EPSG:3857',
-                    dataProjection: 'EPSG:4326'
-                  })
-                  
-                  // Create a GeoJSON feature with the transformed geometry
-                  geoJsonFeature = {
-                    type: 'Feature',
-                    geometry: geoJsonGeometry,
-                    properties: properties
-                  }
-                } catch (error) {
-                  console.error('zoomToFeature: Error converting OpenLayers geometry to GeoJSON', error)
-                }
-              }
-            }
-            
-            // If we couldn't convert it, create a basic GeoJSON feature
-            if (!geoJsonFeature && feature.geometry) {
-              geoJsonFeature = {
-                type: 'Feature',
-                geometry: feature.geometry,
-                properties: properties
-              }
+            // Feature is already GeoJSON, just ensure it has the right structure
+            const geoJsonFeature = {
+              type: 'Feature',
+              geometry: feature.geometry,
+              properties: properties
             }
             
             // Add the feature to the map
-            if (geoJsonFeature) {
-              // Process icon if this is a Point feature
-              if (geoJsonFeature.geometry.type === 'Point') {
+            // Process icon if this is a Point feature
+            if (geoJsonFeature.geometry.type === 'Point') {
                 const iconUrl = getFeatureIconUrl(geoJsonFeature.properties)
                 const zoom = this.map.getZoom()
                 const replaceIconsLowZoom = this.$store.state.userSettings?.replace_icons_low_zoom ?? true
@@ -1519,135 +1487,13 @@ export default {
               if (this.labelMarkerManager) {
                 this.labelMarkerManager.updateMarkers(existingFeatures)
               }
-            }
           }
         }
       }
 
-      // Get feature geometry - handle both converted MapLibre features and raw features
-      let geometry = null
+      // Get feature geometry (pure GeoJSON)
+      const geometry = feature.geometry
       
-      // Try to get geometry from converted feature (has getGeometry method)
-      if (feature.getGeometry && typeof feature.getGeometry === 'function') {
-        const mockGeometry = feature.getGeometry()
-        
-        // Check if this is an OpenLayers geometry (has getCoordinates and getType methods)
-        // OpenLayers geometries are in EPSG:3857 and need transformation
-        if (mockGeometry && typeof mockGeometry.getCoordinates === 'function' && typeof mockGeometry.getType === 'function') {
-          // This is an OpenLayers geometry - transform it to GeoJSON in EPSG:4326
-          try {
-            const format = new GeoJSON()
-            const geoJsonGeometry = format.writeGeometryObject(mockGeometry, {
-              featureProjection: 'EPSG:3857',
-              dataProjection: 'EPSG:4326'
-            })
-            geometry = geoJsonGeometry
-          } catch (error) {
-            console.error('zoomToFeature: Error converting OpenLayers geometry to GeoJSON', error)
-            // Fallback to raw geometry
-            geometry = feature.geometry
-          }
-        } else if (mockGeometry && mockGeometry.getExtent) {
-          // This is a mock geometry from convertMapLibreFeature (already in EPSG:4326)
-          // Use the extent from the mock geometry
-          const extent = mockGeometry.getExtent()
-          if (extent && extent.length === 4) {
-            let [minLon, minLat, maxLon, maxLat] = extent
-            
-            // Validate all values are finite
-            if (extent.every(v => isFinite(v))) {
-              // Validate coordinates are within valid ranges for MapLibre
-              // Longitude: -180 to 180, Latitude: -90 to 90
-              if (minLon < -180 || maxLon > 180 || minLat < -90 || maxLat > 90) {
-                console.warn('zoomToFeature: Extent out of valid range, clamping', { minLon, minLat, maxLon, maxLat })
-                // Clamp to valid ranges
-                minLon = Math.max(-180, Math.min(180, minLon))
-                minLat = Math.max(-90, Math.min(90, minLat))
-                maxLon = Math.max(-180, Math.min(180, maxLon))
-                maxLat = Math.max(-90, Math.min(90, maxLat))
-              }
-              
-              // Check if bounds are valid (not all zeros)
-              const isNotAllZeros = !(minLon === 0 && minLat === 0 && maxLon === 0 && maxLat === 0)
-              
-              if (isNotAllZeros) {
-                // For points (degenerate bounds), use center + zoom
-                if (minLon === maxLon && minLat === maxLat) {
-                  this.map.flyTo({
-                    center: [minLon, minLat],
-                    zoom: 10,
-                    duration: 500
-                  })
-                } else {
-                  // For lines and polygons, use bounds
-                  // MapLibre LngLatBounds takes southwest and northeast corners
-                  try {
-                    // Create LngLatBounds: sw corner [minLon, minLat], ne corner [maxLon, maxLat]
-                    const bounds = new maplibregl.LngLatBounds(
-                      [minLon, minLat], // southwest corner
-                      [maxLon, maxLat]  // northeast corner
-                    )
-                    // Use fitBounds which is more reliable for bounds
-                    this.map.fitBounds(bounds, {
-                      padding: { top: 50, bottom: 50, left: 50, right: 50 },
-                      duration: 500
-                    })
-                  } catch (error) {
-                    console.error('zoomToFeature: Error fitting bounds', error, error.stack)
-                    // Fallback: try flyTo
-                    try {
-                      const bounds = new maplibregl.LngLatBounds([minLon, minLat], [maxLon, maxLat])
-                      this.map.flyTo({
-                        bounds: bounds,
-                        padding: 50,
-                        duration: 500
-                      })
-                    } catch (error2) {
-                      console.error('zoomToFeature: Error with flyTo fallback', error2)
-                    }
-                  }
-                }
-                return
-              } else {
-                console.warn('zoomToFeature: Extent is all zeros, trying fallback')
-              }
-            } else {
-              console.warn('zoomToFeature: Extent contains non-finite values', extent)
-            }
-          } else {
-            console.warn('zoomToFeature: Invalid extent format', extent)
-          }
-        } else {
-          console.warn('zoomToFeature: MockGeometry missing getExtent', mockGeometry)
-        }
-        
-        // If we haven't returned yet, fall through to coordinate extraction
-        if (!geometry) {
-          // Fallback: get raw geometry from converted feature
-          geometry = feature.geometry
-        }
-      } else {
-        // Try direct geometry access
-        geometry = feature.geometry || feature.get?.('geometry')
-      }
-
-      // Check if this is an OpenLayers feature with OpenLayers geometry (not already converted)
-      // OpenLayers geometries have methods like getCoordinates() and getType()
-      if (geometry && typeof geometry.getCoordinates === 'function' && typeof geometry.getType === 'function') {
-        // This is an OpenLayers geometry - transform it to GeoJSON in EPSG:4326
-        try {
-          const format = new GeoJSON()
-          const geoJsonGeometry = format.writeGeometryObject(geometry, {
-            featureProjection: 'EPSG:3857',
-            dataProjection: 'EPSG:4326'
-          })
-          geometry = geoJsonGeometry
-        } catch (error) {
-          console.error('zoomToFeature: Error converting OpenLayers geometry to GeoJSON', error)
-          return
-        }
-      }
-
       if (!geometry || !geometry.type || !geometry.coordinates) {
         console.warn('zoomToFeature: Invalid geometry', { 
           hasGeometry: !!geometry, 
@@ -1967,29 +1813,12 @@ export default {
       this.isTagFilterActive = true
       this.tagFilteredFeatures = filteredFeatures
 
-      // Convert OpenLayers features to GeoJSON
-      const format = new GeoJSON()
+      // Convert features to GeoJSON if needed (features are now native GeoJSON)
       const geojsonFeatures = filteredFeatures.map(f => {
-        const props = f.properties || f.get?.('properties') || {}
-        const geom = f.geometry || f.getGeometry?.()
-        
-        // Properly serialize OpenLayers geometry to GeoJSON geometry object
-        let geojsonGeometry = null
-        if (geom) {
-          try {
-            geojsonGeometry = format.writeGeometryObject(geom, {
-              featureProjection: 'EPSG:3857',
-              dataProjection: 'EPSG:4326'
-            })
-          } catch (error) {
-            console.error('Error converting geometry to GeoJSON:', error)
-          }
-        }
-        
         return markRaw({
           type: 'Feature',
-          properties: props,
-          geometry: geojsonGeometry
+          properties: f.properties || {},
+          geometry: f.geometry
         })
       })
 
@@ -2013,7 +1842,7 @@ export default {
 
       if (!feature) return
 
-      const properties = feature.properties || feature.get?.('properties') || {}
+      const properties = feature.properties || {}
       const featureId = properties.database_id
       const featureName = properties.name
       const geometryType = feature.geometry?.type
@@ -2041,7 +1870,7 @@ export default {
         }
 
         if (this.selectedFeature) {
-          const propsSelected = this.selectedFeature.properties || this.selectedFeature.get?.('properties') || {}
+          const propsSelected = this.selectedFeature.properties || {}
           if (propsSelected.database_id === featureId) {
             this.selectedFeature = null
             this.isEditingFeature = false
@@ -2090,7 +1919,7 @@ export default {
       // Get feature stroke color
       let markerColor = '#ff0000' // Default red
       if (this.selectedFeature) {
-        const properties = this.selectedFeature.properties || this.selectedFeature.get?.('properties') || {}
+        const properties = this.selectedFeature.properties || {}
         const strokeColor = properties.stroke || '#ff0000'
         markerColor = strokeColor
       }
