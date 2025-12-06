@@ -411,10 +411,8 @@ export default {
       }
     },
     async initializeMap() {
-      // Get user location first (skip for public share mode)
-      if (!this.isPublicShareMode) {
-        await this.getUserLocation()
-      }
+      // User location is already fetched in parallel during mounted()
+      // No need to fetch it again here
 
       // Ensure map container is truly available and is an HTMLElement
       if (!this.$refs.mapContainer || !(this.$refs.mapContainer instanceof HTMLElement)) {
@@ -447,19 +445,13 @@ export default {
 
       // Setup GeoJSON source
       setupGeoJsonSource(this.map, () => {
-        this.isMapInitializing = false
+        // Don't set isMapInitializing to false here - keep it true until initial data load completes
+        // This prevents duplicate API calls from map events during initialization
         
         // Resize map to ensure proper rendering
         if (this.map) {
           setTimeout(() => {
             this.map.resize()
-          }, 100)
-        }
-        
-        // Trigger initial data load after map is fully loaded
-        if (this.isInitialLoad && !this.collectionId && !this.isTagFilterActive) {
-          setTimeout(() => {
-            this.loadDataForCurrentView()
           }, 100)
         }
       })
@@ -622,6 +614,11 @@ export default {
       return convertMapLibreFeature(mlFeature)
     },
     debouncedLoadData() {
+      // Skip debounced loads during initial map setup to prevent duplicate API calls
+      if (this.isMapInitializing) {
+        return
+      }
+      
       if (this.loadTimeout) {
         clearTimeout(this.loadTimeout)
       }
@@ -1000,7 +997,11 @@ export default {
               this.selectedLayer = this.tileSources[0].id
             }
           }
+          
+          // Return all sources (including hidden ones) for MapTiler config
+          return data.sources
         }
+        return []
       } catch (error) {
         console.error('Error fetching tile sources:', error)
         // Fallback to OSM if tile sources fail to load
@@ -1018,11 +1019,12 @@ export default {
         if (!this.selectedLayer) {
           this.selectedLayer = 'osm'
         }
+        return []
       }
     },
-    async fetchMaptilerConfig() {
+    async fetchMaptilerConfig(tileSources) {
       this.maptilerConfig = new MapTilerConfig()
-      await this.maptilerConfig.fetchConfig()
+      await this.maptilerConfig.fetchConfig(tileSources)
     },
     add3DTerrainControl() {
       // Only add control if MapTiler is configured
@@ -2351,15 +2353,23 @@ export default {
       return
     }
 
-    // Fetch tile sources, MapTiler API key, and available tags in parallel
-    const initPromises = [this.fetchTileSources(), this.fetchMaptilerConfig()]
-
+    // Parallelize all independent API calls for faster initialization
+    const initPromises = [
+      this.fetchTileSources(),
+      // getUserLocation only for authenticated, non-public-share users
+      (!this.isPublicShareMode ? this.getUserLocation() : Promise.resolve())
+    ]
+    
     // Fetch available tags for child components (only for authenticated users)
     if (this.$store.state.userInfo) {
       initPromises.push(this.fetchAvailableTags())
     }
 
-    await Promise.all(initPromises)
+    // Wait for all parallel fetches to complete
+    const [tileSources] = await Promise.all(initPromises)
+    
+    // Fetch MapTiler config with the tile sources we just got
+    await this.fetchMaptilerConfig(tileSources)
 
     // Wait for map to be fully initialized before loading data
     try {
@@ -2430,6 +2440,10 @@ export default {
       // Check for featureId in URL
       await this.handleUrlFeatureId()
     }
+
+    // Set isMapInitializing to false after initial data load completes
+    // This allows map move/zoom events to trigger data loads from now on
+    this.isMapInitializing = false
 
     // Update map size to ensure it renders properly
     await this.$nextTick()

@@ -8,6 +8,8 @@
  * - Terrain toggle control
  */
 
+import { fetchConfig as fetchCachedConfig } from '@/utils/configService.js'
+
 /**
  * MapTiler configuration class
  * Manages API key, proxy settings, and terrain/hillshade sources
@@ -24,13 +26,14 @@ export class MapTilerConfig {
 
   /**
    * Fetch MapTiler configuration and tile sources from the backend
+   * @param {Array} tileSources - Pre-fetched tile sources array to avoid duplicate API call
+   * @param {Object} serverConfig - Optional pre-fetched server config to avoid duplicate API call
    * @returns {Promise<boolean>} True if MapTiler is configured
    */
-  async fetchConfig() {
+  async fetchConfig(tileSources = null, serverConfig = null) {
     try {
-      // Fetch general config
-      const configResponse = await fetch('/api/config/')
-      const config = await configResponse.json()
+      // Use provided server config or fetch from cache (which may also fetch if not cached)
+      const config = serverConfig || await fetchCachedConfig()
       
       if (!config.maptiles) {
         return false
@@ -40,13 +43,17 @@ export class MapTilerConfig {
       // API key is only provided when not using proxy
       this.apiKey = config.maptiles.apiKey || null
       
-      // Fetch tile sources to get terrain and hillshade configurations
-      const tilesResponse = await fetch('/api/tiles/sources/')
-      const tilesData = await tilesResponse.json()
-      const tileSources = tilesData.sources || []
+      // Use provided tile sources (should always be provided to avoid duplicate API call)
+      let sources = tileSources
+      if (!sources) {
+        console.warn('MapTilerConfig.fetchConfig called without tileSources - this may cause duplicate API calls')
+        const tilesResponse = await fetch('/api/tiles/sources/')
+        const tilesData = await tilesResponse.json()
+        sources = tilesData.sources || []
+      }
       
       // Find terrain and hillshade sources
-      for (const source of tileSources) {
+      for (const source of sources) {
         if (source.id === 'maptiler_terrain') {
           this.terrainSource = source.client_config
           this.terrainExaggeration = source.exaggeration || 1.5

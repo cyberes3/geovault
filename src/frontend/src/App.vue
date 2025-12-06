@@ -356,11 +356,17 @@ export default {
         this.$router.push('/');
       }
 
-      // Load user settings after authentication
+      // Parallelize loading user settings and config cache (for faster map initialization)
+      // Config is needed by tagUtils and maptiler integration
+      const { fetchConfig } = await import('@/utils/configService.js')
+      
       try {
-        await this.$store.dispatch('fetchUserSettings');
+        await Promise.all([
+          this.$store.dispatch('fetchUserSettings'),
+          fetchConfig() // Pre-cache config for map components
+        ]);
       } catch (error) {
-        console.error('Error loading user settings:', error);
+        console.error('Error loading initialization data:', error);
         // Continue even if settings fail to load
       }
 

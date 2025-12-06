@@ -13,7 +13,7 @@ Follow these instructions: <https://trac.osgeo.org/postgis/wiki/UsersWikiPostGIS
 ```shell
 sudo apt install ca-certificates gnupg curl
 curl https://www.postgresql.org/media/keys/ACCC4CF8.asc | gpg --dearmor | sudo tee /etc/apt/trusted.gpg.d/apt.postgresql.org.gpg >/dev/null
-sudo sh -c 'echo "deb http://apt.postgresql.org/pub/repos/apt $(lsb_release -cs)-pgdg main" > /etc/apt/sources.list.d/pgdg.list
+sudo sh -c 'echo "deb http://apt.postgresql.org/pub/repos/apt $(lsb_release -cs)-pgdg main" > /etc/apt/sources.list.d/pgdg.list'
 cat << EOF >> /etc/apt/preferences.d/pgdg.pref
 Package: *
 Pin: release o=apt.postgresql.org
@@ -29,7 +29,7 @@ systemctl enable --now postgresql
 ## Install Required Packages
 
 ```shell
-sudo apt install python3.12 python3.12-dev python3-venv python3-gdal
+sudo apt install python3.12 python3.12-dev python3-venv python3-gdal git
 ```
 
 If your system doesn't provide Python 3.12, add this repo:
