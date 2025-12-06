@@ -399,16 +399,16 @@ export default {
           
           if (data && data.features) {
             for (const feature of data.features) {
-              if (feature.properties && feature.properties['_icon-id'] === iconId) {
-                // Found the feature with this icon, get its icon URL
-                const iconUrl = getFeatureIconUrl(feature.properties)
-                if (iconUrl) {
-                  const resolvedUrl = getIconSourceUrl(iconUrl, feature.properties)
-                  // Load the icon
-                  loadIconImage(this.map, iconId, resolvedUrl).catch(err => {
-                    console.warn(`Failed to load missing icon ${iconId}:`, err)
-                  })
-                  return
+            if (feature.properties && feature.properties['_icon-id'] === iconId) {
+              // Found the feature with this icon, get its icon URL
+              const iconUrl = getFeatureIconUrl(feature.properties)
+              if (iconUrl) {
+                const resolvedUrl = getIconSourceUrl(iconUrl, feature.properties)
+                // Load the icon
+                loadIconImage(this.map, iconId, resolvedUrl).catch(err => {
+                  console.warn(`Failed to load missing icon ${iconId}:`, err)
+                })
+                return
                 }
               }
             }
@@ -1551,52 +1551,52 @@ export default {
         const source = this.map.getSource('geojson-data')
         const serialized = source.serialize()
         const currentData = serialized.data || { type: 'FeatureCollection', features: [] }
-        const existingFeatures = currentData.features || []
-        
-        // Check if feature already exists
-        const exists = existingFeatures.some(f => f.properties?.database_id === featureId)
-        
-        if (!exists) {
-          // Feature is already GeoJSON, just ensure it has the right structure
-          const geoJsonFeature = {
-            type: 'Feature',
-            geometry: feature.geometry,
-            properties: properties
-          }
+          const existingFeatures = currentData.features || []
           
-          // Add the feature to the map
-          // Process icon if this is a Point feature
-          if (geoJsonFeature.geometry.type === 'Point') {
-            const iconUrl = getFeatureIconUrl(geoJsonFeature.properties)
-            const zoom = this.map.getZoom()
-            const replaceIconsLowZoom = this.$store.state.userSettings?.replace_icons_low_zoom ?? true
-            const shouldShowIcon = iconUrl && shouldUseIcon(zoom, iconUrl, replaceIconsLowZoom)
-            
-            if (shouldShowIcon) {
-              const resolvedUrl = getIconSourceUrl(iconUrl, geoJsonFeature.properties)
-              const iconId = `icon-${resolvedUrl.replace(/[^a-zA-Z0-9]/g, '_')}`
-              geoJsonFeature.properties['_icon-id'] = iconId
-              
-              // Load icon if not already loaded
-              if (!this.map.hasImage(iconId)) {
-                loadIconImage(this.map, iconId, resolvedUrl).catch(err => {
-                  console.warn(`Failed to load icon ${iconId}:`, err)
-                  // Remove icon metadata on failure
-                  delete geoJsonFeature.properties['_icon-id']
-                })
-              }
+          // Check if feature already exists
+          const exists = existingFeatures.some(f => f.properties?.database_id === featureId)
+          
+          if (!exists) {
+            // Feature is already GeoJSON, just ensure it has the right structure
+            const geoJsonFeature = {
+              type: 'Feature',
+              geometry: feature.geometry,
+              properties: properties
             }
-          }
-          
-          existingFeatures.push(geoJsonFeature)
-          source.setData({
-            type: 'FeatureCollection',
-            features: existingFeatures
-          })
-          
-          // Update label markers
-          if (this.labelMarkerManager) {
-            this.labelMarkerManager.updateMarkers(existingFeatures)
+            
+            // Add the feature to the map
+            // Process icon if this is a Point feature
+            if (geoJsonFeature.geometry.type === 'Point') {
+                const iconUrl = getFeatureIconUrl(geoJsonFeature.properties)
+                const zoom = this.map.getZoom()
+                const replaceIconsLowZoom = this.$store.state.userSettings?.replace_icons_low_zoom ?? true
+                const shouldShowIcon = iconUrl && shouldUseIcon(zoom, iconUrl, replaceIconsLowZoom)
+                
+                if (shouldShowIcon) {
+                  const resolvedUrl = getIconSourceUrl(iconUrl, geoJsonFeature.properties)
+                  const iconId = `icon-${resolvedUrl.replace(/[^a-zA-Z0-9]/g, '_')}`
+                  geoJsonFeature.properties['_icon-id'] = iconId
+                  
+                  // Load icon if not already loaded
+                  if (!this.map.hasImage(iconId)) {
+                    loadIconImage(this.map, iconId, resolvedUrl).catch(err => {
+                      console.warn(`Failed to load icon ${iconId}:`, err)
+                      // Remove icon metadata on failure
+                      delete geoJsonFeature.properties['_icon-id']
+                    })
+                  }
+                }
+              }
+              
+              existingFeatures.push(geoJsonFeature)
+              source.setData({
+                type: 'FeatureCollection',
+                features: existingFeatures
+              })
+              
+              // Update label markers
+              if (this.labelMarkerManager) {
+                this.labelMarkerManager.updateMarkers(existingFeatures)
           }
         }
       }

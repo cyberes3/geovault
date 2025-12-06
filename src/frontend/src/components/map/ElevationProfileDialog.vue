@@ -580,6 +580,9 @@ export default {
       const hasElevationInCoords = coordinates.length > 0 && coordinates[0].length >= 3
       const featureId = this.feature.properties?.database_id || this.feature.properties?.geojson_hash
       
+      // Check if we have preserved elevation data in properties
+      const preservedElevations = this.feature.properties?._elevations
+      
       // Determine elevation source and fetch coordinates with elevation data
       if (this.elevationProfileSource === 'api') {
         // === EXTERNAL ELEVATION SOURCE ===
@@ -608,10 +611,19 @@ export default {
         // User wants GPS elevations from the original imported data
         
         if (!hasElevationInCoords) {
-          // GPS elevations not available in geometry
-          // (MapLibre strips Z coordinates for rendering - this is expected behavior)
-          // Fetch the original GPS elevations from the database via API
-          if (featureId) {
+          // GPS elevations not available in geometry (MapLibre strips Z coordinates)
+          
+          // First, try to use preserved elevations from properties
+          if (preservedElevations && Array.isArray(preservedElevations) && preservedElevations.length > 0) {
+            // Reconstruct coordinates with preserved elevations
+            coordinates = coordinates.map((coord, index) => {
+              if (index < preservedElevations.length) {
+                return [coord[0], coord[1], preservedElevations[index]]
+              }
+              return coord
+            })
+          } else if (featureId) {
+            // Fallback: fetch from API if no preserved data
             const apiCoordinates = await this.fetchElevationsFromAPI(featureId, 'internal')
             if (apiCoordinates && apiCoordinates.length > 0) {
               coordinates = apiCoordinates

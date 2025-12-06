@@ -345,7 +345,22 @@ export default {
     },
     getFeatureElevation(feature) {
       if (!feature) return null
-      // Pure GeoJSON features only
+      
+      // First, check if elevation is stored as _elevation property (preserved from coordinates)
+      const properties = feature.properties
+      if (properties && properties._elevation != null) {
+        return properties._elevation // Elevation is in meters
+      }
+      
+      // Second, check if elevation is stored as a regular property (from tags)
+      if (properties && properties.elevation != null) {
+        const elevation = parseFloat(properties.elevation)
+        if (!isNaN(elevation)) {
+          return elevation // Elevation is in meters
+        }
+      }
+      
+      // Otherwise, check geometry coordinates (fallback, may not work with MapLibre v5)
       const geometry = feature.geometry
       if (!geometry) return null
 
@@ -358,25 +373,23 @@ export default {
 
       try {
         const geometryJson = geometry
-
         const coords = geometryJson.coordinates
 
         if (geomType === 'Point') {
           // Point: coordinates is [lon, lat] or [lon, lat, elevation]
           if (Array.isArray(coords) && coords.length >= 3) {
             const elevation = coords[2]
-            if (elevation != null && elevation !== 0) {
+            if (elevation != null) {
               return elevation // Elevation is in meters
             }
           }
         } else if (geomType === 'MultiPoint') {
           // MultiPoint: coordinates is [[lon, lat], ...] or [[lon, lat, elevation], ...]
-          // For MultiPoint, we'll use the first point's elevation
           if (Array.isArray(coords) && coords.length > 0) {
             const firstPoint = coords[0]
             if (Array.isArray(firstPoint) && firstPoint.length >= 3) {
               const elevation = firstPoint[2]
-              if (elevation != null && elevation !== 0) {
+              if (elevation != null) {
                 return elevation // Elevation is in meters
               }
             }

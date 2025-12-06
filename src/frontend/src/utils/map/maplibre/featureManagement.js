@@ -187,6 +187,74 @@ export function updateSmallFeatureFlags(map, zoom) {
 
 
 /**
+ * Extract elevation from geometry coordinates and store in properties
+ * MapLibre strips the 3rd coordinate (elevation) when storing internally,
+ * so we need to preserve it in properties
+ * @param {Object} feature - GeoJSON feature
+ * @returns {Object} Feature with elevation in properties
+ */
+function preserveElevationInProperties(feature) {
+  if (!feature || !feature.geometry) return feature
+  
+  const geometry = feature.geometry
+  const coords = geometry.coordinates
+  
+  // Only process Point and MultiPoint features
+  if (geometry.type === 'Point') {
+    if (Array.isArray(coords) && coords.length >= 3 && coords[2] != null) {
+      // Store elevation in properties
+      if (!feature.properties) feature.properties = {}
+      feature.properties._elevation = coords[2]
+    }
+  } else if (geometry.type === 'MultiPoint') {
+    if (Array.isArray(coords) && coords.length > 0) {
+      const firstPoint = coords[0]
+      if (Array.isArray(firstPoint) && firstPoint.length >= 3 && firstPoint[2] != null) {
+        // Store elevation from first point in properties
+        if (!feature.properties) feature.properties = {}
+        feature.properties._elevation = firstPoint[2]
+      }
+    }
+  } else if (geometry.type === 'LineString') {
+    // Store elevation values for elevation profile
+    if (Array.isArray(coords) && coords.length > 0) {
+      const elevations = coords
+        .filter(coord => Array.isArray(coord) && coord.length >= 3 && coord[2] != null)
+        .map(coord => coord[2])
+      
+      if (elevations.length > 0) {
+        if (!feature.properties) feature.properties = {}
+        // Store just the elevation values
+        feature.properties._elevations = elevations
+      }
+    }
+  } else if (geometry.type === 'MultiLineString') {
+    // Flatten and store all elevation values from all line segments
+    if (Array.isArray(coords) && coords.length > 0) {
+      const elevations = []
+      
+      coords.forEach(lineCoords => {
+        if (Array.isArray(lineCoords)) {
+          lineCoords.forEach(coord => {
+            if (Array.isArray(coord) && coord.length >= 3 && coord[2] != null) {
+              elevations.push(coord[2])
+            }
+          })
+        }
+      })
+      
+      if (elevations.length > 0) {
+        if (!feature.properties) feature.properties = {}
+        // Store just the elevation values
+        feature.properties._elevations = elevations
+      }
+    }
+  }
+  
+  return feature
+}
+
+/**
  * Process features to add icon metadata and prepare for rendering
  * Also handles small polygon/line replacement with colored dots
  * @param {Array} features - Array of GeoJSON features
@@ -445,6 +513,8 @@ export async function addFeaturesToMap(map, geojsonData, showAllLabels = true, z
     if (id) {
       newFeatureIds.add(String(id))
       if (!existingFeatures.has(String(id))) {
+        // Preserve elevation in properties before adding to MapLibre
+        preserveElevationInProperties(f)
         existingFeatures.set(String(id), f)
       }
     }

@@ -36,6 +36,16 @@ export function convertMapLibreFeature(mlFeature) {
         }
     }
 
+    // Parse _elevations if it's a string (for LineString/MultiLineString elevation data)
+    if (typeof normalizedProperties._elevations === 'string') {
+        try {
+            normalizedProperties._elevations = JSON.parse(normalizedProperties._elevations)
+        } catch (e) {
+            console.warn('Failed to parse _elevations as JSON:', normalizedProperties._elevations)
+            normalizedProperties._elevations = null
+        }
+    }
+
     // Return pure GeoJSON feature
     return {
         type: 'Feature',
