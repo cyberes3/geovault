@@ -1,11 +1,17 @@
 from typing import List
 from geo_lib.processing.tagging import get_internal_tags
 
+# Additional hardcoded system tags that don't come from tag generators
+# These are special-purpose tags that are manually added in specific scenarios
+ADDITIONAL_SYSTEM_TAGS = [
+    'quick-point',  # Tag for features created via the quick point dialog
+]
+
 # System tag prefixes that identify automatically generated tags.
 # These are tags that users should not be allowed to edit.
 # Used by tag generators to create system tags and by validation to filter them out.
-# This list is now dynamically generated from registered tag generators.
-CONST_INTERNAL_TAGS = get_internal_tags()
+# This list combines dynamically generated tags from tag generators with hardcoded tags.
+CONST_INTERNAL_TAGS = get_internal_tags() + ADDITIONAL_SYSTEM_TAGS
 
 # Tag priority mapping: prefixes to priority (1-10, with 1 being most important)
 # Tags matching these prefixes get the assigned priority. All other tags get priority 0.

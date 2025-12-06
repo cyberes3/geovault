@@ -174,12 +174,13 @@
           <span
             v-for="tag in selectedTags"
             :key="tag"
-            class="inline-flex items-center gap-1 px-2 py-0.5 bg-blue-100 text-blue-800 text-xs rounded"
+            class="inline-flex items-center gap-1 px-2 py-0.5 bg-blue-100 text-blue-800 text-xs rounded max-w-full"
+            :title="tag"
           >
-            {{ tag }}
+            <span class="truncate min-w-0">{{ tag }}</span>
             <button
               @click="removeTag(tag)"
-              class="text-blue-600 hover:text-blue-800 focus:outline-none"
+              class="text-blue-600 hover:text-blue-800 focus:outline-none flex-shrink-0"
               type="button"
               title="Remove tag from filter"
             >
@@ -219,8 +220,8 @@
         >
           <button
             @click="toggleTag(item.tag)"
-            class="w-full px-1.5 py-1 text-left text-xs rounded transition-colors bg-gray-50 hover:bg-gray-100 text-gray-900"
-            title="Toggle tag filter"
+            class="w-full px-1.5 py-1 text-left text-xs rounded transition-colors bg-gray-50 hover:bg-gray-100 text-gray-900 truncate min-w-0"
+            :title="item.tag"
           >
             {{ item.tag }}
           </button>

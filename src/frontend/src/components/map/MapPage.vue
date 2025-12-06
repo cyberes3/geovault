@@ -140,6 +140,15 @@
             @select="handleFeatureSelect"
         />
 
+        <!-- Quick Point Dialog -->
+        <QuickPointDialog
+            v-if="!isPublicShareMode"
+            :is-open="showQuickPointDialog"
+            :available-tags="availableTags"
+            @close="showQuickPointDialog = false"
+            @created="handleQuickPointCreated"
+        />
+
       </div>
 
       <!-- Center to User Location Button -->
@@ -178,6 +187,7 @@
         @unhide-all="handleUnhideAllHidden"
         @labels-visibility-change="handleLabelsVisibilityChange"
         @hillshade-change="handleHillshadeChange"
+        @quick-point="showQuickPointDialog = true"
     />
   </div>
 </template>
@@ -203,6 +213,7 @@ import FeatureSelectionPopup from './FeatureSelectionPopup.vue'
 import ElevationProfileDialog from './ElevationProfileDialog.vue'
 import MapErrorOverlay from './MapErrorOverlay.vue'
 import MapLoadingIndicator from './MapLoadingIndicator.vue'
+import QuickPointDialog from './QuickPointDialog.vue'
 import {HomeIcon, ExclamationCircleIcon, ShareIcon, FolderIcon, ListBulletIcon, Cog6ToothIcon} from '@heroicons/vue/24/outline'
 import {
   getBoundingBoxKey,
@@ -239,6 +250,7 @@ export default {
     ElevationProfileDialog,
     MapErrorOverlay,
     MapLoadingIndicator,
+    QuickPointDialog,
     HomeIcon,
     ExclamationCircleIcon,
     ShareIcon,
@@ -338,6 +350,7 @@ export default {
       featureCleanupTimeout: null,
       selectedFeature: null,
       tileSources: [],
+      showQuickPointDialog: false,
       // Configuration
       API_BASE_URL: '/api/geojson/',
       SHARE_API_BASE_URL: '/api/sharing/public/',
@@ -1742,6 +1755,64 @@ export default {
 
       this.selectedFeature = null
       this.isEditingFeature = false
+    },
+    async handleQuickPointCreated(createdFeature) {
+      // Add the newly created feature directly to the map
+      if (createdFeature && this.map && this.map.getSource('geojson-data')) {
+        // Process icon if this is a Point feature
+        if (createdFeature.geometry?.type !== 'Point') {
+          throw new Error("Quick point was not a point")
+        }
+        const iconUrl = getFeatureIconUrl(createdFeature.properties)
+        const zoom = this.map.getZoom()
+        const userSettings = this.$store.state.userSettings || {}
+        const replaceIconsLowZoom = userSettings.map?.replace_icons_low_zoom !== undefined
+          ? userSettings.map.replace_icons_low_zoom
+          : true
+        const shouldShowIcon = iconUrl && shouldUseIcon(zoom, iconUrl, replaceIconsLowZoom)
+
+        if (shouldShowIcon) {
+          const resolvedUrl = getIconSourceUrl(iconUrl, createdFeature.properties)
+          const iconId = `icon-${resolvedUrl.replace(/[^a-zA-Z0-9]/g, '_')}`
+          createdFeature.properties['_icon-id'] = iconId
+
+          // Load icon if not already loaded
+          if (!this.map.hasImage(iconId)) {
+            try {
+              await loadIconImage(this.map, iconId, resolvedUrl)
+            } catch (err) {
+              console.warn(`Failed to load icon ${iconId}:`, err)
+              // Remove icon metadata on failure
+              delete createdFeature.properties['_icon-id']
+            }
+          }
+        }
+        
+        const source = this.map.getSource('geojson-data')
+        const serialized = source.serialize()
+        const currentData = serialized.data || { type: 'FeatureCollection', features: [] }
+        const existingFeatures = currentData.features || []
+        
+        // Add the new feature to the map
+        existingFeatures.push(createdFeature)
+        source.setData({
+          type: 'FeatureCollection',
+          features: existingFeatures
+        })
+        
+        // Update feature count
+        this.updateFeatureCount()
+        
+        // Update features in extent
+        this.updateFeaturesInExtent()
+        
+        // Update label markers if enabled
+        if (this.showAllLabels && this.labelMarkerManager) {
+          this.labelMarkerManager.updateMarkers(existingFeatures)
+        }
+      }
+      
+      this.showQuickPointDialog = false
     },
     handleFeatureSaved(updatedFeature) {
       // If updated feature data is provided, update in-memory without network call

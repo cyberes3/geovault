@@ -107,6 +107,19 @@
       </div>
     </div>
 
+    <!-- Quick Point Link (only show if not in public share mode) -->
+    <div v-if="!isPublicShareMode" class="mb-4 lg:mb-3 xl:mb-4 text-center">
+      <button
+        type="button"
+        @click="$emit('quick-point')"
+        class="text-xs text-blue-600 hover:text-blue-800 hover:underline inline-flex items-center font-medium focus:outline-none lg:text-[11px] xl:text-xs"
+        title="Add a quick point by pasting coordinates"
+      >
+        <MapPinIcon class="w-3 h-3 mr-1 lg:w-2.5 lg:h-2.5 lg:mr-0.5 xl:w-3 xl:h-3 xl:mr-1" />
+        Quick Point
+      </button>
+    </div>
+
     <!-- Hidden Features Summary & Feature Stats -->
     <div class="mt-auto text-xs text-gray-600 mb-4 space-y-3 lg:text-[11px] lg:mb-3 lg:space-y-2 xl:text-xs xl:mb-4 xl:space-y-3">
       <!-- Hidden features summary (account-level, main map only) -->
@@ -137,7 +150,7 @@
 
 <script>
 import {APIHOST} from '@/config.js'
-import { XMarkIcon, ArrowDownTrayIcon, TagIcon, FolderIcon, ShareIcon } from '@heroicons/vue/24/outline'
+import { XMarkIcon, ArrowDownTrayIcon, TagIcon, FolderIcon, ShareIcon, MapPinIcon } from '@heroicons/vue/24/outline'
 import HiddenFeaturesWidget from './HiddenFeaturesWidget.vue'
 import ToggleButton from '@/components/parts/ToggleButton.vue'
 
@@ -149,6 +162,7 @@ export default {
     TagIcon,
     FolderIcon,
     ShareIcon,
+    MapPinIcon,
     HiddenFeaturesWidget,
     ToggleButton,
   },
@@ -224,7 +238,7 @@ export default {
       default: false
     }
   },
-  emits: ['layer-change', 'close', 'unhide-feature', 'unhide-all', 'labels-visibility-change', 'hillshade-change'],
+  emits: ['layer-change', 'close', 'unhide-feature', 'unhide-all', 'labels-visibility-change', 'hillshade-change', 'quick-point'],
   methods: {
     handleDownload() {
       if (!this.shareId) {

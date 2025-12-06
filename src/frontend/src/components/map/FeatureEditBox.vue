@@ -207,57 +207,20 @@
     />
 
     <!-- Coordinates Edit Dialog -->
-    <div
-      v-if="coordinatesDialogOpen"
-      class="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50"
-      @click.self="closeCoordinatesDialog"
-    >
-      <div class="bg-white rounded-lg shadow-xl max-w-2xl w-full mx-4 max-h-[90vh] flex flex-col">
-        <div class="flex items-center justify-between p-4 border-b border-gray-200">
-          <h3 class="text-lg font-semibold text-gray-900">Edit Coordinates</h3>
-          <button
-            @click="closeCoordinatesDialog"
-            class="text-gray-400 hover:text-gray-600"
-            title="Close coordinates editor"
-          >
-            <XMarkIcon class="w-5 h-5" />
-          </button>
-        </div>
-        <div class="p-4 overflow-y-auto flex-1">
-          <div class="space-y-4">
-            <div>
-              <label class="block text-sm font-medium text-gray-700 mb-2">
-                Coordinates (JSON array)
-              </label>
-              <textarea
-                v-model="rawJsonInput"
-                rows="12"
-                :disabled="isSaving"
-                class="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500 font-mono text-xs disabled:bg-gray-100 disabled:cursor-not-allowed"
-                placeholder="[]"
-              ></textarea>
-            </div>
-          </div>
-        </div>
-        <div class="flex justify-end space-x-2 p-4 border-t border-gray-200">
-          <button
-            type="button"
-            @click="closeCoordinatesDialog"
-            :disabled="isSaving"
-            class="px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-md hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 disabled:opacity-50 disabled:cursor-not-allowed"
-            title="Close"
-          >
-            Close
-          </button>
-        </div>
-      </div>
-    </div>
+    <CoordinatesDialog
+      :is-open="coordinatesDialogOpen"
+      :coordinates="rawJsonInput"
+      :disabled="isSaving"
+      @close="closeCoordinatesDialog"
+      @save="handleCoordinatesSave"
+    />
   </div>
 </template>
 
 <script>
 import {APIHOST} from '@/config.js'
 import ReplacementFeatureDialog from './ReplacementFeatureDialog.vue'
+import CoordinatesDialog from './CoordinatesDialog.vue'
 import TagPicker from '@/components/parts/TagPicker.vue'
 import ColorPickerElement from '@/components/parts/ColorPickerElement.vue'
 import IconSelector from '@/components/parts/IconSelector.vue'
@@ -277,6 +240,7 @@ export default {
   name: 'FeatureEditBox',
   components: {
     ReplacementFeatureDialog,
+    CoordinatesDialog,
     TagPicker,
     ColorPicker: ColorPickerElement,
     IconSelector,
@@ -1065,6 +1029,10 @@ export default {
     },
     closeCoordinatesDialog() {
       this.coordinatesDialogOpen = false
+    },
+    handleCoordinatesSave(coordinates) {
+      this.rawJsonInput = coordinates
+      this.closeCoordinatesDialog()
     },
     formatDateForInput(dateString) {
       if (!dateString) return '';

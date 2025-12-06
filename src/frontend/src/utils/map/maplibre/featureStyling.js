@@ -172,7 +172,7 @@ export function getIconSourceUrl(iconUrl, properties) {
 
 /**
  * Check if a feature should use an icon at current zoom level
- * At zoom level 8 or below, replace image-based icons (not system icons) with colored circles
+ * At zoom level 8 or below, replace icons with colored circles when replaceIconsLowZoom is enabled
  * @param {number} zoom - Current zoom level
  * @param {string} iconUrl - Icon URL
  * @param {boolean} replaceIconsLowZoom - Whether to replace icons at low zoom
@@ -182,10 +182,9 @@ export function shouldUseIcon(zoom, iconUrl, replaceIconsLowZoom = true) {
   if (!iconUrl) return false
   
   const isLowZoom = zoom <= 8
-  const isSystem = isSystemIcon(iconUrl)
   
-  // Always use system icons, or use custom icons at high zoom
-  if (isSystem || !isLowZoom || !replaceIconsLowZoom) {
+  // If replaceIconsLowZoom is disabled or we're at high zoom, always show icon
+  if (!replaceIconsLowZoom || !isLowZoom) {
     return true
   }
   
