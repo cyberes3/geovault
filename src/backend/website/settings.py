@@ -357,7 +357,16 @@ MAX_FEATURES_PER_REQUEST = config.get_int('api.max_features_per_request', -1)
 
 # Tile Proxy Cache Configuration
 # Directory where proxied tiles will be cached on disk
-TILE_CACHE_DIR = config.get_with_env_override('tilesources.cache_dir', 'TILE_CACHE_DIR', '/tmp/geovault-tiles')
+_tile_cache_dir = config.get_with_env_override('tilesources.cache_dir', 'TILE_CACHE_DIR', None)
+if _tile_cache_dir:
+    tile_cache_path = Path(_tile_cache_dir)
+    # If relative path, make it relative to BASE_DIR
+    if not tile_cache_path.is_absolute():
+        TILE_CACHE_DIR = BASE_DIR / tile_cache_path
+    else:
+        TILE_CACHE_DIR = tile_cache_path
+else:
+    TILE_CACHE_DIR = BASE_DIR / 'data' / 'tile-cache'
 
 # Enable or disable tile caching
 TILE_CACHE_ENABLED = config.get_bool_with_env_override('tilesources.cache_enabled', 'TILE_CACHE_ENABLED', True)

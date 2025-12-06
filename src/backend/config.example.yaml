@@ -51,7 +51,8 @@ redis:
 
 tilesources:
   # Directory where proxied tiles will be cached on disk
-  cache_dir: /tmp/geovault-tiles
+  # Relative paths are relative to backend directory
+  cache_dir: data/tile-cache
 
   # Enable or disable tile caching
   cache_enabled: true

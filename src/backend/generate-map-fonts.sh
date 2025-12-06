@@ -25,9 +25,9 @@ if [ -d "$TMP_DIR" ]; then
     rm -rf "$TMP_DIR"
 fi
 
-# Clone the repository
+# Clone the repository (shallow clone without history)
 echo -e "${GREEN}Cloning fonts repository to ${TMP_DIR}...${NC}"
-git clone "$REPO_URL" "$TMP_DIR" || {
+git clone --depth 1 "$REPO_URL" "$TMP_DIR" || {
     echo -e "${RED}Failed to clone repository${NC}"
     exit 1
 }
