@@ -133,7 +133,7 @@
                 <!-- Menu Items (Dropdown on Desktop, Static on Mobile) -->
                 <div
                     :class="[
-                      'md:absolute md:right-0 md:mt-2 md:w-48 md:bg-white md:rounded-md md:shadow-lg md:py-1 md:border md:border-gray-200 z-50',
+                      'md:absolute md:right-0 md:top-full md:w-48 md:bg-white md:rounded-b-md md:shadow-lg md:py-1 md:border md:border-gray-200 z-50',
                       (!userMenuOpen) ? 'md:hidden' : '',
                       'block'
                     ]"

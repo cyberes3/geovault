@@ -52,39 +52,39 @@
       <!-- Users List -->
       <div v-else-if="users.length > 0" class="flex flex-col">
         <!-- Header Row (Desktop only) -->
-        <div class="hidden md:flex bg-gray-50 px-3 py-3 sm:px-6 sm:py-3 border-b border-gray-200">
-          <div class="flex-1 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Email</div>
-          <div class="flex-1 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Last Activity</div>
-          <div class="flex-1 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Creation Date</div>
-          <div class="flex-1 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Features</div>
-          <div class="flex-1 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Shares</div>
-          <div class="flex-1 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Storage</div>
+        <div class="hidden md:flex bg-gray-50 border-b border-gray-200">
+          <div class="flex-1 md:px-3 md:py-3 lg:px-6 lg:py-4 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Email</div>
+          <div class="flex-1 md:px-3 md:py-3 lg:px-6 lg:py-4 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Last Activity</div>
+          <div class="flex-1 md:px-3 md:py-3 lg:px-6 lg:py-4 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Creation Date</div>
+          <div class="flex-1 md:px-3 md:py-3 lg:px-6 lg:py-4 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Features</div>
+          <div class="flex-1 md:px-3 md:py-3 lg:px-6 lg:py-4 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Shares</div>
+          <div class="flex-1 md:px-3 md:py-3 lg:px-6 lg:py-4 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Storage</div>
         </div>
 
         <!-- Items -->
         <div class="flex flex-col space-y-3 md:space-y-0 md:divide-y md:divide-gray-200">
-          <div v-for="user in users" :key="user.id" class="flex flex-col md:flex-row md:items-center p-3 md:p-0 md:px-3 md:py-3 lg:px-6 lg:py-4 border border-gray-200 md:border-0 rounded-lg md:rounded-none hover:bg-gray-50 transition-colors">
-            <div class="flex-1 mb-2 md:mb-0">
+          <div v-for="user in users" :key="user.id" class="flex flex-col md:flex-row md:items-center p-3 md:p-0 border border-gray-200 md:border-0 rounded-lg md:rounded-none hover:bg-gray-50 transition-colors">
+            <div class="flex-1 mb-2 md:mb-0 md:px-3 md:py-3 lg:px-6 lg:py-4">
               <div class="md:hidden text-xs font-semibold text-gray-900 uppercase tracking-wider mb-1">Email</div>
               <div class="text-xs sm:text-sm text-gray-900 break-words">{{ user.email || 'N/A' }}</div>
             </div>
-            <div class="flex-1 mb-2 md:mb-0">
+            <div class="flex-1 mb-2 md:mb-0 md:px-3 md:py-3 lg:px-6 lg:py-4">
               <div class="md:hidden text-xs font-semibold text-gray-900 uppercase tracking-wider mb-1">Last Activity</div>
               <div class="text-xs sm:text-sm text-gray-800">{{ formatDate(user.last_activity) }}</div>
             </div>
-            <div class="flex-1 mb-2 md:mb-0">
+            <div class="flex-1 mb-2 md:mb-0 md:px-3 md:py-3 lg:px-6 lg:py-4">
               <div class="md:hidden text-xs font-semibold text-gray-900 uppercase tracking-wider mb-1">Creation Date</div>
               <div class="text-xs sm:text-sm text-gray-800">{{ formatDate(user.date_joined) }}</div>
             </div>
-            <div class="flex-1 mb-2 md:mb-0">
+            <div class="flex-1 mb-2 md:mb-0 md:px-3 md:py-3 lg:px-6 lg:py-4">
               <div class="md:hidden text-xs font-semibold text-gray-900 uppercase tracking-wider mb-1">Features</div>
               <div class="text-xs sm:text-sm text-gray-800">{{ user.feature_count }}</div>
             </div>
-            <div class="flex-1 mb-2 md:mb-0">
+            <div class="flex-1 mb-2 md:mb-0 md:px-3 md:py-3 lg:px-6 lg:py-4">
               <div class="md:hidden text-xs font-semibold text-gray-900 uppercase tracking-wider mb-1">Shares</div>
               <div class="text-xs sm:text-sm text-gray-800">{{ user.share_count }}</div>
             </div>
-            <div class="flex-1">
+            <div class="flex-1 md:px-3 md:py-3 lg:px-6 lg:py-4">
               <div class="md:hidden text-xs font-semibold text-gray-900 uppercase tracking-wider mb-1">Storage</div>
               <div class="text-xs sm:text-sm text-gray-800">{{ formatStorage(user.storage_bytes) }}</div>
             </div>

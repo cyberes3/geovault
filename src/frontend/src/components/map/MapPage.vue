@@ -1394,6 +1394,36 @@ export default {
         }
       }
     },
+    /**
+     * Helper method to perform programmatic navigation with bbox refresh
+     * This ensures that data loads after navigation completes, even if the area was previously cached
+     * @param {Function} navigationFn - Function that performs the navigation (should return void or Promise)
+     * @param {boolean} clearAllBounds - If true, clears all loaded bounds; if false, only clears relevant bounds
+     */
+    async navigateAndRefresh(navigationFn, clearAllBounds = true) {
+      if (!this.map) return
+
+      // Clear loaded bounds to force refresh after navigation
+      if (clearAllBounds) {
+        this.loadedBounds.clear()
+      }
+
+      // Execute the navigation
+      await navigationFn()
+
+      // Wait for the map movement to complete
+      // Use a one-time listener for moveend to ensure data loads after animation
+      return new Promise((resolve) => {
+        const onMoveEnd = () => {
+          // Trigger immediate (non-debounced) data load
+          this.loadDataForCurrentView()
+          resolve()
+        }
+
+        // Listen for moveend event (fires when flyTo/fitBounds animation completes)
+        this.map.once('moveend', onMoveEnd)
+      })
+    },
     centerToUserLocation() {
       if (!this.map) return
 
@@ -1406,23 +1436,27 @@ export default {
         const longitude = this.userLocation.longitude
 
         if (latitude != null && longitude != null) {
-          this.map.flyTo({
-            center: [longitude, latitude],
-            zoom: stateLevelZoom,
-            pitch: 0,  // Reset tilt to flat
-            bearing: 0,  // Reset rotation to north
-            duration: 500
+          this.navigateAndRefresh(() => {
+            this.map.flyTo({
+              center: [longitude, latitude],
+              zoom: stateLevelZoom,
+              pitch: 0,  // Reset tilt to flat
+              bearing: 0,  // Reset rotation to north
+              duration: 500
+            })
           })
           return
         }
       }
 
       // Fallback: just zoom to state level at current center
-      this.map.flyTo({
-        zoom: stateLevelZoom,
-        pitch: 0,  // Reset tilt to flat
-        bearing: 0,  // Reset rotation to north
-        duration: 500
+      this.navigateAndRefresh(() => {
+        this.map.flyTo({
+          zoom: stateLevelZoom,
+          pitch: 0,  // Reset tilt to flat
+          bearing: 0,  // Reset rotation to north
+          duration: 500
+        })
       })
     },
     zoomToFeature(feature) {
@@ -1548,40 +1582,44 @@ export default {
       // Ensure bounds are not degenerate (same point)
       if (minLon === maxLon && minLat === maxLat) {
         // For points, zoom to a reasonable zoom level (limited to 10)
-        this.map.flyTo({
-          center: [minLon, minLat],
-          zoom: 10,
-          duration: 500
+        this.navigateAndRefresh(() => {
+          this.map.flyTo({
+            center: [minLon, minLat],
+            zoom: 10,
+            duration: 500
+          })
         })
         return
       }
 
       // Fly to feature
-      try {
-        // Create LngLatBounds: sw corner [minLon, minLat], ne corner [maxLon, maxLat]
-        const bounds = new maplibregl.LngLatBounds(
-          [minLon, minLat], // southwest corner
-          [maxLon, maxLat]  // northeast corner
-        )
-        // Use fitBounds which is more reliable for bounds
-        this.map.fitBounds(bounds, {
-          padding: { top: 50, bottom: 50, left: 50, right: 50 },
-          duration: 500
-        })
-      } catch (error) {
-        console.error('zoomToFeature: Error fitting bounds (fallback)', error, error.stack)
-        // Final fallback: try flyTo
+      this.navigateAndRefresh(() => {
         try {
-          const bounds = new maplibregl.LngLatBounds([minLon, minLat], [maxLon, maxLat])
-          this.map.flyTo({
-            bounds: bounds,
-            padding: 50,
+          // Create LngLatBounds: sw corner [minLon, minLat], ne corner [maxLon, maxLat]
+          const bounds = new maplibregl.LngLatBounds(
+            [minLon, minLat], // southwest corner
+            [maxLon, maxLat]  // northeast corner
+          )
+          // Use fitBounds which is more reliable for bounds
+          this.map.fitBounds(bounds, {
+            padding: { top: 50, bottom: 50, left: 50, right: 50 },
             duration: 500
           })
-        } catch (error2) {
-          console.error('zoomToFeature: Error with flyTo fallback (fallback)', error2)
+        } catch (error) {
+          console.error('zoomToFeature: Error fitting bounds (fallback)', error, error.stack)
+          // Final fallback: try flyTo
+          try {
+            const bounds = new maplibregl.LngLatBounds([minLon, minLat], [maxLon, maxLat])
+            this.map.flyTo({
+              bounds: bounds,
+              padding: 50,
+              duration: 500
+            })
+          } catch (error2) {
+            console.error('zoomToFeature: Error with flyTo fallback (fallback)', error2)
+          }
         }
-      }
+      })
     },
     handlePublicShareError(errorMessage) {
       this.publicShareError = errorMessage || 'Invalid share link'
@@ -1969,10 +2007,12 @@ export default {
       const currentZoom = this.map.getZoom()
 
       // Center the map on the point without changing zoom
-      this.map.flyTo({
-        center: [coordinates[0], coordinates[1]],
-        zoom: currentZoom,
-        duration: 500
+      this.navigateAndRefresh(() => {
+        this.map.flyTo({
+          center: [coordinates[0], coordinates[1]],
+          zoom: currentZoom,
+          duration: 500
+        })
       })
     },
     async handleCollectionFilter(collectionId) {
