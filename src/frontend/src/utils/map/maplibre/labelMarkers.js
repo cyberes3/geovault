@@ -420,33 +420,29 @@ export class LabelMarkerManager {
   }
 
   /**
-   * Update markers based on features (debounced for performance)
+   * Update markers based on features (with optional immediate mode for zoom)
    * @param {Array} features - Array of GeoJSON features
+   * @param {boolean} immediate - If true, update immediately without debouncing (for zoom events)
    */
-  updateMarkers(features) {
+  updateMarkers(features, immediate = false) {
     const now = Date.now()
     const currentZoom = this.map ? Math.round(this.map.getZoom()) : null
     
-    // Throttle updates during zoom - only update if zoom level actually changed significantly
-    if (this.lastZoom !== null && currentZoom !== null) {
-      const zoomDiff = Math.abs(currentZoom - this.lastZoom)
-      
-      // If zooming and less than 150ms since last update, use longer debounce
-      if (zoomDiff > 0 && (now - this.lastUpdateTime) < 150) {
-        // Clear existing timeout and set a longer one during active zoom
-        if (this.updateTimeout) {
-          clearTimeout(this.updateTimeout)
-        }
-        
-        this.updateTimeout = setTimeout(() => {
-          this.lastZoom = currentZoom
-          this.performUpdate(features)
-        }, 200) // Longer debounce during zoom
-        return
+    // If immediate update is requested (during zoom), update right away
+    if (immediate) {
+      // Cancel any pending debounced update
+      if (this.updateTimeout) {
+        clearTimeout(this.updateTimeout)
+        this.updateTimeout = null
       }
+      
+      this.lastZoom = currentZoom
+      this.performUpdate(features)
+      return
     }
     
-    // Debounce updates to avoid excessive re-renders during zoom/pan
+    // For non-immediate updates, use debouncing
+    // Debounce updates to avoid excessive re-renders during pan
     if (this.updateTimeout) {
       clearTimeout(this.updateTimeout)
     }

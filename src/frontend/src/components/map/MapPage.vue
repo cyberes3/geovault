@@ -550,14 +550,15 @@ export default {
       this.map.on('zoom', async () => {
         const currentZoom = this.map.getZoom()
         
-        // Update label markers only if labels are visible
+        // Update label markers immediately during zoom (no debouncing)
         if (this.showAllLabels && this.labelMarkerManager) {
           const source = this.map.getSource('geojson-data')
           if (source) {
             const serialized = source.serialize()
             const data = serialized.data
             if (data && data.features) {
-              this.labelMarkerManager.updateMarkers(data.features)
+              // Pass true for immediate update during zoom
+              this.labelMarkerManager.updateMarkers(data.features, true)
             }
           }
         }
