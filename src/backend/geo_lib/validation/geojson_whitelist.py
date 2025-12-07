@@ -60,7 +60,7 @@ class PropertiesModel(BaseModel):
     """Pydantic model for GeoJSON properties validation."""
 
     # Core properties
-    name: str = "Unnamed Feature"
+    name: str = ""
     id: Optional[str] = None
     description: Optional[str] = None
     created: Optional[Union[str, datetime]] = None
@@ -94,8 +94,9 @@ class PropertiesModel(BaseModel):
     @field_validator('name', mode='before')
     @classmethod
     def validate_name(cls, v: Any) -> str:
-        if v is None or (isinstance(v, str) and v.strip() == ''):
-            return "Unnamed Feature"
+        # Convert None to empty string, allow empty strings
+        if v is None:
+            return ""
         return str(v)
     
     @field_validator('description', mode='before')

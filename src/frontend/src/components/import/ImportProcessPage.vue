@@ -175,7 +175,7 @@
                 <div class="flex items-start justify-between gap-3">
                   <div class="flex-1 min-w-0">
                     <div class="text-sm font-medium text-gray-900 mb-1">
-                      {{ result.feature.properties?.name || 'Unnamed Feature' }}
+                      {{ result.feature.properties?.name || '' }}
                     </div>
                     <div v-if="result.feature.properties?.description" class="text-xs text-gray-600 mb-2 line-clamp-2">
                       {{ truncateDescription(result.feature.properties.description) }}

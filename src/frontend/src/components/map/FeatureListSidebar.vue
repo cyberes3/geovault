@@ -385,7 +385,7 @@ export default {
     getFeatureName(feature) {
       // Pure GeoJSON features only
       const properties = feature.properties || {}
-      return properties.name || 'Unnamed Feature'
+      return properties.name || ''
     },
     getFeatureGeometryType(feature) {
       // Pure GeoJSON features only

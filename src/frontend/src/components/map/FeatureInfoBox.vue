@@ -4,7 +4,8 @@
       <!-- Header -->
       <div class="flex items-start justify-between mb-2 md:mb-4 relative">
         <div
-          class="text-base md:text-lg font-bold text-gray-900 pr-2 flex-1 min-w-0"
+          class="text-base md:text-lg font-bold pr-2 flex-1 min-w-0"
+          :class="getFeatureName(feature) ? 'text-gray-900' : 'text-gray-500 italic'"
           @mouseenter="handleNameHover"
           @mouseleave="handleNameLeave"
           @touchstart="handleNameTouchStart"
@@ -19,8 +20,8 @@
               class="ticker-content inline-block"
               :class="{ 'ticker-scrolling': shouldScroll }"
             >
-              <span class="ticker-item">{{ getFeatureName(feature) }}</span>
-              <span v-if="shouldScroll" class="ticker-item">{{ getFeatureName(feature) }}</span>
+              <span class="ticker-item">{{ displayName(feature) }}</span>
+              <span v-if="shouldScroll" class="ticker-item">{{ displayName(feature) }}</span>
             </span>
           </div>
         </div>
@@ -30,7 +31,7 @@
           class="custom-tooltip"
           :style="tooltipStyle"
         >
-          {{ getFeatureName(feature) }}
+          {{ displayName(feature) }}
         </div>
         <button
           @click="$emit('close')"
@@ -311,7 +312,12 @@ export default {
     getFeatureName(feature) {
       // Pure GeoJSON features only
       const properties = feature.properties || {}
-      return properties.name || 'Unnamed Feature'
+      return properties.name || ''
+    },
+    displayName(feature) {
+      // Return the feature name or 'Untitled Feature' for display
+      const name = this.getFeatureName(feature)
+      return name || 'Untitled Feature'
     },
     getFeatureGeometryType(feature) {
       // Pure GeoJSON features only

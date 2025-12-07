@@ -78,11 +78,12 @@
         <!-- Icon Color (for points) -->
         <!-- Enabled for: default markers (no icon) OR system icons (recolorable) -->
         <!-- Disabled for: user icons or external URLs (custom, non-recolorable) -->
-        <div v-if="isPoint">
+        <!-- Hidden when custom icon is present -->
+        <div v-if="isPoint && !isCustomIcon">
           <label class="block text-xs font-bold text-gray-500 uppercase mb-1">Icon Color</label>
           <ColorPicker
             v-model="formData.markerColor"
-            :disabled="isSaving || isCustomIcon"
+            :disabled="isSaving"
             size="sm"
           />
         </div>
@@ -210,6 +211,8 @@
     <CoordinatesDialog
       :is-open="coordinatesDialogOpen"
       :coordinates="rawJsonInput"
+      :feature="feature"
+      :geometry-type="geometryType"
       :disabled="isSaving"
       @close="closeCoordinatesDialog"
       @save="handleCoordinatesSave"
@@ -226,6 +229,8 @@ import ColorPickerElement from '@/components/parts/ColorPickerElement.vue'
 import IconSelector from '@/components/parts/IconSelector.vue'
 import { XMarkIcon, MapIcon, ArrowUpTrayIcon } from '@heroicons/vue/24/outline'
 import { sortTagsByPriority } from '@/utils/tagUtils.js'
+import { restoreElevationInGeometry } from '@/utils/elevationUtils.js'
+import { validateCoordinates } from '@/utils/coordinateValidation.js'
 
 // Helper functions for icon type checking
 function isSystemIcon(iconUrl) {
@@ -561,8 +566,29 @@ export default {
     updateRawJson() {
       if (!this.feature) return
 
+      // Don't overwrite rawJsonInput if user has already edited it
+      // Only initialize if it's empty or invalid
+      if (this.rawJsonInput && this.rawJsonInput.trim()) {
+        try {
+          const parsed = JSON.parse(this.rawJsonInput)
+          if (Array.isArray(parsed)) {
+            // User has valid edited coordinates, preserve them
+            return
+          }
+        } catch (e) {
+          // Invalid JSON, will update below
+        }
+      }
+
       // Pure GeoJSON features only
-      const geometry = this.feature.geometry
+      // First restore elevation in geometry before extracting coordinates
+      const featureWithElevation = restoreElevationInGeometry({
+        type: 'Feature',
+        geometry: this.feature.geometry,
+        properties: this.feature.properties || {}
+      })
+      
+      const geometry = featureWithElevation.geometry
       if (!geometry) return
 
       // Extract only coordinates (or geometries for GeometryCollection)
@@ -570,7 +596,7 @@ export default {
         // For GeometryCollection, show geometries array
         this.rawJsonInput = JSON.stringify(geometry.geometries || [], null, 2)
       } else {
-        // For all other types, show coordinates array
+        // For all other types, show coordinates array (now with elevation restored)
         this.rawJsonInput = JSON.stringify(geometry.coordinates || [], null, 2)
       }
     },
@@ -646,74 +672,11 @@ export default {
           }
         }
 
-        // Build feature from form data and current feature
-        // Pure GeoJSON features only
-        const geometry = this.feature.geometry
-        if (!geometry) {
-          this.errorMessage = 'Feature has no geometry'
-          this.isSaving = false
-          return
-        }
-
-        // Create GeoJSON feature format
-        let featureData = {
-          type: 'Feature',
-          geometry: this.feature.geometry,
-          properties: this.feature.properties || {}
-        }
-
-        // Parse raw JSON if provided to update only the coordinates
-        if (this.rawJsonInput && this.rawJsonInput.trim()) {
-          try {
-            const coordinatesData = JSON.parse(this.rawJsonInput)
-
-            // Validate it's an array
-            if (!Array.isArray(coordinatesData)) {
-              this.errorMessage = 'Coordinates must be a valid JSON array'
-              this.isSaving = false
-              return
-            }
-
-            // Get the current geometry type
-            const currentGeometry = featureData.geometry
-            if (!currentGeometry || !currentGeometry.type) {
-              this.errorMessage = 'Feature has no valid geometry type'
-              this.isSaving = false
-              return
-            }
-
-            // Update only the coordinates/geometries in the existing geometry
-            // Note: MultiPoint and MultiPolygon should not appear (KML converts to GeometryCollection).
-            // If they do appear, the backend will error/assert.
-            if (currentGeometry.type === 'GeometryCollection') {
-              // For GeometryCollection, update geometries array
-              featureData.geometry.geometries = coordinatesData
-            } else {
-              // For all other types, update coordinates array
-              featureData.geometry.coordinates = coordinatesData
-            }
-          } catch (e) {
-            this.errorMessage = `Invalid JSON: ${e.message}`
-            this.isSaving = false
-            return
-          }
-        }
-
-        // Ensure properties object exists
-        if (!featureData.properties) {
-          featureData.properties = {}
-        }
-
-        // Merge form field values into the feature data
-        // Form fields ALWAYS take precedence over raw JSON values
-        // This ensures the color picker and other form fields work even when raw JSON is provided
-        // Use formData.tags array directly (preferred) or fall back to parsing tagsInput for backward compatibility
-        const tagsToUse = this.formData.tags.length > 0 ? this.formData.tags : this.parseTags(this.tagsInput)
-        // Tags are already separated - user tags only in tags field
-        const formFieldUpdates = {
+        // Build metadata-only update payload (NO GEOMETRY)
+        const metadataUpdates = {
           name: this.formData.name,
           description: this.formData.description || '',
-          tags: tagsToUse
+          tags: this.formData.tags
         }
 
         // Add created date if set
@@ -721,105 +684,99 @@ export default {
           // Convert datetime-local format to ISO format
           const date = new Date(this.formData.created);
           if (!isNaN(date.getTime())) {
-            formFieldUpdates.created = date.toISOString();
+            metadataUpdates.created = date.toISOString();
           }
         }
 
         // Handle icon for points
         if (this.isPoint) {
-          // If icon was uploaded via old file input, set it
+          // If icon was uploaded via file input, set it
           if (uploadedIconUrl) {
-            // Set icon in the first available property name
-            formFieldUpdates['icon'] = uploadedIconUrl
-            // Uploaded icons can't be recolored, so clear marker-color
-            delete formFieldUpdates['marker-color']
+            metadataUpdates.icon = uploadedIconUrl
+            // Uploaded icons can't be recolored, so don't send marker-color
           }
           // If icon was selected from picker (preset or uploaded)
           else if (this.currentIconUrl && !this.iconRemoved) {
             // Check if it's a system or user icon
             if (isSystemIcon(this.currentIconUrl) || isUserIcon(this.currentIconUrl)) {
-              formFieldUpdates['icon'] = this.currentIconUrl
+              metadataUpdates.icon = this.currentIconUrl
               // For system icons, save marker-color for recoloring
               if (isSystemIcon(this.currentIconUrl)) {
-                formFieldUpdates['marker-color'] = this.formData.markerColor
-              } else {
-                // User icons can't be recolored
-                delete formFieldUpdates['marker-color']
+                metadataUpdates['marker-color'] = this.formData.markerColor
               }
             }
           }
           // If icon was removed (user clicked remove button)
           else if (this.iconRemoved) {
             // Remove icon by setting it to empty string
-            formFieldUpdates['icon'] = ''
-            // Also remove from other possible icon property names
-            formFieldUpdates['icon-href'] = ''
-            formFieldUpdates['iconUrl'] = ''
-            formFieldUpdates['icon_url'] = ''
-            formFieldUpdates['marker-icon'] = ''
-            formFieldUpdates['marker-symbol'] = ''
-            formFieldUpdates['symbol'] = ''
+            metadataUpdates.icon = ''
             // Restore marker-color
-            formFieldUpdates['marker-color'] = this.formData.markerColor
+            metadataUpdates['marker-color'] = this.formData.markerColor
           }
           // If no icon and no uploaded icon, use marker color
           else if (!this.hasPngIcon && !uploadedIconUrl) {
-            formFieldUpdates['marker-color'] = this.formData.markerColor
+            metadataUpdates['marker-color'] = this.formData.markerColor
           }
         }
 
-        // Update stroke for lines and polygons (stroke-width is normalized on import, don't change it)
+        // Update stroke for lines and polygons
         if (this.isLine || this.isPolygon) {
-          formFieldUpdates.stroke = this.formData.strokeColor
-          // Don't update stroke-width - it's normalized on import
+          metadataUpdates.stroke = this.formData.strokeColor
         }
 
-        // Update fill and fill-opacity for polygons
-        if (this.isPolygon) {
-          // Use the stroke color as the base fill color, with 10% opacity
-          formFieldUpdates.fill = this.formData.strokeColor
-          formFieldUpdates['fill-opacity'] = 0.1
+        // Handle coordinate updates from raw JSON input (Edit Coordinates dialog)
+        if (this.rawJsonInput && this.rawJsonInput.trim()) {
+          try {
+            const coordinatesData = JSON.parse(this.rawJsonInput)
+            
+            // Validate it's an array
+            if (!Array.isArray(coordinatesData)) {
+              this.errorMessage = 'Coordinates must be a valid JSON array'
+              this.isSaving = false
+              return
+            }
+            
+            // Reject empty arrays
+            if (coordinatesData.length === 0) {
+              this.errorMessage = 'Coordinates cannot be empty'
+              this.isSaving = false
+              return
+            }
+            
+            // Validate coordinates structure, bounds, and lat/lon order if geometry type is available
+            if (this.geometryType) {
+              const validation = validateCoordinates(coordinatesData, this.geometryType)
+              if (!validation.valid) {
+                this.errorMessage = validation.error || 'Invalid coordinates'
+                this.isSaving = false
+                return
+              }
+            }
+            
+            // Add coordinates to update payload
+            metadataUpdates.coordinates = coordinatesData
+          } catch (e) {
+            this.errorMessage = `Invalid JSON: ${e.message}`
+            this.isSaving = false
+            return
+          }
         }
 
-        // Merge form field updates into properties, with form fields taking precedence
-        featureData.properties = {
-          ...featureData.properties,
-          ...formFieldUpdates
-        }
-
-        // Remove database_id from properties before sending (it's only for frontend use)
-        delete featureData.properties.database_id
-
-        // Remove system_tags from properties before sending (backend will preserve originals from DB)
-        delete featureData.properties.system_tags
-
-        // Remove internal OpenLayers properties (icon caching, etc.)
-        delete featureData.properties._iconSrc
-        delete featureData.properties._iconFailed
-        delete featureData.properties._iconScale
-
-        // Remove nested properties object (artifact of how we store properties in OpenLayers)
-        // When we do feature.set('properties', {...}), writeFeatureObject serializes it as a nested object
-        delete featureData.properties.properties
-
-        // Remove geojson_hash (internal tracking property)
-        delete featureData.properties.geojson_hash
-
-        // Send update request
-        const response = await fetch(`${APIHOST}/api/feature/${featureId}/update/`, {
+        // Send metadata-only update request (preserves elevation and all geometry data)
+        const response = await fetch(`${APIHOST}/api/feature/${featureId}/update-metadata/`, {
           method: 'PUT',
           headers: {
             'Content-Type': 'application/json',
             'X-CSRFToken': this.getCsrfToken()
           },
           credentials: 'include',
-          body: JSON.stringify(featureData)
+          body: JSON.stringify(metadataUpdates)
         })
 
         const data = await response.json()
 
         if (!response.ok) {
-          this.errorMessage = data.error || 'Failed to update feature'
+          this.errorMessage = data.message || data.error || 'Failed to update feature'
           this.isSaving = false
           return
         }
@@ -882,7 +839,7 @@ export default {
           console.error('Error fetching updated feature:', fetchError)
           // Fall back to local update if fetch fails
           const properties = this.feature.properties || {}
-          Object.assign(properties, formFieldUpdates)
+          Object.assign(properties, metadataUpdates)
           properties.database_id = featureId
           this.feature.properties = properties
           

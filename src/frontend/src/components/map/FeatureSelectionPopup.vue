@@ -243,7 +243,7 @@ export default {
         // Plain GeoJSON
         properties = feature.properties || {}
       }
-      return properties.name || 'Unnamed Feature'
+      return properties.name || ''
     },
     getFeatureGeometryType(feature) {
       // Support both OpenLayers Features and plain GeoJSON

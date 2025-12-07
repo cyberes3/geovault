@@ -27,6 +27,10 @@ from geo_lib.validation.geometry_validation import (
     normalize_and_validate_feature_update,
     GeometryValidationError
 )
+from geo_lib.validation.coordinate_validation import (
+    validate_coordinates_for_geometry_type,
+    CoordinateValidationError
+)
 from geo_lib.validation.geojson_whitelist import (
     validate_and_normalize_geojson_feature
 )
@@ -195,8 +199,8 @@ def _validate_and_preserve_system_tags(properties_dict, original_system_tags):
 @validate_payload(FeatureMetadataUpdate)
 def update_feature_metadata(request, feature_id, validated_data):
     """
-    API endpoint to update only the metadata of a specific feature (name, description, tags, created date).
-    Does not modify geometry or geojson_hash.
+    API endpoint to update only the metadata of a specific feature.
+    Can also update coordinates while preserving elevation and other geometry properties.
 
     URL parameter:
     - feature_id: ID of the feature to update
@@ -206,22 +210,28 @@ def update_feature_metadata(request, feature_id, validated_data):
     - description: string  
     - tags: array of strings
     - created: datetime string (ISO format)
+    - icon: string (icon URL or empty string to remove)
+    - marker-color: string (hex color for point markers)
+    - stroke: string (hex color for lines/polygons)
+    - coordinates: array (coordinates array to update geometry)
     """
     # Get the feature from database
     feature = get_object_or_404_for_user(FeatureStore, request.user, id=feature_id)
 
     # Extract allowed metadata fields
-    allowed_fields = {'name', 'description', 'created', 'tags'}
+    allowed_fields = {'name', 'description', 'created', 'tags', 'icon', 'marker-color', 'stroke', 'coordinates'}
     update_fields = {}
     updated_fields = []
     
     for field in allowed_fields:
-        if field in validated_data:
-            update_fields[field] = validated_data[field]
+        # Handle both 'marker-color' and 'marker_color'
+        field_value = validated_data.get(field) or validated_data.get(field.replace('-', '_'))
+        if field_value is not None:
+            update_fields[field] = field_value
             updated_fields.append(field)
     
     if not updated_fields:
-        return error_response('No valid fields to update. Supported fields: name, description, tags, created', 400)
+        return error_response('No valid fields to update. Supported fields: name, description, tags, created, icon, marker-color, stroke, coordinates', 400)
 
     # Create a deep copy of the original feature to merge updates into
     original_geojson = feature.geojson
@@ -242,6 +252,50 @@ def update_feature_metadata(request, feature_id, validated_data):
         merged_feature['geometry'] = original_geojson.get('geometry', {})
     if 'properties' not in merged_feature:
         merged_feature['properties'] = {}
+    
+    # Handle coordinate updates first (before other property updates)
+    if 'coordinates' in update_fields:
+        coordinates_data = update_fields['coordinates']
+        geometry = merged_feature.get('geometry', {})
+        geometry_type = geometry.get('type', '')
+        
+        if not geometry_type:
+            return error_response('Feature has no geometry type', 400)
+        
+        # Validate coordinates is an array and not empty
+        if coordinates_data is None:
+            return error_response('Coordinates cannot be null or empty', 400)
+        
+        if not isinstance(coordinates_data, list):
+            return error_response('Coordinates must be a valid JSON array', 400)
+        
+        if len(coordinates_data) == 0:
+            return error_response('Coordinates cannot be empty', 400)
+        
+        # Validate coordinates structure, bounds, and detect lat/lon swapping
+        try:
+            if geometry_type == 'GeometryCollection':
+                # For GeometryCollection, validate each geometry's coordinates
+                if not isinstance(coordinates_data, list):
+                    return error_response('GeometryCollection geometries must be an array', 400)
+                for idx, sub_geometry in enumerate(coordinates_data):
+                    if not isinstance(sub_geometry, dict):
+                        return error_response(f'Geometry at index {idx} must be an object', 400)
+                    sub_type = sub_geometry.get('type', '')
+                    if sub_type and sub_type != 'GeometryCollection':
+                        sub_coords = sub_geometry.get('coordinates')
+                        if sub_coords is not None:
+                            validate_coordinates_for_geometry_type(sub_coords, sub_type)
+                geometry['geometries'] = coordinates_data
+            else:
+                # Validate coordinates for the geometry type
+                validate_coordinates_for_geometry_type(coordinates_data, geometry_type)
+                # Update coordinates array
+                geometry['coordinates'] = coordinates_data
+        except CoordinateValidationError as e:
+            return error_response(f'Invalid coordinates: {str(e)}', 400)
+        
+        merged_feature['geometry'] = geometry
     
     # Merge update fields into the feature properties
     for field, value in update_fields.items():
@@ -264,6 +318,24 @@ def update_feature_metadata(request, feature_id, validated_data):
             merged_feature['properties']['description'] = value
         elif field == 'created':
             merged_feature['properties']['created'] = value
+        elif field == 'icon':
+            # Handle icon - empty string means remove icon
+            if value == '':
+                # Remove all possible icon properties
+                for icon_prop in ['icon', 'icon-href', 'iconUrl', 'icon_url', 'marker-icon', 'marker-symbol', 'symbol']:
+                    merged_feature['properties'].pop(icon_prop, None)
+            else:
+                merged_feature['properties']['icon'] = value
+        elif field == 'marker-color':
+            merged_feature['properties']['marker-color'] = value
+        elif field == 'stroke':
+            # For lines and polygons, update stroke
+            merged_feature['properties']['stroke'] = value
+            # For polygons, also update fill to match stroke
+            geometry_type = merged_feature.get('geometry', {}).get('type', '')
+            if geometry_type.lower() in ['polygon', 'multipolygon']:
+                merged_feature['properties']['fill'] = value
+                merged_feature['properties']['fill-opacity'] = 0.1
     
     # Update system tags if created date was changed
     updated_system_tags = original_system_tags
@@ -282,6 +354,11 @@ def update_feature_metadata(request, feature_id, validated_data):
     
     # Ensure system_tags are preserved after normalization
     normalized_feature['properties']['system_tags'] = updated_system_tags
+    
+    # Regenerate geojson_hash if coordinates were updated
+    if 'coordinates' in update_fields:
+        normalized_feature['properties']['geojson_hash'] = generate_geojson_hash(normalized_feature)
+        feature.geojson_hash = normalized_feature['properties']['geojson_hash']
     
     # Update the feature's geojson data
     feature.geojson = normalized_feature

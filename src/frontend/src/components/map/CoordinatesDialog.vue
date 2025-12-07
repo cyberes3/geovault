@@ -18,17 +18,47 @@
       <div class="p-4 overflow-y-auto flex-1">
         <div class="space-y-4">
           <div>
-            <label class="block text-sm font-medium text-gray-700 mb-2">
-              Coordinates (JSON array)
-            </label>
-            <textarea
+            <div class="flex items-center justify-between mb-2">
+              <label class="block text-sm font-medium text-gray-700">
+                Coordinates (JSON array)
+              </label>
+              <button
+                type="button"
+                @click="formatJson"
+                :disabled="!canFormat"
+                class="px-3 py-1 text-xs font-medium text-gray-700 bg-white border border-gray-300 rounded-md hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 disabled:opacity-50 disabled:cursor-not-allowed"
+                :title="canFormat ? 'Format JSON' : 'Cannot format: Invalid JSON'"
+              >
+                Format JSON
+              </button>
+            </div>
+            <div class="mb-2 p-2 bg-blue-50 border border-blue-200 rounded-md">
+              <p class="text-xs text-blue-800">
+                <strong>Note:</strong> GeoJSON coordinates use <strong>[longitude, latitude]</strong> order (backwards from the common [latitude, longitude] format). Elevation is in meters.
+              </p>
+            </div>
+            <CodeEditor
               v-model="localCoordinates"
-              rows="12"
-              :disabled="disabled"
-              class="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500 font-mono text-xs disabled:bg-gray-100 disabled:cursor-not-allowed"
-              placeholder="[]"
-            ></textarea>
-            <p v-if="errorMessage" class="mt-2 text-sm text-red-600">{{ errorMessage }}</p>
+              :read-only="disabled"
+              :languages="[['json', 'JSON']]"
+              :line-nums="true"
+              :wrap="false"
+              :header="false"
+              :copy-code="false"
+              :display-language="false"
+              theme="github"
+              font-size="13px"
+              width="100%"
+              height="400px"
+              padding="12px"
+              border-radius="6px"
+              tab-spaces="2"
+            />
+            <div class="mt-2 min-h-[1.5rem]">
+              <p v-if="errorMessage" class="text-sm text-red-600">{{ errorMessage }}</p>
+              <p v-else-if="validationError" class="text-sm text-red-600">{{ validationError }}</p>
+              <p v-else-if="isValid && geometryType" class="text-sm text-green-600">✓ Coordinates are valid</p>
+            </div>
           </div>
         </div>
       </div>
@@ -45,9 +75,9 @@
         <button
           type="button"
           @click="handleSave"
-          :disabled="disabled || !isValid"
+          :disabled="!canSave"
           class="px-4 py-2 text-sm font-medium text-white bg-blue-600 border border-transparent rounded-md hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 disabled:opacity-50 disabled:cursor-not-allowed"
-          title="Save coordinates"
+          :title="canSave ? 'Save coordinates' : (validationError || 'Invalid coordinates')"
         >
           Save
         </button>
@@ -58,11 +88,16 @@
 
 <script>
 import { XMarkIcon } from '@heroicons/vue/24/outline'
+import { restoreElevationInGeometry } from '@/utils/elevationUtils.js'
+import { validateCoordinates } from '@/utils/coordinateValidation.js'
+import hljs from 'highlight.js'
+import CodeEditor from 'simple-code-editor'
 
 export default {
   name: 'CoordinatesDialog',
   components: {
-    XMarkIcon
+    XMarkIcon,
+    CodeEditor
   },
   props: {
     isOpen: {
@@ -70,6 +105,14 @@ export default {
       default: false
     },
     coordinates: {
+      type: String,
+      default: ''
+    },
+    feature: {
+      type: Object,
+      default: null
+    },
+    geometryType: {
       type: String,
       default: ''
     },
@@ -82,7 +125,9 @@ export default {
   data() {
     return {
       localCoordinates: '',
-      errorMessage: ''
+      errorMessage: '',
+      validationError: null,
+      validationTimeout: null
     }
   },
   computed: {
@@ -92,33 +137,181 @@ export default {
       }
       try {
         const parsed = JSON.parse(this.localCoordinates)
-        return Array.isArray(parsed)
+        if (!Array.isArray(parsed)) {
+          return false
+        }
+        
+        // Reject empty arrays
+        if (parsed.length === 0) {
+          return false
+        }
+        
+        // If we have a geometry type, validate coordinates
+        // Note: validationError is set by validateCoordinates() method
+        // This computed just checks if the structure is valid
+        if (this.geometryType) {
+          const validation = validateCoordinates(parsed, this.geometryType)
+          return validation.valid
+        }
+        
+        // No geometry type, just check if it's a valid non-empty array
+        return true
       } catch (e) {
         return false
       }
+    },
+    canSave() {
+      return this.isValid && !this.validationError && !this.disabled
+    },
+    canFormat() {
+      // Disable format button if JSON is invalid
+      if (this.validationError && this.validationError.includes('Invalid JSON')) {
+        return false
+      }
+      if (this.errorMessage && this.errorMessage.includes('Invalid JSON')) {
+        return false
+      }
+      return !this.disabled
     }
   },
   watch: {
     isOpen(newVal) {
       if (newVal) {
-        this.localCoordinates = this.coordinates || ''
+        // If coordinates prop is provided and valid, use it (preserves user edits)
+        // Otherwise, restore elevation from feature
+        let coordsToShow = this.coordinates || ''
+        
+        // Check if coordinates prop is valid JSON
+        let hasValidCoordinates = false
+        if (coordsToShow && coordsToShow.trim()) {
+          try {
+            const parsed = JSON.parse(coordsToShow)
+            if (Array.isArray(parsed)) {
+              hasValidCoordinates = true
+            }
+          } catch (e) {
+            // Invalid JSON, will restore from feature
+          }
+        }
+        
+        // Only restore from feature if coordinates prop is empty or invalid
+        if (!hasValidCoordinates && this.feature && this.feature.geometry && this.feature.properties) {
+          // Restore elevation in geometry before extracting coordinates
+          const featureWithElevation = restoreElevationInGeometry({
+            type: 'Feature',
+            geometry: this.feature.geometry,
+            properties: this.feature.properties
+          })
+          
+          const geometry = featureWithElevation.geometry
+          if (geometry) {
+            if (geometry.type === 'GeometryCollection') {
+              coordsToShow = JSON.stringify(geometry.geometries || [], null, 2)
+            } else {
+              coordsToShow = JSON.stringify(geometry.coordinates || [], null, 2)
+            }
+          }
+        }
+        
+        this.localCoordinates = coordsToShow
         this.errorMessage = ''
+        this.validationError = null
+        // Validate after setting coordinates
+        this.$nextTick(() => {
+          this.validateCoordinates()
+        })
       }
     },
     coordinates(newVal) {
       if (this.isOpen) {
-        this.localCoordinates = newVal || ''
+        // Only update if we have valid coordinates (user edits)
+        // Don't overwrite if user is currently editing
+        if (newVal && newVal.trim()) {
+          try {
+            const parsed = JSON.parse(newVal)
+            if (Array.isArray(parsed)) {
+              this.localCoordinates = newVal
+              this.validateCoordinates()
+            }
+          } catch (e) {
+            // Invalid JSON, ignore
+          }
+        }
       }
+    },
+    localCoordinates(newVal) {
+      // Debounce validation on input change
+      if (this.validationTimeout) {
+        clearTimeout(this.validationTimeout)
+      }
+      this.validationTimeout = setTimeout(() => {
+        this.validateCoordinates()
+      }, 300)
     }
   },
   methods: {
+    validateCoordinates() {
+      if (!this.localCoordinates || !this.localCoordinates.trim()) {
+        this.validationError = 'Coordinates cannot be empty'
+        return
+      }
+      
+      try {
+        const parsed = JSON.parse(this.localCoordinates)
+        if (!Array.isArray(parsed)) {
+          this.validationError = 'Coordinates must be a valid JSON array'
+          return
+        }
+        
+        // Reject empty arrays
+        if (parsed.length === 0) {
+          this.validationError = 'Coordinates cannot be empty'
+          return
+        }
+        
+        // If we have a geometry type, validate coordinates
+        if (this.geometryType) {
+          const validation = validateCoordinates(parsed, this.geometryType)
+          this.validationError = validation.error
+        } else {
+          // No geometry type, but still check it's a valid non-empty array
+          this.validationError = null
+        }
+      } catch (e) {
+        this.validationError = `Invalid JSON: ${e.message}`
+      }
+    },
+    formatJson() {
+      if (!this.localCoordinates || !this.localCoordinates.trim()) {
+        return
+      }
+      
+      try {
+        const parsed = JSON.parse(this.localCoordinates)
+        // Format with 2-space indentation
+        this.localCoordinates = JSON.stringify(parsed, null, 2)
+        // Clear any existing errors
+        this.errorMessage = ''
+        this.validationError = null
+        // Trigger validation after formatting
+        this.$nextTick(() => {
+          this.validateCoordinates()
+        })
+      } catch (e) {
+        this.errorMessage = `Cannot format: Invalid JSON - ${e.message}`
+      }
+    },
     handleClose() {
       this.errorMessage = ''
+      this.validationError = null
+      if (this.validationTimeout) {
+        clearTimeout(this.validationTimeout)
+      }
       this.$emit('close')
     },
     handleSave() {
       if (!this.isValid) {
-        this.errorMessage = 'Invalid JSON array format'
+        this.errorMessage = this.validationError || 'Invalid coordinates'
         return
       }
       
@@ -128,11 +321,27 @@ export default {
           this.errorMessage = 'Coordinates must be a valid JSON array'
           return
         }
+        
+        // Final validation if geometry type is available
+        if (this.geometryType) {
+          const validation = validateCoordinates(parsed, this.geometryType)
+          if (!validation.valid) {
+            this.errorMessage = validation.error
+            return
+          }
+        }
+        
         this.errorMessage = ''
+        this.validationError = null
         this.$emit('save', this.localCoordinates)
       } catch (e) {
         this.errorMessage = `Invalid JSON: ${e.message}`
       }
+    }
+  },
+  beforeUnmount() {
+    if (this.validationTimeout) {
+      clearTimeout(this.validationTimeout)
     }
   }
 }

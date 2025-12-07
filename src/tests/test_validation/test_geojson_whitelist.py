@@ -57,7 +57,7 @@ class TestGeoJSONWhitelist:
         assert 'tags' in result['properties']
 
     def test_name_normalization(self):
-        """Test that empty names are normalized to 'Unnamed Feature'."""
+        """Test that empty names are allowed."""
         feature = {
             'type': 'Feature',
             'geometry': {
@@ -70,10 +70,10 @@ class TestGeoJSONWhitelist:
             }
         }
         result = validate_and_normalize_geojson_feature(feature)
-        assert result['properties']['name'] == 'Unnamed Feature'
+        assert result['properties']['name'] == ''
 
     def test_name_none_normalization(self):
-        """Test that None names are normalized to 'Unnamed Feature'."""
+        """Test that None names are converted to empty string."""
         feature = {
             'type': 'Feature',
             'geometry': {
@@ -86,7 +86,7 @@ class TestGeoJSONWhitelist:
             }
         }
         result = validate_and_normalize_geojson_feature(feature)
-        assert result['properties']['name'] == 'Unnamed Feature'
+        assert result['properties']['name'] == ''
 
     def test_description_dict_parsing(self):
         """Test parsing of description from dictionary format (KML HTML)."""
@@ -430,4 +430,95 @@ class TestGeoJSONWhitelist:
             preserve_geojson_hash=True
         )
         assert 'geojson_hash' not in result['properties']
+
+    def test_empty_name_point(self):
+        """Test that points can have empty names."""
+        feature = {
+            'type': 'Feature',
+            'geometry': {
+                'type': 'Point',
+                'coordinates': [-122.4194, 37.7749]
+            },
+            'properties': {
+                'name': '',
+                'marker-color': '#00ff00',
+                'tags': []
+            }
+        }
+        result = validate_and_normalize_geojson_feature(feature)
+        assert result['properties']['name'] == ''
+        assert result['properties']['marker-color'] == '#00FF00'
+
+    def test_empty_name_linestring(self):
+        """Test that lines can have empty names."""
+        feature = {
+            'type': 'Feature',
+            'geometry': {
+                'type': 'LineString',
+                'coordinates': [[-122.4194, 37.7749], [-122.4094, 37.7849]]
+            },
+            'properties': {
+                'name': '',
+                'stroke': '#ff0000',
+                'tags': []
+            }
+        }
+        result = validate_and_normalize_geojson_feature(feature)
+        assert result['properties']['name'] == ''
+        assert result['properties']['stroke'] == '#FF0000'
+        assert result['properties']['stroke-width'] == 2
+
+    def test_empty_name_polygon(self):
+        """Test that polygons can have empty names."""
+        feature = {
+            'type': 'Feature',
+            'geometry': {
+                'type': 'Polygon',
+                'coordinates': [[[-122.4194, 37.7749], [-122.4094, 37.7749],
+                                [-122.4094, 37.7849], [-122.4194, 37.7849],
+                                [-122.4194, 37.7749]]]
+            },
+            'properties': {
+                'name': '',
+                'stroke': '#0000ff',
+                'tags': []
+            }
+        }
+        result = validate_and_normalize_geojson_feature(feature)
+        assert result['properties']['name'] == ''
+        assert result['properties']['stroke'] == '#0000FF'
+        assert result['properties']['fill'] == '#0000FF'
+        assert result['properties']['fill-opacity'] == 0.1
+
+    def test_whitespace_only_name(self):
+        """Test that whitespace-only names are preserved (not converted to empty)."""
+        feature = {
+            'type': 'Feature',
+            'geometry': {
+                'type': 'Point',
+                'coordinates': [-122.4194, 37.7749]
+            },
+            'properties': {
+                'name': '   ',
+                'tags': []
+            }
+        }
+        result = validate_and_normalize_geojson_feature(feature)
+        # Whitespace is preserved as-is (converted to string)
+        assert result['properties']['name'] == '   '
+
+    def test_missing_name_property(self):
+        """Test that features without name property get empty string default."""
+        feature = {
+            'type': 'Feature',
+            'geometry': {
+                'type': 'Point',
+                'coordinates': [-122.4194, 37.7749]
+            },
+            'properties': {
+                'tags': []
+            }
+        }
+        result = validate_and_normalize_geojson_feature(feature)
+        assert result['properties']['name'] == ''
 

@@ -165,7 +165,7 @@ export default {
     getFeatureStyle(feature) {
       const properties = feature.get('properties') || {}
       const geometryType = feature.getGeometry().getType()
-      const name = properties.name || 'Unnamed Feature'
+      const name = properties.name || ''
 
       // Helper function to convert hex color to CSS color string
       const hexToColor = (hexColor, defaultColor = '#ff0000') => {

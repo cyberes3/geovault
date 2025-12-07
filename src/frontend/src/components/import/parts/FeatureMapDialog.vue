@@ -112,9 +112,9 @@ export default {
       if (this.selectedFeature) {
         // Try different ways to get the name
         const properties = this.selectedFeature.get('properties') || this.selectedFeature.properties || {}
-        return properties.name || 'Unnamed Feature'
+        return properties.name || ''
       }
-      return 'Unknown Feature'
+      return ''
     }
   },
   watch: {
