@@ -18,7 +18,7 @@ def register_maptiler_terrain():
     
     # Get MapTiler API key
     api_key = config.get_with_env_override(
-        'maptiles.api_key',
+        'maptiler.api_key',
         'MAPTILER_API_KEY',
         None
     )
@@ -28,7 +28,7 @@ def register_maptiler_terrain():
         return
     
     # Check if proxy is enabled
-    use_proxy = config.get_bool('maptiles.proxy_tiles', False)
+    use_proxy = config.get_bool('maptiler.proxy_tiles', False)
     
     if use_proxy:
         # Use server proxy for terrain tiles (raster-dem PNG format)

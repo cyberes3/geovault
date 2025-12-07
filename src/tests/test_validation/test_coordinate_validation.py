@@ -157,3 +157,4 @@ class TestCoordinateValidation:
             validate_coordinates_for_geometry_type([-104.26, 120.0], 'Point')
         assert 'swapped' in str(exc_info.value).lower() or 'bounds' in str(exc_info.value).lower()
 
+

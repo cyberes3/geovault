@@ -61,7 +61,7 @@ tilesources:
   cache_expiry_days: 30
 
 
-maptiles:
+maptiler:
   # MapTiler API key for accessing MapTiler maps and 3D terrain tiles
   # Can be overridden with MAPTILER_API_KEY environment variable
   # Get your API key from https://www.maptiler.com/

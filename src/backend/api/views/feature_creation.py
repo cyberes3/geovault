@@ -94,8 +94,8 @@ def _fetch_elevation_for_point(longitude: float, latitude: float) -> Optional[fl
     except requests.Timeout:
         logger.error(f"Elevation API request timed out after {api_timeout}s")
         return None
-    except Exception as e:
-        logger.error(f"Error fetching elevation data: {str(e)}")
+    except:
+        logger.error(f"Error fetching elevation data: {traceback.format_exc()}")
         return None
 
 

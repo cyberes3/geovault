@@ -52,7 +52,7 @@ def register_maptiler_maps():
     
     # Get MapTiler API key
     api_key = config.get_with_env_override(
-        'maptiles.api_key',
+        'maptiler.api_key',
         'MAPTILER_API_KEY',
         None
     )
@@ -62,7 +62,7 @@ def register_maptiler_maps():
         return
     
     # Get list of map IDs
-    map_ids = config.get_list('maptiles.maps', [])
+    map_ids = config.get_list('maptiler.maps', [])
     
     # If no maps configured, skip registration
     if not map_ids:
@@ -80,7 +80,7 @@ def register_maptiler_maps():
         # MapTiler maps use vector tiles accessed via style.json
         # For MapLibre, we'll use the style URL directly
         source_config = {
-            'id': f'maptiles_{map_id}',
+            'id': f'maptiler_{map_id}',
             'name': display_name,
             'type': 'maptiler',
             'requires_proxy': False,
@@ -92,7 +92,7 @@ def register_maptiler_maps():
         }
         
         # Register the tile source
-        register_tile_source(f'maptiles_{map_id}', source_config)
+        register_tile_source(f'maptiler_{map_id}', source_config)
 
 
 # Register MapTiler maps when this module is imported

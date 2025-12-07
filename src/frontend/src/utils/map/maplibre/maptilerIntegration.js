@@ -35,13 +35,13 @@ export class MapTilerConfig {
       // Use provided server config or fetch from cache (which may also fetch if not cached)
       const config = serverConfig || await fetchCachedConfig()
       
-      if (!config.maptiles) {
+      if (!config.maptiler) {
         return false
       }
       
-      this.useProxy = config.maptiles.proxy_tiles || false
+      this.useProxy = config.maptiler.proxy_tiles || false
       // API key is only provided when not using proxy
-      this.apiKey = config.maptiles.apiKey || null
+      this.apiKey = config.maptiler.apiKey || null
       
       // Use provided tile sources (should always be provided to avoid duplicate API call)
       let sources = tileSources

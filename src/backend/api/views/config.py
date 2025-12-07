@@ -11,7 +11,7 @@ def get_config(request):
     API endpoint to get server configuration, including system tag prefixes and tag priorities.
     
     Returns:
-        JSON object with systemTagPrefixes list, tagPriorities mapping, and optional maptiles config
+        JSON object with systemTagPrefixes list, tagPriorities mapping, and optional maptiler config
     """
     config = {
         'systemTagPrefixes': CONST_INTERNAL_TAGS,
@@ -21,17 +21,17 @@ def get_config(request):
     # Add MapTiler settings if configured (only expose if API key is set)
     config_loader = get_config_loader()
     maptiler_api_key = config_loader.get_maptiler_api_key()
-    use_proxy = config_loader.get_bool('maptiles.proxy_tiles', False)
+    use_proxy = config_loader.get_bool('maptiler.proxy_tiles', False)
     
     if maptiler_api_key:
-        maptiles_config = {
+        maptiler_config = {
             'proxy_tiles': use_proxy
         }
         # Only expose API key if not using proxy (proxy uses server-side key)
         if not use_proxy:
-            maptiles_config['apiKey'] = maptiler_api_key
+            maptiler_config['apiKey'] = maptiler_api_key
         
-        config['maptiles'] = maptiles_config
+        config['maptiler'] = maptiler_config
         # Geocoding is available when MapTiler API key is configured
         config['geocoding_available'] = True
     else:

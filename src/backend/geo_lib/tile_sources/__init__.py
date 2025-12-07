@@ -80,7 +80,7 @@ from . import osm
 from . import mb_topo
 from . import global_imagery
 from . import opentopomap
-from . import maptiles
+from . import maptiler
 from . import maptiler_terrain
 from . import maptiler_hillshade
 
