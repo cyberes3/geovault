@@ -1,7 +1,7 @@
 """
 Reverse geocoding service.
 Note: Reverse geocoding is currently disabled and will return empty data.
-This will be reimplemented using MapTiler in the future.
+This will be reimplemented using Overpass API in the future.
 """
 import math
 from typing import Optional, Dict, Any, List
