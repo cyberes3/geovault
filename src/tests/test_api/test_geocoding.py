@@ -5,6 +5,7 @@ import json
 from unittest.mock import MagicMock, patch
 from django.test import TestCase
 from django.core.cache import cache
+from django.contrib.auth import get_user_model
 
 
 class TestGeocodingAPI(TestCase):
@@ -14,6 +15,15 @@ class TestGeocodingAPI(TestCase):
         """Set up test fixtures."""
         # Clear cache before each test
         cache.clear()
+        
+        # Create and authenticate test user
+        User = get_user_model()
+        self.user = User.objects.create_user(
+            email='test@example.com',
+            password='testpass123',
+            username='testuser'
+        )
+        self.client.force_login(self.user)
 
     def _create_mock_admin_response(self):
         """Create mock response for administrative divisions request."""
@@ -128,7 +138,8 @@ class TestGeocodingAPI(TestCase):
         rmnp_feature = next((f for f in features if f.get('id') == 'poi.48602113'), None)
         self.assertIsNotNone(rmnp_feature, "Rocky Mountain National Park feature should be in results")
         self.assertEqual(rmnp_feature['text'], 'Rocky Mountain National Park')
-        self.assertEqual(rmnp_feature['place_name'], 'Rocky Mountain National Park, Larimer, United States of America')
+        # Note: place_name has the redundant text stripped by _clean_feature
+        self.assertEqual(rmnp_feature['place_name'], 'Larimer, United States of America')
 
         # Verify feature is cleaned (no unnecessary fields)
         self.assertIn('coordinates', rmnp_feature)

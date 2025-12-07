@@ -10,7 +10,7 @@
         :is-initial-load="isMapInitializing || (isDataLoading && isInitialLoad)"
         :is-mobile-open="activeMobileSidebar === 'features'"
         :can-hide-features="isMainMapRoute && !isPublicShareMode && !!$store.state.userInfo"
-        :geocoding-available="maptilerConfig && maptilerConfig.isAvailable()"
+        :geocoding-available="maptilerConfig && maptilerConfig.isAvailable() && !!$store.state.userInfo"
         @close="activeMobileSidebar = null"
         @feature-click="zoomToFeature"
         @feature-hide="handleHideFeature"

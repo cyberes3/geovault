@@ -235,29 +235,35 @@ def geocoding_search(request):
     geographic_features = []
     all_features = []
 
-    # Make administrative divisions request first (highest priority for major cities)
-    admin_response = requests.get(api_url, params=params_admin, headers=headers, timeout=10)
-    if admin_response.status_code == 200:
-        admin_data = admin_response.json()
-        admin_features = admin_data.get('features', [])
-    else:
-        logger.error(f"Geocoding API error response: status={admin_response.status_code}, body={admin_response.text}")
+    try:
+        # Make administrative divisions request first (highest priority for major cities)
+        admin_response = requests.get(api_url, params=params_admin, headers=headers, timeout=10)
+        if admin_response.status_code == 200:
+            admin_data = admin_response.json()
+            admin_features = admin_data.get('features', [])
+        else:
+            logger.error(f"Geocoding API error response: status={admin_response.status_code}, body={admin_response.text}")
 
-    # Make geographic features request
-    geo_response = requests.get(api_url, params=params_geographic, headers=headers, timeout=10)
-    if geo_response.status_code == 200:
-        geo_data = geo_response.json()
-        geographic_features = geo_data.get('features', [])
-    else:
-        logger.error(f"Geocoding API error response: status={geo_response.status_code}, body={geo_response.text}")
+        # Make geographic features request
+        geo_response = requests.get(api_url, params=params_geographic, headers=headers, timeout=10)
+        if geo_response.status_code == 200:
+            geo_data = geo_response.json()
+            geographic_features = geo_data.get('features', [])
+        else:
+            logger.error(f"Geocoding API error response: status={geo_response.status_code}, body={geo_response.text}")
 
-    # Make all types request
-    api_response = requests.get(api_url, params=params_all, headers=headers, timeout=10)
-    if api_response.status_code == 200:
-        api_data = api_response.json()
-        all_features = api_data.get('features', [])
-    else:
-        logger.error(f"Geocoding API error response: status={api_response.status_code}, body={api_response.text}")
+        # Make all types request
+        api_response = requests.get(api_url, params=params_all, headers=headers, timeout=10)
+        if api_response.status_code == 200:
+            api_data = api_response.json()
+            all_features = api_data.get('features', [])
+        else:
+            logger.error(f"Geocoding API error response: status={api_response.status_code}, body={api_response.text}")
+    except requests.exceptions.Timeout:
+        return error_response("Geocoding API request timed out", code=504)
+    except requests.exceptions.RequestException as e:
+        logger.error(f"Geocoding API request error: {e}")
+        return error_response("Geocoding API request failed", code=500)
 
     # If all requests failed, return error
     if not admin_features and not geographic_features and not all_features:
