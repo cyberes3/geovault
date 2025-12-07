@@ -15,6 +15,13 @@ class TestGeocodingAPI(TestCase):
         # Clear cache before each test
         cache.clear()
 
+    def _create_mock_admin_response(self):
+        """Create mock response for administrative divisions request."""
+        return {
+            'type': 'FeatureCollection',
+            'features': []
+        }
+
     def _create_mock_geographic_response(self):
         """Create mock response for geographic features request."""
         return {
@@ -89,7 +96,11 @@ class TestGeocodingAPI(TestCase):
         mock_config.get_maptiler_api_key.return_value = 'test_api_key'
         mock_config_loader.return_value = mock_config
 
-        # Mock API responses
+        # Mock API responses - now 3 requests: admin, geographic, all types
+        mock_admin_response = MagicMock()
+        mock_admin_response.status_code = 200
+        mock_admin_response.json.return_value = self._create_mock_admin_response()
+
         mock_geo_response = MagicMock()
         mock_geo_response.status_code = 200
         mock_geo_response.json.return_value = self._create_mock_geographic_response()
@@ -98,8 +109,8 @@ class TestGeocodingAPI(TestCase):
         mock_all_response.status_code = 200
         mock_all_response.json.return_value = self._create_mock_all_types_response()
 
-        # First call returns geographic features, second call returns all types
-        mock_get.side_effect = [mock_geo_response, mock_all_response]
+        # Three calls: admin divisions, geographic features, all types
+        mock_get.side_effect = [mock_admin_response, mock_geo_response, mock_all_response]
 
         # Make request
         response = self.client.get('/api/geocoding/search/?q=rocky mountain national park')
@@ -141,7 +152,11 @@ class TestGeocodingAPI(TestCase):
         mock_config.get_maptiler_api_key.return_value = 'test_api_key'
         mock_config_loader.return_value = mock_config
 
-        # Mock API responses
+        # Mock API responses - now 3 requests: admin, geographic, all types
+        mock_admin_response = MagicMock()
+        mock_admin_response.status_code = 200
+        mock_admin_response.json.return_value = self._create_mock_admin_response()
+
         mock_geo_response = MagicMock()
         mock_geo_response.status_code = 200
         mock_geo_response.json.return_value = self._create_mock_geographic_response()
@@ -150,13 +165,13 @@ class TestGeocodingAPI(TestCase):
         mock_all_response.status_code = 200
         mock_all_response.json.return_value = self._create_mock_all_types_response()
 
-        mock_get.side_effect = [mock_geo_response, mock_all_response]
+        mock_get.side_effect = [mock_admin_response, mock_geo_response, mock_all_response]
 
         # First request - should call API
         response1 = self.client.get('/api/geocoding/search/?q=denver')
         self.assertEqual(response1.status_code, 200)
         # Verify API was called
-        self.assertEqual(mock_get.call_count, 2)  # Geographic + all types
+        self.assertEqual(mock_get.call_count, 3)  # Admin + geographic + all types
 
         # Reset mock call count
         mock_get.reset_mock()
@@ -215,7 +230,11 @@ class TestGeocodingAPI(TestCase):
         mock_config.get_maptiler_api_key.return_value = 'test_api_key'
         mock_config_loader.return_value = mock_config
 
-        # Mock API error response
+        # Mock API error response - admin succeeds, geographic succeeds, all types fails
+        mock_admin_response = MagicMock()
+        mock_admin_response.status_code = 200
+        mock_admin_response.json.return_value = self._create_mock_admin_response()
+
         mock_geo_response = MagicMock()
         mock_geo_response.status_code = 200
         mock_geo_response.json.return_value = self._create_mock_geographic_response()
@@ -224,7 +243,7 @@ class TestGeocodingAPI(TestCase):
         mock_all_response.status_code = 400
         mock_all_response.text = 'ERR_VALIDATION: Invalid parameter'
 
-        mock_get.side_effect = [mock_geo_response, mock_all_response]
+        mock_get.side_effect = [mock_admin_response, mock_geo_response, mock_all_response]
 
         # Make request
         response = self.client.get('/api/geocoding/search/?q=denver')
@@ -266,7 +285,11 @@ class TestGeocodingAPI(TestCase):
         mock_config.get_maptiler_api_key.return_value = 'test_api_key'
         mock_config_loader.return_value = mock_config
 
-        # Mock API responses
+        # Mock API responses - now 3 requests: admin, geographic, all types
+        mock_admin_response = MagicMock()
+        mock_admin_response.status_code = 200
+        mock_admin_response.json.return_value = self._create_mock_admin_response()
+
         mock_geo_response = MagicMock()
         mock_geo_response.status_code = 200
         mock_geo_response.json.return_value = self._create_mock_geographic_response()
@@ -275,7 +298,7 @@ class TestGeocodingAPI(TestCase):
         mock_all_response.status_code = 200
         mock_all_response.json.return_value = self._create_mock_all_types_response()
 
-        mock_get.side_effect = [mock_geo_response, mock_all_response]
+        mock_get.side_effect = [mock_admin_response, mock_geo_response, mock_all_response]
 
         # Make request
         response = self.client.get('/api/geocoding/search/?q=test')
@@ -320,7 +343,11 @@ class TestGeocodingAPI(TestCase):
         mock_config.get_maptiler_api_key.return_value = 'test_api_key'
         mock_config_loader.return_value = mock_config
 
-        # Mock API responses - geographic features first, then addresses
+        # Mock API responses - now 3 requests: admin, geographic, all types
+        mock_admin_response = MagicMock()
+        mock_admin_response.status_code = 200
+        mock_admin_response.json.return_value = self._create_mock_admin_response()
+
         mock_geo_response = MagicMock()
         mock_geo_response.status_code = 200
         mock_geo_response.json.return_value = self._create_mock_geographic_response()
@@ -329,7 +356,7 @@ class TestGeocodingAPI(TestCase):
         mock_all_response.status_code = 200
         mock_all_response.json.return_value = self._create_mock_all_types_response()
 
-        mock_get.side_effect = [mock_geo_response, mock_all_response]
+        mock_get.side_effect = [mock_admin_response, mock_geo_response, mock_all_response]
 
         # Make request
         response = self.client.get('/api/geocoding/search/?q=rocky mountain')

@@ -2271,7 +2271,7 @@ export default {
     async handleGeocodingResult(result) {
       if (!this.map || !result) return
 
-      // Extract coordinates from geocoding result
+      // Extract coordinates from geocoding result for marker placement
       // Geocoding results have coordinates [lng, lat] directly
       let coordinates = null
       if (result.coordinates && Array.isArray(result.coordinates)) {
@@ -2280,6 +2280,13 @@ export default {
         coordinates = result.center
       } else {
         console.error('Geocoding result missing coordinates:', result)
+        return
+      }
+
+      // Extract bbox - there will always be a bbox
+      const bbox = result.bbox
+      if (!bbox || !Array.isArray(bbox) || bbox.length !== 4) {
+        console.error('Geocoding result missing bbox:', result)
         return
       }
 
@@ -2336,56 +2343,31 @@ export default {
         .setLngLat([coordinates[0], coordinates[1]])
         .addTo(this.map)
 
-      // Now fly to location (marker is already visible)
-      // Use bbox if available to set appropriate zoom level, otherwise use coordinates
-      const bbox = result.bbox
+      // Always use bbox to fly to the location
+      // There will always be a bbox, so no fallback to point coordinates
+      const [minLon, minLat, maxLon, maxLat] = bbox
       
-      if (bbox && Array.isArray(bbox) && bbox.length === 4) {
-        // Check if bbox represents an area (not a point)
-        const [minLon, minLat, maxLon, maxLat] = bbox
-        const isPoint = minLon === maxLon && minLat === maxLat
-        
-        if (!isPoint) {
-          // Use fitBounds for areas (parks, regions, etc.)
-          await this.navigateAndRefresh(() => {
-            try {
-              const bounds = new maplibregl.LngLatBounds(
-                [minLon, minLat], // southwest corner
-                [maxLon, maxLat]  // northeast corner
-              )
-              this.map.fitBounds(bounds, {
-                padding: { top: 50, bottom: 50, left: 50, right: 50 },
-                duration: 500
-              })
-            } catch (error) {
-              console.error('Error fitting bounds, falling back to flyTo:', error)
-              // Fallback to flyTo if fitBounds fails
-              const targetZoom = Math.max(this.map.getZoom(), 12)
-              this.map.flyTo({
-                center: [coordinates[0], coordinates[1]],
-                zoom: targetZoom,
-                duration: 500
-              })
-            }
-          })
-        } else {
-          // Bbox is a point, use flyTo with appropriate zoom
-          const targetZoom = Math.max(this.map.getZoom(), 12)
-          await this.navigateAndRefresh(() => {
-            this.map.flyTo({
-              center: [coordinates[0], coordinates[1]],
-              zoom: targetZoom,
-              duration: 500
-            })
-          })
-        }
-      } else {
-        // No bbox available, use flyTo with coordinates
-        const targetZoom = Math.max(this.map.getZoom(), 12)
+      // Check if bbox is degenerate (a point) - MapTiler API sometimes returns these
+      const isDegenerate = (minLon === maxLon && minLat === maxLat)
+      
+      if (isDegenerate) {
+        // For degenerate bboxes (points), just fly to the point at zoom 15
         await this.navigateAndRefresh(() => {
           this.map.flyTo({
             center: [coordinates[0], coordinates[1]],
-            zoom: targetZoom,
+            zoom: 15,
+            duration: 500
+          })
+        })
+      } else {
+        // For proper bboxes, fit the bounds
+        await this.navigateAndRefresh(() => {
+          const bounds = new maplibregl.LngLatBounds(
+            [minLon, minLat], // southwest corner
+            [maxLon, maxLat]  // northeast corner
+          )
+          this.map.fitBounds(bounds, {
+            padding: { top: 50, bottom: 50, left: 50, right: 50 },
             duration: 500
           })
         })
