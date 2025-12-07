@@ -122,7 +122,7 @@ def create_quick_point(request, validated_data):
         latitude = validated_data['latitude']
         longitude = validated_data['longitude']
         name = validated_data['name'].strip()
-        description = validated_data.get('description', '').strip() if validated_data.get('description') else ''
+        description = validated_data.get('description', '').strip()
         tags = validated_data.get('tags', [])
         marker_color = validated_data.get('marker_color', '#ff0000')
         icon = validated_data.get('icon')
@@ -143,12 +143,10 @@ def create_quick_point(request, validated_data):
         
         properties = {
             'name': name,
+            'description': description,  # Always include description (empty string if not provided)
             'marker-color': marker_color,
             'tags': user_tags
         }
-        
-        if description:
-            properties['description'] = description
         
         if icon:
             properties['icon'] = icon

@@ -7,11 +7,13 @@ import time
 from io import BytesIO
 from django.test import TestCase, TransactionTestCase
 from django.core.files.uploadedfile import SimpleUploadedFile
+from django.db import connections
 
 from django.contrib.auth import get_user_model
 
-from api.models import ImportQueue
+from api.models import ImportQueue, FeatureStore
 from geo_lib.processing.status_tracker import ProcessingStatus, status_tracker
+from geo_lib.processing.queue_worker import stop_all_workers
 
 
 class TestLargeFileUploads(TransactionTestCase):
@@ -20,12 +22,34 @@ class TestLargeFileUploads(TransactionTestCase):
     def setUp(self):
         """Set up test fixtures."""
         User = get_user_model()
-        self.user = User.objects.create_user(
-            email='test@example.com',
-            password='testpass123',
-            username='testuser'
+        self.user, _ = User.objects.get_or_create(
+            username='testuser',
+            defaults={
+                'email': 'test@example.com',
+                'password': 'testpass123'
+            }
         )
+        # Set password separately since get_or_create doesn't hash it
+        if not self.user.has_usable_password():
+            self.user.set_password('testpass123')
+            self.user.save()
         self.client.force_login(self.user)
+
+    def tearDown(self):
+        """Clean up after tests."""
+        # Stop all background workers to prevent them from accessing deleted objects
+        stop_all_workers()
+        time.sleep(0.5)  # Give workers time to stop
+        
+        # Wait a bit for any in-flight jobs to complete or fail
+        time.sleep(1.0)
+        
+        # Clean up any features created during tests
+        FeatureStore.objects.filter(user=self.user).delete()
+        # Clean up import queue items
+        ImportQueue.objects.filter(user=self.user).delete()
+        # Close all database connections to prevent flush issues
+        connections.close_all()
 
     def _wait_for_job_completion(self, job_id: str, timeout: float = 60.0) -> dict:
         """Wait for job to complete with timeout."""
@@ -109,12 +133,34 @@ class TestCorruptedFiles(TransactionTestCase):
     def setUp(self):
         """Set up test fixtures."""
         User = get_user_model()
-        self.user = User.objects.create_user(
-            email='test@example.com',
-            password='testpass123',
-            username='testuser'
+        self.user, _ = User.objects.get_or_create(
+            username='testuser',
+            defaults={
+                'email': 'test@example.com',
+                'password': 'testpass123'
+            }
         )
+        # Set password separately since get_or_create doesn't hash it
+        if not self.user.has_usable_password():
+            self.user.set_password('testpass123')
+            self.user.save()
         self.client.force_login(self.user)
+
+    def tearDown(self):
+        """Clean up after tests."""
+        # Stop all background workers to prevent them from accessing deleted objects
+        stop_all_workers()
+        time.sleep(0.5)  # Give workers time to stop
+        
+        # Wait a bit for any in-flight jobs to complete or fail
+        time.sleep(1.0)
+        
+        # Clean up any features created during tests
+        FeatureStore.objects.filter(user=self.user).delete()
+        # Clean up import queue items
+        ImportQueue.objects.filter(user=self.user).delete()
+        # Close all database connections to prevent flush issues
+        connections.close_all()
 
     def test_upload_truncated_kml(self):
         """Test uploading truncated KML file."""
@@ -172,12 +218,34 @@ class TestCorruptedKMZ(TransactionTestCase):
     def setUp(self):
         """Set up test fixtures."""
         User = get_user_model()
-        self.user = User.objects.create_user(
-            email='test@example.com',
-            password='testpass123',
-            username='testuser'
+        self.user, _ = User.objects.get_or_create(
+            username='testuser',
+            defaults={
+                'email': 'test@example.com',
+                'password': 'testpass123'
+            }
         )
+        # Set password separately since get_or_create doesn't hash it
+        if not self.user.has_usable_password():
+            self.user.set_password('testpass123')
+            self.user.save()
         self.client.force_login(self.user)
+
+    def tearDown(self):
+        """Clean up after tests."""
+        # Stop all background workers to prevent them from accessing deleted objects
+        stop_all_workers()
+        time.sleep(0.5)  # Give workers time to stop
+        
+        # Wait a bit for any in-flight jobs to complete or fail
+        time.sleep(1.0)
+        
+        # Clean up any features created during tests
+        FeatureStore.objects.filter(user=self.user).delete()
+        # Clean up import queue items
+        ImportQueue.objects.filter(user=self.user).delete()
+        # Close all database connections to prevent flush issues
+        connections.close_all()
 
     def test_upload_corrupted_zip(self):
         """Test uploading corrupted ZIP file as KMZ."""
@@ -241,12 +309,34 @@ class TestInvalidCoordinates(TransactionTestCase):
     def setUp(self):
         """Set up test fixtures."""
         User = get_user_model()
-        self.user = User.objects.create_user(
-            email='test@example.com',
-            password='testpass123',
-            username='testuser'
+        self.user, _ = User.objects.get_or_create(
+            username='testuser',
+            defaults={
+                'email': 'test@example.com',
+                'password': 'testpass123'
+            }
         )
+        # Set password separately since get_or_create doesn't hash it
+        if not self.user.has_usable_password():
+            self.user.set_password('testpass123')
+            self.user.save()
         self.client.force_login(self.user)
+
+    def tearDown(self):
+        """Clean up after tests."""
+        # Stop all background workers to prevent them from accessing deleted objects
+        stop_all_workers()
+        time.sleep(0.5)  # Give workers time to stop
+        
+        # Wait a bit for any in-flight jobs to complete or fail
+        time.sleep(1.0)
+        
+        # Clean up any features created during tests
+        FeatureStore.objects.filter(user=self.user).delete()
+        # Clean up import queue items
+        ImportQueue.objects.filter(user=self.user).delete()
+        # Close all database connections to prevent flush issues
+        connections.close_all()
 
     def test_upload_kml_with_invalid_latitude(self):
         """Test KML with latitude > 90 or < -90."""
@@ -316,12 +406,34 @@ class TestEmptyFiles(TransactionTestCase):
     def setUp(self):
         """Set up test fixtures."""
         User = get_user_model()
-        self.user = User.objects.create_user(
-            email='test@example.com',
-            password='testpass123',
-            username='testuser'
+        self.user, _ = User.objects.get_or_create(
+            username='testuser',
+            defaults={
+                'email': 'test@example.com',
+                'password': 'testpass123'
+            }
         )
+        # Set password separately since get_or_create doesn't hash it
+        if not self.user.has_usable_password():
+            self.user.set_password('testpass123')
+            self.user.save()
         self.client.force_login(self.user)
+
+    def tearDown(self):
+        """Clean up after tests."""
+        # Stop all background workers to prevent them from accessing deleted objects
+        stop_all_workers()
+        time.sleep(0.5)  # Give workers time to stop
+        
+        # Wait a bit for any in-flight jobs to complete or fail
+        time.sleep(1.0)
+        
+        # Clean up any features created during tests
+        FeatureStore.objects.filter(user=self.user).delete()
+        # Clean up import queue items
+        ImportQueue.objects.filter(user=self.user).delete()
+        # Close all database connections to prevent flush issues
+        connections.close_all()
 
     def test_upload_completely_empty_file(self):
         """Test uploading completely empty file."""
@@ -367,12 +479,34 @@ class TestSpecialCharactersInFiles(TransactionTestCase):
     def setUp(self):
         """Set up test fixtures."""
         User = get_user_model()
-        self.user = User.objects.create_user(
-            email='test@example.com',
-            password='testpass123',
-            username='testuser'
+        self.user, _ = User.objects.get_or_create(
+            username='testuser',
+            defaults={
+                'email': 'test@example.com',
+                'password': 'testpass123'
+            }
         )
+        # Set password separately since get_or_create doesn't hash it
+        if not self.user.has_usable_password():
+            self.user.set_password('testpass123')
+            self.user.save()
         self.client.force_login(self.user)
+
+    def tearDown(self):
+        """Clean up after tests."""
+        # Stop all background workers to prevent them from accessing deleted objects
+        stop_all_workers()
+        time.sleep(0.5)  # Give workers time to stop
+        
+        # Wait a bit for any in-flight jobs to complete or fail
+        time.sleep(1.0)
+        
+        # Clean up any features created during tests
+        FeatureStore.objects.filter(user=self.user).delete()
+        # Clean up import queue items
+        ImportQueue.objects.filter(user=self.user).delete()
+        # Close all database connections to prevent flush issues
+        connections.close_all()
 
     def test_upload_kml_with_emoji(self):
         """Test KML with emoji in names."""

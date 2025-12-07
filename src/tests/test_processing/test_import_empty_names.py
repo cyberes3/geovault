@@ -84,7 +84,7 @@ class TestImportEmptyNames(TransactionTestCase):
         
         feature_store = imported_features.first()
         self.assertEqual(feature_store.geojson['properties']['name'], '')
-        self.assertEqual(feature_store.geojson['properties']['marker-color'], '#00FF00')
+        self.assertEqual(feature_store.geojson['properties']['marker-color'], '#00ff00')
         
         print("✓ Test passed: import_point_with_empty_name")
 
@@ -132,7 +132,7 @@ class TestImportEmptyNames(TransactionTestCase):
         
         feature_store = imported_features.first()
         self.assertEqual(feature_store.geojson['properties']['name'], '')
-        self.assertEqual(feature_store.geojson['properties']['stroke'], '#FF0000')
+        self.assertEqual(feature_store.geojson['properties']['stroke'], '#ff0000')
         
         print("✓ Test passed: import_line_with_empty_name")
 
@@ -186,8 +186,8 @@ class TestImportEmptyNames(TransactionTestCase):
         
         feature_store = imported_features.first()
         self.assertEqual(feature_store.geojson['properties']['name'], '')
-        self.assertEqual(feature_store.geojson['properties']['stroke'], '#0000FF')
-        self.assertEqual(feature_store.geojson['properties']['fill'], '#0000FF')
+        self.assertEqual(feature_store.geojson['properties']['stroke'], '#0000ff')
+        self.assertEqual(feature_store.geojson['properties']['fill'], '#0000ff')
         
         print("✓ Test passed: import_polygon_with_empty_name")
 

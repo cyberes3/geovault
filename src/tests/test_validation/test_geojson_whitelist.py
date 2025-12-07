@@ -214,7 +214,7 @@ class TestGeoJSONWhitelist:
         }
         result = validate_and_normalize_geojson_feature(feature)
         assert result['properties']['stroke-width'] == 2
-        assert result['properties']['fill'] == '#FF0000'
+        assert result['properties']['fill'] == '#ff0000'
         assert result['properties']['fill-opacity'] == 0.1
 
     def test_invalid_geometry_type(self):
@@ -293,7 +293,7 @@ class TestGeoJSONWhitelist:
             }
         }
         result = validate_and_normalize_geojson_feature(feature)
-        assert result['properties']['marker-color'] == '#ABC123'
+        assert result['properties']['marker-color'] == '#abc123'
 
     def test_geometry_collection_polygon_detection(self):
         """Test that GeometryCollection with polygons gets polygon styling."""
@@ -317,7 +317,7 @@ class TestGeoJSONWhitelist:
             }
         }
         result = validate_and_normalize_geojson_feature(feature)
-        assert result['properties']['fill'] == '#FF0000'
+        assert result['properties']['fill'] == '#ff0000'
         assert result['properties']['fill-opacity'] == 0.1
 
     def test_multipoint_styling(self):
@@ -335,7 +335,7 @@ class TestGeoJSONWhitelist:
             }
         }
         result = validate_and_normalize_geojson_feature(feature)
-        assert result['properties']['marker-color'] == '#00FF00'
+        assert result['properties']['marker-color'] == '#00ff00'
 
     def test_multilinestring_styling(self):
         """Test MultiLineString styling."""
@@ -372,7 +372,7 @@ class TestGeoJSONWhitelist:
             }
         }
         result = validate_and_normalize_geojson_feature(feature)
-        assert result['properties']['fill'] == '#FFFF00'
+        assert result['properties']['fill'] == '#ffff00'
         assert result['properties']['fill-opacity'] == 0.1
 
     def test_geojson_hash_stripped_by_default(self):
@@ -447,7 +447,7 @@ class TestGeoJSONWhitelist:
         }
         result = validate_and_normalize_geojson_feature(feature)
         assert result['properties']['name'] == ''
-        assert result['properties']['marker-color'] == '#00FF00'
+        assert result['properties']['marker-color'] == '#00ff00'
 
     def test_empty_name_linestring(self):
         """Test that lines can have empty names."""
@@ -465,7 +465,7 @@ class TestGeoJSONWhitelist:
         }
         result = validate_and_normalize_geojson_feature(feature)
         assert result['properties']['name'] == ''
-        assert result['properties']['stroke'] == '#FF0000'
+        assert result['properties']['stroke'] == '#ff0000'
         assert result['properties']['stroke-width'] == 2
 
     def test_empty_name_polygon(self):
@@ -486,8 +486,8 @@ class TestGeoJSONWhitelist:
         }
         result = validate_and_normalize_geojson_feature(feature)
         assert result['properties']['name'] == ''
-        assert result['properties']['stroke'] == '#0000FF'
-        assert result['properties']['fill'] == '#0000FF'
+        assert result['properties']['stroke'] == '#0000ff'
+        assert result['properties']['fill'] == '#0000ff'
         assert result['properties']['fill-opacity'] == 0.1
 
     def test_whitespace_only_name(self):

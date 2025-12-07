@@ -431,7 +431,7 @@ class TestCollectionsAPI(TestCase):
         # Verify line feature got the color
         line_feature.refresh_from_db()
         props = line_feature.geojson['properties']
-        self.assertEqual(props.get('stroke'), '#FF00FF')
+        self.assertEqual(props.get('stroke'), '#ff00ff')
 
     def test_apply_bulk_operations_to_collection_polygon_color(self):
         """Test applying polygon color through bulk operations to collection."""
@@ -482,8 +482,8 @@ class TestCollectionsAPI(TestCase):
         # Verify polygon feature got the color
         polygon_feature.refresh_from_db()
         props = polygon_feature.geojson['properties']
-        self.assertEqual(props.get('stroke'), '#0000FF')
-        self.assertEqual(props.get('fill'), '#0000FF')
+        self.assertEqual(props.get('stroke'), '#0000ff')
+        self.assertEqual(props.get('fill'), '#0000ff')
 
     def test_apply_bulk_operations_to_collection_all_operations(self):
         """Test applying all bulk operation types to collection."""
@@ -558,17 +558,17 @@ class TestCollectionsAPI(TestCase):
         point_feature.refresh_from_db()
         point_props = point_feature.geojson['properties']
         self.assertIn('comprehensive-test', point_props.get('tags', []))
-        self.assertEqual(point_props.get('marker-color'), '#FF0000')
+        self.assertEqual(point_props.get('marker-color'), '#ff0000')
         self.assertEqual(point_props.get('icon'), 'assets/icons/test.png')
 
         line_feature.refresh_from_db()
         line_props = line_feature.geojson['properties']
-        self.assertEqual(line_props.get('stroke'), '#00FF00')
+        self.assertEqual(line_props.get('stroke'), '#00ff00')
 
         polygon_feature.refresh_from_db()
         poly_props = polygon_feature.geojson['properties']
-        self.assertEqual(poly_props.get('stroke'), '#0000FF')
-        self.assertEqual(poly_props.get('fill'), '#0000FF')
+        self.assertEqual(poly_props.get('stroke'), '#0000ff')
+        self.assertEqual(poly_props.get('fill'), '#0000ff')
 
     def test_apply_bulk_operations_to_collection_by_tags(self):
         """Test bulk operations on collection that matches features by tags."""
@@ -639,8 +639,8 @@ class TestCollectionsAPI(TestCase):
         feature2.refresh_from_db()
         self.assertIn('bulk-applied', feature1.geojson['properties'].get('tags', []))
         self.assertIn('bulk-applied', feature2.geojson['properties'].get('tags', []))
-        self.assertEqual(feature1.geojson['properties'].get('marker-color'), '#00FF00')
-        self.assertEqual(feature2.geojson['properties'].get('marker-color'), '#00FF00')
+        self.assertEqual(feature1.geojson['properties'].get('marker-color'), '#00ff00')
+        self.assertEqual(feature2.geojson['properties'].get('marker-color'), '#00ff00')
 
     def test_collection_feature_count(self):
         """Test that collection feature count is correct."""

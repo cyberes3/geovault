@@ -396,7 +396,7 @@ class TestFeatureAPI(TestCase):
                 self.assertEqual(properties[prop], '', f'Property {prop} should be empty string')
         
         # Marker color should be preserved/updated (colors are normalized to uppercase)
-        self.assertEqual(properties['marker-color'], '#0000FF')
+        self.assertEqual(properties['marker-color'], '#0000ff')
 
     def test_update_feature_remove_icon_with_user_icon(self):
         """Test removing a user-uploaded icon from a point feature."""
@@ -459,7 +459,7 @@ class TestFeatureAPI(TestCase):
             self.assertEqual(properties['icon'], '')
         
         # Marker color should be set (colors are normalized to uppercase)
-        self.assertEqual(properties['marker-color'], '#00FF00')
+        self.assertEqual(properties['marker-color'], '#00ff00')
 
     def test_update_feature_icon_prevents_external_urls(self):
         """Test that external icon URLs are rejected."""
@@ -799,7 +799,7 @@ class TestFeatureAPI(TestCase):
         updated_properties = system_tag_feature.geojson['properties']
         self.assertIn('bulk-applied-tag', updated_properties.get('tags', []),
                      'Bulk operation tag should be added to feature')
-        self.assertEqual(updated_properties.get('marker-color'), '#00FF00',
+        self.assertEqual(updated_properties.get('marker-color'), '#00ff00',
                         'Point color should be updated by bulk operation')
 
     def test_apply_bulk_operations_to_tag_invalid(self):
@@ -883,7 +883,7 @@ class TestFeatureAPI(TestCase):
             feature.refresh_from_db()
             props = feature.geojson['properties']
             self.assertIn('bulk-applied', props.get('tags', []))
-            self.assertEqual(props.get('marker-color'), '#00FF00')
+            self.assertEqual(props.get('marker-color'), '#00ff00')
 
     def test_apply_bulk_operations_to_tag_point_icon(self):
         """Test applying point icon through bulk operations by tag."""
@@ -929,7 +929,7 @@ class TestFeatureAPI(TestCase):
         self.linestring_feature.refresh_from_db()
         props = self.linestring_feature.geojson['properties']
         if 'test' in props.get('tags', []):
-            self.assertEqual(props.get('stroke'), '#FF00FF')
+            self.assertEqual(props.get('stroke'), '#ff00ff')
 
     def test_apply_bulk_operations_to_tag_polygon_color(self):
         """Test applying polygon color through bulk operations by tag."""
@@ -972,8 +972,8 @@ class TestFeatureAPI(TestCase):
         # Verify polygon feature got the color
         polygon_feature.refresh_from_db()
         props = polygon_feature.geojson['properties']
-        self.assertEqual(props.get('stroke'), '#0000FF')
-        self.assertEqual(props.get('fill'), '#0000FF')
+        self.assertEqual(props.get('stroke'), '#0000ff')
+        self.assertEqual(props.get('fill'), '#0000ff')
 
     def test_apply_bulk_operations_to_tag_all_operations(self):
         """Test applying all bulk operation types at once."""
@@ -1001,13 +1001,13 @@ class TestFeatureAPI(TestCase):
         point_props = self.point_feature.geojson['properties']
         if 'test' in point_props.get('tags', []):
             self.assertIn('comprehensive-test', point_props.get('tags', []))
-            self.assertEqual(point_props.get('marker-color'), '#FF0000')
+            self.assertEqual(point_props.get('marker-color'), '#ff0000')
             self.assertEqual(point_props.get('icon'), 'assets/icons/test.png')
 
         self.linestring_feature.refresh_from_db()
         line_props = self.linestring_feature.geojson['properties']
         if 'test' in line_props.get('tags', []):
-            self.assertEqual(line_props.get('stroke'), '#00FF00')
+            self.assertEqual(line_props.get('stroke'), '#00ff00')
 
     def test_regenerate_feature_tags(self):
         """Test regenerating tags for a feature."""

@@ -59,20 +59,20 @@ class TestStylingValidation:
         assert is_valid_hex_color({}) is False
 
     def test_normalize_hex_color_uppercase(self):
-        """Test that hex colors are normalized to uppercase."""
-        assert normalize_hex_color('#abc') == '#ABC'
-        assert normalize_hex_color('#abcdef') == '#ABCDEF'
-        assert normalize_hex_color('#aBc123') == '#ABC123'
+        """Test that hex colors preserve their case (no normalization)."""
+        assert normalize_hex_color('#abc') == '#abc'
+        assert normalize_hex_color('#abcdef') == '#abcdef'
+        assert normalize_hex_color('#aBc123') == '#aBc123'
 
     def test_normalize_hex_color_preserves_format(self):
         """Test that normalization preserves 3 vs 6 digit format."""
-        assert normalize_hex_color('#abc') == '#ABC'
-        assert normalize_hex_color('#abcdef') == '#ABCDEF'
+        assert normalize_hex_color('#abc') == '#abc'
+        assert normalize_hex_color('#abcdef') == '#abcdef'
 
     def test_normalize_hex_color_strips_whitespace(self):
         """Test that normalization strips whitespace."""
-        assert normalize_hex_color(' #abc ') == '#ABC'
-        assert normalize_hex_color('  #abcdef  ') == '#ABCDEF'
+        assert normalize_hex_color(' #abc ') == '#abc'
+        assert normalize_hex_color('  #abcdef  ') == '#abcdef'
 
     def test_valid_icon_url_assets(self):
         """Test validation of assets/ icon URLs."""

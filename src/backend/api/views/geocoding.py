@@ -4,6 +4,7 @@ Provides place search functionality with server-side caching.
 """
 
 import requests
+import hashlib
 from django.http import JsonResponse
 from django.views.decorators.http import require_http_methods
 from django.core.cache import cache
@@ -37,14 +38,18 @@ def _get_cache_key(query: str) -> str:
     """
     Generate cache key for geocoding query.
     
+    Uses a hash to ensure cache keys are safe for memcached (no spaces or special chars).
+    
     Args:
         query: Search query
         
     Returns:
-        Cache key string
+        Cache key string safe for memcached
     """
     normalized = _normalize_query(query)
-    return f"geocoding:{normalized}"
+    # Use hash to create a safe cache key (memcached doesn't like spaces/special chars)
+    query_hash = hashlib.md5(normalized.encode('utf-8')).hexdigest()
+    return f"geocoding:{query_hash}"
 
 
 def _clean_feature(feature: dict) -> dict:
@@ -156,6 +161,9 @@ def geocoding_search(request):
                 logger.debug(f"Geocoding geographic features: found {len(geographic_features)} features")
             else:
                 logger.warning(f"Geocoding geographic features request failed: status={geo_response.status_code}")
+        except requests.exceptions.Timeout:
+            # Re-raise timeout to be handled by outer handler
+            raise
         except Exception as e:
             logger.warning(f"Geocoding geographic features request exception: {e}")
         
@@ -193,6 +201,9 @@ def geocoding_search(request):
                             "Invalid response from geocoding service",
                             code=502
                         )
+        except requests.exceptions.Timeout:
+            # Re-raise timeout to be handled by outer handler
+            raise
         except Exception as e:
             logger.error(f"Geocoding all types request exception: {e}")
             # If request fails and we have no geographic features, return error

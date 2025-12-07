@@ -28,6 +28,7 @@ from geo_lib.validation.styling_validation import (
     is_valid_hex_color,
     is_valid_icon_url,
     normalize_hex_color,
+    normalize_feature_colors_and_styles,
     describe_color_format,
     describe_icon_format,
 )
@@ -331,6 +332,13 @@ def process_single_feature_for_import(
 
         # Create the GeoJSON data
         geojson_data = json.loads(feature_instance.model_dump_json())
+        
+        # Normalize colors and apply style normalization using shared function
+        if 'properties' in geojson_data and 'geometry' in geojson_data:
+            normalize_feature_colors_and_styles(
+                geojson_data['properties'],
+                geojson_data['geometry']
+            )
 
         # Generate hash-based ID for the feature
         # Use stored hash from properties if available (calculated on raw data during processing)

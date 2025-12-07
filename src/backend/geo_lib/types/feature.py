@@ -21,12 +21,20 @@ class GeoFeatureType(str, Enum):
 class Properties(BaseModel):
     model_config = ConfigDict(extra='allow')  # Allow additional properties from togeojson
 
-    name: str
+    name: str = ""
     geojson_hash: str
     description: Optional[str] = None
     created: Optional[datetime] = None
     tags: Optional[List[str]] = Field(default_factory=list)  # User tags only
     system_tags: Optional[List[str]] = Field(default_factory=list)  # System-generated tags (type, import-year, import-month, source-file, geocoding)
+    
+    @field_validator('name', mode='before')
+    @classmethod
+    def validate_name(cls, v: Any) -> str:
+        """Convert None to empty string, allow empty strings."""
+        if v is None:
+            return ""
+        return str(v)
     
     @field_validator('created', mode='before')
     @classmethod

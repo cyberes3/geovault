@@ -56,6 +56,7 @@ urlpatterns = [
     path('features/bulk-operations/by-tag/<str:tag_name>/', apply_bulk_operations_to_tag),
     path('features/quick-point/create/', create_quick_point),
     path('feature/<int:feature_id>/', get_feature),
+    path('feature/<int:feature_id>/elevations/', get_feature_elevations_external),  # Default to external
     path('feature/<int:feature_id>/elevations/external/', get_feature_elevations_external),
     path('feature/<int:feature_id>/elevations/internal/', get_feature_elevations_internal),
     path('feature/<int:feature_id>/update/', update_feature),
