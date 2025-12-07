@@ -1,6 +1,7 @@
 .idea
 *.timestamp-*
 *.har
+failures.txt
 
 # ---> Python
 # Byte-compiled / optimized / DLL files

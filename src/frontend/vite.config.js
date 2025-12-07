@@ -1,11 +1,35 @@
 import {fileURLToPath, URL} from 'node:url'
+import path from 'path'
 
 import {defineConfig} from 'vite'
 import vue from '@vitejs/plugin-vue'
 
+// Plugin to replace highlight.js with JSON-only build
+// This reduces bundle size from ~970KB to ~30KB
+const highlightJsOptimizer = () => {
+    const wrapperPath = fileURLToPath(new URL('./src/utils/highlight-json-only.js', import.meta.url))
+    
+    return {
+        name: 'highlight-js-optimizer',
+        enforce: 'pre', // Run before other plugins
+        resolveId(id, importer) {
+            // Only replace exact 'highlight.js' imports
+            if (id === 'highlight.js') {
+                // Skip if importing from our wrapper file (allow it to use real highlight.js)
+                if (importer && (importer.includes('highlight-json-only.js') || importer.includes('src/utils'))) {
+                    return null
+                }
+                // Replace all other imports (including from simple-code-editor)
+                return wrapperPath
+            }
+            return null
+        }
+    }
+}
+
 // https://vitejs.dev/config/
 export default defineConfig({
-    plugins: [vue()],
+    plugins: [vue(), highlightJsOptimizer()],
     resolve: {
         alias: {
             '@': fileURLToPath(new URL('./src', import.meta.url))

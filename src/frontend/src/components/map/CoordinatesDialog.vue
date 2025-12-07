@@ -90,7 +90,6 @@
 import { XMarkIcon } from '@heroicons/vue/24/outline'
 import { restoreElevationInGeometry } from '@/utils/elevationUtils.js'
 import { validateCoordinates } from '@/utils/coordinateValidation.js'
-import hljs from 'highlight.js'
 import CodeEditor from 'simple-code-editor'
 
 export default {

@@ -253,7 +253,7 @@ class TestGeocodingAPI(TestCase):
         self.assertEqual(response.status_code, 504)
         data = json.loads(response.content)
         self.assertIn('error', data)
-        self.assertIn('timeout', data['error'].lower())
+        self.assertIn('timed out', data['error'].lower())
 
     @patch('api.views.geocoding.get_config_loader')
     @patch('api.views.geocoding.requests.get')
