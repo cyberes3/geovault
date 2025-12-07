@@ -2,9 +2,10 @@
 Tests for feature API endpoints (CRUD, search, filtering, bulk operations).
 """
 import json
+import time
 from unittest.mock import patch, MagicMock
 import pytest
-from django.test import TestCase
+from django.test import TestCase, TransactionTestCase
 from django.contrib.gis.geos import Point
 
 from django.contrib.auth import get_user_model
@@ -1404,6 +1405,167 @@ class TestQuickPointCreation(TestCase):
         # Verify quick-point system tag is present
         system_tags = feature['properties'].get('system_tags', [])
         self.assertIn('quick-point', system_tags)
+    
+    @patch('api.views.feature_creation._fetch_elevation_for_point')
+    @patch('geo_lib.processing.tagging.modules.geocoding.get_required_setting')
+    @patch('geo_lib.processing.tagging.modules.geocoding.get_reverse_geocoding_service')
+    def test_create_quick_point_geocoding_non_blocking(self, mock_get_service, mock_setting, mock_elevation):
+        """Test that quick point creation returns without geocoding tags (geocoding happens in background)."""
+        mock_elevation.return_value = 1500.0
+        mock_setting.return_value = True
+        
+        # Mock geocoding service to return tags (but these won't be in response since geocoding is async)
+        mock_service = MagicMock()
+        mock_service.get_location_tags.return_value = [
+            'geo-city:San Francisco',
+            'geo-state:California'
+        ]
+        mock_get_service.return_value = mock_service
+        
+        payload = {
+            'latitude': 37.7749,
+            'longitude': -122.4194,
+            'name': 'Non-blocking Point'
+        }
+        
+        # Mock geocode_feature_async to verify it's called but doesn't block
+        with patch('api.views.feature_creation.geocode_feature_async') as mock_async_geocode:
+            response = self.client.post(
+                '/api/features/quick-point/create/',
+                data=json.dumps(payload),
+                content_type='application/json'
+            )
+            
+            # Verify response is successful
+            self.assertEqual(response.status_code, 201)
+            data = json.loads(response.content)
+            feature = data['feature']
+            
+            # Verify feature was created
+            self.assertIn('database_id', feature['properties'])
+            feature_id = feature['properties']['database_id']
+            
+            # Verify geocoding tags are NOT in initial response (geocoding happens in background)
+            # This is the key test: if geocoding was blocking, these tags would be present
+            system_tags = feature['properties'].get('system_tags', [])
+            self.assertNotIn('geo-city:San Francisco', system_tags)
+            self.assertNotIn('geo-state:California', system_tags)
+            
+            # Verify background geocoding was called (proving it's async, not blocking)
+            mock_async_geocode.assert_called_once_with(feature_id)
+            
+            # Verify other system tags are present (proving tag generation worked)
+            self.assertTrue(any('type:point' in tag for tag in system_tags))
+            self.assertIn('quick-point', system_tags)
+    
+    @patch('api.views.feature_creation._fetch_elevation_for_point')
+    @patch('geo_lib.processing.tagging.modules.geocoding.get_required_setting')
+    def test_create_quick_point_skips_geocoding_synchronously(self, mock_setting, mock_elevation):
+        """Test that quick point creation skips geocoding in generate_auto_tags."""
+        mock_elevation.return_value = 1500.0
+        mock_setting.return_value = True
+        
+        payload = {
+            'latitude': 37.7749,
+            'longitude': -122.4194,
+            'name': 'Skip Geocoding Point'
+        }
+        
+        # Mock geocode_feature_async to track if it's called
+        with patch('api.views.feature_creation.geocode_feature_async') as mock_async_geocode:
+            response = self.client.post(
+                '/api/features/quick-point/create/',
+                data=json.dumps(payload),
+                content_type='application/json'
+            )
+            
+            # Verify response is successful
+            self.assertEqual(response.status_code, 201)
+            
+            # Verify background geocoding was started
+            mock_async_geocode.assert_called_once()
+            
+            # Get the feature ID that was passed to background geocoding
+            call_args = mock_async_geocode.call_args
+            feature_id = call_args[0][0]
+            
+        # Verify feature exists
+        self.assertTrue(FeatureStore.objects.filter(id=feature_id).exists())
+
+
+class TestQuickPointCreationBackgroundGeocoding(TransactionTestCase):
+    """
+    Tests for quick point creation with actual background geocoding.
+    
+    Uses TransactionTestCase instead of TestCase because:
+    1. Background geocoding runs in separate threads
+    2. TestCase wraps tests in transactions that aren't visible to other threads
+    3. TransactionTestCase commits data so threads can access it
+    """
+    
+    def setUp(self):
+        """Set up test fixtures."""
+        User = get_user_model()
+        self.user = User.objects.create_user(
+            email='quickpoint_bg@example.com',
+            password='testpass123',
+            username='quickpoint_bg_user'
+        )
+        self.client.force_login(self.user)
+    
+    @patch('api.views.feature_creation._fetch_elevation_for_point')
+    @patch('geo_lib.processing.tagging.modules.geocoding.get_required_setting')
+    @patch('geo_lib.processing.tagging.modules.geocoding.get_reverse_geocoding_service')
+    def test_background_geocoding_adds_tags(self, mock_get_service, mock_setting, mock_elevation):
+        """Test that background geocoding actually adds tags to the feature."""
+        mock_elevation.return_value = 1500.0
+        mock_setting.return_value = True
+        
+        # Mock geocoding service to return tags
+        mock_service = MagicMock()
+        mock_service.get_location_tags.return_value = [
+            'geo-city:San Francisco',
+            'geo-state:California',
+            'geo-country:United States'
+        ]
+        mock_get_service.return_value = mock_service
+        
+        payload = {
+            'latitude': 37.7749,
+            'longitude': -122.4194,
+            'name': 'Background Geocoding Point'
+        }
+        
+        # Create quick point
+        response = self.client.post(
+            '/api/features/quick-point/create/',
+            data=json.dumps(payload),
+            content_type='application/json'
+        )
+        
+        # Verify response is successful
+        self.assertEqual(response.status_code, 201)
+        data = json.loads(response.content)
+        feature = data['feature']
+        
+        # Verify feature was created
+        self.assertIn('database_id', feature['properties'])
+        feature_id = feature['properties']['database_id']
+        
+        # Verify geocoding tags are NOT in initial response
+        system_tags = feature['properties'].get('system_tags', [])
+        self.assertNotIn('geo-city:San Francisco', system_tags)
+        
+        # Wait for background geocoding to complete
+        time.sleep(0.5)
+        
+        # Verify geocoding tags were added in background
+        feature_store = FeatureStore.objects.get(id=feature_id)
+        geojson = feature_store.geojson
+        updated_system_tags = geojson.get('properties', {}).get('system_tags', [])
+        self.assertIn('geo-city:San Francisco', updated_system_tags)
+        self.assertIn('geo-state:California', updated_system_tags)
+        self.assertIn('geo-country:United States', updated_system_tags)
     
     @patch('api.views.feature_creation._fetch_elevation_for_point')
     def test_create_quick_point_elevation_fallback(self, mock_elevation):

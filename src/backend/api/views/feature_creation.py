@@ -13,6 +13,7 @@ from api.utils.responses import error_response, success_response
 from api.validation.feature_updates import validate_payload
 from geo_lib.const_strings import filter_protected_tags, prepare_user_tags, CONST_INTERNAL_TAGS
 from geo_lib.feature_id import generate_geojson_hash
+from geo_lib.geolocation.background_geocoding import geocode_feature_async
 from geo_lib.logging.console import get_access_logger
 from geo_lib.processing.tagging import generate_auto_tags
 from geo_lib.types.feature import PointFeature
@@ -178,9 +179,9 @@ def create_quick_point(request, validated_data):
             normalized_feature['properties'] = {}
         normalized_feature['properties']['geojson_hash'] = geojson_hash
         
-        # Generate system tags using PointFeature type
+        # Generate system tags using PointFeature type (skip geocoding for async processing)
         point_feature = PointFeature(**normalized_feature)
-        system_tags = generate_auto_tags(point_feature, import_log=None, filename='quick-point')
+        system_tags = generate_auto_tags(point_feature, import_log=None, filename='quick-point', skip_geocoding=True)
         
         # Add 'quick-point' system tag to identify features created via this endpoint
         if 'quick-point' not in system_tags:
@@ -202,6 +203,9 @@ def create_quick_point(request, validated_data):
             geometry=geometry,
             geojson_hash=geojson_hash
         )
+        
+        # Start background geocoding (non-blocking)
+        geocode_feature_async(feature_store.id)
         
         # Add database_id to properties for response
         normalized_feature['properties']['database_id'] = feature_store.id

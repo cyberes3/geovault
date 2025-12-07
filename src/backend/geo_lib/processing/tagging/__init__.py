@@ -80,7 +80,8 @@ def get_internal_tags() -> List[str]:
 def generate_auto_tags(
         feature: GeoFeatureSupported,
         import_log=None,
-        filename: Optional[str] = None
+        filename: Optional[str] = None,
+        skip_geocoding: bool = False
 ) -> List[str]:
     """
     Generate automatic tags for a feature using all registered tag generators.
@@ -92,6 +93,7 @@ def generate_auto_tags(
         feature: The feature to generate tags for
         import_log: Optional ImportLog for database logging
         filename: Optional original filename to add as source-file tag
+        skip_geocoding: If True, skip the GeocodingTagGenerator (for async processing)
         
     Returns:
         List of tag strings
@@ -104,6 +106,10 @@ def generate_auto_tags(
 
     # Execute all generators in priority order
     for generator in _tag_generators:
+        # Skip geocoding generator if requested
+        if skip_geocoding and isinstance(generator, GeocodingTagGenerator):
+            continue
+        
         try:
             tags = generator.process(feature, import_log=import_log, filename=filename)
             if tags:
