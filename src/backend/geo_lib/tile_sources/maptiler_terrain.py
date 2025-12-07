@@ -32,6 +32,10 @@ def register_maptiler_terrain():
     
     if use_proxy:
         # Use server proxy for terrain tiles (raster-dem PNG format)
+        # Get site domain for Origin header (MapTiler expects just the domain, no protocol)
+        site_domain = config.get_str('site.domain')
+        proxy_headers = {'Origin': site_domain}
+        
         source_config = {
             'id': 'maptiler_terrain',
             'name': 'MapTiler Terrain',
@@ -40,9 +44,7 @@ def register_maptiler_terrain():
             'hidden': True,  # Don't show in basemap selector
             'url_template': f'https://api.maptiler.com/tiles/terrain-rgb-v2/{{z}}/{{x}}/{{y}}.png?key={api_key}',
             'proxy_config': {
-                'headers': {
-                    'User-Agent': 'Mozilla/5.0'
-                }
+                'headers': proxy_headers
             },
             'client_config': {
                 'type': 'raster-dem',

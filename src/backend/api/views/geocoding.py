@@ -125,6 +125,11 @@ def geocoding_search(request):
     # countries, regions, counties, municipalities, places, addresses, POIs,
     # major landforms (mountains, valleys), continental/marine features, etc.
     try:
+        # Get site domain for Origin header (MapTiler expects just the domain, no protocol)
+        site_domain = config_loader.get_str('site.domain')
+        headers = {'Origin': site_domain}
+        logger.debug(f"MapTiler API headers: {headers}")
+        
         # URL encode the query for the API
         encoded_query = quote(query)
         api_url = f"https://api.maptiler.com/geocoding/{encoded_query}.json"
@@ -151,9 +156,9 @@ def geocoding_search(request):
         
         # Make geographic features request first
         try:
-            logger.info(f"Geocoding API request (geographic): query='{query}', url={api_url}")
-            geo_response = requests.get(api_url, params=params_geographic, timeout=10)
-            logger.info(f"Geocoding API response (geographic): status={geo_response.status_code}")
+            logger.info(f"Geocoding API request (geographic): query='{query}', url={api_url}, headers={headers}")
+            geo_response = requests.get(api_url, params=params_geographic, headers=headers, timeout=10)
+            logger.info(f"Geocoding API response (geographic): status={geo_response.status_code}, response_headers={dict(geo_response.headers)}")
             
             if geo_response.status_code == 200:
                 geo_data = geo_response.json()
@@ -170,7 +175,7 @@ def geocoding_search(request):
         # Make all types request
         try:
             logger.info(f"Geocoding API request (all types): query='{query}', url={api_url}")
-            api_response = requests.get(api_url, params=params_all, timeout=10)
+            api_response = requests.get(api_url, params=params_all, headers=headers, timeout=10)
             logger.info(f"Geocoding API response (all types): status={api_response.status_code}, url={api_response.url}")
             
             if api_response.status_code != 200:
@@ -185,7 +190,7 @@ def geocoding_search(request):
                 if not geographic_features:
                     return error_response(
                         f"Geocoding API error: {api_response.status_code}",
-                        code=502
+                        code=400
                     )
             else:
                 # Parse all-types response
@@ -199,7 +204,7 @@ def geocoding_search(request):
                     if not geographic_features:
                         return error_response(
                             "Invalid response from geocoding service",
-                            code=502
+                            code=400
                         )
         except requests.exceptions.Timeout:
             # Re-raise timeout to be handled by outer handler
@@ -210,7 +215,7 @@ def geocoding_search(request):
             if not geographic_features:
                 return error_response(
                     f"Error connecting to geocoding service: {str(e)}",
-                    code=502
+                    code=400
                 )
         
         # Combine results: prioritize geographic features, then add others
@@ -292,7 +297,7 @@ def geocoding_search(request):
         logger.error(f"Geocoding API request exception: {e}")
         return error_response(
             f"Error connecting to geocoding service: {str(e)}",
-            code=502
+            code=400
         )
     except Exception as e:
         logger.error(f"Geocoding API unexpected error: {e}", exc_info=True)

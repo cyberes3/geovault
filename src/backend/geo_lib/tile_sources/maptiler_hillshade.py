@@ -33,6 +33,10 @@ def register_maptiler_hillshade():
     
     if use_proxy:
         # Use server proxy for hillshade tiles (WebP format)
+        # Get site domain for Origin header (MapTiler expects just the domain, no protocol)
+        site_domain = config.get_str('site.domain')
+        proxy_headers = {'Origin': site_domain}
+        
         source_config = {
             'id': 'maptiler_hillshade',
             'name': 'MapTiler Hillshade',
@@ -41,9 +45,7 @@ def register_maptiler_hillshade():
             'hidden': True,  # Don't show in basemap selector
             'url_template': f'https://api.maptiler.com/tiles/hillshade/{{z}}/{{x}}/{{y}}.webp?key={api_key}',
             'proxy_config': {
-                'headers': {
-                    'User-Agent': 'Mozilla/5.0'
-                }
+                'headers': proxy_headers
             },
             'client_config': {
                 'type': 'raster',

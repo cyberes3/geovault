@@ -612,6 +612,7 @@ def check_site_configuration():
     Check if Django Sites framework is properly configured.
     Verifies that Site object can be created/updated from settings.
     This is a critical check as it's required for email confirmation URLs.
+    Requires that site.domain is explicitly set (not using the default value).
     
     Returns:
         bool: True if Site configuration is valid, False otherwise
@@ -625,6 +626,19 @@ def check_site_configuration():
         
         if not hasattr(settings, 'SITE_ID'):
             logger.error("✗ Site configuration missing: SITE_ID must be defined in settings")
+            return False
+        
+        # Check if site.domain is explicitly set (not using default)
+        config_loader = get_config_loader()
+        default_domain = 'geovault.example.com'
+        
+        # Check if site.domain is set in the config
+        site_domain_config = config_loader.get('site.domain', None)
+        if site_domain_config is None or site_domain_config == default_domain:
+            logger.error("✗ Site domain is not configured: 'site.domain' must be explicitly set in config.yaml")
+            logger.error(f"  Current value: {site_domain_config if site_domain_config else 'not set (using default: ' + default_domain + ')'}")
+            logger.error("  Please set 'site.domain' in your config.yaml file to your actual domain name")
+            logger.error("  Example: site.domain: mydomain.com")
             return False
         
         site_domain = settings.SITE_DOMAIN

@@ -12,7 +12,7 @@ from website.config_loader import get_config_loader
 
 
 @functools.lru_cache(maxsize=None)
-def fetch_map_name(map_id, api_key):
+def fetch_map_name(map_id, api_key, site_domain):
     """
     Fetch the display name for a MapTiler map from its style.json.
     
@@ -21,13 +21,18 @@ def fetch_map_name(map_id, api_key):
     Args:
         map_id: MapTiler map ID
         api_key: MapTiler API key
+        site_domain: Site domain for MapTiler API requests (just the domain, no protocol)
         
     Returns:
         Display name from the style.json, or a formatted fallback name
     """
     try:
         style_url = f'https://api.maptiler.com/maps/{map_id}/style.json?key={api_key}'
-        response = requests.get(style_url, timeout=5)
+        # MapTiler expects just the domain in Origin header to match their allowed origins list
+        headers = {
+            'Origin': site_domain
+        }
+        response = requests.get(style_url, headers=headers, timeout=5)
         
         if response.status_code == 200:
             style_data = response.json()
@@ -68,13 +73,16 @@ def register_maptiler_maps():
     if not map_ids:
         return
     
+    # Get site domain for MapTiler API requests
+    site_domain = config.get_str('site.domain', '')
+    
     # Register each map as a tile source
     for map_id in map_ids:
         if not map_id or not isinstance(map_id, str):
             continue
         
         # Fetch display name from MapTiler's style.json
-        display_name = fetch_map_name(map_id, api_key)
+        display_name = fetch_map_name(map_id, api_key, site_domain)
         
         # Create tile source configuration
         # MapTiler maps use vector tiles accessed via style.json
