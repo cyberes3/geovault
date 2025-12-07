@@ -7,6 +7,7 @@ import hashlib
 import io
 import os
 import re
+import traceback
 import zipfile
 from pathlib import Path
 from typing import Dict, Optional, Tuple
@@ -144,7 +145,7 @@ def extract_icon_from_kmz(kmz_data: bytes, icon_path: str) -> Optional[bytes]:
         logger.error(f"Invalid KMZ/ZIP file format")
         return None
     except Exception as e:
-        logger.error(f"Failed to extract icon from KMZ: {str(e)}")
+        logger.error(f"Failed to extract icon from KMZ: {traceback.format_exc()}")
         return None
 
 
@@ -193,13 +194,13 @@ def fetch_remote_icon(url: str, timeout: float) -> Optional[bytes]:
         logger.warning(f"HTTP error fetching icon: {url} - {e.code}")
         return None
     except URLError as e:
-        logger.warning(f"URL error fetching icon: {url} - {str(e)}")
+        logger.warning(f"URL error fetching icon: {url} - {traceback.format_exc()}")
         return None
     except TimeoutError:
         logger.warning(f"Timeout fetching icon: {url}")
         return None
     except Exception as e:
-        logger.error(f"Failed to fetch remote icon: {url} - {str(e)}")
+        logger.error(f"Failed to fetch remote icon: {url} - {traceback.format_exc()}")
         return None
 
 
@@ -242,7 +243,7 @@ def store_icon(icon_data: bytes, original_path: str) -> Optional[str]:
         return f"/api/icons/user/{icon_hash}{extension}"
 
     except Exception as e:
-        logger.error(f"Failed to store icon: {str(e)}")
+        logger.error(f"Failed to store icon: {traceback.format_exc()}")
         return None
 
 
@@ -386,32 +387,22 @@ def _fix_nested_caltopo_url(url: str) -> str:
     try:
         parsed = urlparse(url)
 
-        # Check if it's a CalTopo URL
         if 'caltopo.com' not in parsed.netloc.lower():
             return url
 
-        # Check if path is /icon.png
         if parsed.path.lower() != '/icon.png':
             return url
 
-        # Parse query parameters
         query_params = parse_qs(parsed.query)
 
-        # Get cfg parameter
         if 'cfg' not in query_params:
             return url
 
         cfg_value = query_params['cfg'][0]
-        # URL decode
         cfg_decoded = unquote(cfg_value)
 
         # Check if cfg contains a full CalTopo URL (nested)
-        # Look for http://caltopo.com or https://caltopo.com in the decoded cfg
         if 'http://caltopo.com' in cfg_decoded.lower() or 'https://caltopo.com' in cfg_decoded.lower():
-            # Extract the inner URL
-            # The pattern is typically: http://caltopo.com/icon.png?cfg=... possibly followed by #1.0
-            # There may be a duplicate #1.0 at the end, so we capture up to the first #1.0
-            # Pattern: capture the URL including optional #1.0, but stop before a second #1.0
             inner_url_match = re.search(r'(https?://caltopo\.com/icon\.png\?cfg=[^#]+(?:#1\.0)?)', cfg_decoded, re.IGNORECASE)
             if inner_url_match:
                 inner_url = inner_url_match.group(1)
@@ -419,9 +410,8 @@ def _fix_nested_caltopo_url(url: str) -> str:
 
         # Not nested, return original
         return url
-
-    except Exception as e:
-        logger.debug(f"Failed to fix nested CalTopo URL {url}: {str(e)}")
+    except Exception:
+        logger.debug(f"Failed to fix nested CalTopo URL {url}: {traceback.format_exc()}")
         return url
 
 
@@ -482,7 +472,7 @@ def _is_caltopo_point_icon(url: str) -> bool:
         return cfg_decoded.startswith('point') or cfg_decoded.startswith('c:point')
 
     except Exception as e:
-        logger.debug(f"Failed to check if CalTopo URL is point icon {url}: {str(e)}")
+        logger.debug(f"Failed to check if CalTopo URL is point icon {url}: {traceback.format_exc()}")
         return False
 
 

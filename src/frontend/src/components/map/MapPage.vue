@@ -10,12 +10,15 @@
         :is-initial-load="isMapInitializing || (isDataLoading && isInitialLoad)"
         :is-mobile-open="activeMobileSidebar === 'features'"
         :can-hide-features="isMainMapRoute && !isPublicShareMode && !!$store.state.userInfo"
+        :geocoding-available="maptilerConfig && maptilerConfig.isAvailable()"
         @close="activeMobileSidebar = null"
         @feature-click="zoomToFeature"
         @feature-hide="handleHideFeature"
         @tag-filter-change="handleTagFilterChange"
         @tag-filter-loading-change="isTagFilterLoading = $event"
         @tag-filter-start="filterExistingFeaturesByTags"
+        @geocoding-result-click="handleGeocodingResult"
+        @geocoding-clear="clearGeocodingMarker"
     />
 
     <!-- Center - Map -->
@@ -397,6 +400,7 @@ export default {
       savedMapZoom: null,
       savedMapPitch: null,
       savedMapBearing: null,
+      geocodingMarker: null, // Marker for geocoding search results
     }
   },
   methods: {
@@ -2263,6 +2267,136 @@ export default {
           duration: 500
         })
       })
+    },
+    async handleGeocodingResult(result) {
+      if (!this.map || !result) return
+
+      // Extract coordinates from geocoding result
+      // MapTiler geocoding results have geometry.coordinates [lng, lat]
+      let coordinates = null
+      if (result.geometry && result.geometry.coordinates && Array.isArray(result.geometry.coordinates)) {
+        coordinates = result.geometry.coordinates
+      } else if (result.center && Array.isArray(result.center)) {
+        coordinates = result.center
+      } else {
+        console.error('Geocoding result missing coordinates:', result)
+        return
+      }
+
+      // Remove previous geocoding marker if exists
+      if (this.geocodingMarker) {
+        this.geocodingMarker.remove()
+        this.geocodingMarker = null
+      }
+
+      // Create marker with search.png icon first
+      // Import the icon asset (Vite will handle the path resolution)
+      let iconUrl
+      try {
+        // Try to import the asset - Vite will resolve this at build time
+        const iconModule = await import('@/assets/img/search.png')
+        iconUrl = iconModule.default || iconModule
+      } catch (error) {
+        console.warn('Could not import search icon, using fallback marker:', error)
+        iconUrl = null
+      }
+
+      // Create marker element
+      const el = document.createElement('div')
+      el.style.cursor = 'pointer'
+      
+      if (iconUrl) {
+        // Create img element for the icon
+        const img = document.createElement('img')
+        img.src = iconUrl
+        img.style.width = '32px'
+        img.style.height = '32px'
+        img.style.display = 'block'
+        el.appendChild(img)
+      } else {
+        // Fallback: create a simple colored marker
+        el.style.width = '20px'
+        el.style.height = '20px'
+        el.style.borderRadius = '50%'
+        el.style.backgroundColor = '#3b82f6' // Blue color
+        el.style.border = '2px solid white'
+        el.style.boxShadow = '0 2px 4px rgba(0,0,0,0.3)'
+      }
+
+      // Make marker clickable to remove it
+      el.addEventListener('click', () => {
+        this.clearGeocodingMarker()
+      })
+
+      // Create and add marker immediately (before flying)
+      this.geocodingMarker = new maplibregl.Marker({
+        element: el,
+        anchor: 'bottom' // Anchor at bottom center for point markers
+      })
+        .setLngLat([coordinates[0], coordinates[1]])
+        .addTo(this.map)
+
+      // Now fly to location (marker is already visible)
+      // Use bbox if available to set appropriate zoom level, otherwise use coordinates
+      const bbox = result.bbox
+      
+      if (bbox && Array.isArray(bbox) && bbox.length === 4) {
+        // Check if bbox represents an area (not a point)
+        const [minLon, minLat, maxLon, maxLat] = bbox
+        const isPoint = minLon === maxLon && minLat === maxLat
+        
+        if (!isPoint) {
+          // Use fitBounds for areas (parks, regions, etc.)
+          await this.navigateAndRefresh(() => {
+            try {
+              const bounds = new maplibregl.LngLatBounds(
+                [minLon, minLat], // southwest corner
+                [maxLon, maxLat]  // northeast corner
+              )
+              this.map.fitBounds(bounds, {
+                padding: { top: 50, bottom: 50, left: 50, right: 50 },
+                duration: 500
+              })
+            } catch (error) {
+              console.error('Error fitting bounds, falling back to flyTo:', error)
+              // Fallback to flyTo if fitBounds fails
+              const targetZoom = Math.max(this.map.getZoom(), 12)
+              this.map.flyTo({
+                center: [coordinates[0], coordinates[1]],
+                zoom: targetZoom,
+                duration: 500
+              })
+            }
+          })
+        } else {
+          // Bbox is a point, use flyTo with appropriate zoom
+          const targetZoom = Math.max(this.map.getZoom(), 12)
+          await this.navigateAndRefresh(() => {
+            this.map.flyTo({
+              center: [coordinates[0], coordinates[1]],
+              zoom: targetZoom,
+              duration: 500
+            })
+          })
+        }
+      } else {
+        // No bbox available, use flyTo with coordinates
+        const targetZoom = Math.max(this.map.getZoom(), 12)
+        await this.navigateAndRefresh(() => {
+          this.map.flyTo({
+            center: [coordinates[0], coordinates[1]],
+            zoom: targetZoom,
+            duration: 500
+          })
+        })
+      }
+    },
+    clearGeocodingMarker() {
+      // Remove geocoding marker if it exists
+      if (this.geocodingMarker) {
+        this.geocodingMarker.remove()
+        this.geocodingMarker = null
+      }
     },
     async handleCollectionFilter(collectionId) {
       if (!this.map || !collectionId) {

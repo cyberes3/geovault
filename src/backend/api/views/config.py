@@ -32,5 +32,9 @@ def get_config(request):
             maptiles_config['apiKey'] = maptiler_api_key
         
         config['maptiles'] = maptiles_config
+        # Geocoding is available when MapTiler API key is configured
+        config['geocoding_available'] = True
+    else:
+        config['geocoding_available'] = False
     
     return JsonResponse(config)

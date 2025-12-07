@@ -1,0 +1,347 @@
+"""
+Tests for geocoding API endpoints.
+"""
+import json
+from unittest.mock import MagicMock, patch
+from django.test import TestCase
+from django.core.cache import cache
+
+
+class TestGeocodingAPI(TestCase):
+    """Test geocoding API endpoints."""
+
+    def setUp(self):
+        """Set up test fixtures."""
+        # Clear cache before each test
+        cache.clear()
+
+    def _create_mock_geographic_response(self):
+        """Create mock response for geographic features request."""
+        return {
+            'type': 'FeatureCollection',
+            'features': [
+                {
+                    'type': 'Feature',
+                    'id': 'poi.48602113',
+                    'text': 'Rocky Mountain National Park',
+                    'place_name': 'Rocky Mountain National Park, Larimer, United States of America',
+                    'geometry': {
+                        'type': 'Point',
+                        'coordinates': [-105.70889554917812, 40.33331796070216]
+                    },
+                    'bbox': [-105.70889554917812, 40.33331796070216, -105.70889554917812, 40.33331796070216],
+                    'properties': {
+                        'country_code': 'us',
+                        'kind': 'place',
+                        'place_designation': 'park'
+                    },
+                    'relevance': 1.0
+                },
+                {
+                    'type': 'Feature',
+                    'id': 'poi.214222',
+                    'text': 'Rocky Mountain',
+                    'place_name': 'Rocky Mountain, New Zealand / Aotearoa',
+                    'geometry': {
+                        'type': 'Point',
+                        'coordinates': [167.94685006141663, -46.861660293551495]
+                    },
+                    'bbox': [167.94685006141663, -46.861660293551495, 167.94685006141663, -46.861660293551495],
+                    'properties': {
+                        'country_code': 'nz',
+                        'kind': 'place'
+                    },
+                    'relevance': 0.8
+                }
+            ]
+        }
+
+    def _create_mock_all_types_response(self):
+        """Create mock response for all types request."""
+        return {
+            'type': 'FeatureCollection',
+            'features': [
+                {
+                    'type': 'Feature',
+                    'id': 'address.21312537',
+                    'text': 'Rocky Mountain',
+                    'place_name': 'Rocky Mountain, Orange, California 92679, United States of America',
+                    'geometry': {
+                        'type': 'Point',
+                        'coordinates': [-117.59722433913015, 33.56643766813242]
+                    },
+                    'bbox': [-117.59850148111583, 33.565166016675256, -117.59511653333904, 33.567816930795615],
+                    'properties': {
+                        'country_code': 'us',
+                        'kind': 'street'
+                    },
+                    'relevance': 0.75
+                }
+            ]
+        }
+
+    @patch('api.views.geocoding.get_config_loader')
+    @patch('api.views.geocoding.requests.get')
+    def test_geocoding_search_rocky_mountain_national_park(self, mock_get, mock_config_loader):
+        """Test that searching for 'rocky mountain national park' returns RMNP feature."""
+        # Mock config loader to return API key
+        mock_config = MagicMock()
+        mock_config.get_maptiler_api_key.return_value = 'test_api_key'
+        mock_config_loader.return_value = mock_config
+
+        # Mock API responses
+        mock_geo_response = MagicMock()
+        mock_geo_response.status_code = 200
+        mock_geo_response.json.return_value = self._create_mock_geographic_response()
+
+        mock_all_response = MagicMock()
+        mock_all_response.status_code = 200
+        mock_all_response.json.return_value = self._create_mock_all_types_response()
+
+        # First call returns geographic features, second call returns all types
+        mock_get.side_effect = [mock_geo_response, mock_all_response]
+
+        # Make request
+        response = self.client.get('/api/geocoding/search/?q=rocky mountain national park')
+
+        # Verify response
+        self.assertEqual(response.status_code, 200)
+        data = json.loads(response.content)
+        self.assertIn('data', data)
+        self.assertIn('features', data['data'])
+        self.assertIn('query', data['data'])
+        self.assertEqual(data['data']['query'], 'rocky mountain national park')
+
+        # Verify RMNP feature is in results
+        features = data['data']['features']
+        rmnp_feature = next((f for f in features if f.get('id') == 'poi.48602113'), None)
+        self.assertIsNotNone(rmnp_feature, "Rocky Mountain National Park feature should be in results")
+        self.assertEqual(rmnp_feature['text'], 'Rocky Mountain National Park')
+        self.assertEqual(rmnp_feature['place_name'], 'Rocky Mountain National Park, Larimer, United States of America')
+
+        # Verify feature is cleaned (no unnecessary fields)
+        self.assertIn('geometry', rmnp_feature)
+        self.assertIn('bbox', rmnp_feature)
+        self.assertIn('id', rmnp_feature)
+        self.assertIn('text', rmnp_feature)
+        self.assertIn('place_name', rmnp_feature)
+        # Should not have unnecessary fields
+        self.assertNotIn('relevance', rmnp_feature)
+        self.assertNotIn('context', rmnp_feature)
+        self.assertNotIn('place_type', rmnp_feature)
+
+    @patch('api.views.geocoding.get_config_loader')
+    @patch('api.views.geocoding.requests.get')
+    def test_geocoding_search_caching(self, mock_get, mock_config_loader):
+        """Test that geocoding results are cached."""
+        # Mock config loader to return API key
+        mock_config = MagicMock()
+        mock_config.get_maptiler_api_key.return_value = 'test_api_key'
+        mock_config_loader.return_value = mock_config
+
+        # Mock API responses
+        mock_geo_response = MagicMock()
+        mock_geo_response.status_code = 200
+        mock_geo_response.json.return_value = self._create_mock_geographic_response()
+
+        mock_all_response = MagicMock()
+        mock_all_response.status_code = 200
+        mock_all_response.json.return_value = self._create_mock_all_types_response()
+
+        mock_get.side_effect = [mock_geo_response, mock_all_response]
+
+        # First request - should call API
+        response1 = self.client.get('/api/geocoding/search/?q=denver')
+        self.assertEqual(response1.status_code, 200)
+        # Verify API was called
+        self.assertEqual(mock_get.call_count, 2)  # Geographic + all types
+
+        # Reset mock call count
+        mock_get.reset_mock()
+
+        # Second request with same query - should use cache
+        response2 = self.client.get('/api/geocoding/search/?q=denver')
+        self.assertEqual(response2.status_code, 200)
+        # Verify API was NOT called again (cache hit)
+        self.assertEqual(mock_get.call_count, 0)
+
+        # Verify responses are the same
+        data1 = json.loads(response1.content)
+        data2 = json.loads(response2.content)
+        self.assertEqual(data1, data2)
+
+    @patch('api.views.geocoding.get_config_loader')
+    def test_geocoding_search_no_api_key(self, mock_config_loader):
+        """Test geocoding search when API key is not configured."""
+        # Mock config loader to return None (no API key)
+        mock_config = MagicMock()
+        mock_config.get_maptiler_api_key.return_value = None
+        mock_config_loader.return_value = mock_config
+
+        # Make request
+        response = self.client.get('/api/geocoding/search/?q=denver')
+
+        # Verify error response
+        self.assertEqual(response.status_code, 503)
+        data = json.loads(response.content)
+        self.assertIn('error', data)
+        self.assertIn('not available', data['error'].lower())
+
+    @patch('api.views.geocoding.get_config_loader')
+    def test_geocoding_search_missing_query(self, mock_config_loader):
+        """Test geocoding search without query parameter."""
+        # Mock config loader
+        mock_config = MagicMock()
+        mock_config.get_maptiler_api_key.return_value = 'test_api_key'
+        mock_config_loader.return_value = mock_config
+
+        # Make request without query
+        response = self.client.get('/api/geocoding/search/')
+
+        # Verify error response
+        self.assertEqual(response.status_code, 400)
+        data = json.loads(response.content)
+        self.assertIn('error', data)
+        self.assertIn('required', data['error'].lower())
+
+    @patch('api.views.geocoding.get_config_loader')
+    @patch('api.views.geocoding.requests.get')
+    def test_geocoding_search_api_error(self, mock_get, mock_config_loader):
+        """Test geocoding search when MapTiler API returns an error."""
+        # Mock config loader to return API key
+        mock_config = MagicMock()
+        mock_config.get_maptiler_api_key.return_value = 'test_api_key'
+        mock_config_loader.return_value = mock_config
+
+        # Mock API error response
+        mock_geo_response = MagicMock()
+        mock_geo_response.status_code = 200
+        mock_geo_response.json.return_value = self._create_mock_geographic_response()
+
+        mock_all_response = MagicMock()
+        mock_all_response.status_code = 400
+        mock_all_response.text = 'ERR_VALIDATION: Invalid parameter'
+
+        mock_get.side_effect = [mock_geo_response, mock_all_response]
+
+        # Make request
+        response = self.client.get('/api/geocoding/search/?q=denver')
+
+        # Should still work with geographic features only
+        self.assertEqual(response.status_code, 200)
+        data = json.loads(response.content)
+        self.assertIn('features', data['data'])
+
+    @patch('api.views.geocoding.get_config_loader')
+    @patch('api.views.geocoding.requests.get')
+    def test_geocoding_search_timeout(self, mock_get, mock_config_loader):
+        """Test geocoding search when API request times out."""
+        import requests
+
+        # Mock config loader to return API key
+        mock_config = MagicMock()
+        mock_config.get_maptiler_api_key.return_value = 'test_api_key'
+        mock_config_loader.return_value = mock_config
+
+        # Mock timeout exception
+        mock_get.side_effect = requests.exceptions.Timeout('Request timed out')
+
+        # Make request
+        response = self.client.get('/api/geocoding/search/?q=denver')
+
+        # Verify error response
+        self.assertEqual(response.status_code, 504)
+        data = json.loads(response.content)
+        self.assertIn('error', data)
+        self.assertIn('timeout', data['error'].lower())
+
+    @patch('api.views.geocoding.get_config_loader')
+    @patch('api.views.geocoding.requests.get')
+    def test_geocoding_search_feature_cleaning(self, mock_get, mock_config_loader):
+        """Test that features are properly cleaned (unnecessary fields removed)."""
+        # Mock config loader to return API key
+        mock_config = MagicMock()
+        mock_config.get_maptiler_api_key.return_value = 'test_api_key'
+        mock_config_loader.return_value = mock_config
+
+        # Mock API responses
+        mock_geo_response = MagicMock()
+        mock_geo_response.status_code = 200
+        mock_geo_response.json.return_value = self._create_mock_geographic_response()
+
+        mock_all_response = MagicMock()
+        mock_all_response.status_code = 200
+        mock_all_response.json.return_value = self._create_mock_all_types_response()
+
+        mock_get.side_effect = [mock_geo_response, mock_all_response]
+
+        # Make request
+        response = self.client.get('/api/geocoding/search/?q=test')
+
+        # Verify response
+        self.assertEqual(response.status_code, 200)
+        data = json.loads(response.content)
+        features = data['data']['features']
+
+        # Verify all features are cleaned
+        for feature in features:
+            # Should have essential fields
+            self.assertIn('type', feature)
+            self.assertIn('geometry', feature)
+            self.assertIn('id', feature)
+            self.assertIn('text', feature)
+            self.assertIn('place_name', feature)
+            self.assertIn('bbox', feature)
+
+            # Should not have unnecessary fields
+            self.assertNotIn('relevance', feature)
+            self.assertNotIn('context', feature)
+            self.assertNotIn('place_type', feature)
+            self.assertNotIn('center', feature)
+
+            # Properties should only have minimal fields
+            if 'properties' in feature:
+                props = feature['properties']
+                # Should not have unnecessary properties
+                self.assertNotIn('ref', props)
+                self.assertNotIn('wikidata', props)
+                self.assertNotIn('feature_tags', props)
+                self.assertNotIn('categories', props)
+
+    @patch('api.views.geocoding.get_config_loader')
+    @patch('api.views.geocoding.requests.get')
+    def test_geocoding_search_prioritizes_geographic_features(self, mock_get, mock_config_loader):
+        """Test that geographic features (parks, POIs) are prioritized over addresses."""
+        # Mock config loader to return API key
+        mock_config = MagicMock()
+        mock_config.get_maptiler_api_key.return_value = 'test_api_key'
+        mock_config_loader.return_value = mock_config
+
+        # Mock API responses - geographic features first, then addresses
+        mock_geo_response = MagicMock()
+        mock_geo_response.status_code = 200
+        mock_geo_response.json.return_value = self._create_mock_geographic_response()
+
+        mock_all_response = MagicMock()
+        mock_all_response.status_code = 200
+        mock_all_response.json.return_value = self._create_mock_all_types_response()
+
+        mock_get.side_effect = [mock_geo_response, mock_all_response]
+
+        # Make request
+        response = self.client.get('/api/geocoding/search/?q=rocky mountain')
+
+        # Verify response
+        self.assertEqual(response.status_code, 200)
+        data = json.loads(response.content)
+        features = data['data']['features']
+
+        # Verify RMNP (geographic feature) appears before addresses
+        feature_ids = [f.get('id') for f in features]
+        rmnp_index = feature_ids.index('poi.48602113') if 'poi.48602113' in feature_ids else -1
+        address_index = feature_ids.index('address.21312537') if 'address.21312537' in feature_ids else -1
+
+        if rmnp_index >= 0 and address_index >= 0:
+            self.assertLess(rmnp_index, address_index, 
+                          "Geographic features should appear before addresses")
+

@@ -51,6 +51,19 @@
           class="w-3 h-3 text-blue-500"
         />
       </button>
+      <button
+        v-if="geocodingAvailable"
+        @click="activeTab = 'geocoding'"
+        :class="[
+          'px-2 py-1 text-xs font-medium transition-colors',
+          activeTab === 'geocoding'
+            ? 'text-blue-500 border-b-2 border-blue-500'
+            : 'text-gray-600 hover:text-gray-900'
+        ]"
+        title="Search for places"
+      >
+        Search Places
+      </button>
     </div>
 
     <!-- Features in Vicinity Tab Content -->
@@ -228,6 +241,80 @@
         </RecycleScroller>
       </div>
     </div>
+
+    <!-- Geocoding Tab Content -->
+    <div v-if="activeTab === 'geocoding'" class="flex flex-col flex-1 min-h-0">
+      <!-- Search Input -->
+      <div class="mb-2 px-1 lg:px-0.5 xl:px-1">
+        <div class="relative">
+          <input
+            v-model="geocodingQuery"
+            @input="handleGeocodingInput"
+            type="text"
+            placeholder="Search for places..."
+            class="w-full px-2 py-1.5 pr-7 text-xs border border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent lg:px-1.5 lg:py-1 xl:px-2 xl:py-1.5"
+          />
+          <button
+            v-if="geocodingQuery"
+            @click="clearGeocodingSearch"
+            class="absolute right-1 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600 focus:outline-none"
+            type="button"
+            title="Clear search"
+          >
+            <XMarkIcon class="w-4 h-4" />
+          </button>
+        </div>
+      </div>
+
+      <!-- Loading Indicator -->
+      <div v-if="isGeocodingSearching" class="flex-1 flex items-center justify-center">
+        <Loader size="md" layout="centered" message="Searching places..." />
+      </div>
+
+      <!-- Results List -->
+      <div v-else class="flex flex-col flex-1 min-h-0">
+        <!-- Clear Results Button -->
+        <div v-if="geocodingResults.length > 0" class="mb-2 px-1">
+          <button
+            @click="clearGeocodingSearch"
+            class="w-full px-2 py-1.5 text-xs text-blue-500 hover:text-blue-700 hover:bg-blue-50 rounded border border-blue-200 transition-colors"
+            type="button"
+            title="Clear results and remove marker"
+          >
+            Clear Results
+          </button>
+        </div>
+        
+        <div class="flex-1 select-none min-h-0">
+          <div v-if="geocodingResults.length === 0 && !geocodingQuery.trim()" class="text-xs text-gray-500 text-center py-3">
+            Enter a place name to search
+          </div>
+          <div v-else-if="geocodingResults.length === 0 && geocodingQuery.trim()" class="text-xs text-gray-500 text-center py-3">
+            No results found
+          </div>
+          <RecycleScroller
+            v-else
+            class="scroller"
+            :items="geocodingResultsWithKeys"
+            :item-size="48"
+            key-field="id"
+            v-slot="{ item }"
+          >
+            <div
+              @click="handleGeocodingResultClick(item)"
+              class="px-1.5 py-2 bg-gray-50 hover:bg-gray-100 transition-colors cursor-pointer lg:px-1 lg:py-1.5 xl:px-1.5 xl:py-2"
+            >
+              <div class="text-xs font-medium text-gray-900 truncate">
+                {{ getGeocodingResultName(item) }}
+              </div>
+              <div v-if="getGeocodingResultDescription(item)" class="text-xs text-gray-500 truncate mt-0.5">
+                {{ getGeocodingResultDescription(item) }}
+              </div>
+            </div>
+          </RecycleScroller>
+        </div>
+      </div>
+    </div>
   </div>
 </template>
 
@@ -278,9 +365,13 @@ export default {
     canHideFeatures: {
       type: Boolean,
       default: false
+    },
+    geocodingAvailable: {
+      type: Boolean,
+      default: false
     }
   },
-  emits: ['feature-click', 'feature-hide', 'tag-filter-change', 'tag-filter-loading-change', 'tag-filter-start', 'close'],
+  emits: ['feature-click', 'feature-hide', 'tag-filter-change', 'tag-filter-loading-change', 'tag-filter-start', 'geocoding-result-click', 'geocoding-clear', 'close'],
   data() {
     return {
       activeTab: 'features-in-vicinity',
@@ -295,6 +386,12 @@ export default {
       tagFilteredFeatures: [],
       isFiltering: false,
       filterTimeout: null,
+      // Geocoding state
+      geocodingQuery: '',
+      geocodingResults: [],
+      isGeocodingSearching: false,
+      geocodingTimeout: null,
+      currentSearchQuery: '', // Track the query of the current/latest search to prevent race conditions
     }
   },
   computed: {
@@ -356,6 +453,13 @@ export default {
       return this.filteredAvailableTags.map((tag, index) => ({
         key: `tag-${index}-${tag}`,
         tag: tag
+      }))
+    },
+    geocodingResultsWithKeys() {
+      // Convert geocoding results to objects with keys for RecycleScroller
+      return this.geocodingResults.map((result, index) => ({
+        ...result,
+        id: result.id || `geocoding-${index}-${result.place_name || ''}`
       }))
     }
   },
@@ -604,6 +708,127 @@ export default {
         this.isFiltering = false
         this.$emit('tag-filter-loading-change', false)
       }
+    },
+    // Geocoding methods
+    handleGeocodingInput() {
+      // Clear existing timeout
+      if (this.geocodingTimeout) {
+        clearTimeout(this.geocodingTimeout)
+      }
+
+      const query = this.geocodingQuery.trim()
+
+      // If query is empty, clear search immediately
+      if (!query) {
+        this.clearGeocodingSearch()
+        return
+      }
+
+      // Show loading spinner immediately while user is typing
+      this.isGeocodingSearching = true
+
+      // Debounce search (300ms)
+      this.geocodingTimeout = setTimeout(() => {
+        this.performGeocodingSearch(query)
+      }, 300)
+    },
+    async performGeocodingSearch(query) {
+      if (!query) {
+        this.clearGeocodingSearch()
+        return
+      }
+
+      // Store the current search query to prevent race conditions
+      this.currentSearchQuery = query
+      this.isGeocodingSearching = true
+
+      try {
+        const url = `${APIHOST}/api/geocoding/search/?q=${encodeURIComponent(query)}`
+        const response = await fetch(url)
+        const data = await response.json()
+
+        // Only update results if this response is for the current query
+        // This prevents older requests from overwriting newer results
+        if (this.currentSearchQuery !== query) {
+          return // This response is stale, ignore it
+        }
+
+        if (response.ok && data.data && data.data.features) {
+          this.geocodingResults = data.data.features
+        } else {
+          console.error('Geocoding search failed:', data.error || 'Unknown error')
+          // Only clear results if this is still the current query
+          if (this.currentSearchQuery === query) {
+            this.geocodingResults = []
+          }
+        }
+      } catch (error) {
+        console.error('Error searching places:', error)
+        // Only clear results if this is still the current query
+        if (this.currentSearchQuery === query) {
+          this.geocodingResults = []
+        }
+      } finally {
+        // Only clear loading state if this is still the current query
+        if (this.currentSearchQuery === query) {
+          this.isGeocodingSearching = false
+        }
+      }
+    },
+    clearGeocodingSearch() {
+      this.geocodingQuery = ''
+      this.geocodingResults = []
+      this.isGeocodingSearching = false
+      this.currentSearchQuery = '' // Clear current search query
+      if (this.geocodingTimeout) {
+        clearTimeout(this.geocodingTimeout)
+        this.geocodingTimeout = null
+      }
+      // Emit event to clear marker on map
+      this.$emit('geocoding-clear')
+    },
+    getGeocodingResultName(result) {
+      // Use 'text' as the title (e.g., "Denver International Airport")
+      return result.text || result.place_name || 'Unknown place'
+    },
+    getGeocodingResultDescription(result) {
+      // Use place_name with 'text' + space stripped from the front
+      // e.g., "Denver International Airport, Denver, United States of America" 
+      // becomes "Denver, United States of America"
+      if (result.place_name && result.text) {
+        const text = result.text.trim()
+        const placeName = result.place_name.trim()
+        
+        // Check if place_name starts with text followed by comma and space
+        const textWithComma = text + ', '
+        if (placeName.startsWith(textWithComma)) {
+          return placeName.substring(textWithComma.length)
+        }
+        
+        // Also check for text + space (without comma)
+        const textWithSpace = text + ' '
+        if (placeName.startsWith(textWithSpace)) {
+          return placeName.substring(textWithSpace.length)
+        }
+        
+        // If place_name exactly equals text, return null (no description needed)
+        if (placeName === text) {
+          return null
+        }
+        
+        // If place_name doesn't start with text, return the full place_name
+        // (this handles edge cases)
+        return placeName
+      }
+      // Fallback: return place_name if text is not available
+      return result.place_name || null
+    },
+    handleGeocodingResultClick(result) {
+      this.$emit('geocoding-result-click', result)
+      // Close modal on mobile when a result is selected
+      if (this.isMobileOpen) {
+        this.$emit('close')
+      }
     }
   },
   async mounted() {
@@ -617,6 +842,9 @@ export default {
     }
     if (this.filterTimeout) {
       clearTimeout(this.filterTimeout)
+    }
+    if (this.geocodingTimeout) {
+      clearTimeout(this.geocodingTimeout)
     }
   }
 }

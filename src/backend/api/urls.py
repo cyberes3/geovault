@@ -29,6 +29,7 @@ from api.views.user_settings import (
 )
 from api.views.tiles import tile_proxy, get_tile_sources
 from api.views.feature_export import export_feature_kmz
+from api.views.geocoding import geocoding_search
 
 urlpatterns = [
     path('item/import/upload', upload_item),
@@ -107,4 +108,6 @@ urlpatterns = [
     # Tile API endpoints
     path('tiles/sources/', get_tile_sources, name='get_tile_sources'),
     path('tiles/<str:service>/<int:z>/<int:x>/<int:y>', tile_proxy, name='tile_proxy'),
+    # Geocoding API endpoints
+    path('geocoding/search/', geocoding_search, name='geocoding_search'),
 ]
