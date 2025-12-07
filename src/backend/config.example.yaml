@@ -106,25 +106,13 @@ icons:
     - .ico
 
 
-geocoding:
-  # Enable or disable reverse geocoding (disabled by default)
-  enabled: false
-
-  # Overpass API server URL
-  overpass_api_url: https://overpass-api.de/api/interpreter
-
-  # Nominatim API server URL
-  nominatim_api_url: https://nominatim.openstreetmap.org
+reverse_geocoding:
+  # Enable or disable reverse geocoding
+  enabled: true
 
   # Distance thresholds for proximity tags (in miles)
   city_proximity_miles: 5.0
   lake_proximity_miles: 1.0
-
-  # Timeout for Overpass API queries
-  overpass_timeout_seconds: 10
-
-  # Timeout for Overpass API requests
-  overpass_request_timeout_seconds: 15
 
 
 processing:

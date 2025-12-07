@@ -404,23 +404,12 @@ ICON_UPLOAD_ALLOWED_EXTENSIONS = set(config.get_list('icons.upload_allowed_exten
 ICON_FETCH_TIMEOUT = config.get_float('icons.fetch_timeout', 5.0)
 
 # Reverse Geocoding Configuration
-# Overpass API server URL
-OVERPASS_API_URL = config.get_with_env_override('geocoding.overpass_api_url', 'OVERPASS_API_URL', 'https://overpass-api.de/api/interpreter')
-
-# Nominatim API server URL
-# Nominatim is better at identifying cities/towns from administrative boundaries
-NOMINATIM_API_URL = config.get_with_env_override('geocoding.nominatim_api_url', 'NOMINATIM_API_URL', 'https://nominatim.openstreetmap.org')
-
-# Enable or disable reverse geocoding (disabled by default)
-REVERSE_GEOCODING_ENABLED = config.get_bool_with_env_override('geocoding.enabled', 'REVERSE_GEOCODING_ENABLED', False)
+# Enable or disable reverse geocoding (enabled by default)
+REVERSE_GEOCODING_ENABLED = config.get_bool_with_env_override('reverse_geocoding.enabled', 'REVERSE_GEOCODING_ENABLED', True)
 
 # Distance thresholds for proximity tags (in miles)
-CITY_PROXIMITY_MILES = config.get_float('geocoding.city_proximity_miles', 5.0)
-LAKE_PROXIMITY_MILES = config.get_float('geocoding.lake_proximity_miles', 1.0)
-
-# Overpass API timeout settings
-OVERPASS_TIMEOUT_SECONDS = config.get_int('geocoding.overpass_timeout_seconds', 10)
-OVERPASS_REQUEST_TIMEOUT_SECONDS = config.get_int('geocoding.overpass_request_timeout_seconds', 15)
+CITY_PROXIMITY_MILES = config.get_float('reverse_geocoding.city_proximity_miles', 5.0)
+LAKE_PROXIMITY_MILES = config.get_float('reverse_geocoding.lake_proximity_miles', 1.0)
 
 # Elevation API Configuration
 # Elevation API server URL (racemap's elevation service)

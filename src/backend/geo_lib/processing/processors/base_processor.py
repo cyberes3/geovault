@@ -254,7 +254,7 @@ class BaseProcessor(ABC):
     def step_6_tag_features(self, processed_features: List[Dict[str, Any]]) -> ImportLog:
         """
         Step 6: Generate tags for already-processed (split and validated) features.
-        Tags include: type, import date, source file, elevation, and geocoding.
+        Tags include: type, import date, source file, elevation, and reverse geocoding.
         
         Args:
             processed_features: List of features that have been split and validated
@@ -267,7 +267,7 @@ class BaseProcessor(ABC):
         if not processed_features or self.minimal_processing:
             return feature_log
         
-        # Count features that will be geocoded (points and lines only)
+        # Count features that will be reverse geocoded (points and lines only)
         geocoding_enabled = get_required_setting('REVERSE_GEOCODING_ENABLED')
         geocoding_count = 0
         if geocoding_enabled:
@@ -276,7 +276,7 @@ class BaseProcessor(ABC):
                 if geometry_type in ['point', 'linestring', 'multilinestring']:
                     geocoding_count += 1
             if geocoding_count > 0:
-                feature_log.add(f"Geocoding {geocoding_count} feature(s)", "Geocoding", DatabaseLogLevel.INFO)
+                feature_log.add(f"Reverse geocoding {geocoding_count} feature(s)", "Reverse Geocoding", DatabaseLogLevel.INFO)
 
         # Get number of threads from settings
         num_threads = get_required_setting('IMPORT_PROCESSING_THREADS')

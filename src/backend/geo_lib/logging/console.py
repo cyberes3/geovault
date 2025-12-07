@@ -55,7 +55,7 @@ def get_tile_logger():
 
 
 def get_geocode_logger():
-    """Get logger for geocoding and reverse geocoding."""
+    """Get logger for reverse geocoding."""
     return TaggedLoggerAdapter(logging.getLogger('geocode'), 'GEOCODE')
 
 
