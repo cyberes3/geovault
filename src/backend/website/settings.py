@@ -405,18 +405,25 @@ ICON_FETCH_TIMEOUT = config.get_float('icons.fetch_timeout', 5.0)
 
 # Reverse Geocoding Configuration
 # Enable or disable reverse geocoding (enabled by default)
-REVERSE_GEOCODING_ENABLED = config.get_bool_with_env_override('reverse_geocoding.enabled', 'REVERSE_GEOCODING_ENABLED', True)
+REVERSE_GEOCODING_ENABLED = config.get_bool('reverse_geocoding.enabled', True)
 
 # Distance thresholds for proximity tags (in miles)
 CITY_PROXIMITY_MILES = config.get_float('reverse_geocoding.city_proximity_miles', 5.0)
 LAKE_PROXIMITY_MILES = config.get_float('reverse_geocoding.lake_proximity_miles', 1.0)
 
+# Overpass API Configuration
+# Overpass API server URL
+OVERPASS_API_URL = config.get_str('geocoding.overpass_api_url', 'https://overpass.private.coffee/api/interpreter')
+
+# Overpass API timeout settings (in seconds)
+OVERPASS_API_TIMEOUT = config.get_int('geocoding.overpass_request_timeout_seconds', 10)
+
 # Elevation API Configuration
 # Elevation API server URL (racemap's elevation service)
-ELEVATION_API_URL = config.get_with_env_override('elevation.api_url', 'ELEVATION_API_URL', 'https://elevation.racemap.com/api')
+ELEVATION_API_URL = config.get_str('elevation.api_url', 'https://elevation.racemap.com/api')
 
 # Enable or disable elevation data filling (enabled by default)
-ELEVATION_API_ENABLED = config.get_bool_with_env_override('elevation.enabled', 'ELEVATION_API_ENABLED', True)
+ELEVATION_API_ENABLED = config.get_bool('elevation.enabled', True)
 
 # Elevation API timeout settings (in seconds)
 ELEVATION_API_TIMEOUT = config.get_int('elevation.timeout_seconds', 30)

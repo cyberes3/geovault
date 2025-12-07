@@ -1,11 +1,94 @@
+import requests
 from django.http import JsonResponse
 from django.views.decorators.http import require_http_methods
 
+from website.config_loader import get_config_loader
+from website.settings_utils import get_required_setting
 from website.startup_checks import (
     check_database_connection,
     check_redis_connection,
     check_postgis_installation,
 )
+
+
+def check_overpass_api() -> bool:
+    """
+    Check Overpass API health by making a simple query.
+    
+    Returns:
+        True if API is healthy, False otherwise
+    """
+    try:
+        api_url = get_required_setting('OVERPASS_API_URL')
+        api_timeout = get_required_setting('OVERPASS_API_TIMEOUT')
+
+        response = requests.post(
+            api_url,
+            data="[out:json];node(around:1000,0,0);out;",
+            timeout=api_timeout,
+            headers={'Content-Type': 'application/x-www-form-urlencoded'}
+        )
+        
+        # API is healthy if we get a 200 response (even if no results)
+        return response.status_code == 200
+    except:
+        return False
+
+
+def check_elevation_api() -> bool:
+    """
+    Check Elevation API health by making a simple request.
+    
+    Returns:
+        True if API is healthy, False otherwise
+    """
+    try:
+        if not get_required_setting('ELEVATION_API_ENABLED'):
+            # If disabled, consider it healthy (not a failure)
+            return True
+        api_url = get_required_setting('ELEVATION_API_URL')
+        api_timeout = get_required_setting('ELEVATION_API_TIMEOUT')
+        
+        response = requests.post(
+            api_url,
+            json=[[0.0, 0.0]],
+            headers={'Content-Type': 'application/json'},
+            timeout=api_timeout
+        )
+        
+        if response.status_code == 200:
+            data = response.json()
+            return isinstance(data, list) and len(data) > 0
+        
+        return False
+    except:
+        return False
+
+
+def check_maptiler_geocoding_api() -> bool:
+    """
+    Check MapTiler Geocoding API health by making a simple search request.
+    
+    Returns:
+        True if API is healthy, False otherwise
+    """
+    try:
+        config = get_config_loader()
+        api_key = config.get_maptiler_api_key()
+        if not api_key:
+            return True
+        
+        site_domain = config.get_str('site.domain', '')
+        headers = {'Origin': site_domain} if site_domain else {}
+        response = requests.get(
+            "https://api.maptiler.com/geocoding/test.json",
+            params={'key': api_key, 'limit': 1},
+            headers=headers,
+            timeout=5
+        )
+        return response.status_code == 200
+    except Exception:
+        return False
 
 
 @require_http_methods(["GET"])
@@ -14,23 +97,86 @@ def health_check(request):
     Health check endpoint that verifies critical system components.
     
     Returns:
-        JsonResponse with status "healthy" (200) or "unhealthy" (500)
+        JsonResponse with status "healthy" (200) or "unhealthy" (500) and components status
     """
+    components = {}
+    overall_healthy = True
+    
     try:
         # Run critical health checks (excluding directory checks that create dirs)
         checks = [
-            check_database_connection,
-            check_redis_connection,
-            check_postgis_installation,
+            ("database", check_database_connection),
+            ("redis", check_redis_connection),
+            ("postgis", check_postgis_installation),
         ]
         
-        for check_func in checks:
-            if not check_func():
-                return JsonResponse({"status": "unhealthy"}, status=500)
+        for name, check_func in checks:
+            try:
+                result = check_func()
+                components[name] = "healthy" if result else "unhealthy"
+                if not result:
+                    overall_healthy = False
+            except Exception:
+                components[name] = "unhealthy"
+                overall_healthy = False
         
-        return JsonResponse({"status": "healthy"}, status=200)
+        # Check external APIs based on configuration
+        config = get_config_loader()
+        
+        # Check Overpass API only if reverse geocoding is enabled
+        reverse_geocoding_enabled = config.get_bool('reverse_geocoding.enabled', True)
+        if reverse_geocoding_enabled:
+            try:
+                result = check_overpass_api()
+                components["overpass_api"] = "healthy" if result else "unhealthy"
+                if not result:
+                    overall_healthy = False
+            except Exception:
+                components["overpass_api"] = "unhealthy"
+                overall_healthy = False
+        else:
+            components["overpass_api"] = "disabled"
+        
+        # Always check Elevation API (it will return True if disabled)
+        try:
+            elevation_enabled = get_required_setting('ELEVATION_API_ENABLED')
+            if not elevation_enabled:
+                components["elevation_api"] = "disabled"
+            else:
+                result = check_elevation_api()
+                components["elevation_api"] = "healthy" if result else "unhealthy"
+                if not result:
+                    overall_healthy = False
+        except Exception:
+            components["elevation_api"] = "unhealthy"
+            overall_healthy = False
+        
+        # Check MapTiler Geocoding API only if API key is set
+        maptiler_api_key = config.get_maptiler_api_key()
+        if maptiler_api_key:
+            try:
+                result = check_maptiler_geocoding_api()
+                components["maptiler_geocoding_api"] = "healthy" if result else "unhealthy"
+                if not result:
+                    overall_healthy = False
+            except Exception:
+                components["maptiler_geocoding_api"] = "unhealthy"
+                overall_healthy = False
+        else:
+            components["maptiler_geocoding_api"] = "not_configured"
+        
+        status = "healthy" if overall_healthy else "unhealthy"
+        status_code = 200 if overall_healthy else 500
+        
+        return JsonResponse({
+            "status": status,
+            "components": components
+        }, status=status_code)
         
     except Exception:
         # Any exception means unhealthy
-        return JsonResponse({"status": "unhealthy"}, status=500)
+        return JsonResponse({
+            "status": "unhealthy",
+            "components": components
+        }, status=500)
 
