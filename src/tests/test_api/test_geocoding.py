@@ -120,12 +120,14 @@ class TestGeocodingAPI(TestCase):
         self.assertEqual(rmnp_feature['place_name'], 'Rocky Mountain National Park, Larimer, United States of America')
 
         # Verify feature is cleaned (no unnecessary fields)
-        self.assertIn('geometry', rmnp_feature)
+        self.assertIn('coordinates', rmnp_feature)
         self.assertIn('bbox', rmnp_feature)
         self.assertIn('id', rmnp_feature)
         self.assertIn('text', rmnp_feature)
         self.assertIn('place_name', rmnp_feature)
         # Should not have unnecessary fields
+        self.assertNotIn('geometry', rmnp_feature)
+        self.assertNotIn('type', rmnp_feature)
         self.assertNotIn('relevance', rmnp_feature)
         self.assertNotIn('context', rmnp_feature)
         self.assertNotIn('place_type', rmnp_feature)
@@ -286,14 +288,15 @@ class TestGeocodingAPI(TestCase):
         # Verify all features are cleaned
         for feature in features:
             # Should have essential fields
-            self.assertIn('type', feature)
-            self.assertIn('geometry', feature)
+            self.assertIn('coordinates', feature)
             self.assertIn('id', feature)
             self.assertIn('text', feature)
             self.assertIn('place_name', feature)
             self.assertIn('bbox', feature)
 
             # Should not have unnecessary fields
+            self.assertNotIn('geometry', feature)
+            self.assertNotIn('type', feature)
             self.assertNotIn('relevance', feature)
             self.assertNotIn('context', feature)
             self.assertNotIn('place_type', feature)

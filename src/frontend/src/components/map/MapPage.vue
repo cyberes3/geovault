@@ -2272,10 +2272,10 @@ export default {
       if (!this.map || !result) return
 
       // Extract coordinates from geocoding result
-      // MapTiler geocoding results have geometry.coordinates [lng, lat]
+      // Geocoding results have coordinates [lng, lat] directly
       let coordinates = null
-      if (result.geometry && result.geometry.coordinates && Array.isArray(result.geometry.coordinates)) {
-        coordinates = result.geometry.coordinates
+      if (result.coordinates && Array.isArray(result.coordinates)) {
+        coordinates = result.coordinates
       } else if (result.center && Array.isArray(result.center)) {
         coordinates = result.center
       } else {

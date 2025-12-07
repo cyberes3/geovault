@@ -792,35 +792,6 @@ export default {
       return result.text || result.place_name || 'Unknown place'
     },
     getGeocodingResultDescription(result) {
-      // Use place_name with 'text' + space stripped from the front
-      // e.g., "Denver International Airport, Denver, United States of America" 
-      // becomes "Denver, United States of America"
-      if (result.place_name && result.text) {
-        const text = result.text.trim()
-        const placeName = result.place_name.trim()
-        
-        // Check if place_name starts with text followed by comma and space
-        const textWithComma = text + ', '
-        if (placeName.startsWith(textWithComma)) {
-          return placeName.substring(textWithComma.length)
-        }
-        
-        // Also check for text + space (without comma)
-        const textWithSpace = text + ' '
-        if (placeName.startsWith(textWithSpace)) {
-          return placeName.substring(textWithSpace.length)
-        }
-        
-        // If place_name exactly equals text, return null (no description needed)
-        if (placeName === text) {
-          return null
-        }
-        
-        // If place_name doesn't start with text, return the full place_name
-        // (this handles edge cases)
-        return placeName
-      }
-      // Fallback: return place_name if text is not available
       return result.place_name || null
     },
     handleGeocodingResultClick(result) {
