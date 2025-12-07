@@ -39,7 +39,7 @@ export class MapTilerConfig {
         return false
       }
       
-      this.useProxy = config.maptiles.proxy || false
+      this.useProxy = config.maptiles.proxy_tiles || false
       // API key is only provided when not using proxy
       this.apiKey = config.maptiles.apiKey || null
       

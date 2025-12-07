@@ -136,7 +136,7 @@ DATABASES = {
             'NAME': 'gv_tests',
             'USER': 'gv_tests',
             'PASSWORD': 'bobjoe99',
-            'HOST': '172.0.2.105',
+            'HOST': '172.0.3.105',
             'PORT': '5432',
         },
     }

@@ -52,7 +52,7 @@ def register_maptiler_maps():
     
     # Get MapTiler API key
     api_key = config.get_with_env_override(
-        'tilesources.maptiles.api_key',
+        'maptiles.api_key',
         'MAPTILER_API_KEY',
         None
     )
@@ -62,7 +62,7 @@ def register_maptiler_maps():
         return
     
     # Get list of map IDs
-    map_ids = config.get_list('tilesources.maptiles.maps', [])
+    map_ids = config.get_list('maptiles.maps', [])
     
     # If no maps configured, skip registration
     if not map_ids:

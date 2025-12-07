@@ -177,7 +177,7 @@ class ConfigLoader:
             MapTiler API key from environment variable or config file, or None if not configured
         """
         api_key = self.get_with_env_override(
-            'tilesources.maptiles.api_key',
+            'maptiles.api_key',
             'MAPTILER_API_KEY',
             None
         )

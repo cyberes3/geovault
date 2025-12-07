@@ -21,11 +21,11 @@ def get_config(request):
     # Add MapTiler settings if configured (only expose if API key is set)
     config_loader = get_config_loader()
     maptiler_api_key = config_loader.get_maptiler_api_key()
-    use_proxy = config_loader.get_bool('tilesources.maptiles.proxy', False)
+    use_proxy = config_loader.get_bool('maptiles.proxy_tiles', False)
     
     if maptiler_api_key:
         maptiles_config = {
-            'proxy': use_proxy
+            'proxy_tiles': use_proxy
         }
         # Only expose API key if not using proxy (proxy uses server-side key)
         if not use_proxy:

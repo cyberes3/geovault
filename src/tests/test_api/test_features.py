@@ -227,6 +227,105 @@ class TestFeatureAPI(TestCase):
         )
         self.assertEqual(response.status_code, 200)
 
+    def test_update_feature_metadata_coordinates_valid(self):
+        """Test updating coordinates via metadata endpoint with valid coordinates."""
+        metadata = {
+            'coordinates': [-104.26, 39.43, 0.0]  # Valid Point coordinates
+        }
+        response = self.client.put(
+            f'/api/feature/{self.point_feature.id}/update-metadata/',
+            data=json.dumps(metadata),
+            content_type='application/json'
+        )
+        self.assertEqual(response.status_code, 200)
+        self.point_feature.refresh_from_db()
+        self.assertEqual(
+            self.point_feature.geojson['geometry']['coordinates'],
+            [-104.26, 39.43, 0.0]
+        )
+
+    def test_update_feature_metadata_coordinates_empty(self):
+        """Test updating coordinates with empty array is rejected."""
+        metadata = {
+            'coordinates': []
+        }
+        response = self.client.put(
+            f'/api/feature/{self.point_feature.id}/update-metadata/',
+            data=json.dumps(metadata),
+            content_type='application/json'
+        )
+        self.assertEqual(response.status_code, 400)
+        self.assertIn('empty', response.json()['error'].lower())
+
+    def test_update_feature_metadata_coordinates_null(self):
+        """Test updating coordinates with null is rejected."""
+        metadata = {
+            'coordinates': None
+        }
+        response = self.client.put(
+            f'/api/feature/{self.point_feature.id}/update-metadata/',
+            data=json.dumps(metadata),
+            content_type='application/json'
+        )
+        self.assertEqual(response.status_code, 400)
+
+    def test_update_feature_metadata_coordinates_wrong_structure(self):
+        """Test updating coordinates with wrong structure for geometry type."""
+        # Point expects [lon, lat], not [[lon, lat]]
+        metadata = {
+            'coordinates': [[-104.26, 39.43]]  # Wrong nesting for Point
+        }
+        response = self.client.put(
+            f'/api/feature/{self.point_feature.id}/update-metadata/',
+            data=json.dumps(metadata),
+            content_type='application/json'
+        )
+        self.assertEqual(response.status_code, 400)
+        self.assertIn('invalid', response.json()['error'].lower())
+
+    def test_update_feature_metadata_coordinates_out_of_bounds(self):
+        """Test updating coordinates with out-of-bounds values is rejected."""
+        metadata = {
+            'coordinates': [181.0, 37.77, 0.0]  # Longitude > 180
+        }
+        response = self.client.put(
+            f'/api/feature/{self.point_feature.id}/update-metadata/',
+            data=json.dumps(metadata),
+            content_type='application/json'
+        )
+        self.assertEqual(response.status_code, 400)
+        self.assertIn('invalid', response.json()['error'].lower())
+
+    def test_update_feature_metadata_coordinates_linestring_valid(self):
+        """Test updating LineString coordinates via metadata endpoint."""
+        metadata = {
+            'coordinates': [[-104.26, 39.43, 0.0], [-104.25, 39.44, 0.0]]
+        }
+        response = self.client.put(
+            f'/api/feature/{self.linestring_feature.id}/update-metadata/',
+            data=json.dumps(metadata),
+            content_type='application/json'
+        )
+        self.assertEqual(response.status_code, 200)
+        self.linestring_feature.refresh_from_db()
+        self.assertEqual(
+            self.linestring_feature.geojson['geometry']['coordinates'],
+            [[-104.26, 39.43, 0.0], [-104.25, 39.44, 0.0]]
+        )
+
+    def test_update_feature_metadata_coordinates_linestring_empty(self):
+        """Test updating LineString coordinates with empty array is rejected."""
+        metadata = {
+            'coordinates': []
+        }
+        response = self.client.put(
+            f'/api/feature/{self.linestring_feature.id}/update-metadata/',
+            data=json.dumps(metadata),
+            content_type='application/json'
+        )
+        self.assertEqual(response.status_code, 400)
+        self.assertIn('empty', response.json()['error'].lower())
+
     def test_update_feature_remove_icon(self):
         """Test removing an icon from a point feature."""
         # First, add an icon to the feature
@@ -1218,3 +1317,303 @@ class TestFeatureEdgeCases(TestCase):
         )
         # Should handle empty array gracefully
         self.assertIn(response.status_code, [200, 400])
+
+
+class TestQuickPointCreation(TestCase):
+    """Tests for quick point creation endpoint."""
+    
+    def setUp(self):
+        """Set up test fixtures."""
+        User = get_user_model()
+        self.user = User.objects.create_user(
+            email='quickpoint@example.com',
+            password='testpass123',
+            username='quickpointuser'
+        )
+        self.client.force_login(self.user)
+    
+    @patch('api.views.feature_creation._fetch_elevation_for_point')
+    def test_create_quick_point_success(self, mock_elevation):
+        """Test successful quick point creation with all fields."""
+        mock_elevation.return_value = 1500.0  # Mock elevation
+        
+        payload = {
+            'latitude': 37.7749,
+            'longitude': -122.4194,
+            'name': 'Test Quick Point',
+            'description': 'A test quick point',
+            'tags': ['test', 'quick'],
+            'marker_color': '#00ff00',
+            'icon': '/api/icons/system/caltopo/flag-1.png'
+        }
+        
+        response = self.client.post(
+            '/api/features/quick-point/create/',
+            data=json.dumps(payload),
+            content_type='application/json'
+        )
+        
+        self.assertEqual(response.status_code, 201)
+        data = json.loads(response.content)
+        self.assertIn('feature', data)
+        
+        feature = data['feature']
+        self.assertEqual(feature['geometry']['type'], 'Point')
+        self.assertEqual(feature['geometry']['coordinates'], [-122.4194, 37.7749, 1500.0])
+        self.assertEqual(feature['properties']['name'], 'Test Quick Point')
+        self.assertEqual(feature['properties']['description'], 'A test quick point')
+        self.assertEqual(feature['properties']['tags'], ['test', 'quick'])
+        self.assertEqual(feature['properties']['marker-color'], '#00ff00')
+        self.assertEqual(feature['properties']['icon'], '/api/icons/system/caltopo/flag-1.png')
+        
+        # Verify quick-point system tag is present
+        system_tags = feature['properties'].get('system_tags', [])
+        self.assertIn('quick-point', system_tags)
+        
+        # Verify feature was saved to database
+        self.assertIn('database_id', feature['properties'])
+        feature_id = feature['properties']['database_id']
+        self.assertTrue(FeatureStore.objects.filter(id=feature_id, user=self.user).exists())
+    
+    @patch('api.views.feature_creation._fetch_elevation_for_point')
+    def test_create_quick_point_minimal(self, mock_elevation):
+        """Test quick point creation with minimal required fields."""
+        mock_elevation.return_value = 0.0  # Mock elevation
+        
+        payload = {
+            'latitude': 39.7392,
+            'longitude': -104.9903,
+            'name': 'Minimal Point'
+        }
+        
+        response = self.client.post(
+            '/api/features/quick-point/create/',
+            data=json.dumps(payload),
+            content_type='application/json'
+        )
+        
+        self.assertEqual(response.status_code, 201)
+        data = json.loads(response.content)
+        feature = data['feature']
+        
+        self.assertEqual(feature['properties']['name'], 'Minimal Point')
+        self.assertEqual(feature['properties'].get('description'), '')
+        self.assertEqual(feature['properties'].get('tags'), [])
+        self.assertEqual(feature['properties']['marker-color'], '#ff0000')  # Default color
+        
+        # Verify quick-point system tag is present
+        system_tags = feature['properties'].get('system_tags', [])
+        self.assertIn('quick-point', system_tags)
+    
+    @patch('api.views.feature_creation._fetch_elevation_for_point')
+    def test_create_quick_point_elevation_fallback(self, mock_elevation):
+        """Test that elevation defaults to 0.0 if API fails."""
+        mock_elevation.return_value = None  # Simulate elevation API failure
+        
+        payload = {
+            'latitude': 40.7128,
+            'longitude': -74.0060,
+            'name': 'Point with Failed Elevation'
+        }
+        
+        response = self.client.post(
+            '/api/features/quick-point/create/',
+            data=json.dumps(payload),
+            content_type='application/json'
+        )
+        
+        self.assertEqual(response.status_code, 201)
+        data = json.loads(response.content)
+        feature = data['feature']
+        
+        # Should default to 0.0 elevation
+        self.assertEqual(feature['geometry']['coordinates'][2], 0.0)
+    
+    def test_create_quick_point_invalid_latitude(self):
+        """Test quick point creation with invalid latitude."""
+        payload = {
+            'latitude': 91.0,  # Invalid: > 90
+            'longitude': -122.4194,
+            'name': 'Invalid Point'
+        }
+        
+        response = self.client.post(
+            '/api/features/quick-point/create/',
+            data=json.dumps(payload),
+            content_type='application/json'
+        )
+        
+        self.assertEqual(response.status_code, 400)
+    
+    def test_create_quick_point_invalid_longitude(self):
+        """Test quick point creation with invalid longitude."""
+        payload = {
+            'latitude': 37.7749,
+            'longitude': 181.0,  # Invalid: > 180
+            'name': 'Invalid Point'
+        }
+        
+        response = self.client.post(
+            '/api/features/quick-point/create/',
+            data=json.dumps(payload),
+            content_type='application/json'
+        )
+        
+        self.assertEqual(response.status_code, 400)
+    
+    def test_create_quick_point_missing_name(self):
+        """Test quick point creation without required name."""
+        payload = {
+            'latitude': 37.7749,
+            'longitude': -122.4194
+            # Missing 'name'
+        }
+        
+        response = self.client.post(
+            '/api/features/quick-point/create/',
+            data=json.dumps(payload),
+            content_type='application/json'
+        )
+        
+        self.assertEqual(response.status_code, 400)
+    
+    def test_create_quick_point_missing_coordinates(self):
+        """Test quick point creation without required coordinates."""
+        payload = {
+            'name': 'Missing Coordinates'
+            # Missing latitude and longitude
+        }
+        
+        response = self.client.post(
+            '/api/features/quick-point/create/',
+            data=json.dumps(payload),
+            content_type='application/json'
+        )
+        
+        self.assertEqual(response.status_code, 400)
+    
+    def test_create_quick_point_empty_name(self):
+        """Test quick point creation with empty name."""
+        payload = {
+            'latitude': 37.7749,
+            'longitude': -122.4194,
+            'name': ''  # Empty name
+        }
+        
+        response = self.client.post(
+            '/api/features/quick-point/create/',
+            data=json.dumps(payload),
+            content_type='application/json'
+        )
+        
+        self.assertEqual(response.status_code, 400)
+    
+    def test_create_quick_point_too_many_tags(self):
+        """Test quick point creation with too many tags."""
+        payload = {
+            'latitude': 37.7749,
+            'longitude': -122.4194,
+            'name': 'Too Many Tags',
+            'tags': [f'tag{i}' for i in range(101)]  # 101 tags (max is 100)
+        }
+        
+        response = self.client.post(
+            '/api/features/quick-point/create/',
+            data=json.dumps(payload),
+            content_type='application/json'
+        )
+        
+        self.assertEqual(response.status_code, 400)
+    
+    def test_create_quick_point_invalid_tag_type(self):
+        """Test quick point creation with non-string tags."""
+        payload = {
+            'latitude': 37.7749,
+            'longitude': -122.4194,
+            'name': 'Invalid Tags',
+            'tags': ['valid', 123, 'also-valid']  # Mixed types
+        }
+        
+        response = self.client.post(
+            '/api/features/quick-point/create/',
+            data=json.dumps(payload),
+            content_type='application/json'
+        )
+        
+        self.assertEqual(response.status_code, 400)
+    
+    @patch('api.views.feature_creation._fetch_elevation_for_point')
+    def test_create_quick_point_filters_system_tags(self, mock_elevation):
+        """Test that system tags in user input are filtered out."""
+        mock_elevation.return_value = 0.0
+        
+        payload = {
+            'latitude': 37.7749,
+            'longitude': -122.4194,
+            'name': 'Filtered Tags',
+            'tags': ['user-tag', 'type:point', 'elevation:high']  # Mix of user and system tags
+        }
+        
+        response = self.client.post(
+            '/api/features/quick-point/create/',
+            data=json.dumps(payload),
+            content_type='application/json'
+        )
+        
+        self.assertEqual(response.status_code, 201)
+        data = json.loads(response.content)
+        feature = data['feature']
+        
+        # User tags should only contain non-system tags
+        user_tags = feature['properties'].get('tags', [])
+        self.assertIn('user-tag', user_tags)
+        self.assertNotIn('type:point', user_tags)
+        self.assertNotIn('elevation:high', user_tags)
+        
+        # System tags should be in system_tags array
+        system_tags = feature['properties'].get('system_tags', [])
+        self.assertIn('type:point', system_tags)  # Generated automatically
+        self.assertIn('quick-point', system_tags)
+    
+    def test_create_quick_point_unauthorized(self):
+        """Test that unauthorized users cannot create quick points."""
+        self.client.logout()
+        
+        payload = {
+            'latitude': 37.7749,
+            'longitude': -122.4194,
+            'name': 'Unauthorized Point'
+        }
+        
+        response = self.client.post(
+            '/api/features/quick-point/create/',
+            data=json.dumps(payload),
+            content_type='application/json'
+        )
+        
+        self.assertEqual(response.status_code, 401)
+    
+    @patch('api.views.feature_creation._fetch_elevation_for_point')
+    def test_create_quick_point_whitespace_trimming(self, mock_elevation):
+        """Test that name and description whitespace is trimmed."""
+        mock_elevation.return_value = 0.0
+        
+        payload = {
+            'latitude': 37.7749,
+            'longitude': -122.4194,
+            'name': '  Trimmed Name  ',
+            'description': '  Trimmed Description  '
+        }
+        
+        response = self.client.post(
+            '/api/features/quick-point/create/',
+            data=json.dumps(payload),
+            content_type='application/json'
+        )
+        
+        self.assertEqual(response.status_code, 201)
+        data = json.loads(response.content)
+        feature = data['feature']
+        
+        self.assertEqual(feature['properties']['name'], 'Trimmed Name')
+        self.assertEqual(feature['properties']['description'], 'Trimmed Description')

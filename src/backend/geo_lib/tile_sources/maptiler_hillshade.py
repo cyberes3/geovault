@@ -19,7 +19,7 @@ def register_maptiler_hillshade():
     
     # Get MapTiler API key
     api_key = config.get_with_env_override(
-        'tilesources.maptiles.api_key',
+        'maptiles.api_key',
         'MAPTILER_API_KEY',
         None
     )
@@ -29,7 +29,7 @@ def register_maptiler_hillshade():
         return
     
     # Check if proxy is enabled
-    use_proxy = config.get_bool('tilesources.maptiles.proxy', False)
+    use_proxy = config.get_bool('maptiles.proxy_tiles', False)
     
     if use_proxy:
         # Use server proxy for hillshade tiles (WebP format)
