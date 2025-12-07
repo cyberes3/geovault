@@ -193,7 +193,7 @@
 </template>
 
 <script>
-import {markRaw} from 'vue'
+import {markRaw, defineAsyncComponent} from 'vue'
 import 'maplibre-gl/dist/maplibre-gl.css'
 import maplibregl from 'maplibre-gl'
 import { LabelMarkerManager } from '@/utils/map/maplibre/labelMarkers.js'
@@ -204,16 +204,19 @@ import {getCookie} from '@/assets/js/auth.js'
 import {getUnitPreference} from '@/utils/units'
 import {APIHOST, MAP_CONFIG} from '@/config.js'
 
-// Components
+// Components - always needed
 import FeatureListSidebar from './FeatureListSidebar.vue'
 import MapControlsSidebar from './MapControlsSidebar.vue'
 import FeatureInfoBox from './FeatureInfoBox.vue'
-import FeatureEditBox from './FeatureEditBox.vue'
-import FeatureSelectionPopup from './FeatureSelectionPopup.vue'
-import ElevationProfileDialog from './ElevationProfileDialog.vue'
 import MapErrorOverlay from './MapErrorOverlay.vue'
 import MapLoadingIndicator from './MapLoadingIndicator.vue'
-import QuickPointDialog from './QuickPointDialog.vue'
+
+// Lazy-loaded components - only loaded when needed
+const FeatureEditBox = defineAsyncComponent(() => import('./FeatureEditBox.vue'))
+const FeatureSelectionPopup = defineAsyncComponent(() => import('./FeatureSelectionPopup.vue'))
+const ElevationProfileDialog = defineAsyncComponent(() => import('./ElevationProfileDialog.vue'))
+const QuickPointDialog = defineAsyncComponent(() => import('./QuickPointDialog.vue'))
+
 import {HomeIcon, ExclamationCircleIcon, ShareIcon, FolderIcon, ListBulletIcon, Cog6ToothIcon} from '@heroicons/vue/24/outline'
 import {
   getBoundingBoxKey,
