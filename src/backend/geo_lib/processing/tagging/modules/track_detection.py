@@ -1,6 +1,6 @@
 """
 Track detection tag generator.
-Detects GPX tracks/routes and generates track:yes tag.
+Detects GPX tracks/routes and generates type:track tag.
 """
 from typing import List
 
@@ -9,7 +9,7 @@ from geo_lib.processing.tagging.base import TagGenerator
 
 
 class TrackDetectionTagGenerator(TagGenerator):
-    """Detects GPX tracks/routes and generates track:yes tag."""
+    """Detects GPX tracks/routes and generates type:track tag."""
     
     priority = 40  # Execute after feature date
     
@@ -23,9 +23,10 @@ class TrackDetectionTagGenerator(TagGenerator):
         **kwargs
     ) -> List[str]:
         """
-        Detect if feature is a GPX track or route and generate track:yes tag.
+        Detect if feature is a GPX track or route and generate type:track tag.
         
         GPX tracks have coordinateProperties.times, GPX routes have time property.
+        This overrides the generic type:line tag with the more specific type:track.
         
         Args:
             feature: The feature to generate tags for
@@ -33,7 +34,7 @@ class TrackDetectionTagGenerator(TagGenerator):
             **kwargs: Additional keyword arguments (not used)
             
         Returns:
-            List containing track:yes tag if detected, empty list otherwise
+            List containing type:track tag if detected, empty list otherwise
         """
         tags = []
         
@@ -46,10 +47,10 @@ class TrackDetectionTagGenerator(TagGenerator):
             if coordinate_properties and isinstance(coordinate_properties, dict):
                 times = coordinate_properties.get('times')
                 if times:
-                    tags.append('track:yes')
+                    tags.append('type:track')
             # Check for GPX route (has time property)
             elif props_dict.get('time'):
-                tags.append('track:yes')
+                tags.append('type:track')
         
         return tags
 

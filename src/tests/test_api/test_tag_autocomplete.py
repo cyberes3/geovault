@@ -175,7 +175,7 @@ class TestTagSeparation(TestCase):
             'feature-year:2023',
             'feature-month:June',
             'source-file:test.gpx',
-            'track:yes',
+            'type:track',
             'elevation:high',
             'geocoding:success',
             'driving:yes'  # The specific tag from the bug report

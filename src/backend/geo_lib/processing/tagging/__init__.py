@@ -125,6 +125,11 @@ def generate_auto_tags(
                     DatabaseLogLevel.WARNING
                 )
 
+    # Post-processing: Handle conflicting type tags
+    # If type:track is present, remove type:line (track is more specific)
+    if 'type:track' in all_tags:
+        all_tags = [tag for tag in all_tags if tag not in ['type:line', 'type:point']]
+    
     # Ensure all tags are strings
     return [str(tag) for tag in all_tags]
 

@@ -16,7 +16,9 @@ from geo_lib.processing.tagging.modules.driving_detection import DrivingDetectio
 from geo_lib.processing.tagging.modules.source_file import SourceFileTagGenerator
 from geo_lib.processing.tagging.modules.elevation import ElevationTagGenerator
 from geo_lib.processing.tagging.modules.geocoding import GeocodingTagGenerator
-from geo_lib.types.feature import PointFeature, LineStringFeature, MultiLineStringFeature, PolygonFeature
+from geo_lib.types.feature import (
+    PointFeature, LineStringFeature, MultiLineStringFeature, PolygonFeature
+)
 from geo_lib.processing.logging import ImportLog
 
 
@@ -72,6 +74,23 @@ class TestGeometryTypeTagGenerator:
         tags = generator.process(feature)
         
         assert tags == ['type:polygon']
+    
+    def test_multilinestring_type_tag(self):
+        """Test that MultiLineString features get type:line tag (simplified)."""
+        generator = GeometryTypeTagGenerator()
+        feature = MultiLineStringFeature(
+            type='Feature',
+            geometry={
+                'type': 'MultiLineString',
+                'coordinates': [[[-122.4194, 37.7749], [-122.4195, 37.7750]]]
+            },
+            properties={'name': 'Test MultiLineString', 'geojson_hash': 'test'}
+        )
+        
+        tags = generator.process(feature)
+        
+        assert tags == ['type:line']
+        assert 'type:multilinestring' not in tags  # Ensure technical name is not used
 
 
 class TestImportDateTagGenerator:
@@ -196,7 +215,8 @@ class TestTrackDetectionTagGenerator:
         
         tags = generator.process(feature)
         
-        assert 'track:yes' in tags
+        assert 'type:track' in tags
+        assert 'track:yes' not in tags  # Old tag should not be present
     
     def test_gpx_route_with_time_property(self):
         """Test that GPX routes with time property are detected as tracks."""
@@ -215,7 +235,8 @@ class TestTrackDetectionTagGenerator:
         
         tags = generator.process(feature)
         
-        assert 'track:yes' in tags
+        assert 'type:track' in tags
+        assert 'track:yes' not in tags  # Old tag should not be present
     
     def test_kml_gx_track_with_timestamps(self):
         """Test that KML gx:Track elements (converted with coordinateProperties) are detected."""
@@ -244,7 +265,8 @@ class TestTrackDetectionTagGenerator:
         
         tags = generator.process(feature)
         
-        assert 'track:yes' in tags
+        assert 'type:track' in tags
+        assert 'track:yes' not in tags  # Old tag should not be present
     
     def test_plain_kml_linestring_without_timestamps(self):
         """Test that plain KML LineStrings without timestamps are NOT marked as tracks."""
@@ -267,6 +289,7 @@ class TestTrackDetectionTagGenerator:
         
         # Should NOT be marked as track - this is the key test case
         assert tags == []
+        assert 'type:track' not in tags
         assert 'track:yes' not in tags
     
     def test_linestring_with_empty_times_array(self):
@@ -354,7 +377,8 @@ class TestTrackDetectionTagGenerator:
         
         tags = generator.process(feature)
         
-        assert 'track:yes' in tags
+        assert 'type:track' in tags
+        assert 'track:yes' not in tags  # Old tag should not be present
     
     def test_point_not_processed(self):
         """Test that points are not processed for track detection."""

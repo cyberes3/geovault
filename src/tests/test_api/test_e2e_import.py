@@ -354,7 +354,7 @@ class TestE2EImport(TransactionTestCase):
         self.assertIn('system_tags', gpx_feature.geojson['properties'],
                      "GPX feature should have system_tags")
         
-        # GPX tracks should have 'track:yes' tag
+        # GPX tracks should have 'type:track' tag
         system_tags = gpx_feature.geojson['properties']['system_tags']
         if gpx_feature.geojson.get('geometry', {}).get('type') in ['LineString', 'MultiLineString']:
             tag_names = [tag.split(':')[0] for tag in system_tags if ':' in tag]
