@@ -29,3 +29,4 @@ finished building their databases and then start them normally:
 docker compose -f nominatim.yml up -d
 docker compose -f overpass.yml up -d
 ```
+
