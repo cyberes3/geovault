@@ -251,7 +251,7 @@
             v-model="geocodingQuery"
             @input="handleGeocodingInput"
             type="text"
-            placeholder="Search for places..."
+            placeholder="Search places or paste coordinates..."
             class="w-full px-2 py-1.5 pr-7 text-xs border border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent lg:px-1.5 lg:py-1 xl:px-2 xl:py-1.5"
           />
           <button
@@ -325,6 +325,7 @@ import Loader from '@/components/parts/Loader.vue'
 import { getGeometryTypeColor } from '@/utils/geometryColors.js'
 import { sortTagsByPriority, sortUserTagsAlphabetically, isSystemTag } from '@/utils/tagUtils.js'
 import { getIconUrl, resolveIconUrl, isSystemIcon } from '@/utils/map/iconUtils.ts'
+import { parseCoordinates } from '@/utils/coordinateParser.js'
 import { RecycleScroller } from 'vue-virtual-scroller'
 import 'vue-virtual-scroller/dist/vue-virtual-scroller.css'
 
@@ -742,6 +743,35 @@ export default {
       this.currentSearchQuery = query
       this.isGeocodingSearching = true
 
+      // First, try to parse the query as coordinates
+      const coordinates = parseCoordinates(query)
+      if (coordinates) {
+        // Successfully parsed as coordinates - create a direct result
+        const coordinateResult = {
+          type: 'Feature',
+          text: `${coordinates.lat.toFixed(6)}, ${coordinates.lng.toFixed(6)}`,
+          place_name: `Coordinates: ${coordinates.lat.toFixed(6)}°, ${coordinates.lng.toFixed(6)}°`,
+          center: [coordinates.lng, coordinates.lat],
+          coordinates: [coordinates.lng, coordinates.lat],
+          // Create a small bbox around the point (approximately 1km in each direction)
+          // 1km ≈ 0.009° at the equator
+          bbox: [
+            coordinates.lng - 0.009,
+            coordinates.lat - 0.009,
+            coordinates.lng + 0.009,
+            coordinates.lat + 0.009
+          ]
+        }
+        
+        // Only update if this is still the current query
+        if (this.currentSearchQuery === query) {
+          this.geocodingResults = [coordinateResult]
+          this.isGeocodingSearching = false
+        }
+        return
+      }
+
+      // Not coordinates, proceed with regular geocoding search
       try {
         const url = `${APIHOST}/api/geocoding/search/?q=${encodeURIComponent(query)}`
         const response = await fetch(url)
