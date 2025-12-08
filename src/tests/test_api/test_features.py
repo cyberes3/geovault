@@ -596,6 +596,125 @@ class TestFeatureAPI(TestCase):
         response = self.client.get('/api/features/filter-by-tags/')
         self.assertEqual(response.status_code, 400)
 
+    def test_filter_features_by_tags_or_mode(self):
+        """Test filtering features by tags with OR logic."""
+        response = self.client.get(
+            '/api/features/filter-by-tags/',
+            {'tags': ['test', 'nonexistent'], 'match_mode': 'OR'}
+        )
+        self.assertEqual(response.status_code, 200)
+        data = json.loads(response.content)
+        self.assertIn('data', data)
+        self.assertEqual(data['match_mode'], 'OR')
+        # Should return features with 'test' tag even though 'nonexistent' doesn't match
+        self.assertGreater(data['feature_count'], 0)
+
+    def test_filter_features_by_tags_and_mode_explicit(self):
+        """Test filtering features by tags with explicit AND logic."""
+        response = self.client.get(
+            '/api/features/filter-by-tags/',
+            {'tags': ['test', 'point'], 'match_mode': 'AND'}
+        )
+        self.assertEqual(response.status_code, 200)
+        data = json.loads(response.content)
+        self.assertIn('data', data)
+        self.assertEqual(data['match_mode'], 'AND')
+        # Should return features that have both 'test' and 'point' tags
+        self.assertGreaterEqual(data['feature_count'], 0)
+
+    def test_filter_features_by_tags_invalid_match_mode(self):
+        """Test filtering with invalid match_mode parameter."""
+        response = self.client.get(
+            '/api/features/filter-by-tags/',
+            {'tags': 'test', 'match_mode': 'INVALID'}
+        )
+        self.assertEqual(response.status_code, 400)
+        data = json.loads(response.content)
+        self.assertIn('error', data)
+
+    def test_filter_features_by_prefix_tag(self):
+        """Test filtering features by prefix tag."""
+        # First, create a feature with a prefixed tag
+        feature_data = {
+            'type': 'Feature',
+            'geometry': {
+                'type': 'Point',
+                'coordinates': [-122.5, 37.8, 0.0]
+            },
+            'properties': {
+                'name': 'Ski Resort',
+                'tags': ['ski-resort:vail', 'colorado']
+            }
+        }
+        FeatureStore.objects.create(
+            user=self.user,
+            geojson=feature_data,
+            geometry=Point(-122.5, 37.8, 0.0),
+            geojson_hash=generate_geojson_hash(feature_data)
+        )
+        
+        # Test prefix matching
+        response = self.client.get(
+            '/api/features/filter-by-tags/',
+            {'tags': 'ski-resort:'}
+        )
+        self.assertEqual(response.status_code, 200)
+        data = json.loads(response.content)
+        self.assertIn('data', data)
+        # Should find the feature with ski-resort:vail tag
+        self.assertGreater(data['feature_count'], 0)
+        
+        # Verify the returned feature has the expected tag
+        features = data['data']['features']
+        found = False
+        for feature in features:
+            tags = feature['properties'].get('tags', [])
+            if any(tag.startswith('ski-resort:') for tag in tags):
+                found = True
+                break
+        self.assertTrue(found, "Should find feature with ski-resort: prefix")
+
+    def test_filter_features_by_mixed_tags(self):
+        """Test filtering with both exact and prefix tags."""
+        # Create features with various tags
+        feature1_data = {
+            'type': 'Feature',
+            'geometry': {
+                'type': 'Point',
+                'coordinates': [-111.0, 40.0, 0.0]
+            },
+            'properties': {
+                'name': 'Utah Ski Resort',
+                'tags': ['utah', 'ski-resort:alta']
+            }
+        }
+        FeatureStore.objects.create(
+            user=self.user,
+            geojson=feature1_data,
+            geometry=Point(-111.0, 40.0, 0.0),
+            geojson_hash=generate_geojson_hash(feature1_data)
+        )
+        
+        # Test mixed exact and prefix matching with AND mode
+        response = self.client.get(
+            '/api/features/filter-by-tags/',
+            {'tags': ['utah', 'ski-resort:'], 'match_mode': 'AND'}
+        )
+        self.assertEqual(response.status_code, 200)
+        data = json.loads(response.content)
+        # Should find features with 'utah' tag AND any tag starting with 'ski-resort:'
+        self.assertGreater(data['feature_count'], 0)
+        
+        # Test with OR mode
+        response = self.client.get(
+            '/api/features/filter-by-tags/',
+            {'tags': ['utah', 'ski-resort:'], 'match_mode': 'OR'}
+        )
+        self.assertEqual(response.status_code, 200)
+        data = json.loads(response.content)
+        # Should find features with 'utah' tag OR any tag starting with 'ski-resort:'
+        self.assertGreater(data['feature_count'], 0)
+
     def test_get_all_features(self):
         """Test getting all features."""
         response = self.client.get('/api/features/all/')

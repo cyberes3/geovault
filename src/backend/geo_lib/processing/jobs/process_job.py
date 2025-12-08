@@ -409,9 +409,9 @@ class ProcessJob(BaseJob):
                             # Check if it's a track (LineString or MultiLineString)
                             is_track_geometry = geometry_type in ['linestring', 'multilinestring']
     
-                            # Check if it has the track:yes tag
+                            # Check if it has the type:track tag
                             system_tags = properties.get('system_tags', [])
-                            is_track_tagged = 'track:yes' in system_tags if isinstance(system_tags, list) else False
+                            is_track_tagged = 'type:track' in system_tags if isinstance(system_tags, list) else False
     
                             if is_track_geometry and is_track_tagged:
                                 # Extract filename without extension

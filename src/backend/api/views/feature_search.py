@@ -3,6 +3,7 @@ import json
 
 from django.db import connection
 from django.db.models import Q
+from django.db.models.expressions import RawSQL
 from django.http import JsonResponse
 from django.views.decorators.http import require_http_methods
 
@@ -318,10 +319,14 @@ def search_features(request):
 @require_http_methods(["GET"])
 def filter_features_by_tags(request):
     """
-    Filter features by tags using AND logic.
+    Filter features by tags with support for AND/OR logic and prefix matching.
     Query parameters:
     - tags: list of tag names (can be repeated: ?tags=tag1&tags=tag2)
-    Returns features that have ALL specified tags.
+      - Tags ending with ':' are treated as prefix matches (e.g., 'ski-resort:' matches 'ski-resort:vail')
+      - Tags without ':' are exact matches
+    - match_mode: 'AND' (default) or 'OR'
+      - AND: returns features that have ALL specified tag conditions
+      - OR: returns features that have ANY specified tag condition
     
     OPTIMIZED: Uses GIN index on geojson field for fast JSONB containment operations.
     """
@@ -337,21 +342,68 @@ def filter_features_by_tags(request):
             'code': 400
         }, status=400)
     
+    # Get match mode (default to AND)
+    match_mode = request.GET.get('match_mode', 'AND').upper()
+    if match_mode not in ['AND', 'OR']:
+        return JsonResponse({
+            'error': 'match_mode must be either AND or OR',
+            'code': 400
+        }, status=400)
+    
     try:
         # Base query for user's features
         base_query = FeatureStore.objects.filter(user=request.user).exclude(geometry__isnull=True)
         
-        # Filter features that have ALL specified tags (AND logic)
-        # We need to check that each tag is present in the feature's tags array
-        features_query = base_query
+        # Build Q objects for each tag condition
+        tag_conditions = []
         
         for tag in tags:
-            # Use JSON field lookup to check if tag exists in either tags or system_tags array
-            # Uses PostgreSQL's @> containment operator, accelerated by GIN index
-            features_query = features_query.filter(
-                Q(geojson__properties__tags__contains=[tag]) |
-                Q(geojson__properties__system_tags__contains=[tag])
-            )
+            if tag.endswith(':'):
+                # Prefix matching: match any tag that starts with the prefix (without the trailing ':')
+                prefix = tag[:-1]  # Remove the trailing ':'
+                
+                # We need to check if any element in the tags/system_tags arrays starts with the prefix
+                # PostgreSQL JSONB doesn't have a direct "array element starts with" operator,
+                # so we use a raw SQL condition for this
+                # This uses PostgreSQL's jsonb_array_elements_text to expand arrays and check each element
+                prefix_condition = Q(
+                    id__in=RawSQL(
+                        """
+                        SELECT DISTINCT fs.id 
+                        FROM api_featurestore fs
+                        WHERE fs.user_id = %s
+                        AND (
+                            EXISTS (
+                                SELECT 1 FROM jsonb_array_elements_text(fs.geojson->'properties'->'tags') AS tag
+                                WHERE tag LIKE %s
+                            )
+                            OR EXISTS (
+                                SELECT 1 FROM jsonb_array_elements_text(fs.geojson->'properties'->'system_tags') AS tag
+                                WHERE tag LIKE %s
+                            )
+                        )
+                        """,
+                        [request.user.id, f"{prefix}%", f"{prefix}%"]
+                    )
+                )
+                tag_conditions.append(prefix_condition)
+            else:
+                # Exact matching: use containment operator (existing behavior)
+                exact_condition = Q(geojson__properties__tags__contains=[tag]) | Q(geojson__properties__system_tags__contains=[tag])
+                tag_conditions.append(exact_condition)
+        
+        # Combine conditions based on match mode
+        if match_mode == 'AND':
+            # Features must match ALL conditions
+            features_query = base_query
+            for condition in tag_conditions:
+                features_query = features_query.filter(condition)
+        else:  # OR
+            # Features must match ANY condition
+            combined_condition = tag_conditions[0]
+            for condition in tag_conditions[1:]:
+                combined_condition |= condition
+            features_query = base_query.filter(combined_condition)
         
         # Convert to GeoJSON format
         geojson_features = []
@@ -376,7 +428,8 @@ def filter_features_by_tags(request):
         response_data = {
             'data': geojson_data,
             'feature_count': len(geojson_features),
-            'tags': tags
+            'tags': tags,
+            'match_mode': match_mode
         }
         
         return JsonResponse(response_data)
@@ -387,6 +440,7 @@ def filter_features_by_tags(request):
             'error': 'Failed to filter features by tags',
             'code': 500
         }, status=500)
+
 
 
 @api_or_login_required_401()

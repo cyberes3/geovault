@@ -159,12 +159,38 @@
 
     <!-- Tag Filter Tab Content -->
     <div v-if="activeTab === 'tag-filter'" class="flex flex-col flex-1 min-h-0">
+      <!-- Match Mode Radio Buttons -->
+      <div class="mb-2 px-1">
+        <div class="flex items-center gap-3 text-xs">
+          <span class="text-gray-600 font-medium">Match:</span>
+          <label class="flex items-center gap-1.5 cursor-pointer">
+            <input
+              type="radio"
+              v-model="tagMatchMode"
+              value="AND"
+              class="radio-custom"
+            />
+            <span class="text-gray-700">AND</span>
+          </label>
+          <label class="flex items-center gap-1.5 cursor-pointer">
+            <input
+              type="radio"
+              v-model="tagMatchMode"
+              value="OR"
+              class="radio-custom"
+            />
+            <span class="text-gray-700">OR</span>
+          </label>
+        </div>
+      </div>
+
       <!-- Tag Search Input -->
       <div class="mb-2 px-1">
         <div class="relative">
           <input
             v-model="tagSearchQuery"
             @input="handleTagSearchInput"
+            @keydown.enter="handleTagSearchEnter"
             type="text"
             placeholder="Search tags..."
             class="w-full px-2 py-1.5 pr-7 text-xs border border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
@@ -187,13 +213,19 @@
           <span
             v-for="tag in selectedTags"
             :key="tag"
-            class="inline-flex items-center gap-1 px-2 py-0.5 bg-blue-100 text-blue-800 text-xs rounded max-w-full"
-            :title="tag"
+            :class="[
+              'inline-flex items-center gap-1 px-2 py-0.5 text-xs rounded max-w-full',
+              tag.endsWith(':') ? 'bg-purple-100 text-purple-800' : 'bg-blue-100 text-blue-800'
+            ]"
+            :title="tag.endsWith(':') ? `Prefix match: ${tag}` : tag"
           >
             <span class="truncate min-w-0">{{ tag }}</span>
             <button
               @click="removeTag(tag)"
-              class="text-blue-600 hover:text-blue-800 focus:outline-none flex-shrink-0"
+              :class="[
+                'hover:text-blue-800 focus:outline-none flex-shrink-0',
+                tag.endsWith(':') ? 'text-purple-600' : 'text-blue-600'
+              ]"
               type="button"
               title="Remove tag from filter"
             >
@@ -384,6 +416,7 @@ export default {
       // Tag filter state
       selectedTags: [],
       tagSearchQuery: '',
+      tagMatchMode: 'AND', // Default to AND mode
       tagFilteredFeatures: [],
       isFiltering: false,
       filterTimeout: null,
@@ -470,6 +503,10 @@ export default {
         this.debouncedFilterByTags()
       },
       deep: true
+    },
+    tagMatchMode() {
+      // Re-filter when match mode changes
+      this.debouncedFilterByTags()
     },
     activeTab(newTab) {
       // Tags are now provided via prop, no need to fetch
@@ -617,6 +654,14 @@ export default {
     handleTagSearchInput() {
       // Tag search is just for filtering the list, no API call needed
     },
+    handleTagSearchEnter() {
+      // Allow adding tags by pressing Enter (including prefix tags with :)
+      const query = this.tagSearchQuery.trim()
+      if (query && !this.selectedTags.includes(query)) {
+        this.selectedTags.push(query)
+        this.tagSearchQuery = ''
+      }
+    },
     clearTagSearch() {
       this.tagSearchQuery = ''
     },
@@ -673,9 +718,10 @@ export default {
       this.$emit('tag-filter-loading-change', true)
 
       try {
-        // Build URL with multiple tag parameters
+        // Build URL with multiple tag parameters and match mode
         const tagParams = this.selectedTags.map(tag => `tags=${encodeURIComponent(tag)}`).join('&')
-        const url = `${APIHOST}/api/features/filter-by-tags/?${tagParams}`
+        const matchModeParam = `match_mode=${encodeURIComponent(this.tagMatchMode)}`
+        const url = `${APIHOST}/api/features/filter-by-tags/?${tagParams}&${matchModeParam}`
         const response = await fetch(url)
         const data = await response.json()
 

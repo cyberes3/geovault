@@ -430,7 +430,7 @@ class TestAllTagsReturned(TestCase):
                 'name': 'Test Point',
                 'tags': ['user1', 'user2', 'user3', 'user4', 'user5', 'user6'],
                 'system_tags': ['type:point', 'import-year:2025', 'elevation:high',
-                              'source-file:test.gpx', 'track:yes']
+                              'source-file:test.gpx', 'type:track']
             }
         }
         FeatureStore.objects.create(
@@ -586,7 +586,7 @@ class TestTagAutocompleteIntegration(TestCase):
                 'user_tags': ['nevada', 'four-wheeling', 'overlanding', 'mines'],
                 'system_tags': ['source-file:2025-06-21 hike North Park.gpx',
                               'elevation:high', 'feature-month:June', 'import-month:December',
-                              'feature-year:2025', 'import-year:2025', 'track:yes']
+                              'feature-year:2025', 'import-year:2025', 'type:track']
             },
             {
                 'name': '2025-05-20 Nevada overlanding',
@@ -598,7 +598,7 @@ class TestTagAutocompleteIntegration(TestCase):
             {
                 'name': 'Morning jog',
                 'user_tags': ['running', 'exercise', 'local'],
-                'system_tags': ['source-file:morning-jog.gpx', 'track:yes']
+                'system_tags': ['source-file:morning-jog.gpx', 'type:track']
             }
         ]
 
@@ -641,14 +641,14 @@ class TestTagAutocompleteIntegration(TestCase):
                         f"User tag '{tag}' should be available for autocomplete")
 
         # CRITICAL: Verify system tags are NOT in user autocomplete list
-        system_tags_to_check = ['driving:yes', 'track:yes', 'elevation:high',
+        system_tags_to_check = ['driving:yes', 'type:track', 'elevation:high',
                                'source-file:2025-06-21 hike North Park.gpx']
         for system_tag in system_tags_to_check:
             self.assertNotIn(system_tag, user_tag_names,
                            f"System tag '{system_tag}' should NOT appear in user tag autocomplete")
             
         # Verify system tags are in the system_tags field
-        for system_tag in ['driving:yes', 'track:yes', 'elevation:high']:
+        for system_tag in ['driving:yes', 'type:track', 'elevation:high']:
             self.assertIn(system_tag, system_tag_names,
                         f"System tag '{system_tag}' should be in system_tags")
 

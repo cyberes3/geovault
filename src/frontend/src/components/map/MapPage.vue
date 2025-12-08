@@ -2650,6 +2650,11 @@ export default {
       }
 
       try {
+        // Fetch available tags (refresh tag list on map restore)
+        if (this.$store.state.userInfo) {
+          await this.fetchAvailableTags()
+        }
+
         // Determine map config - use saved state if available, otherwise use default
         let mapConfig
         if (this.savedMapCenter && this.savedMapZoom !== null) {
