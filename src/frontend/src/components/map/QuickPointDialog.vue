@@ -139,6 +139,7 @@ import TagPicker from '@/components/parts/TagPicker.vue'
 import ColorPickerElement from '@/components/parts/ColorPickerElement.vue'
 import IconSelector from '@/components/parts/IconSelector.vue'
 import { XMarkIcon } from '@heroicons/vue/24/outline'
+import { parseCoordinates } from '@/utils/coordinateParser.js'
 
 // Helper functions for icon type checking
 function isSystemIcon(iconUrl) {
@@ -251,37 +252,16 @@ export default {
         return
       }
       
-      // Split by comma
-      const parts = input.split(',').map(p => p.trim())
-      if (parts.length !== 2) {
-        this.coordinateError = 'Format must be: latitude, longitude'
-        return
+      // Use the same coordinate parsing logic as search places input
+      const coordinates = parseCoordinates(input)
+      if (coordinates) {
+        // Successfully parsed coordinates
+        this.latitude = coordinates.lat
+        this.longitude = coordinates.lng
+      } else {
+        // Failed to parse - set error message
+        this.coordinateError = 'Invalid coordinate format'
       }
-      
-      // Parse numbers
-      const lat = parseFloat(parts[0])
-      const lon = parseFloat(parts[1])
-      
-      // Validate numbers
-      if (isNaN(lat) || isNaN(lon)) {
-        this.coordinateError = 'Both values must be valid numbers'
-        return
-      }
-      
-      // Validate ranges
-      if (lat < -90 || lat > 90) {
-        this.coordinateError = 'Latitude must be between -90 and 90'
-        return
-      }
-      
-      if (lon < -180 || lon > 180) {
-        this.coordinateError = 'Longitude must be between -180 and 180'
-        return
-      }
-      
-      // Valid coordinates
-      this.latitude = lat
-      this.longitude = lon
     },
     handleIconSelected(event) {
       this.iconUrl = event.iconUrl

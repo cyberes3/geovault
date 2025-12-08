@@ -5,9 +5,12 @@ This module provides validation functions for coordinate arrays, ensuring they:
 1. Match the expected structure for the geometry type
 2. Are within valid bounds (lon: -180 to 180, lat: -90 to 90)
 3. Are not swapped (lat/lon order)
+4. Use coordinate-parser library for robust coordinate validation
 """
 
 from typing import List, Any, Tuple, Optional
+
+from coordinate_parser import parse_coordinate
 
 
 class CoordinateValidationError(Exception):
@@ -61,7 +64,23 @@ def _validate_point_coordinate(point: List[Any]) -> Tuple[float, float]:
     if math.isinf(lon) or math.isinf(lat):
         raise CoordinateValidationError("Coordinate values cannot be Infinity")
     
-    # Check bounds
+    # Validate using coordinate-parser library for robust validation
+    try:
+        # Validate longitude using coordinate-parser
+        parsed_lon = parse_coordinate(lon, coord_type="longitude", validate=True)
+        # Validate latitude using coordinate-parser
+        parsed_lat = parse_coordinate(lat, coord_type="latitude", validate=True)
+        # Use parsed values (ensures consistency with coordinate-parser's output)
+        lon = float(parsed_lon)
+        lat = float(parsed_lat)
+    except ValueError as e:
+        # coordinate-parser validation failed
+        raise CoordinateValidationError(f"Invalid coordinate: {str(e)}")
+    except Exception as e:
+        # Other errors from coordinate-parser
+        raise CoordinateValidationError(f"Coordinate validation failed: {str(e)}")
+    
+    # Additional bounds check (coordinate-parser should have already validated, but double-check)
     if not (-180 <= lon <= 180):
         raise CoordinateValidationError(f"Longitude {lon} is out of bounds [-180, 180]")
     if not (-90 <= lat <= 90):
@@ -89,7 +108,7 @@ def _validate_point_coordinate(point: List[Any]) -> Tuple[float, float]:
     # So we only flag obvious cases that passed bounds but are clearly wrong
     # (This case is now empty since bounds check handles everything)
     
-    return (lon, lat)
+    return lon, lat
 
 
 def _check_multiple_points_for_swap(points: List[Tuple[float, float]]) -> Optional[str]:

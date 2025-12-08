@@ -4,6 +4,7 @@ API views for feature creation.
 import traceback
 from typing import Optional
 
+from coordinate_parser import parse_coordinate
 from django.contrib.gis.geos import Point
 from django.http import JsonResponse
 from django.views.decorators.http import require_http_methods
@@ -36,6 +37,40 @@ class QuickPointCreatePayload(BaseModel):
     tags: list[str] = Field(default_factory=list, description="User tags")
     marker_color: str = Field(default="#ff0000", description="Marker color (hex)")
     icon: Optional[str] = Field(None, description="Icon URL")
+
+    @field_validator('latitude')
+    @classmethod
+    def validate_latitude(cls, v):
+        """Validate latitude using coordinate-parser library."""
+        if v is None:
+            raise ValueError('Latitude is required')
+        try:
+            # Validate using coordinate-parser library
+            # parse_coordinate accepts float directly and validates the coordinate is in valid range
+            parsed = parse_coordinate(v, coord_type="latitude", validate=True)
+            # Return the parsed value (ensures consistency with coordinate-parser's output)
+            return float(parsed)
+        except ValueError as e:
+            raise ValueError(f'Invalid latitude: {str(e)}')
+        except Exception as e:
+            raise ValueError(f'Latitude validation failed: {str(e)}')
+
+    @field_validator('longitude')
+    @classmethod
+    def validate_longitude(cls, v):
+        """Validate longitude using coordinate-parser library."""
+        if v is None:
+            raise ValueError('Longitude is required')
+        try:
+            # Validate using coordinate-parser library
+            # parse_coordinate accepts float directly and validates the coordinate is in valid range
+            parsed = parse_coordinate(v, coord_type="longitude", validate=True)
+            # Return the parsed value (ensures consistency with coordinate-parser's output)
+            return float(parsed)
+        except ValueError as e:
+            raise ValueError(f'Invalid longitude: {str(e)}')
+        except Exception as e:
+            raise ValueError(f'Longitude validation failed: {str(e)}')
 
     @field_validator('tags')
     @classmethod

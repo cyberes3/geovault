@@ -21,7 +21,7 @@ def get_representative_points(feature: GeoFeatureSupported) -> List[Tuple[float,
     """
     Get representative points from a feature for reverse geocoding.
     For points: returns the point itself
-    For lines: returns start, middle, and end points
+    For lines: returns only the middle point
     For polygons: returns empty list (not reverse geocoded)
     
     Returns:
@@ -36,7 +36,7 @@ def get_representative_points(feature: GeoFeatureSupported) -> List[Tuple[float,
         points.append((coords[1], coords[0]))  # (lat, lon)
     
     elif geometry.type.value.lower() in ['linestring', 'multilinestring']:
-        # For linestrings, use start, middle, and end points
+        # For linestrings, use only the middle point
         if geometry.type.value.lower() == 'linestring':
             coords_list = geometry.coordinates
         else:  # multilinestring
@@ -44,20 +44,10 @@ def get_representative_points(feature: GeoFeatureSupported) -> List[Tuple[float,
             coords_list = geometry.coordinates[0] if geometry.coordinates else []
         
         if coords_list:
-            # Start point
-            start_coords = coords_list[0]
-            points.append((start_coords[1], start_coords[0]))  # (lat, lon)
-            
-            # Middle point
-            if len(coords_list) > 2:
-                mid_idx = len(coords_list) // 2
-                mid_coords = coords_list[mid_idx]
-                points.append((mid_coords[1], mid_coords[0]))  # (lat, lon)
-            
-            # End point
-            if len(coords_list) > 1:
-                end_coords = coords_list[-1]
-                points.append((end_coords[1], end_coords[0]))  # (lat, lon)
+            # Middle point only
+            mid_idx = len(coords_list) // 2
+            mid_coords = coords_list[mid_idx]
+            points.append((mid_coords[1], mid_coords[0]))  # (lat, lon)
     
     # Polygons are not reverse geocoded (as per user's requirement)
     

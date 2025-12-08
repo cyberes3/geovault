@@ -1742,6 +1742,69 @@ class TestQuickPointCreationBackgroundGeocoding(TransactionTestCase):
         
         self.assertEqual(response.status_code, 400)
     
+    def test_create_quick_point_invalid_latitude_negative(self):
+        """Test quick point creation with invalid negative latitude."""
+        payload = {
+            'latitude': -91.0,  # Invalid: < -90
+            'longitude': -122.4194,
+            'name': 'Invalid Point'
+        }
+        
+        response = self.client.post(
+            '/api/features/quick-point/create/',
+            data=json.dumps(payload),
+            content_type='application/json'
+        )
+        
+        self.assertEqual(response.status_code, 400)
+    
+    def test_create_quick_point_invalid_longitude_negative(self):
+        """Test quick point creation with invalid negative longitude."""
+        payload = {
+            'latitude': 37.7749,
+            'longitude': -181.0,  # Invalid: < -180
+            'name': 'Invalid Point'
+        }
+        
+        response = self.client.post(
+            '/api/features/quick-point/create/',
+            data=json.dumps(payload),
+            content_type='application/json'
+        )
+        
+        self.assertEqual(response.status_code, 400)
+    
+    @patch('api.views.feature_creation._fetch_elevation_for_point')
+    def test_create_quick_point_boundary_values(self, mock_elevation):
+        """Test quick point creation with boundary coordinate values."""
+        mock_elevation.return_value = 0.0
+        
+        # Test all boundary values: -90, 90, -180, 180
+        test_cases = [
+            {'lat': -90.0, 'lon': -180.0, 'name': 'Southwest corner'},
+            {'lat': 90.0, 'lon': 180.0, 'name': 'Northeast corner'},
+            {'lat': -90.0, 'lon': 180.0, 'name': 'Southeast corner'},
+            {'lat': 90.0, 'lon': -180.0, 'name': 'Northwest corner'},
+        ]
+        
+        for case in test_cases:
+            payload = {
+                'latitude': case['lat'],
+                'longitude': case['lon'],
+                'name': case['name']
+            }
+            
+            response = self.client.post(
+                '/api/features/quick-point/create/',
+                data=json.dumps(payload),
+                content_type='application/json'
+            )
+            
+            self.assertEqual(response.status_code, 201, 
+                           f"Boundary values {case['lat']}, {case['lon']} should be accepted")
+            data = json.loads(response.content)
+            self.assertIn('feature', data)
+    
     def test_create_quick_point_missing_name(self):
         """Test quick point creation without required name."""
         payload = {

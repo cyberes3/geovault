@@ -1,4 +1,5 @@
 import requests
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from django.http import JsonResponse
 from django.views.decorators.http import require_http_methods
 
@@ -13,7 +14,9 @@ from website.startup_checks import (
 
 def check_overpass_api() -> bool:
     """
-    Check Overpass API health by making a simple query.
+    Check Overpass API health by making a minimal query.
+    
+    Uses a simple node ID lookup (node 1 exists in OSM) to avoid spatial indexing overhead.
     
     Returns:
         True if API is healthy, False otherwise
@@ -22,9 +25,10 @@ def check_overpass_api() -> bool:
         api_url = get_required_setting('OVERPASS_API_URL')
         api_timeout = get_required_setting('OVERPASS_API_TIMEOUT')
 
+        # Query node 1 (a well-known OSM node) - direct ID lookup, no spatial search
         response = requests.post(
             api_url,
-            data="[out:json];node(around:1000,0,0);out;",
+            data="[out:json];node(1);out;",
             timeout=api_timeout,
             headers={'Content-Type': 'application/x-www-form-urlencoded'}
         )
@@ -91,10 +95,31 @@ def check_maptiler_geocoding_api() -> bool:
         return False
 
 
+def _run_check_safely(name, check_func):
+    """
+    Safely run a health check function and return the result.
+    
+    Args:
+        name: Name of the check component
+        check_func: Function to run for the check
+        
+    Returns:
+        Tuple of (name, status_string, is_healthy)
+    """
+    try:
+        result = check_func()
+        status = "healthy" if result else "unhealthy"
+        return (name, status, result)
+    except Exception:
+        return (name, "unhealthy", False)
+
+
 @require_http_methods(["GET"])
 def health_check(request):
     """
     Health check endpoint that verifies critical system components.
+    
+    All checks run in parallel using threads for better performance.
     
     Returns:
         JsonResponse with status "healthy" (200) or "unhealthy" (500) and components status
@@ -103,67 +128,52 @@ def health_check(request):
     overall_healthy = True
     
     try:
-        # Run critical health checks (excluding directory checks that create dirs)
-        checks = [
-            ("database", check_database_connection),
-            ("redis", check_redis_connection),
-            ("postgis", check_postgis_installation),
-        ]
-        
-        for name, check_func in checks:
-            try:
-                result = check_func()
-                components[name] = "healthy" if result else "unhealthy"
-                if not result:
-                    overall_healthy = False
-            except Exception:
-                components[name] = "unhealthy"
-                overall_healthy = False
-        
-        # Check external APIs based on configuration
+        # Get configuration once
         config = get_config_loader()
+        
+        # Build list of checks to run in parallel
+        checks_to_run = []
+        
+        # Always run critical health checks
+        checks_to_run.append(("database", check_database_connection))
+        checks_to_run.append(("redis", check_redis_connection))
+        checks_to_run.append(("postgis", check_postgis_installation))
         
         # Check Overpass API only if reverse geocoding is enabled
         reverse_geocoding_enabled = config.get_bool('reverse_geocoding.enabled', True)
         if reverse_geocoding_enabled:
-            try:
-                result = check_overpass_api()
-                components["overpass_api"] = "healthy" if result else "unhealthy"
-                if not result:
-                    overall_healthy = False
-            except Exception:
-                components["overpass_api"] = "unhealthy"
-                overall_healthy = False
+            checks_to_run.append(("overpass_api", check_overpass_api))
         else:
             components["overpass_api"] = "disabled"
         
         # Always check Elevation API (it will return True if disabled)
-        try:
-            elevation_enabled = get_required_setting('ELEVATION_API_ENABLED')
-            if not elevation_enabled:
-                components["elevation_api"] = "disabled"
-            else:
-                result = check_elevation_api()
-                components["elevation_api"] = "healthy" if result else "unhealthy"
-                if not result:
-                    overall_healthy = False
-        except Exception:
-            components["elevation_api"] = "unhealthy"
-            overall_healthy = False
+        elevation_enabled = get_required_setting('ELEVATION_API_ENABLED')
+        if not elevation_enabled:
+            components["elevation_api"] = "disabled"
+        else:
+            checks_to_run.append(("elevation_api", check_elevation_api))
         
         # Check MapTiler Geocoding API only if API key is set
         maptiler_api_key = config.get_maptiler_api_key()
         if maptiler_api_key:
-            try:
-                result = check_maptiler_geocoding_api()
-                components["maptiler_geocoding_api"] = "healthy" if result else "unhealthy"
-                if not result:
-                    overall_healthy = False
-            except Exception:
-                components["maptiler_geocoding_api"] = "unhealthy"
-                overall_healthy = False
+            checks_to_run.append(("maptiler_geocoding_api", check_maptiler_geocoding_api))
         else:
             components["maptiler_geocoding_api"] = "not_configured"
+        
+        # Run all checks in parallel using ThreadPoolExecutor
+        with ThreadPoolExecutor(max_workers=len(checks_to_run)) as executor:
+            # Submit all checks
+            future_to_check = {
+                executor.submit(_run_check_safely, name, check_func): name
+                for name, check_func in checks_to_run
+            }
+            
+            # Collect results as they complete
+            for future in as_completed(future_to_check):
+                name, status, is_healthy = future.result()
+                components[name] = status
+                if not is_healthy:
+                    overall_healthy = False
         
         status = "healthy" if overall_healthy else "unhealthy"
         status_code = 200 if overall_healthy else 500

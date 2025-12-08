@@ -23,7 +23,6 @@
 
     <!-- Center - Map -->
     <div class="flex-1 w-full bg-gray-50 relative overflow-hidden">
-      <!-- Mobile Controls Bar -->
       <MobileControlsBar
         :is-public-share-mode="isPublicShareMode"
         :public-share-tag="publicShareTag"

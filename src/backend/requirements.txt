@@ -18,4 +18,5 @@ django-allauth==65.13.0
 dateparser==1.2.2
 pytest==9.0.1
 pytest-django==4.11.1
+coordinate-parser==0.1.1
 

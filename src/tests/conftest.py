@@ -53,6 +53,7 @@ from geo_lib.processing.status_tracker import ProcessingStatus, status_tracker
 from users.api_keys import create_user_api_key
 from users.models import ApiKey, UserProfile
 from website.settings_utils import get_required_setting
+from fixtures.geocoding_responses import get_mock_overpass_response
 
 User = get_user_model()
 
@@ -359,13 +360,16 @@ def conditional_external_api_mocking():
     logger = logging.getLogger(__name__)
     patches = []
     
-    # Always mock geocoding services (not ready yet)
-    # Mock reverse geocoding service
-    geocoding_patch1 = patch('geo_lib.geolocation.reverse_geocode.get_reverse_geocoding_service')
-    mock_geocoding = geocoding_patch1.start()
-    mock_geocoding_service = MagicMock()
-    mock_geocoding_service.reverse_geocode.return_value = None  # Return None to simulate disabled
-    mock_geocoding.return_value = mock_geocoding_service
+    # Always mock geocoding services with realistic data from real Overpass API responses
+    # Mock the Overpass API calls directly so the actual tag generation logic is tested
+    # This provides fast, deterministic tests while using real Overpass response data
+    geocoding_patch1 = patch('geo_lib.geolocation.reverse_geocode.ReverseGeocodingService._query_overpass')
+    mock_overpass = geocoding_patch1.start()
+    
+    # Return real Overpass API responses based on coordinates in the query
+    # This allows the actual geocoding logic to run and generate tags
+    mock_overpass.side_effect = lambda query, max_retries=3: get_mock_overpass_response(query)
+    
     patches.append(geocoding_patch1)
     
     # Mock IP geolocation service
