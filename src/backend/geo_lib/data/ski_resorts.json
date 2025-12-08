@@ -1,0 +1,918 @@
+{
+  "ski_resorts": [
+    {
+      "name": "Vail",
+      "country": "United States",
+      "state": "Colorado",
+      "bbox": {
+        "min_lat": 39.6,
+        "max_lat": 39.68,
+        "min_lon": -106.4,
+        "max_lon": -106.32
+      }
+    },
+    {
+      "name": "Breckenridge",
+      "country": "United States",
+      "state": "Colorado",
+      "bbox": {
+        "min_lat": 39.45,
+        "max_lat": 39.52,
+        "min_lon": -106.08,
+        "max_lon": -106.0
+      }
+    },
+    {
+      "name": "Aspen Mountain",
+      "country": "United States",
+      "state": "Colorado",
+      "bbox": {
+        "min_lat": 39.18,
+        "max_lat": 39.21,
+        "min_lon": -106.85,
+        "max_lon": -106.81
+      }
+    },
+    {
+      "name": "Aspen Highlands",
+      "country": "United States",
+      "state": "Colorado",
+      "bbox": {
+        "min_lat": 39.17,
+        "max_lat": 39.20,
+        "min_lon": -106.87,
+        "max_lon": -106.84
+      }
+    },
+    {
+      "name": "Snowmass",
+      "country": "United States",
+      "state": "Colorado",
+      "bbox": {
+        "min_lat": 39.2,
+        "max_lat": 39.25,
+        "min_lon": -106.97,
+        "max_lon": -106.92
+      }
+    },
+    {
+      "name": "Keystone",
+      "country": "United States",
+      "state": "Colorado",
+      "bbox": {
+        "min_lat": 39.56,
+        "max_lat": 39.62,
+        "min_lon": -105.98,
+        "max_lon": -105.92
+      }
+    },
+    {
+      "name": "Copper Mountain",
+      "country": "United States",
+      "state": "Colorado",
+      "bbox": {
+        "min_lat": 39.48,
+        "max_lat": 39.52,
+        "min_lon": -106.17,
+        "max_lon": -106.12
+      }
+    },
+    {
+      "name": "Arapahoe Basin",
+      "country": "United States",
+      "state": "Colorado",
+      "bbox": {
+        "min_lat": 39.63,
+        "max_lat": 39.66,
+        "min_lon": -105.88,
+        "max_lon": -105.84
+      }
+    },
+    {
+      "name": "Winter Park",
+      "country": "United States",
+      "state": "Colorado",
+      "bbox": {
+        "min_lat": 39.86,
+        "max_lat": 39.92,
+        "min_lon": -105.79,
+        "max_lon": -105.74
+      }
+    },
+    {
+      "name": "Steamboat",
+      "country": "United States",
+      "state": "Colorado",
+      "bbox": {
+        "min_lat": 40.45,
+        "max_lat": 40.50,
+        "min_lon": -106.82,
+        "max_lon": -106.76
+      }
+    },
+    {
+      "name": "Telluride",
+      "country": "United States",
+      "state": "Colorado",
+      "bbox": {
+        "min_lat": 37.92,
+        "max_lat": 37.96,
+        "min_lon": -107.86,
+        "max_lon": -107.81
+      }
+    },
+    {
+      "name": "Crested Butte",
+      "country": "United States",
+      "state": "Colorado",
+      "bbox": {
+        "min_lat": 38.89,
+        "max_lat": 38.93,
+        "min_lon": -106.98,
+        "max_lon": -106.93
+      }
+    },
+    {
+      "name": "Loveland",
+      "country": "United States",
+      "state": "Colorado",
+      "bbox": {
+        "min_lat": 39.67,
+        "max_lat": 39.70,
+        "min_lon": -105.91,
+        "max_lon": -105.87
+      }
+    },
+    {
+      "name": "Eldora",
+      "country": "United States",
+      "state": "Colorado",
+      "bbox": {
+        "min_lat": 39.93,
+        "max_lat": 39.96,
+        "min_lon": -105.60,
+        "max_lon": -105.56
+      }
+    },
+    {
+      "name": "Park City",
+      "country": "United States",
+      "state": "Utah",
+      "bbox": {
+        "min_lat": 40.64,
+        "max_lat": 40.69,
+        "min_lon": -111.53,
+        "max_lon": -111.47
+      }
+    },
+    {
+      "name": "Deer Valley",
+      "country": "United States",
+      "state": "Utah",
+      "bbox": {
+        "min_lat": 40.62,
+        "max_lat": 40.66,
+        "min_lon": -111.49,
+        "max_lon": -111.45
+      }
+    },
+    {
+      "name": "Alta",
+      "country": "United States",
+      "state": "Utah",
+      "bbox": {
+        "min_lat": 40.58,
+        "max_lat": 40.61,
+        "min_lon": -111.65,
+        "max_lon": -111.61
+      }
+    },
+    {
+      "name": "Snowbird",
+      "country": "United States",
+      "state": "Utah",
+      "bbox": {
+        "min_lat": 40.57,
+        "max_lat": 40.60,
+        "min_lon": -111.67,
+        "max_lon": -111.63
+      }
+    },
+    {
+      "name": "Brighton",
+      "country": "United States",
+      "state": "Utah",
+      "bbox": {
+        "min_lat": 40.59,
+        "max_lat": 40.61,
+        "min_lon": -111.59,
+        "max_lon": -111.56
+      }
+    },
+    {
+      "name": "Solitude",
+      "country": "United States",
+      "state": "Utah",
+      "bbox": {
+        "min_lat": 40.61,
+        "max_lat": 40.63,
+        "min_lon": -111.60,
+        "max_lon": -111.57
+      }
+    },
+    {
+      "name": "Jackson Hole",
+      "country": "United States",
+      "state": "Wyoming",
+      "bbox": {
+        "min_lat": 43.57,
+        "max_lat": 43.63,
+        "min_lon": -110.87,
+        "max_lon": -110.81
+      }
+    },
+    {
+      "name": "Grand Targhee",
+      "country": "United States",
+      "state": "Wyoming",
+      "bbox": {
+        "min_lat": 43.77,
+        "max_lat": 43.80,
+        "min_lon": -110.96,
+        "max_lon": -110.93
+      }
+    },
+    {
+      "name": "Big Sky",
+      "country": "United States",
+      "state": "Montana",
+      "bbox": {
+        "min_lat": 45.25,
+        "max_lat": 45.30,
+        "min_lon": -111.42,
+        "max_lon": -111.36
+      }
+    },
+    {
+      "name": "Bridger Bowl",
+      "country": "United States",
+      "state": "Montana",
+      "bbox": {
+        "min_lat": 45.81,
+        "max_lat": 45.84,
+        "min_lon": -110.92,
+        "max_lon": -110.88
+      }
+    },
+    {
+      "name": "Mammoth Mountain",
+      "country": "United States",
+      "state": "California",
+      "bbox": {
+        "min_lat": 37.61,
+        "max_lat": 37.66,
+        "min_lon": -119.05,
+        "max_lon": -118.98
+      }
+    },
+    {
+      "name": "Palisades Tahoe",
+      "country": "United States",
+      "state": "California",
+      "bbox": {
+        "min_lat": 39.18,
+        "max_lat": 39.22,
+        "min_lon": -120.25,
+        "max_lon": -120.21
+      }
+    },
+    {
+      "name": "Heavenly",
+      "country": "United States",
+      "state": "California",
+      "bbox": {
+        "min_lat": 38.93,
+        "max_lat": 38.99,
+        "min_lon": -119.97,
+        "max_lon": -119.89
+      }
+    },
+    {
+      "name": "Northstar",
+      "country": "United States",
+      "state": "California",
+      "bbox": {
+        "min_lat": 39.26,
+        "max_lat": 39.29,
+        "min_lon": -120.13,
+        "max_lon": -120.10
+      }
+    },
+    {
+      "name": "Kirkwood",
+      "country": "United States",
+      "state": "California",
+      "bbox": {
+        "min_lat": 38.68,
+        "max_lat": 38.71,
+        "min_lon": -120.08,
+        "max_lon": -120.04
+      }
+    },
+    {
+      "name": "Mt. Bachelor",
+      "country": "United States",
+      "state": "Oregon",
+      "bbox": {
+        "min_lat": 43.97,
+        "max_lat": 44.01,
+        "min_lon": -121.70,
+        "max_lon": -121.65
+      }
+    },
+    {
+      "name": "Stevens Pass",
+      "country": "United States",
+      "state": "Washington",
+      "bbox": {
+        "min_lat": 47.73,
+        "max_lat": 47.77,
+        "min_lon": -121.10,
+        "max_lon": -121.05
+      }
+    },
+    {
+      "name": "Crystal Mountain",
+      "country": "United States",
+      "state": "Washington",
+      "bbox": {
+        "min_lat": 46.92,
+        "max_lat": 46.96,
+        "min_lon": -121.50,
+        "max_lon": -121.45
+      }
+    },
+    {
+      "name": "Mt. Baker",
+      "country": "United States",
+      "state": "Washington",
+      "bbox": {
+        "min_lat": 48.85,
+        "max_lat": 48.88,
+        "min_lon": -121.69,
+        "max_lon": -121.65
+      }
+    },
+    {
+      "name": "Whistler Blackcomb",
+      "country": "Canada",
+      "state": "British Columbia",
+      "bbox": {
+        "min_lat": 50.06,
+        "max_lat": 50.12,
+        "min_lon": -122.98,
+        "max_lon": -122.92
+      }
+    },
+    {
+      "name": "Lake Louise",
+      "country": "Canada",
+      "state": "Alberta",
+      "bbox": {
+        "min_lat": 51.42,
+        "max_lat": 51.46,
+        "min_lon": -116.20,
+        "max_lon": -116.16
+      }
+    },
+    {
+      "name": "Sunshine Village",
+      "country": "Canada",
+      "state": "Alberta",
+      "bbox": {
+        "min_lat": 51.11,
+        "max_lat": 51.14,
+        "min_lon": -115.78,
+        "max_lon": -115.74
+      }
+    },
+    {
+      "name": "Banff Mt. Norquay",
+      "country": "Canada",
+      "state": "Alberta",
+      "bbox": {
+        "min_lat": 51.20,
+        "max_lat": 51.22,
+        "min_lon": -115.60,
+        "max_lon": -115.57
+      }
+    },
+    {
+      "name": "Revelstoke",
+      "country": "Canada",
+      "state": "British Columbia",
+      "bbox": {
+        "min_lat": 50.98,
+        "max_lat": 51.02,
+        "min_lon": -118.20,
+        "max_lon": -118.15
+      }
+    },
+    {
+      "name": "Stowe",
+      "country": "United States",
+      "state": "Vermont",
+      "bbox": {
+        "min_lat": 44.51,
+        "max_lat": 44.55,
+        "min_lon": -72.79,
+        "max_lon": -72.75
+      }
+    },
+    {
+      "name": "Killington",
+      "country": "United States",
+      "state": "Vermont",
+      "bbox": {
+        "min_lat": 43.60,
+        "max_lat": 43.65,
+        "min_lon": -72.83,
+        "max_lon": -72.78
+      }
+    },
+    {
+      "name": "Sugarbush",
+      "country": "United States",
+      "state": "Vermont",
+      "bbox": {
+        "min_lat": 44.13,
+        "max_lat": 44.18,
+        "min_lon": -72.92,
+        "max_lon": -72.87
+      }
+    },
+    {
+      "name": "Sunday River",
+      "country": "United States",
+      "state": "Maine",
+      "bbox": {
+        "min_lat": 44.46,
+        "max_lat": 44.50,
+        "min_lon": -70.87,
+        "max_lon": -70.82
+      }
+    },
+    {
+      "name": "Sugarloaf",
+      "country": "United States",
+      "state": "Maine",
+      "bbox": {
+        "min_lat": 45.03,
+        "max_lat": 45.08,
+        "min_lon": -70.33,
+        "max_lon": -70.28
+      }
+    },
+    {
+      "name": "Loon Mountain",
+      "country": "United States",
+      "state": "New Hampshire",
+      "bbox": {
+        "min_lat": 44.03,
+        "max_lat": 44.07,
+        "min_lon": -71.64,
+        "max_lon": -71.60
+      }
+    },
+    {
+      "name": "Bretton Woods",
+      "country": "United States",
+      "state": "New Hampshire",
+      "bbox": {
+        "min_lat": 44.25,
+        "max_lat": 44.29,
+        "min_lon": -71.48,
+        "max_lon": -71.43
+      }
+    },
+    {
+      "name": "Chamonix",
+      "country": "France",
+      "state": "Auvergne-Rhône-Alpes",
+      "bbox": {
+        "min_lat": 45.90,
+        "max_lat": 45.96,
+        "min_lon": 6.84,
+        "max_lon": 6.91
+      }
+    },
+    {
+      "name": "Val d'Isère",
+      "country": "France",
+      "state": "Auvergne-Rhône-Alpes",
+      "bbox": {
+        "min_lat": 45.43,
+        "max_lat": 45.48,
+        "min_lon": 6.95,
+        "max_lon": 7.02
+      }
+    },
+    {
+      "name": "Courchevel",
+      "country": "France",
+      "state": "Auvergne-Rhône-Alpes",
+      "bbox": {
+        "min_lat": 45.39,
+        "max_lat": 45.44,
+        "min_lon": 6.62,
+        "max_lon": 6.68
+      }
+    },
+    {
+      "name": "Les Trois Vallées",
+      "country": "France",
+      "state": "Auvergne-Rhône-Alpes",
+      "bbox": {
+        "min_lat": 45.35,
+        "max_lat": 45.50,
+        "min_lon": 6.50,
+        "max_lon": 6.75
+      }
+    },
+    {
+      "name": "Zermatt",
+      "country": "Switzerland",
+      "state": "Valais",
+      "bbox": {
+        "min_lat": 45.98,
+        "max_lat": 46.04,
+        "min_lon": 7.73,
+        "max_lon": 7.79
+      }
+    },
+    {
+      "name": "Verbier",
+      "country": "Switzerland",
+      "state": "Valais",
+      "bbox": {
+        "min_lat": 46.08,
+        "max_lat": 46.12,
+        "min_lon": 7.20,
+        "max_lon": 7.25
+      }
+    },
+    {
+      "name": "St. Anton",
+      "country": "Austria",
+      "state": "Tyrol",
+      "bbox": {
+        "min_lat": 47.11,
+        "max_lat": 47.15,
+        "min_lon": 10.24,
+        "max_lon": 10.29
+      }
+    },
+    {
+      "name": "Ischgl",
+      "country": "Austria",
+      "state": "Tyrol",
+      "bbox": {
+        "min_lat": 46.98,
+        "max_lat": 47.02,
+        "min_lon": 10.28,
+        "max_lon": 10.33
+      }
+    },
+    {
+      "name": "Kitzbühel",
+      "country": "Austria",
+      "state": "Tyrol",
+      "bbox": {
+        "min_lat": 47.43,
+        "max_lat": 47.47,
+        "min_lon": 12.37,
+        "max_lon": 12.42
+      }
+    },
+    {
+      "name": "Cortina d'Ampezzo",
+      "country": "Italy",
+      "state": "Veneto",
+      "bbox": {
+        "min_lat": 46.52,
+        "max_lat": 46.58,
+        "min_lon": 12.11,
+        "max_lon": 12.18
+      }
+    },
+    {
+      "name": "Val Gardena",
+      "country": "Italy",
+      "state": "South Tyrol",
+      "bbox": {
+        "min_lat": 46.53,
+        "max_lat": 46.59,
+        "min_lon": 11.67,
+        "max_lon": 11.75
+      }
+    },
+    {
+      "name": "Beaver Creek",
+      "country": "United States",
+      "state": "Colorado",
+      "bbox": {
+        "min_lat": 39.58,
+        "max_lat": 39.63,
+        "min_lon": -106.53,
+        "max_lon": -106.48
+      }
+    },
+    {
+      "name": "Okemo",
+      "country": "United States",
+      "state": "Vermont",
+      "bbox": {
+        "min_lat": 43.39,
+        "max_lat": 43.43,
+        "min_lon": -72.73,
+        "max_lon": -72.69
+      }
+    },
+    {
+      "name": "Mount Sunapee",
+      "country": "United States",
+      "state": "New Hampshire",
+      "bbox": {
+        "min_lat": 43.33,
+        "max_lat": 43.36,
+        "min_lon": -72.09,
+        "max_lon": -72.05
+      }
+    },
+    {
+      "name": "Hunter Mountain",
+      "country": "United States",
+      "state": "New York",
+      "bbox": {
+        "min_lat": 42.20,
+        "max_lat": 42.23,
+        "min_lon": -74.23,
+        "max_lon": -74.19
+      }
+    },
+    {
+      "name": "Mount Snow",
+      "country": "United States",
+      "state": "Vermont",
+      "bbox": {
+        "min_lat": 42.95,
+        "max_lat": 42.99,
+        "min_lon": -72.93,
+        "max_lon": -72.89
+      }
+    },
+    {
+      "name": "Attitash",
+      "country": "United States",
+      "state": "New Hampshire",
+      "bbox": {
+        "min_lat": 44.07,
+        "max_lat": 44.10,
+        "min_lon": -71.26,
+        "max_lon": -71.22
+      }
+    },
+    {
+      "name": "Wildcat",
+      "country": "United States",
+      "state": "New Hampshire",
+      "bbox": {
+        "min_lat": 44.26,
+        "max_lat": 44.29,
+        "min_lon": -71.24,
+        "max_lon": -71.20
+      }
+    },
+    {
+      "name": "Stratton",
+      "country": "United States",
+      "state": "Vermont",
+      "bbox": {
+        "min_lat": 43.10,
+        "max_lat": 43.14,
+        "min_lon": -72.92,
+        "max_lon": -72.88
+      }
+    },
+    {
+      "name": "Snowshoe",
+      "country": "United States",
+      "state": "West Virginia",
+      "bbox": {
+        "min_lat": 38.40,
+        "max_lat": 38.44,
+        "min_lon": -79.99,
+        "max_lon": -79.95
+      }
+    },
+    {
+      "name": "Tamarack",
+      "country": "United States",
+      "state": "Idaho",
+      "bbox": {
+        "min_lat": 44.57,
+        "max_lat": 44.61,
+        "min_lon": -116.12,
+        "max_lon": -116.08
+      }
+    },
+    {
+      "name": "Schweitzer",
+      "country": "United States",
+      "state": "Idaho",
+      "bbox": {
+        "min_lat": 48.36,
+        "max_lat": 48.40,
+        "min_lon": -116.63,
+        "max_lon": -116.59
+      }
+    },
+    {
+      "name": "Sun Valley",
+      "country": "United States",
+      "state": "Idaho",
+      "bbox": {
+        "min_lat": 43.69,
+        "max_lat": 43.73,
+        "min_lon": -114.36,
+        "max_lon": -114.32
+      }
+    },
+    {
+      "name": "Taos",
+      "country": "United States",
+      "state": "New Mexico",
+      "bbox": {
+        "min_lat": 36.59,
+        "max_lat": 36.63,
+        "min_lon": -105.48,
+        "max_lon": -105.44
+      }
+    },
+    {
+      "name": "Red Lodge",
+      "country": "United States",
+      "state": "Montana",
+      "bbox": {
+        "min_lat": 45.15,
+        "max_lat": 45.19,
+        "min_lon": -109.30,
+        "max_lon": -109.26
+      }
+    },
+    {
+      "name": "Whitefish",
+      "country": "United States",
+      "state": "Montana",
+      "bbox": {
+        "min_lat": 48.48,
+        "max_lat": 48.52,
+        "min_lon": -114.37,
+        "max_lon": -114.33
+      }
+    },
+    {
+      "name": "Squaw Valley Alpine Meadows",
+      "country": "United States",
+      "state": "California",
+      "bbox": {
+        "min_lat": 39.17,
+        "max_lat": 39.23,
+        "min_lon": -120.27,
+        "max_lon": -120.20
+      }
+    },
+    {
+      "name": "Sierra at Tahoe",
+      "country": "United States",
+      "state": "California",
+      "bbox": {
+        "min_lat": 38.78,
+        "max_lat": 38.82,
+        "min_lon": -120.09,
+        "max_lon": -120.05
+      }
+    },
+    {
+      "name": "June Mountain",
+      "country": "United States",
+      "state": "California",
+      "bbox": {
+        "min_lat": 37.77,
+        "max_lat": 37.80,
+        "min_lon": -119.08,
+        "max_lon": -119.04
+      }
+    },
+    {
+      "name": "Snowbasin",
+      "country": "United States",
+      "state": "Utah",
+      "bbox": {
+        "min_lat": 41.21,
+        "max_lat": 41.25,
+        "min_lon": -111.87,
+        "max_lon": -111.82
+      }
+    },
+    {
+      "name": "Powder Mountain",
+      "country": "United States",
+      "state": "Utah",
+      "bbox": {
+        "min_lat": 41.37,
+        "max_lat": 41.41,
+        "min_lon": -111.80,
+        "max_lon": -111.76
+      }
+    },
+    {
+      "name": "Blue Mountain",
+      "country": "Canada",
+      "state": "Ontario",
+      "bbox": {
+        "min_lat": 44.50,
+        "max_lat": 44.53,
+        "min_lon": -80.34,
+        "max_lon": -80.30
+      }
+    },
+    {
+      "name": "Tremblant",
+      "country": "Canada",
+      "state": "Quebec",
+      "bbox": {
+        "min_lat": 46.20,
+        "max_lat": 46.24,
+        "min_lon": -74.60,
+        "max_lon": -74.56
+      }
+    },
+    {
+      "name": "Fernie",
+      "country": "Canada",
+      "state": "British Columbia",
+      "bbox": {
+        "min_lat": 49.46,
+        "max_lat": 49.50,
+        "min_lon": -115.11,
+        "max_lon": -115.07
+      }
+    },
+    {
+      "name": "Kicking Horse",
+      "country": "Canada",
+      "state": "British Columbia",
+      "bbox": {
+        "min_lat": 51.28,
+        "max_lat": 51.32,
+        "min_lon": -117.06,
+        "max_lon": -117.02
+      }
+    },
+    {
+      "name": "Panorama",
+      "country": "Canada",
+      "state": "British Columbia",
+      "bbox": {
+        "min_lat": 50.69,
+        "max_lat": 50.73,
+        "min_lon": -116.06,
+        "max_lon": -116.02
+      }
+    },
+    {
+      "name": "Marmot Basin",
+      "country": "Canada",
+      "state": "Alberta",
+      "bbox": {
+        "min_lat": 52.82,
+        "max_lat": 52.86,
+        "min_lon": -118.09,
+        "max_lon": -118.05
+      }
+    },
+    {
+      "name": "Snowmass",
+      "country": "United States",
+      "state": "Colorado",
+      "bbox": {
+        "min_lat": 39.21,
+        "max_lat": 39.26,
+        "min_lon": -106.95,
+        "max_lon": -106.90
+      }
+    }
+  ]
+}
+

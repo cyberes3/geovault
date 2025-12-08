@@ -24,6 +24,7 @@ class GeometryTypeTagGenerator(TagGenerator):
     ) -> List[str]:
         """
         Generate type tag based on geometry type.
+        Uses simplified user-friendly names instead of technical GeoJSON types.
         
         Args:
             feature: The feature to generate tags for
@@ -34,7 +35,17 @@ class GeometryTypeTagGenerator(TagGenerator):
             List containing a single type tag
         """
         geometry_type = feature.geometry.type.value.lower()
-        # Map linestring to line for tag
-        tag_type = "line" if geometry_type == "linestring" else geometry_type
+        
+        # Map technical GeoJSON types to user-friendly names
+        type_mapping = {
+            'point': 'point',
+            'multipoint': 'point',
+            'linestring': 'line',
+            'multilinestring': 'line',
+            'polygon': 'polygon',
+            'multipolygon': 'polygon'
+        }
+        
+        tag_type = type_mapping.get(geometry_type, geometry_type)
         return [f'type:{tag_type}']
 

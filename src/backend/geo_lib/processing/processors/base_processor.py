@@ -568,11 +568,21 @@ class BaseProcessor(ABC):
                 return {'type': 'FeatureCollection', 'features': []}, self.import_log
 
             # Step 6: Generate tags (elevation tags now use real data from step 5)
+            # Tags include: geometry type, import date, source file, elevation, and reverse geocoding
+            # Note: Reverse geocoding queries OpenStreetMap for location-based tags
             tagging_start = time.time()
+            self.import_log.add("Generating feature tags (including reverse geocoding)...", "Processing", DatabaseLogLevel.INFO)
             tagging_log = self.step_6_tag_features(self.processed_features)
             tagging_duration = time.time() - tagging_start
             self.import_log.extend(tagging_log)
             self.import_log.add_timing("Feature tagging", tagging_duration, "Processing")
+            
+            # Count geocoded features
+            geocoded_count = sum(1 for f in self.processed_features 
+                                if any(tag.startswith(('country:', 'state:', 'city:', 'national-', 'state-park:', 'wilderness:', 'lake:', 'ski-resort:')) 
+                                      for tag in f.get('properties', {}).get('system_tags', [])))
+            if geocoded_count > 0:
+                self.import_log.add(f"Reverse geocoded {geocoded_count} feature(s)", "Reverse Geocoding", DatabaseLogLevel.INFO)
 
             # Check for cancellation
             if self._is_cancelled():

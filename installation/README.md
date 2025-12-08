@@ -119,11 +119,10 @@ Then fill in your values in the config. Important values:
 
 ## Database
 
-You need to create a new user and database. Quick guide:
-
 1. Generate a secure password via `pwgen 32 1`
 2. `sudo -u postgres psql`
-3. `CREATE DATABASE geovault;`
+3. `CREATE DATABASE geovault WITH ENCODING 'UTF8' LC_COLLATE='C.utf8' LC_CTYPE='C.utf8' TEMPLATE=template0;`
+   - If you have locale issues, find the ones available on your system via: `locale -a`
 4. `CREATE USER geovault WITH PASSWORD 'your_password_here';`
 5. `GRANT ALL PRIVILEGES ON DATABASE geovault TO geovault;`
 6. `\c geovault;`

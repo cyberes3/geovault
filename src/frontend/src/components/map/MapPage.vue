@@ -555,11 +555,14 @@ export default {
             this.showFeaturePopup = false
           } else {
             this.overlappingFeatures = uniqueFeatures.map(f => markRaw(convertMapLibreFeature(f)))
+            // Get the map container's bounding rect to properly position the popup
+            // e.point is relative to the map canvas, so we use it directly
+            const mapRect = this.$refs.mapContainer?.getBoundingClientRect() || { left: 0, top: 0 }
             this.popupPosition = {
               x: e.point.x,
               y: e.point.y,
-              containerWidth: this.$refs.mapContainer?.clientWidth || 0,
-              containerHeight: this.$refs.mapContainer?.clientHeight || 0
+              containerWidth: this.$refs.mapContainer?.clientWidth || window.innerWidth,
+              containerHeight: this.$refs.mapContainer?.clientHeight || window.innerHeight
             }
             this.showFeaturePopup = true
           }
@@ -1680,14 +1683,46 @@ export default {
       // Ensure bounds are not degenerate (same point)
       if (minLon === maxLon && minLat === maxLat) {
         // For points, zoom to a reasonable zoom level (limited to 10)
+        // Check if we need to adjust padding for mobile with feature info box
+        const isMobile = window.innerWidth < 768
+        const hasFeatureInfoBox = this.selectedFeature && !this.isEditingFeature
+        
+        let padding = 50
+        if (isMobile && hasFeatureInfoBox) {
+          // On mobile with feature info box, center on top 2/3 of screen
+          // Feature info box takes up to 60vh at bottom
+          const viewportHeight = window.innerHeight
+          const infoBoxMaxHeight = viewportHeight * 0.6
+          // Add extra bottom padding to push feature into top 2/3
+          padding = { top: 50, bottom: infoBoxMaxHeight + 20, left: 50, right: 50 }
+        }
+        
         this.navigateAndRefresh(() => {
           this.map.flyTo({
             center: [minLon, minLat],
             zoom: 10,
-            duration: 500
+            duration: 500,
+            padding: padding
           })
         })
         return
+      }
+
+      // Calculate padding based on screen size and feature info box visibility
+      const isMobile = window.innerWidth < 768
+      const hasFeatureInfoBox = this.selectedFeature && !this.isEditingFeature
+      
+      let padding
+      if (isMobile && hasFeatureInfoBox) {
+        // On mobile with feature info box, center on top 2/3 of screen
+        // Feature info box takes up to 60vh at bottom
+        const viewportHeight = window.innerHeight
+        const infoBoxMaxHeight = viewportHeight * 0.6
+        // Add extra bottom padding to push feature into top 2/3
+        padding = { top: 50, bottom: infoBoxMaxHeight + 20, left: 50, right: 50 }
+      } else {
+        // Default padding for desktop or mobile without feature info box
+        padding = { top: 50, bottom: 50, left: 50, right: 50 }
       }
 
       // Fly to feature
@@ -1700,7 +1735,7 @@ export default {
           )
           // Use fitBounds which is more reliable for bounds
           this.map.fitBounds(bounds, {
-            padding: { top: 50, bottom: 50, left: 50, right: 50 },
+            padding: padding,
             duration: 500
           })
         } catch (error) {
@@ -1710,7 +1745,7 @@ export default {
             const bounds = new maplibregl.LngLatBounds([minLon, minLat], [maxLon, maxLat])
             this.map.flyTo({
               bounds: bounds,
-              padding: 50,
+              padding: typeof padding === 'object' ? padding.top : padding,
               duration: 500
             })
           } catch (error2) {

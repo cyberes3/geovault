@@ -124,7 +124,7 @@ export default {
     arrowPosition() {
       // Determine if arrow should be at top or bottom
       const y = this.position.y
-      const containerHeight = this.position.containerHeight || window.innerHeight
+      const containerHeight = this.position.containerHeight
       const { height } = this.popupDimensions
       
       // Check if popup is positioned above or below
@@ -132,11 +132,12 @@ export default {
       return popupTop < 0 ? 'top' : 'bottom'
     },
     popupStyle() {
-      // Center on click, but position ABOVE the point so the arrow points down to it
+      // Position the popup at the tap/click location
+      // Coordinates are relative to the map container
       let x = this.position.x
       let y = this.position.y
-      const containerWidth = this.position.containerWidth || window.innerWidth
-      const containerHeight = this.position.containerHeight || window.innerHeight
+      const containerWidth = this.position.containerWidth
+      const containerHeight = this.position.containerHeight
       const { width, height, halfWidth } = this.popupDimensions
 
       // Calculate popup bounds if positioned above (default)

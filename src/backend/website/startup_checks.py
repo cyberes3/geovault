@@ -11,6 +11,7 @@ This module performs essential checks when the server starts up:
 7. Frontend static files are built
 8. togeojson Node.js converter is installed
 9. Site configuration (for email confirmation URLs)
+10. Clear Redis cache (ensures fresh data on startup)
 
 Warning checks (don't fail startup):
 - Configuration file exists
@@ -720,6 +721,28 @@ def cleanup_redis_queues():
         return True
 
 
+def clear_redis_cache():
+    """
+    Clear the Redis cache on startup.
+    
+    This ensures fresh data after server restarts and prevents stale
+    cached data (especially important for reverse geocoding which caches
+    results for 30 days).
+    """
+    try:
+        from django.core.cache import cache
+        
+        # Clear all cached data
+        cache.clear()
+        logger.info("✓ Cleared Redis cache (ensures fresh data on startup)")
+        
+        return True
+    except Exception as e:
+        logger.warning(f"⚠ Failed to clear Redis cache: {e}")
+        # This is not critical - server can still start
+        return True
+
+
 def run_startup_checks():
     """
     Run all startup checks and exit if any fail.
@@ -737,6 +760,7 @@ def run_startup_checks():
     10. Validate file type max_size values (< 200MB)
     11. Verify Site configuration (for email confirmation URLs)
     12. Clean up stale Redis processing locks
+    13. Clear Redis cache (ensures fresh data on startup)
     
     Warning checks (don't fail startup):
     - Configuration file
@@ -782,6 +806,10 @@ def run_startup_checks():
     # Cleanup stale Redis queues and locks (non-critical)
     logger.info("Cleaning up stale Redis queues...")
     cleanup_redis_queues()
+    
+    # Clear Redis cache on startup (non-critical)
+    logger.info("Clearing Redis cache...")
+    clear_redis_cache()
     
     if failed_checks:
         logger.error("=" * 60)

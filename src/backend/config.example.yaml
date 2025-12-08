@@ -113,7 +113,6 @@ reverse_geocoding:
   # Overpass API server URL for reverse geocoding
   # This is the main API endpoint for querying OpenStreetMap data
   # Default: https://overpass.private.coffee/api/interpreter (free, unlimited)
-  # Alternative: https://overpass-api.de/api/interpreter (public instance)
   overpass_api_host: https://overpass.private.coffee/api/interpreter
 
   # Timeout for Overpass API queries (in seconds)
