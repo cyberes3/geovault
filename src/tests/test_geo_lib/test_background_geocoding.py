@@ -30,6 +30,41 @@ class TestBackgroundGeocoding(TransactionTestCase):
             username='geocodinguser'
         )
     
+    def _wait_for_geocoding(self, feature_id, expected_tags=None, timeout=2.0, poll_interval=0.1):
+        """
+        Wait for background geocoding to complete by polling the database.
+        
+        Args:
+            feature_id: ID of the feature to check
+            expected_tags: List of tags to wait for (if None, just waits for any geocoding tags)
+            timeout: Maximum time to wait in seconds
+            poll_interval: Time between checks in seconds
+            
+        Returns:
+            True if geocoding completed, False if timeout
+        """
+        start_time = time.time()
+        while time.time() - start_time < timeout:
+            try:
+                feature_store = FeatureStore.objects.get(id=feature_id)
+                geojson = feature_store.geojson
+                system_tags = geojson.get('properties', {}).get('system_tags', [])
+                
+                if expected_tags:
+                    # Check if all expected tags are present
+                    if all(tag in system_tags for tag in expected_tags):
+                        return True
+                else:
+                    # Check if any geocoding tags are present (tags starting with 'geo-')
+                    if any(tag.startswith('geo-') for tag in system_tags):
+                        return True
+            except FeatureStore.DoesNotExist:
+                pass
+            
+            time.sleep(poll_interval)
+        
+        return False
+    
     def _create_test_feature(self, with_geocoding_tags=False):
         """Create a test feature for geocoding."""
         geojson = {
@@ -75,8 +110,12 @@ class TestBackgroundGeocoding(TransactionTestCase):
         # Start background geocoding
         geocode_feature_async(feature_store.id)
         
-        # Wait for background thread to complete (with timeout)
-        time.sleep(0.5)
+        # Wait for geocoding to complete
+        expected_tags = ['geo-city:San Francisco', 'geo-state:California', 'geo-country:United States']
+        self.assertTrue(
+            self._wait_for_geocoding(feature_store.id, expected_tags),
+            "Geocoding tags should be added within timeout"
+        )
         
         # Refresh from database
         feature_store.refresh_from_db()
@@ -111,8 +150,8 @@ class TestBackgroundGeocoding(TransactionTestCase):
         # Start background geocoding
         geocode_feature_async(feature_store.id)
         
-        # Wait for background thread to complete
-        time.sleep(0.5)
+        # Wait a bit for the error to be handled (errors are logged but don't modify feature)
+        time.sleep(0.3)
         
         # Refresh from database
         feature_store.refresh_from_db()
@@ -134,8 +173,8 @@ class TestBackgroundGeocoding(TransactionTestCase):
         # Start background geocoding
         geocode_feature_async(feature_store.id)
         
-        # Wait for background thread to complete
-        time.sleep(0.5)
+        # Wait a bit (geocoding is disabled, so nothing should happen)
+        time.sleep(0.3)
         
         # Refresh from database
         feature_store.refresh_from_db()
@@ -176,8 +215,12 @@ class TestBackgroundGeocoding(TransactionTestCase):
         # Start background geocoding
         geocode_feature_async(feature_store.id)
         
-        # Wait for background thread to complete
-        time.sleep(0.5)
+        # Wait for geocoding to complete
+        expected_tags = ['geo-state:California']
+        self.assertTrue(
+            self._wait_for_geocoding(feature_store.id, expected_tags),
+            "Geocoding should complete within timeout"
+        )
         
         # Refresh from database
         feature_store.refresh_from_db()
@@ -224,8 +267,11 @@ class TestBackgroundGeocoding(TransactionTestCase):
         feature_store.geojson = geojson
         feature_store.save()
         
-        # Wait for background geocoding to complete
-        time.sleep(0.5)
+        # Wait for geocoding to complete
+        self.assertTrue(
+            self._wait_for_geocoding(feature_store.id, ['geo-city:San Francisco']),
+            "Geocoding should complete within timeout"
+        )
         
         # Refresh from database
         feature_store.refresh_from_db()

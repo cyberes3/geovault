@@ -83,19 +83,16 @@ def geocode_feature_async(feature_id: int):
                     logger.warning(f"Feature {feature_id} has unsupported geometry type for geocoding")
                     return
                 
-                # Create feature instance for tag generation
-                try:
-                    feature_instance = feature_class(**geojson)
-                except Exception as e:
-                    logger.warning(f"Failed to create feature instance for {feature_id}: {e}")
-                    return
+                geojson_for_validation = geojson.copy()
+                geojson_for_validation['properties']['geojson_hash'] = feature_store.geojson_hash
+                feature_instance = feature_class(**geojson_for_validation)
                 
                 # Generate geocoding tags using the tag generator
                 geocoding_generator = GeocodingTagGenerator()
                 try:
                     geocoding_tags = geocoding_generator.process(feature_instance, import_log=None)
-                except Exception as e:
-                    logger.warning(f"Geocoding tag generation failed for feature {feature_id}: {e}")
+                except:
+                    logger.warning(f"Geocoding tag generation failed for feature {feature_id}: {traceback.format_exc()}")
                     return
                 
                 # Update system_tags in geojson
