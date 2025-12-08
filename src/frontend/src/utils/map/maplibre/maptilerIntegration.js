@@ -109,12 +109,17 @@ export function setupTerrain(map, config) {
     return
   }
 
-  // Check if terrain is already set up
-  if (map.getSource('terrain-source')) {
-    return
-  }
-
   try {
+    // Remove existing terrain first to ensure clean setup
+    if (map.getSource('terrain-source')) {
+      // Remove terrain configuration first
+      if (map.getStyle()) {
+        map.setTerrain(null)
+      }
+      // Then remove the source
+      map.removeSource('terrain-source')
+    }
+
     // Add terrain source
     const terrainSource = config.createTerrainSource()
     map.addSource('terrain-source', terrainSource)

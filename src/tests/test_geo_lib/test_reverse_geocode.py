@@ -123,9 +123,9 @@ class TestReverseGeocodingService(TestCase):
         mock_response.status_code = 200
         mock_response.json.return_value = {
             'elements': [
-                {'tags': {'name': 'United States of America', 'admin_level': '2'}},
-                {'tags': {'name': 'Colorado', 'admin_level': '4'}},
-                {'tags': {'name': 'Adams County', 'admin_level': '6'}},
+                {'tags': {'name': 'United States of America', 'admin_level': '2', 'boundary': 'administrative'}},
+                {'tags': {'name': 'Colorado', 'admin_level': '4', 'boundary': 'administrative'}},
+                {'tags': {'name': 'Adams County', 'admin_level': '6', 'boundary': 'administrative'}},
                 {'tags': {'name': 'Aurora', 'admin_level': '8', 'boundary': 'administrative'}}
             ]
         }
@@ -266,9 +266,9 @@ class TestReverseGeocodingService(TestCase):
             if 'admin_level' in query:
                 response.json.return_value = {
                     'elements': [
-                        {'tags': {'name': 'United States of America', 'admin_level': '2'}},
-                        {'tags': {'name': 'Colorado', 'admin_level': '4'}},
-                        {'tags': {'name': 'Park County', 'admin_level': '6'}}
+                        {'tags': {'name': 'United States of America', 'admin_level': '2', 'boundary': 'administrative'}},
+                        {'tags': {'name': 'Colorado', 'admin_level': '4', 'boundary': 'administrative'}},
+                        {'tags': {'name': 'Park County', 'admin_level': '6', 'boundary': 'administrative'}}
                     ]
                 }
             # Protected areas query

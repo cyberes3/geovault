@@ -394,6 +394,7 @@ export default {
       terrainEnabled: false, // Current state of terrain (on/off)
       tooltipShown: false, // Track if 3D tooltip has been shown
       terrainTooltipElement: null, // Reference to tooltip element
+      terrainButtonElement: null, // Reference to terrain button element
       hillshadeEnabled: false, // Current state of hillshade (on/off)
       // Saved map state for restoration after destruction
       savedMapCenter: null,
@@ -1139,8 +1140,9 @@ export default {
           container.appendChild(button)
           container.appendChild(tooltip)
           
-          // Store reference to tooltip for initial load
+          // Store references for later updates
           self.terrainTooltipElement = tooltip
+          self.terrainButtonElement = button
 
           // Click handler
           button.onclick = () => {
@@ -1150,6 +1152,7 @@ export default {
             if (newState) {
               button.classList.add('maplibregl-ctrl-terrain-enabled')
               // Enable 3D: add terrain and tilt the map
+              self.terrainEnabled = true
               self.setupTerrain()
               self.map.easeTo({ pitch: 50, duration: 800 })
               
@@ -1161,6 +1164,7 @@ export default {
             } else {
               button.classList.remove('maplibregl-ctrl-terrain-enabled')
               // Disable 3D: remove terrain and reset tilt
+              self.terrainEnabled = false
               self.removeTerrain()
               self.map.easeTo({ pitch: 0, duration: 800 })
             }
@@ -1195,10 +1199,20 @@ export default {
       
       maptilerSetupTerrain(this.map, this.maptilerConfig)
       this.addHillshadeIfNeeded()
+      
+      // Update button state to reflect terrain is enabled
+      if (this.terrainButtonElement) {
+        this.terrainButtonElement.classList.add('maplibregl-ctrl-terrain-enabled')
+      }
     },
     removeTerrain() {
       this.removeHillshade()
       maptilerRemoveTerrain(this.map)
+      
+      // Update button state to reflect terrain is disabled
+      if (this.terrainButtonElement) {
+        this.terrainButtonElement.classList.remove('maplibregl-ctrl-terrain-enabled')
+      }
     },
     addHillshadeIfNeeded() {
       if (!this.map || !this.maptilerConfig) return
@@ -1286,9 +1300,10 @@ export default {
         this.map.setStyle(styleUrl)
         
         // Restore GeoJSON data and terrain after style loads
-        this.map.once('styledata', async () => {
-          // Wait a bit to ensure style is fully loaded
-          await new Promise(resolve => setTimeout(resolve, 100))
+        // Use 'style.load' event to ensure style is fully loaded before restoring terrain
+        this.map.once('style.load', async () => {
+          // Small delay to ensure everything is ready
+          await new Promise(resolve => setTimeout(resolve, 50))
           
           // Restore GeoJSON source and features
           if (geojsonData) {
@@ -1389,8 +1404,8 @@ export default {
           })
           
           // Wait for style to load, then add raster layer and restore GeoJSON
-          this.map.once('styledata', async () => {
-            await new Promise(resolve => setTimeout(resolve, 100))
+          this.map.once('style.load', async () => {
+            await new Promise(resolve => setTimeout(resolve, 50))
             
             // Add raster source and layer
             this.map.addSource('raster-source', {
