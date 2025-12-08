@@ -24,41 +24,14 @@
     <!-- Center - Map -->
     <div class="flex-1 w-full bg-gray-50 relative overflow-hidden">
       <!-- Mobile Controls Bar -->
-      <div class="lg:hidden bg-white border-b border-gray-200 px-4 py-3 flex justify-between items-center">
-        <button
-            class="p-2 text-gray-600 hover:text-gray-900 rounded-md hover:bg-gray-100 focus:outline-none"
-            title="Features"
-            @click="activeMobileSidebar = 'features'"
-        >
-          <ListBulletIcon class="w-6 h-6"/>
-        </button>
-        <div class="text-sm font-medium text-gray-900 max-w-[50%] text-center leading-tight flex flex-col items-center justify-center">
-          <template v-if="isPublicShareMode">
-            <div v-if="publicShareTag" class="flex items-center justify-center gap-1 w-full">
-              <ShareIcon class="w-4 h-4 text-blue-500 flex-shrink-0"/>
-              <span class="line-clamp-2">Tag: {{ publicShareTag }}</span>
-            </div>
-            <div v-else-if="publicShareCollectionName" class="flex items-center justify-center gap-1 w-full">
-              <ShareIcon class="w-4 h-4 text-blue-500 flex-shrink-0"/>
-              <span class="line-clamp-2">Collection: {{ publicShareCollectionName }}</span>
-            </div>
-            <div v-else class="flex items-center justify-center gap-1 w-full">
-              <ShareIcon class="w-4 h-4 text-blue-500 flex-shrink-0"/>
-              <span>Shared Map</span>
-            </div>
-          </template>
-          <template v-else>
-            <span class="line-clamp-2">{{ collectionName || 'Map' }}</span>
-          </template>
-        </div>
-        <button
-            class="p-2 text-gray-600 hover:text-gray-900 rounded-md hover:bg-gray-100 focus:outline-none"
-            title="Map Controls"
-            @click="activeMobileSidebar = 'controls'"
-        >
-          <Cog6ToothIcon class="w-6 h-6"/>
-        </button>
-      </div>
+      <MobileControlsBar
+        :is-public-share-mode="isPublicShareMode"
+        :public-share-tag="publicShareTag"
+        :public-share-collection-name="publicShareCollectionName"
+        :collection-name="collectionName"
+        @toggle-features="activeMobileSidebar = 'features'"
+        @toggle-controls="activeMobileSidebar = 'controls'"
+      />
       <div class="relative w-full h-full">
         <!-- Map -->
         <div
@@ -213,6 +186,7 @@ import MapControlsSidebar from './MapControlsSidebar.vue'
 import FeatureInfoBox from './FeatureInfoBox.vue'
 import MapErrorOverlay from './MapErrorOverlay.vue'
 import MapLoadingIndicator from './MapLoadingIndicator.vue'
+import MobileControlsBar from './MobileControlsBar.vue'
 
 // Lazy-loaded components - only loaded when needed
 const FeatureEditBox = defineAsyncComponent(() => import('./FeatureEditBox.vue'))
@@ -244,6 +218,8 @@ import {
   removeHillshade as maptilerRemoveHillshade,
   createTerrainControl
 } from '@/utils/map/maplibre/maptilerIntegration.js'
+import { fetchUserLocation } from '@/utils/map/locationUtils.js'
+import { getCoordinatesFromGeometry, filterFeaturesByBounds, cleanupDistantFeatures as cleanupDistantFeaturesUtil } from '@/utils/map/featureExtent.js'
 
 export default {
   name: 'MapPage',
@@ -257,6 +233,7 @@ export default {
     MapErrorOverlay,
     MapLoadingIndicator,
     QuickPointDialog,
+    MobileControlsBar,
     HomeIcon,
     ExclamationCircleIcon,
     ShareIcon,
@@ -636,20 +613,7 @@ export default {
       return getBoundingBoxString(bounds)
     },
     async getUserLocation() {
-      try {
-        const response = await fetch(this.LOCATION_API_URL)
-        const data = await response.json()
-
-        if (response.ok && data.location) {
-          this.userLocation = data.location
-          console.log('User detected location:', data.location)
-        } else {
-          this.userLocation = null
-        }
-      } catch (error) {
-        console.error('Error fetching user location:', error)
-        this.userLocation = null
-      }
+      this.userLocation = await fetchUserLocation(this.LOCATION_API_URL)
     },
     async initializeMap() {
       // User location is already fetched in parallel during mounted()
@@ -943,22 +907,8 @@ export default {
       const data = serialized.data || { type: 'FeatureCollection', features: [] }
       const features = data.features || []
 
-      // Filter features in current bounds and exclude label points and replacement points
-      const featuresInBounds = features.filter(f => {
-        // Skip label points - they're internal features for label rendering
-        if (f.properties?._isLabelPoint) return false
-        
-        // Skip small feature replacement points - they're internal features for rendering
-        if (f.properties?._isSmallFeatureReplacement) return false
-        
-        if (!f.geometry) return false
-        const coords = this.getFeatureCoordinates(f.geometry)
-        return coords.some(coord => {
-          const [lon, lat] = coord
-          return lon >= bounds.getWest() && lon <= bounds.getEast() &&
-                 lat >= bounds.getSouth() && lat <= bounds.getNorth()
-        })
-      })
+      // Filter features in current bounds using utility function
+      const featuresInBounds = filterFeaturesByBounds(features, bounds, true, true)
 
       // Convert to format expected by FeatureListSidebar
       // Use markRaw to prevent Vue reactivity on feature objects for performance
@@ -988,36 +938,17 @@ export default {
       const data = serialized.data || { type: 'FeatureCollection', features: [] }
       const features = data.features || []
       
-      // 500 miles = 804,672 meters
-      // Convert to degrees (approximate at equator: 1 degree ≈ 111,320 meters)
-      const bufferDegrees = 804672 / 111320 // ≈ 7.23 degrees
-      
-      // Create buffered bounds (500 miles in each direction)
-      const bufferedBounds = {
-        west: bounds.getWest() - bufferDegrees,
-        east: bounds.getEast() + bufferDegrees,
-        south: bounds.getSouth() - bufferDegrees,
-        north: bounds.getNorth() + bufferDegrees
-      }
-      
-      // Filter to keep only features within the buffer
-      const featuresWithinBuffer = features.filter(f => {
-        if (!f.geometry) return false
-        
-        const coords = this.getFeatureCoordinates(f.geometry)
-        
-        // Check if any coordinate is within the buffered bounds
-        return coords.some(coord => {
-          const [lon, lat] = coord
-          return lon >= bufferedBounds.west && lon <= bufferedBounds.east &&
-                 lat >= bufferedBounds.south && lat <= bufferedBounds.north
-        })
-      })
+      // Use utility function to clean up distant features (500 miles buffer)
+      const { filteredFeatures: featuresWithinBuffer, removedCount } = cleanupDistantFeaturesUtil(
+        features, 
+        bounds, 
+        this.getFeatureCoordinates, 
+        500
+      )
       
       // Only update if we actually removed features
-      if (featuresWithinBuffer.length < features.length) {
-        const removed = features.length - featuresWithinBuffer.length
-        console.log(`Cleaned up ${removed} features more than 500 miles outside viewport`)
+      if (removedCount > 0) {
+        console.log(`Cleaned up ${removedCount} features more than 500 miles outside viewport`)
         
         // Update the source with filtered features
         source.setData(markRaw({
@@ -1035,7 +966,7 @@ export default {
       }
     },
     getFeatureCoordinates(geometry) {
-      return getFeatureCoordinates(geometry)
+      return getCoordinatesFromGeometry(geometry)
     },
     updateFeatureCount() {
       if (this.featureCountUpdatePending) return

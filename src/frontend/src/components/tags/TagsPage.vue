@@ -365,6 +365,7 @@ import BulkStylingModal from "@/components/import/parts/BulkStylingModal.vue";
 import { createEmptyBulkOperations, cloneBulkOperations } from "@/utils/bulkOperations.js";
 import { sortTagsByPriority, sortUserTagsAlphabetically, isSystemTag } from "@/utils/tagUtils.js";
 import { MagnifyingGlassIcon, ExclamationCircleIcon, TagIcon, ShareIcon, ArrowDownTrayIcon, PencilIcon, TrashIcon, CheckIcon, MapIcon, ArrowLeftIcon, ArrowRightIcon, XMarkIcon, RectangleStackIcon } from '@heroicons/vue/24/outline';
+import { deleteTag as deleteTagUtil, removeTagFromFeature as removeTagFromFeatureUtil, buildDeleteTagMessage, buildRemoveTagMessage, scrollToTag as scrollToTagUtil } from "@/utils/tags/tagOperations.js";
 
 export default {
   name: 'TagsPage',
@@ -807,21 +808,7 @@ export default {
       }
     },
     scrollToTag(tagName) {
-      // Find the tag element by looking for the tag name in the DOM
-      // The tag container has class "bg-white rounded-lg shadow-sm border border-gray-200"
-      const tagContainers = this.$el.querySelectorAll('.bg-white.rounded-lg.shadow-sm');
-      for (const container of tagContainers) {
-        // Check if this container's header contains the tag name
-        const tagHeader = container.querySelector('.bg-gray-50');
-        if (tagHeader) {
-          const tagSpan = tagHeader.querySelector('span.inline-flex');
-          if (tagSpan && tagSpan.textContent.trim() === tagName) {
-            // Scroll the container into view with smooth behavior
-            container.scrollIntoView({behavior: 'smooth', block: 'center'});
-            break;
-          }
-        }
-      }
+      scrollToTagUtil(this.$el, tagName);
     },
     async deleteTag(tag) {
       // Prevent deleting system tags
@@ -834,62 +821,21 @@ export default {
       const features = this.tagsData[tag] || [];
       const featureCount = features.length;
 
-      // Show confirmation dialog
-      const confirmMessage = `Are you sure you want to delete the tag "${tag}"?\n\nThis will remove the tag from ${featureCount} ${featureCount === 1 ? 'feature' : 'features'}.`;
+      // Show confirmation dialog using utility
+      const confirmMessage = buildDeleteTagMessage(tag, featureCount);
       if (!confirm(confirmMessage)) {
         return;
       }
 
       try {
-        // Prepare bulk update payload
-        const updates = [];
-        for (const feature of features) {
-          if (!feature.properties.database_id) {
-            continue;
-          }
+        // Use utility function to delete tag
+        const csrfToken = this.getCookie('csrftoken');
+        const result = await deleteTagUtil(tag, features, csrfToken);
 
-          // Get current tags
-          const currentTags = Array.isArray(feature.properties.tags)
-              ? [...feature.properties.tags]
-              : [];
-
-          // Remove the tag from the array
-          const filteredTags = currentTags.filter(t => t !== tag);
-
-          updates.push({
-            feature_id: feature.properties.database_id,
-            tags: filteredTags
-          });
-        }
-
-        // Send bulk update request
-        if (updates.length > 0) {
-          const csrfToken = this.getCookie('csrftoken');
-          const response = await fetch('/api/features/bulk-update-metadata/', {
-            method: 'POST',
-            headers: {
-              'Content-Type': 'application/json',
-              'X-CSRFToken': csrfToken || ''
-            },
-            body: JSON.stringify({
-              updates: updates
-            })
-          });
-
-          if (!response.ok) {
-            const errorData = await response.json().catch(() => ({}));
-            throw new Error(errorData.error || `Failed to update features: ${response.status}`);
-          }
-
-          const result = await response.json();
-          // Response is successful if we got here (response.ok is true)
-
-          // Check for any errors in the response
-          if (result.errors && result.errors.length > 0) {
-            const errorMessages = result.errors.map(e => `Feature ${e.feature_id}: ${e.error}`).join('\n');
-            console.warn('Some features failed to update:', errorMessages);
-            // Still continue with the update, but log the errors
-          }
+        // Check for any errors in the response
+        if (result.errors && result.errors.length > 0) {
+          const errorMessages = result.errors.map(e => `Feature ${e.feature_id}: ${e.error}`).join('\n');
+          console.warn('Some features failed to update:', errorMessages);
         }
 
         // Remove tag from local state
@@ -923,38 +869,17 @@ export default {
         return;
       }
 
-      // Show confirmation dialog
+      // Show confirmation dialog using utility
       const featureName = feature.properties.name || 'Unnamed Feature';
-      const confirmMessage = `Are you sure you want to remove the tag "${tag}" from "${featureName}"?`;
+      const confirmMessage = buildRemoveTagMessage(tag, featureName);
       if (!confirm(confirmMessage)) {
         return;
       }
 
       try {
-        // Get current tags
-        const currentTags = Array.isArray(feature.properties.tags)
-            ? [...feature.properties.tags]
-            : [];
-
-        // Remove the tag from the array
-        const filteredTags = currentTags.filter(t => t !== tag);
-
-        // Update the feature
+        // Use utility function to remove tag from feature
         const csrfToken = this.getCookie('csrftoken');
-        const response = await fetch(`/api/feature/${feature.properties.database_id}/update-metadata/`, {
-          method: 'PUT',
-          headers: {
-            'Content-Type': 'application/json',
-            'X-CSRFToken': csrfToken || ''
-          },
-          body: JSON.stringify({
-            tags: filteredTags
-          })
-        });
-
-        if (!response.ok) {
-          throw new Error(`Failed to update feature ${feature.properties.database_id}`);
-        }
+        await removeTagFromFeatureUtil(tag, feature, csrfToken);
 
         // Update local state - remove feature from tag's list
         const newTagsData = {...this.tagsData};

@@ -1,130 +1,26 @@
 <template>
   <div class="space-y-6">
     <!-- Page Header -->
-    <div class="bg-white rounded-lg shadow-sm border border-gray-200 p-4 sm:p-6">
-      <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
-        <div>
-          <h1 class="text-xl sm:text-2xl font-bold text-gray-900 mb-1 sm:mb-2">Process Import</h1>
-          <h2 v-if="originalFilename != null" class="text-sm sm:text-lg text-gray-600 break-words">{{ originalFilename }}</h2>
-          <div v-else class="h-6 w-48 bg-gray-200 rounded animate-pulse"></div>
-          <p v-if="uploadTimestamp != null" class="text-xs sm:text-sm text-gray-500 mt-1">{{ formatUploadDate(uploadTimestamp) }}</p>
-        </div>
-        <div class="flex items-center sm:justify-end">
-          <span v-if="isImported" class="inline-flex items-center px-3 py-1 rounded-full text-xs sm:text-sm font-medium bg-green-100 text-green-800">
-            <CheckIcon class="w-4 h-4 mr-1" />
-            Imported
-          </span>
-        </div>
-      </div>
-    </div>
+    <ImportProcessHeader 
+      :original-filename="originalFilename"
+      :upload-timestamp="uploadTimestamp"
+      :is-imported="isImported"
+    />
 
     <!-- Import Logs -->
-    <div class="bg-white rounded-lg shadow-sm border border-gray-200 p-4 sm:p-6">
-      <div class="flex items-center justify-between mb-4">
-        <h2 class="text-base sm:text-lg font-semibold text-gray-900">Processing Logs</h2>
-        <button
-            class="inline-flex items-center p-2 border border-gray-300 shadow-sm text-xs sm:text-sm font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500"
-            title="Open full log view"
-            @click="dialogs.logs = true"
-        >
-          <ArrowTopRightOnSquareIcon class="w-4 h-4" />
-        </button>
-      </div>
-      <div class="bg-gray-50 rounded-lg p-3 sm:p-4">
-        <div ref="logsContainer" class="h-32 overflow-auto">
-          <ul class="space-y-1 sm:space-y-0">
-            <li
-              v-for="(item, index) in filteredWorkerLog"
-              :key="`logitem-${index}`"
-              class="border-l-4 pl-2 pb-2 sm:py-1"
-              :class="item.level >= 40 ? 'bg-red-50 border-red-400' : 'border-transparent'"
-            >
-              <div class="flex flex-col gap-1 sm:grid sm:grid-cols-[190px_140px_80px_minmax(0,1fr)] sm:gap-x-4 sm:gap-y-1 sm:items-start">
-                <!-- Level + Source (first row on mobile, cols 2–3 on desktop) -->
-                <div class="flex flex-wrap sm:flex-nowrap items-center gap-2 sm:col-start-2 sm:row-start-1">
-                  <span
-                    v-if="item.level !== undefined"
-                    :class="getLevelClass(item.level)"
-                    class="text-[11px] sm:text-xs px-2 py-0.5 rounded font-medium"
-                  >
-                    {{ getLevelName(item.level) }}
-                  </span>
-                  <span
-                    v-if="item.source"
-                    class="text-xs text-gray-400 bg-gray-100 px-2 py-1 rounded whitespace-normal sm:whitespace-nowrap break-words"
-                    :title="item.source"
-                  >{{ item.source }}</span>
-                </div>
-
-                <!-- Timestamp (second row on mobile, col 1 on desktop) -->
-                <span
-                  class="text-[11px] sm:text-sm text-gray-500 font-mono bg-gray-100 px-2 py-0.5 rounded sm:bg-transparent sm:px-0 sm:py-0 sm:w-fit sm:whitespace-nowrap sm:col-start-1 sm:row-start-1"
-                >{{ formatTimestamp(item.timestamp) }}</span>
-
-                <!-- Message (third row on mobile, last column on desktop) -->
-                <p
-                  :class="item.level >= 40 ? 'text-red-800 font-medium' : 'text-gray-700'"
-                  class="text-xs sm:text-sm leading-relaxed break-words sm:col-start-4 sm:row-start-1 sm:row-span-2"
-                >
-                  {{ item.msg }}
-                </p>
-              </div>
-
-              <!-- Divider for mobile -->
-              <hr v-if="index < filteredWorkerLog.length - 1" class="sm:hidden mt-2 border-gray-200" />
-            </li>
-            <li v-if="filteredWorkerLog.length === 0" class="text-sm text-gray-500 italic">
-              {{ loading.logs ? 'Fetching logs...' : 'No logs available yet...' }}
-            </li>
-          </ul>
-        </div>
-      </div>
-    </div>
+    <ProcessingLogsPanel 
+      :logs="filteredWorkerLog"
+      :is-loading="loading.logs"
+      @open-full-logs="dialogs.logs = true"
+    />
 
     <!-- Import Summary -->
-    <div class="bg-white rounded-lg shadow-sm border border-gray-200 p-4 sm:p-6">
-      <h3 class="text-base sm:text-lg font-semibold text-gray-900 mb-4">Import Summary</h3>
-      <div v-if="loading.page" class="text-center py-8">
-        <span class="text-blue-500 font-medium">Loading...</span>
-      </div>
-      <div v-else class="grid grid-cols-1 md:grid-cols-3 gap-4">
-        <div class="bg-blue-50 border border-blue-200 rounded-lg p-4">
-          <div class="flex items-center">
-            <div class="flex-shrink-0">
-              <DocumentIcon class="h-8 w-8 text-blue-600" />
-            </div>
-            <div class="ml-3">
-              <p class="text-sm font-medium text-blue-700">Total Features</p>
-              <p class="text-2xl font-bold text-blue-700">{{ pagination.totalFeatures || itemsForUser.length }}</p>
-            </div>
-          </div>
-        </div>
-
-        <div class="bg-green-50 border border-green-200 rounded-lg p-4">
-          <div class="flex items-center">
-            <div class="flex-shrink-0">
-              <CheckIcon class="h-8 w-8 text-green-400" />
-            </div>
-            <div class="ml-3">
-              <p class="text-sm font-medium text-green-800">Ready to Import</p>
-              <p class="text-2xl font-bold text-green-900">{{ importableCount }}</p>
-            </div>
-          </div>
-        </div>
-
-        <div class="bg-yellow-50 border border-yellow-200 rounded-lg p-4">
-          <div class="flex items-center">
-            <div class="flex-shrink-0">
-              <ExclamationTriangleIcon class="h-8 w-8 text-yellow-400" />
-            </div>
-            <div class="ml-3">
-              <p class="text-sm font-medium text-yellow-800">Duplicates</p>
-              <p class="text-2xl font-bold text-yellow-900">{{ totalDuplicateCount }}</p>
-            </div>
-          </div>
-        </div>
-      </div>
-    </div>
+    <ImportSummaryStats 
+      :total-features="pagination.totalFeatures || itemsForUser.length"
+      :importable-count="importableCount"
+      :duplicate-count="totalDuplicateCount"
+      :is-loading="loading.page"
+    />
 
     <!-- Loading State for Initial Page Load and Post-Processing -->
     <Loader
@@ -203,48 +99,20 @@
     </div>
 
     <!-- Global Options -->
-    <div v-if="itemsForUser.length > 0 && !loading.page && !processing.active" class="bg-white rounded-lg shadow-sm border border-gray-200 p-4 sm:p-6">
-      <h3 class="text-sm font-semibold text-gray-900 mb-3">Global Options</h3>
-      <div class="flex flex-col sm:flex-row sm:items-center gap-4">
-        <!-- Import Custom Icons Toggle -->
-        <div class="flex items-center space-x-3">
-          <ToggleButton
-              v-model="importCustomIcons"
-              label="Import custom icons for all features"
-              :disabled="lockButtons || loading.importing || loading.saving || isImported"
-              size="md"
-          />
-          <label class="text-sm font-medium text-gray-700 cursor-pointer whitespace-nowrap" @click="!lockButtons && !loading.importing && !loading.saving && !isImported && (importCustomIcons = !importCustomIcons)">
-            Import custom icons for all features
-          </label>
-        </div>
-
-        <!-- Buttons Section -->
-        <div class="flex items-center gap-2 sm:ml-auto">
-          <!-- Recheck Duplicates Button -->
-          <button
-              :disabled="lockButtons || loading.importing || loading.saving || isImported || loading.recheckingDuplicates"
-              class="inline-flex items-center justify-center px-4 py-2 border border-blue-200 text-sm font-medium rounded-md text-blue-700 bg-blue-50 hover:bg-blue-100 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-300 disabled:bg-gray-100 disabled:hover:bg-gray-100 disabled:cursor-not-allowed transition-colors duration-200 whitespace-nowrap"
-              @click="recheckDuplicates"
-              title="Recheck for duplicate features"
-          >
-            <Loader v-if="loading.recheckingDuplicates" size="sm" layout="inline" :showMessage="false" color="#1d4ed8" />
-            {{ loading.recheckingDuplicates ? 'Rechecking...' : 'Recheck Duplicates' }}
-          </button>
-
-          <!-- Bulk Operations Button -->
-          <button
-              :disabled="lockButtons || loading.importing || loading.saving || isImported"
-              class="inline-flex items-center justify-center px-4 py-2 border border-blue-200 text-sm font-medium rounded-md text-blue-700 bg-blue-50 hover:bg-blue-100 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-300 disabled:bg-gray-100 disabled:hover:bg-gray-100 disabled:cursor-not-allowed transition-colors duration-200 whitespace-nowrap"
-              @click="openBulkOperationsModal"
-              title="Bulk Operations"
-          >
-            Bulk Operations
-          </button>
-          <RectangleStackIcon v-if="hasBulkOperationsConfigured" class="w-5 h-5 text-blue-500 flex-shrink-0" />
-        </div>
-      </div>
-    </div>
+    <GlobalOptionsPanel
+      :has-features="itemsForUser.length > 0"
+      :is-loading="loading.page"
+      :is-processing="processing.active"
+      v-model:import-custom-icons="importCustomIcons"
+      :lock-buttons="lockButtons"
+      :is-importing="loading.importing"
+      :is-saving="loading.saving"
+      :is-imported="isImported"
+      :is-rechecking-duplicates="loading.recheckingDuplicates"
+      :has-bulk-operations-configured="hasBulkOperationsConfigured"
+      @recheck-duplicates="recheckDuplicates"
+      @open-bulk-operations="openBulkOperationsModal"
+    />
 
     <!-- Controls (Top) -->
     <ImportControls
@@ -696,10 +564,19 @@ import ImportControls from "@/components/import/parts/ImportControls.vue";
 import BulkStylingModal from "@/components/import/parts/BulkStylingModal.vue";
 import DuplicateWarning from "@/components/import/parts/DuplicateWarning.vue";
 import TagPicker from "@/components/parts/TagPicker.vue";
+import ImportProcessHeader from "@/components/import/parts/ImportProcessHeader.vue";
+import ProcessingLogsPanel from "@/components/import/parts/ProcessingLogsPanel.vue";
+import ImportSummaryStats from "@/components/import/parts/ImportSummaryStats.vue";
+import GlobalOptionsPanel from "@/components/import/parts/GlobalOptionsPanel.vue";
 import ColorPickerElement from "@/components/parts/ColorPickerElement.vue";
 import IconSelector from "@/components/parts/IconSelector.vue";
 import { DEFAULT_BULK_OPERATIONS, hasBulkOperationsConfigured, areBulkOperationsEqual, cloneBulkOperations } from "@/utils/bulkOperations.js";
 import { CheckIcon, ExclamationCircleIcon, ArrowTopRightOnSquareIcon, DocumentIcon, ExclamationTriangleIcon, ArrowDownTrayIcon, ArrowUpTrayIcon, XMarkIcon, MapIcon, ArrowPathIcon, MagnifyingGlassIcon, RectangleStackIcon, ChevronLeftIcon, ChevronRightIcon } from '@heroicons/vue/24/outline';
+import { connectWebSocket, sendWebSocketMessage, parseWebSocketMessage, shouldReconnect, getReconnectDelay } from '@/utils/import/websocketHandlers.js';
+import { calculateTotalDuplicateCount, markDuplicateFeatures, isItemDuplicate, getFeatureId, isItemSkipped, isItemDisabled } from '@/utils/import/duplicateDetection.js';
+import { getFeatureIconUrl, getFeatureIconUrlRaw, resolveIconUrl, hasCustomIcon, isSystemIcon, hasNonRecolorableIcon, handleIconError } from '@/utils/import/iconDetection.js';
+import { calculateAdjustedTotalPages, calculateAdjustedHasNext, calculateAdjustedHasPrevious, calculateImportableCount, isValidPageNumber } from '@/utils/import/paginationUtils.js';
+import { isPointGeometry, isLineGeometry, isPolygonGeometry, initializeFeatureDefaults, handleStrokeColorChange, getItemClasses, getLevelName, getLevelClass, filterWorkerLog } from '@/utils/import/featureProcessing.js';
 
 export default {
   computed: {
@@ -709,8 +586,7 @@ export default {
     },
     isValidPageNumber() {
       return this.pagination.gotoInput &&
-          this.pagination.gotoInput >= 1 &&
-          this.pagination.gotoInput <= this.adjustedTotalPages &&
+          isValidPageNumber(this.pagination.gotoInput, this.adjustedTotalPages) &&
           this.pagination.gotoInput !== this.pagination.currentPage;
     },
 
@@ -719,34 +595,15 @@ export default {
     },
 
     importableCount() {
-      // Calculate importable count:
-      // Total features - hash duplicates (always blocked) - skipped features
-      const featureStoreHashDups = this.duplicates.featureStoreHash || [];
-      const crossQueueHashDups = this.duplicates.crossQueueHash || [];
-
-      // Hash duplicates are always blocked regardless of source (FeatureStore or other queue items)
-      const blockedDuplicatesCount = featureStoreHashDups.length + crossQueueHashDups.length;
-
-      const count = this.pagination.totalFeatures - blockedDuplicatesCount - this.skippedFeatureIds.size;
-      return Math.max(0, count);
+      return calculateImportableCount(
+        this.pagination.totalFeatures,
+        this.totalDuplicateCount,
+        this.skippedFeatureIds
+      );
     },
 
     totalDuplicateCount() {
-      // Count all duplicates (hash and geometry from both sources)
-      const featureStoreHashDups = this.duplicates.featureStoreHash || [];
-      const featureStoreGeometryDups = this.duplicates.featureStoreGeometry || [];
-      const crossQueueHashDups = this.duplicates.crossQueueHash || [];
-      const crossQueueGeometryDups = this.duplicates.crossQueueGeometry || [];
-
-      // Use a Set to avoid counting the same feature twice
-      // Each duplicate object has a 'hash' property we can use as a unique identifier
-      const allFeatureHashes = new Set([
-        ...featureStoreHashDups.map(d => d.hash),
-        ...featureStoreGeometryDups.map(d => d.hash),
-        ...crossQueueHashDups.map(d => d.hash),
-        ...crossQueueGeometryDups.map(d => d.hash)
-      ]);
-      return allFeatureHashes.size;
+      return calculateTotalDuplicateCount(this.duplicates);
     },
 
     showDebugLogs() {
@@ -785,31 +642,30 @@ export default {
 
     // Computed properties to adjust pagination when hiding duplicates
     adjustedTotalPages() {
-      if (!this.hideDuplicates) {
-        return this.pagination.totalPages;
-      }
-      // When hiding duplicates, calculate pages based on non-duplicate count
-      const totalFeatures = this.pagination.totalFeatures;
-      const duplicateCount = this.totalDuplicateCount;
-      const nonDuplicateCount = totalFeatures - duplicateCount;
-      
-      return Math.max(1, Math.ceil(nonDuplicateCount / this.pagination.pageSize));
+      return calculateAdjustedTotalPages(
+        this.pagination.totalFeatures,
+        this.totalDuplicateCount,
+        this.pagination.pageSize,
+        this.hideDuplicates,
+        this.pagination.totalPages
+      );
     },
 
     adjustedHasNext() {
-      if (!this.hideDuplicates) {
-        return this.pagination.hasNext;
-      }
-      // When hiding duplicates, check if we're on the last adjusted page
-      return this.pagination.currentPage < this.adjustedTotalPages;
+      return calculateAdjustedHasNext(
+        this.pagination.currentPage,
+        this.adjustedTotalPages,
+        this.hideDuplicates,
+        this.pagination.hasNext
+      );
     },
 
     adjustedHasPrevious() {
-      if (!this.hideDuplicates) {
-        return this.pagination.hasPrevious;
-      }
-      // Previous page logic remains the same
-      return this.pagination.currentPage > 1;
+      return calculateAdjustedHasPrevious(
+        this.pagination.currentPage,
+        this.hideDuplicates,
+        this.pagination.hasPrevious
+      );
     },
 
     showEmptyPageMessage() {
@@ -844,7 +700,11 @@ export default {
     MapIcon,
     ArrowPathIcon,
     MagnifyingGlassIcon,
-    RectangleStackIcon
+    RectangleStackIcon,
+    ImportProcessHeader,
+    ProcessingLogsPanel,
+    ImportSummaryStats,
+    GlobalOptionsPanel
   },
   data() {
     return {
@@ -1002,19 +862,12 @@ export default {
   methods: {
     // WebSocket methods
     connectWebSocket() {
-      if (!this.currentId) {
-        console.warn('Cannot connect WebSocket: currentId is null');
-        return;
-      }
-
-      const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
-      const wsUrl = `${protocol}//${window.location.host}/ws/upload/status/${this.currentId}/`;
-
-      this.ws = new WebSocket(wsUrl);
-      this.ws.onopen = this.onWebSocketOpen;
-      this.ws.onmessage = this.onWebSocketMessage;
-      this.ws.onclose = this.onWebSocketClose;
-      this.ws.onerror = this.onWebSocketError;
+      this.ws = connectWebSocket(this.currentId, {
+        onOpen: this.onWebSocketOpen,
+        onMessage: this.onWebSocketMessage,
+        onClose: this.onWebSocketClose,
+        onError: this.onWebSocketError
+      });
     },
 
     onWebSocketOpen() {
@@ -1023,7 +876,7 @@ export default {
     },
 
     onWebSocketMessage(event) {
-      const message = JSON.parse(event.data);
+      const message = parseWebSocketMessage(event);
 
       switch (message.type) {
         case 'initial_state':
@@ -1070,15 +923,10 @@ export default {
         return;
       }
 
-      // Don't attempt reconnect if currentId is null (component being destroyed/navigating away)
-      if (!this.currentId) {
-        return;
-      }
-
-      // Attempt to reconnect if not a normal closure and we haven't exceeded max attempts
-      if (event.code !== 1000 && this.wsReconnectAttempts < this.maxReconnectAttempts) {
+      // Attempt to reconnect if conditions are met
+      if (shouldReconnect(event, this.currentId, this.wsReconnectAttempts, this.maxReconnectAttempts)) {
         this.wsReconnectAttempts++;
-        setTimeout(() => this.connectWebSocket(), 2000);
+        setTimeout(() => this.connectWebSocket(), getReconnectDelay());
       }
     },
 
@@ -1264,28 +1112,7 @@ export default {
             return;
           }
           // Initialize default style properties if not present
-          if (!item.properties) {
-            item.properties = {};
-          }
-          // Check if item has a custom icon
-          const iconPropertyNames = ['icon', 'icon-href', 'iconUrl', 'icon_url', 'marker-icon', 'marker-symbol', 'symbol'];
-          const hasIcon = iconPropertyNames.some(propName => {
-            const iconValue = item.properties[propName];
-            return iconValue && typeof iconValue === 'string' && iconValue.trim() !== '';
-          });
-          
-          // Set default marker-color for points if not present and no custom icon
-          if ((item.geometry.type === 'Point' || item.geometry.type === 'MultiPoint') && 
-              !item.properties['marker-color'] && 
-              !hasIcon) {
-            item.properties['marker-color'] = '#ff0000';
-          }
-          // Set default stroke for lines and polygons if not present
-          if ((item.geometry.type === 'LineString' || item.geometry.type === 'MultiLineString' ||
-               item.geometry.type === 'Polygon' || item.geometry.type === 'MultiPolygon') && 
-              !item.properties.stroke) {
-            item.properties.stroke = '#ff0000';
-          }
+          initializeFeatureDefaults(item);
           this.itemsForUser.push(this.parseGeoJson(item));
         });
         this.originalItems = JSON.parse(JSON.stringify(this.itemsForUser));
@@ -1326,7 +1153,7 @@ export default {
         };
 
         // Mark all duplicate types on features
-        this.markDuplicateFeatures();
+        markDuplicateFeatures(this.itemsForUser, this.duplicates);
       }
 
       this.loading.page = false;
@@ -1373,9 +1200,7 @@ export default {
     },
 
     sendWebSocketMessage(type, data) {
-      if (this.ws && this.wsConnected) {
-        this.ws.send(JSON.stringify({type, data}));
-      }
+      sendWebSocketMessage(this.ws, this.wsConnected, type, data);
     },
 
     async checkProcessingStatus() {
@@ -1473,7 +1298,7 @@ export default {
 
               // Process duplicates from the API response
               this.duplicates.features = itemsResponse.data.duplicates || []
-              this.markDuplicateFeatures()
+              markDuplicateFeatures(this.itemsForUser, this.duplicates)
             }
           }
         }
@@ -1493,25 +1318,10 @@ export default {
       }
     },
     getLevelName(level) {
-      const levelMap = {
-        10: 'DEBUG',
-        20: 'INFO',
-        30: 'WARNING',
-        40: 'ERROR',
-        50: 'CRITICAL'
-      };
-      return levelMap[level] || 'UNKNOWN';
+      return getLevelName(level);
     },
     getLevelClass(level) {
-      if (level >= 40) { // ERROR or CRITICAL
-        return 'bg-red-100 text-red-800';
-      } else if (level >= 30) { // WARNING
-        return 'bg-yellow-100 text-yellow-800';
-      } else if (level >= 20) { // INFO
-        return 'bg-blue-100 text-blue-700';
-      } else { // DEBUG
-        return 'bg-gray-100 text-gray-800';
-      }
+      return getLevelClass(level);
     },
     formatTimestamp(timestamp) {
       if (!timestamp) return '';
@@ -1524,99 +1334,16 @@ export default {
       return moment(timestamp).format('LLL'); // e.g., "January 15, 2024 2:30 PM" (localized)
     },
     getFeatureIconUrl(feature) {
-      /**
-       * Get icon URL from feature properties.
-       * Checks multiple common property names for icon URLs.
-       * @param feature - Feature object with properties
-       * @returns Icon URL if found, null otherwise
-       */
-      if (!feature || !feature.properties) {
-        return null;
-      }
-
-      // Common property names that might contain icon hrefs
-      const iconPropertyNames = [
-        'icon',
-        'icon-href',
-        'iconUrl',
-        'icon_url',
-        'marker-icon',
-        'marker-symbol',
-        'symbol',
-      ];
-
-      for (const propName of iconPropertyNames) {
-        if (feature.properties[propName] && typeof feature.properties[propName] === 'string') {
-          const iconUrl = feature.properties[propName].trim();
-          if (iconUrl) {
-            return this.resolveIconUrl(iconUrl);
-          }
-        }
-      }
-
-      return null;
+      return getFeatureIconUrl(feature);
     },
     getFeatureIconUrlRaw(feature) {
-      /**
-       * Get raw (unresolved) icon URL from feature properties.
-       * Checks multiple common property names for icon URLs.
-       * @param feature - Feature object with properties
-       * @returns Raw icon URL if found, null otherwise
-       */
-      if (!feature || !feature.properties) {
-        return null;
-      }
-
-      // Common property names that might contain icon hrefs
-      const iconPropertyNames = [
-        'icon',
-        'icon-href',
-        'iconUrl',
-        'icon_url',
-        'marker-icon',
-        'marker-symbol',
-        'symbol',
-      ];
-
-      for (const propName of iconPropertyNames) {
-        if (feature.properties[propName] && typeof feature.properties[propName] === 'string') {
-          const iconUrl = feature.properties[propName].trim();
-          if (iconUrl) {
-            return iconUrl;
-          }
-        }
-      }
-
-      return null;
+      return getFeatureIconUrlRaw(feature);
     },
     resolveIconUrl(iconUrl) {
-      /**
-       * Resolve icon URL to absolute URL.
-       * Converts relative URLs (starting with /api/) to absolute URLs using APIHOST.
-       * @param iconUrl - Icon URL (relative or absolute)
-       * @returns Absolute icon URL
-       */
-      // If already absolute URL, return as is
-      if (iconUrl.startsWith('http://') || iconUrl.startsWith('https://')) {
-        return iconUrl;
-      }
-
-      // If relative URL starting with /api/, prepend APIHOST
-      // The backend stores icons with path /api/icons/{hash}.png
-      if (iconUrl.startsWith('/api/')) {
-        return `${APIHOST}${iconUrl}`;
-      }
-
-      // Fallback: assume it's a relative path and prepend APIHOST
-      return `${APIHOST}${iconUrl.startsWith('/') ? '' : '/'}${iconUrl}`;
+      return resolveIconUrl(iconUrl);
     },
     handleIconError(event) {
-      /**
-       * Handle icon loading errors by hiding the broken image.
-       */
-      if (event.target && event.target.parentElement) {
-        event.target.parentElement.style.display = 'none';
-      }
+      handleIconError(event);
     },
     scrollLogsToBottom() {
       // Scroll the logs container to the bottom when new logs are added
@@ -1632,49 +1359,21 @@ export default {
       });
     },
     getItemClasses(item, index) {
-      // Base classes
-      let classes = 'rounded-lg shadow-sm border p-6 relative';
-
-      if (this.isItemDuplicate(item)) {
-        classes += ' bg-gray-100 border-gray-300';
-      } else if (this.isItemSkipped(item, index)) {
-        classes += ' bg-gray-100 border-gray-300';
-      } else {
-        classes += ' bg-white border-gray-200';
-      }
-
-      return classes;
+      const isDuplicate = isItemDuplicate(item);
+      const isSkipped = isItemSkipped(item, index, this.skippedFeatureIds, this.pagination.currentPage, this.pagination.pageSize);
+      return getItemClasses(item, isDuplicate, isSkipped);
     },
     getFeatureId(item, index) {
-      // Get feature ID, using global index as fallback for unique identification
-      if (item && item.properties && item.properties.geojson_hash) {
-        return item.properties.geojson_hash;
-      }
-      // Use global index as fallback - this is unique per feature across all pages
-      const globalIndex = (this.pagination.currentPage - 1) * this.pagination.pageSize + index;
-      return `index_${globalIndex}`;
+      return getFeatureId(item, index, this.pagination.currentPage, this.pagination.pageSize);
     },
     isItemSkipped(item, index) {
-      if (!item) {
-        return false;
-      }
-      const featureId = this.getFeatureId(item, index);
-      return this.skippedFeatureIds.has(featureId);
+      return isItemSkipped(item, index, this.skippedFeatureIds, this.pagination.currentPage, this.pagination.pageSize);
     },
     isItemDuplicate(item) {
-      // Check if item is any type of duplicate (hash or geometry, from any source)
-      return !!(item && (
-        item.isFeatureStoreHashDup || 
-        item.isCrossQueueHashDup ||
-        item.isFeatureStoreGeometryDup ||
-        item.isCrossQueueGeometryDup
-      ));
+      return isItemDuplicate(item);
     },
     isItemDisabled(item, index) {
-      return this.isImported ||
-             this.isItemDuplicate(item) ||
-             this.isItemSkipped(item, index) ||
-             this.loading.importing;
+      return isItemDisabled(item, index, this.isImported, this.loading.importing, this.skippedFeatureIds, this.pagination.currentPage, this.pagination.pageSize);
     },
     isItemEditable(item, index) {
       return !this.isItemDisabled(item, index);
@@ -1750,54 +1449,29 @@ export default {
     },
     // Geometry type detection methods for styling
     isPointGeometry(item) {
-      if (!item || !item.geometry) return false;
-      return item.geometry.type === 'Point' || item.geometry.type === 'MultiPoint';
+      return isPointGeometry(item);
     },
     isLineGeometry(item) {
-      if (!item || !item.geometry) return false;
-      return item.geometry.type === 'LineString' || item.geometry.type === 'MultiLineString';
+      return isLineGeometry(item);
     },
     isPolygonGeometry(item) {
-      if (!item || !item.geometry) return false;
-      return item.geometry.type === 'Polygon' || item.geometry.type === 'MultiPolygon';
+      return isPolygonGeometry(item);
     },
     hasCustomIcon(item) {
-      if (!item || !item.properties) return false;
-      const iconPropertyNames = ['icon', 'icon-href', 'iconUrl', 'icon_url', 'marker-icon', 'marker-symbol', 'symbol'];
-      for (const propName of iconPropertyNames) {
-        const iconValue = item.properties[propName];
-        if (iconValue && typeof iconValue === 'string' && iconValue.trim() !== '') {
-          return true;
-        }
-      }
-      return false;
+      return hasCustomIcon(item);
     },
     isSystemIcon(iconUrl) {
-      // System icons can be recolored, so color picker should show for them
-      // Check for the path segment, allowing for absolute URLs or leading slashes
-      return iconUrl && iconUrl.includes('/api/icons/system/');
+      return isSystemIcon(iconUrl);
     },
     hasNonRecolorableIcon(item) {
-      // Check if item has an icon that can't be recolored (user icon or external URL)
-      if (!item || !item.properties) return false;
-      const iconUrl = this.getFeatureIconUrl(item);
-      if (!iconUrl) return false;
-      
-      // System icons can be recolored
-      if (this.isSystemIcon(iconUrl)) return false;
-      
-      // Everything else (user icons, external URLs) can't be recolored
-      return true;
+      return hasNonRecolorableIcon(item);
     },
     handleStrokeColorChange(index, item) {
       // Mark item as edited
       this.markItemAsEdited(index);
       
       // For polygons, automatically update fill color to match stroke with 10% opacity
-      if (this.isPolygonGeometry(item) && item.properties.stroke) {
-        item.properties.fill = item.properties.stroke;
-        item.properties['fill-opacity'] = 0.1;
-      }
+      handleStrokeColorChange(item);
     },
     markItemAsEdited(index) {
       // This ensures the edit is tracked in the cache when saving
@@ -2258,72 +1932,7 @@ export default {
       this.dialogs.featureMap.isOpen = false;
     },
     markDuplicateFeatures() {
-      // Reset all duplicate flags
-      this.itemsForUser.forEach((item) => {
-        item.isFeatureStoreHashDup = false;
-        item.isFeatureStoreGeometryDup = false;
-        item.isCrossQueueHashDup = false;
-        item.isCrossQueueGeometryDup = false;
-        item.duplicateInfo = {};
-      });
-
-      // Mark feature store hash duplicates
-      (this.duplicates.featureStoreHash || []).forEach(dupInfo => {
-        const pageIndex = dupInfo.page_index;
-        if (pageIndex >= 0 && pageIndex < this.itemsForUser.length) {
-          this.itemsForUser[pageIndex].isFeatureStoreHashDup = true;
-          this.itemsForUser[pageIndex].duplicateInfo = {
-            source: 'feature_store',
-            match_type: 'hash',
-            feature_store_id: dupInfo.feature_store_id
-          };
-        }
-      });
-
-      // Mark feature store geometry duplicates
-      (this.duplicates.featureStoreGeometry || []).forEach(dupInfo => {
-        const pageIndex = dupInfo.page_index;
-        if (pageIndex >= 0 && pageIndex < this.itemsForUser.length) {
-          this.itemsForUser[pageIndex].isFeatureStoreGeometryDup = true;
-          this.itemsForUser[pageIndex].duplicateInfo = {
-            source: 'feature_store',
-            match_type: 'geometry',
-            feature_store_id: dupInfo.feature_store_id
-          };
-        }
-      });
-
-      // Mark cross-queue hash duplicates
-      (this.duplicates.crossQueueHash || []).forEach(dupInfo => {
-        const pageIndex = dupInfo.page_index;
-        if (pageIndex >= 0 && pageIndex < this.itemsForUser.length) {
-          this.itemsForUser[pageIndex].isCrossQueueHashDup = true;
-          this.itemsForUser[pageIndex].duplicateInfo = {
-            source: 'cross_queue',
-            match_type: 'hash',
-            hash: dupInfo.hash,
-            global_index: dupInfo.global_index,
-            queue_item_id: dupInfo.queue_item_id,
-            queue_item_filename: dupInfo.queue_item_filename
-          };
-        }
-      });
-
-      // Mark cross-queue geometry duplicates
-      (this.duplicates.crossQueueGeometry || []).forEach(dupInfo => {
-        const pageIndex = dupInfo.page_index;
-        if (pageIndex >= 0 && pageIndex < this.itemsForUser.length) {
-          this.itemsForUser[pageIndex].isCrossQueueGeometryDup = true;
-          this.itemsForUser[pageIndex].duplicateInfo = {
-            source: 'cross_queue',
-            match_type: 'geometry',
-            hash: dupInfo.hash,
-            global_index: dupInfo.global_index,
-            queue_item_id: dupInfo.queue_item_id,
-            queue_item_filename: dupInfo.queue_item_filename
-          };
-        }
-      });
+      markDuplicateFeatures(this.itemsForUser, this.duplicates);
     },
     closeLogModal() {
       this.dialogs.logs = false;
