@@ -420,25 +420,13 @@ class ProcessJob(BaseJob):
                 "File validation passed, starting conversion...", validation_progress
             )
     
-            # Process file to GeoJSON
-            self._update_and_broadcast_status(
-                job_id, user_id, import_queue_id,
-                "Converting to GeoJSON format...", conversion_progress
-            )
-            realtime_log.add("Starting GeoJSON conversion", "ProcessJob", DatabaseLogLevel.INFO)
-    
-            # Check if job was cancelled before conversion
-            if self._check_cancellation(job_id, import_queue_id, realtime_log, "before conversion"):
-                return
-    
             # Get file size for logging
             file_size_mb = len(file_data) / (1024 * 1024)
             realtime_log.add(f"Processing {file_size_mb:.1f}MB file", "ProcessJob", DatabaseLogLevel.INFO)
     
-            # Convert to GeoJSON with timing using new processor API
+            # Create processor instance
             # Use minimal processing for replacement uploads (skip tags, geocoding)
-            conversion_start = time.time()
-            logger.info(f"Starting GeoJSON conversion for job {job_id}: file '{filename}' ({file_size_mb:.2f} MB), replacement={is_replacement}")
+            logger.info(f"Starting file processing for job {job_id}: file '{filename}' ({file_size_mb:.2f} MB), replacement={is_replacement}")
             processor = get_processor(
                 file_data,
                 filename,
@@ -446,40 +434,147 @@ class ProcessJob(BaseJob):
                 status_tracker=self.status_tracker,
                 minimal_processing=is_replacement
             )
-            geojson_data, processing_log = processor.process()
-    
-            if not geojson_data or 'features' not in geojson_data:
-                raise FileValidationError("Processor returned invalid GeoJSON data")
-    
-            logger.info(f"GeoJSON conversion completed for job {job_id} in {time.time() - conversion_start:.2f}s")
-            conversion_duration = time.time() - conversion_start
-            realtime_log.add_timing("GeoJSON conversion", conversion_duration, "ProcessJob")
-    
-            # Check if job was cancelled during processing
-            if self._check_cancellation(job_id, import_queue_id, realtime_log, "during GeoJSON conversion/processing"):
+            
+            # Detect file type (needed for timing labels)
+            file_type = processor.detect_file_type()
+            
+            # Step 1: Validate file
+            if not processor.validate():
+                raise FileValidationError("File validation failed")
+            
+            # Check for cancellation after validation
+            if self._check_cancellation(job_id, import_queue_id, realtime_log, "after file validation"):
                 return
+            
+            # Step 2: Convert file to GeoJSON format
+            self._update_and_broadcast_status(
+                job_id, user_id, import_queue_id,
+                "Converting file to GeoJSON format...", conversion_progress
+            )
+            realtime_log.add("Converting file to GeoJSON format", "ProcessJob", DatabaseLogLevel.INFO)
+            
+            conversion_start = time.time()
+            step3_log = processor.step_3_convert_to_geojson()
+            conversion_duration = time.time() - conversion_start
+            realtime_log.extend(step3_log)
+            realtime_log.add_timing(f"{file_type.value.upper()} conversion", conversion_duration, "ProcessJob")
+            
+            if not processor.geojson_data or 'features' not in processor.geojson_data:
+                raise FileValidationError("Processor returned invalid GeoJSON data")
+            
+            # Check for cancellation after conversion
+            if self._check_cancellation(job_id, import_queue_id, realtime_log, "after GeoJSON conversion"):
+                return
+            
+            # Calculate progress percentages for remaining steps
+            # For normal path: 48 (conv) -> 60 (split) -> 72 (elev) -> 80 (tags) -> 88 (geocode) -> 96 (db)
+            # For replacement: 60 (conv) -> 100 (db) [skip split, elev, tags, geocode]
+            if is_replacement:
+                db_update_progress = 100.0
+            else:
+                split_progress = 60.0
+                elevation_progress = 72.0
+                tagging_progress = 80.0
+                geocoding_progress = 88.0
+                db_update_progress = 96.0
+            
+            # Step 3: Split and validate features
+            if not is_replacement:
+                self._update_and_broadcast_status(
+                    job_id, user_id, import_queue_id,
+                    "Splitting and validating features...", split_progress
+                )
+                realtime_log.add("Splitting and validating features", "ProcessJob", DatabaseLogLevel.INFO)
+                
+                split_start = time.time()
+                processor.processed_features, split_log = processor.step_4_split_and_validate_features(processor.geojson_data)
+                split_duration = time.time() - split_start
+                realtime_log.extend(split_log)
+                realtime_log.add_timing("Feature splitting and validation", split_duration, "ProcessJob")
+                
+                # Check for cancellation after splitting
+                if self._check_cancellation(job_id, import_queue_id, realtime_log, "after feature splitting"):
+                    return
+            else:
+                # For replacement uploads, still need to split features but don't show progress
+                processor.processed_features, split_log = processor.step_4_split_and_validate_features(processor.geojson_data)
+                realtime_log.extend(split_log)
+            
+            # Step 4: Fill elevation data
+            if not is_replacement:
+                self._update_and_broadcast_status(
+                    job_id, user_id, import_queue_id,
+                    "Filling elevation data...", elevation_progress
+                )
+                realtime_log.add("Filling elevation data", "ProcessJob", DatabaseLogLevel.INFO)
+                
+                elevation_start = time.time()
+                elevation_log = processor.step_5_fill_elevations()
+                elevation_duration = time.time() - elevation_start
+                realtime_log.extend(elevation_log)
+                realtime_log.add_timing("Elevation data filling", elevation_duration, "ProcessJob")
+                
+                # Check for cancellation after elevation filling
+                if self._check_cancellation(job_id, import_queue_id, realtime_log, "after elevation filling"):
+                    return
+            else:
+                # For replacement uploads, still fill elevations but don't show progress
+                elevation_log = processor.step_5_fill_elevations()
+                realtime_log.extend(elevation_log)
+            
+            # Step 5: Generate feature tags (minimal_processing flag skips this)
+            if not is_replacement:
+                self._update_and_broadcast_status(
+                    job_id, user_id, import_queue_id,
+                    "Generating feature tags...", tagging_progress
+                )
+                realtime_log.add("Generating feature tags", "ProcessJob", DatabaseLogLevel.INFO)
+                
+                tagging_start = time.time()
+                tagging_log = processor.step_6_tag_features()
+                tagging_duration = time.time() - tagging_start
+                realtime_log.extend(tagging_log)
+                realtime_log.add_timing("Feature tagging", tagging_duration, "ProcessJob")
+                
+                # Check for cancellation after tagging
+                if self._check_cancellation(job_id, import_queue_id, realtime_log, "after feature tagging"):
+                    return
+            
+            # Step 6: Reverse geocoding (minimal_processing flag skips this)
+            if not is_replacement:
+                self._update_and_broadcast_status(
+                    job_id, user_id, import_queue_id,
+                    "Reverse geocoding features...", geocoding_progress
+                )
+                realtime_log.add("Reverse geocoding features", "ProcessJob", DatabaseLogLevel.INFO)
+                
+                geocoding_start = time.time()
+                geocoding_log = processor.step_7_reverse_geocode()
+                geocoding_duration = time.time() - geocoding_start
+                realtime_log.extend(geocoding_log)
+                realtime_log.add_timing("Reverse geocoding", geocoding_duration, "ProcessJob")
+                
+                # Check for cancellation after geocoding
+                if self._check_cancellation(job_id, import_queue_id, realtime_log, "after reverse geocoding"):
+                    return
+            
+            # Build final GeoJSON data from processed features
+            geojson_data = {
+                'type': 'FeatureCollection',
+                'features': processor.processed_features
+            }
     
             # Apply user setting: overwrite single track name with filename if enabled
             self._apply_track_name_override(geojson_data, user_id, filename, job_id)
-    
-            # Add processing log messages to real-time log
-            realtime_log.extend(processing_log)
     
             # Prepare GeoJSON string and size for database storage
             geojson_str = json.dumps(geojson_data)
             geojson_size_mb = len(geojson_str) / (1024 * 1024)
     
-            # Update progress
+            # Update progress for database operations
             self._update_and_broadcast_status(
                 job_id, user_id, import_queue_id,
-                "Processing features...", 60.0
-            )
-            realtime_log.add("Processing features", "ProcessJob", DatabaseLogLevel.INFO)
-    
-            # Process features and update import queue entry
-            self._update_and_broadcast_status(
-                job_id, user_id, import_queue_id,
-                "Updating database entry...", 72.0
+                "Updating database entry...", db_update_progress
             )
             realtime_log.add("Updating database entry", "ProcessJob", DatabaseLogLevel.INFO)
     

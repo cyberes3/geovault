@@ -145,6 +145,38 @@ class BaseProcessor(ABC):
                 return True
         return False
 
+    def step_3_convert_to_geojson(self) -> ImportLog:
+        """
+        Step 3: Convert file to GeoJSON format.
+        Calls the subclass's convert_to_geojson() method and stores result in self.geojson_data.
+        
+        Returns:
+            ImportLog with conversion information
+        """
+        step_log = ImportLog()
+        
+        try:
+            # Check for cancellation
+            if self._is_cancelled():
+                step_log.add("Processing cancelled during GeoJSON conversion", "Processing", DatabaseLogLevel.WARNING)
+                return step_log
+            
+            # Perform conversion
+            self.geojson_data = self.convert_to_geojson()
+            
+            if not self.geojson_data or 'features' not in self.geojson_data:
+                error_msg = "Conversion returned invalid GeoJSON data"
+                step_log.add(error_msg, "File Conversion", DatabaseLogLevel.ERROR)
+                raise Exception(error_msg)
+            
+        except Exception as e:
+            if not self._is_cancelled():
+                step_log.add(f"GeoJSON conversion failed: {str(e)}", "File Conversion", DatabaseLogLevel.ERROR)
+                logger.error(f"GeoJSON conversion error: {traceback.format_exc()}")
+            raise
+        
+        return step_log
+
     def step_4_split_and_validate_features(self, geojson_data: Dict[str, Any]) -> Tuple[List[Dict[str, Any]], ImportLog]:
         """
         Step 4: Split complex geometries and validate coordinates.
@@ -249,39 +281,59 @@ class BaseProcessor(ABC):
 
         return processed_features, feature_log
 
-    def step_6_tag_features(self, processed_features: List[Dict[str, Any]]) -> ImportLog:
+    def step_5_fill_elevations(self) -> ImportLog:
+        """
+        Step 5: Fill missing elevation data for features.
+        Uses elevation API to fill in missing elevation values.
+        Operates on self.processed_features in-place.
+        
+        Returns:
+            ImportLog with elevation filling information
+        """
+        step_log = ImportLog()
+        
+        try:
+            # Check if elevation API is enabled
+            if not get_required_setting('ELEVATION_API_ENABLED'):
+                return step_log
+            
+            if not self.processed_features:
+                return step_log
+            
+            # Check for cancellation
+            if self._is_cancelled():
+                step_log.add("Processing cancelled during elevation data filling", "Processing", DatabaseLogLevel.WARNING)
+                return step_log
+            
+            # Fill elevations (modifies features in-place)
+            temp_geojson = {'type': 'FeatureCollection', 'features': self.processed_features}
+            fill_missing_elevations(temp_geojson, step_log)
+            
+        except Exception as e:
+            step_log.add(f"Elevation data filling failed: {str(e)}", "Elevation Service", DatabaseLogLevel.ERROR)
+            logger.error(f"Elevation data filling error traceback: {traceback.format_exc()}")
+        
+        return step_log
+
+    def step_6_tag_features(self) -> ImportLog:
         """
         Step 6: Generate tags for already-processed (split and validated) features.
-        Tags include: type, import date, source file, elevation, and reverse geocoding.
-        Uses batch processing for geocoding to deduplicate coordinates.
+        Tags include: type, import date, source file, and elevation.
+        Does NOT include reverse geocoding - that's in step 7.
+        Uses the processed_features stored in self.processed_features.
         
-        Args:
-            processed_features: List of features that have been split and validated
-            
         Returns:
             ImportLog with tagging information
         """
         feature_log = ImportLog()
         
-        if not processed_features or self.minimal_processing:
+        if not self.processed_features or self.minimal_processing:
             return feature_log
         
         # Log start of tagging process
-        feature_log.add(f"Starting feature tagging for {len(processed_features)} feature(s)", "Feature Tagging", DatabaseLogLevel.INFO)
-        
-        # Count features that will be reverse geocoded (points and lines only)
-        geocoding_enabled = get_required_setting('REVERSE_GEOCODING_ENABLED')
-        geocoding_count = 0
-        if geocoding_enabled:
-            for feature in processed_features:
-                geometry_type = feature.get('geometry', {}).get('type', '').lower()
-                if geometry_type in ['point', 'linestring', 'multilinestring']:
-                    geocoding_count += 1
-            if geocoding_count > 0:
-                feature_log.add(f"Reverse geocoding {geocoding_count} feature(s) with coordinate deduplication", "Reverse Geocoding", DatabaseLogLevel.INFO)
+        feature_log.add(f"Starting feature tagging for {len(self.processed_features)} feature(s)", "Feature Tagging", DatabaseLogLevel.INFO)
 
-        # NEW APPROACH: Batch process all features at once
-        # This deduplicates coordinates before making API calls
+        # Batch process all features at once (without geocoding)
         try:
             # Check for cancellation before starting
             if self._is_cancelled():
@@ -290,7 +342,7 @@ class BaseProcessor(ABC):
             
             # Create feature instances for all features
             feature_instances = []
-            for feature in processed_features:
+            for feature in self.processed_features:
                 try:
                     geometry_type = feature['geometry']['type'].lower()
                     
@@ -321,13 +373,13 @@ class BaseProcessor(ABC):
                 feature_log.add("Processing cancelled during feature instance creation", "Feature Tagging", DatabaseLogLevel.WARNING)
                 return feature_log
             
-            # Batch generate tags for all features at once
-            # This deduplicates coordinates and minimizes API calls
+            # Batch generate tags for all features at once (SKIP geocoding)
             from geo_lib.processing.tagging import generate_auto_tags_batch
             all_feature_tags = generate_auto_tags_batch(
                 [f for f in feature_instances if f is not None],
                 import_log=feature_log,
-                filename=self.filename
+                filename=self.filename,
+                skip_geocoding=True  # Skip geocoding - done in step 7
             )
             
             # Check for cancellation after tag generation
@@ -337,7 +389,7 @@ class BaseProcessor(ABC):
             
             # Apply tags to features
             tag_index = 0
-            for i, feature in enumerate(processed_features):
+            for i, feature in enumerate(self.processed_features):
                 if feature_instances[i] is None:
                     # Skip features that couldn't be instantiated
                     continue
@@ -377,6 +429,124 @@ class BaseProcessor(ABC):
                 DatabaseLogLevel.ERROR
             )
             logger.error(f"Batch tag generation error: {traceback.format_exc()}")
+        
+        return feature_log
+
+    def step_7_reverse_geocode(self) -> ImportLog:
+        """
+        Step 7: Perform reverse geocoding for features.
+        Adds location-based tags (city, state, country, protected areas, etc.)
+        Uses batch processing with coordinate deduplication.
+        
+        Returns:
+            ImportLog with geocoding information
+        """
+        feature_log = ImportLog()
+        
+        if not self.processed_features or self.minimal_processing:
+            return feature_log
+        
+        # Check if geocoding is enabled
+        geocoding_enabled = get_required_setting('REVERSE_GEOCODING_ENABLED')
+        if not geocoding_enabled:
+            return feature_log
+        
+        # Count features that will be reverse geocoded (points and lines only)
+        geocoding_count = 0
+        for feature in self.processed_features:
+            geometry_type = feature.get('geometry', {}).get('type', '').lower()
+            if geometry_type in ['point', 'linestring', 'multilinestring']:
+                geocoding_count += 1
+        
+        if geocoding_count == 0:
+            return feature_log
+        
+        feature_log.add(f"Reverse geocoding {geocoding_count} feature(s) with coordinate deduplication", "Reverse Geocoding", DatabaseLogLevel.INFO)
+        
+        try:
+            # Check for cancellation before starting
+            if self._is_cancelled():
+                feature_log.add("Processing cancelled before reverse geocoding", "Reverse Geocoding", DatabaseLogLevel.WARNING)
+                return feature_log
+            
+            # Create feature instances for all features
+            feature_instances = []
+            for feature in self.processed_features:
+                try:
+                    geometry_type = feature['geometry']['type'].lower()
+                    
+                    # Determine the appropriate feature class
+                    feature_class = None
+                    if geometry_type in ['point', 'multipoint']:
+                        feature_class = PointFeature
+                    elif geometry_type == 'linestring':
+                        feature_class = LineStringFeature
+                    elif geometry_type == 'multilinestring':
+                        feature_class = MultiLineStringFeature
+                    elif geometry_type in ['polygon', 'multipolygon']:
+                        feature_class = PolygonFeature
+                    else:
+                        feature_instances.append(None)
+                        continue
+                    
+                    # Create feature instance
+                    feature_instance = feature_class(**feature)
+                    feature_instances.append(feature_instance)
+                except Exception as e:
+                    logger.warning(f"Failed to create feature instance for geocoding: {e}")
+                    feature_instances.append(None)
+            
+            # Check for cancellation after creating instances
+            if self._is_cancelled():
+                feature_log.add("Processing cancelled during feature instance creation", "Reverse Geocoding", DatabaseLogLevel.WARNING)
+                return feature_log
+            
+            # Use the geocoding tag generator directly for batch processing
+            from geo_lib.processing.tagging.modules.geocoding import GeocodingTagGenerator
+            geocoding_gen = GeocodingTagGenerator()
+            
+            # Get valid feature instances for geocoding
+            valid_features = [f for f in feature_instances if f is not None]
+            
+            if valid_features:
+                geocode_tags = geocoding_gen.process_batch(valid_features, import_log=feature_log)
+                
+                # Check for cancellation after geocoding
+                if self._is_cancelled():
+                    feature_log.add("Processing cancelled after reverse geocoding", "Reverse Geocoding", DatabaseLogLevel.WARNING)
+                    return feature_log
+                
+                # Apply geocoding tags to features
+                tag_index = 0
+                for i, feature in enumerate(self.processed_features):
+                    if feature_instances[i] is None:
+                        continue
+                    
+                    try:
+                        if tag_index in geocode_tags:
+                            geo_tags = geocode_tags[tag_index]
+                            # Append geocoding tags to existing system_tags
+                            existing_system_tags = feature.get('properties', {}).get('system_tags', [])
+                            if not isinstance(existing_system_tags, list):
+                                existing_system_tags = []
+                            feature['properties']['system_tags'] = existing_system_tags + geo_tags
+                        tag_index += 1
+                    except Exception as tag_error:
+                        feature_name = feature.get('properties', {}).get('name', 'Unnamed')
+                        feature_log.add(
+                            f"Geocoding tag application failed for feature '{feature_name}': {str(tag_error)}",
+                            "Reverse Geocoding",
+                            DatabaseLogLevel.WARNING
+                        )
+                        logger.warning(f"Geocoding tag application failed for feature '{feature_name}': {traceback.format_exc()}")
+        
+        except Exception as e:
+            feature_log.add(
+                f"Reverse geocoding failed: {str(e)}",
+                "Reverse Geocoding",
+                DatabaseLogLevel.ERROR
+            )
+            logger.error(f"Reverse geocoding error: {traceback.format_exc()}")
         
         return feature_log
 
@@ -467,108 +637,6 @@ class BaseProcessor(ABC):
 
         return processed_features, feature_log, skipped_count, was_split
 
-    def process(self) -> Tuple[Dict[str, Any], ImportLog]:
-        """
-        Main processing pipeline orchestrator.
-        Calls all processing steps in order.
-        Checks for cancellation at each step.
-        
-        Returns:
-            Tuple of (geojson_data, import_log)
-        """
-        try:
-            # Step 1: Detect file type
-            detection_start = time.time()
-            file_type = self.detect_file_type()
-            detection_duration = time.time() - detection_start
-            self.import_log.add_timing("File type detection", detection_duration, "Processing")
-
-            # Check for cancellation
-            if self._is_cancelled():
-                self.import_log.add("Processing cancelled during file type detection", "Processing", DatabaseLogLevel.WARNING)
-                return {'type': 'FeatureCollection', 'features': []}, self.import_log
-
-            # Step 2: Validate file
-            if not self.validate():
-                raise Exception("File validation failed")
-
-            # Check for cancellation
-            if self._is_cancelled():
-                self.import_log.add("Processing cancelled during file validation", "Processing", DatabaseLogLevel.WARNING)
-                return {'type': 'FeatureCollection', 'features': []}, self.import_log
-
-            # Step 3: Convert to GeoJSON
-            conversion_start = time.time()
-            self.geojson_data = self.convert_to_geojson()
-            conversion_duration = time.time() - conversion_start
-            self.import_log.add_timing(f"{file_type.value.upper()} conversion", conversion_duration, "File Conversion")
-
-            # Check for cancellation
-            if self._is_cancelled():
-                self.import_log.add("Processing cancelled during GeoJSON conversion", "Processing", DatabaseLogLevel.WARNING)
-                return {'type': 'FeatureCollection', 'features': []}, self.import_log
-
-            # Step 4: Split and validate features (without tagging)
-            feature_processing_start = time.time()
-            self.processed_features, processing_log = self.step_4_split_and_validate_features(self.geojson_data)
-            feature_processing_duration = time.time() - feature_processing_start
-            # Extend processing log first, then add timing so logs appear in correct order
-            self.import_log.extend(processing_log)
-            self.import_log.add_timing("Feature splitting and validation", feature_processing_duration, "Processing")
-
-            # Check for cancellation
-            if self._is_cancelled():
-                self.import_log.add("Processing cancelled during feature splitting", "Processing", DatabaseLogLevel.WARNING)
-                return {'type': 'FeatureCollection', 'features': []}, self.import_log
-
-            # Step 5: Fill missing elevation data
-            # Done BEFORE tagging (step 6) so elevation tags use real data, not 0.0 placeholders
-            # Done AFTER splitting/validation (step 4) so coordinates are valid and geometries are simple
-            elevation_start = time.time()
-            try:
-                if get_required_setting('ELEVATION_API_ENABLED') and self.processed_features:
-                    temp_geojson = {'type': 'FeatureCollection', 'features': self.processed_features}
-                    fill_missing_elevations(temp_geojson, self.import_log)
-                    elevation_duration = time.time() - elevation_start
-                    self.import_log.add_timing("Elevation data filling", elevation_duration, "Processing")
-            except Exception as e:
-                self.import_log.add(f"Elevation data filling failed: {str(e)}", "Elevation Service", DatabaseLogLevel.ERROR)
-                logger.error(f"Elevation data filling error traceback: {traceback.format_exc()}")
-            
-            # Check for cancellation
-            if self._is_cancelled():
-                self.import_log.add("Processing cancelled during elevation data filling", "Processing", DatabaseLogLevel.WARNING)
-                return {'type': 'FeatureCollection', 'features': []}, self.import_log
-
-            # Step 6: Generate tags (elevation tags now use real data from step 5)
-            # Tags include: geometry type, import date, source file, elevation, and reverse geocoding
-            # Note: Reverse geocoding queries OpenStreetMap for location-based tags
-            tagging_start = time.time()
-            self.import_log.add("Generating feature tags (including reverse geocoding)...", "Processing", DatabaseLogLevel.INFO)
-            tagging_log = self.step_6_tag_features(self.processed_features)
-            tagging_duration = time.time() - tagging_start
-            self.import_log.extend(tagging_log)
-            self.import_log.add_timing("Feature tagging", tagging_duration, "Processing")
-            
-            # Check for cancellation
-            if self._is_cancelled():
-                self.import_log.add("Processing cancelled during feature tagging", "Processing", DatabaseLogLevel.WARNING)
-                return {'type': 'FeatureCollection', 'features': []}, self.import_log
-
-            # Create final GeoJSON structure
-            final_geojson = {
-                'type': 'FeatureCollection',
-                'features': self.processed_features
-            }
-
-            return final_geojson, self.import_log
-
-        except Exception as e:
-            # Don't log error if job was cancelled
-            if not self._is_cancelled():
-                self.import_log.add(f"Processing failed: {str(e)}", "Processing", DatabaseLogLevel.ERROR)
-                logger.error(f"Processing error: {traceback.format_exc()}")
-            raise
 
     def _calculate_timeout(self) -> int:
         """

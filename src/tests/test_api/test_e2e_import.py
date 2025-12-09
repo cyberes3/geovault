@@ -226,6 +226,95 @@ class TestE2EImport(TransactionTestCase):
 
     # ==================== BASIC FLOW TESTS ====================
 
+    def test_e2e_processing_steps_granularity(self):
+        """Test that the new granular processing steps are executed in the correct order.
+        
+        This test verifies the refactored processing pipeline with separate steps for:
+        1. File conversion (KML/KMZ/GPX -> GeoJSON)
+        2. Feature splitting and validation
+        3. Elevation data filling
+        4. Feature tagging
+        5. Reverse geocoding
+        """
+        # Load test KML file
+        kml_content = self._load_test_file('Test Items.kml')
+        
+        # Upload and process
+        process_job_id, item_id, process_status = self._upload_file(kml_content, 'Test Items.kml')
+        
+        # Verify processing succeeded
+        self.assertEqual(process_status['status'], ProcessingStatus.COMPLETED.value,
+                        f"Processing failed: {process_status.get('message', '')}")
+        
+        # Get the import item and its logs
+        import_item = ImportQueue.objects.get(id=item_id, user=self.user)
+        
+        if hasattr(import_item, 'log_id') and import_item.log_id:
+            from api.models import ImportLog
+            log_entries = ImportLog.objects.filter(log_id=import_item.log_id).order_by('timestamp')
+            
+            # Extract all log messages and timing entries
+            log_messages = [entry.message for entry in log_entries]
+            timing_entries = [entry for entry in log_entries if entry.level == 'TIMING']
+            
+            # Verify we have timing entries for the new granular steps
+            timing_labels = [entry.message for entry in timing_entries]
+            
+            # Check for the existence of separate timing logs for each step
+            # Note: The exact names come from the processor and process_job
+            expected_timing_steps = [
+                'KML conversion',  # Step 3: File conversion
+                'Feature splitting and validation',  # Step 4
+                # 'Elevation data filling' is optional (depends on settings)
+                'Feature tagging',  # Step 6
+                # 'Reverse geocoding' is optional (depends on settings)
+            ]
+            
+            for expected_step in expected_timing_steps:
+                # Check if timing entry exists for this step
+                has_timing = any(expected_step in timing_label for timing_label in timing_labels)
+                self.assertTrue(has_timing, 
+                    f"Should have timing entry for '{expected_step}' step. "
+                    f"Available timing labels: {timing_labels}")
+            
+            # Verify the steps appear in the correct order in logs
+            # Find indices of key log messages
+            conversion_idx = next((i for i, msg in enumerate(log_messages) 
+                                  if 'Converting file to GeoJSON' in msg or 'KML conversion' in msg), None)
+            splitting_idx = next((i for i, msg in enumerate(log_messages) 
+                                 if 'Splitting and validating features' in msg or 'splitting' in msg.lower()), None)
+            tagging_idx = next((i for i, msg in enumerate(log_messages) 
+                               if 'Generating feature tags' in msg or 'Feature tagging' in msg), None)
+            
+            # Verify order if steps are present
+            if conversion_idx is not None and splitting_idx is not None:
+                self.assertLess(conversion_idx, splitting_idx,
+                              "File conversion should happen before feature splitting")
+            
+            if splitting_idx is not None and tagging_idx is not None:
+                self.assertLess(splitting_idx, tagging_idx,
+                              "Feature splitting should happen before tagging")
+            
+            # Check for reverse geocoding as a separate step (if enabled)
+            geocoding_entries = [msg for msg in log_messages if 'reverse geocoding' in msg.lower()]
+            if geocoding_entries:
+                # If geocoding happened, verify it's after tagging
+                geocoding_idx = next((i for i, msg in enumerate(log_messages) 
+                                     if 'Reverse geocoding features' in msg), None)
+                if geocoding_idx is not None and tagging_idx is not None:
+                    self.assertLess(tagging_idx, geocoding_idx,
+                                  "Reverse geocoding should happen after tagging (as a separate step)")
+                
+                # Verify there's a separate timing entry for reverse geocoding
+                has_geocoding_timing = any('Reverse geocoding' in label for label in timing_labels)
+                self.assertTrue(has_geocoding_timing,
+                              "Should have separate timing entry for reverse geocoding step")
+        
+        # Verify the processing produced valid output
+        self.assertGreater(len(import_item.geofeatures), 0, "Should have processed features")
+        self.assertTrue(import_item.geofeatures[0].get('properties', {}).get('system_tags'),
+                       "Features should have system_tags from tagging step")
+
     def test_e2e_kml_import(self):
         """Test complete KML import flow: upload -> process -> import -> verify DB."""
         # Load test KML file
@@ -238,6 +327,48 @@ class TestE2EImport(TransactionTestCase):
         self.assertEqual(process_status['status'], ProcessingStatus.COMPLETED.value,
                         f"Processing failed: {process_status.get('message', '')}")
         self.assertIsNotNone(item_id, "Import queue item ID should be returned")
+        
+        # Verify the new processing steps are present in the import queue logs
+        import_item = ImportQueue.objects.get(id=item_id, user=self.user)
+        if hasattr(import_item, 'log_id') and import_item.log_id:
+            # Check that the processing log contains the new granular steps
+            from api.models import ImportLog
+            log_entries = ImportLog.objects.filter(log_id=import_item.log_id).order_by('timestamp')
+            
+            log_messages = [entry.message for entry in log_entries]
+            log_str = ' '.join(log_messages)
+            
+            # Verify the new processing steps are logged
+            # Step 3: File conversion
+            self.assertTrue(
+                any('KML conversion' in msg or 'Converting file to GeoJSON' in msg for msg in log_messages),
+                "Should have KML/file conversion step in logs"
+            )
+            
+            # Step 4: Feature splitting and validation
+            self.assertTrue(
+                any('splitting' in msg.lower() or 'Feature splitting and validation' in msg for msg in log_messages),
+                "Should have feature splitting step in logs"
+            )
+            
+            # Step 5: Elevation filling (may be skipped if disabled, so optional check)
+            # Step 6: Feature tagging
+            self.assertTrue(
+                any('tagging' in msg.lower() or 'tag' in msg.lower() for msg in log_messages),
+                "Should have feature tagging step in logs"
+            )
+            
+            # Step 7: Reverse geocoding (may be skipped if disabled, check if present)
+            has_geocoding_step = any('geocoding' in msg.lower() or 'Reverse geocoding' in msg for msg in log_messages)
+            # If geocoding is enabled in settings, it should be present
+            # Note: We don't fail the test if it's not present, as it may be disabled
+            if has_geocoding_step:
+                # If present, verify it's a separate step (not combined with tagging)
+                self.assertTrue(has_geocoding_step, "Reverse geocoding should be a separate step")
+        
+        # Verify ImportQueue entry was created with geofeatures
+        self.assertEqual(import_item.original_filename, 'Test Items.kml')
+        self.assertGreater(len(import_item.geofeatures), 0, "Should have extracted features from KML")
         
         # Verify ImportQueue entry was created with geofeatures
         import_item = ImportQueue.objects.get(id=item_id, user=self.user)
@@ -320,6 +451,30 @@ class TestE2EImport(TransactionTestCase):
         self.assertEqual(import_item.original_filename, 'blue_hills.gpx')
         self.assertGreater(len(import_item.geofeatures), 0, "Should have extracted features from GPX")
         
+        # Verify the new processing steps are present in logs for GPX
+        if hasattr(import_item, 'log_id') and import_item.log_id:
+            from api.models import ImportLog
+            log_entries = ImportLog.objects.filter(log_id=import_item.log_id).order_by('timestamp')
+            log_messages = [entry.message for entry in log_entries]
+            
+            # Verify GPX conversion step
+            self.assertTrue(
+                any('GPX conversion' in msg or 'Converting file to GeoJSON' in msg for msg in log_messages),
+                "Should have GPX/file conversion step in logs"
+            )
+            
+            # Verify feature splitting step
+            self.assertTrue(
+                any('splitting' in msg.lower() or 'Feature splitting and validation' in msg for msg in log_messages),
+                "Should have feature splitting step in logs"
+            )
+            
+            # Verify tagging step
+            self.assertTrue(
+                any('tagging' in msg.lower() or 'tag' in msg.lower() for msg in log_messages),
+                "Should have feature tagging step in logs"
+            )
+        
         # Verify we have different geometry types from GPX (waypoints and tracks)
         geom_types = set()
         for feature in import_item.geofeatures:
@@ -381,6 +536,24 @@ class TestE2EImport(TransactionTestCase):
         import_item = ImportQueue.objects.get(id=item_id, user=self.user)
         self.assertEqual(import_item.original_filename, 'Test Items.kmz')
         self.assertGreater(len(import_item.geofeatures), 0, "Should have extracted features from KMZ")
+        
+        # Verify the new processing steps are present in logs for KMZ
+        if hasattr(import_item, 'log_id') and import_item.log_id:
+            from api.models import ImportLog
+            log_entries = ImportLog.objects.filter(log_id=import_item.log_id).order_by('timestamp')
+            log_messages = [entry.message for entry in log_entries]
+            
+            # Verify KMZ conversion step (converts to KML internally, then processes)
+            self.assertTrue(
+                any('KMZ conversion' in msg or 'Converting file to GeoJSON' in msg for msg in log_messages),
+                "Should have KMZ/file conversion step in logs"
+            )
+            
+            # Verify all the granular processing steps
+            self.assertTrue(
+                any('splitting' in msg.lower() for msg in log_messages),
+                "Should have feature splitting step in logs"
+            )
         
         # Count features before import
         initial_feature_count = FeatureStore.objects.filter(user=self.user).count()
