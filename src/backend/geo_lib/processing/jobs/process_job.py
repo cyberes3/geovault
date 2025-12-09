@@ -48,7 +48,7 @@ from geo_lib.processing.utils import (
     inject_feature_hashes,
     build_skipped_feature_ids
 )
-from geo_lib.security.file_validation import SecureFileValidator
+from geo_lib.security.SecureFileValidator import SecureFileValidator
 from geo_lib.security.exceptions import FileValidationError, SecurityError
 from geo_lib.utils.pydantic_serialization import convert_features_to_pydantic
 from geo_lib.utils.advisory_locks import advisory_lock
