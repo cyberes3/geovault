@@ -17,7 +17,7 @@ from api.views.feature_update import update_feature, update_feature_metadata, bu
 from api.views.geolocation_api import get_user_location, get_location_by_ip
 from api.views.icon_management import serve_user_icon, serve_system_icon, upload_icon, recolor_icon, serve_icon_registry
 from api.views.font_management import serve_font_glyph
-from api.views.import_item import upload_item, get_processing_status, get_user_processing_jobs, delete_import_item, update_import_item, fetch_import_history_item, \
+from api.views.import_item import upload_item, get_processing_status, get_user_processing_jobs, get_all_job_statuses, delete_import_item, update_import_item, fetch_import_history_item, \
     import_to_featurestore, get_import_queue_item_features, search_import_item_features, save_bulk_operations, get_bulk_operations, recheck_duplicates, save_skip_state
 from api.views.sharing import create_share, list_shares, delete_share, get_public_share_info, get_public_share, create_collection_share, get_public_collection_share
 from api.views.collections import list_collections, create_collection, get_collection, update_collection, delete_collection, get_collection_features, apply_bulk_operations_to_collection
@@ -35,6 +35,7 @@ urlpatterns = [
     path('item/import/upload', upload_item),
     path('item/import/status/<str:job_id>', get_processing_status),
     path('item/import/jobs', get_user_processing_jobs),
+    path('item/import/jobs/all', get_all_job_statuses),
     path('item/import/get/history/<int:item_id>', fetch_import_history_item),
     path('item/import/get/features/<int:item_id>', get_import_queue_item_features),
     path('item/import/search/<int:item_id>', search_import_item_features),

@@ -6,6 +6,9 @@ Inherits from KMLProcessor since KMZ is just a zipped KML file.
 from typing import Dict, Any
 
 from geo_lib.processing.icon_manager import process_geojson_icons
+from geo_lib.processing.logging import DatabaseLogLevel
+from geo_lib.security.SecureFileValidator import secure_kmz_to_kml
+from geo_lib.security.exceptions import SecurityError, FileValidationError
 from .kml_processor import KMLProcessor
 
 logger = __import__('logging').getLogger(__name__)
@@ -20,19 +23,31 @@ class KMZProcessor(KMLProcessor):
 
     def convert_to_geojson(self) -> Dict[str, Any]:
         """
-        Convert KMZ file to GeoJSON by writing to temp file and using parent's conversion logic.
+        Convert KMZ file to GeoJSON by extracting KML first, then using parent's conversion logic.
         Also processes embedded icons if icon processing is enabled.
         
         Returns:
             GeoJSON data as dictionary
+            
+        Raises:
+            Exception: If KMZ extraction or conversion fails
         """
         # Ensure file_data is bytes for KMZ
         kmz_data = self.file_data if isinstance(self.file_data, bytes) else self.file_data.encode('utf-8')
 
-        # Convert using shared temp file helper (binary mode for KMZ)
-        geojson_data = self._convert_to_geojson(kmz_data, '.kmz', 'KMZ', is_text=False)
+        try:
+            # Extract KML content from KMZ using secure Python extraction
+            kml_content = secure_kmz_to_kml(kmz_data)
+        except Exception as e:
+            error_msg = f"Failed to extract KML from KMZ: {str(e)}"
+            self.import_log.add(error_msg, "KMZ Extraction", DatabaseLogLevel.ERROR)
+            logger.info(error_msg)
+            raise Exception(error_msg)
 
-        # Process icons in GeoJSON
+        # Convert the extracted KML using parent's logic (text mode for KML)
+        geojson_data = self._convert_to_geojson(kml_content, '.kml', 'KML', is_text=True)
+
+        # Process icons in GeoJSON (still need original KMZ data for icon extraction)
         geojson_data = process_geojson_icons(
             geojson_data,
             file_type='kmz',

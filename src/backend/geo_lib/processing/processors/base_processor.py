@@ -24,7 +24,7 @@ from geo_lib.processing.logging import ImportLog, DatabaseLogLevel
 from geo_lib.processing.elevation_service import fill_missing_elevations
 from geo_lib.processing.status_tracker import ProcessingStatusTracker, ProcessingStatus
 from geo_lib.processing.tagging import generate_auto_tags
-from geo_lib.security.SecureFileValidator import SecureFileValidator
+from geo_lib.security.SecureFileValidator import validate_file
 from geo_lib.validation.geometry_validation import validate_coordinates_values, GeometryValidationError
 from geo_lib.logging.console import get_job_logger
 from website.settings_utils import get_required_setting
@@ -82,7 +82,7 @@ class BaseProcessor(ABC):
     def validate(self) -> bool:
         """
         Validate file security and format.
-        Uses the existing SecureFileValidator.
+        Uses the existing validate_file function.
         
         Returns:
             True if validation passes, False otherwise
@@ -105,8 +105,7 @@ class BaseProcessor(ABC):
 
             # Validate file with timing
             validation_start = time.time()
-            validator = SecureFileValidator()
-            is_valid, validation_message = validator.validate_file(uploaded_file)
+            is_valid, validation_message = validate_file(uploaded_file)
             validation_duration = time.time() - validation_start
             self.import_log.add_timing("File validation", validation_duration, "Processing")
 

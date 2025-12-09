@@ -6,35 +6,17 @@ const { kml } = require('@tmcw/togeojson');
 const { DOMParser } = require('@xmldom/xmldom');
 
 /**
- * Convert KML/KMZ file to GeoJSON
+ * Convert KML file to GeoJSON
  * Usage: node convert.js <input_file> [output_file]
  * If output_file is not provided, outputs to stdout
+ * Note: KMZ files should be extracted to KML before using this tool
  */
-
-function kmzToKml(filePath) {
-    const content = fs.readFileSync(filePath);
-    
-    // Check if it's a KMZ file (ZIP format)
-    if (content[0] === 0x50 && content[1] === 0x4B) { // ZIP signature
-        const AdmZip = require('adm-zip');
-        const zip = new AdmZip(content);
-        const entries = zip.getEntries();
-        
-        // Find the first .kml file
-        const kmlEntry = entries.find(entry => entry.entryName.toLowerCase().endsWith('.kml'));
-        if (kmlEntry) {
-            return kmlEntry.getData().toString('utf8');
-        }
-    }
-    
-    // If not KMZ or no KML found, treat as regular KML
-    return content.toString('utf8');
-}
 
 function convertKmlToGeojson(inputPath) {
     try {
-        // Read and convert KMZ to KML if needed
-        const kmlContent = kmzToKml(inputPath);
+        // Read KML content
+        const content = fs.readFileSync(inputPath);
+        const kmlContent = content.toString('utf8');
         
         // Remove BOM (Byte Order Mark) if present
         let cleanKmlContent = kmlContent;
@@ -67,7 +49,7 @@ if (require.main === module) {
     
     if (args.length === 0) {
         console.error('Usage: node convert.js <input_file> [output_file]');
-        console.error('  input_file: Path to KML or KMZ file');
+        console.error('  input_file: Path to KML file');
         console.error('  output_file: Optional output file path (defaults to stdout)');
         process.exit(1);
     }
@@ -97,4 +79,4 @@ if (require.main === module) {
     }
 }
 
-module.exports = { convertKmlToGeojson, kmzToKml };
+module.exports = { convertKmlToGeojson };

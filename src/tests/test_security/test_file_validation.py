@@ -1,7 +1,7 @@
 """
 Comprehensive tests for file validation and security.
 
-Tests SecureFileValidator, basic_file_security_check, and related security functions.
+Tests validate_file, basic_file_security_check, and related security functions.
 """
 import io
 import zipfile
@@ -11,14 +11,13 @@ import pytest
 from django.core.files.uploadedfile import SimpleUploadedFile
 
 from geo_lib.processing.file_types import FileType
-from geo_lib.security.SecureFileValidator import SecureFileValidator
+from geo_lib.security.SecureFileValidator import validate_file, basic_file_security_check
 from geo_lib.security.exceptions import FileValidationError, SecurityError
-from geo_lib.security.file_validation import basic_file_security_check
-from geo_lib.security.kml import validate_kml_content, secure_kmz_to_kml
+from geo_lib.security.SecureFileValidator import validate_kml_content, secure_kmz_to_kml
 
 
 class TestSecureFileValidator:
-    """Test SecureFileValidator class."""
+    """Test validate_file function."""
 
     def test_validate_valid_kml(self):
         """Test validation of a valid KML file."""
@@ -35,8 +34,7 @@ class TestSecureFileValidator:
 </kml>"""
         
         file = SimpleUploadedFile("test.kml", kml_content.encode('utf-8'), content_type='text/xml')
-        validator = SecureFileValidator()
-        is_valid, message = validator.validate_file(file)
+        is_valid, message = validate_file(file)
         
         assert is_valid is True
         assert "successful" in message.lower()
@@ -56,8 +54,7 @@ class TestSecureFileValidator:
 </gpx>"""
         
         file = SimpleUploadedFile("test.gpx", gpx_content.encode('utf-8'), content_type='text/xml')
-        validator = SecureFileValidator()
-        is_valid, message = validator.validate_file(file)
+        is_valid, message = validate_file(file)
         
         assert is_valid is True
         assert "successful" in message.lower()
@@ -82,8 +79,7 @@ class TestSecureFileValidator:
             zip_file.writestr('doc.kml', kml_content)
         
         file = SimpleUploadedFile("test.kmz", zip_buffer.getvalue(), content_type='application/zip')
-        validator = SecureFileValidator()
-        is_valid, message = validator.validate_file(file)
+        is_valid, message = validate_file(file)
         
         assert is_valid is True
         assert "successful" in message.lower()
@@ -91,8 +87,7 @@ class TestSecureFileValidator:
     def test_validate_empty_file(self):
         """Test validation rejects empty files."""
         file = SimpleUploadedFile("test.kml", b'', content_type='text/xml')
-        validator = SecureFileValidator()
-        is_valid, message = validator.validate_file(file)
+        is_valid, message = validate_file(file)
         
         assert is_valid is False
         assert "empty" in message.lower()
@@ -100,8 +95,7 @@ class TestSecureFileValidator:
     def test_validate_no_filename(self):
         """Test validation rejects files without filename."""
         file = SimpleUploadedFile("", b'<kml></kml>', content_type='text/xml')
-        validator = SecureFileValidator()
-        is_valid, message = validator.validate_file(file)
+        is_valid, message = validate_file(file)
         
         assert is_valid is False
         assert "filename" in message.lower() or "rename" in message.lower()
@@ -109,8 +103,7 @@ class TestSecureFileValidator:
     def test_validate_invalid_extension(self):
         """Test validation rejects files with invalid extensions."""
         file = SimpleUploadedFile("test.txt", b'<kml></kml>', content_type='text/xml')
-        validator = SecureFileValidator()
-        is_valid, message = validator.validate_file(file)
+        is_valid, message = validate_file(file)
         
         assert is_valid is False
         assert "kml" in message.lower() or "kmz" in message.lower() or "gpx" in message.lower()
@@ -119,8 +112,7 @@ class TestSecureFileValidator:
         """Test validation rejects files with invalid signatures."""
         # KML file with wrong signature
         file = SimpleUploadedFile("test.kml", b'not xml content', content_type='text/xml')
-        validator = SecureFileValidator()
-        is_valid, message = validator.validate_file(file)
+        is_valid, message = validate_file(file)
         
         assert is_valid is False
         assert "valid" in message.lower() or "format" in message.lower()
@@ -133,8 +125,7 @@ class TestSecureFileValidator:
         # If the file is actually too large, it should be rejected
         # Note: This test may need adjustment based on actual size limits
         file = SimpleUploadedFile("test.kml", large_content.encode('utf-8'), content_type='text/xml')
-        validator = SecureFileValidator()
-        is_valid, message = validator.validate_file(file)
+        is_valid, message = validate_file(file)
         
         # Should either pass (if under limit) or fail with size error
         if not is_valid:
@@ -148,8 +139,7 @@ class TestSecureFileValidator:
             zip_file.writestr('readme.txt', 'No KML here')
         
         file = SimpleUploadedFile("test.kmz", zip_buffer.getvalue(), content_type='application/zip')
-        validator = SecureFileValidator()
-        is_valid, message = validator.validate_file(file)
+        is_valid, message = validate_file(file)
         
         assert is_valid is False
         assert "kml" in message.lower()
@@ -174,8 +164,7 @@ class TestSecureFileValidator:
             zip_file.writestr('other.kml', '<kml></kml>')
         
         file = SimpleUploadedFile("test.kmz", zip_buffer.getvalue(), content_type='application/zip')
-        validator = SecureFileValidator()
-        is_valid, message = validator.validate_file(file)
+        is_valid, message = validate_file(file)
         
         assert is_valid is True
 
@@ -198,8 +187,7 @@ class TestSecureFileValidator:
             zip_file.writestr('first.kml', kml_content)
         
         file = SimpleUploadedFile("test.kmz", zip_buffer.getvalue(), content_type='application/zip')
-        validator = SecureFileValidator()
-        is_valid, message = validator.validate_file(file)
+        is_valid, message = validate_file(file)
         
         assert is_valid is True
 
@@ -215,8 +203,7 @@ class TestSecureFileValidator:
 </kml>"""
         
         file = SimpleUploadedFile("test.kml", invalid_xml.encode('utf-8'), content_type='text/xml')
-        validator = SecureFileValidator()
-        is_valid, message = validator.validate_file(file)
+        is_valid, message = validate_file(file)
         
         assert is_valid is False
 
@@ -230,8 +217,7 @@ class TestSecureFileValidator:
 </kml>"""
         
         file = SimpleUploadedFile("test.kml", invalid_kml.encode('utf-8'), content_type='text/xml')
-        validator = SecureFileValidator()
-        is_valid, message = validator.validate_file(file)
+        is_valid, message = validate_file(file)
         
         # Should reject KML without placemarks, polygons, etc.
         assert is_valid is False
@@ -247,8 +233,7 @@ class TestSecureFileValidator:
 </gpx>"""
         
         file = SimpleUploadedFile("test.gpx", invalid_gpx.encode('utf-8'), content_type='text/xml')
-        validator = SecureFileValidator()
-        is_valid, message = validator.validate_file(file)
+        is_valid, message = validate_file(file)
         
         # Should reject GPX without tracks, routes, or waypoints
         assert is_valid is False
@@ -259,8 +244,7 @@ class TestSecureFileValidator:
         corrupted_zip = b'PK\x03\x04' + b'corrupted data'
         
         file = SimpleUploadedFile("test.kmz", corrupted_zip, content_type='application/zip')
-        validator = SecureFileValidator()
-        is_valid, message = validator.validate_file(file)
+        is_valid, message = validate_file(file)
         
         assert is_valid is False
         assert "corrupted" in message.lower() or "invalid" in message.lower() or "format" in message.lower()
@@ -271,8 +255,7 @@ class TestSecureFileValidator:
         invalid_utf8 = b'\xff\xfe\x00\x00'  # Invalid UTF-8 sequence
         
         file = SimpleUploadedFile("test.kml", invalid_utf8, content_type='text/xml')
-        validator = SecureFileValidator()
-        is_valid, message = validator.validate_file(file)
+        is_valid, message = validate_file(file)
         
         assert is_valid is False
 
@@ -286,8 +269,7 @@ class TestSecureFileValidator:
             zip_file.writestr('doc.kml', large_kml)
         
         file = SimpleUploadedFile("test.kmz", zip_buffer.getvalue(), content_type='application/zip')
-        validator = SecureFileValidator()
-        is_valid, message = validator.validate_file(file)
+        is_valid, message = validate_file(file)
         
         # Should either pass (if under limit) or fail with size error
         if not is_valid:

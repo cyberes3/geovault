@@ -31,7 +31,8 @@ from geo_lib.processing.jobs import process_job, delete_job, import_job
 from geo_lib.processing.import_utils import validate_bulk_operations_payload
 from geo_lib.processing.logging import DatabaseLogLevel, RealTimeImportLog
 from geo_lib.processing.status_tracker import status_tracker
-from geo_lib.security.file_validation import basic_file_security_check
+from geo_lib.processing.redis_job_storage import get_user_jobs
+from geo_lib.security.SecureFileValidator import basic_file_security_check
 from geo_lib.validation import validate_and_normalize_geojson_feature
 from geo_lib.website.auth import api_or_login_required_401
 from api.validation.feature_updates import validate_payload, FeatureUpdatePayload, ImportToFeaturestorePayload, SkipStatePayload
@@ -141,6 +142,21 @@ def get_user_processing_jobs(request):
             job_statuses.append(job_status)
 
     return success_response({'jobs': job_statuses})
+
+
+@api_or_login_required_401()
+def get_all_job_statuses(request):
+    """
+    Get all background job statuses (import, delete, bulk_import, bulk_delete) for the current user from Redis.
+    This endpoint allows API users to check job status without requiring WebSocket connections.
+    """
+    try:
+        jobs = get_user_jobs(request.user.id)
+        return success_response({'jobs': jobs})
+    except Exception as e:
+        logger.error(f"Failed to get job statuses from Redis: {e}")
+        # Return empty list if Redis is unavailable rather than failing
+        return success_response({'jobs': []})
 
 
 @api_or_login_required_401()

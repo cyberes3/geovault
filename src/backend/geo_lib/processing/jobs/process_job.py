@@ -48,7 +48,7 @@ from geo_lib.processing.utils import (
     inject_feature_hashes,
     build_skipped_feature_ids
 )
-from geo_lib.security.SecureFileValidator import SecureFileValidator
+from geo_lib.security.SecureFileValidator import validate_file
 from geo_lib.security.exceptions import FileValidationError, SecurityError
 from geo_lib.utils.pydantic_serialization import convert_features_to_pydantic
 from geo_lib.utils.advisory_locks import advisory_lock
@@ -259,9 +259,8 @@ class ProcessJob(BaseJob):
         )
 
         # Validate file with timing
-        validator = SecureFileValidator()
         validation_start = time.time()
-        is_valid, validation_message = validator.validate_file(uploaded_file)
+        is_valid, validation_message = validate_file(uploaded_file)
         validation_duration = time.time() - validation_start
         realtime_log.add_timing("File validation", validation_duration, "ProcessJob")
 
