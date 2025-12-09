@@ -98,7 +98,9 @@ class QueueWorker:
                     # Process the job
                     try:
                         logger.info(f"Queue worker for user {self.user_id} processing job {job_data['job_id']}")
-                        self.process_job.process_from_queue(job_data)
+                        # Call _execute_job with BaseJob signature (job_id, kwargs)
+                        # where kwargs is the full job_data dict
+                        self.process_job._execute_job(job_data['job_id'], job_data)
                     except Exception as e:
                         logger.error(f"Error processing job {job_data['job_id']} for user {self.user_id}: {e}", exc_info=True)
                         # Continue processing next job even if this one failed

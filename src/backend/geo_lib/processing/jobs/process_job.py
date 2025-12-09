@@ -134,27 +134,6 @@ class ProcessJob(BaseJob):
             logger.error(f"Failed to enqueue job {job_id}: {e}")
             return False
     
-    def process_from_queue(self, job_data: Dict[str, Any]):
-        """
-        Process a job that was dequeued from Redis.
-        Called by the queue worker thread.
-        
-        Args:
-            job_data: Dictionary containing job information
-        """
-        job_id = job_data['job_id']
-        file_data = job_data['file_data']
-        filename = job_data['filename']
-        user_id = job_data['user_id']
-        
-        # Execute the job directly (no threading, worker handles that)
-        kwargs = {
-            'file_data': file_data,
-            'filename': filename,
-            'user_id': user_id
-        }
-        self._execute_job(job_id, kwargs)
-
     def _mark_import_queue_as_failed(self, import_queue_id: int, error_message: str):
         """
         Mark an ImportQueue item as unparsable and save error information.
@@ -316,46 +295,6 @@ class ProcessJob(BaseJob):
         realtime_log.add("File validation passed successfully", "ProcessJob", DatabaseLogLevel.INFO)
         return True
 
-    def _setup_job_context(self, job_id: str, kwargs: Dict[str, Any]) -> tuple[int, int, str, bool, RealTimeImportLog] | None:
-        """
-        Setup job execution context by retrieving job info and creating logger.
-        
-        Args:
-            job_id: Job ID
-            kwargs: Job arguments
-            
-        Returns:
-            Tuple of (user_id, import_queue_id, log_uuid, is_replacement, realtime_log) or None if setup failed
-        """
-        user_id = kwargs['user_id']
-        
-        # Get the job for user info
-        job = self.status_tracker.get_job(job_id)
-        if not job:
-            logger.error(f"Process job {job_id} not found")
-            return None
-
-        # Get the import queue ID for logging
-        import_queue_id = job.import_queue_id if job else None
-
-        # Get the UUID from the ImportQueue for logging
-        assert import_queue_id
-        try:
-            import_queue = ImportQueue.objects.get(id=import_queue_id)
-            assert import_queue.log_id
-            log_uuid = str(import_queue.log_id)
-            # Check if this is a replacement upload (fast path)
-            is_replacement = import_queue.replacement is not None
-        except ImportQueue.DoesNotExist:
-            # ImportQueue was deleted (likely by user deletion), stop processing
-            logger.warning(f"ImportQueue {import_queue_id} was deleted, stopping processing for job {job_id}")
-            return None
-
-        # Create real-time logger
-        realtime_log = RealTimeImportLog(user_id, log_uuid)
-        
-        return user_id, import_queue_id, log_uuid, is_replacement, realtime_log
-
     def _finalize_job_success(self, job_id: str, user_id: int, import_queue_id: int,
                               feature_count: int, overall_duration: float,
                               geojson_data: Dict[str, Any], realtime_log: RealTimeImportLog) -> None:
@@ -408,15 +347,42 @@ class ProcessJob(BaseJob):
     def _execute_job(self, job_id: str, kwargs: Dict[str, Any]):
         """
         Execute the process job processing logic.
+        
+        This method signature matches the BaseJob interface but ProcessJob uses
+        Redis queue instead of threading, so kwargs is actually the full job_data dict.
+        
+        Args:
+            job_id: Job ID (part of BaseJob interface, also in kwargs)
+            kwargs: Job data from Redis queue containing job_id, file_data, filename, user_id
         """
-        file_data = kwargs['file_data']
-        filename = kwargs['filename']
+        # Extract job parameters (kwargs is actually job_data from Redis)
+        job_data = kwargs
+        file_data = job_data['file_data']
+        filename = job_data['filename']
+        user_id = job_data['user_id']
 
-        # Setup job context
-        context = self._setup_job_context(job_id, kwargs)
-        if not context:
+        # Get job and import queue info
+        job = self.status_tracker.get_job(job_id)
+        if not job or not job.import_queue_id:
+            logger.error(f"Process job {job_id} not found or missing import_queue_id")
             return
-        user_id, import_queue_id, log_uuid, is_replacement, realtime_log = context
+
+        import_queue_id = job.import_queue_id
+
+        # Get the UUID from the ImportQueue for logging
+        try:
+            import_queue = ImportQueue.objects.get(id=import_queue_id)
+            assert import_queue.log_id
+            log_uuid = str(import_queue.log_id)
+            # Check if this is a replacement upload (fast path)
+            is_replacement = import_queue.replacement is not None
+        except ImportQueue.DoesNotExist:
+            # ImportQueue was deleted (likely by user deletion), stop processing
+            logger.warning(f"ImportQueue {import_queue_id} was deleted, stopping processing for job {job_id}")
+            return
+
+        # Create real-time logger
+        realtime_log = RealTimeImportLog(user_id, log_uuid)
 
         # Track overall processing time
         overall_start_time = time.time()
