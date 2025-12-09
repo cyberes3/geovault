@@ -10,7 +10,7 @@ these tests to override the autouse fixture's default behavior with test-specifi
 import pytest
 from unittest.mock import patch
 from django.test import TestCase
-from django.core.cache import cache
+from django.core.cache import cache, caches
 
 from geo_lib.geocoding.reverse_geocode import (
     get_reverse_geocoding_service,
@@ -253,7 +253,7 @@ class TestReverseGeocodingService(TestCase):
     def test_get_location_tags_comprehensive(self, mock_query_overpass):
         """Test comprehensive location tag generation."""
         # Mock responses for all queries
-        def mock_overpass_response(query, max_retries=3):
+        def mock_overpass_response(query, max_retries=3, latitude=None, longitude=None):
             # Admin hierarchy query
             if 'admin_level' in query:
                 return {
@@ -294,10 +294,20 @@ class TestCaching(TestCase):
         """Set up test fixtures."""
         self.service = get_reverse_geocoding_service()
         cache.clear()
+        # Also clear geocoding cache
+        try:
+            caches['geocoding'].clear()
+        except Exception:
+            pass
     
     def tearDown(self):
         """Clean up after tests."""
         cache.clear()
+        # Also clear geocoding cache
+        try:
+            caches['geocoding'].clear()
+        except Exception:
+            pass
     
     @patch('geo_lib.geocoding.reverse_geocode.ReverseGeocodingService._query_overpass')
     def test_admin_hierarchy_caching(self, mock_query_overpass):
@@ -395,14 +405,15 @@ class TestTagGeneration(TestCase):
     @patch('geo_lib.geocoding.reverse_geocode.ReverseGeocodingService._query_overpass')
     def test_national_park_tag(self, mock_query_overpass):
         """Test national park tag generation."""
-        def mock_overpass_response(query, max_retries=3):
-            if 'protected_area' in query:
+        def mock_overpass_response(query, max_retries=3, latitude=None, longitude=None):
+            if 'protected_area' in query or 'admin_level' in query:
                 return {
                     'elements': [{
                         'type': 'area',
                         'tags': {
                             'name': 'Rocky Mountain National Park',
-                            'protection_title': 'National Park'
+                            'protection_title': 'National Park',
+                            'boundary': 'protected_area'
                         }
                     }]
                 }
@@ -418,14 +429,15 @@ class TestTagGeneration(TestCase):
     @patch('geo_lib.geocoding.reverse_geocode.ReverseGeocodingService._query_overpass')
     def test_national_monument_tag(self, mock_query_overpass):
         """Test national monument tag generation."""
-        def mock_overpass_response(query, max_retries=3):
-            if 'protected_area' in query:
+        def mock_overpass_response(query, max_retries=3, latitude=None, longitude=None):
+            if 'protected_area' in query or 'admin_level' in query:
                 return {
                     'elements': [{
                         'type': 'area',
                         'tags': {
                             'name': 'Colorado National Monument',
-                            'protection_title': 'National Monument'
+                            'protection_title': 'National Monument',
+                            'boundary': 'protected_area'
                         }
                     }]
                 }
@@ -441,14 +453,15 @@ class TestTagGeneration(TestCase):
     @patch('geo_lib.geocoding.reverse_geocode.ReverseGeocodingService._query_overpass')
     def test_wilderness_tag(self, mock_query_overpass):
         """Test wilderness area tag generation."""
-        def mock_overpass_response(query, max_retries=3):
-            if 'protected_area' in query:
+        def mock_overpass_response(query, max_retries=3, latitude=None, longitude=None):
+            if 'protected_area' in query or 'admin_level' in query:
                 return {
                     'elements': [{
                         'type': 'area',
                         'tags': {
                             'name': 'Lost Creek Wilderness',
-                            'protection_title': 'Wilderness Area'
+                            'protection_title': 'Wilderness Area',
+                            'boundary': 'protected_area'
                         }
                     }]
                 }

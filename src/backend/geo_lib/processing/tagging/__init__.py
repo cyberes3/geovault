@@ -21,7 +21,7 @@ from geo_lib.processing.tagging.modules.track_detection import TrackDetectionTag
 from geo_lib.types.feature import GeoFeatureSupported
 
 # Export update_feature_date_tags for backward compatibility
-__all__ = ['generate_auto_tags', 'update_feature_date_tags', 'get_internal_tags']
+__all__ = ['generate_auto_tags', 'generate_auto_tags_batch', 'update_feature_date_tags', 'get_internal_tags']
 
 # Registry of tag generators
 _tag_generators: List[TagGenerator] = []
@@ -77,6 +77,94 @@ def get_internal_tags() -> List[str]:
     return internal_tags
 
 
+def generate_auto_tags_batch(
+        features: List[GeoFeatureSupported],
+        import_log=None,
+        filename: Optional[str] = None,
+        skip_geocoding: bool = False
+) -> List[List[str]]:
+    """
+    Generate tags for multiple features at once with batched geocoding.
+    
+    This is the preferred method for processing multiple features as it:
+    - Deduplicates coordinates before geocoding
+    - Makes fewer API calls
+    - Leverages cache more efficiently
+    
+    Args:
+        features: List of features to generate tags for
+        import_log: Optional ImportLog for database logging
+        filename: Optional original filename to add as source-file tag
+        skip_geocoding: If True, skip the GeocodingTagGenerator
+        
+    Returns:
+        List of tag lists (one per feature)
+    """
+    if not features:
+        return []
+    
+    # Discover generators if not already done
+    if not _tag_generators:
+        _discover_tag_generators()
+    
+    # Separate generators into batch-capable and single-only
+    geocoding_gen = None
+    other_generators = []
+    
+    for generator in _tag_generators:
+        if isinstance(generator, GeocodingTagGenerator):
+            geocoding_gen = generator
+        else:
+            other_generators.append(generator)
+    
+    # Process non-geocoding generators per-feature
+    all_feature_tags = [[] for _ in features]
+    
+    for generator in other_generators:
+        for i, feature in enumerate(features):
+            try:
+                tags = generator.process(feature, import_log=import_log, filename=filename)
+                if tags:
+                    all_feature_tags[i].extend(tags)
+            except Exception as e:
+                logger = get_job_logger()
+                logger.warning(f"Tag generator {generator.__class__.__name__} failed for feature {i}: {e}")
+                if import_log:
+                    import_log.add(
+                        f"Tag generator {generator.__class__.__name__} failed: {str(e)}",
+                        "Tagging",
+                        DatabaseLogLevel.WARNING
+                    )
+    
+    # Batch process geocoding for ALL features at once
+    if geocoding_gen and not skip_geocoding:
+        try:
+            geocode_tags = geocoding_gen.process_batch(features, import_log=import_log)
+            for i, tags in geocode_tags.items():
+                all_feature_tags[i].extend(tags)
+        except Exception as e:
+            logger = get_job_logger()
+            logger.warning(f"Batch geocoding failed: {e}")
+            if import_log:
+                import_log.add(
+                    f"Batch geocoding failed: {str(e)}",
+                    "Tagging",
+                    DatabaseLogLevel.WARNING
+                )
+    
+    # Post-processing for each feature
+    for i in range(len(features)):
+        # Handle conflicting type tags
+        if 'type:track' in all_feature_tags[i]:
+            all_feature_tags[i] = [tag for tag in all_feature_tags[i] 
+                                   if tag not in ['type:line', 'type:point']]
+        
+        # Ensure all tags are strings
+        all_feature_tags[i] = [str(tag) for tag in all_feature_tags[i]]
+    
+    return all_feature_tags
+
+
 def generate_auto_tags(
         feature: GeoFeatureSupported,
         import_log=None,
@@ -84,10 +172,10 @@ def generate_auto_tags(
         skip_geocoding: bool = False
 ) -> List[str]:
     """
-    Generate automatic tags for a feature using all registered tag generators.
+    Generate automatic tags for a single feature using all registered tag generators.
     
-    This function maintains backward compatibility with the original interface.
-    It discovers and executes all tag generator modules in priority order.
+    For processing multiple features, prefer using generate_auto_tags_batch() 
+    for better performance with coordinate deduplication.
     
     Args:
         feature: The feature to generate tags for
@@ -98,40 +186,9 @@ def generate_auto_tags(
     Returns:
         List of tag strings
     """
-    # Discover generators if not already done
-    if not _tag_generators:
-        _discover_tag_generators()
-
-    all_tags = []
-
-    # Execute all generators in priority order
-    for generator in _tag_generators:
-        # Skip geocoding generator if requested
-        if skip_geocoding and isinstance(generator, GeocodingTagGenerator):
-            continue
-        
-        try:
-            tags = generator.process(feature, import_log=import_log, filename=filename)
-            if tags:
-                all_tags.extend(tags)
-        except Exception as e:
-            # Log error but continue with other generators
-            logger = get_job_logger()
-            logger.warning(f"Tag generator {generator.__class__.__name__} failed: {e}")
-            if import_log:
-                import_log.add(
-                    f"Tag generator {generator.__class__.__name__} failed: {str(e)}",
-                    "Tagging",
-                    DatabaseLogLevel.WARNING
-                )
-
-    # Post-processing: Handle conflicting type tags
-    # If type:track is present, remove type:line (track is more specific)
-    if 'type:track' in all_tags:
-        all_tags = [tag for tag in all_tags if tag not in ['type:line', 'type:point']]
-    
-    # Ensure all tags are strings
-    return [str(tag) for tag in all_tags]
+    # Call batch version with single feature for consistency
+    result = generate_auto_tags_batch([feature], import_log, filename, skip_geocoding)
+    return result[0] if result else []
 
 
 # Initialize generators on module import

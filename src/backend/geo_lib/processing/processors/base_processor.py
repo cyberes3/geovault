@@ -253,6 +253,7 @@ class BaseProcessor(ABC):
         """
         Step 6: Generate tags for already-processed (split and validated) features.
         Tags include: type, import date, source file, elevation, and reverse geocoding.
+        Uses batch processing for geocoding to deduplicate coordinates.
         
         Args:
             processed_features: List of features that have been split and validated
@@ -277,91 +278,106 @@ class BaseProcessor(ABC):
                 if geometry_type in ['point', 'linestring', 'multilinestring']:
                     geocoding_count += 1
             if geocoding_count > 0:
-                feature_log.add(f"Reverse geocoding {geocoding_count} feature(s)", "Reverse Geocoding", DatabaseLogLevel.INFO)
+                feature_log.add(f"Reverse geocoding {geocoding_count} feature(s) with coordinate deduplication", "Reverse Geocoding", DatabaseLogLevel.INFO)
 
-        # Get number of threads from settings
-        num_threads = get_required_setting('IMPORT_PROCESSING_THREADS')
-
-        # Process features in parallel using ThreadPoolExecutor
-        if len(processed_features) > 0:
-            self._executor = ThreadPoolExecutor(max_workers=num_threads)
-            executor_shutdown_called = False
-            try:
-                # Submit all tasks
-                future_to_feature = {
-                    self._executor.submit(self._step_6_process_single_feature, feature): feature 
-                    for feature in processed_features
-                }
-
-                # Collect results as they complete, checking for cancellation
-                completed_count = 0
-                cancelled = False
-                for future in as_completed(future_to_feature):
-                    # Check for cancellation before processing each result
-                    if self._is_cancelled():
-                        if not cancelled:
-                            feature_log.add(f"Tagging cancelled after {completed_count} features", "Feature Tagging", DatabaseLogLevel.WARNING)
-                            cancelled = True
-                            # Cancel remaining futures
-                            for remaining_future in future_to_feature:
-                                if not remaining_future.done():
-                                    remaining_future.cancel()
-                            # Shutdown executor without waiting for remaining tasks
-                            self._executor.shutdown(wait=False)
-                            executor_shutdown_called = True
-                            break
-
-                    # Only process results if not cancelled
-                    if not cancelled:
-                        try:
-                            result_log = future.result()
-                            feature_log.extend(result_log)
-                            completed_count += 1
-                        except Exception as e:
-                            feature = future_to_feature[future]
-                            feature_name = feature.get('properties', {}).get('name', 'Unnamed')
-                            logger.error(f"Error tagging feature '{feature_name}': {traceback.format_exc()}")
-                            feature_log.add(f"Error tagging feature '{feature_name}': {str(e)}", "Feature Tagging", DatabaseLogLevel.ERROR)
-                            completed_count += 1
+        # NEW APPROACH: Batch process all features at once
+        # This deduplicates coordinates before making API calls
+        try:
+            # Check for cancellation before starting
+            if self._is_cancelled():
+                feature_log.add("Processing cancelled before feature tagging", "Feature Tagging", DatabaseLogLevel.WARNING)
+                return feature_log
+            
+            # Create feature instances for all features
+            feature_instances = []
+            for feature in processed_features:
+                try:
+                    geometry_type = feature['geometry']['type'].lower()
+                    
+                    # Determine the appropriate feature class
+                    feature_class = None
+                    if geometry_type in ['point', 'multipoint']:
+                        feature_class = PointFeature
+                    elif geometry_type == 'linestring':
+                        feature_class = LineStringFeature
+                    elif geometry_type == 'multilinestring':
+                        feature_class = MultiLineStringFeature
+                    elif geometry_type in ['polygon', 'multipolygon']:
+                        feature_class = PolygonFeature
                     else:
-                        completed_count += 1
-            finally:
-                # Ensure executor is always properly shut down
-                if not executor_shutdown_called:
-                    self._executor.shutdown(wait=True)
-                self._executor = None  # Clear reference
-
-        # Log summary of reverse geocoding results if geocoding was enabled
-        if geocoding_enabled and geocoding_count > 0:
-            # Count successful and failed geocoding operations from the log messages
-            geocoding_success_count = 0
-            geocoding_failure_count = 0
-            for log_msg in feature_log.get():
-                if log_msg.source == "Reverse Geocoding":
-                    # Count successes (has location tags)
-                    if "Successfully reverse geocoded feature" in log_msg.msg:
-                        geocoding_success_count += 1
-                    # Count failures (no data / API errors)
-                    elif "returned no data" in log_msg.msg or "failed" in log_msg.msg.lower():
-                        geocoding_failure_count += 1
+                        # Unsupported geometry type, add empty instance to maintain index alignment
+                        feature_instances.append(None)
+                        continue
+                    
+                    # Create feature instance
+                    feature_instance = feature_class(**feature)
+                    feature_instances.append(feature_instance)
+                except Exception as e:
+                    logger.warning(f"Failed to create feature instance for tagging: {e}")
+                    feature_instances.append(None)
             
-            # Calculate actual success count
-            actual_success = geocoding_count - geocoding_failure_count
+            # Check for cancellation after creating instances
+            if self._is_cancelled():
+                feature_log.add("Processing cancelled during feature instance creation", "Feature Tagging", DatabaseLogLevel.WARNING)
+                return feature_log
             
-            # Log summary
-            if geocoding_failure_count > 0:
-                feature_log.add(
-                    f"Reverse geocoding: {actual_success} succeeded, {geocoding_failure_count} failed (API errors)",
-                    "Reverse Geocoding",
-                    DatabaseLogLevel.WARNING
-                )
-            else:
-                feature_log.add(
-                    f"Successfully reverse geocoded all {geocoding_count} feature(s)",
-                    "Reverse Geocoding",
-                    DatabaseLogLevel.INFO
-                )
-
+            # Batch generate tags for all features at once
+            # This deduplicates coordinates and minimizes API calls
+            from geo_lib.processing.tagging import generate_auto_tags_batch
+            all_feature_tags = generate_auto_tags_batch(
+                [f for f in feature_instances if f is not None],
+                import_log=feature_log,
+                filename=self.filename
+            )
+            
+            # Check for cancellation after tag generation
+            if self._is_cancelled():
+                feature_log.add("Processing cancelled after tag generation", "Feature Tagging", DatabaseLogLevel.WARNING)
+                return feature_log
+            
+            # Apply tags to features
+            tag_index = 0
+            for i, feature in enumerate(processed_features):
+                if feature_instances[i] is None:
+                    # Skip features that couldn't be instantiated
+                    continue
+                
+                try:
+                    auto_tags = all_feature_tags[tag_index]
+                    tag_index += 1
+                    
+                    # Separate system tags from user tags
+                    existing_tags = feature.get('properties', {}).get('tags', [])
+                    if not isinstance(existing_tags, list):
+                        existing_tags = []
+                    
+                    # Strip system tags from existing tags (defensive - in case user added them)
+                    user_tags = filter_protected_tags(existing_tags, CONST_INTERNAL_TAGS)
+                    
+                    # Prepare user tags (lowercase and deduplicate)
+                    user_tags = prepare_user_tags(user_tags)
+                    
+                    # Store system tags separately
+                    feature['properties']['system_tags'] = auto_tags
+                    # Store user tags (filtered to remove any system tags)
+                    feature['properties']['tags'] = user_tags
+                except Exception as tag_error:
+                    feature_name = feature.get('properties', {}).get('name', 'Unnamed')
+                    feature_log.add(
+                        f"Tag application failed for feature '{feature_name}': {str(tag_error)}",
+                        "Tag Generation",
+                        DatabaseLogLevel.WARNING
+                    )
+                    logger.warning(f"Tag application failed for feature '{feature_name}': {traceback.format_exc()}")
+            
+        except Exception as e:
+            feature_log.add(
+                f"Batch tag generation failed: {str(e)}",
+                "Tag Generation",
+                DatabaseLogLevel.ERROR
+            )
+            logger.error(f"Batch tag generation error: {traceback.format_exc()}")
+        
         return feature_log
 
     def _step_4_process_single_feature(self, feature: Dict[str, Any]) -> Tuple[List[Dict[str, Any]], ImportLog, int, bool]:
@@ -450,81 +466,6 @@ class BaseProcessor(ABC):
                 skipped_count += 1
 
         return processed_features, feature_log, skipped_count, was_split
-
-    def _step_6_process_single_feature(self, feature: Dict[str, Any]) -> ImportLog:
-        """
-        Worker for step 6: Generate tags for a single feature.
-        
-        Args:
-            feature: Single feature dictionary that has been split and validated
-            
-        Returns:
-            ImportLog with tagging information
-        """
-        feature_log = ImportLog()
-        
-        # Check for cancellation at the very start
-        if self._is_cancelled():
-            return feature_log
-
-        try:
-            geometry_type = feature['geometry']['type'].lower()
-
-            # Determine the appropriate feature class
-            feature_class = None
-            if geometry_type in ['point', 'multipoint']:
-                feature_class = PointFeature
-            elif geometry_type == 'linestring':
-                feature_class = LineStringFeature
-            elif geometry_type == 'multilinestring':
-                feature_class = MultiLineStringFeature
-            elif geometry_type in ['polygon', 'multipolygon']:
-                feature_class = PolygonFeature
-            else:
-                # Unsupported geometry type, skip tagging
-                return feature_log
-            assert feature_class
-
-            # Create feature instance for tag generation
-            feature_instance = feature_class(**feature)
-
-            # Check for cancellation before generating tags
-            if self._is_cancelled():
-                return feature_log
-
-            # Generate all auto tags (includes type, import-year, import-month, source-file, elevation, and geocoding)
-            auto_tags = generate_auto_tags(feature_instance, feature_log, filename=self.filename)
-
-            # Check for cancellation after tag generation
-            if self._is_cancelled():
-                return feature_log
-
-            # Separate system tags from user tags
-            existing_tags = feature.get('properties', {}).get('tags', [])
-            if not isinstance(existing_tags, list):
-                existing_tags = []
-
-            # Strip system tags from existing tags (defensive - in case user added them)
-            user_tags = filter_protected_tags(existing_tags, CONST_INTERNAL_TAGS)
-
-            # Prepare user tags (lowercase and deduplicate)
-            user_tags = prepare_user_tags(user_tags)
-
-            # Store system tags separately
-            feature['properties']['system_tags'] = auto_tags
-            # Store user tags (filtered to remove any system tags)
-            feature['properties']['tags'] = user_tags
-        except Exception as tag_error:
-            # Log error but don't fail the feature processing
-            feature_name = feature.get('properties', {}).get('name', 'Unnamed')
-            feature_log.add(
-                f"Tag generation failed for feature '{feature_name}': {str(tag_error)}",
-                "Tag Generation",
-                DatabaseLogLevel.WARNING
-            )
-            logger.warning(f"Tag generation failed for feature '{feature_name}': {traceback.format_exc()}")
-
-        return feature_log
 
     def process(self) -> Tuple[Dict[str, Any], ImportLog]:
         """

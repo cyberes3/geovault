@@ -3,7 +3,7 @@ Reverse geocoding tag generator.
 Generates location-based tags (city, state, country, protected areas, lakes, etc.)
 using reverse geocoding.
 """
-from typing import List, Tuple
+from typing import List, Tuple, Dict
 
 from website.settings_utils import get_required_setting
 
@@ -61,6 +61,76 @@ class GeocodingTagGenerator(TagGenerator):
     def __init__(self):
         super().__init__('geocoding')
     
+    def process_batch(
+        self,
+        features: List[GeoFeatureSupported],
+        import_log=None,
+        **kwargs
+    ) -> Dict[int, List[str]]:
+        """
+        Process multiple features at once with coordinate deduplication.
+        This is the preferred method for processing multiple features efficiently.
+        
+        Args:
+            features: List of features to geocode
+            import_log: Optional ImportLog for database logging
+            
+        Returns:
+            Dict mapping feature index to list of tags
+        """
+        if not get_required_setting('REVERSE_GEOCODING_ENABLED'):
+            return {i: [] for i in range(len(features))}
+        
+        # Step 1: Extract all coordinates from all features
+        feature_coords = {}  # Maps feature index -> list of coordinates
+        all_coordinates = []
+        
+        for i, feature in enumerate(features):
+            geometry_type = feature.geometry.type.value.lower()
+            if geometry_type in ['point', 'multipoint', 'linestring', 'multilinestring']:
+                points = get_representative_points(feature)
+                if points:
+                    feature_coords[i] = points
+                    all_coordinates.extend(points)
+        
+        if not all_coordinates:
+            return {i: [] for i in range(len(features))}
+        
+        # Step 2: SINGLE CALL to batch geocode all coordinates with deduplication
+        geocoding_service = get_reverse_geocoding_service()
+        geocode_results = geocoding_service.batch_geocode_coordinates(all_coordinates)
+        
+        # Step 3: Assign tags back to features
+        feature_tags = {}
+        for i, coords in feature_coords.items():
+            all_location_tags = set()
+            
+            for lat, lon in coords:
+                tags, log_messages = geocode_results.get((lat, lon), ([], []))
+                all_location_tags.update(tags)
+                
+                # Add log messages to import log
+                if import_log and log_messages:
+                    for log_msg in log_messages:
+                        # Map level string to DatabaseLogLevel
+                        if log_msg.level == 'ERROR':
+                            level = DatabaseLogLevel.ERROR
+                        elif log_msg.level == 'WARNING':
+                            level = DatabaseLogLevel.WARNING
+                        else:
+                            level = DatabaseLogLevel.INFO
+                        
+                        import_log.add(
+                            log_msg.message,
+                            log_msg.source,
+                            level
+                        )
+            
+            feature_tags[i] = sorted(all_location_tags)
+        
+        # Return empty list for features that weren't geocoded
+        return {i: feature_tags.get(i, []) for i in range(len(features))}
+    
     def process(
         self,
         feature: GeoFeatureSupported,
@@ -68,7 +138,8 @@ class GeocodingTagGenerator(TagGenerator):
         **kwargs
     ) -> List[str]:
         """
-        Generate reverse geocoding tags for points and lines only.
+        Process single feature (backwards compatibility).
+        Prefer using process_batch() for better performance when processing multiple features.
         
         Args:
             feature: The feature to generate tags for
@@ -78,59 +149,7 @@ class GeocodingTagGenerator(TagGenerator):
         Returns:
             List of reverse geocoding tags
         """
-        tags = []
-        
-        # Add reverse geocoding tags for points and lines only
-        geometry_type = feature.geometry.type.value.lower()
-        if geometry_type in ['point', 'multipoint', 'linestring', 'multilinestring']:
-            # Check if reverse geocoding is enabled before attempting to reverse geocode
-            if get_required_setting('REVERSE_GEOCODING_ENABLED'):
-                try:
-                    points = get_representative_points(feature)
-                    if points:
-                        geocoding_service = get_reverse_geocoding_service()
-                        all_location_tags = set()
-                        
-                        for lat, lon in points:
-                            try:
-                                location_tags, log_messages = geocoding_service.get_location_tags(lat, lon)
-                                all_location_tags.update(location_tags)
-                                
-                                # Add log messages to import log
-                                if import_log and log_messages:
-                                    for log_msg in log_messages:
-                                        # Map level string to DatabaseLogLevel
-                                        if log_msg.level == 'ERROR':
-                                            level = DatabaseLogLevel.ERROR
-                                        elif log_msg.level == 'WARNING':
-                                            level = DatabaseLogLevel.WARNING
-                                        else:
-                                            level = DatabaseLogLevel.INFO
-                                        
-                                        import_log.add(
-                                            log_msg.message,
-                                            log_msg.source,
-                                            level
-                                        )
-                            except Exception as geocode_point_error:
-                                error_msg = f"Reverse geocoding failed at coordinates ({lat}, {lon}): {str(geocode_point_error)}"
-                                logger.warning(error_msg)
-                                if import_log:
-                                    import_log.add(
-                                        error_msg,
-                                        "Reverse Geocoding",
-                                        DatabaseLogLevel.WARNING
-                                    )
-                        
-                        tags.extend(sorted(all_location_tags))
-                except Exception as e:
-                    logger.warning(f"Failed to reverse geocode feature for tagging: {e}")
-                    if import_log:
-                        import_log.add(
-                            f"Reverse geocoding failed: {str(e)}",
-                            "Reverse Geocoding",
-                            DatabaseLogLevel.WARNING
-                        )
-        
-        return tags
+        # Call batch version with single feature
+        result = self.process_batch([feature], import_log, **kwargs)
+        return result.get(0, [])
 
