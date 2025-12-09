@@ -3,13 +3,12 @@ Reverse geocoding tag generator.
 Generates location-based tags (city, state, country, protected areas, lakes, etc.)
 using reverse geocoding.
 """
-from typing import List, Tuple, Optional
+from typing import List, Tuple
 
-from django.conf import settings
 from website.settings_utils import get_required_setting
 
 from geo_lib.types.feature import GeoFeatureSupported
-from geo_lib.geolocation.reverse_geocode import get_reverse_geocoding_service
+from geo_lib.geocoding.reverse_geocode import get_reverse_geocoding_service
 from geo_lib.processing.tagging.base import TagGenerator
 from geo_lib.processing.logging import DatabaseLogLevel
 from geo_lib.logging.console import get_job_logger

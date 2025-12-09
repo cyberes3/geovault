@@ -4,10 +4,9 @@ Removes existing reverse geocoding tags and regenerates them using current geoco
 """
 from django.core.management.base import BaseCommand
 from django.db import transaction
-from django.db.models import Q
 
 from api.models import FeatureStore
-from geo_lib.geolocation.reverse_geocode import get_reverse_geocoding_service
+from geo_lib.geocoding.reverse_geocode import get_reverse_geocoding_service
 from geo_lib.processing.tagging.modules.geocoding import get_representative_points
 
 

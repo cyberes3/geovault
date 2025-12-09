@@ -10,8 +10,7 @@ from django.contrib.gis.geos import Point
 from django.contrib.auth import get_user_model
 
 from api.models import FeatureStore
-from geo_lib.geolocation.background_geocoding import geocode_feature_async
-from geo_lib.processing.tagging.modules.geocoding import GeocodingTagGenerator
+from geo_lib.geocoding.background_geocoding import geocode_feature_async
 from geo_lib.types.feature import PointFeature
 from geo_lib.feature_id import generate_geojson_hash
 

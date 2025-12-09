@@ -21,18 +21,16 @@ Warning checks (don't fail startup):
 - Email configuration
 """
 
-import os
 import sys
 from pathlib import Path
 
 from asgiref.sync import async_to_sync
 from channels.layers import get_channel_layer
 from django.conf import settings
-from django.core.exceptions import ImproperlyConfigured
 from django.contrib.sites.models import Site
 from django.db import connection
 
-from geo_lib.geolocation.reverse_geocode import load_ski_resorts
+from geo_lib.geocoding.reverse_geocode import load_ski_resorts
 from geo_lib.logging.console import get_startup_logger
 from geo_lib.processing.file_types import FILE_TYPE_CONFIGS
 from geo_lib.utils.redis_connection import get_redis_connection

@@ -8,11 +8,11 @@ already mocks _query_overpass for all tests. Mocking at the _query_overpass leve
 these tests to override the autouse fixture's default behavior with test-specific responses.
 """
 import pytest
-from unittest.mock import patch, MagicMock
+from unittest.mock import patch
 from django.test import TestCase
 from django.core.cache import cache
 
-from geo_lib.geolocation.reverse_geocode import (
+from geo_lib.geocoding.reverse_geocode import (
     get_reverse_geocoding_service,
     haversine_distance,
     _get_cache_key,

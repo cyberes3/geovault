@@ -6,7 +6,7 @@ import traceback
 from django.http import JsonResponse
 from django.views.decorators.http import require_http_methods
 
-from geo_lib.geolocation.ip_service import get_geolocation_service
+from geo_lib.ip_service import get_geolocation_service
 from geo_lib.logging.console import get_access_logger
 from geo_lib.website.auth import api_or_login_required_401
 
@@ -113,9 +113,6 @@ def get_location_by_ip(request):
                 'country_code': location_data.get('country_code'),
                 'latitude': location_data.get('latitude'),
                 'longitude': location_data.get('longitude'),
-                'timezone': location_data.get('timezone'),
-                'postal_code': location_data.get('postal_code'),
-                'is_default': location_data.get('is_default', False)
             },
             'ip_info': {
                 'ip': location_data.get('ip'),
