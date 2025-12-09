@@ -11,8 +11,9 @@ This module performs essential checks when the server starts up:
 7. Frontend static files are built
 8. togeojson Node.js converter is installed
 9. Site configuration (for email confirmation URLs)
-10. Clear Redis cache (ensures fresh data on startup)
-11. Preload ski resorts database (for reverse geocoding)
+10. Clean up stale Redis queues and job status data
+11. Clear Redis cache (ensures fresh data on startup)
+12. Preload ski resorts database (for reverse geocoding)
 
 Warning checks (don't fail startup):
 - Configuration file exists
@@ -693,10 +694,11 @@ def check_site_configuration():
 
 def cleanup_redis_queues():
     """
-    Clean up Redis processing queues and old locks on startup.
+    Clean up Redis processing queues, job status data, and old locks on startup.
     
     This clears any stale queues from previous server instances and removes
     old processing locks (for migration from lock-based to queue-based system).
+    Also clears job status data to ensure a clean slate on server restart.
     """
     try:
         redis_client = get_redis_connection()
@@ -706,6 +708,12 @@ def cleanup_redis_queues():
         
         # Find all old processing lock keys (for migration)
         lock_keys = redis_client.keys('processing_lock:*')
+        
+        # Find all job status keys
+        job_keys = redis_client.keys('job:*')
+        
+        # Find all user jobs set keys
+        user_jobs_keys = redis_client.keys('user_jobs:*')
         
         total_deleted = 0
         
@@ -725,8 +733,24 @@ def cleanup_redis_queues():
         else:
             logger.info("✓ No old Redis processing locks found")
         
+        if job_keys:
+            # Delete all job status data
+            deleted_count = redis_client.delete(*job_keys)
+            total_deleted += deleted_count
+            logger.info(f"✓ Cleaned up {deleted_count} stale Redis job status record(s)")
+        else:
+            logger.info("✓ No stale Redis job status records found")
+        
+        if user_jobs_keys:
+            # Delete all user jobs sets
+            deleted_count = redis_client.delete(*user_jobs_keys)
+            total_deleted += deleted_count
+            logger.info(f"✓ Cleaned up {deleted_count} stale Redis user jobs set(s)")
+        else:
+            logger.info("✓ No stale Redis user jobs sets found")
+        
         if total_deleted == 0:
-            logger.info("✓ Redis is clean (no stale queues or locks)")
+            logger.info("✓ Redis is clean (no stale queues, jobs, or locks)")
         
         return True
     except Exception as e:
@@ -790,7 +814,7 @@ def run_startup_checks():
     9. Check togeojson installation
     10. Validate file type max_size values (< 200MB)
     11. Verify Site configuration (for email confirmation URLs)
-    12. Clean up stale Redis processing locks
+    12. Clean up stale Redis processing queues and job status data
     13. Clear Redis cache (ensures fresh data on startup)
     14. Preload ski resorts database (for reverse geocoding)
     

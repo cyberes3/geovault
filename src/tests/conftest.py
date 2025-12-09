@@ -363,7 +363,7 @@ def conditional_external_api_mocking():
     # Always mock geocoding services with realistic data from real Overpass API responses
     # Mock the Overpass API calls directly so the actual tag generation logic is tested
     # This provides fast, deterministic tests while using real Overpass response data
-    geocoding_patch1 = patch('geo_lib.geolocation.reverse_geocode.ReverseGeocodingService._query_overpass')
+    geocoding_patch1 = patch('geo_lib.geocoding.reverse_geocode.ReverseGeocodingService._query_overpass')
     mock_overpass = geocoding_patch1.start()
     
     # Return real Overpass API responses based on coordinates in the query
@@ -373,7 +373,7 @@ def conditional_external_api_mocking():
     patches.append(geocoding_patch1)
     
     # Mock IP geolocation service
-    geocoding_patch2 = patch('geo_lib.geolocation.ip_service.get_geolocation_service')
+    geocoding_patch2 = patch('geo_lib.ip_geolocation.get_geolocation_service')
     mock_ip_geo = geocoding_patch2.start()
     mock_ip_geo_service = MagicMock()
     mock_ip_geo_service.get_location_from_ip.return_value = None

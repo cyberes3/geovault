@@ -120,7 +120,7 @@ class TestReverseGeocodingService(TestCase):
         """Clean up after tests."""
         cache.clear()
     
-    @patch('geo_lib.geolocation.reverse_geocode.ReverseGeocodingService._query_overpass')
+    @patch('geo_lib.geocoding.reverse_geocode.ReverseGeocodingService._query_overpass')
     def test_admin_hierarchy_query(self, mock_query_overpass):
         """Test administrative hierarchy query."""
         # Mock Overpass response for Aurora, CO
@@ -140,7 +140,7 @@ class TestReverseGeocodingService(TestCase):
         self.assertEqual(result['county'], 'Adams County')
         self.assertEqual(result['city'], 'Aurora')
     
-    @patch('geo_lib.geolocation.reverse_geocode.ReverseGeocodingService._query_overpass')
+    @patch('geo_lib.geocoding.reverse_geocode.ReverseGeocodingService._query_overpass')
     def test_find_nearby_cities(self, mock_query_overpass):
         """Test nearby city search."""
         mock_query_overpass.return_value = {
@@ -160,7 +160,7 @@ class TestReverseGeocodingService(TestCase):
         self.assertEqual(cities[0]['name'], 'Fairplay')
         self.assertLess(cities[0]['distance_miles'], 5.0)
     
-    @patch('geo_lib.geolocation.reverse_geocode.ReverseGeocodingService._query_overpass')
+    @patch('geo_lib.geocoding.reverse_geocode.ReverseGeocodingService._query_overpass')
     def test_protected_areas_query(self, mock_query_overpass):
         """Test protected areas query."""
         mock_query_overpass.return_value = {
@@ -208,7 +208,7 @@ class TestReverseGeocodingService(TestCase):
         resort_names = [r['name'] for r in resorts]
         self.assertIn('Vail', resort_names)
     
-    @patch('geo_lib.geolocation.reverse_geocode.ReverseGeocodingService._query_overpass')
+    @patch('geo_lib.geocoding.reverse_geocode.ReverseGeocodingService._query_overpass')
     def test_search_nearby_lakes(self, mock_query_overpass):
         """Test lake proximity search."""
         mock_query_overpass.return_value = {
@@ -226,7 +226,7 @@ class TestReverseGeocodingService(TestCase):
         self.assertEqual(len(lakes), 1)
         self.assertEqual(lakes[0]['name'], 'Grand Lake')
     
-    @patch('geo_lib.geolocation.reverse_geocode.ReverseGeocodingService._query_overpass')
+    @patch('geo_lib.geocoding.reverse_geocode.ReverseGeocodingService._query_overpass')
     def test_search_nearby_lakes_outside_range(self, mock_query_overpass):
         """Test that lakes outside 1-mile range are not included."""
         # Mock response with a lake that's far away
@@ -249,7 +249,7 @@ class TestReverseGeocodingService(TestCase):
         # Should filter out lakes beyond 1 mile threshold
         self.assertEqual(len(lakes), 0)
     
-    @patch('geo_lib.geolocation.reverse_geocode.ReverseGeocodingService._query_overpass')
+    @patch('geo_lib.geocoding.reverse_geocode.ReverseGeocodingService._query_overpass')
     def test_get_location_tags_comprehensive(self, mock_query_overpass):
         """Test comprehensive location tag generation."""
         # Mock responses for all queries
@@ -299,7 +299,7 @@ class TestCaching(TestCase):
         """Clean up after tests."""
         cache.clear()
     
-    @patch('geo_lib.geolocation.reverse_geocode.ReverseGeocodingService._query_overpass')
+    @patch('geo_lib.geocoding.reverse_geocode.ReverseGeocodingService._query_overpass')
     def test_admin_hierarchy_caching(self, mock_query_overpass):
         """Test that admin hierarchy results are cached."""
         mock_query_overpass.return_value = {
@@ -342,7 +342,7 @@ class TestErrorHandling(TestCase):
         """Clean up after tests."""
         cache.clear()
     
-    @patch('geo_lib.geolocation.reverse_geocode.ReverseGeocodingService._query_overpass')
+    @patch('geo_lib.geocoding.reverse_geocode.ReverseGeocodingService._query_overpass')
     def test_overpass_timeout_handling(self, mock_query_overpass):
         """Test handling of Overpass API timeout/error."""
         # Simulate _query_overpass returning None (error case)
@@ -356,7 +356,7 @@ class TestErrorHandling(TestCase):
         # All values should be None when query fails
         self.assertIsNone(result['country'])
     
-    @patch('geo_lib.geolocation.reverse_geocode.ReverseGeocodingService._query_overpass')
+    @patch('geo_lib.geocoding.reverse_geocode.ReverseGeocodingService._query_overpass')
     def test_overpass_error_response(self, mock_query_overpass):
         """Test handling of Overpass API error response."""
         # Simulate _query_overpass returning None (error case)
@@ -392,7 +392,7 @@ class TestTagGeneration(TestCase):
         """Clean up after tests."""
         cache.clear()
     
-    @patch('geo_lib.geolocation.reverse_geocode.ReverseGeocodingService._query_overpass')
+    @patch('geo_lib.geocoding.reverse_geocode.ReverseGeocodingService._query_overpass')
     def test_national_park_tag(self, mock_query_overpass):
         """Test national park tag generation."""
         def mock_overpass_response(query, max_retries=3):
@@ -415,7 +415,7 @@ class TestTagGeneration(TestCase):
         
         self.assertTrue(any('national-park:Rocky Mountain National Park' in t for t in tags))
     
-    @patch('geo_lib.geolocation.reverse_geocode.ReverseGeocodingService._query_overpass')
+    @patch('geo_lib.geocoding.reverse_geocode.ReverseGeocodingService._query_overpass')
     def test_national_monument_tag(self, mock_query_overpass):
         """Test national monument tag generation."""
         def mock_overpass_response(query, max_retries=3):
@@ -438,7 +438,7 @@ class TestTagGeneration(TestCase):
         
         self.assertTrue(any('national-monument:' in t for t in tags))
     
-    @patch('geo_lib.geolocation.reverse_geocode.ReverseGeocodingService._query_overpass')
+    @patch('geo_lib.geocoding.reverse_geocode.ReverseGeocodingService._query_overpass')
     def test_wilderness_tag(self, mock_query_overpass):
         """Test wilderness area tag generation."""
         def mock_overpass_response(query, max_retries=3):

@@ -93,8 +93,8 @@ class TestGeocodingServiceFailures:
         }
         
         # Mock geocoding service to be unavailable
-        # Note: Geocoding is in geo_lib.geolocation.reverse_geocode, not processing.geocoding
-        with patch('geo_lib.geolocation.reverse_geocode.get_reverse_geocoding_service') as mock_service:
+        # Note: Geocoding is in geo_lib.geocoding.reverse_geocode, not processing.geocoding
+        with patch('geo_lib.geocoding.reverse_geocode.get_reverse_geocoding_service') as mock_service:
             mock_service_instance = MagicMock()
             mock_service_instance.reverse_geocode.side_effect = requests.ConnectionError("Service unavailable")
             mock_service.return_value = mock_service_instance
@@ -126,8 +126,8 @@ class TestGeocodingServiceFailures:
             features.append(feature_data)
         
         # Mock geocoding to hit rate limit after 2 requests
-        # Note: Geocoding is in geo_lib.geolocation.reverse_geocode
-        with patch('geo_lib.geolocation.reverse_geocode.get_reverse_geocoding_service') as mock_service:
+        # Note: Geocoding is in geo_lib.geocoding.reverse_geocode
+        with patch('geo_lib.geocoding.reverse_geocode.get_reverse_geocoding_service') as mock_service:
             call_count = [0]
             
             def rate_limit_side_effect(*args, **kwargs):
@@ -166,8 +166,8 @@ class TestGeocodingServiceFailures:
         }
         
         # Mock geocoding to return invalid/malformed data
-        # Note: Geocoding is in geo_lib.geolocation.reverse_geocode
-        with patch('geo_lib.geolocation.reverse_geocode.get_reverse_geocoding_service') as mock_service:
+        # Note: Geocoding is in geo_lib.geocoding.reverse_geocode
+        with patch('geo_lib.geocoding.reverse_geocode.get_reverse_geocoding_service') as mock_service:
             mock_service_instance = MagicMock()
             mock_service_instance.reverse_geocode.return_value = "invalid response format"
             mock_service.return_value = mock_service_instance

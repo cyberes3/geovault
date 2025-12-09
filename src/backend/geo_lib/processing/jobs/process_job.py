@@ -594,6 +594,18 @@ class ProcessJob(BaseJob):
             message, progress
         )
         
+        # Update Redis with processing status
+        from geo_lib.processing.redis_job_storage import update_job_status as update_redis_job_status
+        job = self.status_tracker.get_job(job_id)
+        if job:
+            update_redis_job_status(
+                job_id=job_id,
+                status=ProcessingStatus.PROCESSING,
+                message=message,
+                progress=progress,
+                started_at=job.started_at
+            )
+        
         self._broadcast_to_process_status_module(user_id, import_queue_id, 'status_updated', {
             'status': 'processing',
             'progress': progress,
