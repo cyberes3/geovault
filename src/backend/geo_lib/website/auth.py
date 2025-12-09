@@ -2,7 +2,6 @@ from functools import wraps
 
 from django.http import JsonResponse
 from django.views.decorators.csrf import csrf_exempt, csrf_protect
-from django.utils.decorators import method_decorator
 
 from users.api_keys import validate_api_key
 
@@ -43,6 +42,7 @@ def api_or_login_required_401(allow_api_keys=True):
             # Only session auth allowed, with CSRF protection
             ...
     """
+
     def decorator(view_func):
         # Wrap the view function
         @wraps(view_func)
@@ -55,37 +55,37 @@ def api_or_login_required_401(allow_api_keys=True):
                 protected_view = csrf_protect(view_func)
                 request.is_api_authenticated = False
                 return protected_view(request, *args, **kwargs)
-            
+
             # If API keys are not allowed for this route, reject
             if not allow_api_keys:
                 return JsonResponse({'error': 'Unauthorized'}, status=401)
-            
+
             # Try to authenticate via API key
             auth_header = request.META.get('HTTP_AUTHORIZATION', '')
             if not auth_header.startswith('Bearer '):
                 return JsonResponse({'error': 'Unauthorized'}, status=401)
-            
+
             # Extract the token
             token = auth_header[7:].strip()  # Remove 'Bearer ' prefix
-            
+
             # Validate the API key
             result = validate_api_key(token)
             if result is None:
                 return JsonResponse({'error': 'Unauthorized'}, status=401)
-            
+
             user, api_key = result
-            
+
             # Set the user on the request
             request.user = user
             request.api_key = api_key
             request.is_api_authenticated = True
-            
+
             # API key requests bypass CSRF - mark as exempt
             request._dont_enforce_csrf_checks = True
             return view_func(request, *args, **kwargs)
-        
+
         # Apply csrf_exempt to the outer wrapper so API key requests bypass CSRF
         # Session auth will use csrf_protect internally
         return csrf_exempt(_wrapped_view)
-    
+
     return decorator

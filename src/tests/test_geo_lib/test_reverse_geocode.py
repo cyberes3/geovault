@@ -278,7 +278,7 @@ class TestReverseGeocodingService(TestCase):
         
         mock_query_overpass.side_effect = mock_overpass_response
         
-        tags = self.service.get_location_tags(39.0, -105.0)
+        tags, log_messages = self.service.get_location_tags(39.0, -105.0)
         
         # Should have country, state, county tags
         tag_strings = [t for t in tags]
@@ -372,10 +372,11 @@ class TestErrorHandling(TestCase):
     def test_get_location_tags_exception_handling(self):
         """Test that get_location_tags handles exceptions gracefully."""
         # Invalid coordinates shouldn't crash
-        tags = self.service.get_location_tags(999.0, 999.0)
+        tags, log_messages = self.service.get_location_tags(999.0, 999.0)
         
         # Should return empty list, not raise exception
         self.assertIsInstance(tags, list)
+        self.assertIsInstance(log_messages, list)
 
 
 @pytest.mark.django_db
@@ -410,7 +411,7 @@ class TestTagGeneration(TestCase):
         
         mock_query_overpass.side_effect = mock_overpass_response
         
-        tags = self.service.get_location_tags(40.34, -105.68)
+        tags, log_messages = self.service.get_location_tags(40.34, -105.68)
         
         self.assertTrue(any('national-park:Rocky Mountain National Park' in t for t in tags))
     
@@ -433,7 +434,7 @@ class TestTagGeneration(TestCase):
         
         mock_query_overpass.side_effect = mock_overpass_response
         
-        tags = self.service.get_location_tags(39.07, -108.73)
+        tags, log_messages = self.service.get_location_tags(39.07, -108.73)
         
         self.assertTrue(any('national-monument:' in t for t in tags))
     
@@ -456,7 +457,7 @@ class TestTagGeneration(TestCase):
         
         mock_query_overpass.side_effect = mock_overpass_response
         
-        tags = self.service.get_location_tags(39.42, -105.65)
+        tags, log_messages = self.service.get_location_tags(39.42, -105.65)
         
         self.assertTrue(any('wilderness:' in t for t in tags))
     

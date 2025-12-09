@@ -6,19 +6,18 @@ from typing import Optional
 
 from coordinate_parser import parse_coordinate
 from django.contrib.gis.geos import Point
-from django.http import JsonResponse
 from django.views.decorators.http import require_http_methods
 
 from api.models import FeatureStore
 from api.utils.responses import error_response, success_response
 from api.validation.feature_updates import validate_payload
-from geo_lib.const_strings import filter_protected_tags, prepare_user_tags, CONST_INTERNAL_TAGS
+from geo_lib.tags.const_strings import filter_protected_tags, prepare_user_tags, CONST_INTERNAL_TAGS
 from geo_lib.feature_id import generate_geojson_hash
 from geo_lib.geolocation.background_geocoding import geocode_feature_async
 from geo_lib.logging.console import get_access_logger
 from geo_lib.processing.tagging import generate_auto_tags
 from geo_lib.types.feature import PointFeature
-from geo_lib.validation.geojson_whitelist import validate_and_normalize_geojson_feature
+from geo_lib.validation import validate_and_normalize_geojson_feature
 from geo_lib.validation.geometry_validation import GeometryValidationError
 from geo_lib.website.auth import api_or_login_required_401
 from pydantic import BaseModel, Field, field_validator

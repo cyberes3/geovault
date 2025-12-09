@@ -8,7 +8,6 @@ from django.http import JsonResponse
 from django.views.decorators.http import require_http_methods
 
 from api.models import FeatureStore
-from geo_lib.const_strings import get_tag_priority
 from geo_lib.logging.console import get_access_logger
 from geo_lib.website.auth import api_or_login_required_401
 

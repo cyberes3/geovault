@@ -95,13 +95,16 @@ class TestBackgroundGeocoding(TransactionTestCase):
         # Enable geocoding
         mock_setting.return_value = True
         
-        # Mock geocoding service to return tags
+        # Mock geocoding service to return tags (returns tuple of tags and log messages)
         mock_service = MagicMock()
-        mock_service.get_location_tags.return_value = [
-            'geo-city:San Francisco',
-            'geo-state:California',
-            'geo-country:United States'
-        ]
+        mock_service.get_location_tags.return_value = (
+            [
+                'geo-city:San Francisco',
+                'geo-state:California',
+                'geo-country:United States'
+            ],
+            []  # Empty log messages
+        )
         mock_get_service.return_value = mock_service
         
         # Create feature without geocoding tags
@@ -201,12 +204,15 @@ class TestBackgroundGeocoding(TransactionTestCase):
         # Enable geocoding
         mock_setting.return_value = True
         
-        # Mock geocoding service to return tags
+        # Mock geocoding service to return tags (returns tuple of tags and log messages)
         mock_service = MagicMock()
-        mock_service.get_location_tags.return_value = [
-            'geo-city:San Francisco',
-            'geo-state:California'
-        ]
+        mock_service.get_location_tags.return_value = (
+            [
+                'geo-city:San Francisco',
+                'geo-state:California'
+            ],
+            []  # Empty log messages
+        )
         mock_get_service.return_value = mock_service
         
         # Create feature with one geocoding tag already present
@@ -248,7 +254,7 @@ class TestBackgroundGeocoding(TransactionTestCase):
         
         def slow_get_location_tags(lat, lon, import_log=None):
             time.sleep(0.1)  # Simulate slow geocoding
-            return ['geo-city:San Francisco']
+            return (['geo-city:San Francisco'], [])  # Return tuple
         
         mock_service.get_location_tags.side_effect = slow_get_location_tags
         mock_get_service.return_value = mock_service
@@ -306,9 +312,9 @@ class TestSkipGeocodingParameter(TestCase):
         # Enable geocoding
         mock_setting.return_value = True
         
-        # Mock geocoding service
+        # Mock geocoding service (returns tuple of tags and log messages)
         mock_service = MagicMock()
-        mock_service.get_location_tags.return_value = ['geo-city:San Francisco']
+        mock_service.get_location_tags.return_value = (['geo-city:San Francisco'], [])
         mock_get_service.return_value = mock_service
         
         # Create feature

@@ -1,10 +1,8 @@
-"""
-Bulk import job WebSocket module.
-"""
+import traceback
 
-from geo_lib.websocket.base_module import BaseWebSocketModule
-from geo_lib.processing.jobs import bulk_import_job
 from geo_lib.logging.console import get_websocket_logger
+from geo_lib.processing.jobs import bulk_import_job
+from geo_lib.websocket.base_module import BaseWebSocketModule
 
 logger = get_websocket_logger()
 
@@ -58,9 +56,9 @@ class BulkImportJobModule(BaseWebSocketModule):
             else:
                 await self.send_to_client('error', {'message': 'Failed to start bulk import job'})
 
-        except Exception as e:
-            logger.error(f"Error handling start_bulk_import: {str(e)}")
-            await self.send_to_client('error', {'message': f'Error starting bulk import: {str(e)}'})
+        except:
+            logger.error(f"Error handling start_bulk_import: {traceback.format_exc()}")
+            await self.send_to_client('error', {'message': 'Error starting bulk import'})
 
     async def send_initial_state(self) -> None:
         """Send initial state for bulk import job module."""
@@ -83,8 +81,3 @@ class BulkImportJobModule(BaseWebSocketModule):
     async def failed(self, event):
         """Handle bulk_import_job_failed event."""
         await self.send_to_client('failed', event['data'])
-
-
-
-
-

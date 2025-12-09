@@ -13,10 +13,14 @@ Rules:
 """
 
 import re
-from typing import Optional, Dict, Any
-
+from typing import Dict, Any
 
 HEX_COLOR_RE = re.compile(r"^#([0-9a-fA-F]{3}|[0-9a-fA-F]{6})$")
+
+_DEFAULT_COLOR = '#ff0000'
+
+_LINE_GEOMETRY_TYPES = {'linestring', 'multilinestring'}
+_POLYGON_GEOMETRY_TYPES = {'polygon', 'multipolygon'}
 
 
 def is_valid_hex_color(value: object) -> bool:
@@ -95,23 +99,17 @@ def normalize_feature_colors_and_styles(properties: Dict[str, Any], geometry: Di
     Returns:
         Modified properties dictionary with normalized colors and styles
     """
-    DEFAULT_COLOR = '#ff0000'
-    
-    # Line geometry types
-    LINE_GEOMETRY_TYPES = {'linestring', 'multilinestring'}
-    # Polygon geometry types
-    POLYGON_GEOMETRY_TYPES = {'polygon', 'multipolygon'}
-    
+
     # Helper to check if geometry contains polygon
     def _has_polygon_geometry(geom: Dict[str, Any]) -> bool:
         geom_type_lower = geom.get('type', '').lower()
-        if geom_type_lower in POLYGON_GEOMETRY_TYPES:
+        if geom_type_lower in _POLYGON_GEOMETRY_TYPES:
             return True
         if geom_type_lower == 'geometrycollection':
             geometries = geom.get('geometries', [])
             return any(_has_polygon_geometry(g) for g in geometries if isinstance(g, dict))
         return False
-    
+
     # Validate and normalize colors - set invalid colors to default red
     # Validate marker-color (for points)
     if 'marker-color' in properties:
@@ -119,29 +117,29 @@ def normalize_feature_colors_and_styles(properties: Dict[str, Any], geometry: Di
         if isinstance(color, str) and is_valid_hex_color(color):
             properties['marker-color'] = normalize_hex_color(color)
         else:
-            properties['marker-color'] = DEFAULT_COLOR
-    
+            properties['marker-color'] = _DEFAULT_COLOR
+
     # Validate stroke (for lines and polygons)
     if 'stroke' in properties:
         color = properties['stroke']
         if isinstance(color, str) and is_valid_hex_color(color):
             properties['stroke'] = normalize_hex_color(color)
         else:
-            properties['stroke'] = DEFAULT_COLOR
-    
+            properties['stroke'] = _DEFAULT_COLOR
+
     # Validate fill (for polygons)
     if 'fill' in properties:
         color = properties['fill']
         if isinstance(color, str) and is_valid_hex_color(color):
             properties['fill'] = normalize_hex_color(color)
         else:
-            properties['fill'] = DEFAULT_COLOR
-    
+            properties['fill'] = _DEFAULT_COLOR
+
     # Apply style normalization based on geometry type
     geom_type = geometry.get('type', '').lower()
     has_polygon = _has_polygon_geometry(geometry)
-    
-    if geom_type in LINE_GEOMETRY_TYPES:
+
+    if geom_type in _LINE_GEOMETRY_TYPES:
         # Lines: normalize stroke-width to 2
         if 'stroke' in properties:
             properties['stroke-width'] = 2
@@ -150,21 +148,20 @@ def normalize_feature_colors_and_styles(properties: Dict[str, Any], geometry: Di
             del properties['fill']
         if 'fill-opacity' in properties:
             del properties['fill-opacity']
-    
-    elif geom_type in POLYGON_GEOMETRY_TYPES or has_polygon:
+
+    elif geom_type in _POLYGON_GEOMETRY_TYPES or has_polygon:
         # Polygons: normalize stroke-width, fill, and fill-opacity
         # Also applies to GeometryCollection that contains polygon geometries
         if 'stroke' in properties:
             properties['stroke-width'] = 2
             # Set fill to match stroke color (stroke is already validated above)
-            stroke_color = properties.get('stroke', DEFAULT_COLOR)
+            stroke_color = properties.get('stroke', _DEFAULT_COLOR)
             properties['fill'] = stroke_color
             properties['fill-opacity'] = 0.1
         elif 'fill' in properties:
             # If no stroke but has fill, still normalize fill-opacity
             properties['fill-opacity'] = 0.1
-    
-    # Points: no style normalization needed (only icon/marker-color)
-    
-    return properties
 
+    # Points: no style normalization needed (only icon/marker-color)
+
+    return properties

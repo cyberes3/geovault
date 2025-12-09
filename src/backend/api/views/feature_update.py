@@ -2,7 +2,6 @@ import copy
 import json
 import traceback
 
-from django.conf import settings
 from django.contrib.gis.geos import GEOSGeometry
 from django.db.models import Q
 from django.http import Http404
@@ -13,8 +12,8 @@ from django.views.decorators.http import require_http_methods
 
 from api.models import FeatureStore, ImportQueue
 from api.utils.authorization import get_object_or_404_for_user
-from api.utils.responses import error_response, success_response, not_found_response, handle_404
-from geo_lib.const_strings import CONST_INTERNAL_TAGS, filter_protected_tags, is_protected_tag, prepare_user_tags
+from api.utils.responses import error_response, handle_404
+from geo_lib.tags.const_strings import CONST_INTERNAL_TAGS, filter_protected_tags, is_protected_tag, prepare_user_tags
 from geo_lib.feature_id import generate_geojson_hash
 from geo_lib.logging.console import get_access_logger
 from geo_lib.processing.tagging import generate_auto_tags, update_feature_date_tags
@@ -27,18 +26,16 @@ from geo_lib.validation.geometry_validation import (
     normalize_and_validate_feature_update,
     GeometryValidationError
 )
-from geo_lib.validation.coordinate_validation import (
-    validate_coordinates_for_geometry_type,
+from geo_lib.validation.coordinate.helpers import (
     CoordinateValidationError
 )
-from geo_lib.validation.geojson_whitelist import (
-    validate_and_normalize_geojson_feature
-)
+from geo_lib.validation.coordinate.coordinate_validation import validate_coordinates_for_geometry_type
+from geo_lib.validation import validate_and_normalize_geojson_feature
 from geo_lib.validation.styling_validation import (
     is_valid_icon_url,
 )
 from geo_lib.website.auth import api_or_login_required_401
-from api.validation.feature_updates import validate_payload, validate_pydantic_model, BulkFeatureUpdatePayload, FeatureMetadataUpdate, ReplacementGeometryPayload
+from api.validation.feature_updates import validate_payload, BulkFeatureUpdatePayload, FeatureMetadataUpdate, ReplacementGeometryPayload
 
 logger = get_access_logger()
 

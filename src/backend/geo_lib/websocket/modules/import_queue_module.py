@@ -1,9 +1,4 @@
-"""
-Import queue WebSocket module.
-"""
-
 import json
-import traceback
 from datetime import datetime, timedelta
 
 from channels.db import database_sync_to_async
@@ -11,9 +6,9 @@ from django.core.serializers.json import DjangoJSONEncoder
 from django.utils import timezone
 
 from api.models import ImportQueue
+from geo_lib.logging.console import get_websocket_logger
 from geo_lib.processing.status_tracker import status_tracker
 from geo_lib.websocket.base_module import BaseWebSocketModule
-from geo_lib.logging.console import get_websocket_logger
 
 logger = get_websocket_logger()
 
@@ -34,15 +29,8 @@ class ImportQueueModule(BaseWebSocketModule):
 
     async def send_initial_state(self) -> None:
         """Send the current import queue state to the client."""
-        try:
-            # Get current import queue data
-            queue_data = await self.get_import_queue_data()
-
-            # Send initial state
-            await self.send_to_client('initial_state', queue_data)
-        except Exception as e:
-            logger.error(f"Error sending initial state to user {self.user.id}: {traceback.format_exc()}")
-            await self.send_to_client('error', {'message': 'Failed to load import queue data'})
+        queue_data = await self.get_import_queue_data()
+        await self.send_to_client('initial_state', queue_data)
 
     @database_sync_to_async
     def get_import_queue_data(self):
@@ -65,7 +53,7 @@ class ImportQueueModule(BaseWebSocketModule):
             job.import_queue_id for job in user_jobs
             if job.status.value == 'processing' and job.import_queue_id
         }
-        
+
         # Get all waiting jobs for this user
         waiting_job_ids = {
             job.import_queue_id for job in user_jobs
@@ -103,7 +91,7 @@ class ImportQueueModule(BaseWebSocketModule):
 
             # Check if this item is currently being processed
             item['processing'] = item['id'] in active_job_ids
-            
+
             # Check if this item is waiting in queue
             item['waiting'] = item['id'] in waiting_job_ids
 
@@ -145,7 +133,7 @@ class ImportQueueModule(BaseWebSocketModule):
                     file_duplicate_status = 'duplicate_in_queue'
                 elif file_hash in imported_hashes:
                     file_duplicate_status = 'duplicate_imported'
-            
+
             item['file_duplicate'] = {
                 'status': file_duplicate_status,
                 'original_filename': None  # We don't track the original filename in the queue list

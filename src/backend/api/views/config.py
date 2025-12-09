@@ -1,7 +1,7 @@
 from django.http import JsonResponse
 from django.views.decorators.http import require_http_methods
 
-from geo_lib.const_strings import CONST_INTERNAL_TAGS, TAG_PRIORITIES
+from geo_lib.tags.const_strings import CONST_INTERNAL_TAGS, TAG_PRIORITIES
 from website.config_loader import get_config_loader
 
 

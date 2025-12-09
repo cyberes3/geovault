@@ -60,16 +60,16 @@ def validate_geometry(geometry: Dict[str, Any]) -> None:
     """
     if not isinstance(geometry, dict):
         raise GeometryValidationError('Geometry must be a dictionary object')
-    
+
     geom_type = geometry.get('type')
     if not geom_type or not isinstance(geom_type, str):
         raise GeometryValidationError('Geometry must have a type string')
-    
+
     if not is_valid_geometry_type(geom_type):
         raise GeometryValidationError(
             f'Invalid geometry type: {geom_type}. Must be one of: {", ".join(VALID_GEOMETRY_TYPES)}'
         )
-    
+
     # Validate required fields based on geometry type
     if geom_type == 'GeometryCollection':
         if 'geometries' not in geometry or not isinstance(geometry.get('geometries'), list):
@@ -93,9 +93,9 @@ def validate_coordinates_values(geometry: Dict[str, Any]) -> None:
     """
     if not isinstance(geometry, dict):
         return
-        
+
     geom_type = geometry.get('type')
-    
+
     if geom_type == 'GeometryCollection':
         geometries = geometry.get('geometries', [])
         if not geometries:
@@ -117,11 +117,11 @@ def validate_coordinates_values(geometry: Dict[str, Any]) -> None:
     def validate_point(point_coords: List[Any]) -> None:
         if not isinstance(point_coords, list) or len(point_coords) < 2:
             raise GeometryValidationError(f"Invalid point coordinates: {point_coords}")
-            
+
         lon, lat = point_coords[0], point_coords[1]
         check_coord(lon, "Longitude")
         check_coord(lat, "Latitude")
-        
+
         if not (-180 <= lon <= 180):
             raise GeometryValidationError(f"Longitude {lon} is out of bounds [-180, 180]")
         if not (-90 <= lat <= 90):
@@ -157,22 +157,22 @@ def validate_feature_geometry(feature_data: Dict[str, Any]) -> None:
     """
     if not isinstance(feature_data, dict):
         raise GeometryValidationError('Feature must be a dictionary object')
-    
+
     if feature_data.get('type') != 'Feature':
         raise GeometryValidationError('Feature must have type "Feature"')
-    
+
     geometry = feature_data.get('geometry')
     if not geometry or not isinstance(geometry, dict):
         raise GeometryValidationError('Feature must have a valid geometry object')
-    
+
     # Use the geometry validation function
     validate_geometry(geometry)
     validate_coordinates_values(geometry)
 
 
 def normalize_and_validate_feature_update(
-    feature_data: Dict[str, Any],
-    original_properties: Dict[str, Any]
+        feature_data: Dict[str, Any],
+        original_properties: Dict[str, Any]
 ) -> Dict[str, Any]:
     """
     Normalize and validate a Feature or geometry object for updates.
@@ -190,9 +190,9 @@ def normalize_and_validate_feature_update(
     """
     if not isinstance(feature_data, dict):
         raise GeometryValidationError('Request body must be a valid GeoJSON object')
-    
+
     geom_type = feature_data.get('type')
-    
+
     if geom_type == 'Feature':
         # Validate Feature object
         validate_feature_geometry(feature_data)

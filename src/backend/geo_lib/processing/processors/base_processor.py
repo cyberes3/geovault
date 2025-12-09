@@ -29,9 +29,8 @@ from geo_lib.validation.geometry_validation import validate_coordinates_values, 
 from geo_lib.logging.console import get_job_logger
 from website.settings_utils import get_required_setting
 from geo_lib.types.feature import PointFeature, LineStringFeature, MultiLineStringFeature, PolygonFeature
-from geo_lib.const_strings import CONST_INTERNAL_TAGS, is_protected_tag, filter_protected_tags, prepare_user_tags
+from geo_lib.tags.const_strings import CONST_INTERNAL_TAGS, filter_protected_tags, prepare_user_tags
 from geo_lib.types.geojson import GeojsonRawProperty
-from django.conf import settings
 from django.core.files.uploadedfile import SimpleUploadedFile
 
 logger = get_job_logger()

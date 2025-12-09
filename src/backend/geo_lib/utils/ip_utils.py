@@ -37,7 +37,7 @@ def get_client_ip(request_or_scope):
         meta = meta_dict
     else:
         return 'unknown'
-    
+
     # Check for X-Forwarded-For header (most common proxy header)
     x_forwarded_for = meta.get('HTTP_X_FORWARDED_FOR')
     if x_forwarded_for:
@@ -46,14 +46,14 @@ def get_client_ip(request_or_scope):
         ip = x_forwarded_for.split(',')[0].strip()
         if ip:
             return ip
-    
+
     # Check for X-Real-IP header (nginx specific)
     x_real_ip = meta.get('HTTP_X_REAL_IP')
     if x_real_ip:
         ip = x_real_ip.strip()
         if ip:
             return ip
-    
+
     # Fall back to REMOTE_ADDR
     return meta.get('REMOTE_ADDR', '127.0.0.1')
 
@@ -75,15 +75,15 @@ def get_user_identifier(request_or_scope):
         user = request_or_scope.get('user')
     else:
         return 'Anonymous'
-    
+
     # Check if user is authenticated
     if not user or not (hasattr(user, 'is_authenticated') and user.is_authenticated):
         return 'Anonymous'
-    
+
     # Try to get email - first from user.email, then from EmailAddress
     if hasattr(user, 'email') and user.email:
         return user.email
-    
+
     try:
         email_address = EmailAddress.objects.filter(user=user, primary=True).first()
         if email_address:
@@ -93,7 +93,6 @@ def get_user_identifier(request_or_scope):
             return email_address.email
     except Exception:
         pass
-    
+
     # Fallback to user ID
     return str(user.id) if hasattr(user, 'id') else 'Anonymous'
-

@@ -1,10 +1,8 @@
-"""
-Bulk delete job WebSocket module.
-"""
+import traceback
 
-from geo_lib.websocket.base_module import BaseWebSocketModule
-from geo_lib.processing.jobs import bulk_delete_job
 from geo_lib.logging.console import get_websocket_logger
+from geo_lib.processing.jobs import bulk_delete_job
+from geo_lib.websocket.base_module import BaseWebSocketModule
 
 logger = get_websocket_logger()
 
@@ -56,9 +54,9 @@ class BulkDeleteJobModule(BaseWebSocketModule):
             else:
                 await self.send_to_client('error', {'message': 'Failed to start bulk delete job'})
 
-        except Exception as e:
-            logger.error(f"Error handling start_bulk_delete: {str(e)}")
-            await self.send_to_client('error', {'message': f'Error starting bulk delete: {str(e)}'})
+        except:
+            logger.error(f"Error handling start_bulk_delete: {traceback.format_exc()}")
+            await self.send_to_client('error', {'message': 'Error starting bulk delete.'})
 
     async def send_initial_state(self) -> None:
         """Send initial state for bulk delete job module."""
@@ -81,8 +79,3 @@ class BulkDeleteJobModule(BaseWebSocketModule):
     async def failed(self, event):
         """Handle bulk_delete_job_failed event."""
         await self.send_to_client('failed', event['data'])
-
-
-
-
-

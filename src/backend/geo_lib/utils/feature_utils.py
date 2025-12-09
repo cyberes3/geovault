@@ -14,20 +14,10 @@ def build_feature_type_summary(features: List[Dict]) -> str:
         
     Returns:
         Summary string like "5 Point, 2 LineString, 1 Polygon"
-        
-    Example:
-        >>> features = [
-        ...     {"geometry": {"type": "Point"}},
-        ...     {"geometry": {"type": "Point"}},
-        ...     {"geometry": {"type": "LineString"}}
-        ... ]
-        >>> build_feature_type_summary(features)
-        '2 Point, 1 LineString'
     """
     feature_types = {}
     for feature in features:
         geom_type = feature.get('geometry', {}).get('type', 'Unknown')
         feature_types[geom_type] = feature_types.get(geom_type, 0) + 1
-    
-    return ', '.join([f"{count} {ftype}" for ftype, count in feature_types.items()])
 
+    return ', '.join([f"{count} {ftype}" for ftype, count in feature_types.items()])

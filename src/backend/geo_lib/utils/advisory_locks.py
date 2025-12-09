@@ -7,6 +7,7 @@ to application-level resources like file processing by hash.
 """
 
 from django.db import connection
+
 from geo_lib.logging.console import get_job_logger
 
 logger = get_job_logger()
@@ -27,7 +28,7 @@ def hash_to_lock_id(file_hash: str) -> int:
     """
     # Use Python's hash() for deterministic conversion within the process
     # Modulo to ensure it fits in PostgreSQL bigint range (-2^63 to 2^63-1)
-    return hash(file_hash) % (2**63)
+    return hash(file_hash) % (2 ** 63)
 
 
 class AdvisoryLock:
@@ -47,7 +48,7 @@ class AdvisoryLock:
     This is particularly useful for preventing race conditions when multiple
     identical files are uploaded simultaneously.
     """
-    
+
     def __init__(self, file_hash: str):
         """
         Initialize advisory lock for a given file hash.
@@ -58,7 +59,7 @@ class AdvisoryLock:
         self.file_hash = file_hash
         self.lock_id = hash_to_lock_id(file_hash)
         self.acquired = False
-        
+
     def __enter__(self):
         """Acquire the advisory lock."""
         with connection.cursor() as cursor:
@@ -66,7 +67,7 @@ class AdvisoryLock:
             cursor.execute("SELECT pg_advisory_lock(%s)", [self.lock_id])
             self.acquired = True
         return self
-    
+
     def __exit__(self, exc_type, exc_val, exc_tb):
         """Release the advisory lock."""
         if self.acquired:
@@ -96,4 +97,3 @@ def advisory_lock(file_hash: str) -> AdvisoryLock:
             pass
     """
     return AdvisoryLock(file_hash)
-

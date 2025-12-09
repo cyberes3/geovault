@@ -3,7 +3,7 @@ Date parsing utility using dateparser for flexible date format support.
 """
 
 from datetime import datetime, timezone
-from typing import Optional
+from typing import Optional, Any
 
 import dateparser
 
@@ -31,7 +31,7 @@ def parse_date_string(date_string: str) -> Optional[datetime]:
     return None
 
 
-def parse_date_field(value: any) -> Optional[datetime]:
+def parse_date_field(value: Any) -> Optional[datetime]:
     """
     Parse a date field that may be a datetime object, string, or None.
     

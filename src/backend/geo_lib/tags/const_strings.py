@@ -1,4 +1,5 @@
 from typing import List
+
 from geo_lib.processing.tagging import get_internal_tags
 
 # Additional hardcoded system tags that don't come from tag generators
@@ -33,7 +34,7 @@ def is_protected_tag(tag: str, protected_prefixes: List[str]) -> bool:
     """
     if not isinstance(tag, str):
         return False
-    
+
     for prefix in protected_prefixes:
         # Exact match
         if tag == prefix:
@@ -41,7 +42,7 @@ def is_protected_tag(tag: str, protected_prefixes: List[str]) -> bool:
         # Prefix match (e.g., "type:point" matches "type")
         if tag.startswith(prefix + ':'):
             return True
-    
+
     return False
 
 
@@ -58,7 +59,7 @@ def filter_protected_tags(tags: List[str], protected_prefixes: List[str]) -> Lis
     """
     if not isinstance(tags, list):
         return []
-    
+
     return [tag for tag in tags if not is_protected_tag(tag, protected_prefixes)]
 
 
@@ -75,7 +76,7 @@ def prepare_user_tags(tags: List[str]) -> List[str]:
     """
     if not tags or not isinstance(tags, list):
         return []
-    
+
     # Use dict.fromkeys() to deduplicate while preserving order (Python 3.7+)
     # Convert to lowercase first, then deduplicate using dict (single data structure)
     unique_tags = dict.fromkeys(tag.lower() for tag in tags if tag)
@@ -98,9 +99,9 @@ def get_tag_priority(tag: str) -> int:
     """
     if not isinstance(tag, str):
         return 0
-    
+
     tag_lower = tag.lower()
-    
+
     # Check each prefix in priority order
     for prefix, priority in TAG_PRIORITIES.items():
         prefix_lower = prefix.lower()
@@ -110,6 +111,6 @@ def get_tag_priority(tag: str) -> int:
         # Prefix match (e.g., "type:point" matches "type")
         if tag_lower.startswith(prefix_lower + ':'):
             return priority
-    
+
     # No match found, return 0 (lowest priority)
     return 0

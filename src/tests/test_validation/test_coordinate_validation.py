@@ -2,10 +2,10 @@
 Tests for coordinate validation utilities.
 """
 import pytest
-from geo_lib.validation.coordinate_validation import (
-    validate_coordinates_for_geometry_type,
+from geo_lib.validation.coordinate.helpers import (
     CoordinateValidationError,
 )
+from geo_lib.validation.coordinate.coordinate_validation import validate_coordinates_for_geometry_type
 
 
 class TestCoordinateValidation:

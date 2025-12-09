@@ -20,4 +20,3 @@ def get_redis_connection():
     config = settings.CHANNEL_LAYERS['default']['CONFIG']
     host, port = config['hosts'][0]
     return redis.Redis(host=host, port=port, decode_responses=True)
-

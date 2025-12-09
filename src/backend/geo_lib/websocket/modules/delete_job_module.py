@@ -1,9 +1,5 @@
-"""
-Delete job WebSocket module.
-"""
-
-from geo_lib.websocket.base_module import BaseWebSocketModule
 from geo_lib.logging.console import get_websocket_logger
+from geo_lib.websocket.base_module import BaseWebSocketModule
 
 logger = get_websocket_logger()
 

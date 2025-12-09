@@ -1,7 +1,6 @@
 import copy
 import json
 import time
-import traceback
 
 from asgiref.sync import async_to_sync
 from channels.layers import get_channel_layer
@@ -17,11 +16,10 @@ from api.utils.responses import (
     error_response,
     success_response,
     not_found_response,
-    forbidden_response,
     server_error_response,
     handle_404,
 )
-from geo_lib.const_strings import CONST_INTERNAL_TAGS, filter_protected_tags, prepare_user_tags
+from geo_lib.tags.const_strings import CONST_INTERNAL_TAGS, filter_protected_tags, prepare_user_tags
 from geo_lib.feature_id import generate_geojson_hash
 from geo_lib.logging.console import get_access_logger
 from geo_lib.processing.duplicate_detection import (
@@ -34,10 +32,9 @@ from geo_lib.processing.import_utils import validate_bulk_operations_payload
 from geo_lib.processing.logging import DatabaseLogLevel, RealTimeImportLog
 from geo_lib.processing.status_tracker import status_tracker
 from geo_lib.security.file_validation import basic_file_security_check
-from geo_lib.validation.geojson_whitelist import validate_and_normalize_geojson_feature
-from geo_lib.validation.geometry_validation import GeometryValidationError
+from geo_lib.validation import validate_and_normalize_geojson_feature
 from geo_lib.website.auth import api_or_login_required_401
-from api.validation.feature_updates import validate_payload, validate_pydantic_model, FeatureUpdatePayload, ImportToFeaturestorePayload, SkipStatePayload
+from api.validation.feature_updates import validate_payload, FeatureUpdatePayload, ImportToFeaturestorePayload, SkipStatePayload
 
 logger = get_access_logger()
 

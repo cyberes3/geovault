@@ -1,16 +1,11 @@
-"""
-Import history WebSocket module.
-"""
-
 import json
-import traceback
 
 from channels.db import database_sync_to_async
 from django.core.serializers.json import DjangoJSONEncoder
 
 from api.models import ImportQueue
-from geo_lib.websocket.base_module import BaseWebSocketModule
 from geo_lib.logging.console import get_websocket_logger
+from geo_lib.websocket.base_module import BaseWebSocketModule
 
 logger = get_websocket_logger()
 
@@ -31,15 +26,8 @@ class ImportHistoryModule(BaseWebSocketModule):
 
     async def send_initial_state(self) -> None:
         """Send the current import history state to the client."""
-        try:
-            # Get current import history data
-            history_data = await self.get_import_history_data()
-
-            # Send initial state
-            await self.send_to_client('initial_state', history_data)
-        except Exception as e:
-            logger.error(f"Error sending initial state to user {self.user.id}: {traceback.format_exc()}")
-            await self.send_to_client('error', {'message': 'Failed to load import history data'})
+        history_data = await self.get_import_history_data()
+        await self.send_to_client('initial_state', history_data)
 
     @database_sync_to_async
     def get_import_history_data(self):
@@ -60,7 +48,3 @@ class ImportHistoryModule(BaseWebSocketModule):
     async def item_added(self, event):
         """Handle item_added event."""
         await self.send_to_client('item_added', event['data'])
-
-
-
-
