@@ -94,8 +94,25 @@ class GeocodingTagGenerator(TagGenerator):
                         
                         for lat, lon in points:
                             try:
-                                location_tags = geocoding_service.get_location_tags(lat, lon, import_log)
+                                location_tags, log_messages = geocoding_service.get_location_tags(lat, lon)
                                 all_location_tags.update(location_tags)
+                                
+                                # Add log messages to import log
+                                if import_log and log_messages:
+                                    for log_msg in log_messages:
+                                        # Map level string to DatabaseLogLevel
+                                        if log_msg.level == 'ERROR':
+                                            level = DatabaseLogLevel.ERROR
+                                        elif log_msg.level == 'WARNING':
+                                            level = DatabaseLogLevel.WARNING
+                                        else:
+                                            level = DatabaseLogLevel.INFO
+                                        
+                                        import_log.add(
+                                            log_msg.message,
+                                            log_msg.source,
+                                            level
+                                        )
                             except Exception as geocode_point_error:
                                 error_msg = f"Reverse geocoding failed at coordinates ({lat}, {lon}): {str(geocode_point_error)}"
                                 logger.warning(error_msg)
@@ -107,15 +124,6 @@ class GeocodingTagGenerator(TagGenerator):
                                     )
                         
                         tags.extend(sorted(all_location_tags))
-                        
-                        if import_log:
-                            tag_count = len(all_location_tags)
-                            if tag_count > 0:
-                                import_log.add(
-                                    f"Added {tag_count} reverse geocoding tag(s) to feature",
-                                    "Reverse Geocoding",
-                                    DatabaseLogLevel.INFO
-                                )
                 except Exception as e:
                     logger.warning(f"Failed to reverse geocode feature for tagging: {e}")
                     if import_log:

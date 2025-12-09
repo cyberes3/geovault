@@ -267,6 +267,9 @@ class BaseProcessor(ABC):
         if not processed_features or self.minimal_processing:
             return feature_log
         
+        # Log start of tagging process
+        feature_log.add(f"Starting feature tagging for {len(processed_features)} feature(s)", "Feature Tagging", DatabaseLogLevel.INFO)
+        
         # Count features that will be reverse geocoded (points and lines only)
         geocoding_enabled = get_required_setting('REVERSE_GEOCODING_ENABLED')
         geocoding_count = 0
@@ -329,6 +332,37 @@ class BaseProcessor(ABC):
                 if not executor_shutdown_called:
                     self._executor.shutdown(wait=True)
                 self._executor = None  # Clear reference
+
+        # Log summary of reverse geocoding results if geocoding was enabled
+        if geocoding_enabled and geocoding_count > 0:
+            # Count successful and failed geocoding operations from the log messages
+            geocoding_success_count = 0
+            geocoding_failure_count = 0
+            for log_msg in feature_log.get():
+                if log_msg.source == "Reverse Geocoding":
+                    # Count successes (has location tags)
+                    if "Successfully reverse geocoded feature" in log_msg.msg:
+                        geocoding_success_count += 1
+                    # Count failures (no data / API errors)
+                    elif "returned no data" in log_msg.msg or "failed" in log_msg.msg.lower():
+                        geocoding_failure_count += 1
+            
+            # Calculate actual success count
+            actual_success = geocoding_count - geocoding_failure_count
+            
+            # Log summary
+            if geocoding_failure_count > 0:
+                feature_log.add(
+                    f"Reverse geocoding: {actual_success} succeeded, {geocoding_failure_count} failed (API errors)",
+                    "Reverse Geocoding",
+                    DatabaseLogLevel.WARNING
+                )
+            else:
+                feature_log.add(
+                    f"Successfully reverse geocoded all {geocoding_count} feature(s)",
+                    "Reverse Geocoding",
+                    DatabaseLogLevel.INFO
+                )
 
         return feature_log
 
@@ -577,13 +611,6 @@ class BaseProcessor(ABC):
             self.import_log.extend(tagging_log)
             self.import_log.add_timing("Feature tagging", tagging_duration, "Processing")
             
-            # Count geocoded features
-            geocoded_count = sum(1 for f in self.processed_features 
-                                if any(tag.startswith(('country:', 'state:', 'city:', 'national-', 'state-park:', 'wilderness:', 'lake:', 'ski-resort:')) 
-                                      for tag in f.get('properties', {}).get('system_tags', [])))
-            if geocoded_count > 0:
-                self.import_log.add(f"Reverse geocoded {geocoded_count} feature(s)", "Reverse Geocoding", DatabaseLogLevel.INFO)
-
             # Check for cancellation
             if self._is_cancelled():
                 self.import_log.add("Processing cancelled during feature tagging", "Processing", DatabaseLogLevel.WARNING)

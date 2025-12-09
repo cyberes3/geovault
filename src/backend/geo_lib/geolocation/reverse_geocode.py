@@ -6,11 +6,14 @@ import json
 import math
 import time
 from pathlib import Path
-from typing import Optional, Dict, Any, List
+from typing import Optional, Dict, Any, List, Tuple
 from concurrent.futures import ThreadPoolExecutor, as_completed
+from threading import Lock
+from dataclasses import dataclass
+from datetime import datetime
 
 import requests
-from django.core.cache import cache
+from django.core.cache import caches
 from django.conf import settings
 
 from geo_lib.logging.console import get_geocode_logger
@@ -22,6 +25,29 @@ GEOCODING_CACHE_TTL = 30 * 24 * 60 * 60
 
 # Load ski resort database
 _SKI_RESORTS = None
+_SKI_RESORTS_LOCK = Lock()
+
+
+def _get_geocoding_cache():
+    """
+    Get the geocoding cache instance.
+    Uses a separate Redis DB that persists across restarts.
+    Falls back to default cache if geocoding cache is not configured.
+    """
+    try:
+        return caches['geocoding']
+    except Exception:
+        # Fallback to default cache if geocoding cache not configured
+        return caches['default']
+
+
+@dataclass
+class GeocodingLogMessage:
+    """Log message from geocoding operations."""
+    timestamp: datetime
+    message: str
+    level: str  # 'INFO', 'WARNING', 'ERROR'
+    source: str  # 'Reverse Geocoding'
 
 
 def _get_name_from_tags(tags: Dict[str, Any]) -> Optional[str]:
@@ -51,22 +77,26 @@ def _get_name_from_tags(tags: Dict[str, Any]) -> Optional[str]:
     name = tags.get('name')
     return name
 
-def _load_ski_resorts() -> List[Dict[str, Any]]:
-    """Load ski resort database from JSON file."""
+def load_ski_resorts() -> List[Dict[str, Any]]:
+    """Load ski resort database from JSON file with thread-safe initialization."""
     global _SKI_RESORTS
-    if _SKI_RESORTS is None:
-        data_dir = Path(__file__).parent.parent / 'data'
-        ski_resorts_file = data_dir / 'ski_resorts.json'
-        try:
+    
+    # Fast path: if already loaded, return immediately without acquiring lock
+    if _SKI_RESORTS is not None:
+        return _SKI_RESORTS
+    
+    # Slow path: acquire lock and load data (only first thread will do this)
+    with _SKI_RESORTS_LOCK:
+        # Double-check after acquiring lock (another thread may have loaded it)
+        if _SKI_RESORTS is None:
+            data_dir = Path(__file__).parent.parent / 'data'
+            ski_resorts_file = data_dir / 'ski_resorts.json'
             with open(ski_resorts_file, 'r', encoding='utf-8') as f:
                 data = json.load(f)
                 _SKI_RESORTS = data.get('ski_resorts', [])
                 logger.info(f"Loaded {len(_SKI_RESORTS)} ski resorts from database")
-        except Exception as e:
-            logger.warning(f"Failed to load ski resorts database: {e}")
-            _SKI_RESORTS = []
+    
     return _SKI_RESORTS
-
 
 def haversine_distance(lat1: float, lon1: float, lat2: float, lon2: float) -> float:
     """Calculate the great circle distance between two points on Earth in miles."""
@@ -108,6 +138,46 @@ class ReverseGeocodingService:
         self.city_proximity_miles = settings.CITY_PROXIMITY_MILES
         self.lake_proximity_miles = settings.LAKE_PROXIMITY_MILES
     
+    def _log_overpass_failure(self, response: requests.Response, error_type: str, additional_info: str = ""):
+        """
+        Log comprehensive information about an Overpass API failure.
+        
+        Args:
+            response: The requests Response object
+            error_type: Type of error (e.g., "Invalid JSON", "Empty Response", "Rate Limited")
+            additional_info: Additional error information to log
+        """
+        status_code = response.status_code
+        content_type = response.headers.get('content-type', 'unknown')
+        content_length = len(response.content) if response.content else 0
+        
+        # Get response preview (truncated to 500 chars)
+        content_preview = ""
+        if response.text:
+            content_preview = response.text[:500]
+            # Replace newlines with escaped version for single-line logging
+            content_preview = content_preview.replace('\n', '\\n').replace('\r', '\\r')
+        
+        # Build complete error message on one line
+        error_parts = [
+            f"Overpass API Failure: {error_type}",
+            f"Status={status_code}",
+            f"Content-Type={content_type}",
+            f"Length={content_length}bytes",
+            f"URL={self.api_url}"
+        ]
+        
+        if additional_info:
+            error_parts.append(f"Details=[{additional_info}]")
+        
+        if content_preview:
+            error_parts.append(f"Preview=[{content_preview}]")
+        else:
+            error_parts.append("Response=(empty)")
+        
+        # Log everything on one line
+        logger.error(" | ".join(error_parts))
+    
     def _query_overpass(self, query: str, max_retries: int = 3) -> Optional[Dict[str, Any]]:
         """
         Query Overpass API with error handling and retry logic.
@@ -129,23 +199,44 @@ class ReverseGeocodingService:
                 )
                 
                 if response.status_code == 200:
-                    return response.json()
+                    # Check if response has content before trying to parse JSON
+                    if not response.content or len(response.content) == 0:
+                        self._log_overpass_failure(response, "Empty Response", "API returned 200 OK but with no content")
+                        return None
+                    
+                    # Check if response is HTML/XML instead of JSON
+                    content_type = response.headers.get('content-type', '').lower()
+                    if 'html' in content_type or 'xml' in content_type:
+                        # Server returned an error page instead of JSON
+                        self._log_overpass_failure(response, "HTML/XML Error Page", f"Expected JSON but got {content_type}")
+                        return None
+                    
+                    try:
+                        return response.json()
+                    except json.JSONDecodeError as json_err:
+                        # Log the response content to help debug
+                        self._log_overpass_failure(response, "Invalid JSON", str(json_err))
+                        return None
+                        
                 elif response.status_code == 429:  # Rate limited
-                    logger.warning(f"Overpass API rate limited, attempt {attempt + 1}/{max_retries}")
+                    self._log_overpass_failure(response, "Rate Limited", f"Attempt {attempt + 1}/{max_retries}, waiting 60s")
                     time.sleep(60)  # Wait 1 minute
                     continue
                 elif response.status_code == 504:  # Gateway timeout
-                    logger.warning(f"Overpass API timeout, attempt {attempt + 1}/{max_retries}")
+                    self._log_overpass_failure(response, "Gateway Timeout", f"Attempt {attempt + 1}/{max_retries}, waiting 5s")
                     time.sleep(5)
                     continue
                 else:
-                    logger.error(f"Overpass API error: {response.status_code} - {response.text}")
+                    self._log_overpass_failure(response, f"HTTP {response.status_code}", "Unexpected status code")
                     return None
                     
             except requests.exceptions.Timeout:
                 logger.warning(f"Overpass request timeout, attempt {attempt + 1}/{max_retries}")
                 if attempt < max_retries - 1:
                     time.sleep(2 ** attempt)  # Exponential backoff
+            except json.JSONDecodeError:
+                # Already handled above, but catch it here in case it happens elsewhere
+                pass
             except Exception as e:
                 logger.error(f"Overpass query failed: {e}")
                 return None
@@ -165,7 +256,8 @@ class ReverseGeocodingService:
         """
         # Check cache first
         cache_key = _get_cache_key(latitude, longitude, prefix="geocode:admin")
-        cached = cache.get(cache_key)
+        geocoding_cache = _get_geocoding_cache()
+        cached = geocoding_cache.get(cache_key)
         if cached is not None:
             return cached
         
@@ -212,9 +304,10 @@ out tags;
                     result['county'] = name
                 elif admin_level == '8':
                     result['city'] = name
+            
+            # Only cache on successful API response
+            geocoding_cache.set(cache_key, result, GEOCODING_CACHE_TTL)
         
-        # Cache for 30 days
-        cache.set(cache_key, result, GEOCODING_CACHE_TTL)
         return result
     
     def _find_nearby_cities(self, latitude: float, longitude: float, threshold_miles: float) -> List[Dict[str, Any]]:
@@ -231,7 +324,8 @@ out tags;
         """
         # Check cache first
         cache_key = _get_cache_key(latitude, longitude, prefix=f"geocode:cities:{threshold_miles}")
-        cached = cache.get(cache_key)
+        geocoding_cache = _get_geocoding_cache()
+        cached = geocoding_cache.get(cache_key)
         if cached is not None:
             return cached
         
@@ -263,12 +357,16 @@ out center;
                             'distance_miles': distance,
                             'place_type': tags.get('place', '')
                         })
+            
+            # Sort by distance
+            cities.sort(key=lambda x: x['distance_miles'])
+            
+            # Only cache on successful API response
+            geocoding_cache.set(cache_key, cities, GEOCODING_CACHE_TTL)
+        else:
+            # Sort by distance even if no response (for consistency)
+            cities.sort(key=lambda x: x['distance_miles'])
         
-        # Sort by distance
-        cities.sort(key=lambda x: x['distance_miles'])
-        
-        # Cache for 30 days
-        cache.set(cache_key, cities, GEOCODING_CACHE_TTL)
         return cities
     
     def _get_protected_areas(self, latitude: float, longitude: float) -> List[Dict[str, str]]:
@@ -284,7 +382,8 @@ out center;
         """
         # Check cache first
         cache_key = _get_cache_key(latitude, longitude, prefix="geocode:protected")
-        cached = cache.get(cache_key)
+        geocoding_cache = _get_geocoding_cache()
+        cached = geocoding_cache.get(cache_key)
         if cached is not None:
             return cached
         
@@ -317,9 +416,10 @@ out tags;
                         'boundary': tags.get('boundary', '')
                     }
                     protected_areas.append(area_info)
+            
+            # Only cache on successful API response
+            geocoding_cache.set(cache_key, protected_areas, GEOCODING_CACHE_TTL)
         
-        # Cache for 30 days
-        cache.set(cache_key, protected_areas, GEOCODING_CACHE_TTL)
         return protected_areas
     
     def _search_nearby_lakes(self, latitude: float, longitude: float, proximity_miles: float = 1.0) -> List[Dict[str, Any]]:
@@ -336,7 +436,8 @@ out tags;
         """
         # Check cache first
         cache_key = _get_cache_key(latitude, longitude, prefix=f"geocode:lakes:{proximity_miles}")
-        cached = cache.get(cache_key)
+        geocoding_cache = _get_geocoding_cache()
+        cached = geocoding_cache.get(cache_key)
         if cached is not None:
             return cached
         
@@ -380,12 +481,16 @@ out tags center;
                                 'distance_miles': distance,
                                 'water_type': water_type or 'water'
                             })
+            
+            # Sort by distance
+            lakes.sort(key=lambda x: x['distance_miles'])
+            
+            # Only cache on successful API response
+            geocoding_cache.set(cache_key, lakes, GEOCODING_CACHE_TTL)
+        else:
+            # Sort by distance even if no response (for consistency)
+            lakes.sort(key=lambda x: x['distance_miles'])
         
-        # Sort by distance
-        lakes.sort(key=lambda x: x['distance_miles'])
-        
-        # Cache for 30 days
-        cache.set(cache_key, lakes, GEOCODING_CACHE_TTL)
         return lakes
     
     def _search_nearby_ski_resorts(self, latitude: float, longitude: float, proximity_miles: float = 2.0) -> List[Dict[str, Any]]:
@@ -405,11 +510,12 @@ out tags center;
         """
         # Check cache first
         cache_key = _get_cache_key(latitude, longitude, prefix="geocode:ski")
-        cached = cache.get(cache_key)
+        geocoding_cache = _get_geocoding_cache()
+        cached = geocoding_cache.get(cache_key)
         if cached is not None:
             return cached
         
-        ski_resorts_data = _load_ski_resorts()
+        ski_resorts_data = load_ski_resorts()
         matching_resorts = []
         
         # Check if point is inside any resort bbox
@@ -453,7 +559,7 @@ out tags center;
         matching_resorts.sort(key=lambda x: x['distance_miles'])
         
         # Cache for 30 days
-        cache.set(cache_key, matching_resorts, GEOCODING_CACHE_TTL)
+        geocoding_cache.set(cache_key, matching_resorts, GEOCODING_CACHE_TTL)
         return matching_resorts
 
     def reverse_geocode(self, latitude: float, longitude: float, import_log=None) -> Optional[Dict[str, Any]]:
@@ -497,16 +603,25 @@ out tags center;
                 'protected_areas': protected_areas
             }
         except Exception as e:
-            logger.error(f"Reverse geocoding failed for ({latitude}, {longitude}): {e}")
+            error_msg = f"Reverse geocoding failed for ({latitude}, {longitude}): {e}"
+            logger.error(error_msg)
+            if import_log:
+                from geo_lib.processing.logging import DatabaseLogLevel
+                import_log.add(
+                    error_msg,
+                    "Reverse Geocoding",
+                    DatabaseLogLevel.ERROR
+                )
             return None
     
-    def search_protected_areas(self, latitude: float, longitude: float) -> List[Dict[str, Any]]:
+    def search_protected_areas(self, latitude: float, longitude: float, import_log=None) -> List[Dict[str, Any]]:
         """
         Search for protected areas at a given coordinate.
         
         Args:
             latitude: Latitude coordinate
             longitude: Longitude coordinate
+            import_log: Optional ImportLog for database logging
         
         Returns:
             List of protected area dicts
@@ -514,7 +629,15 @@ out tags center;
         try:
             return self._get_protected_areas(latitude, longitude)
         except Exception as e:
-            logger.error(f"Protected area search failed for ({latitude}, {longitude}): {e}")
+            error_msg = f"Protected area search failed for ({latitude}, {longitude}): {e}"
+            logger.error(error_msg)
+            if import_log:
+                from geo_lib.processing.logging import DatabaseLogLevel
+                import_log.add(
+                    error_msg,
+                    "Reverse Geocoding",
+                    DatabaseLogLevel.ERROR
+                )
             return []
     
     def check_city_proximity(self, latitude: float, longitude: float, threshold_miles: float, import_log=None) -> Optional[Dict[str, Any]]:
@@ -536,10 +659,18 @@ out tags center;
                 return nearby_cities[0]  # Return closest city
             return None
         except Exception as e:
-            logger.error(f"City proximity check failed for ({latitude}, {longitude}): {e}")
+            error_msg = f"City proximity check failed for ({latitude}, {longitude}): {e}"
+            logger.error(error_msg)
+            if import_log:
+                from geo_lib.processing.logging import DatabaseLogLevel
+                import_log.add(
+                    error_msg,
+                    "Reverse Geocoding",
+                    DatabaseLogLevel.ERROR
+                )
             return None
     
-    def search_lakes(self, latitude: float, longitude: float, proximity_miles: float = 1.0) -> List[Dict[str, Any]]:
+    def search_lakes(self, latitude: float, longitude: float, proximity_miles: float = 1.0, import_log=None) -> List[Dict[str, Any]]:
         """
         Search for lakes and water bodies within proximity_miles of the point.
         
@@ -547,6 +678,7 @@ out tags center;
             latitude: Latitude coordinate
             longitude: Longitude coordinate
             proximity_miles: Distance threshold in miles
+            import_log: Optional ImportLog for database logging
         
         Returns:
             List of lake dicts with name and distance
@@ -554,24 +686,18 @@ out tags center;
         try:
             return self._search_nearby_lakes(latitude, longitude, proximity_miles)
         except Exception as e:
-            logger.error(f"Lake search failed for ({latitude}, {longitude}): {e}")
+            error_msg = f"Lake search failed for ({latitude}, {longitude}): {e}"
+            logger.error(error_msg)
+            if import_log:
+                from geo_lib.processing.logging import DatabaseLogLevel
+                import_log.add(
+                    error_msg,
+                    "Reverse Geocoding",
+                    DatabaseLogLevel.ERROR
+                )
             return []
-    
-    def is_point_in_water(self, latitude: float, longitude: float) -> bool:
-        """
-        Check if a point is in water.
-        
-        Args:
-            latitude: Latitude coordinate
-            longitude: Longitude coordinate
-        
-        Returns:
-            False (future enhancement)
-        """
-        # TODO: Implement water detection using Overpass API
-        return False
 
-    def get_location_tags(self, latitude: float, longitude: float, import_log=None) -> List[str]:
+    def get_location_tags(self, latitude: float, longitude: float) -> Tuple[List[str], List[GeocodingLogMessage]]:
         """
         Generate comprehensive location tags for a coordinate.
         Uses parallel API calls to speed up the process.
@@ -582,12 +708,12 @@ out tags center;
         Args:
             latitude: Latitude coordinate
             longitude: Longitude coordinate
-            import_log: Optional ImportLog for database logging
         
         Returns:
-            List of location tag strings
+            Tuple of (tags list, log messages list)
         """
         tags = []
+        log_messages = []
         
         try:
             # Step 1: Run independent queries in parallel
@@ -602,6 +728,24 @@ out tags center;
                 admin_info = admin_future.result()
                 protected_areas = protected_future.result()
                 nearby_lakes = lakes_future.result()
+            
+            # Check if we got any location data at all (indicates API failures)
+            has_any_data = (
+                admin_info.get('country') or admin_info.get('state') or 
+                admin_info.get('county') or admin_info.get('city') or
+                protected_areas or nearby_lakes
+            )
+            
+            if not has_any_data:
+                # No data returned from any query - likely API failures
+                error_msg = f"Reverse geocoding returned no data for coordinates ({latitude}, {longitude}) - possible API failures (check console logs)"
+                logger.warning(error_msg)
+                log_messages.append(GeocodingLogMessage(
+                    timestamp=datetime.now(),
+                    message=error_msg,
+                    level='WARNING',
+                    source='Reverse Geocoding'
+                ))
             
             # Add administrative tags
             if admin_info['country']:
@@ -679,11 +823,18 @@ out tags center;
                 ski_tags.add(f"ski-resort:{resort['name']}")
             tags.extend(sorted(ski_tags))
             
-            return tags
+            return tags, log_messages
             
         except Exception as e:
-            logger.error(f"Error generating location tags for ({latitude}, {longitude}): {e}")
-            return []
+            error_msg = f"Error generating location tags for ({latitude}, {longitude}): {e}"
+            logger.error(error_msg)
+            log_messages.append(GeocodingLogMessage(
+                timestamp=datetime.now(),
+                message=error_msg,
+                level='ERROR',
+                source='Reverse Geocoding'
+            ))
+            return [], log_messages
 
 
 _reverse_geocoding_service = None

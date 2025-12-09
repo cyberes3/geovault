@@ -16,7 +16,7 @@ from geo_lib.geolocation.reverse_geocode import (
     get_reverse_geocoding_service,
     haversine_distance,
     _get_cache_key,
-    _load_ski_resorts
+    load_ski_resorts
 )
 
 
@@ -80,13 +80,13 @@ class TestSkiResortDatabase(TestCase):
     
     def test_ski_resorts_load(self):
         """Test that ski resorts database loads successfully."""
-        resorts = _load_ski_resorts()
+        resorts = load_ski_resorts()
         self.assertIsInstance(resorts, list)
         self.assertGreater(len(resorts), 50)  # Should have at least 50 resorts
     
     def test_ski_resort_structure(self):
         """Test that ski resorts have required fields."""
-        resorts = _load_ski_resorts()
+        resorts = load_ski_resorts()
         for resort in resorts[:5]:  # Check first 5
             self.assertIn('name', resort)
             self.assertIn('country', resort)
@@ -99,7 +99,7 @@ class TestSkiResortDatabase(TestCase):
     
     def test_ski_resort_bbox_valid(self):
         """Test that bounding boxes are valid."""
-        resorts = _load_ski_resorts()
+        resorts = load_ski_resorts()
         for resort in resorts:
             bbox = resort['bbox']
             self.assertLess(bbox['min_lat'], bbox['max_lat'])

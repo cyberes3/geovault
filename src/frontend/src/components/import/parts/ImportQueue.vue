@@ -403,7 +403,7 @@ export default {
       // Don't hide immediately to give user time to read
     },
     handleStatusClick(event, index) {
-      // Handle click (for desktop mouse clicks) - toggle behavior
+      // Handle click (for desktop mouse clicks)
       // Skip if touch was already handled (prevents double-toggle on mobile)
       if (this.touchHandled[index]) {
         event.preventDefault()
@@ -411,27 +411,9 @@ export default {
         return
       }
       
+      // Don't show tooltip on desktop click - only on mobile touch
       event.preventDefault()
       event.stopPropagation()
-      
-      // Clear any existing timeout first
-      if (this.touchTimeouts[index]) {
-        clearTimeout(this.touchTimeouts[index])
-        this.touchTimeouts[index] = null
-      }
-      
-      // Toggle tooltip: if already showing, hide it; otherwise show it
-      if (this.showTooltip[index]) {
-        this.showTooltip[index] = false
-      } else {
-        this.showTooltip[index] = true
-        this.updateTooltipPosition(event, index)
-        // Hide tooltip after 3 seconds
-        this.touchTimeouts[index] = setTimeout(() => {
-          this.showTooltip[index] = false
-          this.touchTimeouts[index] = null
-        }, 3000)
-      }
     },
     updateTooltipPosition(event, index) {
       // Position tooltip centered along the table card (row)

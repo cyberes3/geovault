@@ -649,27 +649,23 @@ class ProcessJob(BaseJob):
                         'message': 'Checking for duplicate features...'
                     })
 
-                    # Perform duplicate detection against existing features
-                    processing_log.add("Starting duplicate detection against existing feature store", "ProcessJob", DatabaseLogLevel.INFO)
+                    # Start duplicate detection
+                    duplicate_detection_start = time.time()
 
                     # First, check for internal duplicates within the file
-                    processing_log.add("Checking for internal duplicates within the uploaded file", "ProcessJob", DatabaseLogLevel.INFO)
                     unique_internal_features, internal_duplicate_count, internal_duplicate_log = strip_duplicate_features(processed_features)
-                    processing_log.extend(internal_duplicate_log)
+                    
+                    if internal_duplicate_count > 0:
+                        processing_log.add(f"Found {internal_duplicate_count} internal duplicate(s)", "ProcessJob", DatabaseLogLevel.INFO)
+                    else:
+                        processing_log.add("No internal duplicates found", "ProcessJob", DatabaseLogLevel.INFO)
 
                     # Check for cancellation after internal duplicate detection
                     job = self.status_tracker.get_job(job_id)
                     if job and job.status == ProcessingStatus.CANCELLED:
-                        logger.info(f"Job {job_id} was cancelled after internal duplicate detection")
-                        processing_log.add("Processing cancelled after internal duplicate detection", "ProcessJob", DatabaseLogLevel.WARNING)
                         return import_queue.id
 
-                    # Check for duplicates - 2-pass detection with source priority (feature store first, then cross-queue)
-                    processing_log.add("Checking for duplicates in your library and import queue", "ProcessJob", DatabaseLogLevel.INFO)
-                    duplicate_detection_start = time.time()
-                    
                     # PASS 1: Check feature store (hash + geometry, with hash priority)
-                    processing_log.add("Checking for duplicates in your feature library", "ProcessJob", DatabaseLogLevel.INFO)
                     remaining_after_fs, feature_store_duplicates, fs_log = find_duplicates_for_source(
                         unique_internal_features,
                         user_id,
@@ -677,7 +673,6 @@ class ProcessJob(BaseJob):
                         exclude_queue_id=None,
                         exclude_timestamp=None
                     )
-                    processing_log.extend(fs_log)
                     
                     # Split feature store duplicates into hash and geometry for tracking
                     feature_store_hash_duplicates, feature_store_geom_duplicates = split_duplicates_by_match_type(
@@ -685,7 +680,6 @@ class ProcessJob(BaseJob):
                     )
                     
                     # PASS 2: Check cross-queue (hash + geometry, with hash priority) on remaining features
-                    processing_log.add("Checking for duplicates in other import queue items", "ProcessJob", DatabaseLogLevel.INFO)
                     remaining_after_cq, cross_queue_duplicates, cq_log = find_duplicates_for_source(
                         remaining_after_fs,
                         user_id,
@@ -693,7 +687,6 @@ class ProcessJob(BaseJob):
                         exclude_queue_id=import_queue.id,
                         exclude_timestamp=import_queue.timestamp
                     )
-                    processing_log.extend(cq_log)
                     
                     # Split cross-queue duplicates into hash and geometry for tracking
                     cross_queue_hash_duplicates, cross_queue_geom_duplicates = split_duplicates_by_match_type(
@@ -708,8 +701,27 @@ class ProcessJob(BaseJob):
                         cross_queue_geom_duplicates
                     )
                     
+                    # Log duplicate detection results summary
+                    fs_hash_count = len(feature_store_hash_duplicates)
+                    fs_geom_count = len(feature_store_geom_duplicates)
+                    cq_hash_count = len(cross_queue_hash_duplicates)
+                    cq_geom_count = len(cross_queue_geom_duplicates)
+                    total_existing_duplicates = len(duplicate_features)
+                    
+                    if total_existing_duplicates > 0:
+                        summary_parts = []
+                        if fs_hash_count > 0 or fs_geom_count > 0:
+                            fs_total = fs_hash_count + fs_geom_count
+                            summary_parts.append(f"{fs_total} in library")
+                        if cq_hash_count > 0 or cq_geom_count > 0:
+                            cq_total = cq_hash_count + cq_geom_count
+                            summary_parts.append(f"{cq_total} in import queue")
+                        processing_log.add(f"Found {total_existing_duplicates} duplicate(s): {', '.join(summary_parts)}", "ProcessJob", DatabaseLogLevel.INFO)
+                    else:
+                        processing_log.add("No duplicates found in library or import queue", "ProcessJob", DatabaseLogLevel.INFO)
+                    
                     duplicate_detection_duration = time.time() - duplicate_detection_start
-                    processing_log.add_timing("Duplicate detection", duplicate_detection_duration, "ProcessJob")
+                    processing_log.add(f"Duplicate detection completed ({duplicate_detection_duration:.1f}s)", "ProcessJob", DatabaseLogLevel.INFO)
 
                     # Check for cancellation after duplicate detection
                     job = self.status_tracker.get_job(job_id)
@@ -717,14 +729,6 @@ class ProcessJob(BaseJob):
                         logger.info(f"Job {job_id} was cancelled after duplicate detection")
                         processing_log.add("Processing cancelled after duplicate detection", "ProcessJob", DatabaseLogLevel.WARNING)
                         return import_queue.id
-
-                    # Log summary of duplicate detection results
-                    total_duplicates = internal_duplicate_count + len(duplicate_features)
-                    processing_log.add(f"Duplicate detection completed: {internal_duplicate_count} internal duplicates, {len(duplicate_features)} existing duplicates", "ProcessJob", DatabaseLogLevel.INFO)
-
-                    # Use the original processed_features (not unique_features) to preserve all features
-                    # The duplicate_features list contains the duplicate information we need
-                    processing_log.add(f"Total duplicate features found: {total_duplicates}", "ProcessJob", DatabaseLogLevel.INFO)
 
                 # Check for cancellation before database save
                 job = self.status_tracker.get_job(job_id)

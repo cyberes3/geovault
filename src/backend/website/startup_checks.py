@@ -12,6 +12,7 @@ This module performs essential checks when the server starts up:
 8. togeojson Node.js converter is installed
 9. Site configuration (for email confirmation URLs)
 10. Clear Redis cache (ensures fresh data on startup)
+11. Preload ski resorts database (for reverse geocoding)
 
 Warning checks (don't fail startup):
 - Configuration file exists
@@ -31,11 +32,13 @@ from django.core.exceptions import ImproperlyConfigured
 from django.contrib.sites.models import Site
 from django.db import connection
 
+from geo_lib.geolocation.reverse_geocode import load_ski_resorts
 from geo_lib.logging.console import get_startup_logger
 from geo_lib.processing.file_types import FILE_TYPE_CONFIGS
 from geo_lib.utils.redis_connection import get_redis_connection
 from website.config_loader import get_config_loader
 from website.settings_utils import get_required_setting
+from django.core.cache import cache
 
 logger = get_startup_logger()
 
@@ -730,8 +733,6 @@ def clear_redis_cache():
     results for 30 days).
     """
     try:
-        from django.core.cache import cache
-        
         # Clear all cached data
         cache.clear()
         logger.info("✓ Cleared Redis cache (ensures fresh data on startup)")
@@ -741,6 +742,25 @@ def clear_redis_cache():
         logger.warning(f"⚠ Failed to clear Redis cache: {e}")
         # This is not critical - server can still start
         return True
+
+
+def preload_ski_resorts():
+    """
+    Preload the ski resorts database during startup.
+    
+    This ensures the ski resorts are loaded once during startup rather than
+    during the first reverse geocoding operation. This avoids race conditions
+    in multi-threaded processing and provides better startup diagnostics.
+    
+    Returns:
+        bool: True if ski resorts loaded successfully, False otherwise
+    """
+    ski_resorts = load_ski_resorts()
+
+    if ski_resorts:
+        logger.info(f"✓ Preloaded {len(ski_resorts)} ski resorts for reverse geocoding")
+    else:
+        logger.warning("⚠ Ski resorts database is empty or failed to load")
 
 
 def run_startup_checks():
@@ -761,6 +781,7 @@ def run_startup_checks():
     11. Verify Site configuration (for email confirmation URLs)
     12. Clean up stale Redis processing locks
     13. Clear Redis cache (ensures fresh data on startup)
+    14. Preload ski resorts database (for reverse geocoding)
     
     Warning checks (don't fail startup):
     - Configuration file
@@ -810,6 +831,10 @@ def run_startup_checks():
     # Clear Redis cache on startup (non-critical)
     logger.info("Clearing Redis cache...")
     clear_redis_cache()
+    
+    # Preload ski resorts database (non-critical, improves first-time performance)
+    logger.info("Preloading ski resorts database...")
+    preload_ski_resorts()
     
     if failed_checks:
         logger.error("=" * 60)

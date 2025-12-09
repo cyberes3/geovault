@@ -212,6 +212,17 @@ CACHES = {
     'default': {
         'BACKEND': 'django.core.cache.backends.locmem.LocMemCache',
         'LOCATION': 'unique-snowflake',  # Unique identifier for this cache instance
+    },
+    # Separate Redis cache for reverse geocoding results
+    # Uses a different Redis DB to persist across restarts (not cleared on startup)
+    'geocoding': {
+        'BACKEND': 'django_redis.cache.RedisCache',
+        'LOCATION': f"redis://{config.get_str('redis.host', '127.0.0.1')}:{config.get_int('redis.port', 6379)}/1",
+        'OPTIONS': {
+            'CLIENT_CLASS': 'django_redis.client.DefaultClient',
+        },
+        'KEY_PREFIX': 'geocode',
+        'TIMEOUT': 30 * 24 * 60 * 60,  # 30 days default timeout
     }
 }
 
