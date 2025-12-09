@@ -1,10 +1,9 @@
 /**
  * Icon Utilities
  *
- * Functions for handling icon URLs, icon style creation, and icon-related operations.
+ * Functions for handling icon URLs and icon-related operations.
  */
 
-import {Circle, Fill, Icon, Stroke, Style} from 'ol/style';
 import {APIHOST} from '@/config.js';
 
 /**
@@ -14,15 +13,6 @@ import {APIHOST} from '@/config.js';
  */
 export function isSystemIcon(iconUrl: string): boolean {
     return iconUrl.startsWith('/api/icons/system/');
-}
-
-/**
- * Check if an icon URL is a user (uploaded) icon
- * @param iconUrl - Icon URL to check
- * @returns true if the icon is a user icon
- */
-export function isUserIcon(iconUrl: string): boolean {
-    return iconUrl.startsWith('/api/icons/user/');
 }
 
 /**
@@ -89,208 +79,6 @@ export function resolveIconUrl(iconUrl: string): string {
 }
 
 /**
- * Convert hex color to CSS color string
- * @param hexColor - Hex color string (e.g., '#ff0000')
- * @param defaultColor - Default color if hexColor is invalid
- * @returns CSS color string
- */
-function hexToColor(hexColor: string | undefined, defaultColor: string = '#ff0000'): string {
-    if (!hexColor || typeof hexColor !== 'string') return defaultColor;
-    return hexColor;
-}
-
-/**
- * Calculate zoom level from resolution (Web Mercator)
- * Uses equator approximation for simplicity
- * @param resolution - Map resolution in meters per pixel
- * @returns Zoom level
- */
-export function getZoomFromResolution(resolution: number): number {
-    if (resolution <= 0) return 10; // Default to base zoom if invalid
-    // Web Mercator resolution formula: resolution = 156543.03392 / 2^zoom
-    // Solving for zoom: zoom = log2(156543.03392 / resolution)
-    const baseResolution = 156543.03392;
-    return Math.log2(baseResolution / resolution);
-}
-
-/**
- * Calculate exponential scale multiplier based on zoom level
- * Icons are at normal size at zoom 10 and above (city level), with exponential scaling only when zoomed out
- * Icons get smaller when zoomed out below baseZoom, but stay at normal size when zoomed in
- * @param zoom - Current zoom level
- * @param baseZoom - Base zoom level where icons are normal size (default: 10, city level)
- * @param exponentFactor - Exponential scaling factor (default: 0.6 for aggressive scaling)
- * @returns Scale multiplier (1.0 at baseZoom and above, < 1.0 when zoomed out)
- */
-function getZoomScaleMultiplier(zoom: number, baseZoom: number = 10, exponentFactor: number = 0.6): number {
-    // At city level (zoom 10) and above, icons stay at default size
-    if (zoom >= baseZoom) {
-        return 1.0;
-    }
-    // When zoomed out below city level, apply exponential scaling
-    return Math.pow(2, (zoom - baseZoom) * exponentFactor);
-}
-
-/**
- * Get the icon source URL, handling system icon recoloring if needed
- * @param iconUrl - Icon URL (relative or absolute)
- * @param properties - Feature properties (for marker-color)
- * @returns Resolved icon source URL
- */
-function getIconSourceUrl(iconUrl: string, properties: any): string {
-    const builtInIcon = isSystemIcon(iconUrl);
-    const markerColor = properties['marker-color'];
-    
-    if (builtInIcon && markerColor) {
-        // NOTE: Can't recolor in JS, it's fucked. Must use server-side PIL processing.
-        // Even with binary PNG decoding (bypassing Canvas rendering), semi-transparent
-        // edge pixels with low alpha values appear as black spots. CalTopo also uses
-        // backend recoloring: https://caltopo.com/icon.png?cfg=campfire%2CFF0000%231
-        
-        // Extract icon path relative to assets/icons/ for recolor endpoint
-        // Extract path after /api/icons/system/ (e.g., 'caltopo/4wd.png')
-        const iconPathForRecolor = iconUrl.replace('/api/icons/system/', '');
-        const encodedColor = encodeURIComponent(markerColor);
-        const encodedIcon = encodeURIComponent(iconPathForRecolor);
-        return `${APIHOST}/api/icons/recolor/?icon=${encodedIcon}&color=${encodedColor}`;
-    }
-    
-    return resolveIconUrl(iconUrl);
-}
-
-/**
- * Create icon style with error handling
- * Preloads image to detect loading failures and marks feature accordingly
- * Ensures icon has a minimum size by calculating appropriate scale
- * Supports server-side recoloring for built-in icons if marker-color is specified
- * Scales exponentially with zoom level (smaller when zoomed out, larger when zoomed in)
- * @param iconUrl - Icon URL (relative or absolute)
- * @param feature - OpenLayers feature
- * @param properties - Feature properties (for marker-color)
- * @param minSize - Minimum size in pixels (default: 20)
- * @param resolution - Map resolution in meters per pixel (optional, for zoom-based scaling)
- * @returns Icon style or null if icon failed to load
- */
-export function createIconStyle(iconUrl: string, feature: any, properties: any, minSize: number = 20, resolution?: number): Icon | null {
-    // Check if feature already has a calculated scale from previous load
-    let calculatedScale = feature.get('_iconScale');
-
-    // Determine icon source URL
-    const iconSrc = getIconSourceUrl(iconUrl, properties);
-
-    // Check if we're already loading this icon to prevent duplicate network requests
-    const existingIconSrc = feature.get('_iconSrc');
-    const iconSrcChanged = existingIconSrc !== iconSrc;
-    
-    // Only create new Image if icon source changed or hasn't been loaded yet
-    if (iconSrcChanged || !existingIconSrc) {
-        // Store the icon source URL on the feature to track what we're loading
-        feature.set('_iconSrc', iconSrc);
-        
-        // Clear previous failure state if icon source changed
-        if (iconSrcChanged) {
-            feature.set('_iconFailed', false);
-            // Reset scale so it can be recalculated for new icon
-            calculatedScale = undefined;
-        }
-        
-        // Preload image to detect loading failures and get dimensions
-        const img = new Image();
-        
-        img.onload = () => {
-            const naturalSize = Math.max(img.naturalWidth, img.naturalHeight);
-            if (naturalSize > 0) {
-                // Calculate scale needed to reach minimum size
-                const scale = Math.max(minSize / naturalSize, 0.4);
-                feature.set('_iconScale', scale);
-                // Trigger style update to apply new scale
-                feature.changed();
-            }
-        };
-        
-        img.onerror = () => {
-            // Mark feature as having failed icon load
-            feature.set('_iconFailed', true);
-            // Trigger style update by changing a property
-            feature.changed();
-        };
-        
-        img.src = iconSrc;
-
-        // If image is already loaded (cached), calculate scale immediately
-        if (img.complete && img.naturalWidth > 0) {
-            const naturalSize = Math.max(img.naturalWidth, img.naturalHeight);
-            if (naturalSize > 0) {
-                calculatedScale = Math.max(minSize / naturalSize, 0.4);
-                feature.set('_iconScale', calculatedScale);
-            }
-        }
-    }
-
-    // Use stored scale if available, otherwise use default
-    let finalScale = calculatedScale !== undefined ? calculatedScale : 0.4;
-
-    // Apply exponential zoom-based scaling if resolution is provided
-    if (resolution !== undefined && resolution > 0) {
-        const zoom = getZoomFromResolution(resolution);
-        const zoomMultiplier = getZoomScaleMultiplier(zoom);
-        finalScale *= zoomMultiplier;
-    }
-
-    return new Icon({
-        src: iconSrc,
-        scale: finalScale,
-        anchor: [0.5, 1.0], // Anchor at bottom center of icon
-    });
-}
-
-/**
- * Preload an icon image to cache it for faster loading later
- * @param iconUrl - Icon URL (relative or absolute)
- * @param feature - OpenLayers feature
- * @param properties - Feature properties (for marker-color)
- */
-export function preloadIconImage(iconUrl: string, feature: any, properties: any): void {
-    const iconSrc = getIconSourceUrl(iconUrl, properties);
-
-    // Check if we're already loading this icon to prevent duplicate network requests
-    const existingIconSrc = feature.get('_iconSrc');
-    const iconSrcChanged = existingIconSrc !== iconSrc;
-    
-    // Only preload if icon source changed or hasn't been loaded yet
-    if (iconSrcChanged || !existingIconSrc) {
-        // Store the icon source URL on the feature to track what we're loading
-        feature.set('_iconSrc', iconSrc);
-        
-        // Clear previous failure state if icon source changed
-        if (iconSrcChanged) {
-            feature.set('_iconFailed', false);
-        }
-        
-        // Preload image to cache it
-        const img = new Image();
-        
-        img.onload = () => {
-            // Image is now cached and ready for use
-            const naturalSize = Math.max(img.naturalWidth, img.naturalHeight);
-            if (naturalSize > 0) {
-                // Calculate scale needed for minimum size (same as createIconStyle)
-                const minSize = 20;
-                const scale = Math.max(minSize / naturalSize, 0.4);
-                feature.set('_iconScale', scale);
-            }
-        };
-        
-        img.onerror = () => {
-            // Mark feature as having failed icon load
-            feature.set('_iconFailed', true);
-        };
-        
-        img.src = iconSrc;
-    }
-}
-
-/**
  * Parse hex color to RGB components
  * @param hexColor - Hex color string (e.g., '#ff0000')
  * @returns Object with r, g, b values (0-255)
@@ -311,7 +99,7 @@ function parseHexColor(hexColor: string): { r: number; g: number; b: number } {
  * @param threshold - Brightness threshold (0-1, default: 0.7)
  * @returns true if color is too light
  */
-export function isColorTooLight(hexColor: string, threshold: number = 0.7): boolean {
+function isColorTooLight(hexColor: string, threshold: number = 0.7): boolean {
     const { r, g, b } = parseHexColor(hexColor);
     
     // Calculate relative luminance (perceived brightness)
@@ -328,7 +116,7 @@ export function isColorTooLight(hexColor: string, threshold: number = 0.7): bool
  * @param darkenFactor - How much to darken (0-1, default: 0.2 means reduce to 80% brightness)
  * @returns Darkened hex color string
  */
-export function darkenColor(hexColor: string, darkenFactor: number = 0.2): string {
+function darkenColor(hexColor: string, darkenFactor: number = 0.2): string {
     let { r, g, b } = parseHexColor(hexColor);
     
     // Darken by reducing each component
@@ -441,39 +229,3 @@ export function detectPrimaryColor(imageUrl: string): Promise<string> {
         img.src = imageUrl;
     });
 }
-
-/**
- * Get default fallback icon style (red circle)
- * Used when custom icon fails to load or no icon is specified
- * Scales exponentially with zoom level (smaller when zoomed out, larger when zoomed in)
- * @param properties - Feature properties
- * @param resolution - Map resolution in meters per pixel (optional, for zoom-based scaling)
- * @param overrideColor - Optional color to override marker-color property
- * @returns OpenLayers Style with default circle icon
- */
-export function getDefaultIconStyle(properties: any, resolution?: number, overrideColor?: string): Style {
-    const fillColor = overrideColor || hexToColor(properties['marker-color'], '#ff0000');
-    const baseRadius = 3;
-    
-    // Apply exponential zoom-based scaling if resolution is provided
-    let radius = baseRadius;
-    if (resolution !== undefined && resolution > 0) {
-        const zoom = getZoomFromResolution(resolution);
-        const zoomMultiplier = getZoomScaleMultiplier(zoom);
-        radius = baseRadius * zoomMultiplier;
-    }
-    
-    return new Style({
-        image: new Circle({
-            radius: radius,
-            fill: new Fill({
-                color: fillColor
-            }),
-            stroke: new Stroke({
-                color: fillColor, // Same color as fill for all cases
-                width: 2
-            })
-        })
-    });
-}
-
