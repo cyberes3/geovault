@@ -250,12 +250,12 @@ class TestE2EImport(TransactionTestCase):
         import_item = ImportQueue.objects.get(id=item_id, user=self.user)
         
         if hasattr(import_item, 'log_id') and import_item.log_id:
-            from api.models import ImportLog
-            log_entries = ImportLog.objects.filter(log_id=import_item.log_id).order_by('timestamp')
+            from api.models import DatabaseLogging
+            log_entries = DatabaseLogging.objects.filter(log_id=import_item.log_id).order_by('timestamp')
             
             # Extract all log messages and timing entries
-            log_messages = [entry.message for entry in log_entries]
-            timing_entries = [entry for entry in log_entries if entry.level == 'TIMING']
+            log_messages = [entry.text for entry in log_entries]
+            timing_entries = [entry for entry in log_entries if 'completed' in entry.text.lower() or 'timing' in entry.text.lower()]
             
             # Verify we have timing entries for the new granular steps
             timing_labels = [entry.message for entry in timing_entries]
@@ -332,10 +332,10 @@ class TestE2EImport(TransactionTestCase):
         import_item = ImportQueue.objects.get(id=item_id, user=self.user)
         if hasattr(import_item, 'log_id') and import_item.log_id:
             # Check that the processing log contains the new granular steps
-            from api.models import ImportLog
-            log_entries = ImportLog.objects.filter(log_id=import_item.log_id).order_by('timestamp')
+            from api.models import DatabaseLogging
+            log_entries = DatabaseLogging.objects.filter(log_id=import_item.log_id).order_by('timestamp')
             
-            log_messages = [entry.message for entry in log_entries]
+            log_messages = [entry.text for entry in log_entries]
             log_str = ' '.join(log_messages)
             
             # Verify the new processing steps are logged
@@ -453,9 +453,9 @@ class TestE2EImport(TransactionTestCase):
         
         # Verify the new processing steps are present in logs for GPX
         if hasattr(import_item, 'log_id') and import_item.log_id:
-            from api.models import ImportLog
-            log_entries = ImportLog.objects.filter(log_id=import_item.log_id).order_by('timestamp')
-            log_messages = [entry.message for entry in log_entries]
+            from api.models import DatabaseLogging
+            log_entries = DatabaseLogging.objects.filter(log_id=import_item.log_id).order_by('timestamp')
+            log_messages = [entry.text for entry in log_entries]
             
             # Verify GPX conversion step
             self.assertTrue(
@@ -539,9 +539,9 @@ class TestE2EImport(TransactionTestCase):
         
         # Verify the new processing steps are present in logs for KMZ
         if hasattr(import_item, 'log_id') and import_item.log_id:
-            from api.models import ImportLog
-            log_entries = ImportLog.objects.filter(log_id=import_item.log_id).order_by('timestamp')
-            log_messages = [entry.message for entry in log_entries]
+            from api.models import DatabaseLogging
+            log_entries = DatabaseLogging.objects.filter(log_id=import_item.log_id).order_by('timestamp')
+            log_messages = [entry.text for entry in log_entries]
             
             # Verify KMZ conversion step (converts to KML internally, then processes)
             self.assertTrue(

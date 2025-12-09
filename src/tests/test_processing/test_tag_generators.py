@@ -740,13 +740,18 @@ class TestGeocodingTagGenerator:
         """Test that geocoding tags are generated for points."""
         mock_setting.return_value = True
         
-        # Mock the geocoding service
+        # Mock the geocoding service - batch_geocode_coordinates returns dict mapping (lat, lon) to (tags, log_messages)
         mock_service = Mock()
-        mock_service.get_location_tags.return_value = [
-            'geo-city:San Francisco',
-            'geo-state:California',
-            'geo-country:United States'
-        ]
+        mock_service.batch_geocode_coordinates.return_value = {
+            (37.7749, -122.4194): (
+                [
+                    'geo-city:San Francisco',
+                    'geo-state:California',
+                    'geo-country:United States'
+                ],
+                []  # Empty log messages
+            )
+        }
         mock_get_service.return_value = mock_service
         
         generator = GeocodingTagGenerator()
@@ -769,12 +774,17 @@ class TestGeocodingTagGenerator:
         """Test that geocoding tags are generated for linestrings."""
         mock_setting.return_value = True
         
-        # Mock the geocoding service
+        # Mock the geocoding service - batch_geocode_coordinates returns dict mapping (lat, lon) to (tags, log_messages)
         mock_service = Mock()
-        mock_service.get_location_tags.return_value = [
-            'geo-state:California',
-            'geo-country:United States'
-        ]
+        mock_service.batch_geocode_coordinates.return_value = {
+            (37.775, -122.4195): (
+                [
+                    'geo-state:California',
+                    'geo-country:United States'
+                ],
+                []  # Empty log messages
+            )
+        }
         mock_get_service.return_value = mock_service
         
         generator = GeocodingTagGenerator()
@@ -824,9 +834,11 @@ class TestGeocodingTagGenerator:
         """Test that no tags are generated when geocoding returns empty list."""
         mock_setting.return_value = True
         
-        # Mock the geocoding service to return empty list
+        # Mock the geocoding service - batch_geocode_coordinates returns dict with empty tags
         mock_service = Mock()
-        mock_service.get_location_tags.return_value = []
+        mock_service.batch_geocode_coordinates.return_value = {
+            (37.7749, -122.4194): ([], [])  # Empty tags and log messages
+        }
         mock_get_service.return_value = mock_service
         
         generator = GeocodingTagGenerator()

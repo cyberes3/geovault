@@ -21,6 +21,7 @@ from geo_lib.processing.import_utils import (
     filter_features_to_process,
 )
 from geo_lib.processing.jobs.base_job import BaseJob
+from geo_lib.processing.redis_job_storage import update_job_status as update_redis_job_status
 from geo_lib.processing.status_tracker import ProcessingStatus
 
 logger = get_job_logger()
@@ -119,6 +120,18 @@ class ImportJob(BaseJob):
                 error_msg,
                 error_message=error_msg
             )
+            # Update Redis with failure status
+            job = self.status_tracker.get_job(job_id)
+            if job:
+                update_redis_job_status(
+                    job_id=job_id,
+                    status=ProcessingStatus.FAILED,
+                    message=job.message,
+                    progress=job.progress,
+                    error_message=job.error_message,
+                    started_at=job.started_at,
+                    completed_at=job.completed_at
+                )
             return
 
         # Update status
@@ -185,6 +198,17 @@ class ImportJob(BaseJob):
                 job_id, ProcessingStatus.COMPLETED,
                 success_msg, 100.0
             )
+            # Update Redis with completion status
+            job = self.status_tracker.get_job(job_id)
+            if job:
+                update_redis_job_status(
+                    job_id=job_id,
+                    status=ProcessingStatus.COMPLETED,
+                    message=job.message,
+                    progress=job.progress,
+                    started_at=job.started_at,
+                    completed_at=job.completed_at
+                )
 
             # Broadcast completion event to WebSocket
             # Convert Pydantic model to dict for JSON serialization
@@ -215,6 +239,18 @@ class ImportJob(BaseJob):
                 error_msg,
                 error_message=error_msg
             )
+            # Update Redis with failure status
+            job = self.status_tracker.get_job(job_id)
+            if job:
+                update_redis_job_status(
+                    job_id=job_id,
+                    status=ProcessingStatus.FAILED,
+                    message=job.message,
+                    progress=job.progress,
+                    error_message=job.error_message,
+                    started_at=job.started_at,
+                    completed_at=job.completed_at
+                )
 
             # Broadcast failure event to WebSocket
             self._broadcast_to_process_status_module(

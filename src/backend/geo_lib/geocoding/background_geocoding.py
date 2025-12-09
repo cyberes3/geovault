@@ -97,6 +97,8 @@ def geocode_feature_async(feature_id: int):
 
                 geojson.setdefault('properties', {})
                 geojson['properties']['system_tags'] = list(set(geojson['properties'].get('system_tags', []) + geocoding_tags))
+                # Ensure the hash in properties matches the model field hash
+                geojson['properties']['geojson_hash'] = feature_store.geojson_hash
 
                 feature_store.geojson = geojson
                 feature_store.save(update_fields=['geojson'])

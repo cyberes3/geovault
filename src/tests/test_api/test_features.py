@@ -1640,13 +1640,18 @@ class TestQuickPointCreationBackgroundGeocoding(TransactionTestCase):
         mock_elevation.return_value = 1500.0
         mock_setting.return_value = True
         
-        # Mock geocoding service to return tags
+        # Mock geocoding service - batch_geocode_coordinates returns dict mapping (lat, lon) to (tags, log_messages)
         mock_service = MagicMock()
-        mock_service.get_location_tags.return_value = [
-            'geo-city:San Francisco',
-            'geo-state:California',
-            'geo-country:United States'
-        ]
+        mock_service.batch_geocode_coordinates.return_value = {
+            (37.7749, -122.4194): (
+                [
+                    'geo-city:San Francisco',
+                    'geo-state:California',
+                    'geo-country:United States'
+                ],
+                []  # Empty log messages
+            )
+        }
         mock_get_service.return_value = mock_service
         
         payload = {

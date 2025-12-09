@@ -66,18 +66,20 @@ def validate_kml_content(kml_content: str) -> bool:
 
         # Check for dangerous elements
         for elem in root.iter():
-            # Only check elements in the default namespace (no namespace prefix)
-            # Namespaced elements like {http://www.w3.org/2005/atom}link are generally safe
-            if '}' not in elem.tag:
+            # Extract local name from namespaced tags (e.g., {namespace}tag -> tag)
+            # Check both namespaced and non-namespaced elements
+            if '}' in elem.tag:
+                local_name = elem.tag.split('}')[-1].lower()
+            else:
                 local_name = elem.tag.lower()
 
-                # Check for dangerous elements only in default namespace
-                if local_name in [dangerous.lower() for dangerous in DANGEROUS_ELEMENTS]:
-                    raise SecurityError(f"Dangerous element found: {local_name}")
+            # Check for dangerous elements (in any namespace)
+            if local_name in [dangerous.lower() for dangerous in DANGEROUS_ELEMENTS]:
+                raise SecurityError(f"Dangerous element found: {local_name}")
 
-                # Check for HTML-specific dangerous elements in default namespace
-                if local_name in [dangerous.lower() for dangerous in HTML_DANGEROUS_ELEMENTS]:
-                    raise SecurityError(f"HTML dangerous element found: {local_name}")
+            # Check for HTML-specific dangerous elements (only in default namespace to avoid false positives)
+            if '}' not in elem.tag and local_name in [dangerous.lower() for dangerous in HTML_DANGEROUS_ELEMENTS]:
+                raise SecurityError(f"HTML dangerous element found: {local_name}")
 
         # Check for dangerous attributes
         for elem in root.iter():

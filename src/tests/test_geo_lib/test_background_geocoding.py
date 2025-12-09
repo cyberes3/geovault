@@ -74,16 +74,19 @@ class TestBackgroundGeocoding(TransactionTestCase):
             },
             'properties': {
                 'name': 'Test Point',
-                'geojson_hash': 'test_hash',
                 'system_tags': ['type:point', 'quick-point'] + (['geo-city:San Francisco'] if with_geocoding_tags else [])
             }
         }
+        
+        # Generate the real hash and inject it into properties
+        geojson_hash = generate_geojson_hash(geojson)
+        geojson['properties']['geojson_hash'] = geojson_hash
         
         feature_store = FeatureStore.objects.create(
             user=self.user,
             geojson=geojson,
             geometry=Point(-122.4194, 37.7749, 0.0),
-            geojson_hash=generate_geojson_hash(geojson)
+            geojson_hash=geojson_hash
         )
         return feature_store
     
@@ -94,16 +97,18 @@ class TestBackgroundGeocoding(TransactionTestCase):
         # Enable geocoding
         mock_setting.return_value = True
         
-        # Mock geocoding service to return tags (returns tuple of tags and log messages)
+        # Mock geocoding service - batch_geocode_coordinates returns dict mapping (lat, lon) to (tags, log_messages)
         mock_service = MagicMock()
-        mock_service.get_location_tags.return_value = (
-            [
-                'geo-city:San Francisco',
-                'geo-state:California',
-                'geo-country:United States'
-            ],
-            []  # Empty log messages
-        )
+        mock_service.batch_geocode_coordinates.return_value = {
+            (37.7749, -122.4194): (
+                [
+                    'geo-city:San Francisco',
+                    'geo-state:California',
+                    'geo-country:United States'
+                ],
+                []  # Empty log messages
+            )
+        }
         mock_get_service.return_value = mock_service
         
         # Create feature without geocoding tags
@@ -142,7 +147,7 @@ class TestBackgroundGeocoding(TransactionTestCase):
         
         # Mock geocoding service to raise an error
         mock_service = MagicMock()
-        mock_service.get_location_tags.side_effect = Exception("Geocoding API error")
+        mock_service.batch_geocode_coordinates.side_effect = Exception("Geocoding API error")
         mock_get_service.return_value = mock_service
         
         # Create feature
@@ -203,15 +208,17 @@ class TestBackgroundGeocoding(TransactionTestCase):
         # Enable geocoding
         mock_setting.return_value = True
         
-        # Mock geocoding service to return tags (returns tuple of tags and log messages)
+        # Mock geocoding service - batch_geocode_coordinates returns dict mapping (lat, lon) to (tags, log_messages)
         mock_service = MagicMock()
-        mock_service.get_location_tags.return_value = (
-            [
-                'geo-city:San Francisco',
-                'geo-state:California'
-            ],
-            []  # Empty log messages
-        )
+        mock_service.batch_geocode_coordinates.return_value = {
+            (37.7749, -122.4194): (
+                [
+                    'geo-city:San Francisco',
+                    'geo-state:California'
+                ],
+                []  # Empty log messages
+            )
+        }
         mock_get_service.return_value = mock_service
         
         # Create feature with one geocoding tag already present
@@ -251,11 +258,12 @@ class TestBackgroundGeocoding(TransactionTestCase):
         # Mock geocoding service with a delay to simulate slow geocoding
         mock_service = MagicMock()
         
-        def slow_get_location_tags(lat, lon, import_log=None):
+        def slow_batch_geocode(coordinates):
             time.sleep(0.1)  # Simulate slow geocoding
-            return (['geo-city:San Francisco'], [])  # Return tuple
+            # Return dict mapping each coordinate to (tags, log_messages)
+            return {coord: (['geo-city:San Francisco'], []) for coord in coordinates}
         
-        mock_service.get_location_tags.side_effect = slow_get_location_tags
+        mock_service.batch_geocode_coordinates.side_effect = slow_batch_geocode
         mock_get_service.return_value = mock_service
         
         # Create feature
@@ -311,9 +319,14 @@ class TestSkipGeocodingParameter(TestCase):
         # Enable geocoding
         mock_setting.return_value = True
         
-        # Mock geocoding service (returns tuple of tags and log messages)
+        # Mock geocoding service
+        # batch_geocode_coordinates returns a dict mapping (lat, lon) -> (tags, log_messages)
         mock_service = MagicMock()
-        mock_service.get_location_tags.return_value = (['geo-city:San Francisco'], [])
+        # Use side_effect to return results for any coordinate passed
+        def mock_batch_geocode(coordinates):
+            # Return a dict with results for all coordinates passed
+            return {coord: (['geo-city:San Francisco'], []) for coord in coordinates}
+        mock_service.batch_geocode_coordinates.side_effect = mock_batch_geocode
         mock_get_service.return_value = mock_service
         
         # Create feature
