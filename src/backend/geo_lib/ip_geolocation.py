@@ -67,7 +67,7 @@ class IPGeolocationService:
         except geoip2.errors.AddressNotFoundError:
             logger.warning(f"IP address {ip_address} not found in database")
             return None
-        except Exception as e:
+        except:
             logger.error(f"Error looking up IP {ip_address}: {traceback.format_exc()}")
             return {  # Return fallback
                 'ip': ip_address,
