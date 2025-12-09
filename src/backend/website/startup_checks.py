@@ -63,9 +63,12 @@ def check_python_version():
         return False
 
 
-def check_database_connection():
+def check_database_connection(suppress_logging=False):
     """
     Check if the database connection is working.
+    
+    Args:
+        suppress_logging: If True, suppress success log messages (errors still logged)
     
     Returns:
         bool: True if connection is successful, False otherwise
@@ -75,7 +78,8 @@ def check_database_connection():
             cursor.execute("SELECT 1")
             result = cursor.fetchone()
             if result and result[0] == 1:
-                logger.info("✓ Database connection successful")
+                if not suppress_logging:
+                    logger.info("✓ Database connection successful")
                 return True
             else:
                 logger.error("✗ Database connection test failed - unexpected result")
@@ -85,9 +89,12 @@ def check_database_connection():
         return False
 
 
-def check_postgis_installation():
+def check_postgis_installation(suppress_logging=False):
     """
     Check if PostGIS extension is installed and available.
+    
+    Args:
+        suppress_logging: If True, suppress success log messages (errors still logged)
     
     Returns:
         bool: True if PostGIS is installed, False otherwise
@@ -104,13 +111,15 @@ def check_postgis_installation():
             result = cursor.fetchone()
             
             if result and result[0]:
-                logger.info("✓ PostGIS extension is installed")
+                if not suppress_logging:
+                    logger.info("✓ PostGIS extension is installed")
                 
                 # Check PostGIS version for additional verification
-                cursor.execute("SELECT PostGIS_version()")
-                version = cursor.fetchone()
-                if version:
-                    logger.info(f"  PostGIS version: {version[0]}")
+                if not suppress_logging:
+                    cursor.execute("SELECT PostGIS_version()")
+                    version = cursor.fetchone()
+                    if version:
+                        logger.info(f"  PostGIS version: {version[0]}")
                 
                 return True
             else:
@@ -196,9 +205,12 @@ def check_spatial_tables():
         return False
 
 
-def check_redis_connection():
+def check_redis_connection(suppress_logging=False):
     """
     Check if Redis connection is working.
+    
+    Args:
+        suppress_logging: If True, suppress success log messages (errors still logged)
     
     Returns:
         bool: True if connection is successful, False otherwise
@@ -229,7 +241,8 @@ def check_redis_connection():
         try:
             result = async_to_sync(test_redis)()
             if result:
-                logger.info("✓ Redis connection successful")
+                if not suppress_logging:
+                    logger.info("✓ Redis connection successful")
                 return True
             else:
                 logger.error("✗ Redis connection test failed")

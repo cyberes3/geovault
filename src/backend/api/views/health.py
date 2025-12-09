@@ -134,10 +134,10 @@ def health_check(request):
         # Build list of checks to run in parallel
         checks_to_run = []
         
-        # Always run critical health checks
-        checks_to_run.append(("database", check_database_connection))
-        checks_to_run.append(("redis", check_redis_connection))
-        checks_to_run.append(("postgis", check_postgis_installation))
+        # Always run critical health checks (suppress verbose logging)
+        checks_to_run.append(("database", lambda: check_database_connection(suppress_logging=True)))
+        checks_to_run.append(("redis", lambda: check_redis_connection(suppress_logging=True)))
+        checks_to_run.append(("postgis", lambda: check_postgis_installation(suppress_logging=True)))
         
         # Check Overpass API only if reverse geocoding is enabled
         reverse_geocoding_enabled = config.get_bool('reverse_geocoding.enabled', True)
