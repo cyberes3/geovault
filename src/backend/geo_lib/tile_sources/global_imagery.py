@@ -1,9 +1,3 @@
-"""
-Global Imagery tile source configuration.
-
-This tile source requires a backend proxy to avoid CORS issues.
-"""
-
 from . import register_tile_source
 
 # Global Imagery configuration
@@ -28,4 +22,3 @@ GLOBAL_IMAGERY_CONFIG = {
 
 # Register the tile source
 register_tile_source('global_imagery', GLOBAL_IMAGERY_CONFIG)
-

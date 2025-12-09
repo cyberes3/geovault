@@ -1,8 +1,7 @@
+from datetime import datetime
 from typing import Optional, List, Any, Dict, Union
-from datetime import datetime, timezone
-import logging
 
-from pydantic import BaseModel, Field, field_validator, ConfigDict
+from pydantic import BaseModel, Field, field_validator
 
 from geo_lib.utils.date_parser import parse_date_field
 
@@ -15,16 +14,16 @@ class GeojsonRawProperty(BaseModel):
     description: Optional[str] = None
     created: Optional[datetime] = None
     tags: List[str] = Field(default_factory=list, alias='feature_tags')  # kml2geojson calls this field `feature_tags`
-    
+
     # Time property (for GPX routes and other features with time metadata)
     time: Optional[str] = None
-    
+
     # Coordinate properties (for tracks with timestamps/elevation)
     coordinateProperties: Optional[Dict[str, Any]] = None
-    
+
     # System-generated tags (added during processing)
     system_tags: Optional[List[str]] = Field(default_factory=list)
-    
+
     # Point styling
     icon: Optional[str] = None
     icon_href: Optional[str] = Field(default=None, alias='icon-href')
@@ -34,13 +33,13 @@ class GeojsonRawProperty(BaseModel):
     marker_symbol: Optional[str] = Field(default=None, alias='marker-symbol')
     symbol: Optional[str] = None
     marker_color: Optional[str] = Field(default=None, alias='marker-color')
-    
+
     # Line/Polygon styling
     stroke: Optional[str] = None
     stroke_width: Optional[Union[int, float]] = Field(default=None, alias='stroke-width')
     fill: Optional[str] = None
     fill_opacity: Optional[Union[int, float]] = Field(default=None, alias='fill-opacity')
-    
+
     @field_validator('name', mode='before')
     @classmethod
     def parse_name_field(cls, v):
@@ -48,7 +47,7 @@ class GeojsonRawProperty(BaseModel):
         if v is None or (isinstance(v, str) and v.strip() == ''):
             return "Unnamed Feature"
         return v
-    
+
     @field_validator('description', mode='before')
     @classmethod
     def parse_description_field(cls, v):
@@ -58,7 +57,7 @@ class GeojsonRawProperty(BaseModel):
         """
         if v is None:
             return None
-        
+
         # Handle dictionary format from togeojson (KML HTML descriptions)
         if isinstance(v, dict):
             if '@type' in v and v['@type'] == 'html' and 'value' in v:
@@ -66,13 +65,13 @@ class GeojsonRawProperty(BaseModel):
             else:
                 # If it's a dict but not the expected format, convert to string
                 return str(v)
-        
+
         # Ensure we have a string
         if not isinstance(v, str):
             return str(v)
-        
+
         return v
-    
+
     @field_validator('created', mode='before')
     @classmethod
     def parse_created_field(cls, v):

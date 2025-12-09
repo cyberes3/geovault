@@ -9,11 +9,11 @@ import logging
 
 class TaggedLoggerAdapter(logging.LoggerAdapter):
     """Logger adapter that adds a tag prefix to all log messages."""
-    
+
     def __init__(self, logger, tag):
         super().__init__(logger, {})
         self.tag = tag
-    
+
     def process(self, msg, kwargs):
         """Add the tag prefix to the message."""
         return f"[{self.tag}] {msg}", kwargs
@@ -67,4 +67,3 @@ def get_startup_logger():
 def get_config_logger():
     """Get logger for configuration loading."""
     return TaggedLoggerAdapter(logging.getLogger('config'), 'CONFIG')
-

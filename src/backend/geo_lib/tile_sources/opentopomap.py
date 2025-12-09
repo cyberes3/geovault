@@ -59,4 +59,3 @@ OPENTOPOMAP_CONFIG = {
 
 # Register the tile source
 register_tile_source('opentopomap', OPENTOPOMAP_CONFIG)
-

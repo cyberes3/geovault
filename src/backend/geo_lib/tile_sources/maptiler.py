@@ -6,9 +6,11 @@ MapTiler maps are vector tile sources that can be used directly without a proxy.
 """
 
 import functools
+
 import requests
-from . import register_tile_source
+
 from website.config_loader import get_config_loader
+from . import register_tile_source
 
 
 @functools.lru_cache(maxsize=None)
@@ -33,7 +35,7 @@ def fetch_map_name(map_id, api_key, site_domain):
             'Origin': site_domain
         }
         response = requests.get(style_url, headers=headers, timeout=5)
-        
+
         if response.status_code == 200:
             style_data = response.json()
             # Get the name from the style.json
@@ -42,7 +44,7 @@ def fetch_map_name(map_id, api_key, site_domain):
     except Exception as e:
         # Log error but continue with fallback name
         print(f"Warning: Could not fetch name for map '{map_id}': {e}")
-    
+
     # Fallback: format the map ID as a display name
     return f"MapTiler {map_id.replace('-', ' ').title()}"
 
@@ -54,36 +56,36 @@ def register_maptiler_maps():
     Requires API key to be configured.
     """
     config = get_config_loader()
-    
+
     # Get MapTiler API key
     api_key = config.get_with_env_override(
         'maptiler.api_key',
         'MAPTILER_API_KEY',
         None
     )
-    
+
     # If no API key, skip registration
     if not api_key:
         return
-    
+
     # Get list of map IDs
     map_ids = config.get_list('maptiler.maps', [])
-    
+
     # If no maps configured, skip registration
     if not map_ids:
         return
-    
+
     # Get site domain for MapTiler API requests
     site_domain = config.get_str('site.domain', '')
-    
+
     # Register each map as a tile source
     for map_id in map_ids:
         if not map_id or not isinstance(map_id, str):
             continue
-        
+
         # Fetch display name from MapTiler's style.json
         display_name = fetch_map_name(map_id, api_key, site_domain)
-        
+
         # Create tile source configuration
         # MapTiler maps use vector tiles accessed via style.json
         # For MapLibre, we'll use the style URL directly
@@ -98,11 +100,10 @@ def register_maptiler_maps():
                 'map_id': map_id
             }
         }
-        
+
         # Register the tile source
         register_tile_source(f'maptiler_{map_id}', source_config)
 
 
 # Register MapTiler maps when this module is imported
 register_maptiler_maps()
-

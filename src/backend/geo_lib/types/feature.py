@@ -1,5 +1,5 @@
 import json
-from datetime import datetime, timezone
+from datetime import datetime
 from enum import Enum
 from typing import List, Tuple, Optional, Type, Any
 from typing import Union
@@ -27,7 +27,7 @@ class Properties(BaseModel):
     created: Optional[datetime] = None
     tags: Optional[List[str]] = Field(default_factory=list)  # User tags only
     system_tags: Optional[List[str]] = Field(default_factory=list)  # System-generated tags (type, import-year, import-month, source-file, geocoding)
-    
+
     @field_validator('name', mode='before')
     @classmethod
     def validate_name(cls, v: Any) -> str:
@@ -35,7 +35,7 @@ class Properties(BaseModel):
         if v is None:
             return ""
         return str(v)
-    
+
     @field_validator('created', mode='before')
     @classmethod
     def parse_created_field(cls, v: Any) -> Optional[datetime]:

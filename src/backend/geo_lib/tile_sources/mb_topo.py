@@ -1,9 +1,3 @@
-"""
-Mapbuilder Topo tile source configuration.
-
-This tile source requires a backend proxy to avoid CORS issues.
-"""
-
 from . import register_tile_source
 
 # Mapbuilder Topo configuration
@@ -28,4 +22,3 @@ MB_TOPO_CONFIG = {
 
 # Register the tile source
 register_tile_source('mb_topo', MB_TOPO_CONFIG)
-
