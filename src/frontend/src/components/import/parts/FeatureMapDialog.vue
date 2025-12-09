@@ -102,6 +102,7 @@ export default {
       map: null,
       vectorSource: null,
       vectorLayer: null,
+      labelLayer: null,
       isLoading: false,
       featureCount: 0,
       selectedFeature: null
@@ -147,6 +148,7 @@ export default {
         if (this.selectedFeatureIndex >= 0 && this.selectedFeatureIndex < features.length) {
           this.selectedFeature = features[this.selectedFeatureIndex]
           this.vectorLayer.changed() // Force style update
+          this.labelLayer.changed() // Force label style update
         }
       }
     },
@@ -163,12 +165,20 @@ export default {
         this.cleanup()
       }
 
-      // Create vector source and layer
+      // Create vector source and layers
       this.vectorSource = new VectorSource()
 
+      // Layer for features (geometry only, no decluttering)
       this.vectorLayer = new VectorLayer({
         source: this.vectorSource,
-        style: (feature) => this.getFeatureStyle(feature)
+        style: (feature) => this.getFeatureStyle(feature) // No text labels
+      })
+
+      // Layer for labels only (with decluttering)
+      this.labelLayer = new VectorLayer({
+        source: this.vectorSource,
+        style: (feature) => this.getLabelStyle(feature),
+        declutter: true
       })
 
       // Create map
@@ -178,7 +188,8 @@ export default {
           new TileLayer({
             source: new OSM()
           }),
-          this.vectorLayer
+          this.vectorLayer,
+          this.labelLayer
         ],
         view: new View({
           center: fromLonLat([-104.692626, 38.881215]), // Default to Denver, CO
@@ -190,7 +201,6 @@ export default {
     getFeatureStyle(feature) {
       const properties = feature.get('properties') || feature.properties || {}
       const geometryType = feature.getGeometry().getType()
-      const name = properties.name || 'Unnamed Feature'
       const isSelected = feature === this.selectedFeature
 
       // Helper function to convert hex color to CSS color string
@@ -204,89 +214,41 @@ export default {
       const highlightStrokeColor = '#000000' // Black border for contrast
 
       if (geometryType === 'Point') {
-        const fillColor = isSelected ? highlightColor : hexToColor(properties['marker-color'], '#ff0000')
-        const strokeColor = isSelected ? highlightStrokeColor : 'transparent'
-        const strokeWidth = isSelected ? 3 : 0
-
         return new Style({
           image: new Circle({
-            radius: isSelected ? 12 : 8, // Larger radius for selected
+            radius: isSelected ? 8 : 5,
             fill: new Fill({
-              color: fillColor
+              color: isSelected ? highlightColor : hexToColor(properties['marker-color'], '#ff0000')
             }),
             stroke: new Stroke({
-              color: strokeColor,
-              width: strokeWidth
+              color: isSelected ? highlightStrokeColor : 'transparent',
+              width: isSelected ? 2 : 0
             })
-          }),
-          text: new Text({
-            text: name,
-            font: isSelected ? 'bold 14px Arial' : '12px Arial',
-            fill: new Fill({
-              color: isSelected ? '#000000' : '#000000'
-            }),
-            stroke: new Stroke({
-              color: '#ffffff',
-              width: isSelected ? 4 : 3
-            }),
-            offsetY: isSelected ? -20 : -15
           })
         })
       } else if (geometryType === 'LineString') {
         if (isSelected) {
-          // For selected LineStrings, create a multi-layer effect with black outline and yellow center
           return [
-            // Black outline (wider)
             new Style({
               stroke: new Stroke({
                 color: highlightStrokeColor,
                 width: 10
               })
             }),
-            // Yellow center (narrower)
             new Style({
               stroke: new Stroke({
                 color: highlightColor,
                 width: 6
               })
-            }),
-            // Text label
-            new Style({
-              text: new Text({
-                text: name,
-                font: 'bold 14px Arial',
-                fill: new Fill({
-                  color: '#000000'
-                }),
-                stroke: new Stroke({
-                  color: '#ffffff',
-                  width: 4
-                }),
-                offsetY: -15
-              })
             })
           ]
         } else {
-          // Normal styling for non-selected LineStrings
           const strokeColor = hexToColor(properties.stroke, '#ff0000')
           const strokeWidth = properties['stroke-width'] || 3
-
           return new Style({
             stroke: new Stroke({
               color: strokeColor,
               width: strokeWidth
-            }),
-            text: new Text({
-              text: name,
-              font: '12px Arial',
-              fill: new Fill({
-                color: '#000000'
-              }),
-              stroke: new Stroke({
-                color: '#ffffff',
-                width: 3
-              }),
-              offsetY: -10
             })
           })
         }
@@ -294,10 +256,9 @@ export default {
         const fillColor = isSelected ? highlightColor : hexToColor(properties['marker-color'], '#ff0000')
         const strokeColor = isSelected ? highlightStrokeColor : '#000000'
         const strokeWidth = isSelected ? 3 : 2
-
         return new Style({
           image: new Circle({
-            radius: isSelected ? 12 : 8, // Larger radius for selected
+            radius: isSelected ? 12 : 8,
             fill: new Fill({
               color: fillColor
             }),
@@ -305,87 +266,38 @@ export default {
               color: strokeColor,
               width: strokeWidth
             })
-          }),
-          text: new Text({
-            text: name,
-            font: isSelected ? 'bold 14px Arial' : '12px Arial',
-            fill: new Fill({
-              color: isSelected ? '#000000' : '#000000'
-            }),
-            stroke: new Stroke({
-              color: '#ffffff',
-              width: isSelected ? 4 : 3
-            }),
-            offsetY: isSelected ? -20 : -15
           })
         })
       } else if (geometryType === 'MultiLineString') {
         if (isSelected) {
-          // For selected MultiLineStrings, create a multi-layer effect with black outline and yellow center
           return [
-            // Black outline (wider)
             new Style({
               stroke: new Stroke({
                 color: highlightStrokeColor,
                 width: 10
               })
             }),
-            // Yellow center (narrower)
             new Style({
               stroke: new Stroke({
                 color: highlightColor,
                 width: 6
               })
-            }),
-            // Text label
-            new Style({
-              text: new Text({
-                text: name,
-                font: 'bold 14px Arial',
-                fill: new Fill({
-                  color: '#000000'
-                }),
-                stroke: new Stroke({
-                  color: '#ffffff',
-                  width: 4
-                }),
-                offsetY: -15
-              })
             })
           ]
         } else {
-          // Normal styling for non-selected MultiLineStrings with black border
           const strokeColor = hexToColor(properties.stroke, '#ff0000')
           const strokeWidth = properties['stroke-width'] || 3
-
           return [
-            // Black border (wider)
             new Style({
               stroke: new Stroke({
                 color: '#000000',
                 width: strokeWidth + 2
               })
             }),
-            // Colored center (narrower)
             new Style({
               stroke: new Stroke({
                 color: strokeColor,
                 width: strokeWidth
-              })
-            }),
-            // Text label
-            new Style({
-              text: new Text({
-                text: name,
-                font: '12px Arial',
-                fill: new Fill({
-                  color: '#000000'
-                }),
-                stroke: new Stroke({
-                  color: '#ffffff',
-                  width: 3
-                }),
-                offsetY: -10
               })
             })
           ]
@@ -395,7 +307,6 @@ export default {
         let fillColor = isSelected ? highlightColor : hexToColor(properties.fill, '#ff0000')
         const strokeWidth = isSelected ? 4 : (properties['stroke-width'] || 2)
 
-        // Apply fill-opacity if specified (but not for selected)
         if (!isSelected && properties['fill-opacity'] !== undefined) {
           const hex = fillColor.replace('#', '')
           const r = parseInt(hex.substr(0, 2), 16)
@@ -411,18 +322,6 @@ export default {
           }),
           fill: new Fill({
             color: fillColor
-          }),
-          text: new Text({
-            text: name,
-            font: isSelected ? 'bold 14px Arial' : '12px Arial',
-            fill: new Fill({
-              color: isSelected ? '#000000' : '#000000'
-            }),
-            stroke: new Stroke({
-              color: '#ffffff',
-              width: isSelected ? 4 : 3
-            }),
-            offsetY: isSelected ? -15 : -10
           })
         })
       } else if (geometryType === 'Polygon') {
@@ -430,7 +329,6 @@ export default {
         let fillColor = isSelected ? highlightColor : hexToColor(properties.fill, '#ff0000')
         const strokeWidth = isSelected ? 4 : (properties['stroke-width'] || 2)
 
-        // Apply fill-opacity if specified (but not for selected)
         if (!isSelected && properties['fill-opacity'] !== undefined) {
           const hex = fillColor.replace('#', '')
           const r = parseInt(hex.substr(0, 2), 16)
@@ -446,18 +344,6 @@ export default {
           }),
           fill: new Fill({
             color: fillColor
-          }),
-          text: new Text({
-            text: name,
-            font: isSelected ? 'bold 14px Arial' : '12px Arial',
-            fill: new Fill({
-              color: isSelected ? '#000000' : '#000000'
-            }),
-            stroke: new Stroke({
-              color: '#ffffff',
-              width: isSelected ? 4 : 3
-            }),
-            offsetY: isSelected ? -15 : -10
           })
         })
       }
@@ -470,12 +356,75 @@ export default {
         }),
         fill: new Fill({
           color: isSelected ? highlightColor : 'rgba(255, 0, 0, 0.3)'
-        }),
+        })
+      })
+    },
+
+    getLabelStyle(feature) {
+      const properties = feature.get('properties') || feature.properties || {}
+      const geometryType = feature.getGeometry().getType()
+      const name = properties.name || 'Unnamed Feature'
+      const isSelected = feature === this.selectedFeature
+
+      // Only return label style if feature has a name
+      if (!name || name === 'Unnamed Feature') {
+        return null
+      }
+
+      if (geometryType === 'Point' || geometryType === 'MultiPoint') {
+        return new Style({
+          text: new Text({
+            text: name,
+            font: isSelected ? 'bold 14px Arial' : '12px Arial',
+            fill: new Fill({
+              color: '#000000'
+            }),
+            stroke: new Stroke({
+              color: '#ffffff',
+              width: isSelected ? 4 : 3
+            }),
+            offsetY: isSelected ? -20 : -15
+          })
+        })
+      } else if (geometryType === 'LineString' || geometryType === 'MultiLineString') {
+        return new Style({
+          text: new Text({
+            text: name,
+            font: isSelected ? 'bold 14px Arial' : '12px Arial',
+            fill: new Fill({
+              color: '#000000'
+            }),
+            stroke: new Stroke({
+              color: '#ffffff',
+              width: isSelected ? 4 : 3
+            }),
+            offsetY: isSelected ? -15 : -10
+          })
+        })
+      } else if (geometryType === 'Polygon' || geometryType === 'MultiPolygon') {
+        return new Style({
+          text: new Text({
+            text: name,
+            font: isSelected ? 'bold 14px Arial' : '12px Arial',
+            fill: new Fill({
+              color: '#000000'
+            }),
+            stroke: new Stroke({
+              color: '#ffffff',
+              width: isSelected ? 4 : 3
+            }),
+            offsetY: isSelected ? -15 : -10
+          })
+        })
+      }
+
+      // Default label style
+      return new Style({
         text: new Text({
           text: name,
           font: isSelected ? 'bold 14px Arial' : '12px Arial',
           fill: new Fill({
-            color: isSelected ? '#000000' : '#000000'
+            color: '#000000'
           }),
           stroke: new Stroke({
             color: '#ffffff',
@@ -585,6 +534,7 @@ export default {
       }
       this.vectorSource = null
       this.vectorLayer = null
+      this.labelLayer = null
       this.selectedFeature = null
     }
   },

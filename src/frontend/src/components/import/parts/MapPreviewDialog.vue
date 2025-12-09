@@ -87,6 +87,7 @@ export default {
       map: null,
       vectorSource: null,
       vectorLayer: null,
+      labelLayer: null,
       isLoading: false,
       featureCount: 0
     }
@@ -135,14 +136,21 @@ export default {
         this.cleanup()
       }
 
-      // Create vector source and layer
+      // Create vector source and layers
       this.vectorSource = new VectorSource()
 
+      // Layer for features (geometry only, no decluttering)
       this.vectorLayer = new VectorLayer({
         source: this.vectorSource,
-        style: (feature) => this.getFeatureStyle(feature)
+        style: (feature) => this.getFeatureStyle(feature) // No text labels
       })
 
+      // Layer for labels only (with decluttering)
+      this.labelLayer = new VectorLayer({
+        source: this.vectorSource,
+        style: (feature) => this.getLabelStyle(feature),
+        declutter: true
+      })
 
       // Create map
       this.map = new Map({
@@ -151,7 +159,8 @@ export default {
           new TileLayer({
             source: new OSM()
           }),
-          this.vectorLayer
+          this.vectorLayer,
+          this.labelLayer
         ],
         view: new View({
           center: fromLonLat([-104.692626, 38.881215]),
@@ -164,7 +173,6 @@ export default {
     getFeatureStyle(feature) {
       const properties = feature.get('properties') || {}
       const geometryType = feature.getGeometry().getType()
-      const name = properties.name || ''
 
       // Helper function to convert hex color to CSS color string
       const hexToColor = (hexColor, defaultColor = '#ff0000') => {
@@ -175,25 +183,12 @@ export default {
       if (geometryType === 'Point') {
         // Points use marker-color or default red
         const fillColor = hexToColor(properties['marker-color'], '#ff0000')
-
         return new Style({
           image: new Circle({
-            radius: 8,
+            radius: 5,
             fill: new Fill({
               color: fillColor
             })
-          }),
-          text: new Text({
-            text: name,
-            font: '12px Arial',
-            fill: new Fill({
-              color: '#000000'
-            }),
-            stroke: new Stroke({
-              color: '#ffffff',
-              width: 3
-            }),
-            offsetY: -15
           })
         })
       } else if (geometryType === 'LineString') {
@@ -203,18 +198,6 @@ export default {
           stroke: new Stroke({
             color: strokeColor,
             width: properties['stroke-width'] || 3
-          }),
-          text: new Text({
-            text: name,
-            font: '12px Arial',
-            fill: new Fill({
-              color: '#000000'
-            }),
-            stroke: new Stroke({
-              color: '#ffffff',
-              width: 3
-            }),
-            offsetY: -10
           })
         })
       } else if (geometryType === 'Polygon') {
@@ -239,7 +222,64 @@ export default {
           }),
           fill: new Fill({
             color: fillColor
-          }),
+          })
+        })
+      }
+
+      // Default style for unknown geometry types
+      return new Style({
+        stroke: new Stroke({
+          color: '#ff0000',
+          width: 2
+        }),
+        fill: new Fill({
+          color: 'rgba(255, 0, 0, 0.3)'
+        })
+      })
+    },
+
+    getLabelStyle(feature) {
+      const properties = feature.get('properties') || {}
+      const geometryType = feature.getGeometry().getType()
+      const name = properties.name || ''
+
+      // Only return label style if feature has a name
+      if (!name) {
+        return null
+      }
+
+      if (geometryType === 'Point') {
+        return new Style({
+          text: new Text({
+            text: name,
+            font: '12px Arial',
+            fill: new Fill({
+              color: '#000000'
+            }),
+            stroke: new Stroke({
+              color: '#ffffff',
+              width: 3
+            }),
+            offsetY: -15
+          })
+        })
+      } else if (geometryType === 'LineString') {
+        return new Style({
+          text: new Text({
+            text: name,
+            font: '12px Arial',
+            fill: new Fill({
+              color: '#000000'
+            }),
+            stroke: new Stroke({
+              color: '#ffffff',
+              width: 3
+            }),
+            offsetY: -10
+          })
+        })
+      } else if (geometryType === 'Polygon') {
+        return new Style({
           text: new Text({
             text: name,
             font: '12px Arial',
@@ -255,15 +295,8 @@ export default {
         })
       }
 
-      // Default style for unknown geometry types
+      // Default label style
       return new Style({
-        stroke: new Stroke({
-          color: '#ff0000',
-          width: 2
-        }),
-        fill: new Fill({
-          color: 'rgba(255, 0, 0, 0.3)'
-        }),
         text: new Text({
           text: name,
           font: '12px Arial',
@@ -365,6 +398,7 @@ export default {
       }
       this.vectorSource = null
       this.vectorLayer = null
+      this.labelLayer = null
     }
   },
 
