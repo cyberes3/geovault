@@ -8,7 +8,6 @@ import magic
 from django.core.files.uploadedfile import UploadedFile
 
 from geo_lib.processing.file_types import get_file_type_by_extension, validate_file_signature, validate_mime_type, validate_file_size, get_max_file_size, FileType, get_allowed_elements
-from geo_lib.security import _logger
 from geo_lib.security.exceptions import FileValidationError, SecurityError
 
 
@@ -65,10 +64,8 @@ class SecureFileValidator:
             return True, "File validation successful"
 
         except (SecurityError, FileValidationError) as e:
-            _logger.warning(f"File validation failed for {uploaded_file.name}: {str(e)}")
             return False, str(e)
-        except:
-            # logger.error(f"File validation error for {uploaded_file.name}: {traceback.format_exc()}")
+        except Exception as e:
             return False, "Invalid file format"
 
     def _validate_basic_properties(self, uploaded_file: UploadedFile):
@@ -204,7 +201,9 @@ class SecureFileValidator:
             raise SecurityError("The KMZ file appears to be corrupted or invalid. Please try re-saving the file or use a different KMZ file.")
         except UnicodeDecodeError:
             raise SecurityError("The file contains invalid text encoding. Please save the file with UTF-8 encoding and try again.")
-        except:
+        except(SecurityError, FileValidationError):
+            raise
+        except Exception as e:
             raise SecurityError("KMZ file validation failed")
 
     def _validate_kml_content(self, uploaded_file: UploadedFile):
@@ -218,7 +217,9 @@ class SecureFileValidator:
 
         except UnicodeDecodeError:
             raise SecurityError("The file contains invalid text encoding. Please save the file with UTF-8 encoding and try again.")
-        except:
+        except(SecurityError, FileValidationError):
+            raise
+        except Exception as e:
             raise SecurityError("KML file validation failed")
 
     def _validate_gpx_content(self, uploaded_file: UploadedFile):
@@ -232,14 +233,16 @@ class SecureFileValidator:
 
         except UnicodeDecodeError:
             raise SecurityError("The file contains invalid text encoding. Please save the file with UTF-8 encoding and try again.")
-        except:
+        except(SecurityError, FileValidationError):
+            raise
+        except Exception as e:
             raise SecurityError("GPX file validation failed")
 
     def _validate_kml_structure(self, kml_content: str):
         """Validate KML XML structure and check for dangerous content."""
         try:
             # Parse XML with secure settings
-            root = self.secure_xml_parse(kml_content)
+            root = self._secure_xml_parse(kml_content)
 
             # Check for dangerous elements
             self._check_dangerous_elements(root, FileType.KML)
@@ -253,14 +256,16 @@ class SecureFileValidator:
 
         except ET.ParseError:
             raise FileValidationError("The KML file contains invalid XML structure. Please check the file format and try again.")
-        except:
+        except(SecurityError, FileValidationError):
+            raise
+        except Exception as e:
             raise SecurityError("KML file structure validation failed")
 
     def _validate_gpx_structure(self, gpx_content: str):
         """Validate GPX XML structure and check for dangerous content."""
         try:
             # Parse XML with secure settings
-            root = self.secure_xml_parse(gpx_content)
+            root = self._secure_xml_parse(gpx_content)
 
             # Check for dangerous elements
             self._check_dangerous_elements(root, FileType.GPX)
@@ -274,10 +279,12 @@ class SecureFileValidator:
 
         except ET.ParseError:
             raise FileValidationError("The GPX file contains invalid XML structure. Please check the file format and try again.")
-        except:
+        except(SecurityError, FileValidationError):
+            raise
+        except Exception as e:
             raise SecurityError("GPX file structure validation failed")
 
-    def secure_xml_parse(self, xml_content: str) -> ET.Element:
+    def _secure_xml_parse(self, xml_content: str) -> ET.Element:
         """Parse XML with security measures against XXE attacks."""
         # Create a secure parser that disables external entities
         parser = ET.XMLParser()
@@ -295,7 +302,9 @@ class SecureFileValidator:
         try:
             root = ET.fromstring(xml_content, parser=parser)
             return root
-        except ET.ParseError:
+        except ET.ParseError as e:
+            # Log internal error for debugging
+            logger.warning(f"XML parse error: {str(e)}")
             raise FileValidationError("The file contains invalid XML structure. Please check the file format and try again.")
 
     def _check_dangerous_elements(self, root: ET.Element, file_type: FileType = None):
@@ -315,7 +324,7 @@ class SecureFileValidator:
             # Check for dangerous elements
             if tag_name in self.DANGEROUS_ELEMENTS:
                 # Log internal details for debugging, but keep user message generic
-                _logger.warning(f"Dangerous element detected: {tag_name}")
+                logger.warning(f"Dangerous element detected: {tag_name}")
                 raise SecurityError("The file contains content that cannot be processed safely. Please remove any scripts, forms, or other potentially unsafe elements and try again.")
 
     def _check_dangerous_attributes(self, root: ET.Element):
@@ -324,7 +333,7 @@ class SecureFileValidator:
             for attr_name in elem.attrib:
                 if any(dangerous in attr_name.lower() for dangerous in self.DANGEROUS_ATTRIBUTES):
                     # Log internal details for debugging, but keep user message generic
-                    _logger.warning(f"Dangerous attribute detected: {attr_name}")
+                    logger.warning(f"Dangerous attribute detected: {attr_name}")
                     raise SecurityError("The file contains attributes that cannot be processed safely. Please remove any event handlers or other potentially unsafe attributes and try again.")
 
     def _is_valid_kml(self, root: ET.Element) -> bool:
@@ -356,3 +365,174 @@ class SecureFileValidator:
         )
 
         return has_required
+
+
+def validate_kml_content(kml_content: str) -> bool:
+    """
+    Validate KML content by checking for dangerous elements and attributes.
+    Does NOT modify the content - only validates and rejects if dangerous.
+
+    Args:
+        kml_content: Raw KML content string
+
+    Returns:
+        True if content is safe, False if dangerous elements found
+
+    Raises:
+        SecurityError: If dangerous content is found
+    """
+    try:
+        # Parse with secure settings
+        validator = SecureFileValidator()
+        root = validator._secure_xml_parse(kml_content)
+
+        # Check for dangerous elements
+        for elem in root.iter():
+            # Only check elements in the default namespace (no namespace prefix)
+            # Namespaced elements like {http://www.w3.org/2005/atom}link are generally safe
+            if '}' not in elem.tag:
+                local_name = elem.tag.lower()
+
+                # Check for dangerous elements only in default namespace
+                if local_name in [dangerous.lower() for dangerous in validator.DANGEROUS_ELEMENTS]:
+                    raise SecurityError(f"Dangerous element found: {local_name}")
+
+                # Check for HTML-specific dangerous elements in default namespace
+                if local_name in [dangerous.lower() for dangerous in validator.HTML_DANGEROUS_ELEMENTS]:
+                    raise SecurityError(f"HTML dangerous element found: {local_name}")
+
+        # Check for dangerous attributes
+        for elem in root.iter():
+            for attr_name in elem.attrib:
+                # Extract local name from namespaced attributes
+                if '}' in attr_name:
+                    local_attr_name = attr_name.split('}')[-1].lower()
+                else:
+                    local_attr_name = attr_name.lower()
+
+                # Only check for exact matches of dangerous attributes
+                if local_attr_name in [dangerous.lower() for dangerous in validator.DANGEROUS_ATTRIBUTES]:
+                    raise SecurityError(f"Dangerous attribute found: {local_attr_name}")
+
+        return True
+
+    except SecurityError:
+        # Re-raise security errors
+        raise
+    except Exception as e:
+        logger.error(f"KML validation failed: {traceback.format_exc()}")
+        raise SecurityError(f"Invalid KML content: {str(e)}")
+
+
+def basic_file_security_check(uploaded_file: UploadedFile) -> Tuple[bool, str]:
+    """
+    Perform basic security checks for quick rejection before async processing.
+    Only checks that can be done quickly without reading the entire file.
+
+    Checks performed:
+    - File size limit (before reading full file)
+    - File extension validation
+    - Empty file check
+    - Basic file signature check (first few bytes)
+
+    Args:
+        uploaded_file: Django UploadedFile object
+
+    Returns:
+        Tuple of (is_valid, error_message)
+    """
+    try:
+        # Check for empty file
+        if uploaded_file.size == 0:
+            return False, "The file is empty. Please select a valid file."
+
+        # Check filename
+        if not uploaded_file.name:
+            return False, "Invalid filename. Please rename the file and try again."
+
+        # Check file extension
+        try:
+            _, ext = os.path.splitext(uploaded_file.name)
+            file_type = get_file_type_by_extension(ext)
+        except ValueError:
+            return False, "Only KML, KMZ, and GPX files are supported"
+
+        # Check file size limit (quick check before reading full file)
+        try:
+            if not validate_file_size(uploaded_file.size, file_type):
+                max_size_mb = get_max_file_size(file_type) / (1024 * 1024)
+                file_size_mb = uploaded_file.size / (1024 * 1024)
+                return False, f"File too large: {file_size_mb:.1f}MB exceeds {max_size_mb:.0f}MB limit"
+        except ValueError:
+            return False, "Invalid file type"
+
+        # Basic file signature check (read only first 1024 bytes)
+        file_data = uploaded_file.read(1024)
+        uploaded_file.seek(0)  # Reset file pointer
+
+        try:
+            if not validate_file_signature(file_data, file_type):
+                if file_type.value.upper() == 'KMZ':
+                    return False, "This file does not appear to be a valid KMZ file. Please ensure it's a properly formatted KMZ archive."
+                elif file_type.value.upper() == 'KML':
+                    return False, "This file does not appear to be a valid KML file. Please ensure it's a properly formatted KML document."
+                elif file_type.value.upper() == 'GPX':
+                    return False, "This file does not appear to be a valid GPX file. Please ensure it's a properly formatted GPX document."
+                else:
+                    return False, "File format validation failed. Please ensure the file is a valid KML, KMZ, or GPX file."
+        except ValueError:
+            return False, "File format is not recognized"
+
+        return True, "Basic security check passed"
+
+    except Exception as e:
+        logger.error(f"Basic security check error for {uploaded_file.name}: {traceback.format_exc()}")
+        return False, "File validation error"
+
+
+def secure_kmz_to_kml(kmz_data: Union[str, bytes]) -> str:
+    """
+    Securely convert KMZ to KML with protection against zip slip attacks.
+
+    Args:
+        kmz_data: KMZ file data as bytes or string
+
+    Returns:
+        KML content as string
+
+    Raises:
+        SecurityError: If security validation fails
+        FileValidationError: If file structure is invalid
+    """
+    if isinstance(kmz_data, str):
+        kmz_data = kmz_data.encode('utf-8')
+
+    try:
+        with zipfile.ZipFile(io.BytesIO(kmz_data), 'r') as kmz:
+            # Security check: validate all file paths
+            for file_info in kmz.infolist():
+                if os.path.isabs(file_info.filename) or ".." in file_info.filename:
+                    raise SecurityError("Invalid file path in KMZ archive")
+
+            # Find KML files
+            kml_files = [name for name in kmz.namelist() if name.lower().endswith('.kml')]
+            if not kml_files:
+                raise FileValidationError("No KML file found in KMZ archive")
+
+            # Use doc.kml if available, otherwise first .kml file
+            kml_file = 'doc.kml' if 'doc.kml' in kml_files else kml_files[0]
+
+            # Read and decode KML content
+            kml_content = kmz.read(kml_file).decode('utf-8')
+
+            # Validate the content (don't modify it)
+            validate_kml_content(kml_content)
+
+            return kml_content
+
+    except zipfile.BadZipFile:
+        raise SecurityError("Invalid ZIP file structure")
+    except(SecurityError, FileValidationError):
+        raise
+    except Exception as e:
+        raise SecurityError(f"KMZ to KML conversion failed: {str(e)}")
