@@ -963,18 +963,11 @@ export default {
             this.processingMessage = data.job_status.message || 'Processing...'
 
             if (data.job_status.status === 'completed') {
-              // Get the import queue ID from the job status
-              if (data.job_status.import_queue_id) {
-                this.importQueueId = data.job_status.import_queue_id
-                clearInterval(this.pollingInterval)
-                this.pollingInterval = null
-                await this.fetchFeatures()
-              } else {
-                // Fallback: try to find it via polling
-                await this.fetchImportQueueData()
-                clearInterval(this.pollingInterval)
-                this.pollingInterval = null
-              }
+              // Get the import table item ID from the job status
+              this.importQueueId = data.job_status.import_queue_id
+              clearInterval(this.pollingInterval)
+              this.pollingInterval = null
+              await this.fetchFeatures()
             } else if (data.job_status.status === 'failed') {
               this.errorMessage = data.job_status.error_message || PROCESSING_MESSAGES.PROCESSING_FAILED_DEFAULT
               this.processing = false
@@ -984,42 +977,6 @@ export default {
           }
         } catch (error) {
           console.error('Error polling status:', error)
-        }
-      }, 1000)
-    },
-    async fetchImportQueueData() {
-      // Fallback: Poll the job status to get import_queue_id
-      // This should rarely be needed as the job result should contain it
-      let attempts = 0
-      const maxAttempts = 10
-
-      const pollForQueueItem = setInterval(async () => {
-        attempts++
-        if (attempts > maxAttempts) {
-          clearInterval(pollForQueueItem)
-          this.errorMessage = 'Timeout waiting for import queue item'
-          this.processing = false
-          return
-        }
-
-        try {
-          if (!this.jobId) {
-            clearInterval(pollForQueueItem)
-            return
-          }
-
-          const response = await fetch(`${APIHOST}/api/item/import/status/${this.jobId}`, {
-            credentials: 'include'
-          })
-          const data = await response.json()
-
-          if (response.ok && data.job_status && data.job_status.import_queue_id) {
-            this.importQueueId = data.job_status.import_queue_id
-            clearInterval(pollForQueueItem)
-            await this.fetchFeatures()
-          }
-        } catch (error) {
-          console.error('Error polling for import queue:', error)
         }
       }, 1000)
     },
@@ -1097,7 +1054,7 @@ export default {
       // Close dialog immediately
       this.handleClose()
 
-      // Delete the ImportQueue row in the background (fire-and-forget)
+      // Delete the import table item in the background (fire-and-forget)
       if (this.importQueueId) {
         fetch(`${APIHOST}/api/item/import/delete/${this.importQueueId}`, {
           method: 'DELETE',
@@ -1106,7 +1063,7 @@ export default {
           },
           credentials: 'include'
         }).catch(error => {
-          console.error('Error deleting import queue item:', error)
+          console.error('Error deleting import table item:', error)
         })
       }
     },

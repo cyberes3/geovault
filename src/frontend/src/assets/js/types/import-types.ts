@@ -1,4 +1,4 @@
-export class ImportQueueItem {
+export class ImportTableItem {
     id: number;
     original_filename: string;
     raw_file_hash: string;

@@ -103,15 +103,15 @@
                     <p class="text-sm mt-2">The system checks for duplicates in two places:</p>
                     <ul class="list-disc list-inside ml-4 mt-1 text-sm">
                       <li><strong>Your Feature Library:</strong> Features already imported and visible on your map</li>
-                      <li><strong>Your Import Queue:</strong> Files uploaded before the current one to prevent importing the same feature multiple times</li>
+                      <li><strong>Your Import Table:</strong> Files uploaded before the current one to prevent importing the same feature multiple times</li>
                     </ul>
                     <p class="text-sm mt-2">Duplicate features are automatically marked and blocked. You can review them during the review process, and geometry duplicates (same location) can be restored if you want to import them anyway.</p>
                   </div>
 
                   <div>
-                    <h5 class="text-base font-semibold text-gray-900 mb-2">7. Storage in Import Queue</h5>
+                    <h5 class="text-base font-semibold text-gray-900 mb-2">7. Storage in Import Table</h5>
                     <p class="text-sm">
-                      Processed features are stored in your import queue, ready for review and final import. You can
+                      Processed features are stored in your import table, ready for review and final import. You can
                       see all uploaded files in the "Ready to Import" section below.
                     </p>
                   </div>
@@ -170,7 +170,7 @@
 
                 <div class="space-y-4">
                   <div>
-                    <h5 class="text-base font-semibold text-gray-900 mb-2">Accessing the Import Queue</h5>
+                    <h5 class="text-base font-semibold text-gray-900 mb-2">Accessing the Import Table</h5>
                     <p class="text-sm">All uploaded files appear in the "Ready to Import" section below. Each file shows:</p>
                     <ul class="list-disc list-inside ml-4 mt-1 text-sm">
                       <li>Original filename</li>
@@ -182,7 +182,7 @@
 
                   <div>
                     <h5 class="text-base font-semibold text-gray-900 mb-2">Reviewing Features</h5>
-                    <p class="text-sm">Click on any file in the queue to open the detailed review page where you can:</p>
+                    <p class="text-sm">Click on any file in the table to open the detailed review page where you can:</p>
                     <ul class="list-disc list-inside ml-4 mt-1 text-sm">
                       <li>View all features on a map</li>
                       <li>Edit feature properties (name, description, tags)</li>
@@ -204,7 +204,7 @@
 
                   <div>
                     <h5 class="text-base font-semibold text-gray-900 mb-2">Final Import</h5>
-                    <p class="text-sm">When you're ready, click "Import" to move features from the import queue into your permanent feature store. Once imported:</p>
+                    <p class="text-sm">When you're ready, click "Import" to move features from the import table into your permanent feature store. Once imported:</p>
                     <ul class="list-disc list-inside ml-4 mt-1 text-sm">
                       <li>Features become part of your permanent library</li>
                       <li>They appear in your feature store and can be viewed on maps</li>
@@ -223,7 +223,7 @@
                   <li>Files with identical content or filenames are automatically detected as duplicates</li>
                   <li>Each file can only be imported once</li>
                   <li>Large files may take longer to process - you can monitor progress in real-time</li>
-                  <li>You can delete files from the import queue if you decide not to import them</li>
+                  <li>You can delete files from the import table if you decide not to import them</li>
                   <li>Processing logs are available for each file to help troubleshoot any issues</li>
                 </ul>
               </div>

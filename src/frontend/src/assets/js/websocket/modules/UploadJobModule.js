@@ -1,6 +1,6 @@
 /**
  * Process Job WebSocket module.
- * Handles all process job related realtime events for the import queue.
+ * Handles all process job related realtime events for the import table.
  */
 
 import {BaseModule} from './BaseModule.js';
@@ -24,13 +24,13 @@ export class ProcessJobModule extends BaseModule {
 
         // Handle process job completion
         this.subscribe('completed', (data) => {
-            // Request refresh of import queue to get updated data
+            // Request refresh of import table to get updated data
             this.socket.requestRefresh('import_queue');
         });
 
         // Handle process job failure
         this.subscribe('failed', (data) => {
-            // Request refresh of import queue to get updated data
+            // Request refresh of import table to get updated data
             this.socket.requestRefresh('import_queue');
         });
     }
@@ -49,7 +49,7 @@ export class ProcessJobModule extends BaseModule {
         if (data.status === 'completed') {
             updates.processing = false;
             updates.processing_failed = false;
-            // Request a refresh of import queue to get the updated item with correct feature count
+            // Request a refresh of import table to get the updated item with correct feature count
             this.socket.requestRefresh('import_queue');
             return;
         }
@@ -60,7 +60,7 @@ export class ProcessJobModule extends BaseModule {
         }
 
         // Update the specific item in the store using import_queue_id
-        this.store.dispatch('updateImportQueueItem', {
+        this.store.dispatch('updateImportTableItem', {
             id: data.import_queue_id,
             updates: updates
         });

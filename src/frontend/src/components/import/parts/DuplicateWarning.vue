@@ -80,9 +80,9 @@ export default {
         case 'feature_store_geometry':
           return 'Same Location as Feature in Library'
         case 'cross_queue_hash':
-          return 'Exact Duplicate in Import Queue (Blocked)'
+          return 'Exact Duplicate in Import Table (Blocked)'
         case 'cross_queue_geometry':
-          return 'Same Location as Feature in Import Queue'
+          return 'Same Location as Feature in Import Table'
         default:
           return ''
       }
@@ -94,9 +94,9 @@ export default {
         case 'feature_store_geometry':
           return 'This feature has the same location as an existing feature in your feature library. It is skipped by default, but you can restore it if needed.'
         case 'cross_queue_hash':
-          return 'This feature is identical to one in another item in your import queue and will be automatically blocked during import.'
+          return 'This feature is identical to one in another item in your import table and will be automatically blocked during import.'
         case 'cross_queue_geometry':
-          return 'This feature has the same location as a feature in another item in your import queue. It is skipped by default, but you can restore it if needed.'
+          return 'This feature has the same location as a feature in another item in your import table. It is skipped by default, but you can restore it if needed.'
         default:
           return ''
       }

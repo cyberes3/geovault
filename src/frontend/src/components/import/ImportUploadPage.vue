@@ -16,8 +16,8 @@
           <h3 class="text-sm font-medium text-blue-700">How to Upload and Import</h3>
           <div class="mt-2 text-sm text-blue-700">
             <ol class="list-decimal list-inside space-y-2">
-              <li><strong>Upload files:</strong> Select KML, KMZ, or GPX files (max 5MB each) and click "Upload". Files are processed and added to your import queue below.</li>
-              <li><strong>Import from queue:</strong> Go to the "Ready to Import" section and click on a file to review/edit features, or use bulk import to add multiple files to your feature store at once.</li>
+              <li><strong>Upload files:</strong> Select KML, KMZ, or GPX files (max 5MB each) and click "Upload". Files are processed and added to your import table below.</li>
+              <li><strong>Import from table:</strong> Go to the "Ready to Import" section and click on a file to review/edit features, or use bulk import to add multiple files to your feature store at once.</li>
             </ol>
             <p class="mt-3 text-xs text-blue-500">Note: Each file can only be imported once. Files with identical content are detected as duplicates.</p>
             <button
@@ -207,7 +207,7 @@
         <h2 class="text-lg font-semibold text-gray-900">Ready to Import</h2>
         <!--        <span v-if="loadingQueueList" class="text-sm text-gray-500 italic">Loading...</span>-->
       </div>
-      <Importqueue/>
+      <ImportTable/>
     </div>
 
     <!-- Help Modal -->
@@ -219,8 +219,8 @@
 import {mapState} from "vuex"
 import axios from "axios";
 import {capitalizeFirstLetter} from "@/assets/js/string.js";
-import {ImportQueueItem} from "@/assets/js/types/import-types"
-import ImportQueue from "@/components/import/parts/ImportQueue.vue";
+import {ImportTableItem} from "@/assets/js/types/import-types"
+import ImportTable from "@/components/import/parts/ImportTable.vue";
 import ImportHelpModal from "@/components/import/parts/ImportHelpModal.vue";
 import {getCookie} from "@/assets/js/auth.js";
 import {SECURITY_CONFIG} from "@/config.js";
@@ -237,7 +237,7 @@ import {
 
 export default {
   computed: {
-    ...mapState(["userInfo", "importQueue"]),
+    ...mapState(["userInfo", "importTable"]),
     SECURITY_CONFIG() {
       return SECURITY_CONFIG
     },
@@ -351,7 +351,7 @@ export default {
     }
   },
   components: {
-    Importqueue: ImportQueue,
+    ImportTable: ImportTable,
     ImportHelpModal,
     InformationCircleIcon,
     ArrowUpTrayIcon,

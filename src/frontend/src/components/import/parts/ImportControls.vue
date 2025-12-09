@@ -22,7 +22,7 @@
           <ClipboardDocumentIcon class="mx-auto h-12 w-12 text-purple-400" />
         </div>
         <h3 class="text-lg font-medium text-gray-900 mb-2">Duplicate File in Queue</h3>
-        <p class="text-gray-600">This file is a duplicate of <span class="font-medium text-purple-700">{{ fileDuplicate.originalFilename }}</span>, which is already waiting in the import queue.</p>
+        <p class="text-gray-600">This file is a duplicate of <span class="font-medium text-purple-700">{{ fileDuplicate.originalFilename }}</span>, which is already waiting in the import table.</p>
         <p class="text-gray-500 text-sm mt-2">No actions can be performed on this duplicate file.</p>
       </div>
     </div>

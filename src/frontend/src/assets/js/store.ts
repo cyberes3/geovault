@@ -2,8 +2,8 @@ import { createStore, Commit } from 'vuex'
 import { UserInfo } from './types/store-types'
 import { getUserInfo, getCookie } from './auth'
 
-// Define import queue item interface
-interface ImportQueueItem {
+// Define import table item interface
+interface ImportTableItem {
     id: number
     filename: string
     status: string
@@ -34,14 +34,14 @@ interface State {
     userInfo: UserInfo | null
     userSettings: UserSettings | null
     hiddenFeatures: HiddenFeature[]
-    importQueue: ImportQueueItem[]
+    importTable: ImportTableItem[]
     importHistory: ImportHistoryItem[]
     importHistoryLoaded: boolean
-    importQueueRefreshTrigger: boolean
+    importTableRefreshTrigger: boolean
     websocketConnected: boolean
     websocketReconnectAttempts: number
     realtimeData: {
-        importQueue: ImportQueueItem[]
+        importTable: ImportTableItem[]
         importHistory: ImportHistoryItem[]
         [key: string]: any
     }
@@ -54,14 +54,14 @@ export default createStore<State>({
         userInfo: null,
         userSettings: null,
         hiddenFeatures: [],
-        importQueue: [],
+        importTable: [],
         importHistory: [],
         importHistoryLoaded: false,
-        importQueueRefreshTrigger: false,
+        importTableRefreshTrigger: false,
         websocketConnected: false,
         websocketReconnectAttempts: 0,
         realtimeData: {
-            importQueue: [],
+            importTable: [],
             importHistory: []
         },
     }, 
@@ -108,35 +108,35 @@ export default createStore<State>({
             const id = String(featureId)
             state.hiddenFeatures = state.hiddenFeatures.filter(f => f.id !== id)
         },
-        importQueue(state: State, payload: ImportQueueItem[]) {
-            state.importQueue = payload
+        importTable(state: State, payload: ImportTableItem[]) {
+            state.importTable = payload
         },
-        setImportQueue(state: State, importQueue: ImportQueueItem[]) {
-            state.importQueue = importQueue;
+        setImportTable(state: State, importTable: ImportTableItem[]) {
+            state.importTable = importTable;
         },
-        triggerImportQueueRefresh(state: State) {
-            state.importQueueRefreshTrigger = !state.importQueueRefreshTrigger;
+        triggerImportTableRefresh(state: State) {
+            state.importTableRefreshTrigger = !state.importTableRefreshTrigger;
         },
-        addImportQueueItem(state: State, item: ImportQueueItem) {
+        addImportTableItem(state: State, item: ImportTableItem) {
             // Check if item already exists to avoid duplicates
-            const existingIndex = state.importQueue.findIndex(existing => existing.id === item.id);
+            const existingIndex = state.importTable.findIndex(existing => existing.id === item.id);
             if (existingIndex === -1) {
-                state.importQueue.unshift(item); // Add to beginning
+                state.importTable.unshift(item); // Add to beginning
             }
         },
-        removeImportQueueItem(state: State, itemId: number) {
-            const index = state.importQueue.findIndex(item => item.id === itemId);
+        removeImportTableItem(state: State, itemId: number) {
+            const index = state.importTable.findIndex(item => item.id === itemId);
             if (index > -1) {
-                state.importQueue.splice(index, 1);
+                state.importTable.splice(index, 1);
             }
         },
-        removeImportQueueItems(state: State, itemIds: number[]) {
-            state.importQueue = state.importQueue.filter(item => !itemIds.includes(item.id));
+        removeImportTableItems(state: State, itemIds: number[]) {
+            state.importTable = state.importTable.filter(item => !itemIds.includes(item.id));
         },
-        updateImportQueueItem(state: State, { id, updates }: { id: number, updates: Partial<ImportQueueItem> }) {
-            const index = state.importQueue.findIndex(item => item.id === id);
+        updateImportTableItem(state: State, { id, updates }: { id: number, updates: Partial<ImportTableItem> }) {
+            const index = state.importTable.findIndex(item => item.id === id);
             if (index > -1) {
-                state.importQueue[index] = { ...state.importQueue[index], ...updates };
+                state.importTable[index] = { ...state.importTable[index], ...updates };
             }
         },
         setWebSocketConnected(state: State, connected: boolean) {
@@ -171,20 +171,20 @@ export default createStore<State>({
     getters: {
     },
     actions: {
-        refreshImportQueue({ commit }: { commit: Commit }) {
-            commit('triggerImportQueueRefresh');
+        refreshImportTable({ commit }: { commit: Commit }) {
+            commit('triggerImportTableRefresh');
         },
-        addImportQueueItem({ commit }: { commit: Commit }, item: ImportQueueItem) {
-            commit('addImportQueueItem', item);
+        addImportTableItem({ commit }: { commit: Commit }, item: ImportTableItem) {
+            commit('addImportTableItem', item);
         },
-        removeImportQueueItem({ commit }: { commit: Commit }, itemId: number) {
-            commit('removeImportQueueItem', itemId);
+        removeImportTableItem({ commit }: { commit: Commit }, itemId: number) {
+            commit('removeImportTableItem', itemId);
         },
-        removeImportQueueItems({ commit }: { commit: Commit }, itemIds: number[]) {
-            commit('removeImportQueueItems', itemIds);
+        removeImportTableItems({ commit }: { commit: Commit }, itemIds: number[]) {
+            commit('removeImportTableItems', itemIds);
         },
-        updateImportQueueItem({ commit }: { commit: Commit }, payload: { id: number, updates: Partial<ImportQueueItem> }) {
-            commit('updateImportQueueItem', payload);
+        updateImportTableItem({ commit }: { commit: Commit }, payload: { id: number, updates: Partial<ImportTableItem> }) {
+            commit('updateImportTableItem', payload);
         },
         setWebSocketConnected({ commit }: { commit: Commit }, connected: boolean) {
             commit('setWebSocketConnected', connected);

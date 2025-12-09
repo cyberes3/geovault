@@ -504,7 +504,7 @@
 
     <div class="hidden">
       <!-- Load the queue to populate it. -->
-      <Importqueue/>
+      <ImportTable/>
     </div>
 
     <!-- Map Preview Dialog -->
@@ -548,7 +548,7 @@ import axios from "axios";
 import moment from "moment";
 import {capitalizeFirstLetter} from "@/assets/js/string.js";
 import {PROCESSING_MESSAGES} from "@/assets/js/constants/processing-messages.js";
-import ImportQueue from "@/components/import/parts/ImportQueue.vue";
+import ImportTable from "@/components/import/parts/ImportTable.vue";
 import {GeoFeatureTypeStrings} from "@/assets/js/types/geofeature-strings";
 import {GeoPoint, GeoLineString, GeoPolygon} from "@/assets/js/types/geofeature-types";
 import {getCookie} from "@/assets/js/auth.js";
@@ -679,7 +679,7 @@ export default {
   components: {
     Loader,
     ToggleButton,
-    Importqueue: ImportQueue,
+    ImportTable: ImportTable,
     MapPreviewDialog,
     FeatureMapDialog,
     LogViewModal,
@@ -917,7 +917,7 @@ export default {
 
       // Handle 404 - item not found
       if (event.code === 4004) {
-        console.log('Item not found (404) - redirecting to import queue');
+        console.log('Item not found (404) - redirecting to import table');
         this.loading.redirecting = true;
         this.$router.replace('/import');
         return;
@@ -1049,8 +1049,8 @@ export default {
         this.lockButtons = false;
         this.loading.importing = false;
 
-        // Refresh the import queue
-        this.$store.dispatch('refreshImportQueue');
+        // Refresh the import table
+        this.$store.dispatch('refreshImportTable');
 
         // Remove the beforeunload handler before redirecting
         if (this.beforeUnloadHandler) {
@@ -1184,7 +1184,7 @@ export default {
     handleError(data) {
       // Handle error messages from WebSocket
       if (data.code === 404) {
-        console.log('Item not found (404) - redirecting to import queue');
+        console.log('Item not found (404) - redirecting to import table');
         this.loading.redirecting = true;
         this.$router.replace('/import');
       } else if (data.code === 409 && data.file_duplicate && data.file_duplicate.status === 'duplicate_in_queue') {
@@ -1632,7 +1632,7 @@ export default {
           properties.geojson_hash = feature.id;
         }
         // Note: If neither properties.geojson_hash nor feature.id exists, the backend will skip this feature
-        // This should not happen for valid features from the import queue
+        // This should not happen for valid features from the import table
       }
       // Extract only the allowed fields: geojson_hash, name, description, created, tags
       // geojson_hash is required, others are optional

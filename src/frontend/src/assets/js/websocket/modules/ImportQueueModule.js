@@ -1,27 +1,27 @@
 /**
- * Import Queue WebSocket module.
- * Handles all import queue table related realtime events.
+ * Import Table WebSocket module.
+ * Handles all import table related realtime events.
  */
 
 import {BaseModule} from './BaseModule.js';
 
-export class ImportQueueModule extends BaseModule {
+export class ImportTableModule extends BaseModule {
     constructor(store) {
         super(store);
         this.moduleName = 'import_queue';
     }
 
     /**
-     * Initialize the import queue module
+     * Initialize the import table module
      */
     initialize() {
         super.initialize();
 
         // Handle initial state
         this.subscribe('initial_state', (data) => {
-            this.store.dispatch('setRealtimeModuleData', {module: 'importQueue', data});
-            // Also update the legacy importQueue state for backward compatibility
-            this.store.commit('setImportQueue', data);
+            this.store.dispatch('setRealtimeModuleData', {module: 'importTable', data});
+            // Also update the importTable state
+            this.store.commit('setImportTable', data);
         });
 
         // Handle new item added
@@ -32,17 +32,17 @@ export class ImportQueueModule extends BaseModule {
 
         // Handle item deleted
         this.subscribe('item_deleted', (data) => {
-            this.store.dispatch('removeImportQueueItem', data.id);
+            this.store.dispatch('removeImportTableItem', data.id);
         });
 
         // Handle items deleted (bulk)
         this.subscribe('items_deleted', (data) => {
-            this.store.dispatch('removeImportQueueItems', data.ids);
+            this.store.dispatch('removeImportTableItems', data.ids);
         });
 
         // Handle item imported
         this.subscribe('item_imported', (data) => {
-            this.store.dispatch('updateImportQueueItem', {
+            this.store.dispatch('updateImportTableItem', {
                 id: data.id,
                 updates: {imported: true}
             });
@@ -59,7 +59,7 @@ export class ImportQueueModule extends BaseModule {
             if (data.status === 'completed') {
                 updates.processing = false;
                 updates.processing_failed = false;
-                // Request a refresh of import queue to get the updated item with correct feature count
+                // Request a refresh of import table to get the updated item with correct feature count
                 this.requestRefresh();
                 return;
             }
@@ -70,7 +70,7 @@ export class ImportQueueModule extends BaseModule {
             }
 
             // Update the specific item in the store using id
-            this.store.dispatch('updateImportQueueItem', {
+            this.store.dispatch('updateImportTableItem', {
                 id: data.id,
                 updates: updates
             });
@@ -78,7 +78,7 @@ export class ImportQueueModule extends BaseModule {
     }
 
     /**
-     * Cleanup the import queue module
+     * Cleanup the import table module
      */
     cleanup() {
         super.cleanup();

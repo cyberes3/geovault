@@ -1,13 +1,13 @@
 <template>
   <div class="overflow-hidden">
     <!-- Help text for clickable items -->
-    <div v-if="filteredImportQueue.length > 0 && !combinedLoading" class="mb-3">
+    <div v-if="filteredImportTable.length > 0 && !combinedLoading" class="mb-3">
       <p class="text-sm text-gray-600">
         Files that have been uploaded and are ready for processing. Click on any item in the table below to open the import processing page where you can review and edit features before importing.
       </p>
     </div>
     <!-- Bulk Import Controls -->
-    <div v-if="filteredImportQueue.length > 0 && !combinedLoading" class="mb-4">
+    <div v-if="filteredImportTable.length > 0 && !combinedLoading" class="mb-4">
       <div class="flex flex-col sm:flex-row sm:items-center space-y-2 sm:space-y-0 sm:space-x-3">
         <button
           @click="bulkImport"
@@ -39,7 +39,7 @@
           <input
             type="checkbox"
             ref="selectAllCheckbox"
-            :checked="selectedItems.size === filteredImportQueue.length && filteredImportQueue.length > 0"
+            :checked="selectedItems.size === filteredImportTable.length && filteredImportTable.length > 0"
             @change="handleSelectAllToggle($event.target.checked)"
             class="checkbox-custom"
           />
@@ -87,7 +87,7 @@
         </div>
 
         <!-- Empty state when no files are uploaded -->
-        <div v-if="!combinedLoading && filteredImportQueue.length === 0 && hasInitiallyLoaded" class="py-12 text-center">
+        <div v-if="!combinedLoading && filteredImportTable.length === 0 && hasInitiallyLoaded" class="py-12 text-center">
           <div class="flex flex-col items-center">
             <h3 class="text-lg font-medium text-gray-900 mb-2">No files uploaded yet</h3>
             <p class="text-gray-500 mb-6 max-w-sm">
@@ -98,7 +98,7 @@
 
         <!-- Actual data rows -->
         <div
-          v-for="(item, index) in filteredImportQueue"
+          v-for="(item, index) in filteredImportTable"
           :key="`item-${index}`"
           :ref="el => setRowRef(el, index)"
           :class="[
@@ -219,7 +219,7 @@
 <script>
 import {mapState} from "vuex";
 import axios from "axios";
-import {ImportQueueItem} from "@/assets/js/types/import-types";
+import {ImportTableItem} from "@/assets/js/types/import-types";
 import {getCookie} from "@/assets/js/auth.js";
 import {realtimeSocket} from "@/assets/js/websocket/realtimeSocket.js";
 import { toggleSetItem } from "@/assets/js/toggle-utils.js";
@@ -235,10 +235,10 @@ export default {
     }
   },
   computed: {
-    ...mapState(["userInfo", "importQueue", "websocketConnected"]),
-    filteredImportQueue() {
+    ...mapState(["userInfo", "importTable", "websocketConnected"]),
+    filteredImportTable() {
       // Filter out items that have been locally deleted and add deleting/importing state
-      return this.importQueue
+      return this.importTable
         .slice()
         .filter(item => !this.deletedItems.has(item.id))
         .map(item => ({
@@ -254,13 +254,13 @@ export default {
       // 1. We're actually loading (isLoading or internalLoading is true)
       // 2. We haven't initially loaded yet (hasInitiallyLoaded is false)
       // 3. AND we don't have any data in the store yet
-      return (this.isLoading || this.internalLoading) && !this.hasInitiallyLoaded && (!this.importQueue || this.importQueue.length === 0);
+      return (this.isLoading || this.internalLoading) && !this.hasInitiallyLoaded && (!this.importTable || this.importTable.length === 0);
     },
     validImportableCount() {
       // Count items that can actually be imported (same logic as bulkImport)
       let count = 0;
       this.selectedItems.forEach(itemId => {
-        const item = this.filteredImportQueue.find(i => i.id === itemId);
+        const item = this.filteredImportTable.find(i => i.id === itemId);
         if (item && !item.imported && !item.processing_failed && !(item.processing === true || (item.processing === false && item.feature_count === -1)) && item.file_duplicate?.status !== 'duplicate_in_queue') {
           count++;
         }
@@ -312,8 +312,8 @@ export default {
         // WebSocket connected - delete job events are now handled directly by store actions
       }
     },
-    filteredImportQueue() {
-      // Check truncation when queue updates
+    filteredImportTable() {
+      // Check truncation when table updates
       this.$nextTick(() => {
         this.checkAllFilenameTruncation()
       })
@@ -322,7 +322,7 @@ export default {
   methods: {
     subscribeToRefreshMutation() {
       this.$store.subscribe((mutation, state) => {
-        if (mutation.type === 'triggerImportQueueRefresh') {
+        if (mutation.type === 'triggerImportTableRefresh') {
           // Only refresh if we're not in the middle of an auto-refresh cycle
           // This prevents duplicate API calls when the parent component is already refreshing
           if (!this.isRefreshing) {
@@ -498,7 +498,7 @@ export default {
         // Request refresh from WebSocket
         realtimeSocket.requestRefresh('import_queue')
         // Don't set internalLoading = false here - keep it true until data arrives
-        // The subscribeToImportQueueUpdates() method will set it to false when setImportQueue mutation is received
+        // The subscribeToImportTableUpdates() method will set it to false when setImportTable mutation is received
       } catch (error) {
         console.error('Error requesting queue refresh:', error)
         // Only set loading to false on error
@@ -506,7 +506,7 @@ export default {
         this.hasRequestedInitialLoad = false // Reset on error so we can retry
       } finally {
         // Keep isRefreshing true until data arrives to prevent duplicate requests
-        // It will be set to false when data arrives via subscribeToImportQueueUpdates
+        // It will be set to false when data arrives via subscribeToImportTableUpdates
       }
     },
     checkForRestoreItems(serverQueue) {
@@ -553,8 +553,8 @@ export default {
 
         if (response.status === 200) {
           alert(`Successfully imported "${item.original_filename}"!`);
-          // Refresh the queue
-          this.$store.dispatch('refreshImportQueue');
+          // Refresh the table
+          this.$store.dispatch('refreshImportTable');
         } else {
           alert(`Failed to import: ${response.data.msg}`);
         }
@@ -632,14 +632,14 @@ export default {
       }
     },
     toggleSelectAll() {
-      if (this.selectedItems.size === this.filteredImportQueue.length) {
+      if (this.selectedItems.size === this.filteredImportTable.length) {
         this.clearSelection();
       } else {
         this.selectAll();
       }
     },
     selectAll() {
-      this.filteredImportQueue.forEach(item => {
+      this.filteredImportTable.forEach(item => {
         // Select items that are not imported, not currently processing, and not being deleted or imported
         // Note: Duplicates can be selected for bulk deletion, but will be excluded from bulk import
         if (!item.imported && !(item.processing === true || (item.processing === false && item.feature_count === -1)) && !item.deleting && !item.importing) {
@@ -662,7 +662,7 @@ export default {
       const invalidItems = [];
 
       this.selectedItems.forEach(itemId => {
-        const item = this.filteredImportQueue.find(i => i.id === itemId);
+        const item = this.filteredImportTable.find(i => i.id === itemId);
         if (item && !item.imported && !item.processing_failed && !(item.processing === true || (item.processing === false && item.feature_count === -1)) && item.file_duplicate?.status !== 'duplicate_in_queue') {
           validItems.push(itemId);
         } else {
@@ -727,7 +727,7 @@ export default {
       // Check for items that cannot be deleted (imported items or items being deleted)
       const invalidItems = [];
       this.selectedItems.forEach(itemId => {
-        const item = this.filteredImportQueue.find(i => i.id === itemId);
+        const item = this.filteredImportTable.find(i => i.id === itemId);
         if (item && (item.imported || item.deleting)) {
           invalidItems.push(itemId);
         }
@@ -785,11 +785,11 @@ export default {
       // The realtime connection is now managed globally in App.vue
       // Loading state is handled by the store subscription
     },
-    subscribeToImportQueueUpdates() {
-      // Subscribe to import queue mutations to handle loading completion
+    subscribeToImportTableUpdates() {
+      // Subscribe to import table mutations to handle loading completion
       this.$store.subscribe((mutation, state) => {
-        if (mutation.type === 'setImportQueue') {
-          // When import queue data is received, mark as initially loaded
+        if (mutation.type === 'setImportTable') {
+          // When import table data is received, mark as initially loaded
           this.hasInitiallyLoaded = true;
           this.internalLoading = false;
           this.isRefreshing = false; // Clear refreshing flag when data arrives
@@ -824,8 +824,8 @@ export default {
           this.importingItems.delete(itemId);
         });
 
-        // Refresh the queue to update status icons
-        this.$store.dispatch('refreshImportQueue');
+        // Refresh the table to update status icons
+        this.$store.dispatch('refreshImportTable');
 
         this.$forceUpdate();
       };
@@ -840,8 +840,8 @@ export default {
           this.importingItems.delete(itemId);
         });
 
-        // Refresh the queue to update status icons
-        this.$store.dispatch('refreshImportQueue');
+        // Refresh the table to update status icons
+        this.$store.dispatch('refreshImportTable');
 
         this.$forceUpdate();
       };
@@ -869,8 +869,8 @@ export default {
           this.deletingItems.delete(itemId);
         });
 
-        // Refresh the queue to update status icons
-        this.$store.dispatch('refreshImportQueue');
+        // Refresh the table to update status icons
+        this.$store.dispatch('refreshImportTable');
 
         this.$forceUpdate();
       };
@@ -885,8 +885,8 @@ export default {
           this.deletingItems.delete(itemId);
         });
 
-        // Refresh the queue to update status icons
-        this.$store.dispatch('refreshImportQueue');
+        // Refresh the table to update status icons
+        this.$store.dispatch('refreshImportTable');
 
         this.$forceUpdate();
       };
@@ -926,7 +926,7 @@ export default {
   async created() {
     // If we already have data in the store, mark as initially loaded
     // This prevents showing loading placeholders when navigating back with browser buttons
-    if (this.importQueue && this.importQueue.length > 0) {
+    if (this.importTable && this.importTable.length > 0) {
       this.hasInitiallyLoaded = true;
       this.internalLoading = false;
     } else {
@@ -944,13 +944,13 @@ export default {
     // Setup bulk job WebSocket handlers
     this.setupBulkJobHandlers()
 
-    // Subscribe to import queue updates to handle loading completion
-    this.subscribeToImportQueueUpdates();
+    // Subscribe to import table updates to handle loading completion
+    this.subscribeToImportTableUpdates();
   },
   mounted() {
     // WebSocket is already connected in created()
     // Fallback: If we still haven't received data, haven't requested initial load yet, and WebSocket is connected, request refresh
-    if (!this.hasInitiallyLoaded && !this.hasRequestedInitialLoad && this.websocketConnected && (!this.importQueue || this.importQueue.length === 0)) {
+    if (!this.hasInitiallyLoaded && !this.hasRequestedInitialLoad && this.websocketConnected && (!this.importTable || this.importTable.length === 0)) {
       this.fetchQueueList();
     }
     
@@ -1044,3 +1044,4 @@ export default {
   }
 }
 </style>
+

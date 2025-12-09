@@ -29,8 +29,8 @@
     <div class="bg-white rounded-lg shadow-sm border border-gray-200 p-4 sm:p-6">
       <h2 class="text-base sm:text-lg font-semibold text-gray-900 mb-4">Ready to Import</h2>
 
-      <!-- Import queue component -->
-      <ImportQueue :is-loading="importQueueIsLoading"/>
+      <!-- Import table component -->
+      <ImportTable :is-loading="importTableIsLoading"/>
     </div>
 
     <!-- Import History Section -->
@@ -84,13 +84,13 @@
 <script>
 import {mapState} from "vuex"
 import {IMPORT_HISTORY_URL} from "@/assets/js/import/url.js";
-import ImportQueue from "@/components/import/parts/ImportQueue.vue";
+import ImportTable from "@/components/import/parts/ImportTable.vue";
 import Loader from "@/components/parts/Loader.vue";
 import { ArrowUpTrayIcon } from '@heroicons/vue/24/outline';
 
 export default {
   computed: {
-    ...mapState(["userInfo", "importQueue", "importHistory", "importHistoryLoaded"]),
+    ...mapState(["userInfo", "importTable", "importHistory", "importHistoryLoaded"]),
     combinedHistoryLoading() {
       // Show loading placeholders only when:
       // 1. We haven't received initial data from WebSocket yet
@@ -98,11 +98,11 @@ export default {
       return !this.importHistoryLoaded && this.importHistory.length === 0;
     }
   },
-  components: {ImportQueue: ImportQueue, Loader, ArrowUpTrayIcon},
+  components: {ImportTable: ImportTable, Loader, ArrowUpTrayIcon},
   data() {
     return {
-      importQueueIsLoading: true,
-      hasImportQueueLoaded: false,
+      importTableIsLoading: true,
+      hasImportTableLoaded: false,
       refreshInterval: null,
       isRefreshing: false,
     }
@@ -111,30 +111,30 @@ export default {
     IMPORT_HISTORY_URL() {
       return IMPORT_HISTORY_URL
     },
-    async fetchImportQueue(showLoading = true) {
+    async fetchImportTable(showLoading = true) {
       if (showLoading) {
-        this.importQueueIsLoading = true
+        this.importTableIsLoading = true
       }
       try {
-        await this.$store.dispatch('refreshImportQueue')
+        await this.$store.dispatch('refreshImportTable')
       } catch (error) {
-        console.error('Error fetching import queue:', error)
+        console.error('Error fetching import table:', error)
       } finally {
         if (showLoading) {
-          this.importQueueIsLoading = false
+          this.importTableIsLoading = false
         }
-        this.hasImportQueueLoaded = true
+        this.hasImportTableLoaded = true
       }
     },
     startAutoRefresh() {
       // Clear any existing interval
       this.stopAutoRefresh()
 
-      // Start auto-refresh every 5 seconds for import queue only
+      // Start auto-refresh every 5 seconds for import table only
       // Import history is now handled by WebSocket
       this.refreshInterval = setInterval(() => {
-        // Don't call fetchImportQueue during auto-refresh to avoid duplicate API calls
-        // The ImportQueue component will handle its own auto-refresh
+        // Don't call fetchImportTable during auto-refresh to avoid duplicate API calls
+        // The ImportTable component will handle its own auto-refresh
         // History is now handled by WebSocket
       }, 5000)
     },
@@ -145,11 +145,11 @@ export default {
       }
     },
     async refreshTables() {
-      // Force immediate refresh of import queue with loading indicators
+      // Force immediate refresh of import table with loading indicators
       // Import history is now handled by WebSocket
       this.isRefreshing = true
       try {
-        await this.fetchImportQueue(true)
+        await this.fetchImportTable(true)
       } finally {
         this.isRefreshing = false
       }
