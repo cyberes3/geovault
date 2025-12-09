@@ -59,12 +59,10 @@ def _format_existing_feature(existing: Dict[str, Any]) -> Dict[str, Any]:
     }
 
 
-def strip_duplicate_features(features) -> Tuple[List[Any], int, ImportLog]:
-    """Remove 100% duplicate features and return data only (no logging)."""
-    import_log = ImportLog()
-
+def strip_duplicate_features(features) -> Tuple[List[Any], int]:
+    """Remove 100% duplicate features and return unique features with count."""
     if not features:
-        return features, 0, import_log
+        return features, 0
 
     # Track features by hash
     seen_hashes = set()
@@ -83,7 +81,7 @@ def strip_duplicate_features(features) -> Tuple[List[Any], int, ImportLog]:
             seen_hashes.add(geojson_hash)
             unique_features.append(feature)
 
-    return unique_features, duplicate_feature_count, import_log
+    return unique_features, duplicate_feature_count
 
 
 def _build_queue_hash_map(
