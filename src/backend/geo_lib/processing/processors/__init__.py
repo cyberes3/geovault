@@ -15,7 +15,7 @@ from .kml_processor import KMLProcessor
 from .kmz_processor import KMZProcessor
 
 
-def get_processor(file_data: Union[bytes, str], filename: str = "", 
+def get_processor(file_data: Union[bytes, str], filename: str = "",
                   job_id: Optional[str] = None,
                   status_tracker: Optional[ProcessingStatusTracker] = None,
                   minimal_processing: bool = False,
@@ -49,14 +49,14 @@ def get_processor(file_data: Union[bytes, str], filename: str = "",
             raise ValueError(f"Unsupported file type: {ext}")
 
     if file_type == FileType.KML:
-        return KMLProcessor(file_data, filename, job_id=job_id, status_tracker=status_tracker, 
-                          minimal_processing=minimal_processing, user_id=user_id, import_queue_id=import_queue_id)
+        return KMLProcessor(file_data, filename, job_id=job_id, status_tracker=status_tracker,
+                            minimal_processing=minimal_processing, user_id=user_id, import_queue_id=import_queue_id)
     elif file_type == FileType.KMZ:
-        return KMZProcessor(file_data, filename, job_id=job_id, status_tracker=status_tracker, 
-                          minimal_processing=minimal_processing, user_id=user_id, import_queue_id=import_queue_id)
+        return KMZProcessor(file_data, filename, job_id=job_id, status_tracker=status_tracker,
+                            minimal_processing=minimal_processing, user_id=user_id, import_queue_id=import_queue_id)
     elif file_type == FileType.GPX:
-        return GPXProcessor(file_data, filename, job_id=job_id, status_tracker=status_tracker, 
-                          minimal_processing=minimal_processing, user_id=user_id, import_queue_id=import_queue_id)
+        return GPXProcessor(file_data, filename, job_id=job_id, status_tracker=status_tracker,
+                            minimal_processing=minimal_processing, user_id=user_id, import_queue_id=import_queue_id)
     else:
         raise ValueError(f"Unsupported file type: {file_type}")
 

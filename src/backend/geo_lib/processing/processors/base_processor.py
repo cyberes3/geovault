@@ -13,9 +13,7 @@ from abc import ABC, abstractmethod
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from typing import Dict, Any, Tuple, Union, List, Optional
 
-from django.contrib.auth.models import User
 from django.core.files.uploadedfile import SimpleUploadedFile
-from django.db import transaction
 
 from api.models import ImportQueue, UserSettings
 from geo_lib.feature_id import generate_geojson_hash
@@ -31,13 +29,12 @@ from geo_lib.processing.geo_processor import (
 )
 from geo_lib.processing.jobs.helpers.status_tracker import ProcessingStatusTracker, ProcessingStatus
 from geo_lib.processing.logging import ImportLog, DatabaseLogLevel
-from geo_lib.processing.utils import inject_feature_hashes, build_skipped_feature_ids
+from geo_lib.processing.utils import inject_feature_hashes
 from geo_lib.security.SecureFileValidator import validate_file
 from geo_lib.tags.const_strings import CONST_INTERNAL_TAGS, filter_protected_tags, prepare_user_tags
 from geo_lib.types.feature import PointFeature, LineStringFeature, MultiLineStringFeature, PolygonFeature
 from geo_lib.types.geojson import GeojsonRawProperty
 from geo_lib.utils.feature_utils import build_feature_type_summary
-from geo_lib.utils.pydantic_serialization import convert_features_to_pydantic
 from geo_lib.validation.geometry_validation import validate_coordinates_values, GeometryValidationError
 from website.settings_utils import get_required_setting
 
@@ -50,8 +47,8 @@ class BaseProcessor(ABC):
     Defines the common processing pipeline that all file types follow.
     """
 
-    def __init__(self, file_data: Union[bytes, str], filename: str = "", 
-                 job_id: Optional[str] = None, 
+    def __init__(self, file_data: Union[bytes, str], filename: str = "",
+                 job_id: Optional[str] = None,
                  status_tracker: Optional[ProcessingStatusTracker] = None,
                  minimal_processing: bool = False,
                  user_id: Optional[int] = None,
@@ -168,27 +165,27 @@ class BaseProcessor(ABC):
             ImportLog with conversion information
         """
         step_log = ImportLog()
-        
+
         try:
             # Check for cancellation
             if self._is_canceled():
                 step_log.add("Processing canceled during GeoJSON conversion", "Processing", DatabaseLogLevel.WARNING)
                 return step_log
-            
+
             # Perform conversion
             self.geojson_data = self.convert_to_geojson()
-            
+
             if not self.geojson_data or 'features' not in self.geojson_data:
                 error_msg = "Conversion returned invalid GeoJSON data"
                 step_log.add(error_msg, "File Conversion", DatabaseLogLevel.ERROR)
                 raise Exception(error_msg)
-            
+
         except Exception as e:
             if not self._is_canceled():
                 step_log.add(f"GeoJSON conversion failed: {str(e)}", "File Conversion", DatabaseLogLevel.ERROR)
                 logger.error(f"GeoJSON conversion error: {traceback.format_exc()}")
             raise
-        
+
         return step_log
 
     def step_4_split_and_validate_features(self, geojson_data: Dict[str, Any]) -> Tuple[List[Dict[str, Any]], ImportLog]:
@@ -226,7 +223,7 @@ class BaseProcessor(ABC):
             try:
                 # Submit all tasks
                 future_to_feature = {
-                    self._executor.submit(self._step_4_process_single_feature, feature): feature 
+                    self._executor.submit(self._step_4_process_single_feature, feature): feature
                     for feature in features
                 }
 
@@ -256,7 +253,7 @@ class BaseProcessor(ABC):
                             processed_features.extend(result_features)
                             feature_log.extend(result_log)
                             skipped_count += result_skipped
-                            
+
                             # Track what type of split occurred by checking the original feature
                             if was_split:
                                 original_feature = future_to_feature[future]
@@ -305,28 +302,28 @@ class BaseProcessor(ABC):
             ImportLog with elevation filling information
         """
         step_log = ImportLog()
-        
+
         try:
             # Check if elevation API is enabled
             if not get_required_setting('ELEVATION_API_ENABLED'):
                 return step_log
-            
+
             if not self.processed_features:
                 return step_log
-            
+
             # Check for cancellation
             if self._is_canceled():
                 step_log.add("Processing canceled during elevation data filling", "Processing", DatabaseLogLevel.WARNING)
                 return step_log
-            
+
             # Fill elevations (modifies features in-place)
             temp_geojson = {'type': 'FeatureCollection', 'features': self.processed_features}
             fill_missing_elevations(temp_geojson, step_log)
-            
+
         except Exception as e:
             step_log.add(f"Elevation data filling failed: {str(e)}", "Elevation Service", DatabaseLogLevel.ERROR)
             logger.error(f"Elevation data filling error traceback: {traceback.format_exc()}")
-        
+
         return step_log
 
     def step_6_tag_features(self) -> ImportLog:
@@ -340,10 +337,10 @@ class BaseProcessor(ABC):
             ImportLog with tagging information
         """
         feature_log = ImportLog()
-        
+
         if not self.processed_features or self.minimal_processing:
             return feature_log
-        
+
         # Log start of tagging process
         feature_log.add(f"Starting feature tagging for {len(self.processed_features)} feature(s)", "Feature Tagging", DatabaseLogLevel.INFO)
 
@@ -353,13 +350,13 @@ class BaseProcessor(ABC):
             if self._is_canceled():
                 feature_log.add("Processing canceled before feature tagging", "Feature Tagging", DatabaseLogLevel.WARNING)
                 return feature_log
-            
+
             # Create feature instances for all features
             feature_instances = []
             for feature in self.processed_features:
                 try:
                     geometry_type = feature['geometry']['type'].lower()
-                    
+
                     # Determine the appropriate feature class
                     feature_class = None
                     if geometry_type in ['point', 'multipoint']:
@@ -374,19 +371,19 @@ class BaseProcessor(ABC):
                         # Unsupported geometry type, add empty instance to maintain index alignment
                         feature_instances.append(None)
                         continue
-                    
+
                     # Create feature instance
                     feature_instance = feature_class(**feature)
                     feature_instances.append(feature_instance)
                 except Exception as e:
                     logger.warning(f"Failed to create feature instance for tagging: {e}")
                     feature_instances.append(None)
-            
+
             # Check for cancellation after creating instances
             if self._is_canceled():
                 feature_log.add("Processing canceled during feature instance creation", "Feature Tagging", DatabaseLogLevel.WARNING)
                 return feature_log
-            
+
             # Batch generate tags for all features at once (SKIP geocoding)
             from geo_lib.processing.tagging import generate_auto_tags_batch
             all_feature_tags = generate_auto_tags_batch(
@@ -395,34 +392,34 @@ class BaseProcessor(ABC):
                 filename=self.filename,
                 skip_geocoding=True  # Skip geocoding - done in step 7
             )
-            
+
             # Check for cancellation after tag generation
             if self._is_canceled():
                 feature_log.add("Processing canceled after tag generation", "Feature Tagging", DatabaseLogLevel.WARNING)
                 return feature_log
-            
+
             # Apply tags to features
             tag_index = 0
             for i, feature in enumerate(self.processed_features):
                 if feature_instances[i] is None:
                     # Skip features that couldn't be instantiated
                     continue
-                
+
                 try:
                     auto_tags = all_feature_tags[tag_index]
                     tag_index += 1
-                    
+
                     # Separate system tags from user tags
                     existing_tags = feature.get('properties', {}).get('tags', [])
                     if not isinstance(existing_tags, list):
                         existing_tags = []
-                    
+
                     # Strip system tags from existing tags (defensive - in case user added them)
                     user_tags = filter_protected_tags(existing_tags, CONST_INTERNAL_TAGS)
-                    
+
                     # Prepare user tags (lowercase and deduplicate)
                     user_tags = prepare_user_tags(user_tags)
-                    
+
                     # Store system tags separately
                     feature['properties']['system_tags'] = auto_tags
                     # Store user tags (filtered to remove any system tags)
@@ -435,7 +432,7 @@ class BaseProcessor(ABC):
                         DatabaseLogLevel.WARNING
                     )
                     logger.warning(f"Tag application failed for feature '{feature_name}': {traceback.format_exc()}")
-            
+
         except Exception as e:
             feature_log.add(
                 f"Batch tag generation failed: {str(e)}",
@@ -443,7 +440,7 @@ class BaseProcessor(ABC):
                 DatabaseLogLevel.ERROR
             )
             logger.error(f"Batch tag generation error: {traceback.format_exc()}")
-        
+
         return feature_log
 
     def step_7_reverse_geocode(self) -> ImportLog:
@@ -456,39 +453,39 @@ class BaseProcessor(ABC):
             ImportLog with geocoding information
         """
         feature_log = ImportLog()
-        
+
         if not self.processed_features or self.minimal_processing:
             return feature_log
-        
+
         # Check if geocoding is enabled
         geocoding_enabled = get_required_setting('REVERSE_GEOCODING_ENABLED')
         if not geocoding_enabled:
             return feature_log
-        
+
         # Count features that will be reverse geocoded (points and lines only)
         geocoding_count = 0
         for feature in self.processed_features:
             geometry_type = feature.get('geometry', {}).get('type', '').lower()
             if geometry_type in ['point', 'linestring', 'multilinestring']:
                 geocoding_count += 1
-        
+
         if geocoding_count == 0:
             return feature_log
-        
+
         feature_log.add(f"Reverse geocoding {geocoding_count} feature(s) with coordinate deduplication", "Reverse Geocoding", DatabaseLogLevel.INFO)
-        
+
         try:
             # Check for cancellation before starting
             if self._is_canceled():
                 feature_log.add("Processing canceled before reverse geocoding", "Reverse Geocoding", DatabaseLogLevel.WARNING)
                 return feature_log
-            
+
             # Create feature instances for all features
             feature_instances = []
             for feature in self.processed_features:
                 try:
                     geometry_type = feature['geometry']['type'].lower()
-                    
+
                     # Determine the appropriate feature class
                     feature_class = None
                     if geometry_type in ['point', 'multipoint']:
@@ -502,40 +499,40 @@ class BaseProcessor(ABC):
                     else:
                         feature_instances.append(None)
                         continue
-                    
+
                     # Create feature instance
                     feature_instance = feature_class(**feature)
                     feature_instances.append(feature_instance)
                 except Exception as e:
                     logger.warning(f"Failed to create feature instance for geocoding: {e}")
                     feature_instances.append(None)
-            
+
             # Check for cancellation after creating instances
             if self._is_canceled():
                 feature_log.add("Processing canceled during feature instance creation", "Reverse Geocoding", DatabaseLogLevel.WARNING)
                 return feature_log
-            
+
             # Use the geocoding tag generator directly for batch processing
             from geo_lib.processing.tagging.modules.geocoding import GeocodingTagGenerator
             geocoding_gen = GeocodingTagGenerator()
-            
+
             # Get valid feature instances for geocoding
             valid_features = [f for f in feature_instances if f is not None]
-            
+
             if valid_features:
                 geocode_tags = geocoding_gen.process_batch(valid_features, import_log=feature_log)
-                
+
                 # Check for cancellation after geocoding
                 if self._is_canceled():
                     feature_log.add("Processing canceled after reverse geocoding", "Reverse Geocoding", DatabaseLogLevel.WARNING)
                     return feature_log
-                
+
                 # Apply geocoding tags to features
                 tag_index = 0
                 for i, feature in enumerate(self.processed_features):
                     if feature_instances[i] is None:
                         continue
-                    
+
                     try:
                         if tag_index in geocode_tags:
                             geo_tags = geocode_tags[tag_index]
@@ -553,7 +550,7 @@ class BaseProcessor(ABC):
                             DatabaseLogLevel.WARNING
                         )
                         logger.warning(f"Geocoding tag application failed for feature '{feature_name}': {traceback.format_exc()}")
-        
+
         except Exception as e:
             feature_log.add(
                 f"Reverse geocoding failed: {str(e)}",
@@ -561,7 +558,7 @@ class BaseProcessor(ABC):
                 DatabaseLogLevel.ERROR
             )
             logger.error(f"Reverse geocoding error: {traceback.format_exc()}")
-        
+
         return feature_log
 
     def apply_track_name_override(self, geojson_data: Dict[str, Any]) -> ImportLog:
@@ -575,10 +572,10 @@ class BaseProcessor(ABC):
             ImportLog with any relevant messages
         """
         step_log = ImportLog()
-        
+
         if not self.user_id:
             return step_log
-        
+
         try:
             user_settings_obj = UserSettings.objects.filter(user_id=self.user_id).first()
             if user_settings_obj and user_settings_obj.settings:
@@ -612,7 +609,7 @@ class BaseProcessor(ABC):
         except Exception as e:
             logger.error(f"Error applying track name override: {traceback.format_exc()}")
             step_log.add(f"Failed to apply track name override: {str(e)}", "Track Name Override", DatabaseLogLevel.ERROR)
-        
+
         return step_log
 
     def detect_duplicates(self, processed_features: List[Dict[str, Any]]) -> Tuple[List[Dict[str, Any]], ImportLog]:
@@ -627,33 +624,33 @@ class BaseProcessor(ABC):
         """
         step_log = ImportLog()
         duplicate_features = []
-        
+
         # Skip duplicate detection if minimal processing or no user_id
         if self.minimal_processing or not self.user_id:
             return duplicate_features, step_log
-        
+
         try:
             # Check for cancellation before duplicate detection
             if self._is_canceled():
                 step_log.add("Processing canceled before duplicate detection", "Duplicate Detection", DatabaseLogLevel.WARNING)
                 return duplicate_features, step_log
-            
+
             # Start duplicate detection timing
             duplicate_detection_start = time.time()
-            
+
             # First, check for internal duplicates within the file
             unique_internal_features, internal_duplicate_count = remove_internal_duplicates(processed_features)
-            
+
             if internal_duplicate_count > 0:
                 step_log.add(f"Found {internal_duplicate_count} internal duplicate(s)", "Duplicate Detection", DatabaseLogLevel.INFO)
             else:
                 step_log.add("No internal duplicates found", "Duplicate Detection", DatabaseLogLevel.INFO)
-            
+
             # Check for cancellation after internal duplicate detection
             if self._is_canceled():
                 step_log.add("Processing canceled after internal duplicate detection", "Duplicate Detection", DatabaseLogLevel.WARNING)
                 return duplicate_features, step_log
-            
+
             # Get ImportQueue for exclude parameters
             import_queue = None
             if self.import_queue_id:
@@ -661,7 +658,7 @@ class BaseProcessor(ABC):
                     import_queue = ImportQueue.objects.get(id=self.import_queue_id)
                 except ImportQueue.DoesNotExist:
                     pass
-            
+
             # PASS 1: Check feature store (hash + geometry, with hash priority)
             remaining_after_fs, feature_store_duplicates, fs_log = find_duplicates_for_source(
                 unique_internal_features,
@@ -670,16 +667,16 @@ class BaseProcessor(ABC):
                 exclude_queue_id=None,
                 exclude_timestamp=None
             )
-            
+
             # Split feature store duplicates into hash and geometry for tracking
             feature_store_hash_duplicates, feature_store_geom_duplicates = split_duplicates_by_match_type(
                 feature_store_duplicates
             )
-            
+
             # PASS 2: Check cross-queue (hash + geometry, with hash priority) on remaining features
             exclude_queue_id = import_queue.id if import_queue else None
             exclude_timestamp = import_queue.timestamp if import_queue else None
-            
+
             remaining_after_cq, cross_queue_duplicates, cq_log = find_duplicates_for_source(
                 remaining_after_fs,
                 self.user_id,
@@ -687,41 +684,41 @@ class BaseProcessor(ABC):
                 exclude_queue_id=exclude_queue_id,
                 exclude_timestamp=exclude_timestamp
             )
-            
+
             # Split cross-queue duplicates into hash and geometry for tracking
             cross_queue_hash_duplicates, cross_queue_geom_duplicates = split_duplicates_by_match_type(
                 cross_queue_duplicates
             )
-            
+
             # Combine all duplicates in priority order
             duplicate_features = (
-                feature_store_hash_duplicates +
-                feature_store_geom_duplicates +
-                cross_queue_hash_duplicates +
-                cross_queue_geom_duplicates
+                    feature_store_hash_duplicates +
+                    feature_store_geom_duplicates +
+                    cross_queue_hash_duplicates +
+                    cross_queue_geom_duplicates
             )
-            
+
             # Log duplicate detection results summary
             fs_hash_count = len(feature_store_hash_duplicates)
             fs_geom_count = len(feature_store_geom_duplicates)
             cq_hash_count = len(cross_queue_hash_duplicates)
             cq_geom_count = len(cross_queue_geom_duplicates)
-            
+
             summary = self._build_duplicate_summary(fs_hash_count, fs_geom_count, cq_hash_count, cq_geom_count)
             step_log.add(summary, "Duplicate Detection", DatabaseLogLevel.INFO)
-            
+
             duplicate_detection_duration = time.time() - duplicate_detection_start
             step_log.add(f"Duplicate detection completed ({duplicate_detection_duration:.1f}s)", "Duplicate Detection", DatabaseLogLevel.INFO)
-            
+
             # Check for cancellation after duplicate detection
             if self._is_canceled():
                 step_log.add("Processing canceled after duplicate detection", "Duplicate Detection", DatabaseLogLevel.WARNING)
                 return duplicate_features, step_log
-            
+
         except Exception as e:
             logger.error(f"Error during duplicate detection: {traceback.format_exc()}")
             step_log.add(f"Duplicate detection failed: {str(e)}", "Duplicate Detection", DatabaseLogLevel.ERROR)
-        
+
         return duplicate_features, step_log
 
     def _build_duplicate_summary(self, fs_hash_count: int, fs_geom_count: int,
@@ -769,29 +766,29 @@ class BaseProcessor(ABC):
             - type_summary: Feature type breakdown
         """
         finalization_log = ImportLog()
-        
+
         # Build final GeoJSON data from processed features
         geojson_data = {
             'type': 'FeatureCollection',
             'features': self.processed_features
         }
-        
+
         # Pre-calculate and inject geojson_hash into properties
         inject_feature_hashes(self.processed_features)
         finalization_log.add(f"Injected feature hashes for {len(self.processed_features)} features", "Feature Finalization", DatabaseLogLevel.DEBUG)
-        
+
         # Log feature type breakdown
         type_summary = build_feature_type_summary(self.processed_features)
         finalization_log.add(f"Feature breakdown: {type_summary}", "Feature Finalization", DatabaseLogLevel.INFO)
-        
+
         # Apply user setting: overwrite single track name with filename if enabled
         track_override_log = self.apply_track_name_override(geojson_data)
         finalization_log.extend(track_override_log)
-        
+
         # Detect duplicates
         duplicate_features, duplicate_log = self.detect_duplicates(self.processed_features)
         finalization_log.extend(duplicate_log)
-        
+
         # Build result dictionary
         result = {
             'geojson_data': geojson_data,
@@ -799,7 +796,7 @@ class BaseProcessor(ABC):
             'feature_count': len(self.processed_features),
             'type_summary': type_summary
         }
-        
+
         return result, finalization_log
 
     def _step_4_process_single_feature(self, feature: Dict[str, Any]) -> Tuple[List[Dict[str, Any]], ImportLog, int, bool]:
@@ -838,7 +835,7 @@ class BaseProcessor(ABC):
             # Check for cancellation before processing each split feature
             if self._is_canceled():
                 break
-            
+
             # Validate coordinates
             try:
                 validate_coordinates_values(split_feature['geometry'])
@@ -851,7 +848,7 @@ class BaseProcessor(ABC):
                 )
                 skipped_count += 1
                 continue
-                
+
             if split_feature['geometry']['type'] not in ['Point', 'MultiPoint', 'LineString', 'MultiLineString', 'Polygon', 'MultiPolygon']:
                 feature_log.add(f'Skipping unsupported geometry type: {split_feature["geometry"]["type"]}', 'Feature Processing', DatabaseLogLevel.WARNING)
                 skipped_count += 1
@@ -888,7 +885,6 @@ class BaseProcessor(ABC):
                 skipped_count += 1
 
         return processed_features, feature_log, skipped_count, was_split
-
 
     def _calculate_timeout(self) -> int:
         """
@@ -982,7 +978,7 @@ class BaseProcessor(ABC):
             file_size = os.path.getsize(file_path) if os.path.exists(file_path) else 0
             file_size_mb = file_size / (1024 * 1024) if file_size > 0 else 0
             filename = self.filename or os.path.basename(file_path)
-            
+
             # Verify the input file exists
             if not os.path.exists(file_path):
                 error_msg = f"Input file does not exist: {file_path}"
@@ -994,7 +990,7 @@ class BaseProcessor(ABC):
             # Note: Timing is handled by the base processor's process() method
             self.import_log.add(f"Converting {file_type_name} file to GeoJSON format", "File Conversion", DatabaseLogLevel.INFO)
             logger.info(f"Starting {file_type_name} conversion for file '{filename}' ({file_size_mb:.2f} MB)")
-            
+
             result = subprocess.run(
                 ['node', togeojson_path, file_path],
                 capture_output=True,
@@ -1006,16 +1002,16 @@ class BaseProcessor(ABC):
                 # Capture detailed error information
                 stderr_output = result.stderr.strip() if result.stderr else "No error output"
                 stdout_output = result.stdout.strip() if result.stdout else "No output"
-                
+
                 error_msg = f"{file_type_name} file conversion failed"
                 detailed_error = f"Node.js conversion failed for '{filename}' (return code: {result.returncode})"
-                
+
                 if stderr_output:
                     detailed_error += f"\nNode.js stderr: {stderr_output}"
                 if stdout_output and not stdout_output.startswith('{'):
                     # Only log stdout if it's not valid JSON (which would be the error message)
                     detailed_error += f"\nNode.js stdout: {stdout_output}"
-                
+
                 logger.error(detailed_error)
                 self.import_log.add(f"{error_msg}: {stderr_output if stderr_output else 'Unknown error'}", "File Conversion", DatabaseLogLevel.ERROR)
                 raise Exception(f"{error_msg}: {stderr_output if stderr_output else 'Unknown error'}")
@@ -1055,7 +1051,7 @@ class BaseProcessor(ABC):
             # Re-raise if it's already been handled above
             if "conversion" in str(e).lower() or "timeout" in str(e).lower():
                 raise
-            
+
             logger.error(f"{error_msg} for file '{filename}': {traceback.format_exc()}")
             self.import_log.add(f"{file_type_name} conversion failed: {str(e)}", "File Conversion", DatabaseLogLevel.ERROR)
             raise
