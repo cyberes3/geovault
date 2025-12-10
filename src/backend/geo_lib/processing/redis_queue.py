@@ -9,7 +9,7 @@ from typing import Optional, Dict, Any
 from geo_lib.utils.redis_connection import get_redis_connection
 from geo_lib.logging.console import get_tagged_logger
 
-logger = get_tagged_logger('job')
+logger = get_tagged_logger(__name__)
 
 
 class RedisProcessingQueue:

@@ -24,11 +24,10 @@ Usage:
     results = service.batch_geocode_coordinates([(lat1, lon1), (lat2, lon2)])
 """
 import json
-import math
 import time
 from pathlib import Path
 from typing import Optional, Dict, Any, List, Tuple
-from concurrent.futures import ThreadPoolExecutor, as_completed
+from concurrent.futures import ThreadPoolExecutor
 from threading import Lock
 from dataclasses import dataclass
 from datetime import datetime
@@ -38,6 +37,7 @@ from django.core.cache import caches
 from django.conf import settings
 
 from geo_lib.logging.console import get_tagged_logger
+from geo_lib.spatial.haversine import haversine_distance_miles
 
 logger = get_tagged_logger('geocode')
 
@@ -119,17 +119,6 @@ def load_ski_resorts() -> List[Dict[str, Any]]:
     
     return _SKI_RESORTS
 
-def haversine_distance(lat1: float, lon1: float, lat2: float, lon2: float) -> float:
-    """Calculate the great circle distance between two points on Earth in miles."""
-    R = 3958.8
-    phi1 = math.radians(lat1)
-    phi2 = math.radians(lat2)
-    delta_phi = math.radians(lat2 - lat1)
-    delta_lambda = math.radians(lon2 - lon1)
-    a = math.sin(delta_phi / 2) ** 2 + math.cos(phi1) * math.cos(phi2) * math.sin(delta_lambda / 2) ** 2
-    c = 2 * math.atan2(math.sqrt(a), math.sqrt(1 - a))
-    return R * c
-
 
 def _round_coordinate(latitude: float, longitude: float) -> Tuple[float, float]:
     """
@@ -142,7 +131,7 @@ def _round_coordinate(latitude: float, longitude: float) -> Tuple[float, float]:
     Returns:
         Tuple of (rounded_lat, rounded_lon)
     """
-    return (round(latitude, 3), round(longitude, 3))
+    return round(latitude, 3), round(longitude, 3)
 
 
 def _get_cache_key(latitude: float, longitude: float, prefix: str = "geocode") -> str:
@@ -457,7 +446,7 @@ out center;
                 lon = element.get('lon')
                 
                 if name and lat is not None and lon is not None:
-                    distance = haversine_distance(latitude, longitude, lat, lon)
+                    distance = haversine_distance_miles(latitude, longitude, lat, lon)
                     if distance <= threshold_miles:
                         cities.append({
                             'name': name,
@@ -544,7 +533,7 @@ out tags center;
                         lon = center.get('lon')
                     
                     if lat and lon:
-                        distance = haversine_distance(latitude, longitude, lat, lon)
+                        distance = haversine_distance_miles(latitude, longitude, lat, lon)
                         if distance <= proximity_miles:
                             lakes.append({
                                 'name': name,
@@ -615,7 +604,7 @@ out tags center;
                 # Calculate distance to bbox center
                 center_lat = (bbox['min_lat'] + bbox['max_lat']) / 2
                 center_lon = (bbox['min_lon'] + bbox['max_lon']) / 2
-                distance = haversine_distance(latitude, longitude, center_lat, center_lon)
+                distance = haversine_distance_miles(latitude, longitude, center_lat, center_lon)
                 
                 if distance <= proximity_miles:
                     matching_resorts.append({

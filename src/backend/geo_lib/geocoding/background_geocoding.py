@@ -17,7 +17,7 @@ from geo_lib.types.feature import (
     PointFeature, LineStringFeature, MultiLineStringFeature, PolygonFeature
 )
 
-logger = get_tagged_logger('job')
+logger = get_tagged_logger('BackgroundGeocoding')
 
 
 def _get_feature_class_from_geojson(geojson: dict):

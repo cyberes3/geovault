@@ -337,10 +337,11 @@ class TestSkipGeocodingParameter(TestCase):
         )
         
         # Generate tags without skipping geocoding
-        tags_with_geocoding = generate_auto_tags(feature, skip_geocoding=False)
+        from geo_lib.processing.logging import ImportLog
+        tags_with_geocoding = generate_auto_tags(feature, import_log=ImportLog(), skip_geocoding=False)
         
         # Generate tags with geocoding skipped
-        tags_without_geocoding = generate_auto_tags(feature, skip_geocoding=True)
+        tags_without_geocoding = generate_auto_tags(feature, import_log=ImportLog(), skip_geocoding=True)
         
         # Verify geocoding tags are present when not skipped
         self.assertTrue(any('geo-city' in tag for tag in tags_with_geocoding))
@@ -355,6 +356,7 @@ class TestSkipGeocodingParameter(TestCase):
     def test_generate_auto_tags_backward_compatibility(self):
         """Test that generate_auto_tags maintains backward compatibility."""
         from geo_lib.processing.tagging.generate import generate_auto_tags
+        from geo_lib.processing.logging import ImportLog
 
         # Create feature
         feature = PointFeature(
@@ -364,7 +366,7 @@ class TestSkipGeocodingParameter(TestCase):
         )
         
         # Call without skip_geocoding parameter (should default to False)
-        tags = generate_auto_tags(feature)
+        tags = generate_auto_tags(feature, import_log=ImportLog())
         
         # Should still generate tags (at least type tags)
         self.assertTrue(len(tags) > 0)

@@ -3,7 +3,7 @@ import traceback
 from api.models import DatabaseLogging, ImportQueue
 from geo_lib.logging.console import get_tagged_logger
 
-_logger = get_tagged_logger('job')
+_logger = get_tagged_logger(__name__)
 
 
 def delete_associated_logs(import_queue_item: ImportQueue, delete_job_id: str):

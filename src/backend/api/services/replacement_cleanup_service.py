@@ -11,7 +11,7 @@ from django.utils import timezone
 from api.models import ImportQueue
 from geo_lib.logging.console import get_tagged_logger
 
-logger = get_tagged_logger('job')
+logger = get_tagged_logger('ReplacementCleanupService')
 
 
 class ReplacementCleanupService:

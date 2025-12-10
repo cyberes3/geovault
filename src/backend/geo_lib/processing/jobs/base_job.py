@@ -18,7 +18,7 @@ from geo_lib.processing.jobs.helpers.redis_job_storage import (
 from geo_lib.processing.messages import JOB_FAILED_GENERIC
 from geo_lib.processing.jobs.helpers.status_tracker import ProcessingStatusTracker, ProcessingStatus
 
-_logger = get_tagged_logger('job')
+_logger = get_tagged_logger('BaseJob')
 
 
 class BaseJob(ABC):

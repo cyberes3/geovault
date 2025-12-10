@@ -5,13 +5,14 @@ Single worker thread per user ensures FIFO processing order.
 
 import threading
 import time
+import traceback
 from typing import Dict, Optional
 
 from geo_lib.logging.console import get_tagged_logger
 from geo_lib.processing.jobs.helpers.status_tracker import ProcessingStatus
 from geo_lib.processing.redis_queue import get_processing_queue
 
-_logger = get_tagged_logger('job')
+_logger = get_tagged_logger(__name__)
 
 
 class QueueWorker:
@@ -51,7 +52,7 @@ class QueueWorker:
             name=f"QueueWorker-User{self.user_id}"
         )
         self.thread.start()
-        _logger.info(f"Started queue worker for user {self.user_id}")
+        _logger.debug(f"Started queue worker for user {self.user_id}")
 
     def stop(self):
         """Signal the worker to stop gracefully."""
@@ -64,7 +65,7 @@ class QueueWorker:
     def _worker_loop(self):
         """Main worker loop - processes jobs until idle timeout or stop signal."""
         try:
-            _logger.info(f"Queue worker for user {self.user_id} started processing")
+            _logger.debug(f"Queue worker for user {self.user_id} started processing")
 
             while not self.should_stop:
                 try:
@@ -82,7 +83,7 @@ class QueueWorker:
                             self._idle_start = time.time()
                         elif time.time() - self._idle_start >= self.IDLE_TIMEOUT:
                             # Idle timeout - exit worker
-                            _logger.info(f"Queue worker for user {self.user_id} idle timeout, exiting")
+                            _logger.debug(f"Queue worker for user {self.user_id} idle timeout, exiting")
                             break
                         # Continue loop to check for jobs again
                         continue
@@ -93,14 +94,14 @@ class QueueWorker:
 
                     if self.should_stop:
                         # Stop signal received, re-enqueue job and exit
-                        _logger.info(f"Queue worker for user {self.user_id} stopping, re-enqueueing job {job_data['job_id']}")
+                        _logger.debug(f"Queue worker for user {self.user_id} stopping, re-enqueueing job {job_data['job_id']}")
                         self.queue.enqueue(job_data)
                         break
 
                     # Process the job
                     try:
                         job_id = job_data['job_id']
-                        _logger.info(f"Queue worker for user {self.user_id} processing job {job_id}")
+                        _logger.debug(f"Queue worker for user {self.user_id} processing job {job_id}")
 
                         # Set status to PROCESSING immediately when job is dequeued
                         # This ensures only one job shows as processing at a time
@@ -114,12 +115,12 @@ class QueueWorker:
                         # Call _job_worker to ensure proper job initialization (Redis storage, etc.)
                         # This matches the pattern used by other job types
                         self.process_job._job_worker(job_id, job_data)
-                    except Exception as e:
-                        _logger.error(f"Error processing job {job_data['job_id']} for user {self.user_id}: {e}", exc_info=True)
+                    except:
+                        _logger.error(f"Error processing job {job_data['job_id']} for user {self.user_id}: {traceback.format_exc()}", exc_info=True)
                         # Continue processing next job even if this one failed
 
-                except Exception as e:
-                    _logger.error(f"Error in worker loop for user {self.user_id}: {e}", exc_info=True)
+                except:
+                    _logger.error(f"Error in worker loop for user {self.user_id}: {traceback.format_exc()}", exc_info=True)
                     # Small delay before retrying to avoid tight error loop
                     time.sleep(1)
         finally:
@@ -158,7 +159,7 @@ class WorkerRegistry:
                     return True
                 else:
                     # Worker thread died, remove it
-                    _logger.info(f"Removing dead worker for user {user_id}")
+                    _logger.debug(f"Removing dead worker for user {user_id}")
                     del cls._workers[user_id]
 
             # Create and start new worker
@@ -167,8 +168,8 @@ class WorkerRegistry:
                 worker.start()
                 cls._workers[user_id] = worker
                 return True
-            except Exception as e:
-                _logger.error(f"Failed to start worker for user {user_id}: {e}")
+            except:
+                _logger.error(f"Failed to start worker for user {user_id}: {traceback.format_exc()}")
                 return False
 
     @classmethod

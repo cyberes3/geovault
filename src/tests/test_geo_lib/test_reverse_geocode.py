@@ -14,10 +14,10 @@ from django.core.cache import cache, caches
 
 from geo_lib.geocoding.reverse_geocode import (
     get_reverse_geocoding_service,
-    haversine_distance,
     _get_cache_key,
     load_ski_resorts
 )
+from geo_lib.spatial.haversine import haversine_distance_miles
 
 
 @pytest.mark.django_db
@@ -26,19 +26,19 @@ class TestHaversineDistance(TestCase):
     
     def test_haversine_distance_zero(self):
         """Test distance between same point is zero."""
-        distance = haversine_distance(40.0, -105.0, 40.0, -105.0)
+        distance = haversine_distance_miles(40.0, -105.0, 40.0, -105.0)
         self.assertAlmostEqual(distance, 0.0, places=2)
     
     def test_haversine_distance_known(self):
         """Test known distance calculation."""
         # Denver to Colorado Springs (approx 63 miles)
-        distance = haversine_distance(39.7392, -104.9903, 38.8339, -104.8214)
+        distance = haversine_distance_miles(39.7392, -104.9903, 38.8339, -104.8214)
         self.assertAlmostEqual(distance, 63, delta=2)
     
     def test_haversine_distance_international(self):
         """Test international distance calculation."""
         # London to Paris (approx 213 miles)
-        distance = haversine_distance(51.5074, -0.1278, 48.8566, 2.3522)
+        distance = haversine_distance_miles(51.5074, -0.1278, 48.8566, 2.3522)
         self.assertAlmostEqual(distance, 213, delta=5)
 
 

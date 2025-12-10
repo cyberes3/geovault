@@ -1,3 +1,4 @@
+import traceback
 from typing import Optional, List
 
 from geo_lib.logging.console import get_tagged_logger
@@ -5,10 +6,12 @@ from geo_lib.processing.logging import DatabaseLogLevel
 from geo_lib.processing.tagging import _tag_generators, GeocodingTagGenerator
 from geo_lib.types.feature import GeoFeatureSupported
 
+_logger = get_tagged_logger(__name__)
+
 
 def generate_auto_tags(
         feature: GeoFeatureSupported,
-        import_log=None,
+        import_log,
         filename: Optional[str] = None,
         skip_geocoding: bool = False
 ) -> List[str]:
@@ -20,7 +23,7 @@ def generate_auto_tags(
 
     Args:
         feature: The feature to generate tags for
-        import_log: Optional ImportLog for database logging
+        import_log: ImportLog for database logging
         filename: Optional original filename to add as source-file tag
         skip_geocoding: If True, skip the GeocodingTagGenerator (for async processing)
 
@@ -34,7 +37,7 @@ def generate_auto_tags(
 
 def generate_auto_tags_batch(
         features: List[GeoFeatureSupported],
-        import_log=None,
+        import_log,
         filename: Optional[str] = None,
         skip_geocoding: bool = False
 ) -> List[List[str]]:
@@ -48,7 +51,7 @@ def generate_auto_tags_batch(
 
     Args:
         features: List of features to generate tags for
-        import_log: Optional ImportLog for database logging
+        import_log: ImportLog for database logging
         filename: Optional original filename to add as source-file tag
         skip_geocoding: If True, skip the GeocodingTagGenerator
 
@@ -77,15 +80,13 @@ def generate_auto_tags_batch(
                 tags = generator.process(feature, import_log=import_log, filename=filename)
                 if tags:
                     all_feature_tags[i].extend(tags)
-            except Exception as e:
-                logger = get_tagged_logger('job')
-                logger.warning(f"Tag generator {generator.__class__.__name__} failed for feature {i}: {e}")
-                if import_log:
-                    import_log.add(
-                        f"Tag generator {generator.__class__.__name__} failed: {str(e)}",
-                        "Tagging",
-                        DatabaseLogLevel.WARNING
-                    )
+            except:
+                _logger.warning(f"Tag generator {generator.__class__.__name__} failed for feature {i}: {traceback.format_exc()}")
+                import_log.add(
+                    f"Tag generator {generator.__class__.__name__} failed",
+                    "Tagging",
+                    DatabaseLogLevel.WARNING
+                )
 
     # Batch process geocoding for ALL features at once
     if geocoding_gen and not skip_geocoding:
@@ -93,15 +94,13 @@ def generate_auto_tags_batch(
             geocode_tags = geocoding_gen.process_batch(features, import_log=import_log)
             for i, tags in geocode_tags.items():
                 all_feature_tags[i].extend(tags)
-        except Exception as e:
-            logger = get_tagged_logger('job')
-            logger.warning(f"Batch geocoding failed: {e}")
-            if import_log:
-                import_log.add(
-                    f"Batch geocoding failed: {str(e)}",
-                    "Tagging",
-                    DatabaseLogLevel.WARNING
-                )
+        except:
+            _logger.warning(f"Batch geocoding failed: {traceback.format_exc()}")
+            import_log.add(
+                f"Batch geocoding failed",
+                "Tagging",
+                DatabaseLogLevel.WARNING
+            )
 
     # Post-processing for each feature
     for i in range(len(features)):

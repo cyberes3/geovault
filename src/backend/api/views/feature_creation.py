@@ -214,8 +214,9 @@ def create_quick_point(request, validated_data):
         normalized_feature['properties']['geojson_hash'] = geojson_hash
         
         # Generate system tags using PointFeature type (skip geocoding for async processing)
+        from geo_lib.processing.logging import ImportLog
         point_feature = PointFeature(**normalized_feature)
-        system_tags = generate_auto_tags(point_feature, import_log=None, filename='quick-point', skip_geocoding=True)
+        system_tags = generate_auto_tags(point_feature, import_log=ImportLog(), filename='quick-point', skip_geocoding=True)
         
         # Add 'quick-point' system tag to identify features created via this endpoint
         if 'quick-point' not in system_tags:

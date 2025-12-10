@@ -85,7 +85,7 @@ class PolygonFeature(Feature):
     geometry: PolygonGeometry
 
 
-GeoFeatureSupported = Type[PointFeature | LineStringFeature | MultiLineStringFeature | PolygonFeature]
+GeoFeatureSupported = PointFeature | LineStringFeature | MultiLineStringFeature | PolygonFeature
 
 
 def geojson_to_geofeature(geojson: dict) -> Tuple[List[GeoFeatureSupported], ImportLog]:

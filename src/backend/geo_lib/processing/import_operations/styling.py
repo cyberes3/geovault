@@ -12,6 +12,10 @@ from geo_lib.validation.styling_validation import (
     normalize_hex_color,
 )
 
+# Apply point styling (only if value is not None)
+# Applies to both Point and MultiPoint
+DEFAULT_COLOR = '#ff0000'
+
 
 def strip_icon_properties(feature: dict) -> dict:
     """
@@ -105,10 +109,6 @@ def apply_bulk_operations(features: List[Dict[str, Any]], bulk_ops: Dict[str, An
                     existing_tags.add(lower_tag)
 
         geometry_type = modified_feature.get('geometry', {}).get('type')
-
-        # Apply point styling (only if value is not None)
-        # Applies to both Point and MultiPoint
-        DEFAULT_COLOR = '#ff0000'
 
         if geometry_type in ('Point', 'MultiPoint'):
             if bulk_ops.get('pointColor') is not None:

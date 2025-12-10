@@ -26,7 +26,7 @@ from geo_lib.processing.jobs.base_job import BaseJob
 from geo_lib.processing.messages import BULK_IMPORT_JOB_FAILED, ITEM_IMPORT_FAILED
 from geo_lib.processing.jobs.helpers.status_tracker import ProcessingStatus, JobType
 
-_logger = get_tagged_logger('job')
+_logger = get_tagged_logger('BulkImportJob')
 
 
 class BulkImportJob(BaseJob):

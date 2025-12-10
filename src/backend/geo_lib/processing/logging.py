@@ -3,6 +3,7 @@ import json
 import logging
 import time
 import traceback
+import uuid
 from contextlib import contextmanager
 from enum import Enum
 from typing import List
@@ -10,11 +11,13 @@ from typing import Optional
 
 from asgiref.sync import async_to_sync, sync_to_async
 from channels.layers import get_channel_layer
-from pydantic import BaseModel, Field
 from django.utils import timezone
+from pydantic import BaseModel, Field
 
 from api.models import DatabaseLogging, ImportQueue
 from geo_lib.logging.console import get_tagged_logger
+
+_logger = get_tagged_logger(__name__)
 
 
 @contextmanager
@@ -58,12 +61,12 @@ class ImportLog:
 
     def add(self, msg: str, source: str, level=DatabaseLogLevel.INFO, duration: float = None):
         assert isinstance(msg, str)
-        
+
         # Add timing information to the message if provided
         if duration is not None:
             timing_info = f" ({duration:.1f}s)"
             msg = msg + timing_info
-            
+
         self._messages.append(DatabaseLogMsg(msg=msg, source=source, level=level))
 
     def extend(self, msgs: 'ImportLog'):
@@ -75,7 +78,7 @@ class ImportLog:
 
     def json(self) -> str:
         return json.dumps([x.model_dump() for x in self._messages])
-    
+
     def add_timing(self, step_name: str, duration: float, source: str = "Processing", level=DatabaseLogLevel.INFO):
         """Add a timing log message for a completed step."""
         self.add(f"{step_name} completed", source, level, duration)
@@ -86,29 +89,31 @@ class RealTimeImportLog:
     ImportLog that writes messages to the database immediately when add() is called.
     This allows for real-time log updates during async processing.
     """
-    
+
     def __init__(self, user_id: int, log_id: str = None):
+        if log_id is not None:
+            assert isinstance(log_id, str), "log_id must be a string"
+            uuid.UUID(log_id)
         self._messages: List[DatabaseLogMsg] = []
         self.user_id = user_id
         self.log_id = log_id  # This should be a UUID string
-        self._db_logger = get_tagged_logger('database')
-    
+
     def add(self, msg: str, source: str, level=DatabaseLogLevel.INFO, duration: float = None):
         """Add a log message and immediately write it to the database."""
         assert isinstance(msg, str)
-        
+
         # Add timing information to the message if provided
         if duration is not None:
             timing_info = f" ({duration:.1f}s)"
             msg = msg + timing_info
-        
+
         # Generate timestamp once for both in-memory object and database write
         timestamp = timezone.now()
-        
+
         # Create the log message with the timestamp
         log_msg = DatabaseLogMsg(msg=msg, source=source, level=level, timestamp=timestamp)
         self._messages.append(log_msg)
-        
+
         # Write to database immediately with the same timestamp
         try:
             db_log = DatabaseLogging.objects.create(
@@ -122,21 +127,20 @@ class RealTimeImportLog:
             )
             # Assign the database ID to the log message for WebSocket broadcast
             log_msg.id = db_log.id
-            self._db_logger.debug(f"Real-time log written: {source} - {msg}")
-            
+            _logger.debug(f"Real-time log written: {source} - {msg}")
+
             # Broadcast to WebSocket if we have a log_id (indicating this is for an import item)
             if self.log_id:
                 self._broadcast_log_to_websocket(log_msg)
-                
-        except Exception as e:
-            self._db_logger.error(f"Failed to write real-time log to database: {str(e)}")
-            self._db_logger.error(f"Real-time log database write error traceback: {traceback.format_exc()}")
+
+        except:
+            _logger.error(f"Failed to write real-time log to database: {traceback.format_exc()}")
             # Don't raise the exception - we still want processing to continue
-    
+
     async def add_async(self, msg: str, source: str, level=DatabaseLogLevel.INFO, duration: float = None):
         """Async version of add() for use in async contexts."""
         await sync_to_async(self.add)(msg, source, level, duration)
-    
+
     def extend(self, msgs: 'ImportLog'):
         """Extend with messages from another ImportLog and write them to DB efficiently."""
         messages_to_add = msgs.get()
@@ -145,13 +149,13 @@ class RealTimeImportLog:
 
         timestamp = timezone.now()
         db_logs = []
-        
+
         # 1. Prepare DB objects
         for msg in messages_to_add:
             # Set timestamp if missing
             if not msg.timestamp:
                 msg.timestamp = timestamp
-                
+
             db_logs.append(DatabaseLogging(
                 user_id=self.user_id,
                 log_id=self.log_id,
@@ -166,20 +170,17 @@ class RealTimeImportLog:
         # 2. Bulk Create
         try:
             created_logs = DatabaseLogging.objects.bulk_create(db_logs)
-            
+
             # Update IDs for broadcast
             for i, log in enumerate(created_logs):
                 messages_to_add[i].id = log.id
-                
-            self._db_logger.debug(f"Real-time log extended with {len(db_logs)} messages")
-            
+
             # 3. Batch Broadcast
             if self.log_id and len(messages_to_add) > 0:
-                 self._broadcast_logs_batch_to_websocket(messages_to_add)
+                self._broadcast_logs_batch_to_websocket(messages_to_add)
 
-        except Exception as e:
-            self._db_logger.error(f"Failed to write real-time logs to database: {str(e)}")
-            self._db_logger.error(f"Real-time log database write error traceback: {traceback.format_exc()}")
+        except:
+            _logger.error(f"Failed to write real-time logs to database: {traceback.format_exc()}")
 
     async def extend_async(self, msgs: 'ImportLog'):
         """Async version of extend() for use in async contexts."""
@@ -188,29 +189,29 @@ class RealTimeImportLog:
     def get(self) -> List[DatabaseLogMsg]:
         """Get all messages (for compatibility with ImportLog)."""
         return self._messages.copy()
-    
+
     def json(self) -> str:
         """Get messages as JSON string."""
         return json.dumps([x.model_dump() for x in self._messages])
-    
+
     def add_timing(self, step_name: str, duration: float, source: str = "Processing", level=DatabaseLogLevel.INFO):
         """Add a timing log message for a completed step."""
         self.add(f"{step_name} completed", source, level, duration)
-    
+
     async def add_timing_async(self, step_name: str, duration: float, source: str = "Processing", level=DatabaseLogLevel.INFO):
         """Async version of add_timing() for use in async contexts."""
         await self.add_async(f"{step_name} completed", source, level, duration)
-    
+
     def _broadcast_log_to_websocket(self, log_msg: DatabaseLogMsg):
         """Broadcast log message to WebSocket channels."""
         try:
-            
+
             # Find the import item associated with this log_id
             try:
                 import_item = ImportQueue.objects.get(log_id=self.log_id)
                 user_id = import_item.user_id
                 item_id = import_item.id
-                
+
                 # Broadcast to the upload status channel for this specific item
                 channel_layer = get_channel_layer()
                 if channel_layer:
@@ -230,20 +231,20 @@ class RealTimeImportLog:
             except ImportQueue.DoesNotExist:
                 # Import item not found, skip broadcasting
                 pass
-        except Exception as e:
-            self._db_logger.error(f"Failed to broadcast log to WebSocket: {str(e)}")
+        except:
+            _logger.error(f"Failed to broadcast log to WebSocket: {traceback.format_exc()}")
             # Don't raise the exception - we still want processing to continue
 
     def _broadcast_logs_batch_to_websocket(self, log_msgs: List[DatabaseLogMsg]):
         """Broadcast batch of log messages to WebSocket channels."""
         try:
-            
+
             # Find the import item associated with this log_id
             try:
                 import_item = ImportQueue.objects.get(log_id=self.log_id)
                 user_id = import_item.user_id
                 item_id = import_item.id
-                
+
                 channel_layer = get_channel_layer()
                 if channel_layer:
                     # Send as a single batch event
@@ -266,5 +267,5 @@ class RealTimeImportLog:
                     )
             except ImportQueue.DoesNotExist:
                 pass
-        except Exception as e:
-            self._db_logger.error(f"Failed to broadcast log batch to WebSocket: {str(e)}")
+        except:
+            _logger.error(f"Failed to broadcast log batch to WebSocket: {traceback.format_exc()}")

@@ -31,7 +31,7 @@ def validate_bulk_operations_payload(bulk_ops: Dict[str, Any]) -> Tuple[bool, Op
 
     # Use Pydantic validation
     try:
-        validated_dict = validate_pydantic_model(BulkOperationsPayload, bulk_ops)
+        validate_pydantic_model(BulkOperationsPayload, bulk_ops)
         return True, None
     except ValidationError:
         return False, "Invalid bulk operations format"

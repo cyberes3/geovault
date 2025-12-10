@@ -10,7 +10,7 @@ from django.db import connection
 
 from geo_lib.logging.console import get_tagged_logger
 
-logger = get_tagged_logger('job')
+logger = get_tagged_logger(__name__)
 
 
 def hash_to_lock_id(file_hash: str) -> int:

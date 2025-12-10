@@ -37,7 +37,7 @@ from geo_lib.security.exceptions import FileValidationError, SecurityError
 from geo_lib.utils.advisory_locks import advisory_lock
 from geo_lib.utils.pydantic_serialization import convert_features_to_pydantic
 
-_logger = get_tagged_logger('job')
+_logger = get_tagged_logger('ProcessJob')
 
 
 class ProcessJob(BaseJob):

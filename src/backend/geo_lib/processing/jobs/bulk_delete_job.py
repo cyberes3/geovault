@@ -18,7 +18,7 @@ from geo_lib.processing.jobs.helpers.delete import delete_associated_logs
 from geo_lib.processing.messages import BULK_DELETE_JOB_FAILED, ITEM_DELETE_FAILED
 from geo_lib.processing.jobs.helpers.status_tracker import ProcessingStatus, JobType
 
-_logger = get_tagged_logger('job')
+_logger = get_tagged_logger('BulkDeleteJob')
 
 
 class BulkDeleteJob(BaseJob):

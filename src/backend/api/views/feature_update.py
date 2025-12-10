@@ -35,6 +35,7 @@ from geo_lib.validation.styling_validation import (
 )
 from geo_lib.website.auth import api_or_login_required_401
 from api.validation.feature_updates import validate_payload, BulkFeatureUpdatePayload, FeatureMetadataUpdate, ReplacementGeometryPayload
+from geo_lib.processing.logging import ImportLog
 
 logger = get_tagged_logger('access')
 
@@ -1017,7 +1018,7 @@ def apply_replacement_geometry(request, feature_id, validated_data):
                         existing_user_tags = []
 
                     # Generate new system tags based on the new geometry
-                    new_system_tags = generate_auto_tags(feature_instance, import_log=None)
+                    new_system_tags = generate_auto_tags(feature_instance, import_log=ImportLog())
 
                     # Remove any import-year and import-month tags from new system tags
                     # (we'll add back the preserved ones)
@@ -1115,7 +1116,7 @@ def regenerate_feature_tags(request, feature_id):
         existing_user_tags = []
 
     # Generate new system tags
-    new_system_tags = generate_auto_tags(feature_instance, import_log=None)
+    new_system_tags = generate_auto_tags(feature_instance, import_log=ImportLog())
 
     # Update the feature's tags - preserve user tags, regenerate system tags
     if 'properties' not in geojson_data:

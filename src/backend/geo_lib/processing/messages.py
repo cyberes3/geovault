@@ -25,4 +25,3 @@ ITEM_IMPORT_FAILED = "An error occurred while importing this item."
 ERROR_TYPE_VALIDATION_FAILED = "validation_failed"
 ERROR_TYPE_PROCESSING_FAILED = "processing_failed"
 ERROR_TYPE_FILE_UNPARSABLE = "file_unparsable"
-

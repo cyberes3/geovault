@@ -11,7 +11,7 @@ from geo_lib.processing.tagging.base import TagGenerator
 from geo_lib.logging.console import get_tagged_logger
 from geo_lib.utils.date_parser import parse_date_field
 
-logger = get_tagged_logger('job')
+logger = get_tagged_logger(__name__)
 
 
 class FeatureDateTagGenerator(TagGenerator):

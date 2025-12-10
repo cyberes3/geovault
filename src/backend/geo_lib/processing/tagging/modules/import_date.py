@@ -5,23 +5,23 @@ Generates import-year:* and import-month:* tags based on current date.
 from datetime import datetime
 from typing import List
 
-from geo_lib.types.feature import GeoFeatureSupported
 from geo_lib.processing.tagging.base import TagGenerator
+from geo_lib.types.feature import GeoFeatureSupported
 
 
 class ImportDateTagGenerator(TagGenerator):
     """Generates import-year:* and import-month:* tags."""
-    
+
     priority = 20  # Execute after geometry type
-    
+
     def __init__(self):
         super().__init__(['import-year', 'import-month'])
-    
+
     def process(
-        self,
-        feature: GeoFeatureSupported,
-        import_log=None,
-        **kwargs
+            self,
+            feature: GeoFeatureSupported,
+            import_log=None,
+            **kwargs
     ) -> List[str]:
         """
         Generate import date tags based on current date.
@@ -39,4 +39,3 @@ class ImportDateTagGenerator(TagGenerator):
             f'import-year:{now.year}',
             f'import-month:{now.strftime("%B")}'
         ]
-

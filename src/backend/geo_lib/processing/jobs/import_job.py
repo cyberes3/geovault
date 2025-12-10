@@ -23,7 +23,7 @@ from geo_lib.processing.jobs.base_job import BaseJob
 from geo_lib.processing.jobs.helpers.redis_job_storage import update_job_status as update_redis_job_status
 from geo_lib.processing.jobs.helpers.status_tracker import ProcessingStatus
 
-_logger = get_tagged_logger('job')
+_logger = get_tagged_logger('ImportJob')
 
 
 class ImportJob(BaseJob):
