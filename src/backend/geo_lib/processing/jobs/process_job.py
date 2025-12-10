@@ -4,7 +4,6 @@ Handles converting uploaded files to geojson representation.
 """
 
 import json
-import os
 import subprocess
 import time
 import traceback
@@ -236,10 +235,7 @@ class ProcessJob(BaseJob):
             # ImportQueue was deleted (likely by user deletion), stop processing
             return
 
-        # Create real-time logger
         realtime_log = RealTimeImportLog(user_id, log_uuid)
-
-        # Track overall processing time
         overall_start_time = time.time()
 
         # Queue worker ensures sequential processing, no lock needed
@@ -315,7 +311,7 @@ class ProcessJob(BaseJob):
                 })
                 return
 
-            # Check if job was cancelled after validation
+            # Check if job was canceled after validation
             if self._check_cancellation(job_id, realtime_log, "after validation"):
                 return
 
@@ -354,11 +350,11 @@ class ProcessJob(BaseJob):
             if is_replacement:
                 db_update_progress = 100.0
             else:
-                split_progress = 60.0
-                elevation_progress = 72.0
-                tagging_progress = 80.0
-                geocoding_progress = 88.0
                 db_update_progress = 96.0
+            split_progress = 60.0
+            elevation_progress = 72.0
+            tagging_progress = 80.0
+            geocoding_progress = 88.0
 
             # Step 3: Split and validate features
             if not is_replacement:
@@ -440,7 +436,7 @@ class ProcessJob(BaseJob):
                 if self._check_cancellation(job_id, realtime_log, "after reverse geocoding"):
                     return
 
-            # Check if job was cancelled before finalization
+            # Check if job was canceled before finalization
             if self._check_cancellation(job_id, realtime_log, "before feature finalization"):
                 return
 
@@ -455,7 +451,6 @@ class ProcessJob(BaseJob):
             geojson_data = finalization_result['geojson_data']
             duplicate_features = finalization_result['duplicate_features']
             feature_count = finalization_result['feature_count']
-            type_summary = finalization_result['type_summary']
 
             # Prepare GeoJSON string and size for database storage
             geojson_str = json.dumps(geojson_data)
@@ -468,7 +463,7 @@ class ProcessJob(BaseJob):
             )
             realtime_log.add("Updating database entry", "ProcessJob", DatabaseLogLevel.INFO)
 
-            # Check if job was cancelled before database update
+            # Check if job was canceled before database update
             if self._check_cancellation(job_id, realtime_log, "before database update"):
                 return
 
@@ -490,11 +485,9 @@ class ProcessJob(BaseJob):
             _logger.debug(f"Processing timeout for job {job_id}")
             realtime_log.add(PROCESSING_TIMEOUT, "ProcessJob", DatabaseLogLevel.ERROR)
             self._handle_processing_error(job_id, user_id, PROCESSING_TIMEOUT, realtime_log)
-
         except (SecurityError, FileValidationError):
             _logger.debug(f"Security error in job {job_id}: {traceback.format_exc()}")
             self._handle_processing_error(job_id, user_id, FILE_VALIDATION_FAILED, realtime_log)
-
         except:
             file_size_mb = len(file_data) / (1024 * 1024) if file_data else 0
             _logger.error(f"Processing error in job {job_id} for file '{filename}' ({file_size_mb:.2f} MB): {traceback.format_exc}")
