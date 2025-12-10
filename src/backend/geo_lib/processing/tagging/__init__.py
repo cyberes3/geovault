@@ -21,7 +21,6 @@ from geo_lib.processing.tagging.modules.track_detection import TrackDetectionTag
 from geo_lib.types.feature import GeoFeatureSupported
 
 # Export update_feature_date_tags for backward compatibility
-__all__ = ['generate_auto_tags', 'generate_auto_tags_batch', 'update_feature_date_tags', 'get_internal_tags']
 
 # Registry of tag generators
 _tag_generators: List[TagGenerator] = []

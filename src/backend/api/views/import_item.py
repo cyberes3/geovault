@@ -40,7 +40,7 @@ delete_job = DeleteJob(status_tracker)
 import_job = ImportJob(status_tracker)
 from geo_lib.processing.jobs.helpers.redis_job_storage import get_user_jobs
 from geo_lib.security.SecureFileValidator import basic_file_security_check
-from geo_lib.validation import validate_and_normalize_geojson_feature
+from geo_lib.validation.geojson.geojson_whitelist import validate_and_normalize_geojson_feature
 from geo_lib.website.auth import api_or_login_required_401
 from api.validation.feature_updates import validate_payload, FeatureUpdatePayload, ImportToFeaturestorePayload, SkipStatePayload
 

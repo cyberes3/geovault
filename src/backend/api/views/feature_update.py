@@ -16,7 +16,8 @@ from api.utils.responses import error_response, handle_404
 from geo_lib.tags.const_strings import CONST_INTERNAL_TAGS, filter_protected_tags, is_protected_tag, prepare_user_tags
 from geo_lib.feature_id import generate_geojson_hash
 from geo_lib.logging.console import get_access_logger
-from geo_lib.processing.tagging import generate_auto_tags, update_feature_date_tags
+from geo_lib.processing.tagging import generate_auto_tags
+from geo_lib.processing.tagging.modules.feature_date import update_feature_date_tags
 from geo_lib.processing.import_utils import (
     apply_bulk_operations as apply_bulk_operations_to_features,
     validate_bulk_operations_payload,
@@ -30,7 +31,7 @@ from geo_lib.validation.coordinate.helpers import (
     CoordinateValidationError
 )
 from geo_lib.validation.coordinate.coordinate_validation import validate_coordinates_for_geometry_type
-from geo_lib.validation import validate_and_normalize_geojson_feature
+from geo_lib.validation.geojson.geojson_whitelist import validate_and_normalize_geojson_feature
 from geo_lib.validation.styling_validation import (
     is_valid_icon_url,
 )

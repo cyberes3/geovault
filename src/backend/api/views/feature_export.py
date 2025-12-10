@@ -12,14 +12,11 @@ from api.models import FeatureStore, TagShare, CollectionShare, Collection
 from api.utils.authorization import get_object_or_404_for_user
 from api.views.bbox_query import _build_base_query, _build_collection_query
 from api.views.sharing import _validate_share_id
-from geo_lib.export import (
-    geojson_to_kmz_bytes,
-    parse_feature_id,
-    prepare_geojson_for_kmz,
-    build_share_feature_collection,
-    prepare_kmz_options_for_share,
-    prepare_kmz_options_for_feature,
-)
+from geo_lib.export.geojson_to_kmz import geojson_to_kmz_bytes
+from geo_lib.export.feature_export_helpers import parse_feature_id
+from geo_lib.export.geojson_preprocessor import prepare_geojson_for_kmz
+from geo_lib.export.share_export import build_share_feature_collection, prepare_kmz_options_for_share
+from geo_lib.export.single_feature_export import prepare_kmz_options_for_feature
 from geo_lib.logging.console import get_access_logger
 
 logger = get_access_logger()

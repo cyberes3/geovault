@@ -59,12 +59,3 @@ def get_processor(file_data: Union[bytes, str], filename: str = "",
                             minimal_processing=minimal_processing, user_id=user_id, import_queue_id=import_queue_id)
     else:
         raise ValueError(f"Unsupported file type: {file_type}")
-
-
-__all__ = [
-    'BaseProcessor',
-    'KMLProcessor',
-    'KMZProcessor',
-    'GPXProcessor',
-    'get_processor'
-]

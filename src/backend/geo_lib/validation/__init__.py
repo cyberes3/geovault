@@ -12,13 +12,3 @@ from geo_lib.validation.geometry_validation import (
 )
 from geo_lib.validation.geojson.geojson_whitelist import validate_and_normalize_geojson_feature
 
-__all__ = [
-    'validate_geometry',
-    'validate_feature_geometry',
-    'normalize_and_validate_feature_update',
-    'is_valid_geometry_type',
-    'get_valid_geometry_types',
-    'GeometryValidationError',
-    'validate_and_normalize_geojson_feature'
-]
-

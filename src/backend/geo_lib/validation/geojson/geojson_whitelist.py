@@ -1,6 +1,6 @@
 from typing import Dict, Any, Optional, List
 
-from geo_lib.validation import GeometryValidationError
+from geo_lib.validation.geometry_validation import GeometryValidationError
 from geo_lib.validation.geojson.normalize import _normalize_geometry, _normalize_properties
 from geo_lib.validation.geojson.models import GeometryModel
 

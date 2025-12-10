@@ -17,7 +17,7 @@ from geo_lib.geocoding.background_geocoding import geocode_feature_async
 from geo_lib.logging.console import get_access_logger
 from geo_lib.processing.tagging import generate_auto_tags
 from geo_lib.types.feature import PointFeature
-from geo_lib.validation import validate_and_normalize_geojson_feature
+from geo_lib.validation.geojson.geojson_whitelist import validate_and_normalize_geojson_feature
 from geo_lib.validation.geometry_validation import GeometryValidationError
 from geo_lib.website.auth import api_or_login_required_401
 from pydantic import BaseModel, Field, field_validator

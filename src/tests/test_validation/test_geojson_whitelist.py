@@ -2,7 +2,7 @@
 Tests for GeoJSON whitelist validation and normalization.
 """
 import pytest
-from geo_lib.validation import validate_and_normalize_geojson_feature
+from geo_lib.validation.geojson.geojson_whitelist import validate_and_normalize_geojson_feature
 from geo_lib.validation.geometry_validation import GeometryValidationError
 
 

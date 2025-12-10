@@ -438,10 +438,3 @@ def _css_color_to_kml(color: ColorLike, opacity: Optional[Union[int, float]] = N
             aa = "ff"
 
     return f"{aa}{bb}{gg}{rr}"
-
-
-__all__ = [
-    "KMZOptions",
-    "geojson_to_kmz_bytes",
-    "geojson_to_kmz_file",
-]
