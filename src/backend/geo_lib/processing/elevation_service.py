@@ -11,9 +11,9 @@ from django.conf import settings
 from website.settings_utils import get_required_setting
 
 from geo_lib.processing.logging import ImportLog, DatabaseLogLevel
-from geo_lib.logging.console import get_job_logger
+from geo_lib.logging.console import get_tagged_logger
 
-logger = get_job_logger()
+logger = get_tagged_logger('job')
 
 # Maximum points per API request (API limit is ~10,000, we use 10,000 to be safe)
 MAX_POINTS_PER_REQUEST = 10000

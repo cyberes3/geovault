@@ -12,9 +12,9 @@ from django.conf import settings
 from django.http import HttpResponse, Http404
 from django.views.decorators.http import require_http_methods
 
-from geo_lib.logging.console import get_access_logger
+from geo_lib.logging.console import get_tagged_logger
 
-logger = get_access_logger()
+logger = get_tagged_logger('access')
 
 
 @require_http_methods(["GET"])

@@ -5,7 +5,7 @@ from django.db import connection
 from django.http import JsonResponse
 
 from api.models import FeatureStore, ImportQueue
-from geo_lib.logging.console import get_access_logger
+from geo_lib.logging.console import get_tagged_logger
 from geo_lib.website.auth import api_or_login_required_401
 
 
@@ -85,7 +85,7 @@ def get_user_storage(request):
             'storage_bytes': total_storage_bytes
         })
     except Exception as e:
-        logger = get_access_logger()
+        logger = get_tagged_logger('access')
         logger.error(f"Error calculating storage usage for user {request.user.id}:\n{traceback.format_exc()}")
         return JsonResponse({
             'error': 'Failed to calculate storage usage',

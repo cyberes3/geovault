@@ -17,9 +17,9 @@ from geo_lib.export.feature_export_helpers import parse_feature_id
 from geo_lib.export.geojson_preprocessor import prepare_geojson_for_kmz
 from geo_lib.export.share_export import build_share_feature_collection, prepare_kmz_options_for_share
 from geo_lib.export.single_feature_export import prepare_kmz_options_for_feature
-from geo_lib.logging.console import get_access_logger
+from geo_lib.logging.console import get_tagged_logger
 
-logger = get_access_logger()
+logger = get_tagged_logger('access')
 
 
 def _lookup_and_validate_share(share_id: str):

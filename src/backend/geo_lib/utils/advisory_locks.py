@@ -8,9 +8,9 @@ to application-level resources like file processing by hash.
 
 from django.db import connection
 
-from geo_lib.logging.console import get_job_logger
+from geo_lib.logging.console import get_tagged_logger
 
-logger = get_job_logger()
+logger = get_tagged_logger('job')
 
 
 def hash_to_lock_id(file_hash: str) -> int:

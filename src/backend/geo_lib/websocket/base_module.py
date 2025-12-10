@@ -5,9 +5,9 @@ Base module for WebSocket realtime functionality.
 from abc import ABC, abstractmethod
 from typing import Dict, Any
 
-from geo_lib.logging.console import get_websocket_logger
+from geo_lib.logging.console import get_tagged_logger
 
-logger = get_websocket_logger()
+logger = get_tagged_logger('websocket')
 
 
 class BaseWebSocketModule(ABC):

@@ -5,12 +5,12 @@ from urllib.parse import urlparse
 from django.conf import settings
 from django.contrib.auth.models import AnonymousUser
 
-from geo_lib.logging.console import get_access_logger
+from geo_lib.logging.console import get_tagged_logger
 from geo_lib.utils.ip_utils import get_client_ip, get_user_identifier
 from users.models import UserProfile
 from website.settings import get_tile_source_origins
 
-access_logger = get_access_logger()
+access_logger = get_tagged_logger('access')
 
 # In-memory cache for activity tracking throttling
 # Format: {user_id: last_update_timestamp}

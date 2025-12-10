@@ -10,7 +10,7 @@ from typing import Dict, Any
 from asgiref.sync import async_to_sync
 from channels.layers import get_channel_layer
 
-from geo_lib.logging.console import get_job_logger
+from geo_lib.logging.console import get_tagged_logger
 from geo_lib.processing.jobs.helpers.redis_job_storage import (
     store_job_started,
     update_job_status as update_redis_job_status
@@ -18,7 +18,7 @@ from geo_lib.processing.jobs.helpers.redis_job_storage import (
 from geo_lib.processing.messages import JOB_FAILED_GENERIC
 from geo_lib.processing.jobs.helpers.status_tracker import ProcessingStatusTracker, ProcessingStatus
 
-_logger = get_job_logger()
+_logger = get_tagged_logger('job')
 
 
 class BaseJob(ABC):

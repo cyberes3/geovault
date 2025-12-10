@@ -1,9 +1,9 @@
 import traceback
 
 from api.models import DatabaseLogging, ImportQueue
-from geo_lib.logging.console import get_job_logger
+from geo_lib.logging.console import get_tagged_logger
 
-_logger = get_job_logger()
+_logger = get_tagged_logger('job')
 
 
 def delete_associated_logs(import_queue_item: ImportQueue, delete_job_id: str):

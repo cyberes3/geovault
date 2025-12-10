@@ -14,7 +14,7 @@ from api.validation.feature_updates import validate_payload
 from geo_lib.tags.const_strings import filter_protected_tags, prepare_user_tags, CONST_INTERNAL_TAGS
 from geo_lib.feature_id import generate_geojson_hash
 from geo_lib.geocoding.background_geocoding import geocode_feature_async
-from geo_lib.logging.console import get_access_logger
+from geo_lib.logging.console import get_tagged_logger
 from geo_lib.processing.tagging import generate_auto_tags
 from geo_lib.types.feature import PointFeature
 from geo_lib.validation.geojson.geojson_whitelist import validate_and_normalize_geojson_feature
@@ -24,7 +24,7 @@ from pydantic import BaseModel, Field, field_validator
 from website.settings_utils import get_required_setting
 import requests
 
-logger = get_access_logger()
+logger = get_tagged_logger('access')
 
 
 class QuickPointCreatePayload(BaseModel):

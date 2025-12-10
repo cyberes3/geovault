@@ -14,7 +14,7 @@ from pydantic import BaseModel, Field
 from django.utils import timezone
 
 from api.models import DatabaseLogging, ImportQueue
-from geo_lib.logging.console import get_database_logger
+from geo_lib.logging.console import get_tagged_logger
 
 
 @contextmanager
@@ -91,7 +91,7 @@ class RealTimeImportLog:
         self._messages: List[DatabaseLogMsg] = []
         self.user_id = user_id
         self.log_id = log_id  # This should be a UUID string
-        self._db_logger = get_database_logger()
+        self._db_logger = get_tagged_logger('database')
     
     def add(self, msg: str, source: str, level=DatabaseLogLevel.INFO, duration: float = None):
         """Add a log message and immediately write it to the database."""

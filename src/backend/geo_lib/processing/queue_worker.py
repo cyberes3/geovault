@@ -7,11 +7,11 @@ import threading
 import time
 from typing import Dict, Optional
 
-from geo_lib.logging.console import get_job_logger
+from geo_lib.logging.console import get_tagged_logger
 from geo_lib.processing.jobs.helpers.status_tracker import ProcessingStatus
 from geo_lib.processing.redis_queue import get_processing_queue
 
-_logger = get_job_logger()
+_logger = get_tagged_logger('job')
 
 
 class QueueWorker:

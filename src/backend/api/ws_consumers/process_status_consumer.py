@@ -12,11 +12,11 @@ from django.http import Http404
 
 from api.models import ImportQueue
 from api.utils.authorization import get_object_or_404_for_user
-from geo_lib.logging.console import get_websocket_logger
+from geo_lib.logging.console import get_tagged_logger
 from geo_lib.utils.ip_utils import get_client_ip, get_user_identifier
 from geo_lib.websocket.modules.process_status_module import ProcessStatusModule
 
-logger = get_websocket_logger()
+logger = get_tagged_logger('websocket')
 
 
 class ProcessStatusConsumer(AsyncWebsocketConsumer):

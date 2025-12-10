@@ -6,11 +6,11 @@ Provides persistent storage for job status that can be queried via API.
 import json
 from typing import Dict, Any, Optional, List
 
-from geo_lib.logging.console import get_job_logger
+from geo_lib.logging.console import get_tagged_logger
 from geo_lib.processing.jobs.helpers.status_tracker import ProcessingStatus
 from geo_lib.utils.redis_connection import get_redis_connection
 
-_logger = get_job_logger()
+_logger = get_tagged_logger('job')
 
 # TTL for completed/failed jobs: 10 minutes
 COMPLETED_JOB_TTL = 600

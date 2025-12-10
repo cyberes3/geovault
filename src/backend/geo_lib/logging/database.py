@@ -1,8 +1,8 @@
 from api.models import DatabaseLogging
-from geo_lib.logging.console import get_database_logger
+from geo_lib.logging.console import get_tagged_logger
 from geo_lib.processing.logging import ImportLog
 
-_logger = get_database_logger()
+_logger = get_tagged_logger('database')
 
 
 def importlog_to_db(log_obj: ImportLog, user_id: int, log_id: str = None):

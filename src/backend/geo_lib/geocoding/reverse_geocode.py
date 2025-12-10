@@ -37,9 +37,9 @@ import requests
 from django.core.cache import caches
 from django.conf import settings
 
-from geo_lib.logging.console import get_geocode_logger
+from geo_lib.logging.console import get_tagged_logger
 
-logger = get_geocode_logger()
+logger = get_tagged_logger('geocode')
 
 # Cache TTL: 30 days in seconds
 GEOCODING_CACHE_TTL = 30 * 24 * 60 * 60

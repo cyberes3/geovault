@@ -13,11 +13,11 @@ from api.utils.authorization import get_object_or_404_for_user
 from api.utils.responses import error_response, success_response, not_found_response, handle_404
 from api.validation.feature_updates import validate_payload, TagSharePayload, CollectionSharePayload
 from api.views.bbox_query import BboxQueryResult, _build_bbox_response, _get_features_in_bbox, _validate_bbox_params
-from geo_lib.logging.console import get_access_logger
+from geo_lib.logging.console import get_tagged_logger
 from geo_lib.website.auth import api_or_login_required_401
 from website.settings_utils import get_required_setting
 
-logger = get_access_logger()
+logger = get_tagged_logger('access')
 
 
 def _get_public_share_features_in_bbox(bbox: Tuple[float, float, float, float], user_id: int, tag: str, zoom_level: int, allow_downloads: bool = False) -> BboxQueryResult:

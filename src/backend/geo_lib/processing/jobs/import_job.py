@@ -9,7 +9,7 @@ from asgiref.sync import async_to_sync
 from channels.layers import get_channel_layer
 
 from api.models import ImportQueue
-from geo_lib.logging.console import get_job_logger
+from geo_lib.logging.console import get_tagged_logger
 from geo_lib.processing.import_utils import (
     process_features_for_import,
     bulk_create_features_with_fallback,
@@ -21,7 +21,7 @@ from geo_lib.processing.jobs.base_job import BaseJob
 from geo_lib.processing.jobs.helpers.redis_job_storage import update_job_status as update_redis_job_status
 from geo_lib.processing.jobs.helpers.status_tracker import ProcessingStatus
 
-_logger = get_job_logger()
+_logger = get_tagged_logger('job')
 
 
 class ImportJob(BaseJob):

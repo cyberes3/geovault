@@ -19,7 +19,7 @@ from pydantic import ValidationError
 from api.models import ImportQueue, FeatureStore, DatabaseLogging
 from api.validation.feature_updates import validate_pydantic_model, BulkOperationsPayload
 from geo_lib.feature_id import generate_geojson_hash
-from geo_lib.logging.console import get_job_logger
+from geo_lib.logging.console import get_tagged_logger
 from geo_lib.processing.duplicate_detection.models import SkippedDuplicates, SkippedDuplicateFeature, DuplicateMatchType
 from geo_lib.tags.const_strings import prepare_user_tags
 from geo_lib.types.validation import match_geometry_class
@@ -31,7 +31,7 @@ from geo_lib.validation.styling_validation import (
 )
 from website.settings_utils import get_required_setting
 
-logger = get_job_logger()
+logger = get_tagged_logger('job')
 
 
 # ============================================================================

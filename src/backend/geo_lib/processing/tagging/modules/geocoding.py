@@ -11,9 +11,9 @@ from geo_lib.types.feature import GeoFeatureSupported
 from geo_lib.geocoding.reverse_geocode import get_reverse_geocoding_service
 from geo_lib.processing.tagging.base import TagGenerator
 from geo_lib.processing.logging import DatabaseLogLevel
-from geo_lib.logging.console import get_job_logger
+from geo_lib.logging.console import get_tagged_logger
 
-logger = get_job_logger()
+logger = get_tagged_logger('job')
 
 
 def get_representative_points(feature: GeoFeatureSupported) -> List[Tuple[float, float]]:

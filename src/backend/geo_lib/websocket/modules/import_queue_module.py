@@ -6,11 +6,11 @@ from django.core.serializers.json import DjangoJSONEncoder
 from django.utils import timezone
 
 from api.models import ImportQueue
-from geo_lib.logging.console import get_websocket_logger
+from geo_lib.logging.console import get_tagged_logger
 from geo_lib.processing.jobs.helpers.status_tracker import status_tracker
 from geo_lib.websocket.base_module import BaseWebSocketModule
 
-logger = get_websocket_logger()
+logger = get_tagged_logger('websocket')
 
 
 class ImportQueueModule(BaseWebSocketModule):

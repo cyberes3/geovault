@@ -1,7 +1,7 @@
-from geo_lib.logging.console import get_websocket_logger
+from geo_lib.logging.console import get_tagged_logger
 from geo_lib.websocket.base_module import BaseWebSocketModule
 
-logger = get_websocket_logger()
+logger = get_tagged_logger('websocket')
 
 """
 Process job WebSocket module.

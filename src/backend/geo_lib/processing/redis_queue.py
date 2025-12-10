@@ -7,9 +7,9 @@ import json
 import base64
 from typing import Optional, Dict, Any
 from geo_lib.utils.redis_connection import get_redis_connection
-from geo_lib.logging.console import get_job_logger
+from geo_lib.logging.console import get_tagged_logger
 
-logger = get_job_logger()
+logger = get_tagged_logger('job')
 
 
 class RedisProcessingQueue:

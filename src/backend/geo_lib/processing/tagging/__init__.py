@@ -7,7 +7,7 @@ and will be automatically discovered and executed.
 """
 from typing import List, Optional
 
-from geo_lib.logging.console import get_job_logger
+from geo_lib.logging.console import get_tagged_logger
 from geo_lib.processing.logging import DatabaseLogLevel
 from geo_lib.processing.tagging.base import TagGenerator
 from geo_lib.processing.tagging.modules.driving_detection import DrivingDetectionTagGenerator
@@ -126,7 +126,7 @@ def generate_auto_tags_batch(
                 if tags:
                     all_feature_tags[i].extend(tags)
             except Exception as e:
-                logger = get_job_logger()
+                logger = get_tagged_logger('job')
                 logger.warning(f"Tag generator {generator.__class__.__name__} failed for feature {i}: {e}")
                 if import_log:
                     import_log.add(
@@ -142,7 +142,7 @@ def generate_auto_tags_batch(
             for i, tags in geocode_tags.items():
                 all_feature_tags[i].extend(tags)
         except Exception as e:
-            logger = get_job_logger()
+            logger = get_tagged_logger('job')
             logger.warning(f"Batch geocoding failed: {e}")
             if import_log:
                 import_log.add(

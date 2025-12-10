@@ -15,7 +15,7 @@ from django.contrib.auth.models import User
 from django.db import transaction
 
 from api.models import ImportQueue
-from geo_lib.logging.console import get_job_logger
+from geo_lib.logging.console import get_tagged_logger
 from geo_lib.processing.jobs.base_job import BaseJob
 from geo_lib.processing.jobs.helpers.status_tracker import ProcessingStatus
 from geo_lib.processing.logging import RealTimeImportLog, DatabaseLogLevel
@@ -37,7 +37,7 @@ from geo_lib.security.exceptions import FileValidationError, SecurityError
 from geo_lib.utils.advisory_locks import advisory_lock
 from geo_lib.utils.pydantic_serialization import convert_features_to_pydantic
 
-_logger = get_job_logger()
+_logger = get_tagged_logger('job')
 
 
 class ProcessJob(BaseJob):

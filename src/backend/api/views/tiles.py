@@ -7,9 +7,9 @@ from urllib.request import urlopen, Request
 from urllib.error import URLError
 import requests
 from geo_lib.tile_sources import get_tile_source, get_tile_sources_for_client
-from geo_lib.logging.console import get_tile_logger
+from geo_lib.logging.console import get_tagged_logger
 
-tile_logger = get_tile_logger()
+tile_logger = get_tagged_logger('tile')
 
 
 def get_tile_cache_path(service, z, x, y, extension='tile'):

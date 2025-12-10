@@ -4,10 +4,10 @@ from channels.db import database_sync_to_async
 from django.core.serializers.json import DjangoJSONEncoder
 
 from api.models import ImportQueue
-from geo_lib.logging.console import get_websocket_logger
+from geo_lib.logging.console import get_tagged_logger
 from geo_lib.websocket.base_module import BaseWebSocketModule
 
-logger = get_websocket_logger()
+logger = get_tagged_logger('websocket')
 
 
 class ImportHistoryModule(BaseWebSocketModule):

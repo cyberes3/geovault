@@ -32,14 +32,14 @@ from django.contrib.sites.models import Site
 from django.db import connection
 
 from geo_lib.geocoding.reverse_geocode import load_ski_resorts
-from geo_lib.logging.console import get_startup_logger
+from geo_lib.logging.console import get_tagged_logger
 from geo_lib.processing.file_types import FILE_TYPE_CONFIGS
 from geo_lib.utils.redis_connection import get_redis_connection
 from website.config_loader import get_config_loader
 from website.settings_utils import get_required_setting
 from django.core.cache import cache
 
-logger = get_startup_logger()
+logger = get_tagged_logger('startup')
 
 
 def check_python_version():

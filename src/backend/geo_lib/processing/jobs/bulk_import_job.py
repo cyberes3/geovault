@@ -7,7 +7,7 @@ import traceback
 from typing import Dict, Any, List
 
 from api.models import ImportQueue
-from geo_lib.logging.console import get_job_logger
+from geo_lib.logging.console import get_tagged_logger
 from geo_lib.processing.duplicate_detection.models import SkippedDuplicates
 from geo_lib.processing.import_utils import (
     process_features_for_import,
@@ -22,7 +22,7 @@ from geo_lib.processing.jobs.base_job import BaseJob
 from geo_lib.processing.messages import BULK_IMPORT_JOB_FAILED, ITEM_IMPORT_FAILED
 from geo_lib.processing.jobs.helpers.status_tracker import ProcessingStatus, JobType
 
-_logger = get_job_logger()
+_logger = get_tagged_logger('job')
 
 
 class BulkImportJob(BaseJob):

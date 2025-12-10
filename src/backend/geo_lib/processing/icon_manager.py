@@ -17,10 +17,10 @@ from urllib.request import urlopen, Request
 
 from django.conf import settings
 
-from geo_lib.logging.console import get_job_logger
+from geo_lib.logging.console import get_tagged_logger
 from geo_lib.processing.logging import ImportLog, DatabaseLogLevel
 
-logger = get_job_logger()
+logger = get_tagged_logger('job')
 
 # Valid image file extensions
 VALID_ICON_EXTENSIONS = {'.png', '.jpg', '.jpeg', '.gif', '.bmp', '.svg', '.webp', '.ico'}

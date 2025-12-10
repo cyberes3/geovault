@@ -4,14 +4,14 @@ from asgiref.sync import sync_to_async
 
 from api.models import DatabaseLogging, FeatureStore, ImportQueue
 from geo_lib.feature_id import generate_geojson_hash
-from geo_lib.logging.console import get_websocket_logger
+from geo_lib.logging.console import get_tagged_logger
 from geo_lib.processing.duplicate_detection.models import DuplicateMatchType, DuplicateSource
 from geo_lib.processing.messages import ERROR_TYPE_FILE_UNPARSABLE, PROCESSING_FAILED_WITH_LOGS
 from geo_lib.processing.jobs.helpers.status_tracker import status_tracker
 from geo_lib.spatial.bbox import get_feature_bounding_box_center
 from geo_lib.websocket.base_module import BaseWebSocketModule
 
-logger = get_websocket_logger()
+logger = get_tagged_logger('websocket')
 
 """
 Process status WebSocket module.

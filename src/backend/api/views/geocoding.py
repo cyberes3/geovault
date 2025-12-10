@@ -10,11 +10,11 @@ from django.core.cache import cache
 from django.views.decorators.http import require_http_methods
 
 from api.utils.responses import error_response, success_response
-from geo_lib.logging.console import get_access_logger
+from geo_lib.logging.console import get_tagged_logger
 from geo_lib.website.auth import api_or_login_required_401
 from website.config_loader import get_config_loader
 
-logger = get_access_logger()
+logger = get_tagged_logger('access')
 
 # Cache TTL: 7 days in seconds
 GEOCODING_CACHE_TTL = 604800

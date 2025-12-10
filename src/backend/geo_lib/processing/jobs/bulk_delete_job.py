@@ -12,13 +12,13 @@ from channels.layers import get_channel_layer
 from django.db import transaction
 
 from api.models import ImportQueue
-from geo_lib.logging.console import get_job_logger
+from geo_lib.logging.console import get_tagged_logger
 from geo_lib.processing.jobs.base_job import BaseJob
 from geo_lib.processing.jobs.helpers.delete import delete_associated_logs
 from geo_lib.processing.messages import BULK_DELETE_JOB_FAILED, ITEM_DELETE_FAILED
 from geo_lib.processing.jobs.helpers.status_tracker import ProcessingStatus, JobType
 
-_logger = get_job_logger()
+_logger = get_tagged_logger('job')
 
 
 class BulkDeleteJob(BaseJob):

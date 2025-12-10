@@ -8,9 +8,9 @@ import os
 import yaml
 from pathlib import Path
 from typing import Dict, Any, Optional
-from geo_lib.logging.console import get_config_logger
+from geo_lib.logging.console import get_tagged_logger
 
-logger = get_config_logger()
+logger = get_tagged_logger('config')
 
 
 class ConfigLoader:

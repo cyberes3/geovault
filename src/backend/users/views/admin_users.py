@@ -7,7 +7,7 @@ from django.db.models import Count, Q
 from django.http import JsonResponse
 
 from api.models import FeatureStore, ImportQueue, TagShare, CollectionShare
-from geo_lib.logging.console import get_access_logger
+from geo_lib.logging.console import get_tagged_logger
 from geo_lib.website.auth import api_or_login_required_401
 from users.models import UserProfile
 
@@ -136,7 +136,7 @@ def list_all_users(request):
         })
 
     except Exception as e:
-        logger = get_access_logger()
+        logger = get_tagged_logger('access')
         logger.error(f"Error listing users for admin:\n{traceback.format_exc()}")
         return JsonResponse({
             'error': 'Failed to list users',

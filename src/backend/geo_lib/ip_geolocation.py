@@ -8,10 +8,10 @@ from typing import Optional, Dict, Any
 import geoip2.database
 import geoip2.errors
 
-from geo_lib.logging.console import get_geocode_logger
+from geo_lib.logging.console import get_tagged_logger
 from website.settings_utils import get_required_setting
 
-logger = get_geocode_logger()
+logger = get_tagged_logger('geocode')
 
 
 class IPGeolocationService:

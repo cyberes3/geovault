@@ -14,10 +14,10 @@ from geo_lib.websocket.modules.import_queue_module import ImportQueueModule
 from geo_lib.websocket.modules.process_job_module import ProcessJobModule
 from geo_lib.websocket.modules.bulk_import_job_module import BulkImportJobModule
 from geo_lib.websocket.modules.bulk_delete_job_module import BulkDeleteJobModule
-from geo_lib.logging.console import get_websocket_logger
+from geo_lib.logging.console import get_tagged_logger
 from geo_lib.utils.ip_utils import get_client_ip, get_user_identifier
 
-logger = get_websocket_logger()
+logger = get_tagged_logger('websocket')
 
 
 class RealtimeConsumer(AsyncWebsocketConsumer):

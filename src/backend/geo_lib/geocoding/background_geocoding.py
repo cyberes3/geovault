@@ -11,13 +11,13 @@ import traceback
 from django.db import transaction
 
 from api.models import FeatureStore
-from geo_lib.logging.console import get_job_logger
+from geo_lib.logging.console import get_tagged_logger
 from geo_lib.processing.tagging.modules.geocoding import GeocodingTagGenerator
 from geo_lib.types.feature import (
     PointFeature, LineStringFeature, MultiLineStringFeature, PolygonFeature
 )
 
-logger = get_job_logger()
+logger = get_tagged_logger('job')
 
 
 def _get_feature_class_from_geojson(geojson: dict):

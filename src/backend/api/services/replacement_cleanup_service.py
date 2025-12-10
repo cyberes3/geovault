@@ -9,9 +9,9 @@ from datetime import timedelta
 from django.utils import timezone
 
 from api.models import ImportQueue
-from geo_lib.logging.console import get_job_logger
+from geo_lib.logging.console import get_tagged_logger
 
-logger = get_job_logger()
+logger = get_tagged_logger('job')
 
 
 class ReplacementCleanupService:

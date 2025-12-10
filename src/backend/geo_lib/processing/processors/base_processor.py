@@ -17,7 +17,7 @@ from django.core.files.uploadedfile import SimpleUploadedFile
 
 from api.models import ImportQueue, UserSettings
 from geo_lib.feature_id import generate_geojson_hash
-from geo_lib.logging.console import get_job_logger
+from geo_lib.logging.console import get_tagged_logger
 from geo_lib.processing.duplicate_detection.duplicate_detection import remove_internal_duplicates, find_duplicates_for_source
 from geo_lib.processing.duplicate_detection.models import split_duplicates_by_match_type
 from geo_lib.processing.elevation_service import fill_missing_elevations
@@ -38,7 +38,7 @@ from geo_lib.utils.feature_utils import build_feature_type_summary
 from geo_lib.validation.geometry_validation import validate_coordinates_values, GeometryValidationError
 from website.settings_utils import get_required_setting
 
-logger = get_job_logger()
+logger = get_tagged_logger('job')
 
 
 class BaseProcessor(ABC):

@@ -16,10 +16,10 @@ from api.models import FeatureStore, Collection
 from api.utils.authorization import get_object_or_404_for_user
 from api.utils.responses import handle_404
 from api.views.collections import _get_collection_feature_ids
-from geo_lib.logging.console import get_access_logger
+from geo_lib.logging.console import get_tagged_logger
 from geo_lib.website.auth import api_or_login_required_401
 
-logger = get_access_logger()
+logger = get_tagged_logger('access')
 
 
 class BboxQueryResult(NamedTuple):

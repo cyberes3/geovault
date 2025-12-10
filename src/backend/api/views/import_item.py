@@ -21,7 +21,7 @@ from api.utils.responses import (
 )
 from geo_lib.tags.const_strings import CONST_INTERNAL_TAGS, filter_protected_tags, prepare_user_tags
 from geo_lib.feature_id import generate_geojson_hash
-from geo_lib.logging.console import get_access_logger
+from geo_lib.logging.console import get_tagged_logger
 from geo_lib.processing.duplicate_detection.duplicate_detection import (
     find_duplicates_for_source,
     get_skipped_feature_ids_from_duplicates
@@ -44,7 +44,7 @@ from geo_lib.validation.geojson.geojson_whitelist import validate_and_normalize_
 from geo_lib.website.auth import api_or_login_required_401
 from api.validation.feature_updates import validate_payload, FeatureUpdatePayload, ImportToFeaturestorePayload, SkipStatePayload
 
-logger = get_access_logger()
+logger = get_tagged_logger('access')
 
 
 class DocumentForm(forms.Form):

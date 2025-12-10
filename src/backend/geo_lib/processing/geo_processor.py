@@ -14,11 +14,11 @@ import logging
 
 from geo_lib.feature_id import generate_geojson_hash
 from geo_lib.processing.file_types import FileType
-from geo_lib.logging.console import get_job_logger
+from geo_lib.logging.console import get_tagged_logger
 from geo_lib.validation.geojson.geojson_whitelist import validate_and_normalize_geojson_feature
 from geo_lib.validation.geometry_validation import GeometryValidationError
 
-logger = get_job_logger()
+logger = get_tagged_logger('job')
 
 
 def html_to_markdown(html_content) -> str:
