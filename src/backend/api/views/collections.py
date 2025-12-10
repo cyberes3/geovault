@@ -20,10 +20,8 @@ from api.validation.feature_updates import validate_payload, CollectionCreatePay
 from api.views.feature_update import _apply_bulk_ops_and_save_feature
 from geo_lib.feature_id import generate_geojson_hash
 from geo_lib.logging.console import get_tagged_logger
-from geo_lib.processing.import_utils import (
-    apply_bulk_operations as apply_bulk_operations_to_features,
-    validate_bulk_operations_payload,
-)
+from geo_lib.processing.import_operations.styling import apply_bulk_operations as apply_bulk_operations_to_features
+from geo_lib.processing.import_operations.validation import validate_bulk_operations_payload
 from geo_lib.website.auth import api_or_login_required_401
 
 logger = get_tagged_logger('access')

@@ -14,7 +14,7 @@ from django.contrib.gis.geos import Point
 from api.models import ImportQueue, FeatureStore
 from geo_lib.processing.duplicate_detection.models import DuplicateMatchType, DuplicateSource
 from geo_lib.feature_id import generate_geojson_hash
-from geo_lib.processing.import_utils import process_features_for_import
+from geo_lib.processing.import_operations.batch_operations import process_features_for_import
 
 User = get_user_model()
 

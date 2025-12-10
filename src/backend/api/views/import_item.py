@@ -27,7 +27,7 @@ from geo_lib.processing.duplicate_detection.duplicate_detection import (
     get_skipped_feature_ids_from_duplicates
 )
 from geo_lib.processing.duplicate_detection.models import DuplicateMatchType
-from geo_lib.processing.import_utils import validate_bulk_operations_payload
+from geo_lib.processing.import_operations.validation import validate_bulk_operations_payload
 from geo_lib.processing.logging import DatabaseLogLevel, RealTimeImportLog
 from geo_lib.processing.jobs.helpers.status_tracker import status_tracker
 from geo_lib.processing.jobs.process_job import ProcessJob

@@ -11,7 +11,8 @@ from django.contrib.gis.geos import Point, LineString, Polygon
 
 from api.models import FeatureStore, ImportQueue, Collection, UserSettings
 from geo_lib.feature_id import generate_geojson_hash
-from geo_lib.processing.import_utils import validate_bulk_operations_payload, apply_bulk_operations
+from geo_lib.processing.import_operations.validation import validate_bulk_operations_payload
+from geo_lib.processing.import_operations.styling import apply_bulk_operations
 from geo_lib.validation.geometry_validation import (
     validate_geometry,
     validate_coordinates_values,

@@ -8,7 +8,7 @@ from django.test import TestCase
 from django.contrib.auth import get_user_model
 
 from api.models import ImportQueue
-from geo_lib.processing.import_utils import build_features_to_skip, filter_features_to_process
+from geo_lib.processing.import_operations.skip_logic import build_features_to_skip, filter_features_to_process
 from geo_lib.processing.duplicate_detection.models import DuplicateMatchType, DuplicateSource
 from geo_lib.feature_id import generate_geojson_hash
 

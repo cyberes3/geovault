@@ -10,10 +10,12 @@ from channels.layers import get_channel_layer
 
 from api.models import ImportQueue
 from geo_lib.logging.console import get_tagged_logger
-from geo_lib.processing.import_utils import (
+from geo_lib.processing.import_operations.batch_operations import (
     process_features_for_import,
     bulk_create_features_with_fallback,
     finalize_import_item,
+)
+from geo_lib.processing.import_operations.skip_logic import (
     build_features_to_skip,
     filter_features_to_process,
 )

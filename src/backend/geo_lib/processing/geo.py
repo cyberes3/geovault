@@ -86,18 +86,11 @@ def geojson_property_generation(feature: dict) -> dict:
     feature['properties'] = properties
 
     # Validate, whitelist, and normalize the feature
-    try:
-        normalized_feature = validate_and_normalize_geojson_feature(
-            feature,
-            preserve_system_tags=original_system_tags
-        )
-        return normalized_feature.get('properties', {})
-    except GeometryValidationError as e:
-        # If validation fails, log warning and return original properties with basic normalization
-        logger = logging.getLogger(__name__)
-        logger.warning(f"Feature validation failed during property generation: {str(e)}")
-        # Return original properties (caller should handle validation errors)
-        return properties
+    normalized_feature = validate_and_normalize_geojson_feature(
+        feature,
+        preserve_system_tags=original_system_tags
+    )
+    return normalized_feature.get('properties', {})
 
 
 def extract_track_created_date(feature: dict) -> Optional[str]:
@@ -141,25 +134,21 @@ def extract_track_created_date(feature: dict) -> Optional[str]:
     if not times:
         return None
 
-    try:
-        # Handle MultiLineString: times is an array of arrays
-        # Get the first timestamp from the first line
-        if geometry_type == 'multilinestring':
-            if isinstance(times, list) and len(times) > 0:
-                first_line_times = times[0]
-                if isinstance(first_line_times, list) and len(first_line_times) > 0:
-                    first_timestamp = first_line_times[0]
-                    if isinstance(first_timestamp, str):
-                        return first_timestamp
-        # Handle LineString: times is a flat array
-        elif geometry_type == 'linestring':
-            if isinstance(times, list) and len(times) > 0:
-                first_timestamp = times[0]
+    # Handle MultiLineString: times is an array of arrays
+    # Get the first timestamp from the first line
+    if geometry_type == 'multilinestring':
+        if isinstance(times, list) and len(times) > 0:
+            first_line_times = times[0]
+            if isinstance(first_line_times, list) and len(first_line_times) > 0:
+                first_timestamp = first_line_times[0]
                 if isinstance(first_timestamp, str):
                     return first_timestamp
-    except (IndexError, TypeError, AttributeError) as e:
-        _logger.warning(f"Error extracting track timestamp: {e}")
-        return None
+    # Handle LineString: times is a flat array
+    elif geometry_type == 'linestring':
+        if isinstance(times, list) and len(times) > 0:
+            first_timestamp = times[0]
+            if isinstance(first_timestamp, str):
+                return first_timestamp
 
     return None
 
