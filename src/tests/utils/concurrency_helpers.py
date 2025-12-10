@@ -121,7 +121,7 @@ def wait_for_processing_completion(
         
         if status in [ProcessingStatus.COMPLETED.value, 
                       ProcessingStatus.FAILED.value,
-                      ProcessingStatus.CANCELLED.value]:
+                      ProcessingStatus.CANCELED.value]:
             return job_status
         
         time.sleep(poll_interval)

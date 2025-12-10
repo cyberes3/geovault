@@ -163,26 +163,26 @@ class DeleteJob(BaseJob):
             ]
 
             if active_process_jobs:
-                _logger.info(f"Found {len(active_process_jobs)} active process jobs for item {item_id}, cancelling...")
+                _logger.info(f"Found {len(active_process_jobs)} active process jobs for item {item_id}, canceling...")
 
                 # Update delete job status
                 self.status_tracker.update_job_status(
                     delete_job_id, ProcessingStatus.PROCESSING,
-                    f"Cancelling {len(active_process_jobs)} active process job(s)...", 30.0
+                    f"Canceling {len(active_process_jobs)} active process job(s)...", 30.0
                 )
 
                 # Cancel each active process job
                 for process_job in active_process_jobs:
                     if self.status_tracker.cancel_job(process_job.job_id):
-                        _logger.info(f"Cancelled process job {process_job.job_id} for item {item_id}")
+                        _logger.info(f"Canceled process job {process_job.job_id} for item {item_id}")
 
                 # Wait briefly for graceful cancellation
                 time.sleep(1)
 
-                _logger.info(f"Successfully cancelled {len(active_process_jobs)} process jobs for item {item_id}")
+                _logger.info(f"Successfully canceled {len(active_process_jobs)} process jobs for item {item_id}")
             else:
                 _logger.info(f"No active process jobs found for item {item_id}")
 
         except:
-            _logger.warning(f"Error cancelling active processing jobs for item {item_id}: {traceback.format_exc()}")
+            _logger.warning(f"Error canceling active processing jobs for item {item_id}: {traceback.format_exc()}")
             # Don't fail the delete job for this, just log the warning

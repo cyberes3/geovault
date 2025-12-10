@@ -785,7 +785,7 @@ export default {
       )
 
       if (!confirmed) {
-        // User cancelled, don't navigate away
+        // User canceled, don't navigate away
         // Restart auto-refresh since we're staying on the page
         this.startAutoRefresh()
         return

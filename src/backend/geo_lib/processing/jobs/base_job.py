@@ -47,10 +47,10 @@ class BaseJob(ABC):
         Returns:
             True if job started successfully, False otherwise
         """
-        # Check if job already exists and is not cancelled
+        # Check if job already exists and is not canceled
         job = self.status_tracker.get_job(job_id)
-        if not job or job.status == ProcessingStatus.CANCELLED:
-            _logger.warning(f"Cannot start {self.get_job_type()} job {job_id}: job not found or cancelled")
+        if not job or job.status == ProcessingStatus.CANCELED:
+            _logger.warning(f"Cannot start {self.get_job_type()} job {job_id}: job not found or canceled")
             return False
 
         # Check if already processing
@@ -77,8 +77,8 @@ class BaseJob(ABC):
         try:
             # Check if job was canceled before starting processing
             job = self.status_tracker.get_job(job_id)
-            if not job or job.status == ProcessingStatus.CANCELLED:
-                _logger.info(f"Job {job_id} was cancelled before processing started")
+            if not job or job.status == ProcessingStatus.CANCELED:
+                _logger.info(f"Job {job_id} was canceled before processing started")
                 return
 
             # Store job in Redis when it starts processing
@@ -94,16 +94,16 @@ class BaseJob(ABC):
             # Execute the job-specific processing
             self._execute_job(job_id, kwargs)
 
-            # Check if job was cancelled after processing
+            # Check if job was canceled after processing
             job = self.status_tracker.get_job(job_id)
-            if job.status == ProcessingStatus.CANCELLED:
-                _logger.info(f"Job {job_id} was cancelled during processing")
+            if job.status == ProcessingStatus.CANCELED:
+                _logger.info(f"Job {job_id} was canceled during processing")
 
         except Exception as e:
             # Don't log error if job was canceled
             job = self.status_tracker.get_job(job_id)
-            if job.status == ProcessingStatus.CANCELLED:
-                _logger.info(f"Job {job_id} was cancelled, stopping error handling")
+            if job.status == ProcessingStatus.CANCELED:
+                _logger.info(f"Job {job_id} was canceled, stopping error handling")
             else:
                 # Log detailed error internally
                 _logger.error(f"Error in {self.get_job_type()} job {job_id}: {traceback.format_exc()}")
@@ -144,7 +144,7 @@ class BaseJob(ABC):
             job = self.status_tracker.get_job(job_id)
             update_redis_job_status(
                 job_id=job_id,
-                status=ProcessingStatus.CANCELLED,
+                status=ProcessingStatus.CANCELED,
                 message=job.message,
                 progress=job.progress,
                 started_at=job.started_at,

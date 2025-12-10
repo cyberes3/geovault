@@ -20,7 +20,7 @@ class ProcessingStatus(Enum):
     PROCESSING = "processing"  # Currently being processed
     COMPLETED = "completed"  # Processing completed successfully
     FAILED = "failed"  # Processing failed
-    CANCELLED = "cancelled"  # Processing was cancelled
+    CANCELED = "canceled"  # Processing was canceled
 
 
 class JobType(Enum):
@@ -105,7 +105,7 @@ class ProcessingStatusTracker:
             # Update timestamps
             if status == ProcessingStatus.PROCESSING and not job.started_at:
                 job.started_at = time.time()
-            elif status in [ProcessingStatus.COMPLETED, ProcessingStatus.FAILED, ProcessingStatus.CANCELLED]:
+            elif status in [ProcessingStatus.COMPLETED, ProcessingStatus.FAILED, ProcessingStatus.CANCELED]:
                 job.completed_at = time.time()
 
             # Status updates are handled via WebSocket and database logging
@@ -153,12 +153,12 @@ class ProcessingStatusTracker:
         """Cancel a job if it's not already completed."""
         with self._lock:
             job = self._jobs.get(job_id)
-            if not job or job.status in [ProcessingStatus.COMPLETED, ProcessingStatus.FAILED, ProcessingStatus.CANCELLED]:
+            if not job or job.status in [ProcessingStatus.COMPLETED, ProcessingStatus.FAILED, ProcessingStatus.CANCELED]:
                 return False
 
-            job.status = ProcessingStatus.CANCELLED
+            job.status = ProcessingStatus.CANCELED
             job.completed_at = time.time()
-            job.message = "Job cancelled by user"
+            job.message = "Job canceled by user"
 
             # Job cancellation logged at higher level if needed
             return True
@@ -174,7 +174,7 @@ class ProcessingStatusTracker:
 
         jobs_to_remove = []
         for job_id, job in self._jobs.items():
-            if (job.status in [ProcessingStatus.COMPLETED, ProcessingStatus.FAILED, ProcessingStatus.CANCELLED]
+            if (job.status in [ProcessingStatus.COMPLETED, ProcessingStatus.FAILED, ProcessingStatus.CANCELED]
                     and job.created_at < cutoff_time):
                 jobs_to_remove.append(job_id)
 

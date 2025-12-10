@@ -40,7 +40,7 @@ class Command(BaseCommand):
         if not force and not dry_run:
             confirm = input('Are you sure you want to reset the development environment? This will delete ALL data in the selected components. Type "yes" to continue: ')
             if confirm.lower() != 'yes':
-                self.stdout.write(self.style.WARNING('Reset cancelled'))
+                self.stdout.write(self.style.WARNING('Reset canceled'))
                 return
 
         with transaction.atomic():

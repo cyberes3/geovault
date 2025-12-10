@@ -192,7 +192,7 @@ class Command(BaseCommand):
         confirm = input('Are you sure you want to clear ALL geocoding cache? (yes/no): ')
         
         if confirm.lower() != 'yes':
-            self.stdout.write(self.style.WARNING('Cancelled'))
+            self.stdout.write(self.style.WARNING('Canceled'))
             return
 
         try:

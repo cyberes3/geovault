@@ -146,16 +146,16 @@ class BaseProcessor(ABC):
         """
         raise NotImplemented
 
-    def _is_cancelled(self) -> bool:
+    def _is_canceled(self) -> bool:
         """
-        Check if the current job has been cancelled.
+        Check if the current job has been canceled.
         
         Returns:
-            True if job is cancelled, False otherwise
+            True if job is canceled, False otherwise
         """
         if self.job_id and self.status_tracker:
             job = self.status_tracker.get_job(self.job_id)
-            if job and job.status == ProcessingStatus.CANCELLED:
+            if job and job.status == ProcessingStatus.CANCELED:
                 return True
         return False
 
@@ -171,8 +171,8 @@ class BaseProcessor(ABC):
         
         try:
             # Check for cancellation
-            if self._is_cancelled():
-                step_log.add("Processing cancelled during GeoJSON conversion", "Processing", DatabaseLogLevel.WARNING)
+            if self._is_canceled():
+                step_log.add("Processing canceled during GeoJSON conversion", "Processing", DatabaseLogLevel.WARNING)
                 return step_log
             
             # Perform conversion
@@ -184,7 +184,7 @@ class BaseProcessor(ABC):
                 raise Exception(error_msg)
             
         except Exception as e:
-            if not self._is_cancelled():
+            if not self._is_canceled():
                 step_log.add(f"GeoJSON conversion failed: {str(e)}", "File Conversion", DatabaseLogLevel.ERROR)
                 logger.error(f"GeoJSON conversion error: {traceback.format_exc()}")
             raise
@@ -211,8 +211,8 @@ class BaseProcessor(ABC):
         feature_log.add(f"Processing {len(features)} raw features from file", "Feature Processing", DatabaseLogLevel.INFO)
 
         # Check for cancellation before starting
-        if self._is_cancelled():
-            feature_log.add("Processing cancelled before feature processing started", "Feature Processing", DatabaseLogLevel.WARNING)
+        if self._is_canceled():
+            feature_log.add("Processing canceled before feature processing started", "Feature Processing", DatabaseLogLevel.WARNING)
             return processed_features, feature_log
 
         # Get number of threads from settings
@@ -232,13 +232,13 @@ class BaseProcessor(ABC):
 
                 # Collect results as they complete, checking for cancellation
                 completed_count = 0
-                cancelled = False
+                canceled = False
                 for future in as_completed(future_to_feature):
                     # Check for cancellation before processing each result
-                    if self._is_cancelled():
-                        if not cancelled:
-                            feature_log.add(f"Processing cancelled after {completed_count} features", "Feature Processing", DatabaseLogLevel.WARNING)
-                            cancelled = True
+                    if self._is_canceled():
+                        if not canceled:
+                            feature_log.add(f"Processing canceled after {completed_count} features", "Feature Processing", DatabaseLogLevel.WARNING)
+                            canceled = True
                             # Cancel remaining futures (they'll finish but we won't process results)
                             for remaining_future in future_to_feature:
                                 if not remaining_future.done():
@@ -249,8 +249,8 @@ class BaseProcessor(ABC):
                             # Break immediately - don't process any more results
                             break
 
-                    # Only process results if not cancelled
-                    if not cancelled:
+                    # Only process results if not canceled
+                    if not canceled:
                         try:
                             result_features, result_log, result_skipped, was_split = future.result()
                             processed_features.extend(result_features)
@@ -282,8 +282,8 @@ class BaseProcessor(ABC):
                 self._executor = None  # Clear reference
 
         # Log summary
-        if self._is_cancelled():
-            feature_log.add(f"Processing was cancelled. Processed {len(processed_features)} features before cancellation", "Feature Processing", DatabaseLogLevel.WARNING)
+        if self._is_canceled():
+            feature_log.add(f"Processing was canceled. Processed {len(processed_features)} features before cancellation", "Feature Processing", DatabaseLogLevel.WARNING)
         else:
             if geometry_collection_count > 0:
                 feature_log.add(f"Split {geometry_collection_count} geometry collection(s) into individual features", "Feature Processing", DatabaseLogLevel.INFO)
@@ -315,8 +315,8 @@ class BaseProcessor(ABC):
                 return step_log
             
             # Check for cancellation
-            if self._is_cancelled():
-                step_log.add("Processing cancelled during elevation data filling", "Processing", DatabaseLogLevel.WARNING)
+            if self._is_canceled():
+                step_log.add("Processing canceled during elevation data filling", "Processing", DatabaseLogLevel.WARNING)
                 return step_log
             
             # Fill elevations (modifies features in-place)
@@ -350,8 +350,8 @@ class BaseProcessor(ABC):
         # Batch process all features at once (without geocoding)
         try:
             # Check for cancellation before starting
-            if self._is_cancelled():
-                feature_log.add("Processing cancelled before feature tagging", "Feature Tagging", DatabaseLogLevel.WARNING)
+            if self._is_canceled():
+                feature_log.add("Processing canceled before feature tagging", "Feature Tagging", DatabaseLogLevel.WARNING)
                 return feature_log
             
             # Create feature instances for all features
@@ -383,8 +383,8 @@ class BaseProcessor(ABC):
                     feature_instances.append(None)
             
             # Check for cancellation after creating instances
-            if self._is_cancelled():
-                feature_log.add("Processing cancelled during feature instance creation", "Feature Tagging", DatabaseLogLevel.WARNING)
+            if self._is_canceled():
+                feature_log.add("Processing canceled during feature instance creation", "Feature Tagging", DatabaseLogLevel.WARNING)
                 return feature_log
             
             # Batch generate tags for all features at once (SKIP geocoding)
@@ -397,8 +397,8 @@ class BaseProcessor(ABC):
             )
             
             # Check for cancellation after tag generation
-            if self._is_cancelled():
-                feature_log.add("Processing cancelled after tag generation", "Feature Tagging", DatabaseLogLevel.WARNING)
+            if self._is_canceled():
+                feature_log.add("Processing canceled after tag generation", "Feature Tagging", DatabaseLogLevel.WARNING)
                 return feature_log
             
             # Apply tags to features
@@ -479,8 +479,8 @@ class BaseProcessor(ABC):
         
         try:
             # Check for cancellation before starting
-            if self._is_cancelled():
-                feature_log.add("Processing cancelled before reverse geocoding", "Reverse Geocoding", DatabaseLogLevel.WARNING)
+            if self._is_canceled():
+                feature_log.add("Processing canceled before reverse geocoding", "Reverse Geocoding", DatabaseLogLevel.WARNING)
                 return feature_log
             
             # Create feature instances for all features
@@ -511,8 +511,8 @@ class BaseProcessor(ABC):
                     feature_instances.append(None)
             
             # Check for cancellation after creating instances
-            if self._is_cancelled():
-                feature_log.add("Processing cancelled during feature instance creation", "Reverse Geocoding", DatabaseLogLevel.WARNING)
+            if self._is_canceled():
+                feature_log.add("Processing canceled during feature instance creation", "Reverse Geocoding", DatabaseLogLevel.WARNING)
                 return feature_log
             
             # Use the geocoding tag generator directly for batch processing
@@ -526,8 +526,8 @@ class BaseProcessor(ABC):
                 geocode_tags = geocoding_gen.process_batch(valid_features, import_log=feature_log)
                 
                 # Check for cancellation after geocoding
-                if self._is_cancelled():
-                    feature_log.add("Processing cancelled after reverse geocoding", "Reverse Geocoding", DatabaseLogLevel.WARNING)
+                if self._is_canceled():
+                    feature_log.add("Processing canceled after reverse geocoding", "Reverse Geocoding", DatabaseLogLevel.WARNING)
                     return feature_log
                 
                 # Apply geocoding tags to features
@@ -634,8 +634,8 @@ class BaseProcessor(ABC):
         
         try:
             # Check for cancellation before duplicate detection
-            if self._is_cancelled():
-                step_log.add("Processing cancelled before duplicate detection", "Duplicate Detection", DatabaseLogLevel.WARNING)
+            if self._is_canceled():
+                step_log.add("Processing canceled before duplicate detection", "Duplicate Detection", DatabaseLogLevel.WARNING)
                 return duplicate_features, step_log
             
             # Start duplicate detection timing
@@ -650,8 +650,8 @@ class BaseProcessor(ABC):
                 step_log.add("No internal duplicates found", "Duplicate Detection", DatabaseLogLevel.INFO)
             
             # Check for cancellation after internal duplicate detection
-            if self._is_cancelled():
-                step_log.add("Processing cancelled after internal duplicate detection", "Duplicate Detection", DatabaseLogLevel.WARNING)
+            if self._is_canceled():
+                step_log.add("Processing canceled after internal duplicate detection", "Duplicate Detection", DatabaseLogLevel.WARNING)
                 return duplicate_features, step_log
             
             # Get ImportQueue for exclude parameters
@@ -714,8 +714,8 @@ class BaseProcessor(ABC):
             step_log.add(f"Duplicate detection completed ({duplicate_detection_duration:.1f}s)", "Duplicate Detection", DatabaseLogLevel.INFO)
             
             # Check for cancellation after duplicate detection
-            if self._is_cancelled():
-                step_log.add("Processing cancelled after duplicate detection", "Duplicate Detection", DatabaseLogLevel.WARNING)
+            if self._is_canceled():
+                step_log.add("Processing canceled after duplicate detection", "Duplicate Detection", DatabaseLogLevel.WARNING)
                 return duplicate_features, step_log
             
         except Exception as e:
@@ -814,7 +814,7 @@ class BaseProcessor(ABC):
             Tuple of (processed_features_list, feature_log, skipped_count, was_split)
         """
         # Check for cancellation at the very start
-        if self._is_cancelled():
+        if self._is_canceled():
             return [], ImportLog(), 0, False
 
         feature_log = ImportLog()
@@ -836,7 +836,7 @@ class BaseProcessor(ABC):
 
         for split_feature in split_features:
             # Check for cancellation before processing each split feature
-            if self._is_cancelled():
+            if self._is_canceled():
                 break
             
             # Validate coordinates
@@ -877,7 +877,7 @@ class BaseProcessor(ABC):
                 split_feature['properties']['geojson_hash'] = generate_geojson_hash(split_feature)
 
                 # Check for cancellation before finalizing feature
-                if self._is_cancelled():
+                if self._is_canceled():
                     break
 
                 processed_features.append(split_feature)

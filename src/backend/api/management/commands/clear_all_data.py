@@ -144,7 +144,7 @@ class Command(BaseCommand):
             self.stdout.write('')
             response = input('Are you sure you want to delete all this data? Type "yes" to confirm: ')
             if response.lower() != 'yes':
-                self.stdout.write(self.style.SUCCESS('Operation cancelled'))
+                self.stdout.write(self.style.SUCCESS('Operation canceled'))
                 return
 
         # Perform the deletion

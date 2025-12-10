@@ -516,12 +516,12 @@ class ProcessJob(BaseJob):
             stage: Description of processing stage for logging
             
         Returns:
-            True if job was cancelled, False otherwise
+            True if job was canceled, False otherwise
         """
         job = self.status_tracker.get_job(job_id)
-        if job.status == ProcessingStatus.CANCELLED:
-            _logger.info(f"Job {job_id} was cancelled {stage}")
-            processing_log.add(f"Processing cancelled {stage}", "ProcessJob", DatabaseLogLevel.WARNING)
+        if job.status == ProcessingStatus.CANCELED:
+            _logger.info(f"Job {job_id} was canceled {stage}")
+            processing_log.add(f"Processing canceled {stage}", "ProcessJob", DatabaseLogLevel.WARNING)
             return True
         return False
 

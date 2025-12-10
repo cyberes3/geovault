@@ -121,7 +121,7 @@ def update_job_status(job_id: str, status: ProcessingStatus, message: str = "",
 
     # Determine TTL: set 10-minute TTL for completed/failed jobs
     ttl = None
-    if status in [ProcessingStatus.COMPLETED, ProcessingStatus.FAILED, ProcessingStatus.CANCELLED]:
+    if status in [ProcessingStatus.COMPLETED, ProcessingStatus.FAILED, ProcessingStatus.CANCELED]:
         ttl = COMPLETED_JOB_TTL
 
     # Update job data

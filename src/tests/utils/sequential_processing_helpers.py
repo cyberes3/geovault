@@ -42,7 +42,7 @@ def wait_for_job_completion(job_id: str, timeout: float = 10.0, poll_interval: f
             return True
         elif job.status == ProcessingStatus.FAILED:
             return False
-        elif job.status == ProcessingStatus.CANCELLED:
+        elif job.status == ProcessingStatus.CANCELED:
             return False
         
         time.sleep(poll_interval)
