@@ -10,7 +10,13 @@ from urllib.request import Request, urlopen
 
 from django.conf import settings
 
-from geo_lib.processing.icons.icon_manager import VALID_ICON_EXTENSIONS, _logger
+from geo_lib.logging.console import get_tagged_logger
+from geo_lib.processing.logging import ImportLog, DatabaseLogLevel
+
+_logger = get_tagged_logger(__name__)
+
+# Valid image file extensions
+VALID_ICON_EXTENSIONS = {'.png', '.jpg', '.jpeg', '.gif', '.bmp', '.svg', '.webp', '.ico'}
 
 
 def _get_icon_extension(filename_or_url: str) -> Optional[str]:
@@ -50,13 +56,14 @@ def _get_storage_path(icon_hash: str, extension: str) -> Path:
     return subdir / f"{icon_hash}{extension}"
 
 
-def extract_icon_from_kmz(kmz_data: bytes, icon_path: str) -> Optional[bytes]:
+def extract_icon_from_kmz(kmz_data: bytes, icon_path: str, import_log: ImportLog) -> Optional[bytes]:
     """
     Extract icon from KMZ ZIP archive.
 
     Args:
         kmz_data: KMZ file content as bytes
         icon_path: Path to icon within KMZ archive (e.g., 'files/icon.png' or 'icon.png')
+        import_log: Optional ImportLog for recording user-visible warnings
 
     Returns:
         Icon data as bytes, or None if extraction fails
@@ -99,22 +106,39 @@ def extract_icon_from_kmz(kmz_data: bytes, icon_path: str) -> Optional[bytes]:
                         return zip_file.read(entry_name)
 
             # Icon not found
+            import_log.add(
+                f"Icon not found in KMZ archive: {icon_path}",
+                "Icon Processing",
+                DatabaseLogLevel.WARNING
+            )
             return None
 
     except zipfile.BadZipFile:
+        import_log.add(
+            f"Invalid KMZ archive when extracting icon: {icon_path}",
+            "Icon Processing",
+            DatabaseLogLevel.WARNING
+        )
         return None
     except:
-        _logger.error(f"Failed to extract icon from KMZ: {traceback.format_exc()}")
+        error_msg = f"Failed to extract icon from KMZ: {traceback.format_exc()}"
+        _logger.error(error_msg)
+        import_log.add(
+            f"Failed to extract icon from KMZ archive: {icon_path}",
+            "Icon Processing",
+            DatabaseLogLevel.WARNING
+        )
         return None
 
 
-def fetch_remote_icon(url: str, timeout: float) -> Optional[bytes]:
+def fetch_remote_icon(url: str, timeout: float, import_log: ImportLog) -> Optional[bytes]:
     """
     Fetch icon from remote URL with timeout.
 
     Args:
         url: Remote icon URL
         timeout: Timeout in seconds
+        import_log: Optional ImportLog for recording user-visible warnings
 
     Returns:
         Icon data as bytes, or None if fetch fails
@@ -131,6 +155,11 @@ def fetch_remote_icon(url: str, timeout: float) -> Optional[bytes]:
                 size = int(content_length)
                 if size > settings.ICON_MAX_SIZE_BYTES:
                     _logger.warning(f"Icon exceeds size limit: {url} ({size} bytes)")
+                    import_log.add(
+                        f"Icon exceeds size limit ({size} bytes): {url}",
+                        "Icon Processing",
+                        DatabaseLogLevel.WARNING
+                    )
                     return None
 
             # Read data with size limit
@@ -145,19 +174,46 @@ def fetch_remote_icon(url: str, timeout: float) -> Optional[bytes]:
                 icon_data += chunk
                 if len(icon_data) > max_size:
                     _logger.warning(f"Icon exceeds size limit during download: {url}")
+                    import_log.add(
+                        f"Icon exceeds size limit during download: {url}",
+                        "Icon Processing",
+                        DatabaseLogLevel.WARNING
+                    )
                     return None
 
             return icon_data
 
     except HTTPError as e:
         _logger.warning(f"HTTP error fetching icon: {url} - {e.code}")
+        import_log.add(
+            f"HTTP error fetching icon (code {e.code}): {url}",
+            "Icon Processing",
+            DatabaseLogLevel.WARNING
+        )
         return None
     except URLError:
-        _logger.warning(f"URL error fetching icon: {url} - {traceback.format_exc()}")
+        error_msg = f"URL error fetching icon: {url} - {traceback.format_exc()}"
+        _logger.warning(error_msg)
+        import_log.add(
+            f"URL error fetching icon: {url}",
+            "Icon Processing",
+            DatabaseLogLevel.WARNING
+        )
         return None
     except TimeoutError:
         _logger.warning(f"Timeout fetching icon: {url}")
+        import_log.add(
+            f"Timeout fetching icon: {url}",
+            "Icon Processing",
+            DatabaseLogLevel.WARNING
+        )
         return None
     except:
-        _logger.error(f"Failed to fetch remote icon: {url} - {traceback.format_exc()}")
+        error_msg = f"Failed to fetch remote icon: {url} - {traceback.format_exc()}"
+        _logger.error(error_msg)
+        import_log.add(
+            f"Failed to fetch remote icon: {url}",
+            "Icon Processing",
+            DatabaseLogLevel.ERROR
+        )
         return None

@@ -35,13 +35,15 @@ def _is_valid_icon_type(filename_or_url: str) -> bool:
     return ext is not None
 
 
-def store_icon(icon_data: bytes, original_path: str) -> Optional[str]:
+def store_icon(icon_data: bytes, original_path: str, import_log: ImportLog, stats: Dict[str, int]) -> Optional[str]:
     """
     Store icon using SHA-256 hash as filename.
     
     Args:
         icon_data: Icon file content as bytes
         original_path: Original icon path/URL for extension detection
+        import_log: ImportLog for recording user-visible warnings
+        stats: Statistics dictionary for tracking icon processing
         
     Returns:
         Local URL path for icon (e.g., '/api/icons/user/{hash}.png'), or None if storage fails
@@ -50,12 +52,24 @@ def store_icon(icon_data: bytes, original_path: str) -> Optional[str]:
         # Validate size
         if len(icon_data) > settings.ICON_MAX_SIZE_BYTES:
             _logger.warning(f"Icon exceeds size limit: {len(icon_data)} bytes")
+            import_log.add(
+                f"Icon exceeds size limit ({len(icon_data)} bytes): {original_path}",
+                "Icon Processing",
+                DatabaseLogLevel.WARNING
+            )
+            stats['failed'] += 1
             return None
 
         # Get extension
         extension = _get_icon_extension(original_path)
         if not extension:
             _logger.warning(f"Invalid icon extension: {original_path}")
+            import_log.add(
+                f"Invalid icon extension: {original_path}",
+                "Icon Processing",
+                DatabaseLogLevel.WARNING
+            )
+            stats['failed'] += 1
             return None
 
         # Calculate hash
@@ -71,14 +85,23 @@ def store_icon(icon_data: bytes, original_path: str) -> Optional[str]:
             _logger.debug(f"Stored icon: {storage_path}")
 
         # Return URL path
-        return f"/api/icons/user/{icon_hash}{extension}"
+        result = f"/api/icons/user/{icon_hash}{extension}"
+        stats['successful'] += 1
+        return result
 
     except:
-        _logger.error(f"Failed to store icon: {traceback.format_exc()}")
+        error_msg = f"Failed to store icon: {traceback.format_exc()}"
+        _logger.error(error_msg)
+        import_log.add(
+            f"Failed to store icon from {original_path}",
+            "Icon Processing",
+            DatabaseLogLevel.ERROR
+        )
+        stats['failed'] += 1
         return None
 
 
-def process_icon_href(href: str, file_type: str, file_data: Optional[bytes] = None) -> Optional[str]:
+def process_icon_href(href: str, file_type: str, import_log: ImportLog, stats: Dict[str, int], file_data: Optional[bytes] = None) -> Optional[str]:
     """
     Main entry point for processing icon hrefs.
     Handles both KMZ embedded icons and KML remote icons.
@@ -87,6 +110,8 @@ def process_icon_href(href: str, file_type: str, file_data: Optional[bytes] = No
         href: Icon href from KML/KMZ (can be URL or relative path)
         file_type: File type ('kmz' or 'kml')
         file_data: File data as bytes (required for KMZ)
+        import_log: ImportLog for recording user-visible warnings
+        stats: Statistics dictionary for tracking icon processing
         
     Returns:
         Local URL path for icon, or None if processing fails
@@ -112,29 +137,33 @@ def process_icon_href(href: str, file_type: str, file_data: Optional[bytes] = No
         # For KMZ, check if it's an embedded icon (not a remote URL)
         if not is_remote and file_data:
             # Extract from KMZ archive
-            icon_data = extract_icon_from_kmz(file_data, href)
+            icon_data = extract_icon_from_kmz(file_data, href, import_log)
         elif is_remote:
             # Remote URL in KMZ - fetch it
-            icon_data = fetch_remote_icon(href, settings.ICON_FETCH_TIMEOUT)
+            icon_data = fetch_remote_icon(href, settings.ICON_FETCH_TIMEOUT, import_log)
     elif file_type.lower() == 'kml':
         # For KML, fetch remote icons
         if is_remote:
-            icon_data = fetch_remote_icon(href, settings.ICON_FETCH_TIMEOUT)
+            icon_data = fetch_remote_icon(href, settings.ICON_FETCH_TIMEOUT, import_log)
         else:
             # Local path in KML - not supported (would need file system access)
             return None
 
     if icon_data:
-        return store_icon(icon_data, href)
+        result = store_icon(icon_data, href, import_log, stats)
+        # store_icon already incremented stats (successful or failed)
+        return result
 
+    # Failed to get icon_data (fetch/extract failed)
+    stats['failed'] += 1
     return None
 
 
 def process_geojson_icons(
         geojson_data: dict,
         file_type: str,
-        file_data: Optional[bytes] = None,
-        import_log: Optional[ImportLog] = None
+        import_log: ImportLog,
+        file_data: Optional[bytes] = None
 ) -> dict:
     """
     Process all icon hrefs in GeoJSON data structure.
@@ -145,7 +174,7 @@ def process_geojson_icons(
         geojson_data: GeoJSON data dictionary
         file_type: File type ('kmz' or 'kml')
         file_data: File data as bytes (required for KMZ)
-        import_log: Optional ImportLog for recording user-visible warnings
+        import_log: ImportLog for recording user-visible warnings
         
     Returns:
         Modified GeoJSON data with replaced icon hrefs
@@ -155,6 +184,13 @@ def process_geojson_icons(
 
     if not isinstance(geojson_data, dict):
         return geojson_data
+
+    # Statistics tracking
+    stats = {
+        'successful': 0,
+        'caltopo_found': 0,
+        'failed': 0
+    }
 
     # Create mapping of original hrefs to new hrefs
     href_mapping: Dict[str, str] = {}
@@ -173,10 +209,11 @@ def process_geojson_icons(
                 _process_properties_icons(
                     feature['properties'],
                     file_type,
+                    import_log,
+                    stats,
                     file_data,
                     href_mapping,
-                    is_point=True,
-                    import_log=import_log
+                    is_point=True
                 )
             elif geometry_type != 'point' and 'properties' in feature:
                 # For non-Point features, remove icon properties entirely
@@ -194,15 +231,25 @@ def process_geojson_icons(
     # (Root-level properties are typically metadata, not feature icons)
     pass
 
+    # Log statistics
+    total_processed = stats['successful'] + stats['caltopo_found'] + stats['failed']
+    if total_processed > 0:
+        import_log.add(
+            f"Icon processing complete: {stats['successful']} successfully extracted, {stats['caltopo_found']} CalTopo icons found, {stats['failed']} failed",
+            "Icon Processing",
+            DatabaseLogLevel.INFO
+        )
+
     return geojson_data
 
 
 def _process_single_icon_href(
         href: str,
         file_type: str,
+        import_log: ImportLog,
+        stats: Dict[str, int],
         file_data: Optional[bytes] = None,
-        href_mapping: Optional[Dict[str, str]] = None,
-        import_log: Optional[ImportLog] = None
+        href_mapping: Optional[Dict[str, str]] = None
 ) -> Tuple[Optional[str], Optional[str]]:
     """
     Process a single icon href and return the result.
@@ -212,7 +259,8 @@ def _process_single_icon_href(
         file_type: File type ('kmz' or 'kml')
         file_data: File data as bytes (required for KMZ)
         href_mapping: Optional pre-computed mapping of old hrefs to new hrefs
-        import_log: Optional ImportLog for recording warnings
+        import_log: ImportLog for recording warnings
+        stats: Statistics dictionary for tracking icon processing
         
     Returns:
         Tuple of (new_href, extracted_color):
@@ -226,6 +274,8 @@ def _process_single_icon_href(
 
     # Check if this is a CalTopo URL
     is_caltopo = _is_caltopo_url(href)
+    if is_caltopo:
+        stats['caltopo_found'] += 1
 
     # Extract color from CalTopo URL (works on both nested and fixed URLs)
     caltopo_color = _extract_color_from_caltopo_url(href)
@@ -255,16 +305,17 @@ def _process_single_icon_href(
     # For non-CalTopo URLs, also fetch the icon
     if is_caltopo and caltopo_color:
         # Non-point CalTopo icon with color - fetch icon and return both
-        new_href = process_icon_href(href, file_type, file_data)
+        new_href = process_icon_href(href, file_type, import_log, stats, file_data)
         if new_href:
+            # process_icon_href already incremented successful via store_icon, don't double-count
             return new_href, caltopo_color  # Return icon and color
         # Fetch failed but we have color - return color
-        if import_log is not None:
-            import_log.add(
-                f"Failed to load icon '{href}', but extracted color {caltopo_color} from URL",
-                "Icon Processing",
-                DatabaseLogLevel.WARNING
-            )
+        # process_icon_href already incremented failed, don't double-count
+        import_log.add(
+            f"Failed to load icon '{href}', but extracted color {caltopo_color} from URL",
+            "Icon Processing",
+            DatabaseLogLevel.WARNING
+        )
         return None, caltopo_color
 
     # END CALTOPO ICON PROCESSING
@@ -274,27 +325,29 @@ def _process_single_icon_href(
     assert caltopo_color is None
 
     # For non-CalTopo URLs, fetch/store the icon
-    new_href = process_icon_href(href, file_type, file_data)
+    new_href = process_icon_href(href, file_type, import_log, stats, file_data)
     if new_href:
+        # process_icon_href already incremented successful via store_icon, don't double-count
         return new_href, None
 
     # Fetch failed and no color - log warning
-    if import_log is not None:
-        import_log.add(
-            f"Failed to load icon '{href}', using default red icon",
-            "Icon Processing",
-            DatabaseLogLevel.WARNING
-        )
+    # process_icon_href already incremented failed, don't double-count
+    import_log.add(
+        f"Failed to load icon '{href}', using default red icon",
+        "Icon Processing",
+        DatabaseLogLevel.WARNING
+    )
     return None, None
 
 
 def _process_properties_icons(
         properties: dict,
         file_type: str,
+        import_log: ImportLog,
+        stats: Dict[str, int],
         file_data: Optional[bytes] = None,
         href_mapping: Optional[Dict[str, str]] = None,
-        is_point: bool = False,
-        import_log: Optional[ImportLog] = None
+        is_point: bool = False
 ) -> None:
     """
     Process icon hrefs in properties dictionary.
@@ -307,6 +360,8 @@ def _process_properties_icons(
         file_data: File data as bytes (required for KMZ)
         href_mapping: Optional pre-computed mapping of old hrefs to new hrefs
         is_point: Whether this is a Point feature (only True for Point geometries)
+        import_log: ImportLog for recording warnings
+        stats: Statistics dictionary for tracking icon processing
     """
     if not is_point or not isinstance(properties, dict):
         return
@@ -336,7 +391,7 @@ def _process_properties_icons(
 
         # Process the href
         new_href, extracted_color = _process_single_icon_href(
-            href, file_type, file_data, href_mapping, import_log
+            href, file_type, import_log, stats, file_data, href_mapping
         )
 
         # Handle the result
@@ -351,6 +406,12 @@ def _process_properties_icons(
         elif is_caltopo and not extracted_color and not new_href:
             # CalTopo URL detected but both color extraction and fetch failed
             _logger.warning(f"CalTopo URL detected but color extraction failed: {href}")
+            import_log.add(
+                f"CalTopo URL detected but color extraction failed: {href}",
+                "Icon Processing",
+                DatabaseLogLevel.WARNING
+            )
+            stats['failed'] += 1
             del properties[prop_name]
             if 'marker-color' not in properties or not properties['marker-color']:
                 properties['marker-color'] = '#ff0000'
@@ -359,6 +420,7 @@ def _process_properties_icons(
             properties[prop_name] = new_href
         else:
             # Icon fetch failed - remove icon property and set default red color if needed
+            # Note: failed count is already incremented in _process_single_icon_href or process_icon_href
             del properties[prop_name]
             if 'marker-color' not in properties or not properties['marker-color']:
                 properties['marker-color'] = '#ff0000'
@@ -366,11 +428,11 @@ def _process_properties_icons(
     # Process nested structures (e.g., style objects)
     for key, value in properties.items():
         if isinstance(value, dict):
-            _process_properties_icons(value, file_type, file_data, href_mapping, is_point=True, import_log=import_log)
+            _process_properties_icons(value, file_type, import_log, stats, file_data, href_mapping, is_point=True)
         elif isinstance(value, list):
             for item in value:
                 if isinstance(item, dict):
-                    _process_properties_icons(item, file_type, file_data, href_mapping, is_point=True, import_log=import_log)
+                    _process_properties_icons(item, file_type, import_log, stats, file_data, href_mapping, is_point=True)
         elif isinstance(value, str) and key not in icon_property_names:
             # Check if any string value matches a href in the mapping
             if href_mapping and value in href_mapping:

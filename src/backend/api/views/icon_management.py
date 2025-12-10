@@ -12,6 +12,7 @@ from PIL import Image
 
 from geo_lib.logging.console import get_tagged_logger
 from geo_lib.processing.icons.icon_manager import store_icon
+from geo_lib.processing.logging import ImportLog
 from geo_lib.website.auth import api_or_login_required_401
 
 logger = get_tagged_logger('access')
@@ -75,7 +76,9 @@ def upload_icon(request):
             }, status=400)
 
         # Store icon using existing icon manager
-        icon_url = store_icon(icon_data, file_name)
+        # Create empty ImportLog for non-import use case
+        import_log = ImportLog()
+        icon_url = store_icon(icon_data, file_name, import_log, stats={'successful': 0, 'caltopo_found': 0, 'failed': 0})
 
         if not icon_url:
             return JsonResponse({

@@ -7,6 +7,7 @@ from geo_lib.processing.icons.icon_manager import (
     _process_single_icon_href
 )
 from geo_lib.processing.icons.caltopo import _fix_nested_caltopo_url, _is_caltopo_point_icon, _extract_color_from_caltopo_url
+from geo_lib.processing.logging import ImportLog
 
 
 class TestCalTopoIconDetection:
@@ -155,7 +156,9 @@ class TestCalTopoIconProcessingIntegration:
         assert color is None, "Should have no color in the URL"
         
         # Now test the actual processing function
-        new_href, extracted_color = _process_single_icon_href(url, 'kml')
+        import_log = ImportLog()
+        stats = {'successful': 0, 'caltopo_found': 0, 'failed': 0}
+        new_href, extracted_color = _process_single_icon_href(url, 'kml', import_log, stats)
         
         assert new_href is None, "Point icons should not be fetched"
         assert extracted_color == '#000000', "Should default to black when no color is specified"
@@ -172,7 +175,9 @@ class TestCalTopoIconProcessingIntegration:
         assert color == "#FF0000", "Should extract the color"
         
         # Test the actual processing function
-        new_href, extracted_color = _process_single_icon_href(url, 'kml')
+        import_log = ImportLog()
+        stats = {'successful': 0, 'caltopo_found': 0, 'failed': 0}
+        new_href, extracted_color = _process_single_icon_href(url, 'kml', import_log, stats)
         
         assert new_href is None, "Point icons should not be fetched"
         assert extracted_color == "#FF0000", "Should use the specified color"
@@ -189,15 +194,19 @@ class TestCalTopoIconProcessingIntegration:
         assert color == "#FF0000", "Should still extract the color"
         
         # Mock the icon fetching to avoid actually downloading
-        with patch('geo_lib.processing.icon_manager.process_icon_href') as mock_fetch:
-            mock_fetch.return_value = 'assets/icons/local_icon.png'
-            
-            new_href, extracted_color = _process_single_icon_href(url, 'kml')
-            
-            # Verify fetch was called for non-point icons
-            mock_fetch.assert_called_once()
-            assert new_href == 'assets/icons/local_icon.png', "Should return fetched icon path"
-            assert extracted_color == "#FF0000", "Should extract the color"
+        import_log = ImportLog()
+        stats = {'successful': 0, 'caltopo_found': 0, 'failed': 0}
+        with patch('geo_lib.processing.icons.icon_manager.fetch_remote_icon') as mock_fetch:
+            mock_fetch.return_value = b'fake_icon_data'
+            with patch('geo_lib.processing.icons.icon_manager.store_icon') as mock_store:
+                mock_store.return_value = 'assets/icons/local_icon.png'
+                
+                new_href, extracted_color = _process_single_icon_href(url, 'kml', import_log, stats)
+                
+                # Verify fetch was called for non-point icons
+                mock_fetch.assert_called_once()
+                assert new_href == 'assets/icons/local_icon.png', "Should return fetched icon path"
+                assert extracted_color == "#FF0000", "Should extract the color"
 
     def test_href_mapping_with_point_icon_without_color(self):
         """
@@ -212,8 +221,10 @@ class TestCalTopoIconProcessingIntegration:
         
         href_mapping = {original_url: mapped_url}
         
+        import_log = ImportLog()
+        stats = {'successful': 0, 'caltopo_found': 0, 'failed': 0}
         new_href, extracted_color = _process_single_icon_href(
-            original_url, 'kml', href_mapping=href_mapping
+            original_url, 'kml', import_log, stats, href_mapping=href_mapping
         )
         
         assert new_href is None, "Point icons should not be fetched even with mapping"
@@ -232,8 +243,10 @@ class TestCalTopoIconProcessingIntegration:
         
         href_mapping = {original_url: mapped_url}
         
+        import_log = ImportLog()
+        stats = {'successful': 0, 'caltopo_found': 0, 'failed': 0}
         new_href, extracted_color = _process_single_icon_href(
-            original_url, 'kml', href_mapping=href_mapping
+            original_url, 'kml', import_log, stats, href_mapping=href_mapping
         )
         
         assert new_href is None, "Point icons should not be fetched"
@@ -253,8 +266,10 @@ class TestCalTopoIconProcessingIntegration:
         
         href_mapping = {original_url: mapped_url}
         
+        import_log = ImportLog()
+        stats = {'successful': 0, 'caltopo_found': 0, 'failed': 0}
         new_href, extracted_color = _process_single_icon_href(
-            original_url, 'kml', href_mapping=href_mapping
+            original_url, 'kml', import_log, stats, href_mapping=href_mapping
         )
         
         assert new_href is None, "Point icons should not be fetched"
@@ -275,8 +290,10 @@ class TestCalTopoIconProcessingIntegration:
         
         href_mapping = {original_url: mapped_url}
         
+        import_log = ImportLog()
+        stats = {'successful': 0, 'caltopo_found': 0, 'failed': 0}
         new_href, extracted_color = _process_single_icon_href(
-            original_url, 'kml', href_mapping=href_mapping
+            original_url, 'kml', import_log, stats, href_mapping=href_mapping
         )
         
         assert new_href is None, "Mapped point icons should not be fetched"
@@ -298,13 +315,17 @@ class TestCalTopoIconProcessingIntegration:
         assert color is None, "Should have no color"
         
         # Mock the icon fetching
-        with patch('geo_lib.processing.icon_manager.process_icon_href') as mock_fetch:
-            mock_fetch.return_value = 'assets/icons/local_icon.png'
-            
-            new_href, extracted_color = _process_single_icon_href(url, 'kml')
-            
-            # Should still attempt to fetch the icon even without color
-            mock_fetch.assert_called_once()
-            assert new_href == 'assets/icons/local_icon.png', "Should return fetched icon path"
-            assert extracted_color is None, "Should have no extracted color"
+        import_log = ImportLog()
+        stats = {'successful': 0, 'caltopo_found': 0, 'failed': 0}
+        with patch('geo_lib.processing.icons.icon_manager.fetch_remote_icon') as mock_fetch:
+            mock_fetch.return_value = b'fake_icon_data'
+            with patch('geo_lib.processing.icons.icon_manager.store_icon') as mock_store:
+                mock_store.return_value = 'assets/icons/local_icon.png'
+                
+                new_href, extracted_color = _process_single_icon_href(url, 'kml', import_log, stats)
+                
+                # Should still attempt to fetch the icon even without color
+                mock_fetch.assert_called_once()
+                assert new_href == 'assets/icons/local_icon.png', "Should return fetched icon path"
+                assert extracted_color is None, "Should have no extracted color"
 

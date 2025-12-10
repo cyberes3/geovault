@@ -61,8 +61,8 @@ class KMLProcessor(BaseProcessor):
         geojson_data = process_geojson_icons(
             geojson_data,
             file_type='kml',
-            file_data=None,
-            import_log=self.import_log
+            import_log=self.import_log,
+            file_data=None
         )
 
         return geojson_data
