@@ -8,20 +8,15 @@ import os
 import subprocess
 import time
 import traceback
-from typing import Dict, Any, Optional
+from typing import Dict, Any, Optional, List
 
 from asgiref.sync import async_to_sync
 from channels.layers import get_channel_layer
 from django.contrib.auth.models import User
-from django.core.files.uploadedfile import SimpleUploadedFile
 from django.db import transaction
 
-from api.models import ImportQueue, UserSettings
+from api.models import ImportQueue
 from geo_lib.logging.console import get_job_logger
-from geo_lib.processing.duplicate_detection.duplicate_detection import remove_internal_duplicates, find_duplicates_for_source
-from geo_lib.processing.duplicate_detection.models import (
-    split_duplicates_by_match_type
-)
 from geo_lib.processing.jobs.base_job import BaseJob
 from geo_lib.processing.jobs.helpers.status_tracker import ProcessingStatus
 from geo_lib.processing.logging import RealTimeImportLog, DatabaseLogLevel
@@ -37,13 +32,10 @@ from geo_lib.processing.queue_worker import start_worker_for_user
 from geo_lib.processing.redis_queue import get_processing_queue
 from geo_lib.processing.utils import (
     encode_raw_file_data,
-    inject_feature_hashes,
     build_skipped_feature_ids
 )
-from geo_lib.security.SecureFileValidator import validate_file
 from geo_lib.security.exceptions import FileValidationError, SecurityError
 from geo_lib.utils.advisory_locks import advisory_lock
-from geo_lib.utils.feature_utils import build_feature_type_summary
 from geo_lib.utils.pydantic_serialization import convert_features_to_pydantic
 
 _logger = get_job_logger()
@@ -156,114 +148,6 @@ class ProcessJob(BaseJob):
         # Update Redis with failure status
         self._broadcast_job_failed(job_id, error_msg)
 
-    def _apply_track_name_override(self, geojson_data: Dict[str, Any],
-                                   user_id: int, filename: str, job_id: str) -> None:
-        """
-        Apply user setting to overwrite single track name with filename if enabled.
-        
-        Args:
-            geojson_data: GeoJSON data to potentially modify (modified in-place)
-            user_id: User ID to check settings for
-            filename: Original filename
-            job_id: Job ID for logging
-        """
-        user_settings_obj = UserSettings.objects.filter(user_id=user_id).first()
-        if user_settings_obj and user_settings_obj.settings:
-            import_settings = user_settings_obj.settings.get('import', {})
-            overwrite_enabled = import_settings.get('overwrite_single_track_name_with_filename', False)
-
-            if overwrite_enabled:
-                features = geojson_data.get('features', [])
-                # Check if there's exactly one feature
-                if len(features) == 1:
-                    feature = features[0]
-                    geometry = feature.get('geometry', {})
-                    geometry_type = geometry.get('type', '').lower() if geometry else ''
-                    properties = feature.get('properties', {})
-
-                    # Check if it's a track (LineString or MultiLineString)
-                    is_track_geometry = geometry_type in ['linestring', 'multilinestring']
-
-                    # Check if it has the type:track tag
-                    system_tags = properties.get('system_tags', [])
-                    is_track_tagged = 'type:track' in system_tags if isinstance(system_tags, list) else False
-
-                    if is_track_geometry and is_track_tagged:
-                        # Extract filename without extension
-                        filename_without_ext = os.path.splitext(filename)[0]
-                        # Overwrite the name property
-                        properties['name'] = filename_without_ext
-                        feature['properties'] = properties
-                        _logger.info(f"Overwrote single track name with filename '{filename_without_ext}' for job {job_id}")
-
-    def _validate_uploaded_file(self, file_data: bytes, filename: str,
-                                job_id: str, user_id: int, import_queue_id: int,
-                                realtime_log: RealTimeImportLog) -> bool:
-        """
-        Validate uploaded file format and security.
-        
-        Args:
-            file_data: Raw file data
-            filename: Original filename
-            job_id: Job ID
-            user_id: User ID for broadcasting
-            import_queue_id: Import queue ID for broadcasting
-            realtime_log: Real-time log for messages
-            
-        Returns:
-            True if validation passed, False otherwise
-        """
-        # Update status
-        self._update_and_broadcast_status(
-            job_id, user_id, import_queue_id,
-            "Validating file format and security...", 24.0
-        )
-        realtime_log.add("Validating file format and security", "ProcessJob", DatabaseLogLevel.INFO)
-
-        # Create a mock uploaded file for validation
-        uploaded_file = SimpleUploadedFile(
-            name=filename,
-            content=file_data,
-            content_type='application/zip' if filename.lower().endswith('.kmz') else 'text/xml'
-        )
-
-        # Validate file with timing
-        validation_start = time.time()
-        is_valid, validation_message = validate_file(uploaded_file)
-        validation_duration = time.time() - validation_start
-        realtime_log.add_timing("File validation", validation_duration, "ProcessJob")
-
-        if not is_valid:
-            error_msg = f"{FILE_VALIDATION_FAILED}: {validation_message}"
-            realtime_log.add(error_msg, "ProcessJob", DatabaseLogLevel.ERROR)
-
-            # Mark ImportQueue item as unparsable and save error information
-            self._mark_import_queue_as_failed(import_queue_id, validation_message)
-
-            self.status_tracker.update_job_status(
-                job_id, ProcessingStatus.FAILED,
-                error_msg,
-                error_message=validation_message
-            )
-
-            # Broadcast high-level status to realtime channel (processing failed)
-            self._broadcast_to_import_queue_module(user_id, 'status_updated', {
-                'id': import_queue_id,
-                'status': 'failed',
-                'progress': 0.0,
-                'message': PROCESSING_FAILED
-            })
-
-            # Broadcast detailed failure to process status channel
-            self._broadcast_to_process_status_module(user_id, import_queue_id, 'item_failed', {
-                'job_id': job_id,
-                'error_message': error_msg
-            })
-            return False
-
-        realtime_log.add("File validation passed successfully", "ProcessJob", DatabaseLogLevel.INFO)
-        return True
-
     def _finalize_job_success(self, job_id: str, user_id: int, import_queue_id: int,
                               feature_count: int, overall_duration: float,
                               geojson_data: Dict[str, Any], realtime_log: RealTimeImportLog) -> None:
@@ -374,8 +258,61 @@ class ProcessJob(BaseJob):
                 'message': 'Processing started'
             })
 
-            # Validate file
-            if not self._validate_uploaded_file(file_data, filename, job_id, user_id, import_queue_id, realtime_log):
+            # Get file size for logging
+            file_size_mb = len(file_data) / (1024 * 1024)
+            realtime_log.add(f"Processing {file_size_mb:.1f}MB file", "ProcessJob", DatabaseLogLevel.INFO)
+
+            # Create processor instance
+            # Use minimal processing for replacement uploads (skip tags, geocoding)
+            _logger.info(f"Starting file processing for job {job_id}: file '{filename}' ({file_size_mb:.2f} MB), replacement={is_replacement}")
+            processor = get_processor(
+                file_data,
+                filename,
+                job_id=job_id,
+                status_tracker=self.status_tracker,
+                minimal_processing=is_replacement,
+                user_id=user_id,
+                import_queue_id=import_queue_id
+            )
+
+            # Detect file type (needed for timing labels)
+            file_type = processor.detect_file_type()
+
+            # Update status for validation
+            self._update_and_broadcast_status(
+                job_id, user_id, import_queue_id,
+                "Validating file format and security...", 24.0
+            )
+            realtime_log.add("Validating file format and security", "ProcessJob", DatabaseLogLevel.INFO)
+
+            # Validate file using processor
+            if not processor.validate():
+                # Validation failed - handle error
+                error_msg = f"{FILE_VALIDATION_FAILED}: File validation failed"
+                realtime_log.add(error_msg, "ProcessJob", DatabaseLogLevel.ERROR)
+
+                # Mark ImportQueue item as unparsable
+                self._mark_import_queue_as_failed(import_queue_id, "File validation failed")
+
+                self.status_tracker.update_job_status(
+                    job_id, ProcessingStatus.FAILED,
+                    error_msg,
+                    error_message="File validation failed"
+                )
+
+                # Broadcast high-level status to realtime channel (processing failed)
+                self._broadcast_to_import_queue_module(user_id, 'status_updated', {
+                    'id': import_queue_id,
+                    'status': 'failed',
+                    'progress': 0.0,
+                    'message': PROCESSING_FAILED
+                })
+
+                # Broadcast detailed failure to process status channel
+                self._broadcast_to_process_status_module(user_id, import_queue_id, 'item_failed', {
+                    'job_id': job_id,
+                    'error_message': error_msg
+                })
                 return
 
             # Check if job was cancelled after validation
@@ -390,32 +327,6 @@ class ProcessJob(BaseJob):
                 job_id, user_id, import_queue_id,
                 "File validation passed, starting conversion...", validation_progress
             )
-
-            # Get file size for logging
-            file_size_mb = len(file_data) / (1024 * 1024)
-            realtime_log.add(f"Processing {file_size_mb:.1f}MB file", "ProcessJob", DatabaseLogLevel.INFO)
-
-            # Create processor instance
-            # Use minimal processing for replacement uploads (skip tags, geocoding)
-            _logger.info(f"Starting file processing for job {job_id}: file '{filename}' ({file_size_mb:.2f} MB), replacement={is_replacement}")
-            processor = get_processor(
-                file_data,
-                filename,
-                job_id=job_id,
-                status_tracker=self.status_tracker,
-                minimal_processing=is_replacement
-            )
-
-            # Detect file type (needed for timing labels)
-            file_type = processor.detect_file_type()
-
-            # Step 1: Validate file
-            if not processor.validate():
-                raise FileValidationError("File validation failed")
-
-            # Check for cancellation after validation
-            if self._check_cancellation(job_id, realtime_log, "after file validation"):
-                return
 
             # Step 2: Convert file to GeoJSON format
             self._update_and_broadcast_status(
@@ -529,14 +440,22 @@ class ProcessJob(BaseJob):
                 if self._check_cancellation(job_id, realtime_log, "after reverse geocoding"):
                     return
 
-            # Build final GeoJSON data from processed features
-            geojson_data = {
-                'type': 'FeatureCollection',
-                'features': processor.processed_features
-            }
+            # Check if job was cancelled before finalization
+            if self._check_cancellation(job_id, realtime_log, "before feature finalization"):
+                return
 
-            # Apply user setting: overwrite single track name with filename if enabled
-            self._apply_track_name_override(geojson_data, user_id, filename, job_id)
+            # Finalize features (hashing, type summary, track override, duplicate detection)
+            finalization_start = time.time()
+            finalization_result, finalization_log = processor.finalize_features()
+            finalization_duration = time.time() - finalization_start
+            realtime_log.extend(finalization_log)
+            realtime_log.add_timing("Feature finalization", finalization_duration, "ProcessJob")
+
+            # Extract results
+            geojson_data = finalization_result['geojson_data']
+            duplicate_features = finalization_result['duplicate_features']
+            feature_count = finalization_result['feature_count']
+            type_summary = finalization_result['type_summary']
 
             # Prepare GeoJSON string and size for database storage
             geojson_str = json.dumps(geojson_data)
@@ -549,21 +468,17 @@ class ProcessJob(BaseJob):
             )
             realtime_log.add("Updating database entry", "ProcessJob", DatabaseLogLevel.INFO)
 
-            # Count features for logging
-            feature_count = len(geojson_data.get('features', []))
-            realtime_log.add(f"Found {feature_count} features to process", "ProcessJob", DatabaseLogLevel.INFO)
-
             # Check if job was cancelled before database update
             if self._check_cancellation(job_id, realtime_log, "before database update"):
                 return
 
-            # Finalize processed features with duplicate detection and save
+            # Save processed features to database
             feature_processing_start = time.time()
             import_queue_id = self._finalize_and_save_processed_features(
-                geojson_data, realtime_log, user_id, job_id, geojson_size_mb, file_data
+                geojson_data, duplicate_features, realtime_log, user_id, job_id, geojson_size_mb, file_data
             )
             feature_processing_duration = time.time() - feature_processing_start
-            realtime_log.add_timing("Feature processing and database update", feature_processing_duration, "ProcessJob")
+            realtime_log.add_timing("Database save", feature_processing_duration, "ProcessJob")
 
             # Finalize job success
             overall_duration = time.time() - overall_start_time
@@ -651,50 +566,22 @@ class ProcessJob(BaseJob):
             'message': message
         })
 
-    def _build_duplicate_summary(self, fs_hash_count: int, fs_geom_count: int,
-                                 cq_hash_count: int, cq_geom_count: int) -> str:
-        """
-        Build duplicate summary message for logging.
-        
-        Args:
-            fs_hash_count: Feature store hash duplicate count
-            fs_geom_count: Feature store geometry duplicate count
-            cq_hash_count: Cross-queue hash duplicate count
-            cq_geom_count: Cross-queue geometry duplicate count
-            
-        Returns:
-            Summary string like "Found 5 duplicate(s): 3 in library, 2 in import queue"
-        """
-        total_existing_duplicates = fs_hash_count + fs_geom_count + cq_hash_count + cq_geom_count
-
-        if total_existing_duplicates == 0:
-            return "No duplicates found in library or import queue"
-
-        summary_parts = []
-        if fs_hash_count > 0 or fs_geom_count > 0:
-            fs_total = fs_hash_count + fs_geom_count
-            summary_parts.append(f"{fs_total} in library")
-        if cq_hash_count > 0 or cq_geom_count > 0:
-            cq_total = cq_hash_count + cq_geom_count
-            summary_parts.append(f"{cq_total} in import queue")
-
-        return f"Found {total_existing_duplicates} duplicate(s): {', '.join(summary_parts)}"
-
     def _finalize_and_save_processed_features(self, geojson_data: Dict[str, Any],
+                                              duplicate_features: List[Dict[str, Any]],
                                               processing_log: RealTimeImportLog,
                                               user_id: int, job_id: str, geojson_size_mb: float,
                                               raw_file_data: bytes) -> int:
         """
-        Finalize processed features with duplicate detection and save to database.
+        Save processed features to database.
         
-        This is the final processing step that:
-        - Performs duplicate detection (internal, feature store, cross-queue)
+        This is the final database persistence step that:
         - Handles file-level duplicate checking
         - Auto-skips geometry duplicates
         - Persists all data to the ImportQueue entry
         
         Args:
             geojson_data: Processed GeoJSON data
+            duplicate_features: List of detected duplicate features
             processing_log: Real-time import log
             user_id: User ID
             job_id: Processing job ID
@@ -722,115 +609,22 @@ class ProcessJob(BaseJob):
             # regardless of processing differences or file format (KML vs KMZ)
             raw_file_content, file_hash = encode_raw_file_data(raw_file_data)
 
-            # Process features using the processor's already processed features
-            features = geojson_data.get('features', [])
+            # Process features from geojson_data (already processed and finalized by processor)
+            processed_features = geojson_data.get('features', [])
 
-            processing_log.add(f"Processing {len(features)} features from uploaded file", "ProcessJob", DatabaseLogLevel.INFO)
-            # Features are already processed by the processor, so we use them directly
-            processed_features = features
+            processing_log.add(f"Saving {len(processed_features)} features to database ({geojson_size_mb:.2f} MB)", "ProcessJob", DatabaseLogLevel.INFO)
 
-            # Pre-calculate and inject geojson_hash into properties
-            inject_feature_hashes(processed_features)
-
-            # Log feature type breakdown
-            type_summary = build_feature_type_summary(processed_features)
-            processing_log.add(f"Feature breakdown: {type_summary}", "ProcessJob", DatabaseLogLevel.INFO)
-            processing_log.add(f"Successfully processed {len(processed_features)} features", "ProcessJob", DatabaseLogLevel.INFO)
-            processing_log.add("Preparing to save processed data to database", "ProcessJob", DatabaseLogLevel.INFO)
-
-            # Check if this is a replacement upload - skip duplicate detection for fast path
+            # Check if this is a replacement upload
             is_replacement = import_queue.replacement is not None
 
             with transaction.atomic():
-                if is_replacement:
-                    # Fast path: skip duplicate detection entirely for replacement uploads
-                    duplicate_features = []  # No duplicates tracked for replacements
-                else:
-                    # Normal path: perform duplicate detection
-                    # Check for cancellation before duplicate detection
-                    if self._check_cancellation(job_id, processing_log, "before duplicate detection"):
-                        return import_queue.id
-
-                    # Update progress for duplicate detection
-                    self._update_and_broadcast_status(
-                        job_id, user_id, import_queue.id,
-                        "Checking for duplicate features...", 84.0
-                    )
-
-                    # Start duplicate detection
-                    duplicate_detection_start = time.time()
-
-                    # First, check for internal duplicates within the file
-                    unique_internal_features, internal_duplicate_count = remove_internal_duplicates(processed_features)
-
-                    if internal_duplicate_count > 0:
-                        processing_log.add(f"Found {internal_duplicate_count} internal duplicate(s)", "ProcessJob", DatabaseLogLevel.INFO)
-                    else:
-                        processing_log.add("No internal duplicates found", "ProcessJob", DatabaseLogLevel.INFO)
-
-                    # Check for cancellation after internal duplicate detection
-                    if self._check_cancellation(job_id, processing_log, "after internal duplicate detection"):
-                        return import_queue.id
-
-                    # PASS 1: Check feature store (hash + geometry, with hash priority)
-                    remaining_after_fs, feature_store_duplicates, fs_log = find_duplicates_for_source(
-                        unique_internal_features,
-                        user_id,
-                        source='feature_store',
-                        exclude_queue_id=None,
-                        exclude_timestamp=None
-                    )
-
-                    # Split feature store duplicates into hash and geometry for tracking
-                    feature_store_hash_duplicates, feature_store_geom_duplicates = split_duplicates_by_match_type(
-                        feature_store_duplicates
-                    )
-
-                    # PASS 2: Check cross-queue (hash + geometry, with hash priority) on remaining features
-                    remaining_after_cq, cross_queue_duplicates, cq_log = find_duplicates_for_source(
-                        remaining_after_fs,
-                        user_id,
-                        source='cross_queue',
-                        exclude_queue_id=import_queue.id,
-                        exclude_timestamp=import_queue.timestamp
-                    )
-
-                    # Split cross-queue duplicates into hash and geometry for tracking
-                    cross_queue_hash_duplicates, cross_queue_geom_duplicates = split_duplicates_by_match_type(
-                        cross_queue_duplicates
-                    )
-
-                    # Combine all duplicates in priority order
-                    duplicate_features = (
-                            feature_store_hash_duplicates +
-                            feature_store_geom_duplicates +
-                            cross_queue_hash_duplicates +
-                            cross_queue_geom_duplicates
-                    )
-
-                    # Log duplicate detection results summary
-                    fs_hash_count = len(feature_store_hash_duplicates)
-                    fs_geom_count = len(feature_store_geom_duplicates)
-                    cq_hash_count = len(cross_queue_hash_duplicates)
-                    cq_geom_count = len(cross_queue_geom_duplicates)
-
-                    summary = self._build_duplicate_summary(fs_hash_count, fs_geom_count, cq_hash_count, cq_geom_count)
-                    processing_log.add(summary, "ProcessJob", DatabaseLogLevel.INFO)
-
-                    duplicate_detection_duration = time.time() - duplicate_detection_start
-                    processing_log.add(f"Duplicate detection completed ({duplicate_detection_duration:.1f}s)", "ProcessJob", DatabaseLogLevel.INFO)
-
-                    # Check for cancellation after duplicate detection
-                    if self._check_cancellation(job_id, processing_log, "after duplicate detection"):
-                        return import_queue.id
-
                 # Check for cancellation before database save
                 if self._check_cancellation(job_id, processing_log, "before database save"):
                     return import_queue.id
 
                 # Update progress for database save (different percentages for fast vs normal path)
                 if is_replacement:
-                    # Fast path: already at 100% since we skipped duplicate detection
+                    # Fast path: already at 100%
                     progress = 100.0
                     message = "Saving features to database..."
                 else:
@@ -842,9 +636,6 @@ class ProcessJob(BaseJob):
                     job_id, user_id, import_queue.id,
                     message, progress
                 )
-
-                # Save the features to the database
-                processing_log.add(f"Saving {len(processed_features)} features to database ({geojson_size_mb:.2f} MB)", "ProcessJob", DatabaseLogLevel.INFO)
 
                 # Convert features through Pydantic models for validation and serialization
                 # This ensures datetime objects are serialized to ISO strings via model_dump(mode='json')

@@ -5,8 +5,6 @@ import sys
 
 from django.apps import AppConfig
 
-from geo_lib.processing.queue_worker import stop_all_workers
-
 
 class DatamanageConfig(AppConfig):
     default_auto_field = 'django.db.models.BigAutoField'
@@ -68,7 +66,9 @@ class DatamanageConfig(AppConfig):
             apps_logger.error(f"Failed to start replacement cleanup service: {e}", exc_info=True)
         
         # Register queue worker cleanup on shutdown
+        # Import here to avoid circular import during app initialization
         try:
+            from geo_lib.processing.queue_worker import stop_all_workers
             atexit.register(stop_all_workers)
             apps_logger.info("Registered queue worker cleanup handler")
         except Exception as e:

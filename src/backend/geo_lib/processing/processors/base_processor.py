@@ -13,24 +13,33 @@ from abc import ABC, abstractmethod
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from typing import Dict, Any, Tuple, Union, List, Optional
 
+from django.contrib.auth.models import User
+from django.core.files.uploadedfile import SimpleUploadedFile
+from django.db import transaction
+
+from api.models import ImportQueue, UserSettings
 from geo_lib.feature_id import generate_geojson_hash
+from geo_lib.logging.console import get_job_logger
+from geo_lib.processing.duplicate_detection.duplicate_detection import remove_internal_duplicates, find_duplicates_for_source
+from geo_lib.processing.duplicate_detection.models import split_duplicates_by_match_type
+from geo_lib.processing.elevation_service import fill_missing_elevations
 from geo_lib.processing.file_types import FileType, detect_file_type
 from geo_lib.processing.geo_processor import (
     extract_track_created_date,
     geojson_property_generation,
     split_complex_geometries
 )
-from geo_lib.processing.logging import ImportLog, DatabaseLogLevel
-from geo_lib.processing.elevation_service import fill_missing_elevations
 from geo_lib.processing.jobs.helpers.status_tracker import ProcessingStatusTracker, ProcessingStatus
+from geo_lib.processing.logging import ImportLog, DatabaseLogLevel
+from geo_lib.processing.utils import inject_feature_hashes, build_skipped_feature_ids
 from geo_lib.security.SecureFileValidator import validate_file
-from geo_lib.validation.geometry_validation import validate_coordinates_values, GeometryValidationError
-from geo_lib.logging.console import get_job_logger
-from website.settings_utils import get_required_setting
-from geo_lib.types.feature import PointFeature, LineStringFeature, MultiLineStringFeature, PolygonFeature
 from geo_lib.tags.const_strings import CONST_INTERNAL_TAGS, filter_protected_tags, prepare_user_tags
+from geo_lib.types.feature import PointFeature, LineStringFeature, MultiLineStringFeature, PolygonFeature
 from geo_lib.types.geojson import GeojsonRawProperty
-from django.core.files.uploadedfile import SimpleUploadedFile
+from geo_lib.utils.feature_utils import build_feature_type_summary
+from geo_lib.utils.pydantic_serialization import convert_features_to_pydantic
+from geo_lib.validation.geometry_validation import validate_coordinates_values, GeometryValidationError
+from website.settings_utils import get_required_setting
 
 logger = get_job_logger()
 
@@ -44,7 +53,9 @@ class BaseProcessor(ABC):
     def __init__(self, file_data: Union[bytes, str], filename: str = "", 
                  job_id: Optional[str] = None, 
                  status_tracker: Optional[ProcessingStatusTracker] = None,
-                 minimal_processing: bool = False):
+                 minimal_processing: bool = False,
+                 user_id: Optional[int] = None,
+                 import_queue_id: Optional[int] = None):
         """
         Initialize the processor.
         
@@ -54,6 +65,8 @@ class BaseProcessor(ABC):
             job_id: Optional job ID for cancellation checking
             status_tracker: Optional status tracker for cancellation checking
             minimal_processing: If True, skip tag generation and other expensive operations
+            user_id: Optional user ID for database operations
+            import_queue_id: Optional import queue ID for database operations
         """
         self.file_data = file_data
         self.filename = filename
@@ -64,6 +77,8 @@ class BaseProcessor(ABC):
         self.job_id = job_id
         self.status_tracker = status_tracker
         self.minimal_processing = minimal_processing
+        self.user_id = user_id
+        self.import_queue_id = import_queue_id
         self._executor = None  # Store executor reference for proper shutdown
 
     def detect_file_type(self) -> FileType:
@@ -548,6 +563,244 @@ class BaseProcessor(ABC):
             logger.error(f"Reverse geocoding error: {traceback.format_exc()}")
         
         return feature_log
+
+    def apply_track_name_override(self, geojson_data: Dict[str, Any]) -> ImportLog:
+        """
+        Apply user setting to overwrite single track name with filename if enabled.
+        
+        Args:
+            geojson_data: GeoJSON data to potentially modify (modified in-place)
+            
+        Returns:
+            ImportLog with any relevant messages
+        """
+        step_log = ImportLog()
+        
+        if not self.user_id:
+            return step_log
+        
+        try:
+            user_settings_obj = UserSettings.objects.filter(user_id=self.user_id).first()
+            if user_settings_obj and user_settings_obj.settings:
+                import_settings = user_settings_obj.settings.get('import', {})
+                overwrite_enabled = import_settings.get('overwrite_single_track_name_with_filename', False)
+
+                if overwrite_enabled:
+                    features = geojson_data.get('features', [])
+                    # Check if there's exactly one feature
+                    if len(features) == 1:
+                        feature = features[0]
+                        geometry = feature.get('geometry', {})
+                        geometry_type = geometry.get('type', '').lower() if geometry else ''
+                        properties = feature.get('properties', {})
+
+                        # Check if it's a track (LineString or MultiLineString)
+                        is_track_geometry = geometry_type in ['linestring', 'multilinestring']
+
+                        # Check if it has the type:track tag
+                        system_tags = properties.get('system_tags', [])
+                        is_track_tagged = 'type:track' in system_tags if isinstance(system_tags, list) else False
+
+                        if is_track_geometry and is_track_tagged:
+                            # Extract filename without extension
+                            filename_without_ext = os.path.splitext(self.filename)[0]
+                            # Overwrite the name property
+                            properties['name'] = filename_without_ext
+                            feature['properties'] = properties
+                            logger.info(f"Overwrote single track name with filename '{filename_without_ext}' for job {self.job_id}")
+                            step_log.add(f"Applied track name override: '{filename_without_ext}'", "Track Name Override", DatabaseLogLevel.INFO)
+        except Exception as e:
+            logger.error(f"Error applying track name override: {traceback.format_exc()}")
+            step_log.add(f"Failed to apply track name override: {str(e)}", "Track Name Override", DatabaseLogLevel.ERROR)
+        
+        return step_log
+
+    def detect_duplicates(self, processed_features: List[Dict[str, Any]]) -> Tuple[List[Dict[str, Any]], ImportLog]:
+        """
+        Detect duplicate features (internal, feature store, and cross-queue).
+        
+        Args:
+            processed_features: List of processed features to check for duplicates
+            
+        Returns:
+            Tuple of (duplicate_features, detection_log)
+        """
+        step_log = ImportLog()
+        duplicate_features = []
+        
+        # Skip duplicate detection if minimal processing or no user_id
+        if self.minimal_processing or not self.user_id:
+            return duplicate_features, step_log
+        
+        try:
+            # Check for cancellation before duplicate detection
+            if self._is_cancelled():
+                step_log.add("Processing cancelled before duplicate detection", "Duplicate Detection", DatabaseLogLevel.WARNING)
+                return duplicate_features, step_log
+            
+            # Start duplicate detection timing
+            duplicate_detection_start = time.time()
+            
+            # First, check for internal duplicates within the file
+            unique_internal_features, internal_duplicate_count = remove_internal_duplicates(processed_features)
+            
+            if internal_duplicate_count > 0:
+                step_log.add(f"Found {internal_duplicate_count} internal duplicate(s)", "Duplicate Detection", DatabaseLogLevel.INFO)
+            else:
+                step_log.add("No internal duplicates found", "Duplicate Detection", DatabaseLogLevel.INFO)
+            
+            # Check for cancellation after internal duplicate detection
+            if self._is_cancelled():
+                step_log.add("Processing cancelled after internal duplicate detection", "Duplicate Detection", DatabaseLogLevel.WARNING)
+                return duplicate_features, step_log
+            
+            # Get ImportQueue for exclude parameters
+            import_queue = None
+            if self.import_queue_id:
+                try:
+                    import_queue = ImportQueue.objects.get(id=self.import_queue_id)
+                except ImportQueue.DoesNotExist:
+                    pass
+            
+            # PASS 1: Check feature store (hash + geometry, with hash priority)
+            remaining_after_fs, feature_store_duplicates, fs_log = find_duplicates_for_source(
+                unique_internal_features,
+                self.user_id,
+                source='feature_store',
+                exclude_queue_id=None,
+                exclude_timestamp=None
+            )
+            
+            # Split feature store duplicates into hash and geometry for tracking
+            feature_store_hash_duplicates, feature_store_geom_duplicates = split_duplicates_by_match_type(
+                feature_store_duplicates
+            )
+            
+            # PASS 2: Check cross-queue (hash + geometry, with hash priority) on remaining features
+            exclude_queue_id = import_queue.id if import_queue else None
+            exclude_timestamp = import_queue.timestamp if import_queue else None
+            
+            remaining_after_cq, cross_queue_duplicates, cq_log = find_duplicates_for_source(
+                remaining_after_fs,
+                self.user_id,
+                source='cross_queue',
+                exclude_queue_id=exclude_queue_id,
+                exclude_timestamp=exclude_timestamp
+            )
+            
+            # Split cross-queue duplicates into hash and geometry for tracking
+            cross_queue_hash_duplicates, cross_queue_geom_duplicates = split_duplicates_by_match_type(
+                cross_queue_duplicates
+            )
+            
+            # Combine all duplicates in priority order
+            duplicate_features = (
+                feature_store_hash_duplicates +
+                feature_store_geom_duplicates +
+                cross_queue_hash_duplicates +
+                cross_queue_geom_duplicates
+            )
+            
+            # Log duplicate detection results summary
+            fs_hash_count = len(feature_store_hash_duplicates)
+            fs_geom_count = len(feature_store_geom_duplicates)
+            cq_hash_count = len(cross_queue_hash_duplicates)
+            cq_geom_count = len(cross_queue_geom_duplicates)
+            
+            summary = self._build_duplicate_summary(fs_hash_count, fs_geom_count, cq_hash_count, cq_geom_count)
+            step_log.add(summary, "Duplicate Detection", DatabaseLogLevel.INFO)
+            
+            duplicate_detection_duration = time.time() - duplicate_detection_start
+            step_log.add(f"Duplicate detection completed ({duplicate_detection_duration:.1f}s)", "Duplicate Detection", DatabaseLogLevel.INFO)
+            
+            # Check for cancellation after duplicate detection
+            if self._is_cancelled():
+                step_log.add("Processing cancelled after duplicate detection", "Duplicate Detection", DatabaseLogLevel.WARNING)
+                return duplicate_features, step_log
+            
+        except Exception as e:
+            logger.error(f"Error during duplicate detection: {traceback.format_exc()}")
+            step_log.add(f"Duplicate detection failed: {str(e)}", "Duplicate Detection", DatabaseLogLevel.ERROR)
+        
+        return duplicate_features, step_log
+
+    def _build_duplicate_summary(self, fs_hash_count: int, fs_geom_count: int,
+                                 cq_hash_count: int, cq_geom_count: int) -> str:
+        """
+        Build duplicate summary message for logging.
+        
+        Args:
+            fs_hash_count: Feature store hash duplicate count
+            fs_geom_count: Feature store geometry duplicate count
+            cq_hash_count: Cross-queue hash duplicate count
+            cq_geom_count: Cross-queue geometry duplicate count
+            
+        Returns:
+            Summary string like "Found 5 duplicate(s): 3 in library, 2 in import queue"
+        """
+        total_existing_duplicates = fs_hash_count + fs_geom_count + cq_hash_count + cq_geom_count
+
+        if total_existing_duplicates == 0:
+            return "No duplicates found in library or import queue"
+
+        summary_parts = []
+        if fs_hash_count > 0 or fs_geom_count > 0:
+            fs_total = fs_hash_count + fs_geom_count
+            summary_parts.append(f"{fs_total} in library")
+        if cq_hash_count > 0 or cq_geom_count > 0:
+            cq_total = cq_hash_count + cq_geom_count
+            summary_parts.append(f"{cq_total} in import queue")
+
+        return f"Found {total_existing_duplicates} duplicate(s): {', '.join(summary_parts)}"
+
+    def finalize_features(self) -> Tuple[Dict[str, Any], ImportLog]:
+        """
+        Finalize processed features by:
+        - Injecting feature hashes
+        - Building feature type summary
+        - Applying track name override
+        - Detecting duplicates
+        
+        Returns:
+            Tuple of (result_dict, finalization_log) where result_dict contains:
+            - geojson_data: Final GeoJSON with all features
+            - duplicate_features: List of detected duplicates
+            - feature_count: Total number of features
+            - type_summary: Feature type breakdown
+        """
+        finalization_log = ImportLog()
+        
+        # Build final GeoJSON data from processed features
+        geojson_data = {
+            'type': 'FeatureCollection',
+            'features': self.processed_features
+        }
+        
+        # Pre-calculate and inject geojson_hash into properties
+        inject_feature_hashes(self.processed_features)
+        finalization_log.add(f"Injected feature hashes for {len(self.processed_features)} features", "Feature Finalization", DatabaseLogLevel.DEBUG)
+        
+        # Log feature type breakdown
+        type_summary = build_feature_type_summary(self.processed_features)
+        finalization_log.add(f"Feature breakdown: {type_summary}", "Feature Finalization", DatabaseLogLevel.INFO)
+        
+        # Apply user setting: overwrite single track name with filename if enabled
+        track_override_log = self.apply_track_name_override(geojson_data)
+        finalization_log.extend(track_override_log)
+        
+        # Detect duplicates
+        duplicate_features, duplicate_log = self.detect_duplicates(self.processed_features)
+        finalization_log.extend(duplicate_log)
+        
+        # Build result dictionary
+        result = {
+            'geojson_data': geojson_data,
+            'duplicate_features': duplicate_features,
+            'feature_count': len(self.processed_features),
+            'type_summary': type_summary
+        }
+        
+        return result, finalization_log
 
     def _step_4_process_single_feature(self, feature: Dict[str, Any]) -> Tuple[List[Dict[str, Any]], ImportLog, int, bool]:
         """

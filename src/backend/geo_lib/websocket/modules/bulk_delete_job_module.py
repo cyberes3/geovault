@@ -1,10 +1,14 @@
 import traceback
 
 from geo_lib.logging.console import get_websocket_logger
-from geo_lib.processing.jobs import bulk_delete_job
+from geo_lib.processing.jobs.helpers.status_tracker import status_tracker
+from geo_lib.processing.jobs.bulk_delete_job import BulkDeleteJob
 from geo_lib.websocket.base_module import BaseWebSocketModule
 
 logger = get_websocket_logger()
+
+# Create singleton instance
+bulk_delete_job = BulkDeleteJob(status_tracker)
 
 
 class BulkDeleteJobModule(BaseWebSocketModule):

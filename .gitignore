@@ -2,6 +2,7 @@
 *.timestamp-*
 *.har
 failures.txt
+.cursor/plans
 
 # ---> Python
 # Byte-compiled / optimized / DLL files

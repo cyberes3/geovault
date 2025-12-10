@@ -2,3 +2,7 @@
 alwaysApply: true
 ---
 Always use top-level imports in Python, not local/function level!
+
+The backend venv is at src/backend/venv
+
+Run tests with src/tests/run-tests.sh

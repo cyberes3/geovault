@@ -1,5 +1,6 @@
 #!/bin/bash
 # Simple entrypoint script to run all GeoVault backend tests using pytest
+# This takes 30+ minutes to run.
 #
 # Usage:
 #   ./run-tests.sh              # Run all tests

@@ -18,7 +18,9 @@ from .kmz_processor import KMZProcessor
 def get_processor(file_data: Union[bytes, str], filename: str = "", 
                   job_id: Optional[str] = None,
                   status_tracker: Optional[ProcessingStatusTracker] = None,
-                  minimal_processing: bool = False) -> BaseProcessor:
+                  minimal_processing: bool = False,
+                  user_id: Optional[int] = None,
+                  import_queue_id: Optional[int] = None) -> BaseProcessor:
     """
     Factory function to create the appropriate processor for a file type.
     
@@ -28,6 +30,8 @@ def get_processor(file_data: Union[bytes, str], filename: str = "",
         job_id: Optional job ID for cancellation checking
         status_tracker: Optional status tracker for cancellation checking
         minimal_processing: If True, skip tag generation and other expensive operations
+        user_id: Optional user ID for database operations
+        import_queue_id: Optional import queue ID for database operations
         
     Returns:
         Appropriate processor instance
@@ -45,11 +49,14 @@ def get_processor(file_data: Union[bytes, str], filename: str = "",
             raise ValueError(f"Unsupported file type: {ext}")
 
     if file_type == FileType.KML:
-        return KMLProcessor(file_data, filename, job_id=job_id, status_tracker=status_tracker, minimal_processing=minimal_processing)
+        return KMLProcessor(file_data, filename, job_id=job_id, status_tracker=status_tracker, 
+                          minimal_processing=minimal_processing, user_id=user_id, import_queue_id=import_queue_id)
     elif file_type == FileType.KMZ:
-        return KMZProcessor(file_data, filename, job_id=job_id, status_tracker=status_tracker, minimal_processing=minimal_processing)
+        return KMZProcessor(file_data, filename, job_id=job_id, status_tracker=status_tracker, 
+                          minimal_processing=minimal_processing, user_id=user_id, import_queue_id=import_queue_id)
     elif file_type == FileType.GPX:
-        return GPXProcessor(file_data, filename, job_id=job_id, status_tracker=status_tracker, minimal_processing=minimal_processing)
+        return GPXProcessor(file_data, filename, job_id=job_id, status_tracker=status_tracker, 
+                          minimal_processing=minimal_processing, user_id=user_id, import_queue_id=import_queue_id)
     else:
         raise ValueError(f"Unsupported file type: {file_type}")
 

@@ -27,10 +27,17 @@ from geo_lib.processing.duplicate_detection.duplicate_detection import (
     get_skipped_feature_ids_from_duplicates
 )
 from geo_lib.processing.duplicate_detection.models import DuplicateMatchType
-from geo_lib.processing.jobs import process_job, delete_job, import_job
 from geo_lib.processing.import_utils import validate_bulk_operations_payload
 from geo_lib.processing.logging import DatabaseLogLevel, RealTimeImportLog
 from geo_lib.processing.jobs.helpers.status_tracker import status_tracker
+from geo_lib.processing.jobs.process_job import ProcessJob
+from geo_lib.processing.jobs.delete_job import DeleteJob
+from geo_lib.processing.jobs.import_job import ImportJob
+
+# Create singleton instances
+process_job = ProcessJob(status_tracker)
+delete_job = DeleteJob(status_tracker)
+import_job = ImportJob(status_tracker)
 from geo_lib.processing.jobs.helpers.redis_job_storage import get_user_jobs
 from geo_lib.security.SecureFileValidator import basic_file_security_check
 from geo_lib.validation import validate_and_normalize_geojson_feature
