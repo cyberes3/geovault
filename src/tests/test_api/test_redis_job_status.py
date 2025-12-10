@@ -10,8 +10,7 @@ from django.contrib.auth import get_user_model
 
 from api.models import ImportQueue, FeatureStore
 from geo_lib.processing.status_tracker import ProcessingStatus, status_tracker
-from geo_lib.processing.redis_job_storage import (
-    get_user_jobs,
+from geo_lib.processing.jobs.helpers.redis_job_storage import (
     get_job_status,
     COMPLETED_JOB_TTL
 )

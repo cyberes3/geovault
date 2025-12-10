@@ -11,6 +11,7 @@ from django.db import transaction
 
 from api.models import ImportQueue, DatabaseLogging
 from geo_lib.processing.jobs.base_job import BaseJob
+from geo_lib.processing.messages import DELETE_JOB_FAILED
 from geo_lib.processing.status_tracker import ProcessingStatus, JobType
 from geo_lib.logging.console import get_job_logger
 
@@ -137,9 +138,11 @@ class DeleteJob(BaseJob):
             logger.info(f"Successfully completed delete job {job_id} for item {item_id}")
 
         except Exception as e:
-            error_msg = f"Delete job failed: {str(e)}"
-            logger.error(f"Delete job {job_id} error: {error_msg}")
+            # Log detailed error internally
+            logger.error(f"Delete job {job_id} error: {str(e)}")
             logger.error(f"Delete job error traceback: {traceback.format_exc()}")
+            # Use generic error message for user
+            error_msg = DELETE_JOB_FAILED
 
             self.status_tracker.update_job_status(
                 job_id, ProcessingStatus.FAILED,

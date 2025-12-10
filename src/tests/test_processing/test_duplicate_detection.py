@@ -20,10 +20,13 @@ from django.contrib.gis.geos import Point
 
 from api.models import FeatureStore, ImportQueue
 from geo_lib.feature_id import generate_geojson_hash
-from geo_lib.processing.duplicate_detection import (
+from geo_lib.processing.duplicate_detection.duplicate_detection import (
     find_duplicates_for_source,
-    find_hash_duplicates,
-    find_geometry_duplicates
+)
+# Import private methods directly for testing (common Python testing pattern)
+from geo_lib.processing.duplicate_detection.find import (
+    _find_hash_duplicates as find_hash_duplicates,
+    _find_geometry_duplicates as find_geometry_duplicates,
 )
 from geo_lib.processing.duplicate_detection.models import DuplicateMatchType, DuplicateSource, split_duplicates_by_match_type
 
@@ -668,7 +671,7 @@ class TestCrossQueueNavigation(TestCase):
         )
         
         # Try to import exact copy of feature2 (hash duplicate at index 1)
-        hash_duplicates, log = find_hash_duplicates(
+        hash_duplicates = find_hash_duplicates(
             [feature2],
             self.user.id,
             exclude_queue_id=newer_queue.id,

@@ -31,7 +31,7 @@ from geo_lib.processing.jobs import process_job, delete_job, import_job
 from geo_lib.processing.import_utils import validate_bulk_operations_payload
 from geo_lib.processing.logging import DatabaseLogLevel, RealTimeImportLog
 from geo_lib.processing.status_tracker import status_tracker
-from geo_lib.processing.redis_job_storage import get_user_jobs
+from geo_lib.processing.jobs.helpers.redis_job_storage import get_user_jobs
 from geo_lib.security.SecureFileValidator import basic_file_security_check
 from geo_lib.validation import validate_and_normalize_geojson_feature
 from geo_lib.website.auth import api_or_login_required_401

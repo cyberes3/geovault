@@ -593,8 +593,10 @@ class ProcessJob(BaseJob):
     
         except TimeoutError as e:
             # Timeout during processing (e.g., subprocess timeout)
-            error_msg = str(e)
-            logger.error(f"Processing timeout for job {job_id}: {error_msg}")
+            # Log detailed error internally
+            logger.error(f"Processing timeout for job {job_id}: {str(e)}")
+            # Use generic timeout message for user
+            error_msg = PROCESSING_TIMEOUT
             realtime_log.add(error_msg, "ProcessJob", DatabaseLogLevel.ERROR)
             self._handle_processing_error(job_id, user_id, error_msg, error_msg, realtime_log)
             
@@ -682,7 +684,7 @@ class ProcessJob(BaseJob):
         )
         
         # Update Redis with processing status
-        from geo_lib.processing.redis_job_storage import update_job_status as update_redis_job_status
+        from geo_lib.processing.jobs.helpers.redis_job_storage import update_job_status as update_redis_job_status
         job = self.status_tracker.get_job(job_id)
         if job:
             update_redis_job_status(

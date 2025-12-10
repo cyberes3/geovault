@@ -8,6 +8,7 @@ from typing import Dict, Any, List
 
 from api.models import ImportQueue
 from geo_lib.processing.jobs.base_job import BaseJob
+from geo_lib.processing.messages import BULK_IMPORT_JOB_FAILED, ITEM_IMPORT_FAILED
 from geo_lib.processing.status_tracker import ProcessingStatus, JobType
 from geo_lib.logging.console import get_job_logger
 from geo_lib.processing.import_utils import (
@@ -139,14 +140,14 @@ class BulkImportJob(BaseJob):
                             'filename': item.original_filename,
                             'error': result['error']
                         })
-                except Exception as e:
-                    error_msg = str(e)
-                    logger.error(f"Bulk import job {job_id}: Error importing item {item.id}: {error_msg}")
-                    logger.error(f"Bulk import error traceback: {traceback.format_exc()}")
+                except:
+                    # Log detailed error internally
+                    logger.error(f"Bulk import job {job_id}: Error importing item {item.id}: {traceback.format_exc()}")
+                    # Use generic error message for user
                     failed_imports.append({
                         'item_id': item.id,
                         'filename': item.original_filename,
-                        'error': error_msg
+                        'error': ITEM_IMPORT_FAILED
                     })
 
             # Mark as completed
@@ -175,10 +176,11 @@ class BulkImportJob(BaseJob):
 
             logger.info(f"Successfully completed bulk import job {job_id}: {successful_imports} imported, {len(failed_imports)} failed")
 
-        except Exception as e:
-            error_msg = f"Bulk import job failed: {str(e)}"
-            logger.error(f"Bulk import job {job_id} error: {error_msg}")
-            logger.error(f"Bulk import job error traceback: {traceback.format_exc()}")
+        except:
+            # Log detailed error internally
+            logger.error(f"Bulk import job {job_id} error: {traceback.format_exc()}")
+            # Use generic error message for user
+            error_msg = BULK_IMPORT_JOB_FAILED
 
             self.status_tracker.update_job_status(
                 job_id, ProcessingStatus.FAILED,
@@ -252,6 +254,8 @@ class BulkImportJob(BaseJob):
             else:
                 return job_error_result('No features were imported')
 
-        except Exception as e:
-            logger.error(f"Error importing item {import_item.id}: {str(e)}")
-            return job_error_result(str(e))
+        except:
+            # Log detailed error internally
+            logger.error(f"Error importing item {import_item.id}: {traceback.format_exc()}")
+            # Use generic error message for user
+            return job_error_result(ITEM_IMPORT_FAILED)

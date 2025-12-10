@@ -7,17 +7,17 @@ import time
 import traceback
 from typing import Dict, Any, List
 
-from django.db import transaction
-
 from asgiref.sync import async_to_sync
 from channels.layers import get_channel_layer
+from django.db import transaction
 
 from api.models import ImportQueue, DatabaseLogging
-from geo_lib.processing.jobs.base_job import BaseJob
-from geo_lib.processing.status_tracker import ProcessingStatus, JobType
 from geo_lib.logging.console import get_job_logger
+from geo_lib.processing.jobs.base_job import BaseJob
+from geo_lib.processing.messages import BULK_DELETE_JOB_FAILED, ITEM_DELETE_FAILED
+from geo_lib.processing.status_tracker import ProcessingStatus, JobType
 
-logger = get_job_logger()
+_logger = get_job_logger()
 
 
 class BulkDeleteJob(BaseJob):
@@ -29,7 +29,7 @@ class BulkDeleteJob(BaseJob):
     def get_job_type(self) -> str:
         return "bulk_delete"
 
-    def start_bulk_delete_job(self, item_ids: List[int], user_id: int) -> str:
+    def start_bulk_delete_job(self, item_ids: List[int], user_id: int) -> str | None:
         """
         Start a bulk delete job for multiple import queue items.
         
@@ -41,8 +41,11 @@ class BulkDeleteJob(BaseJob):
             Job ID for tracking the bulk deletion
         """
         # Create bulk delete job
-        filename = f"Bulk delete of {len(item_ids)} item(s)"
-        job_id = self.status_tracker.create_job(filename, user_id, JobType.BULK_DELETE)
+        job_id = self.status_tracker.create_job(
+            f"Bulk delete of {len(item_ids)} item(s)",
+            user_id,
+            JobType.BULK_DELETE
+        )
 
         # Store item IDs in result data
         self.status_tracker.set_job_result(job_id, {'item_ids': item_ids})
@@ -63,7 +66,7 @@ class BulkDeleteJob(BaseJob):
         # Get the job for user info
         job = self.status_tracker.get_job(job_id)
         if not job:
-            logger.error(f"Bulk delete job {job_id} not found")
+            _logger.error(f"Bulk delete job {job_id} not found")
             return
 
         try:
@@ -84,7 +87,7 @@ class BulkDeleteJob(BaseJob):
             missing_ids = set(item_ids) - set(found_ids)
             if missing_ids:
                 error_msg = f"Items not found or not authorized: {list(missing_ids)}"
-                logger.warning(f"Bulk delete job {job_id}: {error_msg}")
+                _logger.warning(f"Bulk delete job {job_id}: {error_msg}")
                 self.status_tracker.update_job_status(
                     job_id, ProcessingStatus.FAILED,
                     error_msg, error_message=error_msg
@@ -120,14 +123,13 @@ class BulkDeleteJob(BaseJob):
                             'filename': item.original_filename,
                             'error': result['error']
                         })
-                except Exception as e:
-                    error_msg = str(e)
-                    logger.error(f"Bulk delete job {job_id}: Error deleting item {item.id}: {error_msg}")
-                    logger.error(f"Bulk delete error traceback: {traceback.format_exc()}")
+                except:
+                    # Log detailed error internally
+                    _logger.error(f"Bulk delete job {job_id}: Error deleting item {item.id}: {traceback.format_exc()}")
                     failed_deletes.append({
                         'item_id': item.id,
                         'filename': item.original_filename,
-                        'error': error_msg
+                        'error': ITEM_DELETE_FAILED
                     })
 
             # Mark as completed
@@ -155,19 +157,15 @@ class BulkDeleteJob(BaseJob):
                 deleted_ids = [item.id for item in items if item.id not in [f['item_id'] for f in failed_deletes]]
                 self._broadcast_items_deleted(user_id, deleted_ids)
 
-            logger.info(f"Successfully completed bulk delete job {job_id}: {successful_deletes} deleted, {len(failed_deletes)} failed")
+            _logger.info(f"Successfully completed bulk delete job {job_id}: {successful_deletes} deleted, {len(failed_deletes)} failed")
 
-        except Exception as e:
-            error_msg = f"Bulk delete job failed: {str(e)}"
-            logger.error(f"Bulk delete job {job_id} error: {error_msg}")
-            logger.error(f"Bulk delete job error traceback: {traceback.format_exc()}")
-
+        except:
+            _logger.error(f"Bulk delete job {job_id} error: {traceback.format_exc()}")
+            error_msg = BULK_DELETE_JOB_FAILED
             self.status_tracker.update_job_status(
                 job_id, ProcessingStatus.FAILED,
                 error_msg, error_message=error_msg
             )
-
-            # Broadcast failure
             self._broadcast_job_failed(job_id, error_msg)
 
     def _delete_single_item(self, import_queue_item: ImportQueue, user_id: int, bulk_job_id: str) -> Dict[str, Any]:
@@ -191,10 +189,9 @@ class BulkDeleteJob(BaseJob):
 
             return {'success': True}
 
-        except Exception as e:
-            logger.error(f"Error deleting item {import_queue_item.id}: {str(e)}")
-            logger.error(f"Delete error traceback: {traceback.format_exc()}")
-            return {'success': False, 'error': str(e)}
+        except:
+            _logger.error(f"Error deleting item {import_queue_item.id}: {traceback.format_exc()}")
+            return {'success': False, 'error': ITEM_DELETE_FAILED}
 
     def _cancel_active_processing_jobs(self, item_id: int, user_id: int, bulk_job_id: str):
         """
@@ -213,22 +210,22 @@ class BulkDeleteJob(BaseJob):
             ]
 
             if active_process_jobs:
-                logger.info(f"Found {len(active_process_jobs)} active process jobs for item {item_id}, cancelling...")
+                _logger.info(f"Found {len(active_process_jobs)} active process jobs for item {item_id}, cancelling...")
 
                 # Cancel each active process job
                 for process_job in active_process_jobs:
                     if self.status_tracker.cancel_job(process_job.job_id):
-                        logger.info(f"Cancelled process job {process_job.job_id} for item {item_id}")
+                        _logger.info(f"Cancelled process job {process_job.job_id} for item {item_id}")
 
                 # Wait briefly for graceful cancellation
                 time.sleep(1)
 
-                logger.info(f"Successfully cancelled {len(active_process_jobs)} process jobs for item {item_id}")
+                _logger.info(f"Successfully cancelled {len(active_process_jobs)} process jobs for item {item_id}")
             else:
-                logger.info(f"No active process jobs found for item {item_id}")
+                _logger.info(f"No active process jobs found for item {item_id}")
 
-        except Exception as e:
-            logger.warning(f"Error cancelling active processing jobs for item {item_id}: {str(e)}")
+        except:
+            _logger.warning(f"Error cancelling active processing jobs for item {item_id}: {traceback.format_exc()}")
             # Don't fail the delete job for this, just log the warning
 
     def _delete_associated_logs(self, import_queue_item: ImportQueue, bulk_job_id: str):
@@ -238,12 +235,12 @@ class BulkDeleteJob(BaseJob):
         try:
             if import_queue_item.log_id:
                 deleted_count = DatabaseLogging.objects.filter(log_id=import_queue_item.log_id).delete()[0]
-                logger.info(f"Deleted {deleted_count} log entries for item {import_queue_item.id}")
+                _logger.info(f"Deleted {deleted_count} log entries for item {import_queue_item.id}")
             else:
-                logger.info(f"No log_id found for item {import_queue_item.id}")
+                _logger.info(f"No log_id found for item {import_queue_item.id}")
 
-        except Exception as e:
-            logger.warning(f"Error deleting logs for item {import_queue_item.id}: {str(e)}")
+        except:
+            _logger.warning(f"Error deleting logs for item {import_queue_item.id}: {traceback.format_exc()}")
             # Don't fail the delete job for this, just log the warning
 
     def _broadcast_items_deleted(self, user_id: int, item_ids: List[int]):
@@ -257,4 +254,3 @@ class BulkDeleteJob(BaseJob):
                     'data': {'ids': item_ids}
                 }
             )
-

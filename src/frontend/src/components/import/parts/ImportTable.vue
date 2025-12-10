@@ -843,6 +843,10 @@ export default {
         // Refresh the table to update status icons
         this.$store.dispatch('refreshImportTable');
 
+        // Show error alert to user
+        const errorMessage = data.error_message || 'An error occurred while importing items. Some items may not have been imported.';
+        window.alert(`Bulk import failed: ${errorMessage}`);
+
         this.$forceUpdate();
       };
 
@@ -887,6 +891,10 @@ export default {
 
         // Refresh the table to update status icons
         this.$store.dispatch('refreshImportTable');
+
+        // Show error alert to user
+        const errorMessage = data.error_message || 'An error occurred while deleting items. Some items may not have been deleted.';
+        window.alert(`Bulk delete failed: ${errorMessage}`);
 
         this.$forceUpdate();
       };

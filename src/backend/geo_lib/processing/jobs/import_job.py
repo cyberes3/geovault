@@ -3,17 +3,14 @@ Import job processor for asynchronous import operations.
 Handles importing a single import queue item to the feature store.
 """
 
-import json
 from typing import Dict, Any, List
 
 from asgiref.sync import async_to_sync
 from channels.layers import get_channel_layer
 
-from api.models import ImportQueue, FeatureStore
+from api.models import ImportQueue
 from geo_lib.logging.console import get_job_logger
 from geo_lib.processing.import_utils import (
-    delete_logs_by_log_id,
-    broadcast_item_imported,
     process_features_for_import,
     bulk_create_features_with_fallback,
     finalize_import_item,
@@ -21,7 +18,7 @@ from geo_lib.processing.import_utils import (
     filter_features_to_process,
 )
 from geo_lib.processing.jobs.base_job import BaseJob
-from geo_lib.processing.redis_job_storage import update_job_status as update_redis_job_status
+from geo_lib.processing.jobs.helpers.redis_job_storage import update_job_status as update_redis_job_status
 from geo_lib.processing.status_tracker import ProcessingStatus
 
 logger = get_job_logger()

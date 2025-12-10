@@ -4,14 +4,13 @@ Provides persistent storage for job status that can be queried via API.
 """
 
 import json
-import time
 from typing import Dict, Any, Optional, List
 
-from geo_lib.utils.redis_connection import get_redis_connection
-from geo_lib.processing.status_tracker import ProcessingStatus, JobType
 from geo_lib.logging.console import get_job_logger
+from geo_lib.processing.status_tracker import ProcessingStatus
+from geo_lib.utils.redis_connection import get_redis_connection
 
-logger = get_job_logger()
+_logger = get_job_logger()
 
 # TTL for completed/failed jobs: 10 minutes
 COMPLETED_JOB_TTL = 600
@@ -27,8 +26,8 @@ def _get_user_jobs_key(user_id: int) -> str:
     return f"user_jobs:{user_id}"
 
 
-def store_job_started(job_id: str, user_id: int, job_type: str, filename: str, 
-                     created_at: float, **kwargs) -> bool:
+def store_job_started(job_id: str, user_id: int, job_type: str, filename: str,
+                      created_at: float, **kwargs) -> bool:
     """
     Store job information when it starts.
     
@@ -45,7 +44,7 @@ def store_job_started(job_id: str, user_id: int, job_type: str, filename: str,
     """
     try:
         redis_client = get_redis_connection()
-        
+
         job_data = {
             'job_id': job_id,
             'user_id': user_id,
@@ -60,23 +59,23 @@ def store_job_started(job_id: str, user_id: int, job_type: str, filename: str,
             'completed_at': None,
             **kwargs
         }
-        
+
         # Store job data
         redis_client.set(_get_job_key(job_id), json.dumps(job_data))
-        
+
         # Add to user's job set
         redis_client.sadd(_get_user_jobs_key(user_id), job_id)
-        
+
         return True
     except Exception as e:
-        logger.error(f"Failed to store job started in Redis: {e}")
+        _logger.error(f"Failed to store job started in Redis: {e}")
         return False
 
 
 def update_job_status(job_id: str, status: ProcessingStatus, message: str = "",
-                     progress: Optional[float] = None, error_message: Optional[str] = None,
-                     started_at: Optional[float] = None, completed_at: Optional[float] = None,
-                     **kwargs) -> bool:
+                      progress: Optional[float] = None, error_message: Optional[str] = None,
+                      started_at: Optional[float] = None, completed_at: Optional[float] = None,
+                      **kwargs) -> bool:
     """
     Update job status in Redis.
     
@@ -96,15 +95,15 @@ def update_job_status(job_id: str, status: ProcessingStatus, message: str = "",
     try:
         redis_client = get_redis_connection()
         job_key = _get_job_key(job_id)
-        
+
         # Get existing job data
         existing_data = redis_client.get(job_key)
         if not existing_data:
-            logger.warning(f"Job {job_id} not found in Redis for status update")
+            _logger.warning(f"Job {job_id} not found in Redis for status update")
             return False
-        
+
         job_data = json.loads(existing_data)
-        
+
         # Update fields
         job_data['status'] = status.value
         if message:
@@ -117,24 +116,24 @@ def update_job_status(job_id: str, status: ProcessingStatus, message: str = "",
             job_data['started_at'] = started_at
         if completed_at is not None:
             job_data['completed_at'] = completed_at
-        
+
         # Update any additional fields
         job_data.update(kwargs)
-        
+
         # Determine TTL: set 10-minute TTL for completed/failed jobs
         ttl = None
         if status in [ProcessingStatus.COMPLETED, ProcessingStatus.FAILED, ProcessingStatus.CANCELLED]:
             ttl = COMPLETED_JOB_TTL
-        
+
         # Update job data
         if ttl:
             redis_client.setex(job_key, ttl, json.dumps(job_data))
         else:
             redis_client.set(job_key, json.dumps(job_data))
-        
+
         return True
     except Exception as e:
-        logger.error(f"Failed to update job status in Redis: {e}")
+        _logger.error(f"Failed to update job status in Redis: {e}")
         return False
 
 
@@ -151,14 +150,14 @@ def get_job_status(job_id: str) -> Optional[Dict[str, Any]]:
     try:
         redis_client = get_redis_connection()
         job_key = _get_job_key(job_id)
-        
+
         job_data = redis_client.get(job_key)
         if not job_data:
             return None
-        
+
         return json.loads(job_data)
     except Exception as e:
-        logger.error(f"Failed to get job status from Redis: {e}")
+        _logger.error(f"Failed to get job status from Redis: {e}")
         return None
 
 
@@ -175,12 +174,12 @@ def get_user_jobs(user_id: int) -> List[Dict[str, Any]]:
     try:
         redis_client = get_redis_connection()
         user_jobs_key = _get_user_jobs_key(user_id)
-        
+
         # Get all job IDs for this user
         job_ids = redis_client.smembers(user_jobs_key)
         if not job_ids:
             return []
-        
+
         # Fetch all job data
         jobs = []
         for job_id in job_ids:
@@ -190,12 +189,11 @@ def get_user_jobs(user_id: int) -> List[Dict[str, Any]]:
             else:
                 # Job expired or was deleted, remove from set
                 redis_client.srem(user_jobs_key, job_id)
-        
+
         # Sort by created_at descending (newest first)
         jobs.sort(key=lambda x: x.get('created_at', 0), reverse=True)
-        
+
         return jobs
     except Exception as e:
-        logger.error(f"Failed to get user jobs from Redis: {e}")
+        _logger.error(f"Failed to get user jobs from Redis: {e}")
         return []
-

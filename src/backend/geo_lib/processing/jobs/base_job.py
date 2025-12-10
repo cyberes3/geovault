@@ -3,7 +3,6 @@ Base job class for all asynchronous operations.
 """
 
 import threading
-import time
 import traceback
 from abc import ABC, abstractmethod
 from typing import Dict, Any
@@ -11,14 +10,13 @@ from typing import Dict, Any
 from asgiref.sync import async_to_sync
 from channels.layers import get_channel_layer
 
-from geo_lib.processing.status_tracker import ProcessingStatusTracker, ProcessingStatus
-from geo_lib.processing.redis_job_storage import (
+from geo_lib.processing.jobs import _logger
+from geo_lib.processing.jobs.helpers.redis_job_storage import (
     store_job_started,
     update_job_status as update_redis_job_status
 )
-from geo_lib.logging.console import get_job_logger
-
-logger = get_job_logger()
+from geo_lib.processing.messages import JOB_FAILED_GENERIC
+from geo_lib.processing.status_tracker import ProcessingStatusTracker, ProcessingStatus
 
 
 class BaseJob(ABC):
@@ -34,7 +32,7 @@ class BaseJob(ABC):
     @abstractmethod
     def get_job_type(self) -> str:
         """Return the type of job (e.g., 'import', 'delete')."""
-        pass
+        raise NotImplementedError()
 
     def start_job(self, job_id: str, **kwargs) -> bool:
         """
@@ -50,12 +48,12 @@ class BaseJob(ABC):
         # Check if job already exists and is not cancelled
         job = self.status_tracker.get_job(job_id)
         if not job or job.status == ProcessingStatus.CANCELLED:
-            logger.warning(f"Cannot start {self.get_job_type()} job {job_id}: job not found or cancelled")
+            _logger.warning(f"Cannot start {self.get_job_type()} job {job_id}: job not found or cancelled")
             return False
 
         # Check if already processing
         if job_id in self._active_threads:
-            logger.warning(f"Job {job_id} is already being processed")
+            _logger.warning(f"Job {job_id} is already being processed")
             return False
 
         # Start processing in background thread
@@ -75,10 +73,10 @@ class BaseJob(ABC):
         Checks for cancellation before and during processing.
         """
         try:
-            # Check if job was cancelled before starting processing
+            # Check if job was canceled before starting processing
             job = self.status_tracker.get_job(job_id)
             if not job or job.status == ProcessingStatus.CANCELLED:
-                logger.info(f"Job {job_id} was cancelled before processing started")
+                _logger.info(f"Job {job_id} was cancelled before processing started")
                 return
 
             # Store job in Redis when it starts processing
@@ -97,16 +95,18 @@ class BaseJob(ABC):
             # Check if job was cancelled after processing
             job = self.status_tracker.get_job(job_id)
             if job and job.status == ProcessingStatus.CANCELLED:
-                logger.info(f"Job {job_id} was cancelled during processing")
+                _logger.info(f"Job {job_id} was cancelled during processing")
 
         except Exception as e:
-            # Don't log error if job was cancelled
+            # Don't log error if job was canceled
             job = self.status_tracker.get_job(job_id)
             if job and job.status == ProcessingStatus.CANCELLED:
-                logger.info(f"Job {job_id} was cancelled, stopping error handling")
+                _logger.info(f"Job {job_id} was cancelled, stopping error handling")
             else:
-                logger.error(f"Error in {self.get_job_type()} job {job_id}: {traceback.format_exc()}")
-                self._handle_job_error(job_id, str(e))
+                # Log detailed error internally
+                _logger.error(f"Error in {self.get_job_type()} job {job_id}: {traceback.format_exc()}")
+                # Use generic error message for user
+                self._handle_job_error(job_id, JOB_FAILED_GENERIC)
 
         finally:
             # Clean up thread reference
@@ -119,7 +119,7 @@ class BaseJob(ABC):
         Execute the job-specific processing logic.
         Must be implemented by subclasses.
         """
-        pass
+        raise NotImplementedError()
 
     def _handle_job_error(self, job_id: str, error_message: str):
         """
@@ -188,7 +188,7 @@ class BaseJob(ABC):
                 started_at=job.started_at,
                 **kwargs
             )
-        
+
         data = {
             'job_id': job_id,
             'status': status,
@@ -213,7 +213,7 @@ class BaseJob(ABC):
                 completed_at=job.completed_at,
                 **data
             )
-        
+
         self._broadcast_websocket_event(user_id, 'completed', {'job_id': job_id, **data})
 
     def _broadcast_job_failed(self, job_id: str, error_message: str, **data):
