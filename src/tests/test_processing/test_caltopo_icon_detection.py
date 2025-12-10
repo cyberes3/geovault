@@ -1,15 +1,12 @@
 """
 Tests for CalTopo icon URL detection and processing.
 """
-import pytest
 from unittest.mock import patch
 
-from geo_lib.processing.icon_manager import (
-    _extract_color_from_caltopo_url,
-    _fix_nested_caltopo_url,
-    _is_caltopo_point_icon,
+from geo_lib.processing.icons.icon_manager import (
     _process_single_icon_href
 )
+from geo_lib.processing.icons.caltopo import _fix_nested_caltopo_url, _is_caltopo_point_icon, _extract_color_from_caltopo_url
 
 
 class TestCalTopoIconDetection:

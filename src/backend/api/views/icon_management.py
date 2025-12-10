@@ -11,7 +11,7 @@ from django.views.decorators.http import require_http_methods
 from PIL import Image
 
 from geo_lib.logging.console import get_tagged_logger
-from geo_lib.processing.icon_manager import store_icon
+from geo_lib.processing.icons.icon_manager import store_icon
 from geo_lib.website.auth import api_or_login_required_401
 
 logger = get_tagged_logger('access')

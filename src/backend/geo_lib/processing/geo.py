@@ -4,21 +4,17 @@ This module provides helper functions for processing various geospatial file for
 Main processing logic has been moved to the processors module.
 """
 
+import logging
 import re
-import xml.etree.ElementTree as ET
 from typing import Optional
 
 import markdownify
 
-import logging
-
-from geo_lib.feature_id import generate_geojson_hash
-from geo_lib.processing.file_types import FileType
 from geo_lib.logging.console import get_tagged_logger
 from geo_lib.validation.geojson.geojson_whitelist import validate_and_normalize_geojson_feature
 from geo_lib.validation.geometry_validation import GeometryValidationError
 
-logger = get_tagged_logger('job')
+_logger = get_tagged_logger(__name__)
 
 
 def html_to_markdown(html_content) -> str:
@@ -66,125 +62,6 @@ def html_to_markdown(html_content) -> str:
     return markdown_content
 
 
-def normalize_content_for_comparison(content: str, file_type: FileType) -> str:
-    """
-    Normalize file content for comparison by removing differences that don't affect the actual data.
-    
-    Args:
-        content: File content as string
-        file_type: Type of file being normalized
-        
-    Returns:
-        Normalized content string
-    """
-    if not content:
-        return ""
-
-    if file_type == FileType.KML:
-        return _normalize_kml_for_comparison(content)
-    elif file_type == FileType.GPX:
-        return _normalize_gpx_for_comparison(content)
-    else:
-        return content
-
-
-def _normalize_kml_for_comparison(kml_content: str) -> str:
-    """
-    Normalize KML content for comparison by removing differences that don't affect the actual data.
-    
-    This function handles the differences between KML and KMZ files:
-    1. Normalizes document names (removes .kml/.kmz extensions)
-    2. Normalizes icon paths (converts both :/ and files/ paths to a standard format)
-    3. Removes whitespace differences
-    4. Standardizes XML formatting
-    """
-    # Parse the KML content with secure settings
-    try:
-        # Use secure parser to prevent XXE attacks
-        parser = ET.XMLParser()
-
-        # Disable entity processing to prevent XXE attacks
-        # Note: In newer Python versions, parser.entity is readonly, so we use a different approach
-        try:
-            # Try to disable entity processing (works in older Python versions)
-            parser.entity = {}
-        except (AttributeError, TypeError):
-            # In newer versions, we rely on the default secure behavior
-            pass
-
-        root = ET.fromstring(kml_content, parser=parser)
-    except ET.ParseError:
-        # If XML parsing fails, return the original content
-        return kml_content
-
-    # Normalize document name - remove .kml/.kmz extensions
-    for name_elem in root.iter():
-        if name_elem.tag.endswith('name') and name_elem.text:
-            # Remove .kml or .kmz extensions from document names
-            name_elem.text = re.sub(r'\.(kml|kmz)$', '', name_elem.text, flags=re.IGNORECASE)
-
-    # Normalize icon paths - convert both :/ and files/ paths to a standard format
-    for href_elem in root.iter():
-        if href_elem.tag.endswith('href') and href_elem.text:
-            href = href_elem.text
-            # Convert :/ paths to standard format
-            if href.startswith(':/'):
-                href_elem.text = href[2:]  # Remove :/ prefix
-            # Convert files/ paths to standard format  
-            elif href.startswith('files/'):
-                href_elem.text = href[6:]  # Remove files/ prefix
-
-    # Convert back to string with consistent formatting
-    try:
-        # Use a consistent XML declaration and formatting
-        normalized = ET.tostring(root, encoding='unicode', xml_declaration=True)
-        # Normalize whitespace
-        normalized = re.sub(r'\s+', ' ', normalized)
-        normalized = re.sub(r'>\s+<', '><', normalized)
-        return normalized.strip()
-    except Exception:
-        # If normalization fails, return the original content
-        return kml_content
-
-
-def _normalize_gpx_for_comparison(gpx_content: str) -> str:
-    """
-    Normalize GPX content for comparison by removing differences that don't affect the actual data.
-    
-    This function:
-    1. Normalizes whitespace differences
-    2. Standardizes XML formatting
-    3. Removes metadata that doesn't affect the actual track data
-    """
-    # Parse the GPX content with secure settings
-    try:
-        # Use secure parser to prevent XXE attacks
-        parser = ET.XMLParser()
-
-        # Disable entity processing to prevent XXE attacks
-        try:
-            parser.entity = {}
-        except (AttributeError, TypeError):
-            pass
-
-        root = ET.fromstring(gpx_content, parser=parser)
-    except ET.ParseError:
-        # If XML parsing fails, return the original content
-        return gpx_content
-
-    # Convert back to string with consistent formatting
-    try:
-        # Use a consistent XML declaration and formatting
-        normalized = ET.tostring(root, encoding='unicode', xml_declaration=True)
-        # Normalize whitespace
-        normalized = re.sub(r'\s+', ' ', normalized)
-        normalized = re.sub(r'>\s+<', '><', normalized)
-        return normalized.strip()
-    except Exception:
-        # If normalization fails, return the original content
-        return gpx_content
-
-
 def geojson_property_generation(feature: dict) -> dict:
     """
     Generate GeoJSON properties with validation, whitelisting, and style normalization.
@@ -198,10 +75,10 @@ def geojson_property_generation(feature: dict) -> dict:
     Returns:
         Properties dictionary with validated, whitelisted keys and normalized styles
     """
-    
+
     # Extract and preserve system_tags if they exist (they're generated during processing)
     original_system_tags = feature.get('properties', {}).get('system_tags')
-    
+
     # Convert HTML descriptions to markdown before validation
     properties = feature.get('properties', {}).copy()
     if 'description' in properties and properties['description']:
@@ -241,29 +118,29 @@ def extract_track_created_date(feature: dict) -> Optional[str]:
     """
     geometry = feature.get('geometry', {})
     geometry_type = geometry.get('type', '').lower() if geometry else ''
-    
+
     # Only process lines (LineString or MultiLineString)
     if geometry_type not in ['linestring', 'multilinestring']:
         return None
-    
+
     properties = feature.get('properties', {})
-    
+
     # First, check for GPX route time property (routes have time at the route level)
     if 'time' in properties and properties['time']:
         time_value = properties['time']
         if isinstance(time_value, str):
             return time_value
-    
+
     # Then check for track timestamps in coordinateProperties.times
     coordinate_properties = properties.get('coordinateProperties', {})
-    
+
     if not coordinate_properties:
         return None
-    
+
     times = coordinate_properties.get('times')
     if not times:
         return None
-    
+
     try:
         # Handle MultiLineString: times is an array of arrays
         # Get the first timestamp from the first line
@@ -281,9 +158,9 @@ def extract_track_created_date(feature: dict) -> Optional[str]:
                 if isinstance(first_timestamp, str):
                     return first_timestamp
     except (IndexError, TypeError, AttributeError) as e:
-        logger.warning(f"Error extracting track timestamp: {e}")
+        _logger.warning(f"Error extracting track timestamp: {e}")
         return None
-    
+
     return None
 
 
@@ -309,21 +186,21 @@ def split_complex_geometries(feature: dict) -> list:
         return []
 
     geometry_type = feature['geometry']['type']
-    
+
     # Assert that MultiPoint should not appear (KML converts to GeometryCollection)
     if geometry_type == 'MultiPoint':
         feature_name = feature.get('properties', {}).get('name', 'Unnamed')
         error_msg = f"Unexpected MultiPoint geometry in feature '{feature_name}'. KML MultiGeometry should convert to GeometryCollection."
-        logger.error(error_msg)
+        _logger.error(error_msg)
         assert False, error_msg
-    
+
     # Assert that MultiPolygon should not appear (KML converts to GeometryCollection)
     if geometry_type == 'MultiPolygon':
         feature_name = feature.get('properties', {}).get('name', 'Unnamed')
         error_msg = f"Unexpected MultiPolygon geometry in feature '{feature_name}'. KML MultiGeometry should convert to GeometryCollection."
-        logger.error(error_msg)
+        _logger.error(error_msg)
         assert False, error_msg
-    
+
     # Split GeometryCollection into separate features
     if geometry_type == 'GeometryCollection':
         features = []
@@ -345,6 +222,6 @@ def split_complex_geometries(feature: dict) -> list:
             features.append(new_feature)
 
         return features
-    
+
     # For all other geometry types, return as-is
     return [feature]

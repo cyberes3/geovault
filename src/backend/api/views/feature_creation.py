@@ -15,7 +15,7 @@ from geo_lib.tags.const_strings import filter_protected_tags, prepare_user_tags,
 from geo_lib.feature_id import generate_geojson_hash
 from geo_lib.geocoding.background_geocoding import geocode_feature_async
 from geo_lib.logging.console import get_tagged_logger
-from geo_lib.processing.tagging import generate_auto_tags
+from geo_lib.processing.tagging.generate import generate_auto_tags
 from geo_lib.types.feature import PointFeature
 from geo_lib.validation.geojson.geojson_whitelist import validate_and_normalize_geojson_feature
 from geo_lib.validation.geometry_validation import GeometryValidationError

@@ -314,8 +314,8 @@ class TestSkipGeocodingParameter(TestCase):
     @patch('geo_lib.processing.tagging.modules.geocoding.get_reverse_geocoding_service')
     def test_generate_auto_tags_skips_geocoding(self, mock_get_service, mock_setting):
         """Test that generate_auto_tags skips geocoding when flag is set."""
-        from geo_lib.processing.tagging import generate_auto_tags
-        
+        from geo_lib.processing.tagging.generate import generate_auto_tags
+
         # Enable geocoding
         mock_setting.return_value = True
         
@@ -354,8 +354,8 @@ class TestSkipGeocodingParameter(TestCase):
     
     def test_generate_auto_tags_backward_compatibility(self):
         """Test that generate_auto_tags maintains backward compatibility."""
-        from geo_lib.processing.tagging import generate_auto_tags
-        
+        from geo_lib.processing.tagging.generate import generate_auto_tags
+
         # Create feature
         feature = PointFeature(
             type='Feature',

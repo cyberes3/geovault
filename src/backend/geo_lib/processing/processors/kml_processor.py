@@ -6,10 +6,11 @@ Handles KML-specific conversion logic.
 import re
 from typing import Dict, Any
 
-from geo_lib.processing.icon_manager import process_geojson_icons
+from geo_lib.processing.icons.icon_manager import process_geojson_icons
 from .base_processor import BaseProcessor
+from ...logging.console import get_tagged_logger
 
-logger = __import__('logging').getLogger(__name__)
+_logger = get_tagged_logger('KMLPROCESSOR')
 
 
 def _remove_namespaces(content: str) -> str:

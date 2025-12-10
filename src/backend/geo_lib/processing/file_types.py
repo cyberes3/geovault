@@ -5,8 +5,10 @@ This module provides a unified registry of supported file types with their prope
 
 import os
 from dataclasses import dataclass
-from typing import List, Dict, Any, Union
 from enum import Enum
+from typing import List, Dict, Union
+
+from django.conf import settings
 
 
 class FileType(Enum):
@@ -52,14 +54,14 @@ FILE_TYPE_CONFIGS: Dict[FileType, FileTypeConfig] = {
             # passes, so allow text/html here.
             'text/html'
         ],
-        max_size=5 * 1024 * 1024,  # 5MB
+        max_size=settings.FILE_UPLOAD_MAX_MEMORY_SIZE,
         xml_root_elements=['kml'],
         allowed_elements=[
             'style', 'iconstyle', 'linestyle', 'polystyle', 'labelstyle', 'balloonstyle',
             'liststyle', 'itemicon', 'pair', 'hotspot', 'link'
         ]
     ),
-    
+
     FileType.KMZ: FileTypeConfig(
         file_type=FileType.KMZ,
         extensions=['.kmz'],
@@ -74,7 +76,7 @@ FILE_TYPE_CONFIGS: Dict[FileType, FileTypeConfig] = {
             'application/vnd.google-earth.kmz',
             'application/vnd.google-earth.kmz+xml'
         ],
-        max_size=5 * 1024 * 1024,  # 5MB
+        max_size=settings.FILE_UPLOAD_MAX_MEMORY_SIZE,
         xml_root_elements=['kml'],
         allowed_elements=[
             'style', 'iconstyle', 'linestyle', 'polystyle', 'labelstyle', 'balloonstyle',
@@ -83,7 +85,7 @@ FILE_TYPE_CONFIGS: Dict[FileType, FileTypeConfig] = {
         is_archive=True,
         archive_extensions=['.kml']
     ),
-    
+
     FileType.GPX: FileTypeConfig(
         file_type=FileType.GPX,
         extensions=['.gpx'],
@@ -99,7 +101,7 @@ FILE_TYPE_CONFIGS: Dict[FileType, FileTypeConfig] = {
             'application/gpx+xml',
             'application/gpx'
         ],
-        max_size=5 * 1024 * 1024,  # 5MB
+        max_size=settings.FILE_UPLOAD_MAX_MEMORY_SIZE,
         xml_root_elements=['gpx'],
         allowed_elements=['trk', 'rte', 'wpt', 'name', 'desc', 'time', 'ele']
     )
@@ -129,11 +131,11 @@ def get_file_type_by_extension(extension: str) -> FileType:
     extension = extension.lower()
     if not extension.startswith('.'):
         extension = f'.{extension}'
-    
+
     for file_type, config in FILE_TYPE_CONFIGS.items():
         if extension in config.extensions:
             return file_type
-    
+
     raise ValueError(f"Unsupported file extension: {extension}")
 
 
@@ -142,18 +144,18 @@ def get_file_type_by_signature(file_data: bytes) -> FileType:
     # Check for more specific signatures first (root elements) before generic XML
     # This prevents GPX files from being misidentified as KML
     file_data_lower = file_data.lower()
-    
+
     # Check for root elements first (most specific)
     if b'<gpx' in file_data_lower or b'<GPX' in file_data:
         return FileType.GPX
     if b'<kml' in file_data_lower or b'<KML' in file_data:
         return FileType.KML
-    
+
     # Then check other signatures
     for file_type, config in FILE_TYPE_CONFIGS.items():
         if any(file_data.startswith(sig) for sig in config.signatures):
             return file_type
-    
+
     raise ValueError("Unsupported file signature")
 
 
@@ -162,7 +164,7 @@ def get_file_type_by_mime_type(mime_type: str) -> FileType:
     for file_type, config in FILE_TYPE_CONFIGS.items():
         if mime_type in config.mime_types:
             return file_type
-    
+
     raise ValueError(f"Unsupported MIME type: {mime_type}")
 
 
@@ -214,14 +216,14 @@ def strip_bom_and_whitespace(file_data: bytes) -> bytes:
         file_data = file_data[2:]
     elif file_data.startswith(b'\xfe\xff'):  # UTF-16 BE BOM
         file_data = file_data[2:]
-    
+
     # Remove leading whitespace (spaces, tabs, newlines, carriage returns)
     # But only if it's text-based (XML) files, not binary (ZIP/KMZ)
     # Check if it looks like text (starts with XML declaration or tag)
     if file_data.startswith(b'<?xml') or file_data.startswith(b'<'):
         # Strip leading whitespace for XML-based formats
         file_data = file_data.lstrip(b' \t\n\r')
-    
+
     return file_data
 
 
@@ -234,7 +236,7 @@ def validate_file_signature(file_data: bytes, file_type: FileType) -> bool:
     # For binary formats (KMZ/ZIP), check as-is
     if file_type == FileType.KML or file_type == FileType.GPX:
         file_data = strip_bom_and_whitespace(file_data)
-    
+
     return any(file_data.startswith(sig) for sig in FILE_TYPE_CONFIGS[file_type].signatures)
 
 
@@ -256,7 +258,7 @@ def detect_file_type(file_data: Union[bytes, str], filename: str = "") -> FileTy
             return get_file_type_by_extension(ext)
         except ValueError:
             pass  # Continue to content-based detection
-    
+
     # Check file content signatures
     if isinstance(file_data, bytes):
         try:
@@ -269,7 +271,7 @@ def detect_file_type(file_data: Union[bytes, str], filename: str = "") -> FileTy
                 return FileType.KMZ  # Assume KMZ if not decodable as UTF-8
     else:
         content = file_data
-    
+
     # Check for KML/GPX XML signatures in content
     # Check for root elements first (more specific), then generic XML
     content_lower = content.lower().strip()
@@ -280,6 +282,6 @@ def detect_file_type(file_data: Union[bytes, str], filename: str = "") -> FileTy
     elif content_lower.startswith('<?xml'):
         # Generic XML - default to KML
         return FileType.KML
-    
+
     # Default to KML if we can't determine
     return FileType.KML

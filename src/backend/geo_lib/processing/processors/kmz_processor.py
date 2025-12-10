@@ -5,13 +5,13 @@ Inherits from KMLProcessor since KMZ is just a zipped KML file.
 
 from typing import Dict, Any
 
-from geo_lib.processing.icon_manager import process_geojson_icons
+from geo_lib.processing.icons.icon_manager import process_geojson_icons
 from geo_lib.processing.logging import DatabaseLogLevel
 from geo_lib.security.SecureFileValidator import secure_kmz_to_kml
-from geo_lib.security.exceptions import SecurityError, FileValidationError
 from .kml_processor import KMLProcessor
+from ...logging.console import get_tagged_logger
 
-logger = __import__('logging').getLogger(__name__)
+_logger = get_tagged_logger('KMZPROCESSOR')
 
 
 class KMZProcessor(KMLProcessor):
@@ -32,16 +32,14 @@ class KMZProcessor(KMLProcessor):
         Raises:
             Exception: If KMZ extraction or conversion fails
         """
-        # Ensure file_data is bytes for KMZ
-        kmz_data = self.file_data if isinstance(self.file_data, bytes) else self.file_data.encode('utf-8')
+        kmz_data = self.file_data if isinstance(self.file_data, bytes) else self.file_data.encode('utf-8')  # ensure bytes
 
         try:
-            # Extract KML content from KMZ using secure Python extraction
             kml_content = secure_kmz_to_kml(kmz_data)
         except Exception as e:
             error_msg = f"Failed to extract KML from KMZ: {str(e)}"
             self.import_log.add(error_msg, "KMZ Extraction", DatabaseLogLevel.ERROR)
-            logger.info(error_msg)
+            _logger.info(error_msg)
             raise Exception(error_msg)
 
         # Convert the extracted KML using parent's logic (text mode for KML)

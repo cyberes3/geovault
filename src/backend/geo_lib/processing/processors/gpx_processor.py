@@ -6,8 +6,9 @@ Handles GPX-specific conversion logic.
 from typing import Dict, Any
 
 from .base_processor import BaseProcessor
+from ...logging.console import get_tagged_logger
 
-logger = __import__('logging').getLogger(__name__)
+_logger = get_tagged_logger('GPXPROCESSOR')
 
 
 class GPXProcessor(BaseProcessor):

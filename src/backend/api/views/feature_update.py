@@ -16,7 +16,7 @@ from api.utils.responses import error_response, handle_404
 from geo_lib.tags.const_strings import CONST_INTERNAL_TAGS, filter_protected_tags, is_protected_tag, prepare_user_tags
 from geo_lib.feature_id import generate_geojson_hash
 from geo_lib.logging.console import get_tagged_logger
-from geo_lib.processing.tagging import generate_auto_tags
+from geo_lib.processing.tagging.generate import generate_auto_tags
 from geo_lib.processing.tagging.modules.feature_date import update_feature_date_tags
 from geo_lib.processing.import_utils import (
     apply_bulk_operations as apply_bulk_operations_to_features,

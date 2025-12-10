@@ -128,10 +128,6 @@ processing:
   # Number of threads to use for parallel feature processing during import
   import_threads: 10
 
-  # File upload limits (in bytes)
-  file_upload_max_memory_size: 2097152  # 2MB
-  data_upload_max_memory_size: 2097152  # 2MB
-
   # Base timeout for file processing
   timeout_base_seconds: 30
 

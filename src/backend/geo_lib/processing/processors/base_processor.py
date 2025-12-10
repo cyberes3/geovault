@@ -22,7 +22,7 @@ from geo_lib.processing.duplicate_detection.duplicate_detection import remove_in
 from geo_lib.processing.duplicate_detection.models import split_duplicates_by_match_type
 from geo_lib.processing.elevation_service import fill_missing_elevations
 from geo_lib.processing.file_types import FileType, detect_file_type
-from geo_lib.processing.geo_processor import (
+from geo_lib.processing.geo import (
     extract_track_created_date,
     geojson_property_generation,
     split_complex_geometries
@@ -38,7 +38,7 @@ from geo_lib.utils.feature_utils import build_feature_type_summary
 from geo_lib.validation.geometry_validation import validate_coordinates_values, GeometryValidationError
 from website.settings_utils import get_required_setting
 
-logger = get_tagged_logger('job')
+_logger = get_tagged_logger('BASEPROCESSOR')
 
 
 class BaseProcessor(ABC):
@@ -129,7 +129,7 @@ class BaseProcessor(ABC):
 
         except Exception as e:
             self.import_log.add(f"File validation error: {str(e)}", "Validation", DatabaseLogLevel.ERROR)
-            logger.error(f"Validation error: {traceback.format_exc()}")
+            _logger.error(f"Validation error: {traceback.format_exc()}")
             return False
 
     @abstractmethod
@@ -183,7 +183,7 @@ class BaseProcessor(ABC):
         except Exception as e:
             if not self._is_canceled():
                 step_log.add(f"GeoJSON conversion failed: {str(e)}", "File Conversion", DatabaseLogLevel.ERROR)
-                logger.error(f"GeoJSON conversion error: {traceback.format_exc()}")
+                _logger.error(f"GeoJSON conversion error: {traceback.format_exc()}")
             raise
 
         return step_log
@@ -264,7 +264,7 @@ class BaseProcessor(ABC):
                         except Exception as e:
                             feature = future_to_feature[future]
                             feature_name = feature.get('properties', {}).get('name', 'Unnamed')
-                            logger.error(f"Error processing feature '{feature_name}': {traceback.format_exc()}")
+                            _logger.error(f"Error processing feature '{feature_name}': {traceback.format_exc()}")
                             feature_log.add(f"Error processing feature '{feature_name}': {str(e)}", "Feature Processing", DatabaseLogLevel.ERROR)
                             skipped_count += 1
                             completed_count += 1
@@ -322,7 +322,7 @@ class BaseProcessor(ABC):
 
         except Exception as e:
             step_log.add(f"Elevation data filling failed: {str(e)}", "Elevation Service", DatabaseLogLevel.ERROR)
-            logger.error(f"Elevation data filling error traceback: {traceback.format_exc()}")
+            _logger.error(f"Elevation data filling error traceback: {traceback.format_exc()}")
 
         return step_log
 
@@ -376,7 +376,7 @@ class BaseProcessor(ABC):
                     feature_instance = feature_class(**feature)
                     feature_instances.append(feature_instance)
                 except Exception as e:
-                    logger.warning(f"Failed to create feature instance for tagging: {e}")
+                    _logger.warning(f"Failed to create feature instance for tagging: {e}")
                     feature_instances.append(None)
 
             # Check for cancellation after creating instances
@@ -385,7 +385,7 @@ class BaseProcessor(ABC):
                 return feature_log
 
             # Batch generate tags for all features at once (SKIP geocoding)
-            from geo_lib.processing.tagging import generate_auto_tags_batch
+            from geo_lib.processing.tagging.generate import generate_auto_tags_batch
             all_feature_tags = generate_auto_tags_batch(
                 [f for f in feature_instances if f is not None],
                 import_log=feature_log,
@@ -431,7 +431,7 @@ class BaseProcessor(ABC):
                         "Tag Generation",
                         DatabaseLogLevel.WARNING
                     )
-                    logger.warning(f"Tag application failed for feature '{feature_name}': {traceback.format_exc()}")
+                    _logger.warning(f"Tag application failed for feature '{feature_name}': {traceback.format_exc()}")
 
         except Exception as e:
             feature_log.add(
@@ -439,7 +439,7 @@ class BaseProcessor(ABC):
                 "Tag Generation",
                 DatabaseLogLevel.ERROR
             )
-            logger.error(f"Batch tag generation error: {traceback.format_exc()}")
+            _logger.error(f"Batch tag generation error: {traceback.format_exc()}")
 
         return feature_log
 
@@ -504,7 +504,7 @@ class BaseProcessor(ABC):
                     feature_instance = feature_class(**feature)
                     feature_instances.append(feature_instance)
                 except Exception as e:
-                    logger.warning(f"Failed to create feature instance for geocoding: {e}")
+                    _logger.warning(f"Failed to create feature instance for geocoding: {e}")
                     feature_instances.append(None)
 
             # Check for cancellation after creating instances
@@ -549,7 +549,7 @@ class BaseProcessor(ABC):
                             "Reverse Geocoding",
                             DatabaseLogLevel.WARNING
                         )
-                        logger.warning(f"Geocoding tag application failed for feature '{feature_name}': {traceback.format_exc()}")
+                        _logger.warning(f"Geocoding tag application failed for feature '{feature_name}': {traceback.format_exc()}")
 
         except Exception as e:
             feature_log.add(
@@ -557,7 +557,7 @@ class BaseProcessor(ABC):
                 "Reverse Geocoding",
                 DatabaseLogLevel.ERROR
             )
-            logger.error(f"Reverse geocoding error: {traceback.format_exc()}")
+            _logger.error(f"Reverse geocoding error: {traceback.format_exc()}")
 
         return feature_log
 
@@ -604,10 +604,10 @@ class BaseProcessor(ABC):
                             # Overwrite the name property
                             properties['name'] = filename_without_ext
                             feature['properties'] = properties
-                            logger.info(f"Overwrote single track name with filename '{filename_without_ext}' for job {self.job_id}")
+                            _logger.info(f"Overwrote single track name with filename '{filename_without_ext}' for job {self.job_id}")
                             step_log.add(f"Applied track name override: '{filename_without_ext}'", "Track Name Override", DatabaseLogLevel.INFO)
         except Exception as e:
-            logger.error(f"Error applying track name override: {traceback.format_exc()}")
+            _logger.error(f"Error applying track name override: {traceback.format_exc()}")
             step_log.add(f"Failed to apply track name override: {str(e)}", "Track Name Override", DatabaseLogLevel.ERROR)
 
         return step_log
@@ -716,7 +716,7 @@ class BaseProcessor(ABC):
                 return duplicate_features, step_log
 
         except Exception as e:
-            logger.error(f"Error during duplicate detection: {traceback.format_exc()}")
+            _logger.error(f"Error during duplicate detection: {traceback.format_exc()}")
             step_log.add(f"Duplicate detection failed: {str(e)}", "Duplicate Detection", DatabaseLogLevel.ERROR)
 
         return duplicate_features, step_log
@@ -881,7 +881,7 @@ class BaseProcessor(ABC):
             except Exception:
                 feature_name = split_feature.get('properties', {}).get('name', 'Unnamed')
                 feature_log.add(f"Failed to process feature '{feature_name}', skipping", 'Feature Processing', DatabaseLogLevel.WARNING)
-                logger.error(f"Feature processing error for '{feature_name}': {traceback.format_exc()}")
+                _logger.error(f"Feature processing error for '{feature_name}': {traceback.format_exc()}")
                 skipped_count += 1
 
         return processed_features, feature_log, skipped_count, was_split
@@ -970,7 +970,7 @@ class BaseProcessor(ABC):
             # Verify the converter script exists
             if not os.path.exists(togeojson_path):
                 error_msg = f"Node.js converter script not found at {togeojson_path}"
-                logger.error(error_msg)
+                _logger.error(error_msg)
                 self.import_log.add(error_msg, "File Conversion", DatabaseLogLevel.ERROR)
                 raise FileNotFoundError(error_msg)
 
@@ -982,14 +982,14 @@ class BaseProcessor(ABC):
             # Verify the input file exists
             if not os.path.exists(file_path):
                 error_msg = f"Input file does not exist: {file_path}"
-                logger.error(error_msg)
+                _logger.error(error_msg)
                 self.import_log.add(error_msg, "File Conversion", DatabaseLogLevel.ERROR)
                 raise FileNotFoundError(error_msg)
 
             # Use the JavaScript converter with file path
             # Note: Timing is handled by the base processor's process() method
             self.import_log.add(f"Converting {file_type_name} file to GeoJSON format", "File Conversion", DatabaseLogLevel.INFO)
-            logger.info(f"Starting {file_type_name} conversion for file '{filename}' ({file_size_mb:.2f} MB)")
+            _logger.info(f"Starting {file_type_name} conversion for file '{filename}' ({file_size_mb:.2f} MB)")
 
             result = subprocess.run(
                 ['node', togeojson_path, file_path],
@@ -1012,39 +1012,39 @@ class BaseProcessor(ABC):
                     # Only log stdout if it's not valid JSON (which would be the error message)
                     detailed_error += f"\nNode.js stdout: {stdout_output}"
 
-                logger.error(detailed_error)
+                _logger.error(detailed_error)
                 self.import_log.add(f"{error_msg}: {stderr_output if stderr_output else 'Unknown error'}", "File Conversion", DatabaseLogLevel.ERROR)
                 raise Exception(f"{error_msg}: {stderr_output if stderr_output else 'Unknown error'}")
 
             # Validate that we got valid output
             if not result.stdout or not result.stdout.strip():
                 error_msg = f"{file_type_name} conversion produced no output"
-                logger.error(f"{error_msg} for file '{filename}'")
+                _logger.error(f"{error_msg} for file '{filename}'")
                 self.import_log.add(error_msg, "File Conversion", DatabaseLogLevel.ERROR)
                 raise Exception(error_msg)
 
             try:
                 geojson_data = json.loads(result.stdout)
-                logger.info(f"Successfully converted {file_type_name} file '{filename}' to GeoJSON")
+                _logger.info(f"Successfully converted {file_type_name} file '{filename}' to GeoJSON")
                 return geojson_data
             except json.JSONDecodeError as json_err:
                 # Log the actual output that failed to parse
                 output_preview = result.stdout[:500] if len(result.stdout) > 500 else result.stdout
                 error_msg = f"{file_type_name} conversion produced invalid JSON output"
                 detailed_error = f"{error_msg} for file '{filename}': {str(json_err)}\nOutput preview: {output_preview}"
-                logger.error(detailed_error)
+                _logger.error(detailed_error)
                 self.import_log.add(f"{error_msg} - file may be corrupted or invalid", "File Conversion", DatabaseLogLevel.ERROR)
                 raise Exception(f"{error_msg}: {str(json_err)}")
 
         except subprocess.TimeoutExpired as e:
             timeout_seconds = self._calculate_timeout()
             error_msg = f"{file_type_name} conversion timed out after {timeout_seconds}s"
-            logger.error(f"{error_msg} for file '{filename}' ({file_size_mb:.2f} MB)")
+            _logger.error(f"{error_msg} for file '{filename}' ({file_size_mb:.2f} MB)")
             self.import_log.add(error_msg, "File Conversion", DatabaseLogLevel.ERROR)
             raise Exception(f"{file_type_name} file conversion timed out")
         except FileNotFoundError:
             error_msg = f"Node.js not found - cannot convert {file_type_name} file"
-            logger.error(f"{error_msg} for file '{filename}'. Is Node.js installed?")
+            _logger.error(f"{error_msg} for file '{filename}'. Is Node.js installed?")
             self.import_log.add(error_msg, "File Conversion", DatabaseLogLevel.ERROR)
             raise Exception(error_msg)
         except Exception as e:
@@ -1052,7 +1052,7 @@ class BaseProcessor(ABC):
             if "conversion" in str(e).lower() or "timeout" in str(e).lower():
                 raise
 
-            logger.error(f"{error_msg} for file '{filename}': {traceback.format_exc()}")
+            _logger.error(f"{error_msg} for file '{filename}': {traceback.format_exc()}")
             self.import_log.add(f"{file_type_name} conversion failed: {str(e)}", "File Conversion", DatabaseLogLevel.ERROR)
             raise
 

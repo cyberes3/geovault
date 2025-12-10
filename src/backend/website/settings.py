@@ -347,8 +347,8 @@ SESSION_SAVE_EVERY_REQUEST = True
 
 # File Upload Security Settings
 # Note: File type configurations are now centralized in geo_lib.processing.file_types
-FILE_UPLOAD_MAX_MEMORY_SIZE = config.get_int('processing.file_upload_max_memory_size', 2 * 1024 * 1024)  # 2MB
-DATA_UPLOAD_MAX_MEMORY_SIZE = config.get_int('processing.data_upload_max_memory_size', 2 * 1024 * 1024)  # 2MB
+FILE_UPLOAD_MAX_MEMORY_SIZE = 5 * 1024 * 1024  # 5MB
+DATA_UPLOAD_MAX_MEMORY_SIZE = 5 * 1024 * 1024  # 5MB
 
 # Security validation settings
 SECURE_XML_PARSING = config.get_bool('validation.secure_xml_parsing', True)

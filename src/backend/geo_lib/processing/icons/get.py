@@ -1,0 +1,163 @@
+import io
+import os
+import traceback
+import zipfile
+from pathlib import Path
+from typing import Optional
+from urllib.error import HTTPError, URLError
+from urllib.parse import urlparse
+from urllib.request import Request, urlopen
+
+from django.conf import settings
+
+from geo_lib.processing.icons.icon_manager import VALID_ICON_EXTENSIONS, _logger
+
+
+def _get_icon_extension(filename_or_url: str) -> Optional[str]:
+    """
+    Extract file extension from filename or URL.
+
+    Args:
+        filename_or_url: Filename or URL string
+
+    Returns:
+        Extension with leading dot, or None if not found
+    """
+    # Parse URL or filename
+    parsed = urlparse(filename_or_url)
+    path = parsed.path or filename_or_url
+
+    # Extract extension
+    ext = os.path.splitext(path)[1].lower()
+    return ext if ext in VALID_ICON_EXTENSIONS else None
+
+
+def _get_storage_path(icon_hash: str, extension: str) -> Path:
+    """
+    Get storage path for icon using hash-based directory structure.
+
+    Args:
+        icon_hash: SHA-256 hash of icon content
+        extension: File extension with leading dot
+
+    Returns:
+        Path object for icon storage location
+    """
+    storage_dir = Path(settings.ICON_STORAGE_DIR)
+    # Create subdirectory structure: {hash[0:2]}/{hash[2:4]}/
+    subdir = storage_dir / icon_hash[0:2] / icon_hash[2:4]
+    subdir.mkdir(parents=True, exist_ok=True)
+    return subdir / f"{icon_hash}{extension}"
+
+
+def extract_icon_from_kmz(kmz_data: bytes, icon_path: str) -> Optional[bytes]:
+    """
+    Extract icon from KMZ ZIP archive.
+
+    Args:
+        kmz_data: KMZ file content as bytes
+        icon_path: Path to icon within KMZ archive (e.g., 'files/icon.png' or 'icon.png')
+
+    Returns:
+        Icon data as bytes, or None if extraction fails
+    """
+    try:
+        # Normalize icon path - remove leading :/ or files/ prefix
+        normalized_path = icon_path
+        if normalized_path.startswith(':/'):
+            normalized_path = normalized_path[2:]
+        elif normalized_path.startswith('files/'):
+            normalized_path = normalized_path[6:]
+
+        # Open KMZ as ZIP archive
+        with zipfile.ZipFile(io.BytesIO(kmz_data), 'r') as zip_file:
+            # Build list of paths to try (original, normalized, and variations)
+            paths_to_try = []
+
+            # 1. Try original path first (as-is)
+            if icon_path:
+                paths_to_try.append(icon_path)
+
+            # 2. Try normalized path (without files/ or :/)
+            if normalized_path and normalized_path != icon_path:
+                paths_to_try.append(normalized_path)
+
+            # 3. Try with files/ prefix if not already present
+            if not icon_path.startswith('files/') and not icon_path.startswith(':/'):
+                paths_to_try.append(f'files/{icon_path}')
+
+            # Try exact matches first
+            for path in paths_to_try:
+                if path in zip_file.namelist():
+                    return zip_file.read(path)
+
+            # Try case-insensitive search on all paths
+            for path in paths_to_try:
+                path_lower = path.lower()
+                for entry_name in zip_file.namelist():
+                    if entry_name.lower() == path_lower:
+                        return zip_file.read(entry_name)
+
+            # Icon not found
+            return None
+
+    except zipfile.BadZipFile:
+        return None
+    except:
+        _logger.error(f"Failed to extract icon from KMZ: {traceback.format_exc()}")
+        return None
+
+
+def fetch_remote_icon(url: str, timeout: float) -> Optional[bytes]:
+    """
+    Fetch icon from remote URL with timeout.
+
+    Args:
+        url: Remote icon URL
+        timeout: Timeout in seconds
+
+    Returns:
+        Icon data as bytes, or None if fetch fails
+    """
+    try:
+        # Create request with user agent
+        req = Request(url, headers={'User-Agent': 'GeoVault/1.0'})
+
+        # Fetch with timeout
+        with urlopen(req, timeout=timeout) as response:
+            # Check content length if available
+            content_length = response.headers.get('Content-Length')
+            if content_length:
+                size = int(content_length)
+                if size > settings.ICON_MAX_SIZE_BYTES:
+                    _logger.warning(f"Icon exceeds size limit: {url} ({size} bytes)")
+                    return None
+
+            # Read data with size limit
+            icon_data = b''
+            max_size = settings.ICON_MAX_SIZE_BYTES
+            chunk_size = min(8192, max_size)
+
+            while True:
+                chunk = response.read(chunk_size)
+                if not chunk:
+                    break
+                icon_data += chunk
+                if len(icon_data) > max_size:
+                    _logger.warning(f"Icon exceeds size limit during download: {url}")
+                    return None
+
+            return icon_data
+
+    except HTTPError as e:
+        _logger.warning(f"HTTP error fetching icon: {url} - {e.code}")
+        return None
+    except URLError:
+        _logger.warning(f"URL error fetching icon: {url} - {traceback.format_exc()}")
+        return None
+    except TimeoutError:
+        _logger.warning(f"Timeout fetching icon: {url}")
+        return None
+    except:
+        _logger.error(f"Failed to fetch remote icon: {url} - {traceback.format_exc()}")
+        return None
