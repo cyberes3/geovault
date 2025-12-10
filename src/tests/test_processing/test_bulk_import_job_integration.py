@@ -4,14 +4,13 @@ Integration tests for BulkImportJob - multi-item end-to-end execution.
 Tests complete BulkImportJob execution flow including sequential processing,
 progress tracking, aggregated results, and WebSocket broadcasts.
 """
-import pytest
 from django.test import TransactionTestCase
 from django.contrib.auth import get_user_model
 import time
 
 from api.models import ImportQueue, FeatureStore
 from geo_lib.processing.jobs.bulk_import_job import BulkImportJob
-from geo_lib.processing.status_tracker import status_tracker, ProcessingStatus
+from geo_lib.processing.jobs.helpers.status_tracker import status_tracker, ProcessingStatus
 from geo_lib.feature_id import generate_geojson_hash
 
 User = get_user_model()

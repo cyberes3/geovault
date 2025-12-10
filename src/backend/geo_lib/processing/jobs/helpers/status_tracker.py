@@ -10,11 +10,7 @@ from dataclasses import dataclass
 from enum import Enum
 from typing import Dict, Optional, Any
 
-from django.conf import settings
 from website.settings_utils import get_required_setting
-from geo_lib.logging.console import get_job_logger
-
-logger = get_job_logger()
 
 
 class ProcessingStatus(Enum):

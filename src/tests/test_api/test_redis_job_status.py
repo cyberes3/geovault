@@ -9,13 +9,14 @@ from django.test import TransactionTestCase
 from django.contrib.auth import get_user_model
 
 from api.models import ImportQueue, FeatureStore
-from geo_lib.processing.status_tracker import ProcessingStatus, status_tracker
+from geo_lib.processing.jobs.helpers.status_tracker import ProcessingStatus, status_tracker
 from geo_lib.processing.jobs.helpers.redis_job_storage import (
     get_job_status,
     COMPLETED_JOB_TTL
 )
 from geo_lib.utils.redis_connection import get_redis_connection
 from geo_lib.processing.jobs import import_job, delete_job, bulk_import_job, bulk_delete_job
+from geo_lib.feature_id import generate_geojson_hash
 
 User = get_user_model()
 
@@ -82,15 +83,19 @@ class TestRedisJobStatusAPI(TransactionTestCase):
     def test_import_job_stored_in_redis(self):
         """Test that import job is stored in Redis when started."""
         # Create an import queue item
+        feature = {
+            'type': 'Feature',
+            'geometry': {'type': 'Point', 'coordinates': [-122.4194, 37.7749, 0]},
+            'properties': {'name': 'Test Point'}
+        }
+        # Add required geojson_hash
+        feature['properties']['geojson_hash'] = generate_geojson_hash(feature)
+        
         import_item = ImportQueue.objects.create(
             user=self.user,
             original_filename='test.kml',
             raw_file='<kml></kml>',
-            geofeatures=[{
-                'type': 'Feature',
-                'geometry': {'type': 'Point', 'coordinates': [-122.4194, 37.7749, 0]},
-                'properties': {'name': 'Test Point'}
-            }]
+            geofeatures=[feature]
         )
 
         # Start import job
@@ -100,17 +105,24 @@ class TestRedisJobStatusAPI(TransactionTestCase):
         )
         self.assertIsNotNone(job_id)
 
-        # Wait a bit for job to start
-        time.sleep(0.5)
+        # Wait for job to be stored in Redis (with timeout)
+        max_wait = 5.0
+        start_time = time.time()
+        redis_job = None
+        while time.time() - start_time < max_wait:
+            redis_job = get_job_status(job_id)
+            if redis_job:
+                break
+            time.sleep(0.1)
 
         # Check Redis for job
-        redis_job = get_job_status(job_id)
         self.assertIsNotNone(redis_job, "Job should be stored in Redis")
         self.assertEqual(redis_job['job_id'], job_id)
         self.assertEqual(redis_job['user_id'], self.user.id)
         self.assertEqual(redis_job['job_type'], 'import')
         self.assertEqual(redis_job['filename'], f"Import {import_item.original_filename}")
-        self.assertIn(redis_job['status'], ['queued', 'processing'])
+        # Job might be queued, processing, or completed (if it finished very quickly)
+        self.assertIn(redis_job['status'], ['queued', 'processing', 'completed'])
 
         # Wait for job to complete
         self._wait_for_job_completion(job_id, timeout=30.0)
@@ -139,17 +151,24 @@ class TestRedisJobStatusAPI(TransactionTestCase):
         )
         self.assertIsNotNone(job_id)
 
-        # Wait a bit for job to start
-        time.sleep(0.5)
+        # Wait for job to be stored in Redis (with timeout)
+        max_wait = 5.0
+        start_time = time.time()
+        redis_job = None
+        while time.time() - start_time < max_wait:
+            redis_job = get_job_status(job_id)
+            if redis_job:
+                break
+            time.sleep(0.1)
 
         # Check Redis for job
-        redis_job = get_job_status(job_id)
         self.assertIsNotNone(redis_job, "Job should be stored in Redis")
         self.assertEqual(redis_job['job_id'], job_id)
         self.assertEqual(redis_job['user_id'], self.user.id)
         self.assertEqual(redis_job['job_type'], 'delete')
         self.assertEqual(redis_job['filename'], import_item.original_filename)
-        self.assertIn(redis_job['status'], ['queued', 'processing'])
+        # Job might be queued, processing, or completed (if it finished very quickly)
+        self.assertIn(redis_job['status'], ['queued', 'processing', 'completed'])
 
         # Wait for job to complete
         self._wait_for_job_completion(job_id, timeout=30.0)
@@ -450,7 +469,7 @@ class TestRedisJobStatusAPI(TransactionTestCase):
         # Mock Redis to raise an exception
         from unittest.mock import patch
         
-        with patch('geo_lib.processing.redis_job_storage.get_redis_connection') as mock_redis:
+        with patch('geo_lib.processing.jobs.helpers.redis_job_storage.get_redis_connection') as mock_redis:
             mock_redis.side_effect = Exception("Redis unavailable")
             
             # API should return empty list instead of failing

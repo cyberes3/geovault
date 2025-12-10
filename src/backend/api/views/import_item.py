@@ -30,7 +30,7 @@ from geo_lib.processing.duplicate_detection.models import DuplicateMatchType
 from geo_lib.processing.jobs import process_job, delete_job, import_job
 from geo_lib.processing.import_utils import validate_bulk_operations_payload
 from geo_lib.processing.logging import DatabaseLogLevel, RealTimeImportLog
-from geo_lib.processing.status_tracker import status_tracker
+from geo_lib.processing.jobs.helpers.status_tracker import status_tracker
 from geo_lib.processing.jobs.helpers.redis_job_storage import get_user_jobs
 from geo_lib.security.SecureFileValidator import basic_file_security_check
 from geo_lib.validation import validate_and_normalize_geojson_feature
@@ -85,13 +85,11 @@ def upload_item(request):
             job_id = status_tracker.create_job(file_name, request.user.id)
 
             # Enqueue job to Redis queue for sequential processing
-            if process_job.enqueue_job(job_id, file_data, file_name, request.user.id, replacement_feature_id=replacement_feature_id):
-                return success_response({
-                    'msg': 'File uploaded successfully, processing queued',
-                    'job_id': job_id
-                })
-            else:
-                return server_error_response('Failed to enqueue file processing')
+            process_job.enqueue_job(job_id, file_data, file_name, request.user.id, replacement_feature_id=replacement_feature_id)
+            return success_response({
+                'msg': 'File uploaded successfully, processing queued',
+                'job_id': job_id
+            })
         else:
             # Try to get filename even if form validation failed
             filename = "unknown file"

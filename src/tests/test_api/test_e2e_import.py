@@ -21,7 +21,7 @@ from django.core.files.uploadedfile import SimpleUploadedFile
 from api.models import ImportQueue, FeatureStore
 from geo_lib.feature_id import generate_geojson_hash
 from geo_lib.processing.duplicate_detection.models import DuplicateMatchType, DuplicateSource
-from geo_lib.processing.status_tracker import status_tracker, ProcessingStatus
+from geo_lib.processing.jobs.helpers.status_tracker import status_tracker, ProcessingStatus
 
 
 class TestE2EImport(TransactionTestCase):
@@ -256,7 +256,7 @@ class TestE2EImport(TransactionTestCase):
             timing_entries = [entry for entry in log_entries if 'completed' in entry.text.lower() or 'timing' in entry.text.lower()]
             
             # Verify we have timing entries for the new granular steps
-            timing_labels = [entry.message for entry in timing_entries]
+            timing_labels = [entry.text for entry in timing_entries]
             
             # Check for the existence of separate timing logs for each step
             # Note: The exact names come from the processor and process_job
@@ -1335,7 +1335,7 @@ class TestE2EImport(TransactionTestCase):
                          "Empty file should be rejected")
 
     def test_e2e_file_with_no_features(self):
-        """Test uploading a valid KML with no placemarks."""
+        """Test uploading a KML with no placemarks is rejected during validation."""
         # Create valid KML structure but with no features
         no_features_kml = b"""<?xml version="1.0" encoding="UTF-8"?>
 <kml xmlns="http://www.opengis.net/kml/2.2">
@@ -1352,24 +1352,19 @@ class TestE2EImport(TransactionTestCase):
         data = json.loads(response.content)
         job_id = data['job_id']
         
-        # Processing should succeed but with no features
+        # Processing should fail because files must have features
         job_status = self._wait_for_job_completion(job_id)
-        self.assertEqual(job_status['status'], ProcessingStatus.COMPLETED.value)
+        self.assertEqual(job_status['status'], ProcessingStatus.FAILED.value,
+                        "Files without features should be rejected during validation")
         
-        # Get item
-        job = status_tracker.get_job(job_id)
-        item_id = job.import_queue_id
-        
-        import_item = ImportQueue.objects.get(id=item_id, user=self.user)
-        self.assertEqual(len(import_item.geofeatures), 0,
-                        "Should have no features extracted")
-        
-        # Try to import - should fail gracefully
-        import_job_id, import_status = self._import_item(item_id)
-        
-        # Import should fail because there are no features
-        self.assertEqual(import_status['status'], ProcessingStatus.FAILED.value,
-                        "Import of item with no features should fail")
+        # Verify the error message mentions geographic features
+        error_message = job_status.get('message', '').lower()
+        self.assertTrue(
+            'geographic' in error_message or 
+            'features' in error_message or
+            'placemark' in error_message,
+            f"Error message should mention missing geographic features. Got: {error_message}"
+        )
 
     def test_e2e_import_already_imported(self):
         """Test trying to import an item that was already imported."""

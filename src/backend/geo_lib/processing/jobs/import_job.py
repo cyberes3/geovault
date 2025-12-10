@@ -19,9 +19,9 @@ from geo_lib.processing.import_utils import (
 )
 from geo_lib.processing.jobs.base_job import BaseJob
 from geo_lib.processing.jobs.helpers.redis_job_storage import update_job_status as update_redis_job_status
-from geo_lib.processing.status_tracker import ProcessingStatus
+from geo_lib.processing.jobs.helpers.status_tracker import ProcessingStatus
 
-logger = get_job_logger()
+_logger = get_job_logger()
 
 
 class ImportJob(BaseJob):
@@ -51,10 +51,10 @@ class ImportJob(BaseJob):
         """
         # Call parent implementation for general broadcast
         super()._handle_job_error(job_id, error_message)
-        
+
         # Also broadcast to process_status channel if we have item_id
         job = self.status_tracker.get_job(job_id)
-        if job and job.import_queue_id:
+        if job.import_queue_id:
             self._broadcast_to_process_status_module(
                 job.user_id, job.import_queue_id, 'item_failed',
                 {
@@ -82,7 +82,7 @@ class ImportJob(BaseJob):
         # Create a job
         import_item = ImportQueue.objects.get(id=item_id)
         job_id = self.status_tracker.create_job(f"Import {import_item.original_filename}", user_id)
-        
+
         # Set the import_queue_id so error handling can broadcast to the right channel
         self.status_tracker.set_job_result(job_id, {}, item_id)
 
@@ -111,24 +111,8 @@ class ImportJob(BaseJob):
             import_item = ImportQueue.objects.get(id=item_id, user_id=user_id)
         except ImportQueue.DoesNotExist:
             error_msg = f"Import queue item {item_id} not found"
-            logger.error(error_msg)
-            self.status_tracker.update_job_status(
-                job_id, ProcessingStatus.FAILED,
-                error_msg,
-                error_message=error_msg
-            )
-            # Update Redis with failure status
-            job = self.status_tracker.get_job(job_id)
-            if job:
-                update_redis_job_status(
-                    job_id=job_id,
-                    status=ProcessingStatus.FAILED,
-                    message=job.message,
-                    progress=job.progress,
-                    error_message=job.error_message,
-                    started_at=job.started_at,
-                    completed_at=job.completed_at
-                )
+            _logger.error(error_msg)
+            self._mark_job_failed(job_id, error_msg)
             return
 
         # Update status
@@ -197,15 +181,14 @@ class ImportJob(BaseJob):
             )
             # Update Redis with completion status
             job = self.status_tracker.get_job(job_id)
-            if job:
-                update_redis_job_status(
-                    job_id=job_id,
-                    status=ProcessingStatus.COMPLETED,
-                    message=job.message,
-                    progress=job.progress,
-                    started_at=job.started_at,
-                    completed_at=job.completed_at
-                )
+            update_redis_job_status(
+                job_id=job_id,
+                status=ProcessingStatus.COMPLETED,
+                message=job.message,
+                progress=job.progress,
+                started_at=job.started_at,
+                completed_at=job.completed_at
+            )
 
             # Broadcast completion event to WebSocket
             # Convert Pydantic model to dict for JSON serialization
@@ -231,25 +214,7 @@ class ImportJob(BaseJob):
                 reason = f"Failed to create {len(features_to_create)} features in the database"
 
             error_msg = f'No features were imported. {reason}.'
-            self.status_tracker.update_job_status(
-                job_id, ProcessingStatus.FAILED,
-                error_msg,
-                error_message=error_msg
-            )
-            # Update Redis with failure status
-            job = self.status_tracker.get_job(job_id)
-            if job:
-                update_redis_job_status(
-                    job_id=job_id,
-                    status=ProcessingStatus.FAILED,
-                    message=job.message,
-                    progress=job.progress,
-                    error_message=job.error_message,
-                    started_at=job.started_at,
-                    completed_at=job.completed_at
-                )
-
-            # Broadcast failure event to WebSocket
+            self._mark_job_failed(job_id, error_msg)
             self._broadcast_to_process_status_module(
                 user_id, item_id, 'item_failed',
                 {
@@ -257,3 +222,20 @@ class ImportJob(BaseJob):
                     'reason': reason
                 }
             )
+
+    def _mark_job_failed(self, job_id: str, error_msg: str) -> None:
+        self.status_tracker.update_job_status(
+            job_id, ProcessingStatus.FAILED,
+            error_msg,
+            error_message=error_msg
+        )
+        job = self.status_tracker.get_job(job_id)
+        update_redis_job_status(
+            job_id=job_id,
+            status=ProcessingStatus.FAILED,
+            message=job.message,
+            progress=job.progress,
+            error_message=job.error_message,
+            started_at=job.started_at,
+            completed_at=job.completed_at
+        )

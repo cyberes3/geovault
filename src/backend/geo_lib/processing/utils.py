@@ -30,10 +30,10 @@ def encode_raw_file_data(raw_file_data: bytes | str) -> tuple[str, str]:
         raw_bytes = raw_file_data.encode('utf-8')
     else:
         raw_bytes = raw_file_data
-    
+
     # Compute hash
     file_hash = hashlib.sha256(raw_bytes).hexdigest()
-    
+
     # Convert to string for storage
     if isinstance(raw_file_data, bytes):
         # Try to decode as UTF-8, fall back to base64 if it's binary
@@ -44,7 +44,7 @@ def encode_raw_file_data(raw_file_data: bytes | str) -> tuple[str, str]:
             file_content = base64.b64encode(raw_bytes).decode('utf-8')
     else:
         file_content = raw_file_data
-    
+
     return file_content, file_hash
 
 
@@ -65,8 +65,8 @@ def inject_feature_hashes(features: List[Dict]) -> None:
         feature['properties']['geojson_hash'] = geojson_hash
 
 
-def build_skipped_feature_ids(duplicate_features: List[Dict], 
-                               existing_skipped: set) -> List[str]:
+def build_skipped_feature_ids(duplicate_features: List[Dict],
+                              existing_skipped: set) -> List[str]:
     """
     Build list of feature IDs to auto-skip (geometry duplicates only).
     
@@ -81,7 +81,7 @@ def build_skipped_feature_ids(duplicate_features: List[Dict],
         List of feature IDs (hashes) to skip
     """
     skipped_ids = set(existing_skipped)
-    
+
     # Only add geometry duplicates to skipped list
     for dup in duplicate_features:
         if dup.get('match_type') == DuplicateMatchType.GEOMETRY:
@@ -91,6 +91,5 @@ def build_skipped_feature_ids(duplicate_features: List[Dict],
                 if not geojson_hash:
                     geojson_hash = generate_geojson_hash(dup_feature)
                 skipped_ids.add(geojson_hash)
-    
-    return list(skipped_ids)
 
+    return list(skipped_ids)

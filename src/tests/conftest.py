@@ -28,17 +28,11 @@ import django
 if not django.apps.apps.ready:
     django.setup()
 
-import io
 import logging
 import time
 import zipfile
 from io import BytesIO
 from unittest.mock import MagicMock, patch
-from urllib.error import HTTPError, URLError
-from urllib.parse import urlparse
-from urllib.request import Request, urlopen
-
-import requests
 
 from django.conf import settings
 from django.contrib.auth import get_user_model
@@ -46,13 +40,10 @@ from django.contrib.gis.geos import Point
 from django.db import connections
 from django.test import Client
 
-from api.models import FeatureStore, ImportQueue, Collection, TagShare, CollectionShare, UserSettings
+from api.models import FeatureStore, ImportQueue, Collection, UserSettings
 from geo_lib.feature_id import generate_geojson_hash
-from geo_lib.processing import elevation_service
-from geo_lib.processing.status_tracker import ProcessingStatus, status_tracker
+from geo_lib.processing.jobs.helpers.status_tracker import ProcessingStatus, status_tracker
 from users.api_keys import create_user_api_key
-from users.models import ApiKey, UserProfile
-from website.settings_utils import get_required_setting
 from fixtures.geocoding_responses import get_mock_overpass_response
 
 User = get_user_model()

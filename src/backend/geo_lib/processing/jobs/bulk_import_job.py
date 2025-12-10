@@ -7,10 +7,8 @@ import traceback
 from typing import Dict, Any, List
 
 from api.models import ImportQueue
-from geo_lib.processing.jobs.base_job import BaseJob
-from geo_lib.processing.messages import BULK_IMPORT_JOB_FAILED, ITEM_IMPORT_FAILED
-from geo_lib.processing.status_tracker import ProcessingStatus, JobType
 from geo_lib.logging.console import get_job_logger
+from geo_lib.processing.duplicate_detection.models import SkippedDuplicates
 from geo_lib.processing.import_utils import (
     process_features_for_import,
     bulk_create_features_with_fallback,
@@ -20,9 +18,11 @@ from geo_lib.processing.import_utils import (
     build_features_to_skip,
     filter_features_to_process,
 )
-from geo_lib.processing.duplicate_detection.models import SkippedDuplicates
+from geo_lib.processing.jobs.base_job import BaseJob
+from geo_lib.processing.messages import BULK_IMPORT_JOB_FAILED, ITEM_IMPORT_FAILED
+from geo_lib.processing.jobs.helpers.status_tracker import ProcessingStatus, JobType
 
-logger = get_job_logger()
+_logger = get_job_logger()
 
 
 class BulkImportJob(BaseJob):
@@ -34,7 +34,7 @@ class BulkImportJob(BaseJob):
     def get_job_type(self) -> str:
         return "bulk_import"
 
-    def start_bulk_import_job(self, item_ids: List[int], user_id: int, import_custom_icons: bool = True) -> str:
+    def start_bulk_import_job(self, item_ids: List[int], user_id: int, import_custom_icons: bool = True) -> str | None:
         """
         Start a bulk import job for multiple import queue items.
         
@@ -73,7 +73,7 @@ class BulkImportJob(BaseJob):
         # Get the job for user info
         job = self.status_tracker.get_job(job_id)
         if not job:
-            logger.error(f"Bulk import job {job_id} not found")
+            _logger.error(f"Bulk import job {job_id} not found")
             return
 
         try:
@@ -94,7 +94,7 @@ class BulkImportJob(BaseJob):
             missing_ids = set(item_ids) - set(found_ids)
             if missing_ids:
                 error_msg = f"Items not found or not authorized: {list(missing_ids)}"
-                logger.warning(f"Bulk import job {job_id}: {error_msg}")
+                _logger.warning(f"Bulk import job {job_id}: {error_msg}")
                 self.status_tracker.update_job_status(
                     job_id, ProcessingStatus.FAILED,
                     error_msg, error_message=error_msg
@@ -106,9 +106,7 @@ class BulkImportJob(BaseJob):
             total_items = len(found_ids)
             successful_imports = 0
             failed_imports = []
-            skipped_items = []
-            # Aggregate skipped duplicates across all items
-            all_skipped_duplicates = SkippedDuplicates()
+            all_skipped_duplicates = SkippedDuplicates()  # Aggregate skipped duplicates across all items
 
             for index, item in enumerate(items):
                 item_progress = (index / total_items) * 100.0
@@ -142,7 +140,7 @@ class BulkImportJob(BaseJob):
                         })
                 except:
                     # Log detailed error internally
-                    logger.error(f"Bulk import job {job_id}: Error importing item {item.id}: {traceback.format_exc()}")
+                    _logger.error(f"Bulk import job {job_id}: Error importing item {item.id}: {traceback.format_exc()}")
                     # Use generic error message for user
                     failed_imports.append({
                         'item_id': item.id,
@@ -163,7 +161,7 @@ class BulkImportJob(BaseJob):
 
             # Convert aggregated skipped duplicates to dict for JSON serialization
             duplicates_skipped_dict = all_skipped_duplicates.model_dump(mode='json') if all_skipped_duplicates else {'hash': [], 'geometry': []}
-            
+
             # Broadcast completion
             self._broadcast_job_completed(
                 user_id, job_id,
@@ -174,20 +172,15 @@ class BulkImportJob(BaseJob):
                 duplicates_skipped=duplicates_skipped_dict
             )
 
-            logger.info(f"Successfully completed bulk import job {job_id}: {successful_imports} imported, {len(failed_imports)} failed")
+            _logger.info(f"Successfully completed bulk import job {job_id}: {successful_imports} imported, {len(failed_imports)} failed")
 
         except:
-            # Log detailed error internally
-            logger.error(f"Bulk import job {job_id} error: {traceback.format_exc()}")
-            # Use generic error message for user
+            _logger.error(f"Bulk import job {job_id} error: {traceback.format_exc()}")
             error_msg = BULK_IMPORT_JOB_FAILED
-
             self.status_tracker.update_job_status(
                 job_id, ProcessingStatus.FAILED,
                 error_msg, error_message=error_msg
             )
-
-            # Broadcast failure
             self._broadcast_job_failed(job_id, error_msg)
 
     def _import_single_item(self, import_item: ImportQueue, user_id: int, import_custom_icons: bool) -> Dict[str, Any]:
@@ -211,7 +204,7 @@ class BulkImportJob(BaseJob):
                     imported=False,
                     timestamp__lt=import_item.timestamp
                 ).order_by('timestamp').first()
-                
+
                 if earlier_duplicates:
                     return job_error_result(f'Duplicate of "{earlier_duplicates.original_filename}"')
 
@@ -222,11 +215,11 @@ class BulkImportJob(BaseJob):
             geometry_duplicate_hashes, manually_skipped_non_duplicates, all_features_to_skip = build_features_to_skip(
                 import_item, user_skipped_feature_ids=None
             )
-            
+
             # Filter out features to skip before processing
             # Note: Hash duplicates are always blocked by process_features_for_import, no need to filter here
             features_to_process, _ = filter_features_to_process(import_item, all_features_to_skip)
-            
+
             features_to_create, skipped_duplicates = process_features_for_import(
                 import_item, user_id, import_custom_icons, features_to_process, geometry_duplicate_hashes
             )
@@ -241,9 +234,8 @@ class BulkImportJob(BaseJob):
                 # Finalize import using shared utility
                 finalize_import_item(import_item, user_id)
 
-                # Build result message and log
-                logger.info(f"Imported {successful_imports} features for user {user_id}")
-                
+                _logger.info(f"Imported {successful_imports} features for user {user_id}")
+
                 # Convert Pydantic model to dict for JSON serialization
                 # job_success_result expects a dict, so convert the Pydantic model
                 duplicates_skipped_dict = skipped_duplicates.model_dump(mode='json') if skipped_duplicates else {'hash': [], 'geometry': []}
@@ -255,7 +247,5 @@ class BulkImportJob(BaseJob):
                 return job_error_result('No features were imported')
 
         except:
-            # Log detailed error internally
-            logger.error(f"Error importing item {import_item.id}: {traceback.format_exc()}")
-            # Use generic error message for user
+            _logger.error(f"Error importing item {import_item.id}: {traceback.format_exc()}")
             return job_error_result(ITEM_IMPORT_FAILED)

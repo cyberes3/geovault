@@ -10,13 +10,15 @@ from typing import Dict, Any
 from asgiref.sync import async_to_sync
 from channels.layers import get_channel_layer
 
-from geo_lib.processing.jobs import _logger
+from geo_lib.logging.console import get_job_logger
 from geo_lib.processing.jobs.helpers.redis_job_storage import (
     store_job_started,
     update_job_status as update_redis_job_status
 )
 from geo_lib.processing.messages import JOB_FAILED_GENERIC
-from geo_lib.processing.status_tracker import ProcessingStatusTracker, ProcessingStatus
+from geo_lib.processing.jobs.helpers.status_tracker import ProcessingStatusTracker, ProcessingStatus
+
+_logger = get_job_logger()
 
 
 class BaseJob(ABC):
@@ -94,13 +96,13 @@ class BaseJob(ABC):
 
             # Check if job was cancelled after processing
             job = self.status_tracker.get_job(job_id)
-            if job and job.status == ProcessingStatus.CANCELLED:
+            if job.status == ProcessingStatus.CANCELLED:
                 _logger.info(f"Job {job_id} was cancelled during processing")
 
         except Exception as e:
             # Don't log error if job was canceled
             job = self.status_tracker.get_job(job_id)
-            if job and job.status == ProcessingStatus.CANCELLED:
+            if job.status == ProcessingStatus.CANCELLED:
                 _logger.info(f"Job {job_id} was cancelled, stopping error handling")
             else:
                 # Log detailed error internally
@@ -140,15 +142,14 @@ class BaseJob(ABC):
         if result:
             # Update Redis with cancellation status
             job = self.status_tracker.get_job(job_id)
-            if job:
-                update_redis_job_status(
-                    job_id=job_id,
-                    status=ProcessingStatus.CANCELLED,
-                    message=job.message,
-                    progress=job.progress,
-                    started_at=job.started_at,
-                    completed_at=job.completed_at
-                )
+            update_redis_job_status(
+                job_id=job_id,
+                status=ProcessingStatus.CANCELLED,
+                message=job.message,
+                progress=job.progress,
+                started_at=job.started_at,
+                completed_at=job.completed_at
+            )
         return result
 
     def get_active_jobs(self) -> Dict[str, Any]:
@@ -179,7 +180,7 @@ class BaseJob(ABC):
         """Broadcast WebSocket event when job status is updated."""
         # Update Redis if status is PROCESSING (job actually started)
         job = self.status_tracker.get_job(job_id)
-        if job and status == 'processing' and job.status == ProcessingStatus.PROCESSING:
+        if status == 'processing' and job.status == ProcessingStatus.PROCESSING:
             update_redis_job_status(
                 job_id=job_id,
                 status=ProcessingStatus.PROCESSING,
@@ -203,16 +204,15 @@ class BaseJob(ABC):
         """Broadcast WebSocket event when a job completes."""
         # Update Redis with completion status
         job = self.status_tracker.get_job(job_id)
-        if job:
-            update_redis_job_status(
-                job_id=job_id,
-                status=ProcessingStatus.COMPLETED,
-                message=job.message,
-                progress=job.progress,
-                started_at=job.started_at,
-                completed_at=job.completed_at,
-                **data
-            )
+        update_redis_job_status(
+            job_id=job_id,
+            status=ProcessingStatus.COMPLETED,
+            message=job.message,
+            progress=job.progress,
+            started_at=job.started_at,
+            completed_at=job.completed_at,
+            **data
+        )
 
         self._broadcast_websocket_event(user_id, 'completed', {'job_id': job_id, **data})
 

@@ -4,8 +4,7 @@ Integration tests for ImportJob - end-to-end job execution.
 Tests complete ImportJob execution flow including database operations,
 WebSocket broadcasts, error handling, and finalization.
 """
-import pytest
-from django.test import TestCase, TransactionTestCase
+from django.test import TransactionTestCase
 from django.contrib.auth import get_user_model
 
 import time
@@ -13,7 +12,7 @@ import time
 from api.models import ImportQueue, FeatureStore
 from geo_lib.feature_id import generate_geojson_hash
 from geo_lib.processing.jobs.import_job import ImportJob
-from geo_lib.processing.status_tracker import ProcessingStatus, ProcessingStatusTracker, status_tracker
+from geo_lib.processing.jobs.helpers.status_tracker import ProcessingStatus, status_tracker
 
 User = get_user_model()
 

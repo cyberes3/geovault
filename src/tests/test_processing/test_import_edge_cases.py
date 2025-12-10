@@ -15,7 +15,7 @@ from geo_lib.feature_id import generate_geojson_hash
 from geo_lib.processing.duplicate_detection.models import DuplicateMatchType, DuplicateSource
 from geo_lib.processing.jobs.bulk_import_job import BulkImportJob
 from geo_lib.processing.jobs.import_job import ImportJob
-from geo_lib.processing.status_tracker import ProcessingStatus, status_tracker
+from geo_lib.processing.jobs.helpers.status_tracker import ProcessingStatus, status_tracker
 
 User = get_user_model()
 

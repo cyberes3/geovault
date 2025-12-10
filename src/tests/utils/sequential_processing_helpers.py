@@ -11,8 +11,8 @@ from contextlib import contextmanager
 from typing import Optional
 
 from geo_lib.processing.jobs import delete_job, import_job, process_job
-from geo_lib.processing.queue_worker import WorkerRegistry, stop_all_workers
-from geo_lib.processing.status_tracker import ProcessingStatus, status_tracker
+from geo_lib.processing.queue_worker import stop_all_workers
+from geo_lib.processing.jobs.helpers.status_tracker import ProcessingStatus, status_tracker
 
 
 def wait_for_job_completion(job_id: str, timeout: float = 10.0, poll_interval: float = 0.1) -> bool:

@@ -11,11 +11,12 @@ from asgiref.sync import async_to_sync
 from channels.layers import get_channel_layer
 from django.db import transaction
 
-from api.models import ImportQueue, DatabaseLogging
+from api.models import ImportQueue
 from geo_lib.logging.console import get_job_logger
 from geo_lib.processing.jobs.base_job import BaseJob
+from geo_lib.processing.jobs.helpers.delete import delete_associated_logs
 from geo_lib.processing.messages import BULK_DELETE_JOB_FAILED, ITEM_DELETE_FAILED
-from geo_lib.processing.status_tracker import ProcessingStatus, JobType
+from geo_lib.processing.jobs.helpers.status_tracker import ProcessingStatus, JobType
 
 _logger = get_job_logger()
 
@@ -181,7 +182,7 @@ class BulkDeleteJob(BaseJob):
             self._cancel_active_processing_jobs(import_queue_item.id, user_id, bulk_job_id)
 
             # Delete associated logs
-            self._delete_associated_logs(import_queue_item, bulk_job_id)
+            delete_associated_logs(import_queue_item, bulk_job_id)
 
             # Delete the item
             with transaction.atomic():
@@ -226,21 +227,6 @@ class BulkDeleteJob(BaseJob):
 
         except:
             _logger.warning(f"Error cancelling active processing jobs for item {item_id}: {traceback.format_exc()}")
-            # Don't fail the delete job for this, just log the warning
-
-    def _delete_associated_logs(self, import_queue_item: ImportQueue, bulk_job_id: str):
-        """
-        Delete all logs associated with the import queue item.
-        """
-        try:
-            if import_queue_item.log_id:
-                deleted_count = DatabaseLogging.objects.filter(log_id=import_queue_item.log_id).delete()[0]
-                _logger.info(f"Deleted {deleted_count} log entries for item {import_queue_item.id}")
-            else:
-                _logger.info(f"No log_id found for item {import_queue_item.id}")
-
-        except:
-            _logger.warning(f"Error deleting logs for item {import_queue_item.id}: {traceback.format_exc()}")
             # Don't fail the delete job for this, just log the warning
 
     def _broadcast_items_deleted(self, user_id: int, item_ids: List[int]):

@@ -6,7 +6,7 @@ These helpers simplify testing of concurrent operations and race conditions.
 import threading
 import time
 from typing import List, Callable, Any, Dict
-from geo_lib.processing.status_tracker import status_tracker, ProcessingStatus
+from geo_lib.processing.jobs.helpers.status_tracker import status_tracker, ProcessingStatus
 
 
 def run_concurrent_operations(

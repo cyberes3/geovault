@@ -10,26 +10,26 @@ import traceback
 from concurrent.futures import ThreadPoolExecutor
 from typing import Dict, Any, Optional, Tuple, List
 
-from django.contrib.gis.geos import GEOSGeometry
-from django.db import IntegrityError
 from asgiref.sync import async_to_sync
 from channels.layers import get_channel_layer
+from django.contrib.gis.geos import GEOSGeometry
+from django.db import IntegrityError
+from pydantic import ValidationError
 
 from api.models import ImportQueue, FeatureStore, DatabaseLogging
-from geo_lib.tags.const_strings import prepare_user_tags
+from api.validation.feature_updates import validate_pydantic_model, BulkOperationsPayload
 from geo_lib.feature_id import generate_geojson_hash
 from geo_lib.logging.console import get_job_logger
 from geo_lib.processing.duplicate_detection.models import SkippedDuplicates, SkippedDuplicateFeature, DuplicateMatchType
+from geo_lib.tags.const_strings import prepare_user_tags
 from geo_lib.types.validation import match_geometry_class
-from website.settings_utils import get_required_setting
 from geo_lib.validation.styling_validation import (
     is_valid_hex_color,
     is_valid_icon_url,
     normalize_hex_color,
     normalize_feature_colors_and_styles,
 )
-from api.validation.feature_updates import validate_pydantic_model, BulkOperationsPayload
-from pydantic import ValidationError
+from website.settings_utils import get_required_setting
 
 logger = get_job_logger()
 
@@ -39,8 +39,8 @@ logger = get_job_logger()
 # ============================================================================
 
 def build_features_to_skip(
-    import_item: ImportQueue,
-    user_skipped_feature_ids: Optional[List[str]] = None
+        import_item: ImportQueue,
+        user_skipped_feature_ids: Optional[List[str]] = None
 ) -> Tuple[set, set, set]:
     """
     Build sets of features to skip during import.
@@ -71,26 +71,26 @@ def build_features_to_skip(
                     geojson_hash = dup_feature['properties'].get('geojson_hash')
                     if geojson_hash:
                         geometry_duplicate_hashes.add(geojson_hash)
-    
+
     # Get manually skipped features (from user clicking "Skip" button on non-duplicates)
     # These are features the user explicitly doesn't want to import
     user_skipped_ids = set(user_skipped_feature_ids) if user_skipped_feature_ids else set()
     saved_skipped_ids = set(import_item.skipped_feature_ids if import_item.skipped_feature_ids else [])
     manually_skipped = user_skipped_ids.union(saved_skipped_ids)
-    
+
     # Remove geometry duplicates from manually skipped (we handle those separately)
     # This allows us to bypass "restore" on geometry duplicates while respecting manual skips
     manually_skipped_non_duplicates = manually_skipped - geometry_duplicate_hashes
-    
+
     # Combine: ALL geometry duplicates + manually skipped non-duplicates
     all_features_to_skip = geometry_duplicate_hashes.union(manually_skipped_non_duplicates)
-    
+
     return geometry_duplicate_hashes, manually_skipped_non_duplicates, all_features_to_skip
 
 
 def filter_features_to_process(
-    import_item: ImportQueue,
-    all_features_to_skip: set
+        import_item: ImportQueue,
+        all_features_to_skip: set
 ) -> Tuple[List[Dict[str, Any]], int]:
     """
     Filter features to process by removing skipped features.
@@ -106,14 +106,14 @@ def filter_features_to_process(
     """
     features_to_process = []
     skipped_count = 0
-    
+
     for feature in import_item.geofeatures:
         feature_id = feature['properties'].get('geojson_hash')
         if feature_id in all_features_to_skip:
             skipped_count += 1
             continue
         features_to_process.append(feature)
-    
+
     return features_to_process, skipped_count
 
 
@@ -121,7 +121,7 @@ def filter_features_to_process(
 # Internal Job Result Helpers
 # ============================================================================
 
-def job_success_result(imported: int = 0, duplicates_skipped = None, **kwargs) -> Dict[str, Any]:
+def job_success_result(imported: int = 0, duplicates_skipped=None, **kwargs) -> Dict[str, Any]:
     """
     Create a standardized success result for job operations.
     
@@ -273,13 +273,13 @@ def broadcast_item_imported(user_id: int, item_id: int):
 
 
 def process_single_feature_for_import(
-    feature: Dict[str, Any], feature_index: int, import_item: ImportQueue,
-    user_id: int, import_custom_icons: bool, existing_hashes: set,
-    current_batch_hashes: set, duplicate_check_lock: threading.Lock,
-    queue_hash_to_item: Dict[str, Dict[str, Any]],
-    skipped_hash_duplicates: List[SkippedDuplicateFeature],
-    skipped_feature_ids: set, geometry_duplicate_hashes: set,
-    skipped_geometry_duplicates: List[SkippedDuplicateFeature]
+        feature: Dict[str, Any], feature_index: int, import_item: ImportQueue,
+        user_id: int, import_custom_icons: bool, existing_hashes: set,
+        current_batch_hashes: set, duplicate_check_lock: threading.Lock,
+        queue_hash_to_item: Dict[str, Dict[str, Any]],
+        skipped_hash_duplicates: List[SkippedDuplicateFeature],
+        skipped_feature_ids: set, geometry_duplicate_hashes: set,
+        skipped_geometry_duplicates: List[SkippedDuplicateFeature]
 ) -> Optional[FeatureStore]:
     """
     Process a single feature for import, including validation, tag generation, and FeatureStore creation.
@@ -328,7 +328,7 @@ def process_single_feature_for_import(
 
         # Create the GeoJSON data
         geojson_data = json.loads(feature_instance.model_dump_json())
-        
+
         # Normalize colors and apply style normalization using shared function
         if 'properties' in geojson_data and 'geometry' in geojson_data:
             normalize_feature_colors_and_styles(
@@ -344,7 +344,7 @@ def process_single_feature_for_import(
         #     geojson_hash = generate_geojson_hash(geojson_data)
 
         feature_name = feature.get('properties', {}).get('name', 'Unnamed')
-        
+
         # Check if this is a geometry duplicate
         # Only skip if user explicitly added it to skipped_feature_ids
         if geojson_hash in geometry_duplicate_hashes and geojson_hash in skipped_feature_ids:
@@ -548,11 +548,11 @@ def apply_bulk_operations(features: List[Dict[str, Any]], bulk_ops: Dict[str, An
 
 
 def process_features_for_import(
-    import_item: ImportQueue,
-    user_id: int,
-    import_custom_icons: bool,
-    features_to_process: Optional[List[Dict[str, Any]]] = None,
-    skipped_feature_ids: Optional[set] = None
+        import_item: ImportQueue,
+        user_id: int,
+        import_custom_icons: bool,
+        features_to_process: Optional[List[Dict[str, Any]]] = None,
+        skipped_feature_ids: Optional[set] = None
 ) -> Tuple[List[FeatureStore], SkippedDuplicates]:
     """
     Process features from an import item and return FeatureStore objects ready for creation.
@@ -650,8 +650,8 @@ def process_features_for_import(
 
 
 def bulk_create_features_with_fallback(
-    features_to_create: List[FeatureStore],
-    user_id: int
+        features_to_create: List[FeatureStore],
+        user_id: int
 ) -> Tuple[int, int]:
     """
     Attempt to bulk create features, falling back to individual saves on failure.
@@ -674,9 +674,8 @@ def bulk_create_features_with_fallback(
         bulk_batch_size = get_required_setting('BULK_CREATE_BATCH_SIZE')
         FeatureStore.objects.bulk_create(features_to_create, batch_size=bulk_batch_size)
         successful_imports = len(features_to_create)
-    except Exception as e:
-        logger.warning(f"Bulk import failed for user {user_id}, falling back to individual imports: {str(e)}")
-        logger.error(f"Bulk import error traceback: {traceback.format_exc()}")
+    except:
+        logger.warning(f"Bulk import failed for user {user_id}, falling back to individual imports: {traceback.format_exc()}")
 
         # Fallback to individual creation if bulk fails
         for feature in features_to_create:
@@ -691,7 +690,7 @@ def bulk_create_features_with_fallback(
                 else:
                     # Unexpected integrity error
                     logger.error(f"Unexpected integrity error for user {user_id}: {traceback.format_exc()}")
-            except Exception:
+            except:
                 logger.error(f"Error creating individual feature for user {user_id}: {traceback.format_exc()}")
 
     return successful_imports, duplicates_skipped

@@ -7,7 +7,7 @@ import json
 from typing import Dict, Any, Optional, List
 
 from geo_lib.logging.console import get_job_logger
-from geo_lib.processing.status_tracker import ProcessingStatus
+from geo_lib.processing.jobs.helpers.status_tracker import ProcessingStatus
 from geo_lib.utils.redis_connection import get_redis_connection
 
 _logger = get_job_logger()
@@ -92,49 +92,45 @@ def update_job_status(job_id: str, status: ProcessingStatus, message: str = "",
     Returns:
         True if updated successfully, False otherwise
     """
-    try:
-        redis_client = get_redis_connection()
-        job_key = _get_job_key(job_id)
+    redis_client = get_redis_connection()
+    job_key = _get_job_key(job_id)
 
-        # Get existing job data
-        existing_data = redis_client.get(job_key)
-        if not existing_data:
-            _logger.warning(f"Job {job_id} not found in Redis for status update")
-            return False
-
-        job_data = json.loads(existing_data)
-
-        # Update fields
-        job_data['status'] = status.value
-        if message:
-            job_data['message'] = message
-        if progress is not None:
-            job_data['progress'] = progress
-        if error_message is not None:
-            job_data['error_message'] = error_message
-        if started_at is not None:
-            job_data['started_at'] = started_at
-        if completed_at is not None:
-            job_data['completed_at'] = completed_at
-
-        # Update any additional fields
-        job_data.update(kwargs)
-
-        # Determine TTL: set 10-minute TTL for completed/failed jobs
-        ttl = None
-        if status in [ProcessingStatus.COMPLETED, ProcessingStatus.FAILED, ProcessingStatus.CANCELLED]:
-            ttl = COMPLETED_JOB_TTL
-
-        # Update job data
-        if ttl:
-            redis_client.setex(job_key, ttl, json.dumps(job_data))
-        else:
-            redis_client.set(job_key, json.dumps(job_data))
-
-        return True
-    except Exception as e:
-        _logger.error(f"Failed to update job status in Redis: {e}")
+    # Get existing job data
+    existing_data = redis_client.get(job_key)
+    if not existing_data:
+        _logger.warning(f"Job {job_id} not found in Redis for status update")
         return False
+
+    job_data = json.loads(existing_data)
+
+    # Update fields
+    job_data['status'] = status.value
+    if message:
+        job_data['message'] = message
+    if progress is not None:
+        job_data['progress'] = progress
+    if error_message is not None:
+        job_data['error_message'] = error_message
+    if started_at is not None:
+        job_data['started_at'] = started_at
+    if completed_at is not None:
+        job_data['completed_at'] = completed_at
+
+    # Update any additional fields
+    job_data.update(kwargs)
+
+    # Determine TTL: set 10-minute TTL for completed/failed jobs
+    ttl = None
+    if status in [ProcessingStatus.COMPLETED, ProcessingStatus.FAILED, ProcessingStatus.CANCELLED]:
+        ttl = COMPLETED_JOB_TTL
+
+    # Update job data
+    if ttl:
+        redis_client.setex(job_key, ttl, json.dumps(job_data))
+    else:
+        redis_client.set(job_key, json.dumps(job_data))
+
+    return True
 
 
 def get_job_status(job_id: str) -> Optional[Dict[str, Any]]:
@@ -147,18 +143,14 @@ def get_job_status(job_id: str) -> Optional[Dict[str, Any]]:
     Returns:
         Job data dictionary or None if not found
     """
-    try:
-        redis_client = get_redis_connection()
-        job_key = _get_job_key(job_id)
+    redis_client = get_redis_connection()
+    job_key = _get_job_key(job_id)
 
-        job_data = redis_client.get(job_key)
-        if not job_data:
-            return None
-
-        return json.loads(job_data)
-    except Exception as e:
-        _logger.error(f"Failed to get job status from Redis: {e}")
+    job_data = redis_client.get(job_key)
+    if not job_data:
         return None
+
+    return json.loads(job_data)
 
 
 def get_user_jobs(user_id: int) -> List[Dict[str, Any]]:
@@ -171,29 +163,25 @@ def get_user_jobs(user_id: int) -> List[Dict[str, Any]]:
     Returns:
         List of job data dictionaries
     """
-    try:
-        redis_client = get_redis_connection()
-        user_jobs_key = _get_user_jobs_key(user_id)
+    redis_client = get_redis_connection()
+    user_jobs_key = _get_user_jobs_key(user_id)
 
-        # Get all job IDs for this user
-        job_ids = redis_client.smembers(user_jobs_key)
-        if not job_ids:
-            return []
-
-        # Fetch all job data
-        jobs = []
-        for job_id in job_ids:
-            job_data = get_job_status(job_id)
-            if job_data:
-                jobs.append(job_data)
-            else:
-                # Job expired or was deleted, remove from set
-                redis_client.srem(user_jobs_key, job_id)
-
-        # Sort by created_at descending (newest first)
-        jobs.sort(key=lambda x: x.get('created_at', 0), reverse=True)
-
-        return jobs
-    except Exception as e:
-        _logger.error(f"Failed to get user jobs from Redis: {e}")
+    # Get all job IDs for this user
+    job_ids = redis_client.smembers(user_jobs_key)
+    if not job_ids:
         return []
+
+    # Fetch all job data
+    jobs = []
+    for job_id in job_ids:
+        job_data = get_job_status(job_id)
+        if job_data:
+            jobs.append(job_data)
+        else:
+            # Job expired or was deleted, remove from set
+            redis_client.srem(user_jobs_key, job_id)
+
+    # Sort by created_at descending (newest first)
+    jobs.sort(key=lambda x: x.get('created_at', 0), reverse=True)
+
+    return jobs

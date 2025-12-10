@@ -26,4 +26,3 @@ def get_required_setting(attr_name: str) -> Any:
     value = getattr(settings, attr_name, None)
     assert value is not None, f"Required setting '{attr_name}' is None or not set"
     return value
-

@@ -4,18 +4,15 @@ Error handling tests for import operations.
 Tests various failure modes including file-level duplicates, database errors,
 invalid data, and edge cases.
 """
-import pytest
 from django.test import TransactionTestCase
 from django.contrib.auth import get_user_model
-from django.db import IntegrityError
-from unittest.mock import patch, MagicMock
 import time
 
 from api.models import ImportQueue, FeatureStore
 from geo_lib.feature_id import generate_geojson_hash
 from geo_lib.processing.jobs.bulk_import_job import BulkImportJob
 from geo_lib.processing.jobs.import_job import ImportJob
-from geo_lib.processing.status_tracker import ProcessingStatus, status_tracker
+from geo_lib.processing.jobs.helpers.status_tracker import ProcessingStatus, status_tracker
 
 User = get_user_model()
 

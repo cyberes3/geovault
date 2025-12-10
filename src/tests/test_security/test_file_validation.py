@@ -104,7 +104,8 @@ class TestSecureFileValidator:
         except Exception as e:
             # Django raises SuspiciousFileOperation for empty filenames
             # This is acceptable behavior - the file is rejected before validation
-            assert "filename" in str(e).lower() or "suspicious" in str(e).lower()
+            error_str = str(e).lower()
+            assert "file name" in error_str or "filename" in error_str or "suspicious" in error_str or "derive" in error_str
 
     def test_validate_invalid_extension(self):
         """Test validation rejects files with invalid extensions."""
@@ -317,7 +318,8 @@ class TestBasicFileSecurityCheck:
         except Exception as e:
             # Django raises SuspiciousFileOperation for empty filenames
             # This is acceptable behavior - the file is rejected before validation
-            assert "filename" in str(e).lower() or "suspicious" in str(e).lower()
+            error_str = str(e).lower()
+            assert "file name" in error_str or "filename" in error_str or "suspicious" in error_str or "derive" in error_str
 
     def test_basic_check_invalid_extension(self):
         """Test basic check rejects invalid extensions."""

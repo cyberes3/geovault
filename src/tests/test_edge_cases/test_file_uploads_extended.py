@@ -2,17 +2,16 @@
 Extended tests for file upload edge cases and error handling.
 """
 import zipfile
-import json
 import time
 from io import BytesIO
-from django.test import TestCase, TransactionTestCase
+from django.test import TransactionTestCase
 from django.core.files.uploadedfile import SimpleUploadedFile
 from django.db import connections
 
 from django.contrib.auth import get_user_model
 
 from api.models import ImportQueue, FeatureStore
-from geo_lib.processing.status_tracker import ProcessingStatus, status_tracker
+from geo_lib.processing.jobs.helpers.status_tracker import ProcessingStatus, status_tracker
 from geo_lib.processing.queue_worker import stop_all_workers
 
 

@@ -8,7 +8,7 @@ from typing import Union, Optional
 
 from geo_lib.processing.file_types import FileType
 from geo_lib.processing.file_types import detect_file_type
-from geo_lib.processing.status_tracker import ProcessingStatusTracker
+from geo_lib.processing.jobs.helpers.status_tracker import ProcessingStatusTracker
 from .base_processor import BaseProcessor
 from .gpx_processor import GPXProcessor
 from .kml_processor import KMLProcessor

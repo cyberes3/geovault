@@ -7,16 +7,13 @@ using threading, advisory locks, and database transactions.
 import pytest
 import threading
 import time
-from unittest.mock import patch, MagicMock
-from django.test import Client
 from django.contrib.auth import get_user_model
 from django.contrib.gis.geos import Point
-from django.db import transaction, connection, close_old_connections
+from django.db import transaction, close_old_connections
 
 from api.models import FeatureStore, ImportQueue, Collection, CollectionShare
 from geo_lib.feature_id import generate_geojson_hash
 from geo_lib.utils.advisory_locks import advisory_lock
-from geo_lib.processing.status_tracker import status_tracker
 
 User = get_user_model()
 

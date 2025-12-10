@@ -22,8 +22,7 @@ from geo_lib.processing.geo_processor import (
 )
 from geo_lib.processing.logging import ImportLog, DatabaseLogLevel
 from geo_lib.processing.elevation_service import fill_missing_elevations
-from geo_lib.processing.status_tracker import ProcessingStatusTracker, ProcessingStatus
-from geo_lib.processing.tagging import generate_auto_tags
+from geo_lib.processing.jobs.helpers.status_tracker import ProcessingStatusTracker, ProcessingStatus
 from geo_lib.security.SecureFileValidator import validate_file
 from geo_lib.validation.geometry_validation import validate_coordinates_values, GeometryValidationError
 from geo_lib.logging.console import get_job_logger

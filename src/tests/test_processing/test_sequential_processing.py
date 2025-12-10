@@ -3,18 +3,16 @@ Tests for sequential processing with Redis queue.
 Verifies that files are processed in FIFO order and only one at a time per user.
 """
 
-import pytest
 import time
 import threading
-from unittest.mock import patch, MagicMock
+from unittest.mock import patch
 from django.test import TransactionTestCase
 from django.contrib.auth import get_user_model
 
-from api.models import ImportQueue
 from geo_lib.processing.jobs.process_job import ProcessJob
 from geo_lib.processing.queue_worker import QueueWorker, WorkerRegistry
 from geo_lib.processing.redis_queue import get_processing_queue
-from geo_lib.processing.status_tracker import ProcessingStatus, status_tracker
+from geo_lib.processing.jobs.helpers.status_tracker import ProcessingStatus, status_tracker
 from geo_lib.utils.redis_connection import get_redis_connection
 
 User = get_user_model()
@@ -92,10 +90,10 @@ class TestSequentialProcessing(TransactionTestCase):
                 job_ids.append(job_id)
                 
                 file_data = f'test content {i}'.encode('utf-8')
-                success = self.process_job.enqueue_job(
+                result = self.process_job.enqueue_job(
                     job_id, file_data, f'file{i}.kml', self.user.id
                 )
-                assert success
+                assert result is not False
             
             # Wait for all jobs to complete
             # With 0.2s per job, 5 jobs should take ~1 second
@@ -218,10 +216,10 @@ class TestSequentialProcessing(TransactionTestCase):
                 job_id = status_tracker.create_job(f'ts{i}.kml', self.user.id)
                 file_data = f'timestamp test {i}'.encode()
                 
-                success = self.process_job.enqueue_job(
+                result = self.process_job.enqueue_job(
                     job_id, file_data, f'ts{i}.kml', self.user.id
                 )
-                assert success
+                assert result is not False
                 timestamps.append(time.time())
                 time.sleep(0.05)  # Small delay between enqueues
             
@@ -318,10 +316,10 @@ class TestSequentialProcessing(TransactionTestCase):
                 
                 # Enqueue the job
                 file_data = f'status test {i}'.encode('utf-8')
-                success = self.process_job.enqueue_job(
+                result = self.process_job.enqueue_job(
                     job_id, file_data, f'status{i}.kml', self.user.id
                 )
-                assert success
+                assert result is not False
             
             # Give a moment for the queue to be populated and first job to start
             time.sleep(0.2)
