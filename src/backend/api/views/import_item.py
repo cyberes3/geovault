@@ -22,11 +22,11 @@ from api.utils.responses import (
 from geo_lib.tags.const_strings import CONST_INTERNAL_TAGS, filter_protected_tags, prepare_user_tags
 from geo_lib.feature_id import generate_geojson_hash
 from geo_lib.logging.console import get_access_logger
-from geo_lib.processing.duplicate_detection import (
+from geo_lib.processing.duplicate_detection.duplicate_detection import (
     find_duplicates_for_source,
     get_skipped_feature_ids_from_duplicates
 )
-from geo_lib.processing.duplicate_models import DuplicateMatchType
+from geo_lib.processing.duplicate_detection.models import DuplicateMatchType
 from geo_lib.processing.jobs import process_job, delete_job, import_job
 from geo_lib.processing.import_utils import validate_bulk_operations_payload
 from geo_lib.processing.logging import DatabaseLogLevel, RealTimeImportLog

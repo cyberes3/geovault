@@ -7,16 +7,12 @@ Validates that:
 3. Both jobs always block hash duplicates
 4. Cross-queue and feature store duplicates are handled correctly
 """
-import pytest
-from django.test import TestCase, TransactionTestCase
+from django.test import TestCase
 from django.contrib.auth import get_user_model
 from django.contrib.gis.geos import Point
-from datetime import datetime, timezone
 
 from api.models import ImportQueue, FeatureStore
-from geo_lib.processing.jobs.import_job import ImportJob
-from geo_lib.processing.jobs.bulk_import_job import BulkImportJob
-from geo_lib.processing.duplicate_models import DuplicateMatchType, DuplicateSource
+from geo_lib.processing.duplicate_detection.models import DuplicateMatchType, DuplicateSource
 from geo_lib.feature_id import generate_geojson_hash
 from geo_lib.processing.import_utils import process_features_for_import
 

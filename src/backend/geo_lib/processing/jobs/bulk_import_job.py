@@ -3,22 +3,14 @@ Bulk import job processor for asynchronous bulk import operations.
 Handles importing multiple import queue items to the feature store.
 """
 
-import json
 import traceback
-from typing import Dict, Any, List, Tuple, Optional
+from typing import Dict, Any, List
 
-from django.conf import settings
-from django.contrib.gis.geos import GEOSGeometry
-from website.settings_utils import get_required_setting
-from django.db import transaction
-
-from api.models import ImportQueue, FeatureStore, DatabaseLogging
+from api.models import ImportQueue
 from geo_lib.processing.jobs.base_job import BaseJob
 from geo_lib.processing.status_tracker import ProcessingStatus, JobType
 from geo_lib.logging.console import get_job_logger
 from geo_lib.processing.import_utils import (
-    delete_logs_by_log_id, 
-    broadcast_item_imported,
     process_features_for_import,
     bulk_create_features_with_fallback,
     finalize_import_item,
@@ -27,7 +19,7 @@ from geo_lib.processing.import_utils import (
     build_features_to_skip,
     filter_features_to_process,
 )
-from geo_lib.processing.duplicate_models import SkippedDuplicates, SkippedDuplicateFeature
+from geo_lib.processing.duplicate_detection.models import SkippedDuplicates
 
 logger = get_job_logger()
 

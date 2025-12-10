@@ -19,7 +19,7 @@ from api.models import ImportQueue, FeatureStore, DatabaseLogging
 from geo_lib.tags.const_strings import prepare_user_tags
 from geo_lib.feature_id import generate_geojson_hash
 from geo_lib.logging.console import get_job_logger
-from geo_lib.processing.duplicate_models import SkippedDuplicates, SkippedDuplicateFeature, DuplicateMatchType
+from geo_lib.processing.duplicate_detection.models import SkippedDuplicates, SkippedDuplicateFeature, DuplicateMatchType
 from geo_lib.types.validation import match_geometry_class
 from website.settings_utils import get_required_setting
 from geo_lib.validation.styling_validation import (

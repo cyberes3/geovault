@@ -4,13 +4,12 @@ Unit tests for import utility functions.
 Tests the new utility functions build_features_to_skip and filter_features_to_process
 that were extracted from ImportJob and BulkImportJob.
 """
-import pytest
 from django.test import TestCase
 from django.contrib.auth import get_user_model
 
 from api.models import ImportQueue
 from geo_lib.processing.import_utils import build_features_to_skip, filter_features_to_process
-from geo_lib.processing.duplicate_models import DuplicateMatchType, DuplicateSource
+from geo_lib.processing.duplicate_detection.models import DuplicateMatchType, DuplicateSource
 from geo_lib.feature_id import generate_geojson_hash
 
 User = get_user_model()

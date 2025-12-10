@@ -3,8 +3,7 @@ Tests for import/upload API endpoints.
 """
 import json
 import time
-from unittest.mock import patch, MagicMock, call, ANY
-import pytest
+from unittest.mock import patch
 from django.contrib.auth import get_user_model
 from django.contrib.gis.geos import Point
 from django.test import TestCase, TransactionTestCase
@@ -12,9 +11,8 @@ from django.core.files.uploadedfile import SimpleUploadedFile
 
 from api.models import ImportQueue, FeatureStore
 from geo_lib.feature_id import generate_geojson_hash
-from geo_lib.processing.duplicate_models import DuplicateMatchType, DuplicateSource
 from geo_lib.processing.jobs.import_job import ImportJob
-from geo_lib.processing.status_tracker import ProcessingStatus, JobType, status_tracker
+from geo_lib.processing.status_tracker import ProcessingStatus, status_tracker
 
 
 class TestImportAPI(TransactionTestCase):

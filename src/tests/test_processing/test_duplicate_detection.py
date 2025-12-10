@@ -11,7 +11,6 @@ Also tests priority rules:
 - Hash > Geometry (within same source)
 - Feature Store > Cross-Queue (across sources)
 """
-import pytest
 from django.test import TestCase, TransactionTestCase
 from django.contrib.auth import get_user_model
 
@@ -26,7 +25,7 @@ from geo_lib.processing.duplicate_detection import (
     find_hash_duplicates,
     find_geometry_duplicates
 )
-from geo_lib.processing.duplicate_models import DuplicateMatchType, DuplicateSource, split_duplicates_by_match_type
+from geo_lib.processing.duplicate_detection.models import DuplicateMatchType, DuplicateSource, split_duplicates_by_match_type
 
 
 User = get_user_model()

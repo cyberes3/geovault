@@ -4,17 +4,15 @@ Edge case tests for import operations.
 Tests boundary conditions, large batches, mixed valid/invalid features,
 and concurrent operations.
 """
-import pytest
 from django.test import TransactionTestCase
 from django.contrib.auth import get_user_model
-from unittest.mock import patch
 import time
 
 from django.contrib.gis.geos import Point
 
 from api.models import ImportQueue, FeatureStore
 from geo_lib.feature_id import generate_geojson_hash
-from geo_lib.processing.duplicate_models import DuplicateMatchType, DuplicateSource
+from geo_lib.processing.duplicate_detection.models import DuplicateMatchType, DuplicateSource
 from geo_lib.processing.jobs.bulk_import_job import BulkImportJob
 from geo_lib.processing.jobs.import_job import ImportJob
 from geo_lib.processing.status_tracker import ProcessingStatus, status_tracker

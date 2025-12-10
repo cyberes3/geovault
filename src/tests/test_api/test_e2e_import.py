@@ -2,7 +2,6 @@
 End-to-end tests for the complete import flow.
 Tests file upload -> async processing -> import to FeatureStore using real files.
 """
-import io
 import json
 import re
 import threading
@@ -14,7 +13,6 @@ from urllib.error import HTTPError, URLError
 from urllib.parse import urlparse
 from urllib.request import Request, urlopen
 
-import pytest
 from django.contrib.auth import get_user_model
 from django.contrib.gis.geos import Point
 from django.test import TransactionTestCase
@@ -22,7 +20,7 @@ from django.core.files.uploadedfile import SimpleUploadedFile
 
 from api.models import ImportQueue, FeatureStore
 from geo_lib.feature_id import generate_geojson_hash
-from geo_lib.processing.duplicate_models import DuplicateMatchType, DuplicateSource
+from geo_lib.processing.duplicate_detection.models import DuplicateMatchType, DuplicateSource
 from geo_lib.processing.status_tracker import status_tracker, ProcessingStatus
 
 

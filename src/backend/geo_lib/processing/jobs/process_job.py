@@ -3,8 +3,6 @@ Process job processor for asynchronous file processing.
 Handles converting uploaded files to geojson representation.
 """
 
-import base64
-import hashlib
 import json
 import os
 import subprocess
@@ -18,16 +16,10 @@ from django.contrib.auth.models import User
 from django.core.files.uploadedfile import SimpleUploadedFile
 from django.db import transaction
 
-from api.models import ImportQueue, UserSettings, FeatureStore
-from geo_lib.feature_id import generate_geojson_hash
+from api.models import ImportQueue, UserSettings
 from geo_lib.logging.console import get_job_logger
-from geo_lib.processing.duplicate_detection import (
-    find_duplicates_for_source,
-    strip_duplicate_features
-)
-from geo_lib.processing.duplicate_models import (
-    DuplicateMatchType,
-    DuplicateSource,
+from geo_lib.processing.duplicate_detection.duplicate_detection import remove_internal_duplicates, find_duplicates_for_source
+from geo_lib.processing.duplicate_detection.models import (
     split_duplicates_by_match_type
 )
 from geo_lib.processing.jobs.base_job import BaseJob
@@ -821,7 +813,7 @@ class ProcessJob(BaseJob):
                     duplicate_detection_start = time.time()
 
                     # First, check for internal duplicates within the file
-                    unique_internal_features, internal_duplicate_count = strip_duplicate_features(processed_features)
+                    unique_internal_features, internal_duplicate_count = remove_internal_duplicates(processed_features)
                     
                     if internal_duplicate_count > 0:
                         processing_log.add(f"Found {internal_duplicate_count} internal duplicate(s)", "ProcessJob", DatabaseLogLevel.INFO)

@@ -10,7 +10,7 @@ import hashlib
 from typing import Dict, List
 
 from geo_lib.feature_id import generate_geojson_hash
-from geo_lib.processing.duplicate_models import DuplicateMatchType
+from geo_lib.processing.duplicate_detection.models import DuplicateMatchType
 
 
 def encode_raw_file_data(raw_file_data: bytes | str) -> tuple[str, str]:
