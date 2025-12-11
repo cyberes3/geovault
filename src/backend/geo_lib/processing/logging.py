@@ -16,7 +16,7 @@ from pydantic import BaseModel, Field
 from api.models import DatabaseLogging, ImportQueue
 from geo_lib.logging.console import get_tagged_logger
 
-_logger = get_tagged_logger(__name__)
+_logger = get_tagged_logger()
 
 
 @contextmanager

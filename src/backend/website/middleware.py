@@ -9,7 +9,7 @@ from geo_lib.utils.ip_utils import get_client_ip, get_user_identifier
 from users.models import UserProfile
 from website.settings import get_tile_source_origins
 
-_logger = get_tagged_logger('access')
+_logger = get_tagged_logger()
 
 # In-memory cache for activity tracking throttling
 # Format: {user_id: last_update_timestamp}

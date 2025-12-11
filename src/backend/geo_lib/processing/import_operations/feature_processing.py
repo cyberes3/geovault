@@ -17,7 +17,7 @@ from geo_lib.tags.const_strings import prepare_user_tags
 from geo_lib.types.validation import match_geometry_class
 from geo_lib.validation.styling_validation import normalize_feature_colors_and_styles
 
-_logger = get_tagged_logger(__name__)
+_logger = get_tagged_logger()
 
 
 def process_single_feature_for_import(

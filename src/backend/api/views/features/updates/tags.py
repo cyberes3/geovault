@@ -5,7 +5,7 @@ from django.views.decorators.http import require_http_methods
 from api.models import FeatureStore
 from api.utils.authorization import get_object_or_404_for_user
 from api.utils.responses import error_response, handle_404
-from api.views.features.updates._shared import _validate_and_preserve_feature
+from api.views.features.updates.shared import _validate_and_preserve_feature
 from geo_lib.feature_id import generate_geojson_hash
 from geo_lib.logging.console import get_tagged_logger
 from geo_lib.processing.logging import ImportLog
@@ -20,7 +20,7 @@ from geo_lib.types.feature import (
 from geo_lib.validation.geometry_validation import GeometryValidationError
 from geo_lib.website.auth import api_or_login_required_401
 
-logger = get_tagged_logger('access')
+logger = get_tagged_logger()
 
 
 @api_or_login_required_401()

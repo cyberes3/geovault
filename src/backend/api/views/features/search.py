@@ -1,4 +1,3 @@
-import traceback
 import json
 
 from django.db import connection
@@ -11,51 +10,7 @@ from api.models import FeatureStore
 from geo_lib.logging.console import get_tagged_logger
 from geo_lib.website.auth import api_or_login_required_401
 
-logger = get_tagged_logger('access')
-
-
-def _create_minimal_feature(feature):
-    """
-    Create a minimal feature object with only essential fields for display.
-    
-    Args:
-        feature: FeatureStore instance
-        
-    Returns:
-        dict: Minimal feature object with id, name, description, and geometry type
-    """
-    geojson_data = feature.geojson
-    if not geojson_data or 'properties' not in geojson_data:
-        return None
-    
-    properties = geojson_data.get('properties', {})
-    geometry_data = geojson_data.get('geometry', {})
-    
-    return {
-        "properties": {
-            "database_id": feature.id,
-            "name": properties.get('name', 'Unnamed Feature'),
-            "description": properties.get('description', '')
-        },
-        "geometry": {
-            "type": geometry_data.get('type', 'Unknown') if isinstance(geometry_data, dict) else 'Unknown'
-        }
-    }
-
-
-def _normalize_tags(tags):
-    """
-    Normalize tags to ensure they're a list of strings.
-    
-    Args:
-        tags: Tags value (could be list, None, or other)
-        
-    Returns:
-        list: Normalized list of tag strings
-    """
-    if not isinstance(tags, list):
-        return []
-    return [tag for tag in tags if isinstance(tag, str) and tag]
+_logger = get_tagged_logger()
 
 
 @api_or_login_required_401()
@@ -64,10 +19,10 @@ def get_features_by_tag(request):
     """
     API endpoint to get all features grouped by tags (both user-generated and system tags).
     Returns separate dictionaries for user_tags and system_tags where keys are tags and values are lists of features with that tag.
-    
+
     Query parameters:
     - search: optional search query to filter tags by name
-    
+
     OPTIMIZED VERSION: Uses a highly optimized PostgreSQL query that:
     1. Eliminates UNION ALL by directly aggregating in subquery
     2. Computes tag priority in SQL for efficient sorting
@@ -91,7 +46,7 @@ def get_features_by_tag(request):
             search_condition = ""
             # Double params for user_id in both parts of UNION ALL
             params = (user_id, user_id)
-        
+
         # Optimized query: processes both tag types in one pass with priority calculation
         # Uses array_agg for better performance than json_agg
         # Tag priority is computed in SQL using CASE for 'source-file' prefix (priority 1, else 0)
@@ -112,9 +67,9 @@ def get_features_by_tag(request):
                   AND jsonb_typeof(f.geojson->'properties'->'tags') = 'array'
                   AND t.tag_value != ''
                   {search_condition}
-                
+
                 UNION ALL
-                
+
                 -- Extract system tags with priority calculation
                 SELECT 
                     f.id,
@@ -148,15 +103,15 @@ def get_features_by_tag(request):
                 CASE WHEN tag_type = 'system' THEN priority ELSE 0 END,
                 LOWER(tag_value)
         """
-        
+
         cursor.execute(query, params)
         results = cursor.fetchall()
-    
+
     # Process results - they're already sorted correctly by SQL
     # Build JSON from arrays (faster than json_agg in PostgreSQL)
     user_tags_dict = {}
     system_tags_dict = {}
-    
+
     for tag, tag_type, priority, feature_ids, feature_names, geometry_types in results:
         # Build feature list from parallel arrays
         features = [
@@ -171,18 +126,18 @@ def get_features_by_tag(request):
             }
             for fid, fname, gtype in zip(feature_ids, feature_names, geometry_types)
         ]
-        
+
         if tag_type == 'user':
             user_tags_dict[tag] = features
         else:
             system_tags_dict[tag] = features
-    
+
     # Build response - no need to sort in Python, SQL already sorted correctly
     response_data = {
         'user_tags': user_tags_dict,
         'system_tags': system_tags_dict
     }
-    
+
     return JsonResponse(response_data)
 
 
@@ -195,7 +150,7 @@ def get_user_tags(request):
 
     This is optimized for tag autocomplete use-cases and intentionally avoids
     returning any feature data or system tags.
-    
+
     OPTIMIZED: Leverages GIN index on geojson field for fast JSONB array operations.
     """
     user_id = request.user.id
@@ -228,10 +183,10 @@ def search_features(request):
     """
     API endpoint to search features by name, description, or tags.
     Searches across all user's features, not just those in view.
-    
+
     Query parameters:
     - query: search text (required)
-    
+
     OPTIMIZED VERSION: Uses raw SQL with native PostgreSQL operators for maximum performance.
     - Selects only needed fields (id, geojson, geojson_hash) to avoid fetching large geometry field
     - Uses ILIKE with ->> operator for efficient JSONB text search
@@ -247,71 +202,63 @@ def search_features(request):
             'code': 400
         }, status=400)
 
-    try:
-        user_id = request.user.id
-        table_name = FeatureStore._meta.db_table
-        search_pattern = f'%{query}%'
-        
-        # Raw SQL query for maximum performance
-        # Searches in name, description, tags array (as text), and system_tags array (as text)
-        # For arrays, we convert to text with explicit casting: (geojson->'properties'->'tags')::text
-        # LIMIT 100 applied at database level for efficiency
-        sql_query = f"""
-            SELECT id, geojson, geojson_hash
-            FROM {table_name}
-            WHERE user_id = %s
-              AND geometry IS NOT NULL
-              AND (
-                geojson->'properties'->>'name' ILIKE %s OR
-                geojson->'properties'->>'description' ILIKE %s OR
-                (geojson->'properties'->'tags')::text ILIKE %s OR
-                (geojson->'properties'->'system_tags')::text ILIKE %s
-              )
-            ORDER BY id
-            LIMIT 100
-        """
-        
-        with connection.cursor() as cursor:
-            cursor.execute(sql_query, (user_id, search_pattern, search_pattern, search_pattern, search_pattern))
-            results = cursor.fetchall()
-        
-        # Convert results to GeoJSON format
-        geojson_features = []
-        for feature_id, geojson_data, geojson_hash in results:
-            # Parse JSON if it's a string (depends on psycopg2 configuration)
-            if isinstance(geojson_data, str):
-                geojson_data = json.loads(geojson_data)
-            
-            if geojson_data and 'geometry' in geojson_data:
-                properties = geojson_data.get('properties', {}).copy()
-                properties['database_id'] = feature_id
-                geojson_features.append({
-                    "type": "Feature",
-                    "geometry": geojson_data.get('geometry'),
-                    "properties": properties,
-                    "geojson_hash": geojson_hash
-                })
+    user_id = request.user.id
+    table_name = FeatureStore._meta.db_table
+    search_pattern = f'%{query}%'
 
-        # Create GeoJSON FeatureCollection
-        geojson_data = {
-            "type": "FeatureCollection",
-            "features": geojson_features
-        }
+    # Raw SQL query for maximum performance
+    # Searches in name, description, tags array (as text), and system_tags array (as text)
+    # For arrays, we convert to text with explicit casting: (geojson->'properties'->'tags')::text
+    # LIMIT 100 applied at database level for efficiency
+    sql_query = f"""
+        SELECT id, geojson, geojson_hash
+        FROM {table_name}
+        WHERE user_id = %s
+          AND geometry IS NOT NULL
+          AND (
+            geojson->'properties'->>'name' ILIKE %s OR
+            geojson->'properties'->>'description' ILIKE %s OR
+            (geojson->'properties'->'tags')::text ILIKE %s OR
+            (geojson->'properties'->'system_tags')::text ILIKE %s
+          )
+        ORDER BY id
+        LIMIT 100
+    """
 
-        response_data = {
-            'data': geojson_data,
-            'feature_count': len(geojson_features),
-            'query': query
-        }
+    with connection.cursor() as cursor:
+        cursor.execute(sql_query, (user_id, search_pattern, search_pattern, search_pattern, search_pattern))
+        results = cursor.fetchall()
 
-        return JsonResponse(response_data)
+    # Convert results to GeoJSON format
+    geojson_features = []
+    for feature_id, geojson_data, geojson_hash in results:
+        # Parse JSON if it's a string (depends on psycopg2 configuration)
+        if isinstance(geojson_data, str):
+            geojson_data = json.loads(geojson_data)
 
-    except Exception:
-        logger.error(f"Error searching features: {traceback.format_exc()}")
-        return JsonResponse({
-            'error': 'Failed to search features',
-            'code': 500
-        }, status=500)
+        if geojson_data and 'geometry' in geojson_data:
+            properties = geojson_data.get('properties', {}).copy()
+            properties['database_id'] = feature_id
+            geojson_features.append({
+                "type": "Feature",
+                "geometry": geojson_data.get('geometry'),
+                "properties": properties,
+                "geojson_hash": geojson_hash
+            })
+
+    # Create GeoJSON FeatureCollection
+    geojson_data = {
+        "type": "FeatureCollection",
+        "features": geojson_features
+    }
+
+    response_data = {
+        'data': geojson_data,
+        'feature_count': len(geojson_features),
+        'query': query
+    }
+
+    return JsonResponse(response_data)
 
 
 @api_or_login_required_401()
@@ -326,21 +273,21 @@ def filter_features_by_tags(request):
     - match_mode: 'AND' (default) or 'OR'
       - AND: returns features that have ALL specified tag conditions
       - OR: returns features that have ANY specified tag condition
-    
+
     OPTIMIZED: Uses GIN index on geojson field for fast JSONB containment operations.
     """
     # Get tags from query parameters (can be multiple)
     tags = request.GET.getlist('tags')
-    
+
     # Filter out empty tags
     tags = [tag.strip() for tag in tags if tag.strip()]
-    
+
     if not tags:
         return JsonResponse({
             'error': 'At least one tag parameter is required',
             'code': 400
         }, status=400)
-    
+
     # Get match mode (default to AND)
     match_mode = request.GET.get('match_mode', 'AND').upper()
     if match_mode not in ['AND', 'OR']:
@@ -348,98 +295,87 @@ def filter_features_by_tags(request):
             'error': 'match_mode must be either AND or OR',
             'code': 400
         }, status=400)
-    
-    try:
-        # Base query for user's features
-        base_query = FeatureStore.objects.filter(user=request.user).exclude(geometry__isnull=True)
-        
-        # Build Q objects for each tag condition
-        tag_conditions = []
-        
-        for tag in tags:
-            if tag.endswith(':'):
-                # Prefix matching: match any tag that starts with the prefix (without the trailing ':')
-                prefix = tag[:-1]  # Remove the trailing ':'
-                
-                # We need to check if any element in the tags/system_tags arrays starts with the prefix
-                # PostgreSQL JSONB doesn't have a direct "array element starts with" operator,
-                # so we use a raw SQL condition for this
-                # This uses PostgreSQL's jsonb_array_elements_text to expand arrays and check each element
-                prefix_condition = Q(
-                    id__in=RawSQL(
-                        """
-                        SELECT DISTINCT fs.id 
-                        FROM api_featurestore fs
-                        WHERE fs.user_id = %s
-                        AND (
-                            EXISTS (
-                                SELECT 1 FROM jsonb_array_elements_text(fs.geojson->'properties'->'tags') AS tag
-                                WHERE tag LIKE %s
-                            )
-                            OR EXISTS (
-                                SELECT 1 FROM jsonb_array_elements_text(fs.geojson->'properties'->'system_tags') AS tag
-                                WHERE tag LIKE %s
-                            )
-                        )
-                        """,
-                        [request.user.id, f"{prefix}%", f"{prefix}%"]
-                    )
-                )
-                tag_conditions.append(prefix_condition)
-            else:
-                # Exact matching: use containment operator (existing behavior)
-                exact_condition = Q(geojson__properties__tags__contains=[tag]) | Q(geojson__properties__system_tags__contains=[tag])
-                tag_conditions.append(exact_condition)
-        
-        # Combine conditions based on match mode
-        if match_mode == 'AND':
-            # Features must match ALL conditions
-            features_query = base_query
-            for condition in tag_conditions:
-                features_query = features_query.filter(condition)
-        else:  # OR
-            # Features must match ANY condition
-            combined_condition = tag_conditions[0]
-            for condition in tag_conditions[1:]:
-                combined_condition |= condition
-            features_query = base_query.filter(combined_condition)
-        
-        # Convert to GeoJSON format
-        geojson_features = []
-        for feature in features_query.order_by('id'):
-            geojson_data = feature.geojson
-            if geojson_data and 'geometry' in geojson_data:
-                properties = geojson_data.get('properties', {}).copy()
-                properties['database_id'] = feature.id
-                geojson_features.append({
-                    "type": "Feature",
-                    "geometry": geojson_data.get('geometry'),
-                    "properties": properties,
-                    "geojson_hash": feature.geojson_hash
-                })
-        
-        # Create GeoJSON FeatureCollection
-        geojson_data = {
-            "type": "FeatureCollection",
-            "features": geojson_features
-        }
-        
-        response_data = {
-            'data': geojson_data,
-            'feature_count': len(geojson_features),
-            'tags': tags,
-            'match_mode': match_mode
-        }
-        
-        return JsonResponse(response_data)
-    
-    except Exception:
-        logger.error(f"Error filtering features by tags: {traceback.format_exc()}")
-        return JsonResponse({
-            'error': 'Failed to filter features by tags',
-            'code': 500
-        }, status=500)
 
+    # Base query for user's features
+    base_query = FeatureStore.objects.filter(user=request.user).exclude(geometry__isnull=True)
+
+    # Build Q objects for each tag condition
+    tag_conditions = []
+
+    for tag in tags:
+        if tag.endswith(':'):
+            # Prefix matching: match any tag that starts with the prefix (without the trailing ':')
+            prefix = tag[:-1]  # Remove the trailing ':'
+
+            # We need to check if any element in the tags/system_tags arrays starts with the prefix
+            # PostgreSQL JSONB doesn't have a direct "array element starts with" operator,
+            # so we use a raw SQL condition for this
+            # This uses PostgreSQL's jsonb_array_elements_text to expand arrays and check each element
+            prefix_condition = Q(
+                id__in=RawSQL(
+                    """
+                    SELECT DISTINCT fs.id
+                    FROM api_featurestore fs
+                    WHERE fs.user_id = %s
+                      AND (
+                        EXISTS (SELECT 1
+                                FROM jsonb_array_elements_text(fs.geojson -> 'properties' -> 'tags') AS tag
+                                WHERE tag LIKE %s)
+                            OR EXISTS (SELECT 1
+                                       FROM jsonb_array_elements_text(fs.geojson -> 'properties' -> 'system_tags') AS tag
+                                       WHERE tag LIKE %s)
+                        )
+                    """,
+                    [request.user.id, f"{prefix}%", f"{prefix}%"]
+                )
+            )
+            tag_conditions.append(prefix_condition)
+        else:
+            # Exact matching: use containment operator (existing behavior)
+            exact_condition = Q(geojson__properties__tags__contains=[tag]) | Q(geojson__properties__system_tags__contains=[tag])
+            tag_conditions.append(exact_condition)
+
+    # Combine conditions based on match mode
+    if match_mode == 'AND':
+        # Features must match ALL conditions
+        features_query = base_query
+        for condition in tag_conditions:
+            features_query = features_query.filter(condition)
+    else:  # OR
+        # Features must match ANY condition
+        combined_condition = tag_conditions[0]
+        for condition in tag_conditions[1:]:
+            combined_condition |= condition
+        features_query = base_query.filter(combined_condition)
+
+    # Convert to GeoJSON format
+    geojson_features = []
+    for feature in features_query.order_by('id'):
+        geojson_data = feature.geojson
+        if geojson_data and 'geometry' in geojson_data:
+            properties = geojson_data.get('properties', {}).copy()
+            properties['database_id'] = feature.id
+            geojson_features.append({
+                "type": "Feature",
+                "geometry": geojson_data.get('geometry'),
+                "properties": properties,
+                "geojson_hash": feature.geojson_hash
+            })
+
+    # Create GeoJSON FeatureCollection
+    geojson_data = {
+        "type": "FeatureCollection",
+        "features": geojson_features
+    }
+
+    response_data = {
+        'data': geojson_data,
+        'feature_count': len(geojson_features),
+        'tags': tags,
+        'match_mode': match_mode
+    }
+
+    return JsonResponse(response_data)
 
 
 @api_or_login_required_401()
@@ -449,40 +385,76 @@ def get_all_features(request):
     API endpoint to get all features for the user.
     Returns a list of all features with their basic information for selection purposes.
     """
-    try:
-        # Get all features for the user
-        features = FeatureStore.objects.filter(user=request.user).exclude(geometry__isnull=True).order_by('id')
-        
-        # Convert to GeoJSON format
-        geojson_features = []
-        for feature in features:
-            geojson_data = feature.geojson
-            if geojson_data and 'geometry' in geojson_data:
-                properties = geojson_data.get('properties', {}).copy()
-                properties['database_id'] = feature.id
-                geojson_features.append({
-                    "type": "Feature",
-                    "geometry": geojson_data.get('geometry'),
-                    "properties": properties,
-                    "geojson_hash": feature.geojson_hash
-                })
-        
-        # Create GeoJSON FeatureCollection
-        geojson_data = {
-            "type": "FeatureCollection",
-            "features": geojson_features
-        }
-        
-        response_data = {
-            'data': geojson_data,
-            'feature_count': len(geojson_features)
-        }
-        
-        return JsonResponse(response_data)
+    # Get all features for the user
+    features = FeatureStore.objects.filter(user=request.user).exclude(geometry__isnull=True).order_by('id')
+
+    # Convert to GeoJSON format
+    geojson_features = []
+    for feature in features:
+        geojson_data = feature.geojson
+        if geojson_data and 'geometry' in geojson_data:
+            properties = geojson_data.get('properties', {}).copy()
+            properties['database_id'] = feature.id
+            geojson_features.append({
+                "type": "Feature",
+                "geometry": geojson_data.get('geometry'),
+                "properties": properties,
+                "geojson_hash": feature.geojson_hash
+            })
+
+    # Create GeoJSON FeatureCollection
+    geojson_data = {
+        "type": "FeatureCollection",
+        "features": geojson_features
+    }
+
+    response_data = {
+        'data': geojson_data,
+        'feature_count': len(geojson_features)
+    }
+
+    return JsonResponse(response_data)
+
+
+def _create_minimal_feature(feature):
+    """
+    Create a minimal feature object with only essential fields for display.
     
-    except Exception:
-        logger.error(f"Error getting all features: {traceback.format_exc()}")
-        return JsonResponse({
-            'error': 'Failed to get all features',
-            'code': 500
-        }, status=500)
+    Args:
+        feature: FeatureStore instance
+        
+    Returns:
+        dict: Minimal feature object with id, name, description, and geometry type
+    """
+    geojson_data = feature.geojson
+    if not geojson_data or 'properties' not in geojson_data:
+        return None
+
+    properties = geojson_data.get('properties', {})
+    geometry_data = geojson_data.get('geometry', {})
+
+    return {
+        "properties": {
+            "database_id": feature.id,
+            "name": properties.get('name', 'Unnamed Feature'),
+            "description": properties.get('description', '')
+        },
+        "geometry": {
+            "type": geometry_data.get('type', 'Unknown') if isinstance(geometry_data, dict) else 'Unknown'
+        }
+    }
+
+
+def _normalize_tags(tags):
+    """
+    Normalize tags to ensure they're a list of strings.
+    
+    Args:
+        tags: Tags value (could be list, None, or other)
+        
+    Returns:
+        list: Normalized list of tag strings
+    """
+    if not isinstance(tags, list):
+        return []
+    return [tag for tag in tags if isinstance(tag, str) and tag]

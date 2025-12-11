@@ -41,21 +41,32 @@ This tile source does not require a proxy as it can be accessed directly.
 Note: Only pre-rendered tiles for zoom levels 0-13 are available after the main server shutdown.
 """
 
-from . import register_tile_source
+from geo_lib.tile_sources.registry import TileSource
 
-# OpenTopoMap configuration
-OPENTOPOMAP_CONFIG = {
-    'id': 'opentopomap',
-    'name': 'OpenTopoMap',
-    'type': 'xyz',
-    'requires_proxy': False,
-    'url_template': 'https://{s}.tile.opentopomap.org/{z}/{x}/{y}.png',
-    'client_config': {
-        'type': 'xyz',
-        'url': 'https://{s}.tile.opentopomap.org/{z}/{x}/{y}.png',
-        'tileSubdomains': ['a', 'b', 'c']
-    }
-}
 
-# Register the tile source
-register_tile_source('opentopomap', OPENTOPOMAP_CONFIG)
+class OpenTopoMapTileSource(TileSource):
+    """OpenTopoMap tile source."""
+    
+    @property
+    def id(self):
+        return 'opentopomap'
+    
+    @property
+    def name(self):
+        return 'OpenTopoMap'
+    
+    @property
+    def type(self):
+        return 'xyz'
+    
+    @property
+    def url_template(self):
+        return 'https://{s}.tile.opentopomap.org/{z}/{x}/{y}.png'
+    
+    @property
+    def client_config(self):
+        return {
+            'type': 'xyz',
+            'url': 'https://{s}.tile.opentopomap.org/{z}/{x}/{y}.png',
+            'tileSubdomains': ['a', 'b', 'c']
+        }

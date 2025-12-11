@@ -12,7 +12,7 @@ from geo_lib.logging.console import get_tagged_logger
 from geo_lib.processing.jobs.helpers.status_tracker import ProcessingStatus
 from geo_lib.processing.redis_queue import get_processing_queue
 
-_logger = get_tagged_logger(__name__)
+_logger = get_tagged_logger()
 
 
 class QueueWorker:

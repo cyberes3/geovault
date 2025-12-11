@@ -13,7 +13,7 @@ from django.views.decorators.http import require_http_methods
 
 from geo_lib.logging.console import get_tagged_logger
 
-_logger = get_tagged_logger('access')
+_logger = get_tagged_logger()
 
 
 @require_http_methods(["GET"])

@@ -345,7 +345,7 @@ class TestMaxFeaturesLimit(TestCase):
         )
         self.client.force_login(self.user)
 
-    @patch('api.views.features.bbox_query.get_required_setting')
+    @patch('api.views.features.bbox_utils.get_required_setting')
     def test_max_features_limit_enforced(self, mock_get_setting):
         """Test that MAX_FEATURES_PER_REQUEST limit is enforced."""
         # Set a low limit for testing
@@ -384,7 +384,7 @@ class TestMaxFeaturesLimit(TestCase):
         # Should have warning
         self.assertIn('warning', data)
 
-    @patch('api.views.features.bbox_query.get_required_setting')
+    @patch('api.views.features.bbox_utils.get_required_setting')
     def test_max_features_unlimited(self, mock_get_setting):
         """Test behavior when limit is -1 (unlimited)."""
         # Set limit to -1 (unlimited)

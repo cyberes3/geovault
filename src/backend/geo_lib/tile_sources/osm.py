@@ -1,19 +1,30 @@
-from . import register_tile_source
+from geo_lib.tile_sources.registry import TileSource
 
-# OpenStreetMap configuration
-OSM_CONFIG = {
-    'id': 'osm',
-    'name': 'OpenStreetMap',
-    'type': 'xyz',  # OSM is a raster/XYZ tile source
-    'requires_proxy': False,
-    'url_template': 'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
-    'client_config': {
-        'type': 'xyz',
-        'url': 'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
-        'tileSize': 256,
-        'attribution': '© OpenStreetMap contributors'
-    }
-}
 
-# Register the tile source
-register_tile_source('osm', OSM_CONFIG)
+class OSMTileSource(TileSource):
+    """OpenStreetMap tile source."""
+    
+    @property
+    def id(self):
+        return 'osm'
+    
+    @property
+    def name(self):
+        return 'OpenStreetMap'
+    
+    @property
+    def type(self):
+        return 'xyz'
+    
+    @property
+    def url_template(self):
+        return 'https://tile.openstreetmap.org/{z}/{x}/{y}.png'
+    
+    @property
+    def client_config(self):
+        return {
+            'type': 'xyz',
+            'url': 'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
+            'tileSize': 256,
+            'attribution': '© OpenStreetMap contributors'
+        }

@@ -1,7 +1,7 @@
 """
 MapTiler maps tile source configuration.
 
-This module dynamically registers MapTiler maps as tile sources based on configuration.
+This module dynamically generates MapTiler maps configurations as tile sources.
 MapTiler maps are vector tile sources that can be used directly without a proxy.
 """
 
@@ -9,22 +9,94 @@ import functools
 
 import requests
 
+from geo_lib.tile_sources.registry import TileSource
 from website.config_loader import get_config_loader
-from . import register_tile_source
+
+
+class MapTilerMapTileSource(TileSource):
+    """Individual MapTiler map tile source."""
+
+    def __init__(self, map_id, api_key, site_domain):
+        self._map_id = map_id
+        self._api_key = api_key
+        self._site_domain = site_domain
+        self._display_name = _fetch_map_name(map_id, api_key, site_domain)
+
+    @property
+    def id(self):
+        return f'maptiler_{self._map_id}'
+
+    @property
+    def name(self):
+        return self._display_name
+
+    @property
+    def type(self):
+        return 'maptiler'
+
+    @property
+    def client_config(self):
+        return {
+            'type': 'maptiler',
+            'style_url': f'https://api.maptiler.com/maps/{self._map_id}/style.json?key={self._api_key}',
+            'map_id': self._map_id
+        }
+
+
+def generate_maptiler_sources():
+    """
+    Generate MapTiler map tile source instances based on configuration.
+    
+    Returns:
+        List of MapTilerMapTileSource instances. Returns empty list if API key 
+        is not configured or no maps are configured.
+    """
+    config = get_config_loader()
+
+    # Get MapTiler API key
+    api_key = config.get_with_env_override(
+        'maptiler.api_key',
+        'MAPTILER_API_KEY',
+        None
+    )
+
+    # If no API key, skip registration
+    if not api_key:
+        return []
+
+    # Get list of map IDs
+    map_ids = config.get_list('maptiler.maps', [])
+
+    # If no maps configured, skip registration
+    if not map_ids:
+        return []
+
+    # Get site domain for MapTiler API requests
+    site_domain = config.get_str('site.domain', '')
+
+    # Build tile sources for each map
+    sources = []
+    for map_id in map_ids:
+        if not map_id or not isinstance(map_id, str):
+            continue
+
+        sources.append(MapTilerMapTileSource(map_id, api_key, site_domain))
+
+    return sources
 
 
 @functools.lru_cache(maxsize=None)
-def fetch_map_name(map_id, api_key, site_domain):
+def _fetch_map_name(map_id, api_key, site_domain):
     """
     Fetch the display name for a MapTiler map from its style.json.
-    
+
     Cached for the lifetime of the server to avoid repeated API calls.
-    
+
     Args:
         map_id: MapTiler map ID
         api_key: MapTiler API key
         site_domain: Site domain for MapTiler API requests (just the domain, no protocol)
-        
+
     Returns:
         Display name from the style.json, or a formatted fallback name
     """
@@ -47,63 +119,3 @@ def fetch_map_name(map_id, api_key, site_domain):
 
     # Fallback: format the map ID as a display name
     return f"MapTiler {map_id.replace('-', ' ').title()}"
-
-
-def register_maptiler_maps():
-    """
-    Register MapTiler maps as tile sources based on configuration.
-    This function reads the map IDs from config and registers each as a tile source.
-    Requires API key to be configured.
-    """
-    config = get_config_loader()
-
-    # Get MapTiler API key
-    api_key = config.get_with_env_override(
-        'maptiler.api_key',
-        'MAPTILER_API_KEY',
-        None
-    )
-
-    # If no API key, skip registration
-    if not api_key:
-        return
-
-    # Get list of map IDs
-    map_ids = config.get_list('maptiler.maps', [])
-
-    # If no maps configured, skip registration
-    if not map_ids:
-        return
-
-    # Get site domain for MapTiler API requests
-    site_domain = config.get_str('site.domain', '')
-
-    # Register each map as a tile source
-    for map_id in map_ids:
-        if not map_id or not isinstance(map_id, str):
-            continue
-
-        # Fetch display name from MapTiler's style.json
-        display_name = fetch_map_name(map_id, api_key, site_domain)
-
-        # Create tile source configuration
-        # MapTiler maps use vector tiles accessed via style.json
-        # For MapLibre, we'll use the style URL directly
-        source_config = {
-            'id': f'maptiler_{map_id}',
-            'name': display_name,
-            'type': 'maptiler',
-            'requires_proxy': False,
-            'client_config': {
-                'type': 'maptiler',
-                'style_url': f'https://api.maptiler.com/maps/{map_id}/style.json?key={api_key}',
-                'map_id': map_id
-            }
-        }
-
-        # Register the tile source
-        register_tile_source(f'maptiler_{map_id}', source_config)
-
-
-# Register MapTiler maps when this module is imported
-register_maptiler_maps()

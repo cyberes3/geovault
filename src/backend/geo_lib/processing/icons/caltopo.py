@@ -5,7 +5,7 @@ from urllib.parse import urlparse, parse_qs, unquote
 
 from geo_lib.logging.console import get_tagged_logger
 
-_logger = get_tagged_logger(__name__)
+_logger = get_tagged_logger()
 
 
 def _fix_nested_caltopo_url(url: str) -> str:

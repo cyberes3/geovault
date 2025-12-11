@@ -6,7 +6,7 @@ from django.db.models import Q
 from api.models import Collection, FeatureStore
 
 
-def _get_collection_feature_ids(collection: Collection) -> Set[int]:
+def get_collection_feature_ids(collection: Collection) -> Set[int]:
     """
     Get the set of feature IDs that belong to a collection.
     This is the union of features matching tags and individually selected features.
@@ -18,20 +18,20 @@ def _get_collection_feature_ids(collection: Collection) -> Set[int]:
         Set of feature IDs (integers) that match the collection criteria
     """
     feature_ids_set: Set[int] = set()
-    
+
     # 1. Get features matching ANY of the collection's tags (OR logic)
     if collection.tags:
         base_query = FeatureStore.objects.filter(user=collection.user).exclude(geometry__isnull=True)
-        
+
         tag_query = Q()
         for tag in collection.tags:
             if tag:  # Only process non-empty tags
                 tag_query |= Q(geojson__properties__tags__contains=[tag]) | Q(geojson__properties__system_tags__contains=[tag])
-        
+
         if tag_query:
             tag_features = base_query.filter(tag_query).values_list('id', flat=True)
             feature_ids_set.update(tag_features)
-    
+
     # 2. Add individually selected features
     if collection.feature_ids:
         # Verify these features belong to the user
@@ -40,7 +40,7 @@ def _get_collection_feature_ids(collection: Collection) -> Set[int]:
             .values_list('id', flat=True)
         )
         feature_ids_set.update(user_feature_ids)
-    
+
     return feature_ids_set
 
 
@@ -57,7 +57,7 @@ def _serialize_collection(collection: Collection, feature_count: int = None) -> 
     """
     if feature_count is None:
         feature_count = _count_collection_features(collection)
-    
+
     return {
         'id': collection.id,
         'name': collection.name,
@@ -75,4 +75,4 @@ def _count_collection_features(collection: Collection) -> int:
     Count the number of features in a collection.
     This is the union of features matching tags and individually selected features.
     """
-    return len(_get_collection_feature_ids(collection))
+    return len(get_collection_feature_ids(collection))

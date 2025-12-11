@@ -1,8 +1,3 @@
-"""
-Validation utilities for import operations.
-Handles validation of bulk operations payloads.
-"""
-
 from typing import Dict, Any, Tuple, Optional
 
 from pydantic import ValidationError
@@ -22,7 +17,7 @@ def validate_bulk_operations_payload(bulk_ops: Dict[str, Any]) -> Tuple[bool, Op
 
     Returns:
         (is_valid, error_message). error_message is None when is_valid is True.
-        
+
     Note: This function maintains backward compatibility with the old signature.
     It uses Pydantic validation internally but returns the legacy tuple format.
     """

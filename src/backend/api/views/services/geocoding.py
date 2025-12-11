@@ -14,144 +14,10 @@ from geo_lib.logging.console import get_tagged_logger
 from geo_lib.website.auth import api_or_login_required_401
 from website.config_loader import get_config_loader
 
-logger = get_tagged_logger('access')
+_logger = get_tagged_logger()
 
 # Cache TTL: 7 days in seconds
 GEOCODING_CACHE_TTL = 604800
-
-
-def _get_cache_key(query: str) -> str:
-    """
-    Generate cache key for geocoding query.
-
-    Uses a hash to ensure cache keys are safe for memcached (no spaces or special chars).
-
-    Args:
-        query: Search query
-
-    Returns:
-        Cache key string safe for memcached
-    """
-    normalized = query.strip().lower()
-    # Use hash to create a safe cache key (memcached doesn't like spaces/special chars)
-    query_hash = hashlib.md5(normalized.encode('utf-8')).hexdigest()
-    return f"geocoding:{query_hash}"
-
-
-def _clean_feature(feature: dict) -> dict:
-    """
-    Remove unnecessary fields from geocoding feature to reduce payload size.
-    Keeps only essential fields needed by the frontend.
-    Transforms GeoJSON geometry into a simple coordinates array.
-    
-    For non-English place names, uses matching_text and matching_place_name
-    when available to provide English-friendly display names.
-
-    Args:
-        feature: Raw geocoding feature from MapTiler API
-        
-    Returns:
-        Cleaned feature with only necessary fields, coordinates extracted from geometry
-    """
-    # Prefer matching_text over text for non-English names (e.g., Shanghai has text="上海市" but matching_text="Shanghai")
-    matching_text = feature.get('matching_text')
-    text = feature.get('text')
-    
-    # Use matching_text if available, otherwise use text
-    if matching_text:
-        text = matching_text.strip()
-    elif text:
-        text = text.strip()
-    else:
-        text = None
-
-    # Prefer matching_place_name over place_name for non-English names
-    matching_place_name = feature.get('matching_place_name')
-    place_name = feature.get('place_name')
-    
-    # Use matching_place_name if available, otherwise use place_name
-    if matching_place_name:
-        place_name = matching_place_name.strip()
-    elif place_name:
-        place_name = place_name.strip()
-    else:
-        place_name = None
-
-    # Strip 'text' + ', ' from the start of 'place_name' to avoid redundancy
-    if text and place_name:
-        text_with_comma = text + ', '
-        if place_name.startswith(text_with_comma):
-            place_name = place_name[len(text_with_comma):]
-        elif place_name.startswith(text + ' '):
-            place_name = place_name[len(text + ' '):]
-        elif place_name == text:
-            place_name = None
-
-    # Extract coordinates from geometry
-    coordinates = None
-    geometry = feature.get('geometry')
-    if geometry and isinstance(geometry, dict):
-        coordinates = geometry.get('coordinates')
-
-    return {
-        'coordinates': coordinates,
-        'id': feature.get('id'),
-        'text': text,
-        'place_name': place_name,
-        'bbox': feature.get('bbox')
-    }
-
-
-def _get_feature_priority(feature, query):
-    """Return priority score - higher is better. Geographic features get higher priority."""
-    place_types = feature.get('place_type', [])
-    properties = feature.get('properties', {})
-    kind = properties.get('kind', '')
-    place_designation = properties.get('place_designation', '')
-    text = feature.get('text', '').lower()
-    matching_text = feature.get('matching_text', '').lower()
-    matching_place_name = feature.get('matching_place_name', '').lower()
-    query_lower = query.lower()
-
-    # Check if the feature text matches the query exactly (for city-level places)
-    # Also check matching_text and matching_place_name for non-English names
-    # (e.g., Shanghai has text="上海市" but matching_text="Shanghai")
-    is_exact_match = (
-        text == query_lower or
-        matching_text == query_lower or
-        (matching_place_name and matching_place_name.startswith(query_lower + ',')) or
-        (matching_place_name and matching_place_name.startswith(query_lower + ' '))
-    )
-
-    # Administrative/geographic place types that should be prioritized (all status: true per MapTiler docs)
-    admin_place_types = [
-        'place', 'region', 'subregion', 'county', 'municipality',
-        'joint_municipality', 'joint_submunicipality', 'municipal_district',
-        'locality', 'neighbourhood', 'country'
-    ]
-
-    # Highest priority: Major administrative divisions (cities, states, provinces) that match query exactly
-    # This ensures major cities like "London, UK" and "Shanghai, China" appear above smaller towns
-    if is_exact_match and any(t in place_types for t in admin_place_types):
-        if place_designation == 'city':
-            return 120  # Cities get highest priority
-        elif place_designation in ('state', 'province', 'region'):
-            return 115  # States/provinces get very high priority (e.g., Shanghai is a direct-administered municipality)
-        return 110  # Other municipalities/towns get high priority
-    # High priority: POIs, major landforms, parks
-    elif 'poi' in place_types or kind == 'major_landform' or 'park' in place_designation.lower():
-        return 100
-    # High priority: administrative places (not exact match)
-    elif any(t in place_types for t in admin_place_types):
-        return 80
-    # Medium priority: addresses
-    elif 'address' in place_types:
-        return 50
-    # Lower priority: postcodes
-    elif 'postcode' in place_types:
-        return 30
-    # Default
-    return 0
 
 
 @require_http_methods(["GET"])
@@ -159,13 +25,13 @@ def _get_feature_priority(feature, query):
 def geocoding_search(request):
     """
     Search for places using MapTiler Geocoding API.
-    
+
     Query parameters:
         q: Search query string (required)
-    
+
     Returns:
         JSON response with geocoding results or error message
-        
+
     Caching:
         Results are cached server-side for 7 days.
         HTTP Cache-Control header is set to 7 days.
@@ -242,7 +108,7 @@ def geocoding_search(request):
             admin_data = admin_response.json()
             admin_features = admin_data.get('features', [])
         else:
-            logger.error(f"Geocoding API error response: status={admin_response.status_code}, body={admin_response.text}")
+            _logger.error(f"Geocoding API error response: status={admin_response.status_code}, body={admin_response.text}")
 
         # Make geographic features request
         geo_response = requests.get(api_url, params=params_geographic, headers=headers, timeout=10)
@@ -250,7 +116,7 @@ def geocoding_search(request):
             geo_data = geo_response.json()
             geographic_features = geo_data.get('features', [])
         else:
-            logger.error(f"Geocoding API error response: status={geo_response.status_code}, body={geo_response.text}")
+            _logger.error(f"Geocoding API error response: status={geo_response.status_code}, body={geo_response.text}")
 
         # Make all types request
         api_response = requests.get(api_url, params=params_all, headers=headers, timeout=10)
@@ -258,17 +124,14 @@ def geocoding_search(request):
             api_data = api_response.json()
             all_features = api_data.get('features', [])
         else:
-            logger.error(f"Geocoding API error response: status={api_response.status_code}, body={api_response.text}")
+            _logger.error(f"Geocoding API error response: status={api_response.status_code}, body={api_response.text}")
     except requests.exceptions.Timeout:
         return error_response("Geocoding API request timed out", code=504)
-    except requests.exceptions.RequestException as e:
-        logger.error(f"Geocoding API request error: {e}")
-        return error_response("Geocoding API request failed", code=500)
 
     # If all requests failed, return error
     if not admin_features and not geographic_features and not all_features:
         return error_response(
-            "Geocoding API error: All requests failed",
+            "Geocoding API error: all requests failed",
             code=400
         )
 
@@ -326,3 +189,137 @@ def geocoding_search(request):
     response = success_response(data=result_data)
     response['Cache-Control'] = 'public, max-age=604800'  # 7 days
     return response
+
+
+def _get_cache_key(query: str) -> str:
+    """
+    Generate cache key for geocoding query.
+
+    Uses a hash to ensure cache keys are safe for memcached (no spaces or special chars).
+
+    Args:
+        query: Search query
+
+    Returns:
+        Cache key string safe for memcached
+    """
+    normalized = query.strip().lower()
+    # Use hash to create a safe cache key (memcached doesn't like spaces/special chars)
+    query_hash = hashlib.md5(normalized.encode('utf-8')).hexdigest()
+    return f"geocoding:{query_hash}"
+
+
+def _clean_feature(feature: dict) -> dict:
+    """
+    Remove unnecessary fields from geocoding feature to reduce payload size.
+    Keeps only essential fields needed by the frontend.
+    Transforms GeoJSON geometry into a simple coordinates array.
+    
+    For non-English place names, uses matching_text and matching_place_name
+    when available to provide English-friendly display names.
+
+    Args:
+        feature: Raw geocoding feature from MapTiler API
+        
+    Returns:
+        Cleaned feature with only necessary fields, coordinates extracted from geometry
+    """
+    # Prefer matching_text over text for non-English names (e.g., Shanghai has text="上海市" but matching_text="Shanghai")
+    matching_text = feature.get('matching_text')
+    text = feature.get('text')
+
+    # Use matching_text if available, otherwise use text
+    if matching_text:
+        text = matching_text.strip()
+    elif text:
+        text = text.strip()
+    else:
+        text = None
+
+    # Prefer matching_place_name over place_name for non-English names
+    matching_place_name = feature.get('matching_place_name')
+    place_name = feature.get('place_name')
+
+    # Use matching_place_name if available, otherwise use place_name
+    if matching_place_name:
+        place_name = matching_place_name.strip()
+    elif place_name:
+        place_name = place_name.strip()
+    else:
+        place_name = None
+
+    # Strip 'text' + ', ' from the start of 'place_name' to avoid redundancy
+    if text and place_name:
+        text_with_comma = text + ', '
+        if place_name.startswith(text_with_comma):
+            place_name = place_name[len(text_with_comma):]
+        elif place_name.startswith(text + ' '):
+            place_name = place_name[len(text + ' '):]
+        elif place_name == text:
+            place_name = None
+
+    # Extract coordinates from geometry
+    coordinates = None
+    geometry = feature.get('geometry')
+    if geometry and isinstance(geometry, dict):
+        coordinates = geometry.get('coordinates')
+
+    return {
+        'coordinates': coordinates,
+        'id': feature.get('id'),
+        'text': text,
+        'place_name': place_name,
+        'bbox': feature.get('bbox')
+    }
+
+
+def _get_feature_priority(feature, query):
+    """Return priority score - higher is better. Geographic features get higher priority."""
+    place_types = feature.get('place_type', [])
+    properties = feature.get('properties', {})
+    kind = properties.get('kind', '')
+    place_designation = properties.get('place_designation', '')
+    text = feature.get('text', '').lower()
+    matching_text = feature.get('matching_text', '').lower()
+    matching_place_name = feature.get('matching_place_name', '').lower()
+    query_lower = query.lower()
+
+    # Check if the feature text matches the query exactly (for city-level places)
+    # Also check matching_text and matching_place_name for non-English names
+    # (e.g., Shanghai has text="上海市" but matching_text="Shanghai")
+    is_exact_match = (
+            text == query_lower or
+            matching_text == query_lower or
+            (matching_place_name and matching_place_name.startswith(query_lower + ',')) or
+            (matching_place_name and matching_place_name.startswith(query_lower + ' '))
+    )
+
+    # Administrative/geographic place types that should be prioritized (all status: true per MapTiler docs)
+    admin_place_types = [
+        'place', 'region', 'subregion', 'county', 'municipality',
+        'joint_municipality', 'joint_submunicipality', 'municipal_district',
+        'locality', 'neighbourhood', 'country'
+    ]
+
+    # Highest priority: Major administrative divisions (cities, states, provinces) that match query exactly
+    # This ensures major cities like "London, UK" and "Shanghai, China" appear above smaller towns
+    if is_exact_match and any(t in place_types for t in admin_place_types):
+        if place_designation == 'city':
+            return 120  # Cities get highest priority
+        elif place_designation in ('state', 'province', 'region'):
+            return 115  # States/provinces get very high priority (e.g., Shanghai is a direct-administered municipality)
+        return 110  # Other municipalities/towns get high priority
+    # High priority: POIs, major landforms, parks
+    elif 'poi' in place_types or kind == 'major_landform' or 'park' in place_designation.lower():
+        return 100
+    # High priority: administrative places (not exact match)
+    elif any(t in place_types for t in admin_place_types):
+        return 80
+    # Medium priority: addresses
+    elif 'address' in place_types:
+        return 50
+    # Lower priority: zip codes
+    elif 'postcode' in place_types:
+        return 30
+    # Default
+    return 0

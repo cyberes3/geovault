@@ -25,7 +25,7 @@ from geo_lib.geocoding.ski_resorts import search_nearby_ski_resorts
 from geo_lib.logging.console import get_tagged_logger
 from geo_lib.spatial.coordinates import round_coordinate
 
-_logger = get_tagged_logger(__name__)
+_logger = get_tagged_logger()
 
 
 @dataclass

@@ -15,7 +15,7 @@ from geo_lib.processing.icons.icon_manager import store_icon
 from geo_lib.processing.logging import ImportLog
 from geo_lib.website.auth import api_or_login_required_401
 
-_logger = get_tagged_logger('access')
+_logger = get_tagged_logger()
 
 # Content type mapping for icon file extensions
 _CONTENT_TYPES = {

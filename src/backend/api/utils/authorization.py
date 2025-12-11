@@ -6,9 +6,10 @@ reducing code duplication and ensuring consistent error handling across API view
 """
 
 from typing import Type, TypeVar
+
+from django.contrib.auth import get_user_model
 from django.db import models
 from django.http import Http404
-from django.contrib.auth import get_user_model
 
 User = get_user_model()
 T = TypeVar('T', bound=models.Model)
@@ -51,5 +52,3 @@ def get_object_or_404_for_user(model: Type[T], user: User, **filters) -> T:
         return model.objects.get(user=user, **filters)
     except model.DoesNotExist:
         raise Http404(f"{model.__name__} not found or access denied")
-
-

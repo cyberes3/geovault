@@ -16,7 +16,7 @@ from urllib.parse import urlparse
 
 from website.config_loader import get_config_loader
 
-from geo_lib.tile_sources import get_all_tile_sources
+from geo_lib.tile_sources.registry import get_all_tile_sources
 
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
 BASE_DIR = Path(__file__).resolve().parent.parent

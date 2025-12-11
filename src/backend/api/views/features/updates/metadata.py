@@ -10,9 +10,9 @@ from api.models import FeatureStore
 from api.utils.authorization import get_object_or_404_for_user
 from api.utils.responses import error_response, handle_404
 from api.validation.feature_updates import validate_payload, FeatureMetadataUpdate, BulkFeatureUpdatePayload
-from api.views.features.updates._shared import (
+from api.views.features.updates.shared import (
     _validate_tags,
-    _extract_system_tags,
+    extract_system_tags,
     _validate_and_preserve_feature
 )
 from geo_lib.feature_id import generate_geojson_hash
@@ -24,7 +24,7 @@ from geo_lib.validation.coordinate.helpers import CoordinateValidationError
 from geo_lib.validation.geometry_validation import GeometryValidationError
 from geo_lib.website.auth import api_or_login_required_401
 
-logger = get_tagged_logger('access')
+logger = get_tagged_logger()
 
 
 @api_or_login_required_401()
@@ -56,29 +56,29 @@ def update_feature_metadata(request, feature_id, validated_data):
     allowed_fields = {'name', 'description', 'created', 'tags', 'icon', 'marker-color', 'stroke', 'coordinates'}
     update_fields = {}
     updated_fields = []
-    
+
     for field in allowed_fields:
         # Handle both 'marker-color' and 'marker_color'
         field_value = validated_data.get(field) or validated_data.get(field.replace('-', '_'))
         if field_value is not None:
             update_fields[field] = field_value
             updated_fields.append(field)
-    
+
     if not updated_fields:
         return error_response('No valid fields to update. Supported fields: name, description, tags, created, icon, marker-color, stroke, coordinates', 400)
 
     # Create a deep copy of the original feature to merge updates into
     original_geojson = feature.geojson
-    
+
     # Ensure original_geojson is a dict (it should be, but be defensive)
     if not isinstance(original_geojson, dict):
         return error_response('Invalid feature data in database', 500)
-    
+
     merged_feature = copy.deepcopy(original_geojson)
-    
+
     # Preserve existing system_tags from original feature
-    original_system_tags = _extract_system_tags(original_geojson)
-    
+    original_system_tags = extract_system_tags(original_geojson)
+
     # Ensure the feature has the required structure (type, geometry, properties)
     # Always set these explicitly to ensure they exist
     merged_feature['type'] = 'Feature'
@@ -86,26 +86,26 @@ def update_feature_metadata(request, feature_id, validated_data):
         merged_feature['geometry'] = original_geojson.get('geometry', {})
     if 'properties' not in merged_feature:
         merged_feature['properties'] = {}
-    
+
     # Handle coordinate updates first (before other property updates)
     if 'coordinates' in update_fields:
         coordinates_data = update_fields['coordinates']
         geometry = merged_feature.get('geometry', {})
         geometry_type = geometry.get('type', '')
-        
+
         if not geometry_type:
             return error_response('Feature has no geometry type', 400)
-        
+
         # Validate coordinates is an array and not empty
         if coordinates_data is None:
             return error_response('Coordinates cannot be null or empty', 400)
-        
+
         if not isinstance(coordinates_data, list):
             return error_response('Coordinates must be a valid JSON array', 400)
-        
+
         if len(coordinates_data) == 0:
             return error_response('Coordinates cannot be empty', 400)
-        
+
         # Validate coordinates structure, bounds, and detect lat/lon swapping
         try:
             if geometry_type == 'GeometryCollection':
@@ -128,9 +128,9 @@ def update_feature_metadata(request, feature_id, validated_data):
                 geometry['coordinates'] = coordinates_data
         except CoordinateValidationError as e:
             return error_response(f'Invalid coordinates: {str(e)}', 400)
-        
+
         merged_feature['geometry'] = geometry
-    
+
     # Merge update fields into the feature properties
     for field, value in update_fields.items():
         if field == 'tags':
@@ -138,13 +138,13 @@ def update_feature_metadata(request, feature_id, validated_data):
             is_valid, error_resp = _validate_tags(value)
             if not is_valid:
                 return error_resp
-            
+
             # Strip system tags from incoming tags (defensive - user shouldn't be able to add them)
             user_tags = filter_protected_tags(value, CONST_INTERNAL_TAGS)
-            
+
             # Prepare user tags (lowercase and deduplicate)
             user_tags = prepare_user_tags(user_tags)
-            
+
             merged_feature['properties']['tags'] = user_tags
         elif field == 'name':
             merged_feature['properties']['name'] = value
@@ -170,12 +170,12 @@ def update_feature_metadata(request, feature_id, validated_data):
             if geometry_type.lower() in ['polygon', 'multipolygon']:
                 merged_feature['properties']['fill'] = value
                 merged_feature['properties']['fill-opacity'] = 0.1
-    
+
     # Update system tags if created date was changed
     updated_system_tags = original_system_tags
     if 'created' in update_fields:
         updated_system_tags = update_feature_date_tags(original_system_tags, update_fields['created'])
-    
+
     # Run the merged feature through validate_and_normalize_geojson_feature()
     try:
         normalized_feature = _validate_and_preserve_feature(merged_feature)
@@ -183,12 +183,12 @@ def update_feature_metadata(request, feature_id, validated_data):
         normalized_feature['properties']['system_tags'] = updated_system_tags
     except GeometryValidationError as e:
         return error_response(f'Feature validation failed: {str(e)}', 400)
-    
+
     # Regenerate geojson_hash if coordinates were updated
     if 'coordinates' in update_fields:
         normalized_feature['properties']['geojson_hash'] = generate_geojson_hash(normalized_feature)
         feature.geojson_hash = normalized_feature['properties']['geojson_hash']
-    
+
     # Update the feature's geojson data
     feature.geojson = normalized_feature
     feature.save()
@@ -221,107 +221,102 @@ def bulk_update_features_metadata(request, validated_data):
     - updated_count: int (number of successfully updated features)
     - errors: array of error objects with feature_id and error message
     """
-    try:
-        # Process all updates in a single transaction
-        updated_count = 0
-        errors = []
-        updates = validated_data['updates']
-        
-        with transaction.atomic():
-            for update_data in updates:
-                feature_id = update_data['feature_id']
-                
-                allowed_fields = {'name', 'description', 'created', 'tags'}
-                update_fields = {}
-                updated_fields = []
-                
-                for field in allowed_fields:
-                    if field in update_data:
-                        update_fields[field] = update_data[field]
-                        updated_fields.append(field)
-                
-                if not updated_fields:
+    # Process all updates in a single transaction
+    updated_count = 0
+    errors = []
+    updates = validated_data['updates']
+
+    with transaction.atomic():
+        for update_data in updates:
+            feature_id = update_data['feature_id']
+
+            allowed_fields = {'name', 'description', 'created', 'tags'}
+            update_fields = {}
+            updated_fields = []
+
+            for field in allowed_fields:
+                if field in update_data:
+                    update_fields[field] = update_data[field]
+                    updated_fields.append(field)
+
+            if not updated_fields:
+                errors.append({
+                    'feature_id': feature_id,
+                    'error': 'No valid fields to update. Supported fields: name, description, tags, created'
+                })
+                continue
+
+            try:
+                # Get the feature from database
+                feature = get_object_or_404_for_user(FeatureStore, request.user, id=feature_id)
+
+                # Create a deep copy of the original feature to merge updates into
+                original_geojson = feature.geojson
+
+                # Ensure original_geojson is a dict (it should be, but be defensive)
+                if not isinstance(original_geojson, dict):
                     errors.append({
                         'feature_id': feature_id,
-                        'error': 'No valid fields to update. Supported fields: name, description, tags, created'
+                        'error': 'Invalid feature data in database'
                     })
                     continue
-                
+
+                merged_feature = copy.deepcopy(original_geojson)
+
+                # Preserve existing system_tags from original feature
+                original_system_tags = extract_system_tags(original_geojson)
+
+                # Ensure the feature has the required structure (type, geometry, properties)
+                merged_feature['type'] = 'Feature'
+                if 'geometry' not in merged_feature or not merged_feature['geometry']:
+                    merged_feature['geometry'] = original_geojson.get('geometry', {})
+                if 'properties' not in merged_feature:
+                    merged_feature['properties'] = {}
+
+                for field, value in update_fields.items():
+                    if field == 'tags':
+                        user_tags = filter_protected_tags(value, CONST_INTERNAL_TAGS)
+                        user_tags = prepare_user_tags(user_tags)
+                        merged_feature['properties']['tags'] = user_tags
+                    else:
+                        merged_feature['properties'][field] = value
+
+                # Update system tags if created date was changed
+                updated_system_tags = original_system_tags
+                if 'created' in update_fields:
+                    updated_system_tags = update_feature_date_tags(original_system_tags, update_fields['created'])
+
+                # Run the merged feature through validate_and_normalize_geojson_feature()
                 try:
-                    # Get the feature from database
-                    feature = get_object_or_404_for_user(FeatureStore, request.user, id=feature_id)
-                    
-                    # Create a deep copy of the original feature to merge updates into
-                    original_geojson = feature.geojson
-                    
-                    # Ensure original_geojson is a dict (it should be, but be defensive)
-                    if not isinstance(original_geojson, dict):
-                        errors.append({
-                            'feature_id': feature_id,
-                            'error': 'Invalid feature data in database'
-                        })
-                        continue
-                    
-                    merged_feature = copy.deepcopy(original_geojson)
-                    
-                    # Preserve existing system_tags from original feature
-                    original_system_tags = _extract_system_tags(original_geojson)
-                    
-                    # Ensure the feature has the required structure (type, geometry, properties)
-                    merged_feature['type'] = 'Feature'
-                    if 'geometry' not in merged_feature or not merged_feature['geometry']:
-                        merged_feature['geometry'] = original_geojson.get('geometry', {})
-                    if 'properties' not in merged_feature:
-                        merged_feature['properties'] = {}
-                    
-                    for field, value in update_fields.items():
-                        if field == 'tags':
-                            user_tags = filter_protected_tags(value, CONST_INTERNAL_TAGS)
-                            user_tags = prepare_user_tags(user_tags)
-                            merged_feature['properties']['tags'] = user_tags
-                        else:
-                            merged_feature['properties'][field] = value
-                    
-                    # Update system tags if created date was changed
-                    updated_system_tags = original_system_tags
-                    if 'created' in update_fields:
-                        updated_system_tags = update_feature_date_tags(original_system_tags, update_fields['created'])
-                    
-                    # Run the merged feature through validate_and_normalize_geojson_feature()
-                    try:
-                        normalized_feature = _validate_and_preserve_feature(merged_feature)
-                        # Ensure system_tags are preserved after normalization
-                        normalized_feature['properties']['system_tags'] = updated_system_tags
-                    except GeometryValidationError as e:
-                        errors.append({
-                            'feature_id': feature_id,
-                            'error': f'Feature validation failed: {str(e)}'
-                        })
-                        continue
-                    
-                    # Update the feature's geojson data
-                    feature.geojson = normalized_feature
-                    feature.save()
-                    
-                    updated_count += 1
-                    
-                except Http404:
+                    normalized_feature = _validate_and_preserve_feature(merged_feature)
+                    # Ensure system_tags are preserved after normalization
+                    normalized_feature['properties']['system_tags'] = updated_system_tags
+                except GeometryValidationError as e:
                     errors.append({
                         'feature_id': feature_id,
-                        'error': 'Feature not found or access denied'
+                        'error': f'Feature validation failed: {str(e)}'
                     })
-                except Exception as e:
-                    logger.error(f"Error updating feature metadata {feature_id} in bulk update: {traceback.format_exc()}")
-                    errors.append({
-                        'feature_id': feature_id,
-                        'error': f'Failed to update feature metadata: {str(e)}'
-                    })
-        
-        return JsonResponse({
-            'updated_count': updated_count,
-            'errors': errors
-        })
-    
-    except Exception:
-        logger.error(f"Error in bulk update features metadata: {traceback.format_exc()}")
-        return error_response('Failed to process bulk update request', 500)
+                    continue
+
+                # Update the feature's geojson data
+                feature.geojson = normalized_feature
+                feature.save()
+
+                updated_count += 1
+
+            except Http404:
+                errors.append({
+                    'feature_id': feature_id,
+                    'error': 'Feature not found or access denied'
+                })
+            except Exception as e:
+                logger.error(f"Error updating feature metadata {feature_id} in bulk update: {traceback.format_exc()}")
+                errors.append({
+                    'feature_id': feature_id,
+                    'error': f'Failed to update feature metadata: {str(e)}'
+                })
+
+    return JsonResponse({
+        'updated_count': updated_count,
+        'errors': errors
+    })

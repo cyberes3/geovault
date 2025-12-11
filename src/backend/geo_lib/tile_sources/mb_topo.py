@@ -1,24 +1,42 @@
-from . import register_tile_source
+from geo_lib.tile_sources.registry import TileSource
 
-# Mapbuilder Topo configuration
-MB_TOPO_CONFIG = {
-    'id': 'mb_topo',
-    'name': 'Mapbuilder Topo',
-    'type': 'xyz',
-    'requires_proxy': True,
-    'url_template': 'https://caltopo.com/tile/mb_topo/{z}/{x}/{y}.png?ctdarkmode=false',
-    'proxy_config': {
-        'headers': {
-            'Origin': 'https://caltopo.com',
-            'Referer': 'https://caltopo.com/map.html',
-            'User-Agent': 'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36'
+
+class MapbuilderTopoTileSource(TileSource):
+    """Mapbuilder Topo tile source."""
+    
+    @property
+    def id(self):
+        return 'mb_topo'
+    
+    @property
+    def name(self):
+        return 'Mapbuilder Topo'
+    
+    @property
+    def type(self):
+        return 'xyz'
+    
+    @property
+    def requires_proxy(self):
+        return True
+    
+    @property
+    def url_template(self):
+        return 'https://caltopo.com/tile/mb_topo/{z}/{x}/{y}.png?ctdarkmode=false'
+    
+    @property
+    def proxy_config(self):
+        return {
+            'headers': {
+                'Origin': 'https://caltopo.com',
+                'Referer': 'https://caltopo.com/map.html',
+                'User-Agent': 'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36'
+            }
         }
-    },
-    'client_config': {
-        'type': 'xyz',
-        'url': '/api/tiles/mb_topo/{z}/{x}/{y}'
-    }
-}
-
-# Register the tile source
-register_tile_source('mb_topo', MB_TOPO_CONFIG)
+    
+    @property
+    def client_config(self):
+        return {
+            'type': 'xyz',
+            'url': '/api/tiles/mb_topo/{z}/{x}/{y}'
+        }

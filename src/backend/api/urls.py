@@ -12,7 +12,7 @@ from api.views.collections.management import (
     get_collection_features,
 )
 from api.views.config import get_config
-from api.views.features.bbox_query import get_geojson_data
+from api.views.features.get_geojson_data import get_geojson_data
 from api.views.features.creation import create_quick_point
 from api.views.features.deletion import delete_feature
 from api.views.features.export import export_feature_kmz

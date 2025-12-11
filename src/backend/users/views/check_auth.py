@@ -85,7 +85,7 @@ def get_user_storage(request):
             'storage_bytes': total_storage_bytes
         })
     except Exception as e:
-        logger = get_tagged_logger('access')
+        logger = get_tagged_logger()
         logger.error(f"Error calculating storage usage for user {request.user.id}:\n{traceback.format_exc()}")
         return JsonResponse({
             'error': 'Failed to calculate storage usage',

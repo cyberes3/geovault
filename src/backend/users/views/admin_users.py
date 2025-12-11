@@ -136,7 +136,7 @@ def list_all_users(request):
         })
 
     except Exception as e:
-        logger = get_tagged_logger('access')
+        logger = get_tagged_logger()
         logger.error(f"Error listing users for admin:\n{traceback.format_exc()}")
         return JsonResponse({
             'error': 'Failed to list users',

@@ -11,7 +11,7 @@ from api.views.collections.utils import get_collection_feature_ids
 from geo_lib.logging.console import get_tagged_logger
 from website.settings_utils import get_required_setting
 
-logger = get_tagged_logger()
+_logger = get_tagged_logger()
 
 
 class BboxQueryResult(NamedTuple):
@@ -263,7 +263,7 @@ def _convert_feature_to_geojson(feature: FeatureStore, public_safe: bool = False
     }
 
 
-def _get_features_in_bbox(bbox: Tuple[float, float, float, float], user_id: int, tag: str | None = None, collection_id: uuid.UUID | None = None, public_safe: bool = False, include_tags: bool = False, allow_downloads: bool = False) -> BboxQueryResult:
+def get_features_in_bbox(bbox: Tuple[float, float, float, float], user_id: int, tag: str | None = None, collection_id: uuid.UUID | None = None, public_safe: bool = False, include_tags: bool = False, allow_downloads: bool = False) -> BboxQueryResult:
     """
     Get features within bounding box from database, handling world-wide extents that cross the International Date Line.
     Returns both the features and the total count in a single optimized operation.
@@ -298,7 +298,7 @@ def _get_features_in_bbox(bbox: Tuple[float, float, float, float], user_id: int,
             bbox_polygon = Polygon.from_bbox(bbox)
             base_query = base_query_filter.filter(geometry__intersects=bbox_polygon)
         except Exception as e:
-            logger.warning(f"Error creating bbox polygon or spatial query: {e}. Falling back to world-wide query.")
+            _logger.warning(f"Error creating bbox polygon or spatial query: {e}. Falling back to world-wide query.")
             # Fallback to world-wide query if spatial query fails
             base_query = base_query_filter
 
@@ -332,7 +332,7 @@ def _get_features_in_bbox(bbox: Tuple[float, float, float, float], user_id: int,
         suspicious_result = is_large_extent and suspicious_result_min_count > total_count > 0
 
         if suspicious_result:
-            logger.warning(
+            _logger.warning(
                 f"Suspicious result: large extent (lon_span={lon_span:.1f}°, lat_span={lat_span:.1f}°) "
                 f"but only {total_count} features found. Falling back to world-wide query."
             )

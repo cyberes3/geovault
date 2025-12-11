@@ -10,7 +10,7 @@ from geo_lib.logging.console import get_tagged_logger
 from geo_lib.processing.jobs.helpers.status_tracker import ProcessingStatus
 from geo_lib.utils.redis_connection import get_redis_connection
 
-_logger = get_tagged_logger(__name__)
+_logger = get_tagged_logger()
 
 # TTL for completed/failed jobs: 10 minutes
 COMPLETED_JOB_TTL = 600

@@ -15,7 +15,7 @@ from api.utils.responses import (
     handle_404,
 )
 from api.validation.feature_updates import validate_payload, FeatureUpdatePayload, ImportToFeaturestorePayload
-from api.views.features.updates._shared import _extract_system_tags
+from api.views.features.updates.shared import extract_system_tags
 from geo_lib.logging.console import get_tagged_logger
 from geo_lib.processing.jobs.delete_job import DeleteJob
 from geo_lib.processing.jobs.helpers.redis_job_storage import get_user_jobs
@@ -25,7 +25,7 @@ from geo_lib.tags.const_strings import CONST_INTERNAL_TAGS, filter_protected_tag
 from geo_lib.validation.geojson.geojson_whitelist import validate_and_normalize_geojson_feature
 from geo_lib.website.auth import api_or_login_required_401
 
-logger = get_tagged_logger('access')
+_logger = get_tagged_logger()
 
 # Create singleton instances
 delete_job = DeleteJob(status_tracker)
@@ -76,20 +76,14 @@ def get_all_job_statuses(request):
     Get all background job statuses (import, delete, bulk_import, bulk_delete) for the current user from Redis.
     This endpoint allows API users to check job status without requiring WebSocket connections.
     """
-    try:
-        jobs = get_user_jobs(request.user.id)
-        return success_response({'jobs': jobs})
-    except Exception as e:
-        logger.error(f"Failed to get job statuses from Redis: {e}")
-        # Return empty list if Redis is unavailable rather than failing
-        return success_response({'jobs': []})
+    jobs = get_user_jobs(request.user.id)
+    return success_response({'jobs': jobs})
 
 
 @api_or_login_required_401()
 @handle_404
 def fetch_import_history_item(request, item_id: int):
     item = get_object_or_404_for_user(ImportQueue, request.user, id=item_id)
-
     response = HttpResponse(item.raw_file, content_type='application/octet-stream')
     response['Content-Disposition'] = 'attachment; filename="%s"' % item.original_filename
     return response
@@ -137,8 +131,8 @@ def search_import_item_features(request, item_id: int):
         })
 
     # Search configuration
-    PAGE_SIZE = 50
-    MAX_RESULTS = 150
+    page_size = 50
+    max_results = 150
     query_lower = query.lower()
 
     # Search through all features
@@ -161,8 +155,8 @@ def search_import_item_features(request, item_id: int):
             total_matches += 1
 
             # Only include in results if under limit
-            if len(matches) < MAX_RESULTS:
-                page = (feature_index // PAGE_SIZE) + 1
+            if len(matches) < max_results:
+                page = (feature_index // page_size) + 1
                 matches.append({
                     'feature_index': feature_index,
                     'page': page,
@@ -222,7 +216,7 @@ def update_import_item(request, item_id, validated_data):
         # Extract feature ID for matching (geojson_hash is not an updatable field)
         feature_id = properties.get('geojson_hash')
         if not feature_id:
-            logger.warning(f"Skipping feature without geojson_hash: {properties.get('name', 'Unnamed')}")
+            _logger.warning(f"Skipping feature without geojson_hash: {properties.get('name', 'Unnamed')}")
             continue
 
         # Extract only allowed updatable fields (name, description, created, tags)
@@ -233,7 +227,7 @@ def update_import_item(request, item_id, validated_data):
 
         # Validate that at least one field is being updated
         if not update_fields:
-            logger.warning(f"Skipping feature {feature_id}: no updatable fields provided")
+            _logger.warning(f"Skipping feature {feature_id}: no updatable fields provided")
             continue
 
         updates_by_id[feature_id] = update_fields
@@ -249,7 +243,7 @@ def update_import_item(request, item_id, validated_data):
                 merged_feature = copy.deepcopy(existing_feature)
 
                 # Preserve existing system_tags from original feature
-                original_system_tags = _extract_system_tags(existing_feature)
+                original_system_tags = extract_system_tags(existing_feature)
 
                 # Get the partial update fields
                 update_fields = updates_by_id[feature_id]

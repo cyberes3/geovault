@@ -17,7 +17,7 @@ from geo_lib.spatial.haversine import haversine_distance_miles
 
 _SKI_RESORTS = None
 _SKI_RESORTS_LOCK = Lock()
-_logger = get_tagged_logger(__name__)
+_logger = get_tagged_logger()
 
 
 def load_ski_resorts() -> List[Dict[str, Any]]:

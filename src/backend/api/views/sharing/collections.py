@@ -1,5 +1,4 @@
 """Collection sharing operations"""
-import traceback
 import uuid
 
 from django.db.models import F
@@ -8,14 +7,14 @@ from django.views.decorators.http import require_http_methods
 
 from api.models import TagShare, CollectionShare, Collection
 from api.utils.authorization import get_object_or_404_for_user
-from api.utils.responses import error_response, handle_404
+from api.utils.responses import handle_404
 from api.validation.feature_updates import validate_payload, CollectionSharePayload
-from api.views.features.bbox_query import _build_bbox_response, _get_features_in_bbox, _validate_bbox_params
-from api.views.sharing._shared import _validate_share_id
+from api.views.features.bbox_utils import _build_bbox_response, get_features_in_bbox, _validate_bbox_params
+from api.views.sharing.utils import validate_share_id
 from geo_lib.logging.console import get_tagged_logger
 from geo_lib.website.auth import api_or_login_required_401
 
-logger = get_tagged_logger('access')
+_logger = get_tagged_logger()
 
 
 @api_or_login_required_401()
@@ -81,44 +80,39 @@ def get_public_collection_share(request, share_id):
     - bbox: comma-separated bounding box (min_lon,min_lat,max_lon,max_lat) - required
     - zoom: zoom level (integer, 1-20) - optional, defaults to 10
     """
-    try:
-        # Validate share_id format (must be UUID4)
-        if not _validate_share_id(share_id):
-            return JsonResponse({
-                'error': 'Invalid share link',
-                'code': 404
-            }, status=404)
+    # Validate share_id format (must be UUID4)
+    if not validate_share_id(share_id):
+        return JsonResponse({
+            'error': 'Invalid share link',
+            'code': 404
+        }, status=404)
 
-        # Get the share
-        share = CollectionShare.objects.filter(share_id=share_id).select_related('collection').first()
-        
-        if not share:
-            # Return same error message to prevent information disclosure
-            return JsonResponse({
-                'error': 'Invalid share link',
-                'code': 404
-            }, status=404)
+    # Get the share
+    share = CollectionShare.objects.filter(share_id=share_id).select_related('collection').first()
 
-        # Validate bbox and zoom parameters
-        validation_result = _validate_bbox_params(request)
-        if isinstance(validation_result, JsonResponse):
-            return validation_result
-        bbox, zoom_level = validation_result
+    if not share:
+        # Return same error message to prevent information disclosure
+        return JsonResponse({
+            'error': 'Invalid share link',
+            'code': 404
+        }, status=404)
 
-        # Fetch data from database using collection query
-        query_result = _get_features_in_bbox(bbox, share.user.id, zoom_level, collection_id=share.collection.id, public_safe=True, include_tags=share.include_tags, allow_downloads=share.allow_downloads)
-        features = query_result.features
-        total_features_in_bbox = query_result.total_count
-        fallback_used = query_result.fallback_used
+    # Validate bbox and zoom parameters
+    validation_result = _validate_bbox_params(request)
+    if isinstance(validation_result, JsonResponse):
+        return validation_result
+    bbox, zoom_level = validation_result
 
-        # Build response using helper function, including collection name for frontend display
-        response_data = _build_bbox_response(features, total_features_in_bbox, zoom_level, fallback_used, collection_name=share.collection.name)
+    # Fetch data from database using collection query
+    query_result = get_features_in_bbox(bbox, share.user.id, collection_id=share.collection.id, public_safe=True, include_tags=share.include_tags, allow_downloads=share.allow_downloads)
+    features = query_result.features
+    total_features_in_bbox = query_result.total_count
+    fallback_used = query_result.fallback_used
 
-        # Increment access count atomically only on successful response
-        CollectionShare.objects.filter(share_id=share_id).update(access_count=F('access_count') + 1)
+    # Build response using helper function, including collection name for frontend display
+    response_data = _build_bbox_response(features, total_features_in_bbox, zoom_level, fallback_used, collection_name=share.collection.name)
 
-        return JsonResponse(response_data)
+    # Increment access count atomically only on successful response
+    CollectionShare.objects.filter(share_id=share_id).update(access_count=F('access_count') + 1)
 
-    except Exception:
-        logger.error(f"Error getting public collection share: {traceback.format_exc()}")
-        return error_response('Failed to get shared features', code=500)
+    return JsonResponse(response_data)

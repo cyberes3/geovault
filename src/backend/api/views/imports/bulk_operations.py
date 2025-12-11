@@ -1,18 +1,19 @@
 """Import bulk operations management"""
 import json
+import traceback
 
 from django.views.decorators.http import require_http_methods
 
 from api.models import ImportQueue
 from api.utils.authorization import get_object_or_404_for_user
 from api.utils.responses import error_response, success_response, server_error_response, handle_404
+from api.validation.bulk_opts import validate_bulk_operations_payload
 from api.validation.feature_updates import validate_payload, SkipStatePayload
 from geo_lib.feature_id import generate_geojson_hash
 from geo_lib.logging.console import get_tagged_logger
-from geo_lib.processing.import_operations.validation import validate_bulk_operations_payload
 from geo_lib.website.auth import api_or_login_required_401
 
-logger = get_tagged_logger('access')
+_logger = get_tagged_logger()
 
 
 @api_or_login_required_401()
@@ -53,11 +54,8 @@ def save_bulk_operations(request, item_id):
 
         return success_response({'msg': 'Bulk operations saved successfully'})
 
-    except (json.JSONDecodeError, ValueError) as e:
-        return error_response(str(e), code=400)
-    except Exception as e:
-        logger.error(f"Error saving bulk operations: {str(e)}")
-        return server_error_response('Failed to save bulk operations')
+    except (json.JSONDecodeError, ValueError):
+        return error_response('Invalid request data', code=400)
 
 
 @api_or_login_required_401()
@@ -68,8 +66,6 @@ def get_bulk_operations(request, item_id):
     Get bulk operations for an import queue item.
     """
     import_item = get_object_or_404_for_user(ImportQueue, request.user, id=item_id)
-
-    # Return bulk operations (default to empty dict if None)
     bulk_ops = import_item.bulk_operations or {}
     return success_response({'bulk_operations': bulk_ops})
 
@@ -91,34 +87,29 @@ def save_skip_state(request, item_id, validated_data):
             code=400
         )
 
-    try:
-        skipped_feature_ids = validated_data.get('skipped_feature_ids', [])
-        
-        # Validate that all feature IDs exist in the item's geofeatures
-        if skipped_feature_ids:
-            # Get all feature IDs from geofeatures
-            existing_feature_ids = set()
-            for feature in import_item.geofeatures:
-                geojson_hash = generate_geojson_hash(feature)
-                existing_feature_ids.add(geojson_hash)
-                # Also check if feature has an id property
-                if feature.get('properties', {}).get('geojson_hash'):
-                    existing_feature_ids.add(feature.get('properties', {}).get('geojson_hash'))
-            
-            # Validate all skipped IDs exist
-            invalid_ids = [fid for fid in skipped_feature_ids if fid not in existing_feature_ids]
-            if invalid_ids:
-                return error_response(
-                    f'Invalid feature IDs: {invalid_ids}',
-                    code=400
-                )
+    skipped_feature_ids = validated_data.get('skipped_feature_ids', [])
 
-        # Save skip state to the import queue item
-        import_item.skipped_feature_ids = skipped_feature_ids
-        import_item.save(update_fields=['skipped_feature_ids'])
+    # Validate that all feature IDs exist in the item's geofeatures
+    if skipped_feature_ids:
+        # Get all feature IDs from geofeatures
+        existing_feature_ids = set()
+        for feature in import_item.geofeatures:
+            geojson_hash = generate_geojson_hash(feature)
+            existing_feature_ids.add(geojson_hash)
+            # Also check if feature has an id property
+            if feature.get('properties', {}).get('geojson_hash'):
+                existing_feature_ids.add(feature.get('properties', {}).get('geojson_hash'))
 
-        return success_response({'msg': 'Skip state saved successfully'})
+        # Validate all skipped IDs exist
+        invalid_ids = [fid for fid in skipped_feature_ids if fid not in existing_feature_ids]
+        if invalid_ids:
+            return error_response(
+                f'Invalid feature IDs: {invalid_ids}',
+                code=400
+            )
 
-    except Exception as e:
-        logger.error(f"Error saving skip state: {str(e)}")
-        return server_error_response('Failed to save skip state')
+    # Save skip state to the import queue item
+    import_item.skipped_feature_ids = skipped_feature_ids
+    import_item.save(update_fields=['skipped_feature_ids'])
+
+    return success_response({'msg': 'Skip state saved successfully'})

@@ -11,7 +11,7 @@ from typing import Any, Dict, Optional
 
 from pydantic import BaseModel, Field, ValidationError, ConfigDict, field_validator, model_serializer
 
-from geo_lib.tile_sources import get_all_tile_sources
+from geo_lib.tile_sources.registry import get_all_tile_sources
 
 
 class ElevationProfileSource(str, Enum):

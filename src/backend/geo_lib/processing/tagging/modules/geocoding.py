@@ -13,7 +13,7 @@ from geo_lib.processing.tagging.base import TagGenerator
 from geo_lib.processing.logging import DatabaseLogLevel
 from geo_lib.logging.console import get_tagged_logger
 
-logger = get_tagged_logger(__name__)
+logger = get_tagged_logger()
 
 
 def get_representative_points(feature: GeoFeatureSupported) -> List[Tuple[float, float]]:

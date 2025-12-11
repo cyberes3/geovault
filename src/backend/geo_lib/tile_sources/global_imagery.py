@@ -1,24 +1,42 @@
-from . import register_tile_source
+from geo_lib.tile_sources.registry import TileSource
 
-# Global Imagery configuration
-GLOBAL_IMAGERY_CONFIG = {
-    'id': 'global_imagery',
-    'name': 'Global Imagery',
-    'type': 'xyz',
-    'requires_proxy': True,
-    'url_template': 'https://caltopo.com/tile/imagery/{z}/{x}/{y}.png',
-    'proxy_config': {
-        'headers': {
-            'Origin': 'https://caltopo.com',
-            'Referer': 'https://caltopo.com/map.html',
-            'User-Agent': 'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36'
+
+class GlobalImageryTileSource(TileSource):
+    """Global Imagery tile source."""
+    
+    @property
+    def id(self):
+        return 'global_imagery'
+    
+    @property
+    def name(self):
+        return 'Global Imagery'
+    
+    @property
+    def type(self):
+        return 'xyz'
+    
+    @property
+    def requires_proxy(self):
+        return True
+    
+    @property
+    def url_template(self):
+        return 'https://caltopo.com/tile/imagery/{z}/{x}/{y}.png'
+    
+    @property
+    def proxy_config(self):
+        return {
+            'headers': {
+                'Origin': 'https://caltopo.com',
+                'Referer': 'https://caltopo.com/map.html',
+                'User-Agent': 'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36'
+            }
         }
-    },
-    'client_config': {
-        'type': 'xyz',
-        'url': '/api/tiles/global_imagery/{z}/{x}/{y}'
-    }
-}
-
-# Register the tile source
-register_tile_source('global_imagery', GLOBAL_IMAGERY_CONFIG)
+    
+    @property
+    def client_config(self):
+        return {
+            'type': 'xyz',
+            'url': '/api/tiles/global_imagery/{z}/{x}/{y}'
+        }

@@ -19,5 +19,7 @@ class TaggedLoggerAdapter(logging.LoggerAdapter):
         return f"[{self.tag}] {msg}", kwargs
 
 
-def get_tagged_logger(name: str):
+def get_tagged_logger(name: str = None):
+    if not name:
+        name = __name__
     return TaggedLoggerAdapter(logging.getLogger(name.lower()), name.upper())

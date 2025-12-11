@@ -13,7 +13,7 @@ from django.conf import settings
 
 from geo_lib.logging.console import get_tagged_logger
 
-_logger = get_tagged_logger(__name__)
+_logger = get_tagged_logger()
 
 
 def _log_overpass_failure(

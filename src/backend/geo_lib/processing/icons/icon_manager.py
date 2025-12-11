@@ -15,7 +15,7 @@ from geo_lib.processing.icons.caltopo import _fix_nested_caltopo_url, _is_caltop
 from geo_lib.processing.icons.get import _get_icon_extension, _get_storage_path, extract_icon_from_kmz, fetch_remote_icon
 from geo_lib.processing.logging import ImportLog, DatabaseLogLevel
 
-_logger = get_tagged_logger(__name__)
+_logger = get_tagged_logger()
 
 # Valid image file extensions
 VALID_ICON_EXTENSIONS = {'.png', '.jpg', '.jpeg', '.gif', '.bmp', '.svg', '.webp', '.ico'}

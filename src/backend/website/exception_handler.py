@@ -13,7 +13,7 @@ from django.http import HttpResponse
 from api.utils.responses import server_error_response
 from geo_lib.logging.console import get_tagged_logger
 
-access_logger = get_tagged_logger('access')
+access_logger = get_tagged_logger()
 
 # Get root logger for global exception logging
 root_logger = logging.getLogger()

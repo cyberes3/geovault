@@ -10,9 +10,9 @@ from api.models import FeatureStore, ImportQueue
 from api.utils.authorization import get_object_or_404_for_user
 from api.utils.responses import error_response, handle_404
 from api.validation.feature_updates import validate_payload, ReplacementGeometryPayload
-from api.views.features.updates._shared import (
+from api.views.features.updates.shared import (
     _validate_tags,
-    _extract_system_tags,
+    extract_system_tags,
     _validate_and_preserve_feature,
     _validate_and_preserve_system_tags
 )
@@ -36,7 +36,7 @@ from geo_lib.validation.geometry_validation import (
 from geo_lib.validation.styling_validation import is_valid_icon_url
 from geo_lib.website.auth import api_or_login_required_401
 
-logger = get_tagged_logger('access')
+_logger = get_tagged_logger()
 
 
 @api_or_login_required_401()
@@ -75,8 +75,8 @@ def update_feature(request, feature_id):
         return error_response(str(e), 400)
 
     # Preserve existing system_tags from original feature
-    original_system_tags = _extract_system_tags(original_geojson)
-    
+    original_system_tags = extract_system_tags(original_geojson)
+
     # Validate, whitelist, and normalize the feature
     try:
         feature_data = _validate_and_preserve_feature(feature_data)
@@ -108,12 +108,12 @@ def update_feature(request, feature_id):
     new_tags = new_properties.get('tags', [])
     if not isinstance(new_tags, list):
         new_tags = []
-    
+
     # Validate tags
     is_valid, error_resp = _validate_tags(new_tags)
     if not is_valid:
         return error_resp
-    
+
     # Filter out any system tags that user might have added
     user_tags = filter_protected_tags(new_tags, CONST_INTERNAL_TAGS)
 
@@ -135,11 +135,11 @@ def update_feature(request, feature_id):
                 break
 
     # Handle icon URL changes
-    # Allow: removing icons (null/empty), setting new built-in icons (assets/), 
+    # Allow: removing icons (null/empty), setting new built-in icons (assets/),
     #        setting new uploaded icons (/api/icons/), keeping same icon
     # Prevent: manually changing existing icon URLs to arbitrary external URLs
     new_icon_url = new_properties.get('icon', '')
-    
+
     if original_icon_url:
         # Check if icon is being removed (main 'icon' property is empty)
         if new_icon_url == '':
@@ -152,8 +152,8 @@ def update_feature(request, feature_id):
             # Icon is being changed - validate new icon URL
             # Allow: same icon, built-in icons (assets/), uploaded icons (/api/icons/)
             if (
-                new_icon_url == original_icon_url
-                or is_valid_icon_url(new_icon_url)
+                    new_icon_url == original_icon_url
+                    or is_valid_icon_url(new_icon_url)
             ):
                 # Valid icon change - clear other icon property names to avoid conflicts
                 for prop_name in icon_property_names:
@@ -166,7 +166,7 @@ def update_feature(request, feature_id):
                 for prop_name in icon_property_names:
                     if prop_name != 'icon':
                         new_properties[prop_name] = ''
-                logger.warning(f"Attempted to manually change icon URL for feature {feature_id}, restored original")
+                _logger.warning(f"Attempted to manually change icon URL for feature {feature_id}, restored original")
     else:
         # No original icon - validate that new icons are built-in or uploaded (not external URLs)
         if isinstance(new_icon_url, str) and new_icon_url.strip():
@@ -178,7 +178,7 @@ def update_feature(request, feature_id):
                 for prop_name in icon_property_names:
                     if prop_name != 'icon':
                         new_properties[prop_name] = ''
-                logger.warning(f"Attempted to set external icon URL for feature {feature_id}, removed (only built-in and uploaded icons allowed)")
+                _logger.warning(f"Attempted to set external icon URL for feature {feature_id}, removed (only built-in and uploaded icons allowed)")
 
     # Note: stroke-width, fill, and fill-opacity normalization is now handled by validate_and_normalize_geojson_feature
     # The normalization function ensures stroke-width=2 for lines/polygons and proper fill/fill-opacity for polygons
@@ -189,41 +189,10 @@ def update_feature(request, feature_id):
     feature_data.setdefault('properties', {})['geojson_hash'] = generate_geojson_hash(feature_data)
 
     # Validate feature structure using the same validation as import conversion
-    try:
-        geom_type = feature_data.get('geometry', {}).get('type', '').lower()
-        feature_class = None
-
-        # GeometryCollection is not supported by the feature classes, but we allow it
-        if geom_type == 'geometrycollection':
-            # For GeometryCollection, we do basic validation but skip feature class validation
-            geom_data = feature_data.get('geometry', {})
-            if not geom_data.get('geometries') or not isinstance(geom_data.get('geometries'), list):
-                return error_response('GeometryCollection must have a geometries array', 400)
-            # Skip feature class validation for GeometryCollection
-            feature_class = None
-        else:
-            match geom_type:
-                case 'point' | 'multipoint':
-                    feature_class = PointFeature
-                case 'linestring':
-                    feature_class = LineStringFeature
-                case 'multilinestring':
-                    feature_class = MultiLineStringFeature
-                case 'polygon' | 'multipolygon':
-                    feature_class = PolygonFeature
-                case _:
-                    return error_response(f'Unsupported geometry type: {geom_type}', 400)
-
-        # Validate by instantiating the feature class (this will raise ValidationError if invalid)
-        # Skip for GeometryCollection as it's not supported by feature classes
-        if feature_class is not None:
-            validated_feature = feature_class(**feature_data)
-            # Convert back to dict for storage (this ensures proper structure)
-            feature_data = json.loads(validated_feature.model_dump_json())
-
-    except Exception as e:
-        logger.error(f"Feature validation error for feature {feature_id}: {traceback.format_exc()}")
-        return error_response(f'Feature validation failed: {str(e)}', 400)
+    is_valid, validated_data, error_msg = _validate_feature_with_class(feature_data, feature_id)
+    if not is_valid:
+        return error_response(error_msg, 400)
+    feature_data = validated_data
 
     # Update the feature data
     feature.geojson = feature_data
@@ -232,41 +201,7 @@ def update_feature(request, feature_id):
     feature.geojson_hash = generate_geojson_hash(feature_data)
 
     # Update the geometry field if coordinates changed
-    try:
-        geom_data = feature_data.get('geometry', {})
-        if geom_data and geom_data.get('type'):
-            # Handle GeometryCollection separately (not supported by GEOSGeometry)
-            if geom_data['type'] == 'GeometryCollection':
-                # For GeometryCollection, we can't use GEOSGeometry, so skip geometry field update
-                # The geometry will be stored in the geojson field
-                pass
-            elif geom_data.get('coordinates'):
-                # Ensure coordinates have 3 dimensions for consistency
-                coords = geom_data['coordinates']
-                if geom_data['type'] == 'Point':
-                    if len(coords) == 2:
-                        coords = [coords[0], coords[1], 0.0]
-                    elif len(coords) == 3:
-                        coords = [coords[0], coords[1], coords[2]]
-                    geom_data['coordinates'] = coords
-                elif geom_data['type'] == 'LineString':
-                    geom_data['coordinates'] = [
-                        [coord[0], coord[1], coord[2] if len(coord) > 2 else 0.0]
-                        for coord in coords
-                    ]
-                elif geom_data['type'] == 'Polygon':
-                    geom_data['coordinates'] = [
-                        [
-                            [coord[0], coord[1], coord[2] if len(coord) > 2 else 0.0]
-                            for coord in ring
-                        ]
-                        for ring in coords
-                    ]
-
-                feature.geometry = GEOSGeometry(json.dumps(geom_data))
-    except Exception as e:
-        logger.warning(f"Error updating geometry for feature {feature_id}: {e}")
-        # Continue without updating geometry if there's an error
+    _update_feature_geometry_field(feature, feature_data, feature_id)
 
     # Save the updated feature
     feature.save()
@@ -315,7 +250,7 @@ def apply_replacement_geometry(request, feature_id, validated_data):
 
     # Validate feature_index is within bounds
     if feature_index < 0 or feature_index >= len(geofeatures):
-        return error_response(f'feature_index {feature_index} is out of bounds (0-{len(geofeatures)-1})', 400)
+        return error_response(f'feature_index {feature_index} is out of bounds (0-{len(geofeatures) - 1})', 400)
 
     # Get the selected replacement feature
     replacement_feature = geofeatures[feature_index]
@@ -330,11 +265,11 @@ def apply_replacement_geometry(request, feature_id, validated_data):
     # Get original feature data
     original_geojson = feature.geojson.copy()
     original_properties = original_geojson.get('properties', {})
-    
+
     # Validate that geometry type hasn't changed
     original_geometry_type = original_geojson.get('geometry', {}).get('type', '').lower()
     replacement_geometry_type = replacement_geometry.get('type', '').lower()
-    
+
     if original_geometry_type != replacement_geometry_type:
         return error_response(
             f'Geometry type cannot change. Original: {original_geometry_type}, Replacement: {replacement_geometry_type}',
@@ -347,7 +282,7 @@ def apply_replacement_geometry(request, feature_id, validated_data):
         'geometry': replacement_geometry,
         'properties': original_properties
     }
-    
+
     # Generate temporary geojson_hash for the updated feature for validation purposes
     updated_feature.setdefault('properties', {})['geojson_hash'] = generate_geojson_hash(updated_feature)
 
@@ -358,41 +293,10 @@ def apply_replacement_geometry(request, feature_id, validated_data):
         return error_response(str(e), 400)
 
     # Validate feature structure using feature classes
-    try:
-        geom_type = feature_data.get('geometry', {}).get('type', '').lower()
-        feature_class = None
-
-        # GeometryCollection is not supported by the feature classes, but we allow it
-        if geom_type == 'geometrycollection':
-            # For GeometryCollection, we do basic validation but skip feature class validation
-            geom_data = feature_data.get('geometry', {})
-            if not geom_data.get('geometries') or not isinstance(geom_data.get('geometries'), list):
-                return error_response('GeometryCollection must have a geometries array', 400)
-            # Skip feature class validation for GeometryCollection
-            feature_class = None
-        else:
-            match geom_type:
-                case 'point' | 'multipoint':
-                    feature_class = PointFeature
-                case 'linestring':
-                    feature_class = LineStringFeature
-                case 'multilinestring':
-                    feature_class = MultiLineStringFeature
-                case 'polygon' | 'multipolygon':
-                    feature_class = PolygonFeature
-                case _:
-                    return error_response(f'Unsupported geometry type: {geom_type}', 400)
-
-        # Validate by instantiating the feature class (this will raise ValidationError if invalid)
-        # Skip for GeometryCollection as it's not supported by feature classes
-        if feature_class is not None:
-            validated_feature = feature_class(**feature_data)
-            # Convert back to dict for storage (this ensures proper structure)
-            feature_data = json.loads(validated_feature.model_dump_json())
-
-    except Exception as e:
-        logger.error(f"Feature validation error for replacement feature {feature_id}: {str(e)}")
-        return error_response(f'Feature validation failed: {str(e)}', 400)
+    is_valid, validated_data, error_msg = _validate_feature_with_class(feature_data, feature_id)
+    if not is_valid:
+        return error_response(error_msg, 400)
+    feature_data = validated_data
 
     # Validate and normalize the feature (including color/icon validation)
     try:
@@ -407,48 +311,14 @@ def apply_replacement_geometry(request, feature_id, validated_data):
     feature.geojson_hash = generate_geojson_hash(feature_data)
 
     # Update the geometry field if coordinates changed
-    try:
-        geom_data = feature_data.get('geometry', {})
-        if geom_data and geom_data.get('type'):
-            # Handle GeometryCollection separately (not supported by GEOSGeometry)
-            if geom_data['type'] == 'GeometryCollection':
-                # For GeometryCollection, we can't use GEOSGeometry, so skip geometry field update
-                # The geometry will be stored in the geojson field
-                pass
-            elif geom_data.get('coordinates'):
-                # Ensure coordinates have 3 dimensions for consistency
-                coords = geom_data['coordinates']
-                if geom_data['type'] == 'Point':
-                    if len(coords) == 2:
-                        coords = [coords[0], coords[1], 0.0]
-                    elif len(coords) == 3:
-                        coords = [coords[0], coords[1], coords[2]]
-                    geom_data['coordinates'] = coords
-                elif geom_data['type'] == 'LineString':
-                    geom_data['coordinates'] = [
-                        [coord[0], coord[1], coord[2] if len(coord) > 2 else 0.0]
-                        for coord in coords
-                    ]
-                elif geom_data['type'] == 'Polygon':
-                    geom_data['coordinates'] = [
-                        [
-                            [coord[0], coord[1], coord[2] if len(coord) > 2 else 0.0]
-                            for coord in ring
-                        ]
-                        for ring in coords
-                    ]
-
-                feature.geometry = GEOSGeometry(json.dumps(geom_data))
-    except Exception as e:
-        logger.warning(f"Error updating geometry for feature {feature_id}: {e}")
-        # Continue without updating geometry if there's an error
+    _update_feature_geometry_field(feature, feature_data, feature_id)
 
     # Regenerate tags if requested (using the new geometry)
     if regenerate_tags:
         try:
             # Preserve original import-year and import-month tags from the original feature
-            original_system_tags = _extract_system_tags(original_geojson)
-            
+            original_system_tags = extract_system_tags(original_geojson)
+
             # Extract import-year and import-month tags from original system_tags
             preserved_import_tags = [
                 tag for tag in original_system_tags
@@ -457,28 +327,18 @@ def apply_replacement_geometry(request, feature_id, validated_data):
 
             # Get the updated feature's geometry type
             geom_type = feature_data.get('geometry', {}).get('type', '').lower()
-            tag_feature_class = None
+            tag_feature_class = _get_feature_class_for_geometry_type(geom_type)
 
-            match geom_type:
-                case 'point' | 'multipoint':
-                    tag_feature_class = PointFeature
-                case 'linestring':
-                    tag_feature_class = LineStringFeature
-                case 'multilinestring':
-                    tag_feature_class = MultiLineStringFeature
-                case 'polygon' | 'multipolygon':
-                    tag_feature_class = PolygonFeature
-                case _:
-                    # Skip tag regeneration for unsupported geometry types (e.g., GeometryCollection)
-                    logger.warning(f"Skipping tag regeneration for unsupported geometry type: {geom_type}")
-                    tag_feature_class = None
+            if tag_feature_class is None:
+                # Skip tag regeneration for unsupported geometry types (e.g., GeometryCollection)
+                _logger.warning(f"Skipping tag regeneration for unsupported geometry type: {geom_type}")
 
             if tag_feature_class is not None:
                 # Create feature instance with the updated geometry for tag generation
                 try:
                     feature_instance: GeoFeatureSupported = tag_feature_class(**feature_data)
                 except Exception as e:
-                    logger.error(f"Error creating feature instance for tag regeneration {feature_id}: {str(e)}")
+                    _logger.error(f"Error creating feature instance for tag regeneration {feature_id}: {str(e)}")
                     # Continue without regenerating tags if feature instance creation fails
                 else:
                     # Get existing user tags (preserve them)
@@ -511,14 +371,14 @@ def apply_replacement_geometry(request, feature_id, validated_data):
                         feature_data['properties']['system_tags'] = new_system_tags
                         feature_data = _validate_and_preserve_feature(feature_data)
                     except GeometryValidationError as e:
-                        logger.error(f"Feature validation failed for feature {feature_id} during tag regeneration in replacement: {str(e)}")
+                        _logger.error(f"Feature validation failed for feature {feature_id} during tag regeneration in replacement: {str(e)}")
                         # Continue without regenerating tags if validation fails
                         feature_data = feature.geojson  # Restore original
 
                     # Update the feature's geojson with regenerated tags
                     feature.geojson = feature_data
-        except Exception as e:
-            logger.error(f"Error regenerating tags for feature {feature_id}: {traceback.format_exc()}")
+        except:
+            _logger.error(f"Error regenerating tags for feature {feature_id}: {traceback.format_exc()}")
             # Continue without regenerating tags if there's an error
 
     # Save the updated feature
@@ -531,3 +391,133 @@ def apply_replacement_geometry(request, feature_id, validated_data):
         'message': 'Replacement geometry applied successfully',
         'feature_id': feature.id
     })
+
+
+def _get_feature_class_for_geometry_type(geom_type: str):
+    """
+    Get the appropriate feature class for a given geometry type.
+    
+    Args:
+        geom_type: Geometry type string (lowercase)
+        
+    Returns:
+        Feature class or None for unsupported types
+    """
+    match geom_type:
+        case 'point' | 'multipoint':
+            return PointFeature
+        case 'linestring':
+            return LineStringFeature
+        case 'multilinestring':
+            return MultiLineStringFeature
+        case 'polygon' | 'multipolygon':
+            return PolygonFeature
+        case _:
+            return None
+
+
+def _validate_feature_with_class(feature_data: dict, feature_id: str = None) -> tuple[bool, dict | None, str | None]:
+    """
+    Validate a feature using the appropriate feature class based on geometry type.
+    
+    Args:
+        feature_data: Feature data dictionary
+        feature_id: Optional feature ID for logging
+        
+    Returns:
+        Tuple of (is_valid, validated_feature_data or None, error_message or None)
+    """
+    geom_type = feature_data.get('geometry', {}).get('type', '').lower()
+
+    # GeometryCollection is not supported by the feature classes, but we allow it
+    if geom_type == 'geometrycollection':
+        # For GeometryCollection, we do basic validation but skip feature class validation
+        geom_data = feature_data.get('geometry', {})
+        if not geom_data.get('geometries') or not isinstance(geom_data.get('geometries'), list):
+            return False, None, 'GeometryCollection must have a geometries array'
+        # Skip feature class validation for GeometryCollection
+        return True, feature_data, None
+
+    feature_class = _get_feature_class_for_geometry_type(geom_type)
+
+    if feature_class is None:
+        return False, None, f'Unsupported geometry type: {geom_type}'
+
+    try:
+        # Validate by instantiating the feature class (this will raise ValidationError if invalid)
+        validated_feature = feature_class(**feature_data)
+        # Convert back to dict for storage (this ensures proper structure)
+        feature_data = json.loads(validated_feature.model_dump_json())
+        return True, feature_data, None
+    except Exception as e:
+        log_msg = f"Feature validation error"
+        if feature_id:
+            log_msg += f" for feature {feature_id}"
+        log_msg += f": {str(e)}"
+        _logger.error(log_msg)
+        return False, None, f'Feature validation failed: {str(e)}'
+
+
+def _normalize_geometry_coordinates(geom_data: dict) -> dict:
+    """
+    Ensure coordinates have 3 dimensions for consistency.
+    
+    Args:
+        geom_data: Geometry data dictionary with 'type' and 'coordinates'
+        
+    Returns:
+        Geometry data with normalized coordinates
+    """
+    if not geom_data or not geom_data.get('type') or not geom_data.get('coordinates'):
+        return geom_data
+
+    coords = geom_data['coordinates']
+    geom_type = geom_data['type']
+
+    if geom_type == 'Point':
+        if len(coords) == 2:
+            coords = [coords[0], coords[1], 0.0]
+        elif len(coords) == 3:
+            coords = [coords[0], coords[1], coords[2]]
+        geom_data['coordinates'] = coords
+    elif geom_type == 'LineString':
+        geom_data['coordinates'] = [
+            [coord[0], coord[1], coord[2] if len(coord) > 2 else 0.0]
+            for coord in coords
+        ]
+    elif geom_type == 'Polygon':
+        geom_data['coordinates'] = [
+            [
+                [coord[0], coord[1], coord[2] if len(coord) > 2 else 0.0]
+                for coord in ring
+            ]
+            for ring in coords
+        ]
+
+    return geom_data
+
+
+def _update_feature_geometry_field(feature: FeatureStore, feature_data: dict, feature_id: str):
+    """
+    Update the Django geometry field from the feature data.
+    
+    Args:
+        feature: FeatureStore instance
+        feature_data: Feature data dictionary
+        feature_id: Feature ID for logging
+    """
+    try:
+        geom_data = feature_data.get('geometry', {})
+        if geom_data and geom_data.get('type'):
+            # Handle GeometryCollection separately (not supported by GEOSGeometry)
+            if geom_data['type'] == 'GeometryCollection':
+                # For GeometryCollection, we can't use GEOSGeometry, so skip geometry field update
+                # The geometry will be stored in the geojson field
+                pass
+            elif geom_data.get('coordinates'):
+                # Normalize coordinates to 3D
+                geom_data = _normalize_geometry_coordinates(geom_data)
+                feature.geometry = GEOSGeometry(json.dumps(geom_data))
+    except Exception as e:
+        _logger.warning(f"Error updating geometry for feature {feature_id}: {e}")
+        # Continue without updating geometry if there's an error

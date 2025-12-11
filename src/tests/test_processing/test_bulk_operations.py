@@ -2,7 +2,7 @@
 Tests for bulk operations validation and application.
 """
 import pytest
-from geo_lib.processing.import_operations.validation import validate_bulk_operations_payload
+from api.validation.bulk_opts import validate_bulk_operations_payload
 from geo_lib.processing.import_operations.styling import apply_bulk_operations
 
 

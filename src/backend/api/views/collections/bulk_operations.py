@@ -7,9 +7,9 @@ from django.views.decorators.http import require_http_methods
 from api.models import Collection, FeatureStore
 from api.utils.authorization import get_object_or_404_for_user
 from api.utils.responses import error_response, success_response, handle_404
-from api.views.collections._shared import _get_collection_feature_ids
+from api.views.collections.utils import get_collection_feature_ids
 from api.views.features.updates.bulk_operations import _apply_bulk_ops_and_save_feature
-from geo_lib.processing.import_operations.validation import validate_bulk_operations_payload
+from api.validation.bulk_opts import validate_bulk_operations_payload
 from geo_lib.website.auth import api_or_login_required_401
 
 
@@ -47,7 +47,7 @@ def apply_bulk_operations_to_collection(request, collection_id):
     collection = get_object_or_404_for_user(Collection, request.user, id=collection_id)
 
     # Build the same feature ID set used by get_collection_features/_count_collection_features
-    feature_ids_set = _get_collection_feature_ids(collection)
+    feature_ids_set = get_collection_feature_ids(collection)
 
     if not feature_ids_set:
         return success_response({

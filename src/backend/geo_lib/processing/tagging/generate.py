@@ -6,7 +6,7 @@ from geo_lib.processing.logging import DatabaseLogLevel
 from geo_lib.processing.tagging import _tag_generators, GeocodingTagGenerator
 from geo_lib.types.feature import GeoFeatureSupported
 
-_logger = get_tagged_logger(__name__)
+_logger = get_tagged_logger()
 
 
 def generate_auto_tags(

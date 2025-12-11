@@ -12,7 +12,7 @@ from geo_lib.logging.console import get_tagged_logger
 from geo_lib.processing.logging import ImportLog, DatabaseLogLevel
 from website.settings_utils import get_required_setting
 
-_logger = get_tagged_logger(__name__)
+_logger = get_tagged_logger()
 
 # Maximum points per API request (API limit is ~10,000)
 MAX_POINTS_PER_REQUEST = 10000

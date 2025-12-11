@@ -19,7 +19,7 @@ from geo_lib.processing.import_operations.styling import apply_bulk_operations
 from geo_lib.processing.import_operations.websocket import broadcast_item_imported
 from website.settings_utils import get_required_setting
 
-_logger = get_tagged_logger(__name__)
+_logger = get_tagged_logger()
 
 
 def delete_logs_by_log_id(log_id):
