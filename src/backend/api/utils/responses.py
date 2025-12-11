@@ -3,10 +3,11 @@ Standardized API response utilities using Pydantic models.
 Provides consistent response formats across all API endpoints.
 """
 
-from typing import Any, Dict, Optional
 from functools import wraps
-from pydantic import BaseModel, ConfigDict, Field
+from typing import Any, Dict, Optional
+
 from django.http import JsonResponse, Http404
+from pydantic import BaseModel, ConfigDict, Field
 
 
 class ErrorResponse(BaseModel):
@@ -20,7 +21,7 @@ class ErrorResponse(BaseModel):
             }
         }
     )
-    
+
     error: str = Field(..., description="Human-readable error message")
     code: int = Field(..., description="HTTP status code")
     details: Optional[Dict[str, Any]] = Field(default=None, description="Optional detailed error information")
@@ -36,15 +37,15 @@ class SuccessResponse(BaseModel):
             }
         }
     )
-    
+
     msg: Optional[str] = Field(default=None, description="Success message")
     data: Optional[Dict[str, Any]] = Field(default=None, description="Response data")
 
 
 def error_response(
-    error_message: str,
-    code: int = 400,
-    details: Optional[Dict[str, Any]] = None
+        error_message: str,
+        code: int = 400,
+        details: Optional[Dict[str, Any]] = None
 ) -> JsonResponse:
     """
     Create a standardized error response.
@@ -66,9 +67,9 @@ def error_response(
 
 
 def success_response(
-    data: Optional[Dict[str, Any]] = None,
-    message: Optional[str] = None,
-    status: int = 200
+        data: Optional[Dict[str, Any]] = None,
+        message: Optional[str] = None,
+        status: int = 200
 ) -> JsonResponse:
     """
     Create a standardized success response.
@@ -87,17 +88,17 @@ def success_response(
     """
     if data is None:
         data = {}
-    
+
     # If message is provided, include it in the response
     if message:
         data = {"msg": message, **data}
-    
+
     return JsonResponse(data, status=status)
 
 
 def validation_error_response(
-    field_errors: Dict[str, str],
-    message: str = "Validation failed"
+        field_errors: Dict[str, str],
+        message: str = "Validation failed"
 ) -> JsonResponse:
     """
     Create a validation error response with field-level errors.
@@ -184,6 +185,7 @@ def handle_404(view_func):
             obj = get_object_or_404_for_user(MyModel, request.user, id=obj_id)
             # ... rest of view logic
     """
+
     @wraps(view_func)
     def wrapper(request, *args, **kwargs):
         try:
@@ -192,5 +194,5 @@ def handle_404(view_func):
             # Extract message from Http404 if available
             message = str(e) if str(e) else "Resource not found"
             return not_found_response(message)
-    return wrapper
 
+    return wrapper

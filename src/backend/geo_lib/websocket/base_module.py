@@ -1,7 +1,7 @@
 """
 Base module for WebSocket realtime functionality.
 """
-
+import json
 from abc import ABC, abstractmethod
 from typing import Dict, Any
 
@@ -29,7 +29,7 @@ class BaseWebSocketModule(ABC):
     async def handle_message(self, message_type: str, data: Dict[str, Any]) -> None:
         """Handle incoming messages for this module."""
         pass
-    
+
     @abstractmethod
     async def send_initial_state(self) -> None:
         """Send initial state for this module."""
@@ -37,7 +37,7 @@ class BaseWebSocketModule(ABC):
 
     async def send_to_client(self, message_type: str, data: Dict[str, Any]) -> None:
         """Send a message to the client."""
-        await self.consumer.send(text_data=self.consumer.encode_json({
+        await self.consumer.send(text_data=json.dumps({
             'module': self.module_name,
             'type': message_type,
             'data': data

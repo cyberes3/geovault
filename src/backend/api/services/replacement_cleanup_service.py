@@ -11,7 +11,12 @@ from django.utils import timezone
 from api.models import ImportQueue
 from geo_lib.logging.console import get_tagged_logger
 
-logger = get_tagged_logger('ReplacementCleanupService')
+"""
+This is a really shitt implementation of background process daemons. Has a few issues.
+It works for now but if we need to add another background daemon we need to move to Celery.
+"""
+
+_logger = get_tagged_logger('ReplacementCleanupService')
 
 
 class ReplacementCleanupService:
@@ -35,7 +40,7 @@ class ReplacementCleanupService:
             if self._timer:
                 self._timer.cancel()
                 self._timer = None
-            logger.info("Stopped replacement cleanup service")
+            _logger.info("Stopped replacement cleanup service")
 
     def _schedule_next_run(self):
         """Schedule the next cleanup run in 60 seconds."""
@@ -75,7 +80,7 @@ class ReplacementCleanupService:
             if deleted_count > 0:
                 for row in rows_to_delete:
                     age_minutes = (timezone.now() - row.timestamp).total_seconds() / 60
-                    logger.info(
+                    _logger.info(
                         f'Deleting orphaned replacement ImportQueue row: '
                         f'id={row.id}, replacement_feature_id={row.replacement}, '
                         f'filename="{row.original_filename}", created={row.timestamp}, '
@@ -83,7 +88,7 @@ class ReplacementCleanupService:
                     )
 
         except Exception as e:
-            logger.error(f"Error in replacement cleanup service: {str(e)}", exc_info=True)
+            _logger.error(f"Error in replacement cleanup service: {str(e)}", exc_info=True)
         finally:
             # Schedule the next run
             if self._running:
@@ -115,13 +120,13 @@ def ensure_service_started():
     one instance runs, even if this function is called multiple times.
     """
     cleanup_service = get_cleanup_service()
-    
+
     with cleanup_service._lock:
         # Check if service is already running
         if cleanup_service._running or cleanup_service._timer is not None:
             return
-        
+
         # Start the service
         cleanup_service._running = True
-        logger.info("Replacement cleanup service started")
+        _logger.info("Replacement cleanup service started")
         cleanup_service._schedule_next_run()

@@ -5,9 +5,9 @@ This module provides validation for feature update payloads using Pydantic model
 Validates structure and content of feature update requests before processing.
 """
 
+import uuid
 from datetime import datetime
 from typing import Any, Dict, List, Optional, Union
-import uuid
 
 from pydantic import BaseModel, Field, ValidationError, ConfigDict, field_validator
 
@@ -27,14 +27,14 @@ class BaseMetadataFields(BaseModel):
     description: Optional[str] = Field(default=None, description="Feature description")
     tags: Optional[List[str]] = Field(default=None, description="Feature tags")
     created: Optional[str] = Field(default=None, description="Feature creation date (ISO format)")
-    
+
     # Icon and styling fields (for points)
     icon: Optional[str] = Field(default=None, description="Icon URL or empty string to remove icon")
     marker_color: Optional[str] = Field(default=None, alias='marker-color', description="Marker color (hex)")
-    
+
     # Styling fields (for lines and polygons)
     stroke: Optional[str] = Field(default=None, description="Stroke color (hex)")
-    
+
     # Geometry update field (coordinates or geometries array)
     coordinates: Optional[Union[List, List[List], List[List[List]]]] = Field(default=None, description="Coordinates array to update geometry (JSON array)")
 
@@ -49,7 +49,7 @@ class BaseMetadataFields(BaseModel):
         except (ValueError, AttributeError):
             raise ValueError('created must be a valid ISO datetime string')
         return v
-    
+
     @field_validator('marker_color', 'stroke')
     @classmethod
     def validate_color(cls, v: Any) -> Optional[str]:
@@ -59,7 +59,7 @@ class BaseMetadataFields(BaseModel):
         if not is_valid_hex_color(v):
             raise ValueError('Color must be a valid hex color')
         return v
-    
+
     @field_validator('icon')
     @classmethod
     def validate_icon(cls, v: Any) -> Optional[str]:
@@ -124,13 +124,13 @@ class FeatureMetadataUpdate(BaseMetadataFields):
 class BulkOperationsPayload(BaseModel):
     """Pydantic model for bulk operations (styling/tagging)."""
     model_config = ConfigDict(extra='forbid')
-    
+
     tags: Optional[List[str]] = Field(default=None, description="Tags to apply")
     pointColor: Optional[str] = Field(default=None, description="Point color (hex)")
     pointIcon: Optional[str] = Field(default=None, description="Point icon URL")
     lineColor: Optional[str] = Field(default=None, description="Line color (hex)")
     polyColor: Optional[str] = Field(default=None, description="Polygon color (hex)")
-    
+
     @field_validator('pointColor', 'lineColor', 'polyColor')
     @classmethod
     def validate_color(cls, v: Any) -> Optional[str]:
@@ -139,7 +139,7 @@ class BulkOperationsPayload(BaseModel):
         if not is_valid_hex_color(v):
             raise ValueError('Invalid hex color')
         return v
-    
+
     @field_validator('pointIcon')
     @classmethod
     def validate_icon(cls, v: Any) -> Optional[str]:
@@ -304,15 +304,16 @@ def validate_payload(model_class: Type[BaseModel], allow_empty: bool = False):
             # Empty body is allowed, validated_data will be {}
             ...
     """
+
     def decorator(view_func):
         @wraps(view_func)
         def wrapper(request, *args, **kwargs):
-            
+
             # Handle empty body - check for truly empty or just boundary markers
             # Django Test Client may send boundary markers even with no actual content
             body = request.body
             has_body = bool(body and len(body) > 0)
-            
+
             # If there's a body, try to parse it as JSON
             # If it fails (e.g., it's just boundary markers), treat as empty
             if has_body:
@@ -323,7 +324,7 @@ def validate_payload(model_class: Type[BaseModel], allow_empty: bool = False):
                     content_type = request.META.get('CONTENT_TYPE', '')
                     body_str = body.decode('utf-8', errors='ignore') if isinstance(body, bytes) else str(body)
                     looks_like_json = 'json' in content_type.lower() or body_str.strip().startswith(('{', '['))
-                    
+
                     if looks_like_json:
                         # Intentional JSON that failed to parse - return error
                         return error_response('Invalid JSON in request body', code=400)
@@ -333,7 +334,7 @@ def validate_payload(model_class: Type[BaseModel], allow_empty: bool = False):
                         return view_func(request, *args, **kwargs)
                     else:
                         return error_response('Invalid JSON in request body', code=400)
-                
+
                 # Valid JSON - validate against Pydantic model
                 try:
                     validated_data = validate_pydantic_model(model_class, data)
@@ -348,6 +349,7 @@ def validate_payload(model_class: Type[BaseModel], allow_empty: bool = False):
                     return view_func(request, *args, **kwargs)
                 else:
                     return error_response('Request body is required', code=400)
-        
+
         return wrapper
+
     return decorator

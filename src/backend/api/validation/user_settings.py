@@ -7,7 +7,7 @@ Settings are structured as nested JSON objects.
 
 from enum import Enum
 from functools import lru_cache
-from typing import Any, Dict, Optional
+from typing import Any, Dict, List, Optional
 
 from pydantic import BaseModel, Field, ValidationError, ConfigDict, field_validator, model_serializer
 
@@ -171,4 +171,35 @@ def validate_settings(settings: Dict[str, Any]) -> tuple[bool, Optional[str], Op
             error_message = 'Validation failed'
         
         return False, error_message, error_details, None
+
+
+# ============================================================================
+# User Settings Update Payloads
+# ============================================================================
+
+class UserSettingsUpdatePayload(BaseModel):
+    """
+    Pydantic model for update_user_setting request body.
+    Accepts a partial nested JSON object (any settings fields can be updated).
+    """
+    model_config = ConfigDict(extra='allow')  # Allow any nested settings
+    
+    # No specific fields defined - accepts any dict structure
+    # Validation is done by UserSettingsModel after merging
+
+
+class BulkUpdateHiddenFeaturesPayload(BaseModel):
+    """
+    Pydantic model for bulk_update_hidden_features request body.
+    """
+    model_config = ConfigDict(extra='forbid')
+    
+    add: Optional[List[Any]] = Field(
+        default_factory=list,
+        description="List of feature IDs to add to hidden features"
+    )
+    remove: Optional[List[Any]] = Field(
+        default_factory=list,
+        description="List of feature IDs to remove from hidden features"
+    )
 

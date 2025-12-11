@@ -4,7 +4,8 @@ from django.http import JsonResponse
 from django.views.decorators.http import require_http_methods
 
 from api.models import Collection
-from api.utils import handle_404, get_object_or_404_for_user
+from api.utils.authorization import get_object_or_404_for_user
+from api.utils.responses import handle_404
 from api.views.features.bbox_utils import _validate_bbox_params, get_features_in_bbox, _build_bbox_response
 from geo_lib.website.auth import api_or_login_required_401
 

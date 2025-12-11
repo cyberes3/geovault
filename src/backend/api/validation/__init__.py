@@ -1,3 +1,0 @@
-# Validation module for API
-
-

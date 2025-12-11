@@ -16,7 +16,7 @@ from geo_lib.logging.console import get_tagged_logger
 from geo_lib.utils.ip_utils import get_client_ip, get_user_identifier
 from geo_lib.websocket.modules.process_status_module import ProcessStatusModule
 
-logger = get_tagged_logger('websocket')
+_logger = get_tagged_logger()
 
 
 class ProcessStatusConsumer(AsyncWebsocketConsumer):
@@ -29,22 +29,22 @@ class ProcessStatusConsumer(AsyncWebsocketConsumer):
 
     async def connect(self):
         """Handle WebSocket connection."""
-        
+
         path = self.scope.get('path', 'unknown')
         client_ip = 'unknown'
         user_identifier = 'unknown'
-        
+
         # Get user from scope (AuthMiddlewareStack should set this)
         self.user = self.scope.get("user")
         if self.user is None:
             # If user is not in scope, default to AnonymousUser
             self.user = AnonymousUser()
-        
+
         client_ip = get_client_ip(self.scope)
 
         # Reject connection if user is not authenticated
         if isinstance(self.user, AnonymousUser):
-            logger.warning(f"WebSocket connection rejected: {path} - Anonymous@{client_ip}")
+            _logger.warning(f"WebSocket connection rejected: {path} - Anonymous@{client_ip}")
             # Don't accept the connection - just return without accepting
             # This will cause the connection to fail gracefully
             return
@@ -61,10 +61,10 @@ class ProcessStatusConsumer(AsyncWebsocketConsumer):
 
             # Only accept the connection if the item exists and user owns it
             await self.accept()
-            
+
             # Log successful connection
             user_identifier = get_user_identifier(self.scope)
-            logger.info(f"WebSocket connected: {path} - {user_identifier}@{client_ip} - Item: {self.item_id}")
+            _logger.info(f"WebSocket connected: {path} - {user_identifier}@{client_ip} - Item: {self.item_id}")
 
             # Create item-specific room group
             self.room_group_name = f"process_status_{self.user.id}_{self.item_id}"
@@ -85,7 +85,7 @@ class ProcessStatusConsumer(AsyncWebsocketConsumer):
             # Accept connection briefly to send error message, then close
             await self.accept()
             user_identifier = get_user_identifier(self.scope)
-            logger.warning(f"WebSocket connection rejected: {path} - {user_identifier}@{client_ip} - Item {self.item_id} not found")
+            _logger.warning(f"WebSocket connection rejected: {path} - {user_identifier}@{client_ip} - Item {self.item_id} not found")
             await self.send(text_data=json.dumps({
                 'type': 'error',
                 'data': {
@@ -94,12 +94,9 @@ class ProcessStatusConsumer(AsyncWebsocketConsumer):
                 }
             }))
             await self.close(code=4004)  # 4004 = 404 Not Found
-        except Exception as e:
-            # Log the full traceback for debugging
-            traceback_str = traceback.format_exc()
-            user_identifier = get_user_identifier(self.scope)
-            logger.error(f"WebSocket connection error: {path} - {user_identifier}@{client_ip}\n{traceback_str}")
-            
+        except:
+            _logger.error(f"WebSocket connection error: {path} - {get_user_identifier(self.scope)}@{client_ip}: {traceback.format_exc()}")
+
             # Try to accept and close the connection with error code if not already accepted
             try:
                 # Check if connection was already accepted by checking if room_group_name exists
@@ -109,9 +106,8 @@ class ProcessStatusConsumer(AsyncWebsocketConsumer):
                 else:
                     # Connection was accepted, close it properly
                     await self.close(code=1011)  # 1011 = Internal Server Error
-            except Exception as close_error:
-                # Log error when closing connection after initial error
-                logger.warning(f"Error closing WebSocket connection after error: {path} - {user_identifier}@{client_ip} - Item: {self.item_id}: {str(close_error)}")
+            except:
+                pass
 
     async def disconnect(self, close_code):
         """Handle WebSocket disconnection."""
@@ -119,8 +115,8 @@ class ProcessStatusConsumer(AsyncWebsocketConsumer):
         client_ip = get_client_ip(self.scope)
         user_identifier = get_user_identifier(self.scope)
         item_id = getattr(self, 'item_id', 'Unknown')
-        logger.info(f"WebSocket disconnected: {path} - {user_identifier}@{client_ip} - Item: {item_id} - Close code: {close_code}")
-        
+        _logger.info(f"WebSocket disconnected: {path} - {user_identifier}@{client_ip} - Item: {item_id} - Close code: {close_code}")
+
         if self.room_group_name:
             # Leave room group
             await self.channel_layer.group_discard(
@@ -152,15 +148,11 @@ class ProcessStatusConsumer(AsyncWebsocketConsumer):
                     page_size = message_data.get('page_size', 50)
                     await self.process_status_module.send_page(page, page_size)
                 else:
-                    logger.warning(f"Unknown message type for process status: {message_type}")
+                    _logger.warning(f"Unknown message type for process status: {message_type}")
             except json.JSONDecodeError:
-                logger.warning(f"Invalid JSON received from user {self.user.id}")
+                _logger.warning(f"Invalid JSON received from user {self.user.id}")
         elif bytes_data:
-            logger.warning("Binary data received but not supported")
-
-    def encode_json(self, data):
-        """Encode data as JSON."""
-        return json.dumps(data)
+            _logger.warning("Binary data received but not supported")
 
     # Event handlers for WebSocket events
     async def status_updated(self, event):

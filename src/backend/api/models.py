@@ -48,31 +48,31 @@ class FeatureStore(models.Model):
             models.Index(fields=['user', 'timestamp']),
             GistIndex(fields=['geometry'], name='featurestore_geometry_idx'),  # GIST spatial index
             models.Index(fields=['geojson_hash']),  # Index for hash-based lookups
-            
+
             # NEW COMPOUND INDEXES FOR OPTIMIZED QUERIES (with short names)
             # NOTE: Removed compound indexes that include geometry fields to avoid PostgreSQL
             # btree index size limits. Geometry fields use GiST spatial indexes instead.
-            
+
             # 1. User + Hash lookups (used in duplicate detection and hash-based queries)
             # Optimizes queries like: user_id=user_id, geojson_hash=hash
             models.Index(fields=['user', 'geojson_hash'], name='fs_user_hash'),
-            
+
             # 2. User + Timestamp for chronological queries
             # Optimizes queries like: user_id=user_id ORDER BY timestamp
             models.Index(fields=['user', 'timestamp'], name='fs_user_time'),
-            
+
             # 3. User + Source for import tracking
             # Optimizes queries like: user_id=user_id, source=import_queue
             models.Index(fields=['user', 'source'], name='fs_user_source'),
-            
+
             # 4. Hash + Timestamp for hash-based chronological queries
             # Optimizes duplicate detection with temporal ordering
             models.Index(fields=['geojson_hash', 'timestamp'], name='fs_hash_time'),
-            
+
             # 5. GIN index for user tags JSONB array (for efficient containment queries)
             # Optimizes queries like: geojson->'properties'->'tags' @> '["tag_name"]'
             GinIndex(fields=['geojson'], name='fs_tags_gin', opclasses=['jsonb_path_ops']),
-            
+
             # 6. GIN index for system tags JSONB array (for efficient containment queries)
             # Optimizes queries like: geojson->'properties'->'system_tags' @> '["tag_name"]'
             # Note: Using same GIN index as above since jsonb_path_ops covers all JSONB paths
@@ -106,21 +106,21 @@ class DatabaseLogging(django_models.Model):
             django_models.Index(fields=['source']),
             django_models.Index(fields=['level']),
             django_models.Index(fields=['log_id', 'timestamp']),
-            
+
             # NEW COMPOUND INDEXES FOR OPTIMIZED LOGGING QUERIES (with short names)
-            
+
             # 1. User + Level + Timestamp for filtered log queries
             # Optimizes queries like: user_id=user_id, level=ERROR ORDER BY timestamp
             django_models.Index(fields=['user', 'level', 'timestamp'], name='log_user_level_time'),
-            
+
             # 2. User + Source + Timestamp for source-specific log queries
             # Optimizes queries like: user_id=user_id, source='import' ORDER BY timestamp
             django_models.Index(fields=['user', 'source', 'timestamp'], name='log_user_source_time'),
-            
+
             # 3. Log ID + Level for log analysis
             # Optimizes queries like: log_id=uuid, level=ERROR
             django_models.Index(fields=['log_id', 'level'], name='log_logid_level'),
-            
+
             # 4. Source + Level + Timestamp for system-wide log analysis
             # Optimizes queries like: source='import', level=ERROR ORDER BY timestamp
             django_models.Index(fields=['source', 'level', 'timestamp'], name='log_source_level_time'),

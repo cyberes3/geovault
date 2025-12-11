@@ -12,10 +12,10 @@ from api.views.collections.management import (
     get_collection_features,
 )
 from api.views.config import get_config
-from api.views.features.get_geojson_data import get_geojson_data
 from api.views.features.creation import create_quick_point
 from api.views.features.deletion import delete_feature
 from api.views.features.export import export_feature_kmz
+from api.views.features.get_geojson_data import get_geojson_data
 from api.views.features.retrieval import get_feature, get_feature_elevations_external, get_feature_elevations_internal
 from api.views.features.search import (
     get_features_by_tag,

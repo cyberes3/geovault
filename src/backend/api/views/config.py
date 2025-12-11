@@ -17,12 +17,12 @@ def get_config(request):
         'systemTagPrefixes': CONST_INTERNAL_TAGS,
         'tagPriorities': TAG_PRIORITIES
     }
-    
+
     # Add MapTiler settings if configured (only expose if API key is set)
     config_loader = get_config_loader()
     maptiler_api_key = config_loader.get_maptiler_api_key()
     use_proxy = config_loader.get_bool('maptiler.proxy_tiles', False)
-    
+
     if maptiler_api_key:
         maptiler_config = {
             'proxy_tiles': use_proxy
@@ -30,7 +30,7 @@ def get_config(request):
         # Only expose API key if not using proxy (proxy uses server-side key)
         if not use_proxy:
             maptiler_config['apiKey'] = maptiler_api_key
-        
+
         config['maptiler'] = maptiler_config
-    
+
     return JsonResponse(config)

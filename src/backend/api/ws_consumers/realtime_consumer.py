@@ -8,16 +8,16 @@ import traceback
 from channels.generic.websocket import AsyncWebsocketConsumer
 from django.contrib.auth.models import AnonymousUser
 
+from geo_lib.logging.console import get_tagged_logger
+from geo_lib.utils.ip_utils import get_client_ip, get_user_identifier
+from geo_lib.websocket.modules.bulk_delete_job_module import BulkDeleteJobModule
+from geo_lib.websocket.modules.bulk_import_job_module import BulkImportJobModule
 from geo_lib.websocket.modules.delete_job_module import DeleteJobModule
 from geo_lib.websocket.modules.import_history_module import ImportHistoryModule
 from geo_lib.websocket.modules.import_queue_module import ImportQueueModule
 from geo_lib.websocket.modules.process_job_module import ProcessJobModule
-from geo_lib.websocket.modules.bulk_import_job_module import BulkImportJobModule
-from geo_lib.websocket.modules.bulk_delete_job_module import BulkDeleteJobModule
-from geo_lib.logging.console import get_tagged_logger
-from geo_lib.utils.ip_utils import get_client_ip, get_user_identifier
 
-logger = get_tagged_logger('websocket')
+_logger = get_tagged_logger()
 
 
 class RealtimeConsumer(AsyncWebsocketConsumer):
@@ -39,23 +39,22 @@ class RealtimeConsumer(AsyncWebsocketConsumer):
 
     async def connect(self):
         """Handle WebSocket connection."""
-        
+
         path = self.scope.get('path', 'unknown')
         client_ip = 'unknown'
-        user_identifier = 'unknown'
-        
+
         try:
             # Get user from scope (AuthMiddlewareStack should set this)
             self.user = self.scope.get("user")
             if self.user is None:
                 # If user is not in scope, default to AnonymousUser
                 self.user = AnonymousUser()
-            
+
             client_ip = get_client_ip(self.scope)
 
             # Reject connection if user is not authenticated
             if isinstance(self.user, AnonymousUser):
-                logger.warning(f"WebSocket connection rejected: {path} - Anonymous@{client_ip}")
+                _logger.warning(f"WebSocket connection rejected: {path} - Anonymous@{client_ip}")
                 # Don't accept the connection - just return without accepting
                 # This will cause the connection to fail gracefully
                 return
@@ -70,10 +69,10 @@ class RealtimeConsumer(AsyncWebsocketConsumer):
             )
 
             await self.accept()
-            
+
             # Log successful connection
             user_identifier = get_user_identifier(self.scope)
-            logger.info(f"WebSocket connected: {path} - {user_identifier}@{client_ip}")
+            _logger.info(f"WebSocket connected: {path} - {user_identifier}@{client_ip}")
 
             # Load modules now that user is available
             self._load_modules()
@@ -81,13 +80,10 @@ class RealtimeConsumer(AsyncWebsocketConsumer):
             # Send initial state for all modules
             for module in self.modules.values():
                 await module.send_initial_state()
-                
-        except Exception as e:
-            # Log the full traceback for debugging
-            traceback_str = traceback.format_exc()
-            user_identifier = get_user_identifier(self.scope)
-            logger.error(f"WebSocket connection error: {path} - {user_identifier}@{client_ip}\n{traceback_str}")
-            
+
+        except:
+            _logger.error(f"WebSocket connection error: {path} - {get_user_identifier(self.scope)}@{client_ip}: {traceback.format_exc()}")
+
             # Try to accept and close the connection with error code if not already accepted
             try:
                 # Check if connection was already accepted by checking if room_group_name exists
@@ -97,33 +93,29 @@ class RealtimeConsumer(AsyncWebsocketConsumer):
                 else:
                     # Connection was accepted, close it properly
                     await self.close(code=1011)  # 1011 = Internal Server Error
-            except Exception as close_error:
-                # Log error when closing connection after initial error
-                logger.warning(f"Error closing WebSocket connection after error: {path} - {user_identifier}@{client_ip}: {str(close_error)}")
+            except:
+                pass
 
     async def disconnect(self, close_code):
         """Handle WebSocket disconnection."""
-        
+
         path = self.scope.get('path', 'unknown')
         client_ip = 'unknown'
-        user_identifier = 'unknown'
-        
+
         try:
             client_ip = get_client_ip(self.scope)
             user_identifier = get_user_identifier(self.scope)
-            logger.info(f"WebSocket disconnected: {path} - {user_identifier}@{client_ip} - Close code: {close_code}")
-            
+            _logger.info(f"WebSocket disconnected: {path} - {user_identifier}@{client_ip} - Close code: {close_code}")
+
             # Leave room group if it was created
             if hasattr(self, 'room_group_name') and self.room_group_name:
                 await self.channel_layer.group_discard(
                     self.room_group_name,
                     self.channel_name
                 )
-        except Exception as e:
+        except:
             # Log the error but don't raise - we're already disconnecting
-            traceback_str = traceback.format_exc()
-            user_identifier = get_user_identifier(self.scope)
-            logger.error(f"WebSocket disconnect error: {path} - {user_identifier}@{client_ip}\n{traceback_str}")
+            _logger.error(f"WebSocket disconnect error: {path} - {get_user_identifier(self.scope)}@{client_ip}: {traceback.format_exc()}")
 
     async def receive(self, text_data=None, bytes_data=None):
         """Handle messages received from WebSocket."""
@@ -136,7 +128,7 @@ class RealtimeConsumer(AsyncWebsocketConsumer):
 
                 if message_type == 'ping':
                     # Send pong response in the same format as other messages
-                    await self.send(text_data=self.encode_json({
+                    await self.send(text_data=json.dumps({
                         'module': 'ping',
                         'type': 'pong',
                         'data': {}
@@ -144,15 +136,11 @@ class RealtimeConsumer(AsyncWebsocketConsumer):
                 elif module_name in self.modules:
                     await self.modules[module_name].handle_message(message_type, message_data)
                 else:
-                    logger.warning(f"Unknown module: {module_name}")
+                    _logger.warning(f"Unknown module: {module_name}")
             except json.JSONDecodeError:
-                logger.warning(f"Invalid JSON received from user {self.user.id}")
+                _logger.warning(f"Invalid JSON received from user {self.user.id}")
         elif bytes_data:
-            logger.warning("Binary data received but not supported")
-
-    def encode_json(self, data):
-        """Encode data as JSON."""
-        return json.dumps(data)
+            _logger.warning("Binary data received but not supported")
 
     # Dynamic event routing - automatically route events to modules
     def __getattr__(self, name):
@@ -177,6 +165,3 @@ class RealtimeConsumer(AsyncWebsocketConsumer):
 
         # If not a module event, raise AttributeError
         raise AttributeError(f"'{self.__class__.__name__}' object has no attribute '{name}'")
-
-
-

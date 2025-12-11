@@ -1,11 +1,13 @@
-import json
-import traceback
-
 from django.http import JsonResponse, HttpResponse
 from django.views.decorators.http import require_http_methods
 
 from api.models import UserSettings, FeatureStore
-from api.validation.user_settings import validate_settings
+from api.validation.feature_updates import validate_payload
+from api.validation.user_settings import (
+    validate_settings,
+    UserSettingsUpdatePayload,
+    BulkUpdateHiddenFeaturesPayload,
+)
 from geo_lib.logging.console import get_tagged_logger
 from geo_lib.website.auth import api_or_login_required_401
 
@@ -44,67 +46,46 @@ def get_user_settings(request):
 
 @api_or_login_required_401()
 @require_http_methods(["PUT", "PATCH"])
-def update_user_setting(request):
+@validate_payload(UserSettingsUpdatePayload)
+def update_user_setting(request, validated_data):
     """
     Update user settings with a partial nested JSON object.
 
     PUT/PATCH body: Partial nested JSON object (e.g., {"map": {"elevation_profile_source": "api"}})
     The provided settings will be deep merged with existing settings.
     """
-    try:
-        data = json.loads(request.body)
+    # Get or create UserSettings for the user
+    user_settings, created = UserSettings.objects.get_or_create(user=request.user)
 
-        # Validate that data is a dictionary
-        if not isinstance(data, dict):
-            return JsonResponse({
-                'error': 'Request body must be a JSON object',
-                'code': 400
-            }, status=400)
+    # Get existing settings
+    existing_settings = user_settings.settings or {}
 
-        # Get or create UserSettings for the user
-        user_settings, created = UserSettings.objects.get_or_create(user=request.user)
+    # Deep merge incoming settings with existing settings
+    merged_settings = deep_merge(existing_settings, validated_data)
 
-        # Get existing settings
-        existing_settings = user_settings.settings or {}
+    # Validate the merged settings
+    is_valid, error_message, error_details, validated_settings = validate_settings(merged_settings)
 
-        # Deep merge incoming settings with existing settings
-        merged_settings = deep_merge(existing_settings, data)
-
-        # Validate the merged settings
-        is_valid, error_message, error_details, validated_settings = validate_settings(merged_settings)
-
-        if not is_valid:
-            response_data = {
-                'error': error_message,
-                'code': 400
-            }
-            # Add detailed error information if available
-            if error_details:
-                response_data['errors'] = error_details
-            _logger.warning(f"Setting validation failed for user {request.user.id}: {error_message}")
-            return JsonResponse(response_data, status=400)
-
-        # Update the settings (do not modify hidden_features here)
-        user_settings.settings = validated_settings
-        user_settings.save(update_fields=['settings'])
-
-        # Skip fetching hidden_features since this endpoint only updates settings
-        # Hidden features are managed by separate endpoints and don't change here
-        return JsonResponse({
-            'settings': validated_settings,
-        })
-
-    except json.JSONDecodeError:
-        return JsonResponse({
-            'error': 'Invalid JSON in request body',
+    if not is_valid:
+        response_data = {
+            'error': error_message,
             'code': 400
-        }, status=400)
-    except Exception:
-        _logger.error(f"Error updating user setting: {traceback.format_exc()}")
-        return JsonResponse({
-            'error': 'Failed to update user setting',
-            'code': 500
-        }, status=500)
+        }
+        # Add detailed error information if available
+        if error_details:
+            response_data['errors'] = error_details
+        _logger.warning(f"Setting validation failed for user {request.user.id}: {error_message}")
+        return JsonResponse(response_data, status=400)
+
+    # Update the settings (do not modify hidden_features here)
+    user_settings.settings = validated_settings
+    user_settings.save(update_fields=['settings'])
+
+    # Skip fetching hidden_features since this endpoint only updates settings
+    # Hidden features are managed by separate endpoints and don't change here
+    return JsonResponse({
+        'settings': validated_settings,
+    })
 
 
 @api_or_login_required_401()
@@ -130,7 +111,8 @@ def clear_hidden_features(request):
 
 @api_or_login_required_401()
 @require_http_methods(["POST"])
-def bulk_update_hidden_features(request):
+@validate_payload(BulkUpdateHiddenFeaturesPayload, allow_empty=True)
+def bulk_update_hidden_features(request, validated_data):
     """
     Bulk update hidden features list by adding and/or removing multiple feature IDs.
     Body: {
@@ -138,64 +120,45 @@ def bulk_update_hidden_features(request):
         "remove": [list of feature IDs to remove]
     }
     """
-    try:
-        data = json.loads(request.body or "{}")
-        add_ids = data.get("add", [])
-        remove_ids = data.get("remove", [])
+    add_ids = validated_data.get("add", [])
+    remove_ids = validated_data.get("remove", [])
 
-        if not isinstance(add_ids, list):
-            add_ids = []
-        if not isinstance(remove_ids, list):
-            remove_ids = []
+    # Normalize to string IDs and convert to sets for O(1) lookups
+    add_ids_set = {str(fid) for fid in add_ids if fid and isinstance(fid, (str, int))}
+    remove_ids_set = {str(fid) for fid in remove_ids if fid and isinstance(fid, (str, int))}
 
-        # Normalize to string IDs and convert to sets for O(1) lookups
-        add_ids_set = {str(fid) for fid in add_ids if fid and isinstance(fid, (str, int))}
-        remove_ids_set = {str(fid) for fid in remove_ids if fid and isinstance(fid, (str, int))}
-
-        # Early return if nothing to do
-        if not add_ids_set and not remove_ids_set:
-            return HttpResponse(status=204)
-
-        user_settings, _ = UserSettings.objects.get_or_create(user=request.user)
-        current_hidden = _normalize_hidden_features(getattr(user_settings, "hidden_features", []))
-
-        # Convert to set for O(1) operations
-        current_hidden_set = set(current_hidden)
-
-        # Remove IDs first (set difference)
-        if remove_ids_set:
-            current_hidden_set -= remove_ids_set
-
-        # Add new IDs (set union)
-        if add_ids_set:
-            current_hidden_set |= add_ids_set
-
-        # Convert back to list (preserve order by keeping existing order, then appending new ones)
-        # This maintains backward compatibility with list-based storage
-        result_list = [fid for fid in current_hidden if fid in current_hidden_set]
-        # Add any new IDs that weren't in the original list
-        for fid in add_ids_set:
-            if fid not in result_list:
-                result_list.append(fid)
-
-        user_settings.hidden_features = result_list
-        user_settings.save(update_fields=["hidden_features"])
-
-        # No response body needed; frontend uses an optimistic local cache.
-        # Return 204 No Content to indicate success.
+    # Early return if nothing to do
+    if not add_ids_set and not remove_ids_set:
         return HttpResponse(status=204)
 
-    except json.JSONDecodeError:
-        return JsonResponse({
-            "error": "Invalid JSON in request body",
-            "code": 400,
-        }, status=400)
-    except Exception:
-        _logger.error(f"Error bulk updating hidden features: {traceback.format_exc()}")
-        return JsonResponse({
-            "error": "Failed to bulk update hidden features",
-            "code": 500,
-        }, status=500)
+    user_settings, _ = UserSettings.objects.get_or_create(user=request.user)
+    current_hidden = _normalize_hidden_features(getattr(user_settings, "hidden_features", []))
+
+    # Convert to set for O(1) operations
+    current_hidden_set = set(current_hidden)
+
+    # Remove IDs first (set difference)
+    if remove_ids_set:
+        current_hidden_set -= remove_ids_set
+
+    # Add new IDs (set union)
+    if add_ids_set:
+        current_hidden_set |= add_ids_set
+
+    # Convert back to list (preserve order by keeping existing order, then appending new ones)
+    # This maintains backward compatibility with list-based storage
+    result_list = [fid for fid in current_hidden if fid in current_hidden_set]
+    # Add any new IDs that weren't in the original list
+    for fid in add_ids_set:
+        if fid not in result_list:
+            result_list.append(fid)
+
+    user_settings.hidden_features = result_list
+    user_settings.save(update_fields=["hidden_features"])
+
+    # No response body needed; frontend uses an optimistic local cache.
+    # Return 204 No Content to indicate success.
+    return HttpResponse(status=204)
 
 
 def deep_merge(base: dict, update: dict) -> dict:
