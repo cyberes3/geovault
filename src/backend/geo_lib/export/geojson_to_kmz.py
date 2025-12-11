@@ -207,7 +207,7 @@ def _apply_properties_to_placemark(placemark: ET.Element, props: Dict[str, Any],
                 desc += f"\n\nTags: {tags_str}"
             else:
                 desc = f"Tags: {tags_str}"
-    
+
     # Add system tags to description if present
     system_tags = props.get("system_tags")
     if system_tags and isinstance(system_tags, list):
@@ -323,17 +323,17 @@ def _resolve_icon_href(
 
     base = options.icon_base_path or os.getcwd()
     base_path = os.path.abspath(base)
-    
+
     # Join and resolve the path
     src_path = os.path.join(base_path, raw_icon)
     # Normalize to resolve any remaining .. or . sequences
     src_path = os.path.normpath(src_path)
-    
+
     # Security: Ensure the resolved path is within base directory
     if not src_path.startswith(base_path + os.sep) and src_path != base_path:
         # Path traversal detected - reject
         return None, None
-    
+
     if not os.path.exists(src_path):
         # Fall back to just using the raw value as an href
         return raw_icon, None

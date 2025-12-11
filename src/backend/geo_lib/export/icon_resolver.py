@@ -58,21 +58,21 @@ def resolve_icon_path(icon_url: str, base_dir: str, icon_storage_dir: str) -> Op
     # System icons: /api/icons/system/{path} -> assets/icons/{path}
     if icon_url.startswith("/api/icons/system/"):
         relative_path = icon_url.replace("/api/icons/system/", "assets/icons/")
-        
+
         # Security: Prevent path traversal
         # Check for any .. sequences or absolute paths
         if ".." in relative_path or Path(relative_path).is_absolute():
             return None
-        
+
         # Normalize the path to resolve any remaining issues
         normalized = Path(relative_path).resolve()
         full_path = base_path / relative_path
-        
+
         # Ensure the resolved path is within base_dir/assets/icons/
         assets_icons_dir = base_path / "assets" / "icons"
         if not _is_safe_path(full_path.resolve(), assets_icons_dir):
             return None
-        
+
         if full_path.exists() and full_path.is_file():
             return relative_path
         return None
@@ -90,7 +90,7 @@ def resolve_icon_path(icon_url: str, base_dir: str, icon_storage_dir: str) -> Op
         # Validate hash length (should be 64 chars for SHA-256)
         if len(hash_part) != 64:
             return None
-        
+
         # Security: Validate hash contains only hexadecimal characters
         try:
             int(hash_part, 16)
