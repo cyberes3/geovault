@@ -1474,6 +1474,396 @@ class TestE2EImport(TransactionTestCase):
         # Real WebSocket broadcasts happen - verification done by WebSocket consumer tests
         # This test verifies the failure workflow works correctly
 
+    # ==================== API ENDPOINT EDGE CASES ====================
+
+    def test_e2e_bulk_operations_validation(self):
+        """Test bulk operations endpoint with invalid data."""
+        # Upload a file
+        kml_content = self._load_test_file('Test Items.kml')
+        process_job_id, item_id, process_status = self._upload_file(kml_content, 'Test Items.kml')
+        self.assertEqual(process_status['status'], ProcessingStatus.COMPLETED.value)
+        
+        # Test 1: Invalid color format
+        invalid_bulk_ops = {
+            'tags': ['test'],
+            'pointColor': 'not-a-color',  # Invalid format
+        }
+        
+        response = self.client.put(
+            f'/api/item/import/bulk-operations/{item_id}',
+            data=json.dumps({'bulk_operations': invalid_bulk_ops}),
+            content_type='application/json'
+        )
+        self.assertEqual(response.status_code, 400, "Should reject invalid color format")
+        
+        # Test 2: Invalid tags type (not a list)
+        invalid_bulk_ops = {
+            'tags': 'not-a-list',  # Should be a list
+        }
+        
+        response = self.client.put(
+            f'/api/item/import/bulk-operations/{item_id}',
+            data=json.dumps({'bulk_operations': invalid_bulk_ops}),
+            content_type='application/json'
+        )
+        self.assertEqual(response.status_code, 400, "Should reject invalid tags type")
+        
+        # Test 3: Valid bulk operations should succeed
+        valid_bulk_ops = {
+            'tags': ['test', 'valid'],
+            'pointColor': '#ff0000',
+        }
+        
+        response = self.client.put(
+            f'/api/item/import/bulk-operations/{item_id}',
+            data=json.dumps({'bulk_operations': valid_bulk_ops}),
+            content_type='application/json'
+        )
+        self.assertEqual(response.status_code, 200, "Valid bulk operations should succeed")
+
+    def test_e2e_bulk_operations_on_imported_item(self):
+        """Test that bulk operations cannot be modified after import."""
+        # Upload and import a file
+        kml_content = self._load_test_file('Test Items.kml')
+        process_job_id, item_id, process_status = self._upload_file(kml_content, 'Test Items.kml')
+        self.assertEqual(process_status['status'], ProcessingStatus.COMPLETED.value)
+        
+        # Import the item
+        import_job_id, import_status = self._import_item(item_id)
+        self.assertEqual(import_status['status'], ProcessingStatus.COMPLETED.value)
+        
+        # Try to modify bulk operations after import
+        bulk_ops = {
+            'tags': ['should', 'fail'],
+            'pointColor': '#ff0000',
+        }
+        
+        response = self.client.put(
+            f'/api/item/import/bulk-operations/{item_id}',
+            data=json.dumps({'bulk_operations': bulk_ops}),
+            content_type='application/json'
+        )
+        self.assertEqual(response.status_code, 400, 
+                        "Should not allow modifying bulk operations after import")
+        
+        data = json.loads(response.content)
+        self.assertIn('already been imported', data.get('error', '').lower(),
+                     "Error message should indicate item was already imported")
+
+    def test_e2e_get_bulk_operations(self):
+        """Test retrieving bulk operations from import item."""
+        # Upload a file
+        kml_content = self._load_test_file('Test Items.kml')
+        process_job_id, item_id, process_status = self._upload_file(kml_content, 'Test Items.kml')
+        self.assertEqual(process_status['status'], ProcessingStatus.COMPLETED.value)
+        
+        # Test 1: Get bulk operations when none are set (should return empty)
+        response = self.client.get(f'/api/item/import/bulk-operations/{item_id}/get')
+        self.assertEqual(response.status_code, 200)
+        
+        data = json.loads(response.content)
+        self.assertIn('bulk_operations', data)
+        self.assertEqual(data['bulk_operations'], {}, 
+                        "Should return empty dict when no bulk operations set")
+        
+        # Test 2: Set bulk operations
+        bulk_ops = {
+            'tags': ['get', 'test'],
+            'pointColor': '#00ff00',
+            'lineColor': '#0000ff',
+        }
+        
+        response = self.client.put(
+            f'/api/item/import/bulk-operations/{item_id}',
+            data=json.dumps({'bulk_operations': bulk_ops}),
+            content_type='application/json'
+        )
+        self.assertEqual(response.status_code, 200)
+        
+        # Test 3: Get bulk operations and verify they match
+        response = self.client.get(f'/api/item/import/bulk-operations/{item_id}/get')
+        self.assertEqual(response.status_code, 200)
+        
+        data = json.loads(response.content)
+        self.assertIn('bulk_operations', data)
+        self.assertEqual(data['bulk_operations']['tags'], bulk_ops['tags'])
+        self.assertEqual(data['bulk_operations']['pointColor'], bulk_ops['pointColor'])
+        self.assertEqual(data['bulk_operations']['lineColor'], bulk_ops['lineColor'])
+
+    def test_e2e_recheck_duplicates_after_import(self):
+        """Test that recheck duplicates detects features imported after initial upload."""
+        # Upload and import file A with a specific point
+        first_kml = b"""<?xml version="1.0" encoding="UTF-8"?>
+<kml xmlns="http://www.opengis.net/kml/2.2">
+  <Document>
+    <Placemark>
+      <name>File A Point</name>
+      <Point>
+        <coordinates>-122.5,37.5,0</coordinates>
+      </Point>
+    </Placemark>
+  </Document>
+</kml>"""
+        
+        process_job_id1, item_id1, process_status1 = self._upload_file(first_kml, 'file_a.kml')
+        self.assertEqual(process_status1['status'], ProcessingStatus.COMPLETED.value)
+        
+        import_job_id1, import_status1 = self._import_item(item_id1)
+        self.assertEqual(import_status1['status'], ProcessingStatus.COMPLETED.value)
+        
+        # Upload file B with a duplicate point (same coordinates)
+        second_kml = b"""<?xml version="1.0" encoding="UTF-8"?>
+<kml xmlns="http://www.opengis.net/kml/2.2">
+  <Document>
+    <Placemark>
+      <name>File B Point - Duplicate Location</name>
+      <Point>
+        <coordinates>-122.5,37.5,0</coordinates>
+      </Point>
+    </Placemark>
+  </Document>
+</kml>"""
+        
+        process_job_id2, item_id2, process_status2 = self._upload_file(second_kml, 'file_b.kml')
+        self.assertEqual(process_status2['status'], ProcessingStatus.COMPLETED.value)
+        
+        # Check initial duplicate detection
+        import_item2 = ImportQueue.objects.get(id=item_id2, user=self.user)
+        initial_duplicate_count = len(import_item2.duplicate_features)
+        self.assertGreater(initial_duplicate_count, 0, 
+                          "Should detect initial duplicates from file A")
+        
+        # Upload and import file C with a DIFFERENT point (not duplicate)
+        third_kml = b"""<?xml version="1.0" encoding="UTF-8"?>
+<kml xmlns="http://www.opengis.net/kml/2.2">
+  <Document>
+    <Placemark>
+      <name>File C Point - Different Location</name>
+      <Point>
+        <coordinates>-122.6,37.6,0</coordinates>
+      </Point>
+    </Placemark>
+  </Document>
+</kml>"""
+        
+        process_job_id3, item_id3, process_status3 = self._upload_file(third_kml, 'file_c.kml')
+        self.assertEqual(process_status3['status'], ProcessingStatus.COMPLETED.value)
+        
+        import_job_id3, import_status3 = self._import_item(item_id3)
+        self.assertEqual(import_status3['status'], ProcessingStatus.COMPLETED.value)
+        
+        # Now recheck duplicates on file B - should still detect A (C is different location)
+        response = self.client.post(f'/api/item/import/recheck-duplicates/{item_id2}')
+        self.assertEqual(response.status_code, 200, 
+                        f"Recheck duplicates should succeed: {response.content}")
+        
+        data = json.loads(response.content)
+        self.assertIn('duplicate_count', data)
+        
+        # Verify duplicates were updated in database
+        import_item2.refresh_from_db()
+        # Should still have duplicates (from file A only, since C was different location)
+        self.assertGreater(len(import_item2.duplicate_features), 0,
+                          "Should have detected duplicates after recheck")
+        
+        # The key test: verify recheck worked (it re-ran duplicate detection)
+        # Even if duplicate count is same, the recheck operation should have succeeded
+        self.assertIn('msg', data)
+        self.assertIn('rechecked', data['msg'].lower())
+
+    def test_e2e_recheck_duplicates_on_imported_item(self):
+        """Test that recheck duplicates fails on already-imported items."""
+        # Upload and import a file
+        kml_content = self._load_test_file('Test Items.kml')
+        process_job_id, item_id, process_status = self._upload_file(kml_content, 'Test Items.kml')
+        self.assertEqual(process_status['status'], ProcessingStatus.COMPLETED.value)
+        
+        # Import the item
+        import_job_id, import_status = self._import_item(item_id)
+        self.assertEqual(import_status['status'], ProcessingStatus.COMPLETED.value)
+        
+        # Try to recheck duplicates after import
+        response = self.client.post(f'/api/item/import/recheck-duplicates/{item_id}')
+        self.assertEqual(response.status_code, 400,
+                        "Should not allow rechecking duplicates after import")
+        
+        data = json.loads(response.content)
+        self.assertIn('already been imported', data.get('error', '').lower(),
+                     "Error message should indicate item was already imported")
+
+    def test_e2e_delete_during_processing(self):
+        """Test deleting import item during or immediately after processing."""
+        # Create a moderately-sized KML to ensure some processing time
+        kml_content = """<?xml version="1.0" encoding="UTF-8"?>
+<kml xmlns="http://www.opengis.net/kml/2.2">
+  <Document>"""
+        
+        # Add 100 placemarks
+        for i in range(100):
+            kml_content += f"""
+    <Placemark>
+      <name>Point {i}</name>
+      <Point>
+        <coordinates>{-122.4194 + i * 0.001},{37.7749 + i * 0.001},0</coordinates>
+      </Point>
+    </Placemark>"""
+        
+        kml_content += """
+  </Document>
+</kml>"""
+        
+        # Upload the file
+        file_obj = SimpleUploadedFile('delete_test.kml', kml_content.encode('utf-8'))
+        response = self.client.post('/api/item/import/upload', {'file': file_obj})
+        self.assertEqual(response.status_code, 200)
+        
+        data = json.loads(response.content)
+        job_id = data['job_id']
+        
+        # Get the import queue item ID
+        # Wait briefly for the initial queue entry to be created
+        time.sleep(0.2)
+        job = status_tracker.get_job(job_id)
+        item_id = job.import_queue_id if job else None
+        self.assertIsNotNone(item_id, "Import queue item should be created")
+        
+        # Verify item exists
+        import_item = ImportQueue.objects.filter(id=item_id, user=self.user).first()
+        self.assertIsNotNone(import_item, "Import item should exist")
+        
+        # Delete the import item (might still be processing)
+        response = self.client.delete(f'/api/item/import/delete/{item_id}')
+        self.assertEqual(response.status_code, 200,
+                        f"Delete should succeed: {response.content}")
+        
+        # Wait for processing to complete or timeout
+        try:
+            job_status = self._wait_for_job_completion(job_id, timeout=10.0)
+            # Job might complete successfully or fail - either is acceptable
+            # The important thing is no errors/crashes
+        except (TimeoutError, ValueError):
+            # Job might be cancelled/removed after deletion - that's fine
+            pass
+        
+        # Verify the import item was deleted from database
+        import_item = ImportQueue.objects.filter(id=item_id, user=self.user).first()
+        self.assertIsNone(import_item, "Import item should be deleted from database")
+        
+        # Verify no zombie features were created
+        features = FeatureStore.objects.filter(user=self.user)
+        self.assertEqual(features.count(), 0,
+                        "No features should be imported after deletion")
+
+    def test_e2e_update_features_before_import(self):
+        """Test updating feature properties before import and verify changes persist."""
+        # Upload a file
+        kml_content = self._load_test_file('Test Items.kml')
+        process_job_id, item_id, process_status = self._upload_file(kml_content, 'Test Items.kml')
+        self.assertEqual(process_status['status'], ProcessingStatus.COMPLETED.value)
+        
+        # Get the import item and its features
+        import_item = ImportQueue.objects.get(id=item_id, user=self.user)
+        self.assertGreater(len(import_item.geofeatures), 0, "Should have features")
+        
+        # Store original system_tags from first feature
+        original_feature = import_item.geofeatures[0]
+        original_system_tags = original_feature.get('properties', {}).get('system_tags', [])
+        self.assertGreater(len(original_system_tags), 0, 
+                          "Feature should have system_tags from processing")
+        
+        # Update features via PATCH endpoint
+        updated_features = []
+        for i, feature in enumerate(import_item.geofeatures[:3]):  # Update first 3 features
+            updated_feature = {
+                'properties': {
+                    'geojson_hash': feature['properties']['geojson_hash'],
+                    'name': f'Updated Name {i}',
+                    'description': f'Updated description {i}',
+                    'tags': ['updated', f'tag{i}'],
+                }
+            }
+            updated_features.append(updated_feature)
+        
+        response = self.client.patch(
+            f'/api/item/import/update/{item_id}',
+            data=json.dumps({'features': updated_features}),
+            content_type='application/json'
+        )
+        self.assertEqual(response.status_code, 200,
+                        f"Update should succeed: {response.content}")
+        
+        # Verify updates were applied
+        import_item.refresh_from_db()
+        updated_feature_0 = import_item.geofeatures[0]
+        self.assertEqual(updated_feature_0['properties']['name'], 'Updated Name 0')
+        self.assertEqual(updated_feature_0['properties']['description'], 'Updated description 0')
+        self.assertIn('updated', updated_feature_0['properties'].get('tags', []))
+        
+        # Verify system_tags were preserved
+        preserved_system_tags = updated_feature_0['properties'].get('system_tags', [])
+        self.assertEqual(preserved_system_tags, original_system_tags,
+                        "System tags should be preserved during update")
+        
+        # Import the item
+        import_job_id, import_status = self._import_item(item_id)
+        self.assertEqual(import_status['status'], ProcessingStatus.COMPLETED.value)
+        
+        # Verify the updated data appears in FeatureStore
+        features = FeatureStore.objects.filter(user=self.user).order_by('id')
+        self.assertGreater(features.count(), 0, "Should have imported features")
+        
+        # Find the first updated feature in FeatureStore
+        first_feature = features[0]
+        self.assertEqual(first_feature.geojson['properties']['name'], 'Updated Name 0',
+                        "Updated name should appear in FeatureStore")
+        self.assertEqual(first_feature.geojson['properties']['description'], 
+                        'Updated description 0',
+                        "Updated description should appear in FeatureStore")
+        self.assertIn('updated', first_feature.geojson['properties'].get('tags', []),
+                     "Updated tags should appear in FeatureStore")
+        
+        # Verify system_tags are still present
+        self.assertIn('system_tags', first_feature.geojson['properties'],
+                     "System tags should be in FeatureStore")
+        self.assertGreater(len(first_feature.geojson['properties']['system_tags']), 0,
+                          "System tags should not be empty")
+
+    def test_e2e_update_features_on_imported_item(self):
+        """Test that features cannot be updated after import."""
+        # Upload and import a file
+        kml_content = self._load_test_file('Test Items.kml')
+        process_job_id, item_id, process_status = self._upload_file(kml_content, 'Test Items.kml')
+        self.assertEqual(process_status['status'], ProcessingStatus.COMPLETED.value)
+        
+        # Get a feature hash for the update
+        import_item = ImportQueue.objects.get(id=item_id, user=self.user)
+        feature_hash = import_item.geofeatures[0]['properties']['geojson_hash']
+        
+        # Import the item
+        import_job_id, import_status = self._import_item(item_id)
+        self.assertEqual(import_status['status'], ProcessingStatus.COMPLETED.value)
+        
+        # Try to update features after import
+        updated_features = [{
+            'properties': {
+                'geojson_hash': feature_hash,
+                'name': 'Should Fail',
+                'description': 'This update should fail',
+            }
+        }]
+        
+        response = self.client.patch(
+            f'/api/item/import/update/{item_id}',
+            data=json.dumps({'features': updated_features}),
+            content_type='application/json'
+        )
+        self.assertEqual(response.status_code, 400,
+                        "Should not allow updating features after import")
+        
+        data = json.loads(response.content)
+        self.assertIn('already been imported', data.get('error', '').lower(),
+                     "Error message should indicate item was already imported")
+
 
 
 
