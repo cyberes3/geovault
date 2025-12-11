@@ -354,7 +354,7 @@ def _find_hash_duplicates(
         if not geojson_hash:
             geojson_hash = generate_geojson_hash(feature)
 
-        feature_name = feature.get('properties', {}).get('name', 'Unnamed')
+        feature_name = feature.get('properties', {}).get('name', '')
 
         # Check FeatureStore first (higher priority)
         if geojson_hash in existing_store_hashes:

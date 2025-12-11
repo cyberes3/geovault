@@ -89,7 +89,7 @@ def process_single_feature_for_import(
     # if not geojson_hash:
     #     geojson_hash = generate_geojson_hash(geojson_data)
 
-    feature_name = feature.get('properties', {}).get('name', 'Unnamed')
+    feature_name = feature.get('properties', {}).get('name', '')
 
     # Check if this is a geometry duplicate
     # Only skip if user explicitly added it to skipped_feature_ids

@@ -21,7 +21,7 @@ def _normalize_feature_for_hashing(existing: Dict[str, Any]) -> Dict[str, Any]:
 
     return {
         'id': existing['id'],
-        'name': geojson_data.get('properties', {}).get('name', 'Unnamed'),
+        'name': geojson_data.get('properties', {}).get('name', ''),
         'type': geojson_data.get('geometry', {}).get('type', 'Unknown'),
         'timestamp': timestamp_str,
         'geojson': geojson_data
