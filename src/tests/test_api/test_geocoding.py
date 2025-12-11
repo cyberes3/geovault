@@ -97,8 +97,8 @@ class TestGeocodingAPI(TestCase):
             ]
         }
 
-    @patch('api.views.geocoding.get_config_loader')
-    @patch('api.views.geocoding.requests.get')
+    @patch('api.views.services.geocoding.get_config_loader')
+    @patch('api.views.services.geocoding.requests.get')
     def test_geocoding_search_rocky_mountain_national_park(self, mock_get, mock_config_loader):
         """Test that searching for 'rocky mountain national park' returns RMNP feature."""
         # Mock config loader to return API key
@@ -154,8 +154,8 @@ class TestGeocodingAPI(TestCase):
         self.assertNotIn('context', rmnp_feature)
         self.assertNotIn('place_type', rmnp_feature)
 
-    @patch('api.views.geocoding.get_config_loader')
-    @patch('api.views.geocoding.requests.get')
+    @patch('api.views.services.geocoding.get_config_loader')
+    @patch('api.views.services.geocoding.requests.get')
     def test_geocoding_search_caching(self, mock_get, mock_config_loader):
         """Test that geocoding results are cached."""
         # Mock config loader to return API key
@@ -198,7 +198,7 @@ class TestGeocodingAPI(TestCase):
         data2 = json.loads(response2.content)
         self.assertEqual(data1, data2)
 
-    @patch('api.views.geocoding.get_config_loader')
+    @patch('api.views.services.geocoding.get_config_loader')
     def test_geocoding_search_no_api_key(self, mock_config_loader):
         """Test geocoding search when API key is not configured."""
         # Mock config loader to return None (no API key)
@@ -215,7 +215,7 @@ class TestGeocodingAPI(TestCase):
         self.assertIn('error', data)
         self.assertIn('not available', data['error'].lower())
 
-    @patch('api.views.geocoding.get_config_loader')
+    @patch('api.views.services.geocoding.get_config_loader')
     def test_geocoding_search_missing_query(self, mock_config_loader):
         """Test geocoding search without query parameter."""
         # Mock config loader
@@ -232,8 +232,8 @@ class TestGeocodingAPI(TestCase):
         self.assertIn('error', data)
         self.assertIn('required', data['error'].lower())
 
-    @patch('api.views.geocoding.get_config_loader')
-    @patch('api.views.geocoding.requests.get')
+    @patch('api.views.services.geocoding.get_config_loader')
+    @patch('api.views.services.geocoding.requests.get')
     def test_geocoding_search_api_error(self, mock_get, mock_config_loader):
         """Test geocoding search when MapTiler API returns an error."""
         # Mock config loader to return API key
@@ -264,8 +264,8 @@ class TestGeocodingAPI(TestCase):
         data = json.loads(response.content)
         self.assertIn('features', data['data'])
 
-    @patch('api.views.geocoding.get_config_loader')
-    @patch('api.views.geocoding.requests.get')
+    @patch('api.views.services.geocoding.get_config_loader')
+    @patch('api.views.services.geocoding.requests.get')
     def test_geocoding_search_timeout(self, mock_get, mock_config_loader):
         """Test geocoding search when API request times out."""
         import requests
@@ -287,8 +287,8 @@ class TestGeocodingAPI(TestCase):
         self.assertIn('error', data)
         self.assertIn('timed out', data['error'].lower())
 
-    @patch('api.views.geocoding.get_config_loader')
-    @patch('api.views.geocoding.requests.get')
+    @patch('api.views.services.geocoding.get_config_loader')
+    @patch('api.views.services.geocoding.requests.get')
     def test_geocoding_search_feature_cleaning(self, mock_get, mock_config_loader):
         """Test that features are properly cleaned (unnecessary fields removed)."""
         # Mock config loader to return API key
@@ -345,8 +345,8 @@ class TestGeocodingAPI(TestCase):
                 self.assertNotIn('feature_tags', props)
                 self.assertNotIn('categories', props)
 
-    @patch('api.views.geocoding.get_config_loader')
-    @patch('api.views.geocoding.requests.get')
+    @patch('api.views.services.geocoding.get_config_loader')
+    @patch('api.views.services.geocoding.requests.get')
     def test_geocoding_search_prioritizes_geographic_features(self, mock_get, mock_config_loader):
         """Test that geographic features (parks, POIs) are prioritized over addresses."""
         # Mock config loader to return API key

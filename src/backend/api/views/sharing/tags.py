@@ -1,0 +1,173 @@
+"""Tag sharing operations"""
+import traceback
+import uuid
+
+from django.db.models import F, Q
+from django.http import JsonResponse
+from django.views.decorators.http import require_http_methods
+
+from api.models import TagShare, CollectionShare, FeatureStore
+from api.utils.responses import error_response, not_found_response
+from api.validation.feature_updates import validate_payload, TagSharePayload
+from api.views.features.bbox_query import _build_bbox_response, _validate_bbox_params
+from api.views.sharing._shared import _get_public_share_features_in_bbox, _validate_share_id
+from geo_lib.logging.console import get_tagged_logger
+from geo_lib.website.auth import api_or_login_required_401
+from website.settings_utils import get_required_setting
+
+logger = get_tagged_logger('access')
+
+
+@api_or_login_required_401()
+@require_http_methods(["POST"])
+@validate_payload(TagSharePayload)
+def create_share(request, validated_data):
+    """
+    Create a new share link for a tag.
+    Always uses UUID4 for share_id (no customization allowed).
+    
+    POST body:
+    - tag: string (required) - The tag to share
+    """
+    try:
+        tag = validated_data['tag'].strip()
+
+        # Validate tag length
+        tag_max_length = get_required_setting('TAG_MAX_LENGTH')
+        if len(tag) > tag_max_length:
+            return error_response(f'Tag name exceeds maximum length of {tag_max_length} characters', code=400)
+
+        # Verify that the tag exists in the user's features (check both user tags and system tags)
+        tag_exists = FeatureStore.objects.filter(
+            user=request.user
+        ).filter(
+            Q(geojson__properties__tags__contains=[tag]) |
+            Q(geojson__properties__system_tags__contains=[tag])
+        ).exists()
+        
+        if not tag_exists:
+            return not_found_response('Tag not found in your data')
+
+        # Generate UUID4 share_id
+        share_id = str(uuid.uuid4())
+        # Ensure uniqueness (very unlikely but check anyway)
+        while TagShare.objects.filter(share_id=share_id).exists() or CollectionShare.objects.filter(share_id=share_id).exists():
+            share_id = str(uuid.uuid4())
+
+        # Get allow_downloads from validated data
+        allow_downloads = validated_data.get('allow_downloads', False)
+
+        # Create new share (always use UUID4)
+        tag_share = TagShare.objects.create(
+            share_id=share_id,
+            tag=tag,
+            user=request.user,
+            allow_downloads=allow_downloads
+        )
+
+        # Build full URL
+        base_url = request.build_absolute_uri('/').rstrip('/')
+        share_url = f"{base_url}/#/mapshare?id={tag_share.share_id}"
+
+        return JsonResponse({
+            'share_id': tag_share.share_id,
+            'url': share_url,
+            'created_at': tag_share.created_at.isoformat()
+        })
+
+    except Exception:
+        logger.error(f"Error creating share: {traceback.format_exc()}")
+        return error_response('Failed to create share', code=500)
+
+
+@require_http_methods(["GET"])
+def get_public_share_info(request, share_id):
+    """
+    Public endpoint to get information about a shared tag.
+    No authentication required.
+    Returns tag name for display purposes without revealing data.
+    Does not increment access_count.
+    """
+    try:
+        # Validate share_id format (must be UUID4)
+        if not _validate_share_id(share_id):
+            return JsonResponse({
+                'error': 'Invalid share link',
+                'code': 404
+            }, status=404)
+
+        # Get the share
+        share = TagShare.objects.filter(share_id=share_id).first()
+        
+        if not share:
+            # Return same error message to prevent information disclosure
+            return JsonResponse({
+                'error': 'Invalid share link',
+                'code': 404
+            }, status=404)
+
+        # Return basic share info
+        return JsonResponse({
+            'tag': share.tag,
+            'created_at': share.created_at.isoformat(),
+            'allow_downloads': share.allow_downloads
+        })
+
+    except Exception:
+        logger.error(f"Error getting public share info: {traceback.format_exc()}")
+        return error_response('Failed to get share info', code=500)
+
+
+@require_http_methods(["GET"])
+def get_public_share(request, share_id):
+    """
+    Public endpoint to get features for a shared tag within a bounding box.
+    No authentication required.
+    Returns GeoJSON FeatureCollection of features with the shared tag in the specified bbox.
+    Increments access_count on each successful access.
+
+    Query parameters:
+    - bbox: comma-separated bounding box (min_lon,min_lat,max_lon,max_lat) - required
+    - zoom: zoom level (integer, 1-20) - optional, defaults to 10
+    """
+    try:
+        # Validate share_id format (must be UUID4)
+        if not _validate_share_id(share_id):
+            return JsonResponse({
+                'error': 'Invalid share link',
+                'code': 404
+            }, status=404)
+
+        # Get the share
+        share = TagShare.objects.filter(share_id=share_id).first()
+        
+        if not share:
+            # Return same error message to prevent information disclosure
+            return JsonResponse({
+                'error': 'Invalid share link',
+                'code': 404
+            }, status=404)
+
+        # Validate bbox and zoom parameters
+        validation_result = _validate_bbox_params(request)
+        if isinstance(validation_result, JsonResponse):
+            return validation_result
+        bbox, zoom_level = validation_result
+
+        # Fetch data from database
+        query_result = _get_public_share_features_in_bbox(bbox, share.user.id, share.tag, zoom_level, allow_downloads=share.allow_downloads)
+        features = query_result.features
+        total_features_in_bbox = query_result.total_count
+        fallback_used = query_result.fallback_used
+
+        # Build response using helper function
+        response_data = _build_bbox_response(features, total_features_in_bbox, zoom_level, fallback_used)
+
+        # Increment access count atomically only on successful response
+        TagShare.objects.filter(share_id=share_id).update(access_count=F('access_count') + 1)
+
+        return JsonResponse(response_data)
+
+    except Exception:
+        logger.error(f"Error getting public share: {traceback.format_exc()}")
+        return error_response('Failed to get shared features', code=500)

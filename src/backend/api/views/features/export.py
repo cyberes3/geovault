@@ -10,8 +10,8 @@ from django.views.decorators.http import require_http_methods
 
 from api.models import FeatureStore, TagShare, CollectionShare, Collection
 from api.utils.authorization import get_object_or_404_for_user
-from api.views.bbox_query import _build_base_query, _build_collection_query
-from api.views.sharing import _validate_share_id
+from api.views.features.bbox_query import _build_base_query, _build_collection_query
+from api.views.sharing._shared import _validate_share_id
 from geo_lib.export.geojson_to_kmz import geojson_to_kmz_bytes
 from geo_lib.export.feature_export_helpers import parse_feature_id
 from geo_lib.export.geojson_preprocessor import prepare_geojson_for_kmz

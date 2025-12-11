@@ -1520,8 +1520,8 @@ class TestSequentialProcessing(TestCase):
         )
         self.client.force_login(self.user)
 
-    @patch('api.views.import_item.process_job')
-    @patch('api.views.import_item.status_tracker')
+    @patch('api.views.imports.upload.process_job')
+    @patch('api.views.imports.upload.status_tracker')
     def test_redis_queue_is_used_for_processing(self, mock_status_tracker, mock_process_job):
         """Test that files are enqueued to Redis queue for processing."""
         # Setup mocks
@@ -1549,8 +1549,8 @@ class TestSequentialProcessing(TestCase):
         # Verify enqueue_job was called instead of start_process_job
         mock_process_job.enqueue_job.assert_called_once()
 
-    @patch('api.views.import_item.process_job')
-    @patch('api.views.import_item.status_tracker')
+    @patch('api.views.imports.upload.process_job')
+    @patch('api.views.imports.upload.status_tracker')
     def test_upload_returns_immediately_job_runs_async(self, mock_status_tracker, mock_process_job):
         """Test that upload returns immediately while job runs asynchronously."""
 

@@ -1452,7 +1452,7 @@ class TestQuickPointCreation(TestCase):
         )
         self.client.force_login(self.user)
     
-    @patch('api.views.feature_creation._fetch_elevation_for_point')
+    @patch('api.views.features.creation._fetch_elevation_for_point')
     def test_create_quick_point_success(self, mock_elevation):
         """Test successful quick point creation with all fields."""
         mock_elevation.return_value = 1500.0  # Mock elevation
@@ -1495,7 +1495,7 @@ class TestQuickPointCreation(TestCase):
         feature_id = feature['properties']['database_id']
         self.assertTrue(FeatureStore.objects.filter(id=feature_id, user=self.user).exists())
     
-    @patch('api.views.feature_creation._fetch_elevation_for_point')
+    @patch('api.views.features.creation._fetch_elevation_for_point')
     def test_create_quick_point_minimal(self, mock_elevation):
         """Test quick point creation with minimal required fields."""
         mock_elevation.return_value = 0.0  # Mock elevation
@@ -1525,9 +1525,9 @@ class TestQuickPointCreation(TestCase):
         system_tags = feature['properties'].get('system_tags', [])
         self.assertIn('quick-point', system_tags)
     
-    @patch('api.views.feature_creation._fetch_elevation_for_point')
+    @patch('api.views.features.creation._fetch_elevation_for_point')
     @patch('geo_lib.processing.tagging.modules.geocoding.get_required_setting')
-    @patch('geo_lib.processing.tagging.modules.geocoding.get_reverse_geocoding_service')
+    @patch('geo_lib.geocoding.reverse_geocode.get_reverse_geocoding_service')
     def test_create_quick_point_geocoding_non_blocking(self, mock_get_service, mock_setting, mock_elevation):
         """Test that quick point creation returns without geocoding tags (geocoding happens in background)."""
         mock_elevation.return_value = 1500.0
@@ -1548,7 +1548,7 @@ class TestQuickPointCreation(TestCase):
         }
         
         # Mock geocode_feature_async to verify it's called but doesn't block
-        with patch('api.views.feature_creation.geocode_feature_async') as mock_async_geocode:
+        with patch('api.views.features.creation.geocode_feature_async') as mock_async_geocode:
             response = self.client.post(
                 '/api/features/quick-point/create/',
                 data=json.dumps(payload),
@@ -1577,7 +1577,7 @@ class TestQuickPointCreation(TestCase):
             self.assertTrue(any('type:point' in tag for tag in system_tags))
             self.assertIn('quick-point', system_tags)
     
-    @patch('api.views.feature_creation._fetch_elevation_for_point')
+    @patch('api.views.features.creation._fetch_elevation_for_point')
     @patch('geo_lib.processing.tagging.modules.geocoding.get_required_setting')
     def test_create_quick_point_skips_geocoding_synchronously(self, mock_setting, mock_elevation):
         """Test that quick point creation skips geocoding in generate_auto_tags."""
@@ -1591,7 +1591,7 @@ class TestQuickPointCreation(TestCase):
         }
         
         # Mock geocode_feature_async to track if it's called
-        with patch('api.views.feature_creation.geocode_feature_async') as mock_async_geocode:
+        with patch('api.views.features.creation.geocode_feature_async') as mock_async_geocode:
             response = self.client.post(
                 '/api/features/quick-point/create/',
                 data=json.dumps(payload),
@@ -1632,9 +1632,9 @@ class TestQuickPointCreationBackgroundGeocoding(TransactionTestCase):
         )
         self.client.force_login(self.user)
     
-    @patch('api.views.feature_creation._fetch_elevation_for_point')
+    @patch('api.views.features.creation._fetch_elevation_for_point')
     @patch('geo_lib.processing.tagging.modules.geocoding.get_required_setting')
-    @patch('geo_lib.processing.tagging.modules.geocoding.get_reverse_geocoding_service')
+    @patch('geo_lib.geocoding.reverse_geocode.get_reverse_geocoding_service')
     def test_background_geocoding_adds_tags(self, mock_get_service, mock_setting, mock_elevation):
         """Test that background geocoding actually adds tags to the feature."""
         mock_elevation.return_value = 1500.0
@@ -1691,7 +1691,7 @@ class TestQuickPointCreationBackgroundGeocoding(TransactionTestCase):
         self.assertIn('geo-state:California', updated_system_tags)
         self.assertIn('geo-country:United States', updated_system_tags)
     
-    @patch('api.views.feature_creation._fetch_elevation_for_point')
+    @patch('api.views.features.creation._fetch_elevation_for_point')
     def test_create_quick_point_elevation_fallback(self, mock_elevation):
         """Test that elevation defaults to 0.0 if API fails."""
         mock_elevation.return_value = None  # Simulate elevation API failure
@@ -1779,7 +1779,7 @@ class TestQuickPointCreationBackgroundGeocoding(TransactionTestCase):
         
         self.assertEqual(response.status_code, 400)
     
-    @patch('api.views.feature_creation._fetch_elevation_for_point')
+    @patch('api.views.features.creation._fetch_elevation_for_point')
     def test_create_quick_point_boundary_values(self, mock_elevation):
         """Test quick point creation with boundary coordinate values."""
         mock_elevation.return_value = 0.0
@@ -1891,7 +1891,7 @@ class TestQuickPointCreationBackgroundGeocoding(TransactionTestCase):
         
         self.assertEqual(response.status_code, 400)
     
-    @patch('api.views.feature_creation._fetch_elevation_for_point')
+    @patch('api.views.features.creation._fetch_elevation_for_point')
     def test_create_quick_point_filters_system_tags(self, mock_elevation):
         """Test that system tags in user input are filtered out."""
         mock_elevation.return_value = 0.0
@@ -1942,7 +1942,7 @@ class TestQuickPointCreationBackgroundGeocoding(TransactionTestCase):
         
         self.assertEqual(response.status_code, 401)
     
-    @patch('api.views.feature_creation._fetch_elevation_for_point')
+    @patch('api.views.features.creation._fetch_elevation_for_point')
     def test_create_quick_point_whitespace_trimming(self, mock_elevation):
         """Test that name and description whitespace is trimmed."""
         mock_elevation.return_value = 0.0
