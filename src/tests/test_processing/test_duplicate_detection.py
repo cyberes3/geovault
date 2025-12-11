@@ -1533,3 +1533,86 @@ class TestSequentialProcessingIntegration(TransactionTestCase):
                         "Newer file should reference older queue item")
         
         print("✓ Timestamp ordering test passed: Sequential processing enforces correct ordering")
+
+
+class TestEmptyNameDuplicateDetection(TestCase):
+    """Test that empty feature names don't break duplicate detection."""
+    
+    def setUp(self):
+        """Set up test fixtures."""
+        self.user = User.objects.create_user(
+            email='emptyname@example.com',
+            password='testpass123',
+            username='emptynameuser'
+        )
+    
+    def test_duplicate_detection_works_with_empty_names(self):
+        """Test that duplicate detection works correctly when features have empty names."""
+        # Create feature with empty name in feature store
+        feature = {
+            'type': 'Feature',
+            'geometry': {'type': 'Point', 'coordinates': [-122.1, 37.7]},
+            'properties': {'name': '', 'description': 'Test'}
+        }
+        feature_hash = generate_geojson_hash(feature)
+        feature['properties']['geojson_hash'] = feature_hash
+        
+        FeatureStore.objects.create(
+            user=self.user,
+            geojson=feature,
+            geojson_hash=feature_hash,
+            geometry=Point(-122.1, 37.7, 0, srid=4326)
+        )
+        
+        # Try to import same feature (should be detected as hash duplicate)
+        remaining, duplicates, log = find_duplicates_for_source(
+            [feature],
+            self.user.id,
+            source='feature_store',
+            exclude_queue_id=None,
+            exclude_timestamp=None
+        )
+        
+        # Duplicate detection should work normally
+        self.assertEqual(len(remaining), 0, "Feature should be detected as duplicate")
+        self.assertEqual(len(duplicates), 1, "Should have 1 duplicate")
+        self.assertEqual(duplicates[0]['match_type'], DuplicateMatchType.HASH)
+        
+        print("✓ Test passed: Duplicate detection works with empty names")
+    
+    def test_multiple_empty_names_different_geometry_not_duplicates(self):
+        """Test that multiple features with empty names but different geometry are NOT duplicates."""
+        features = [
+            {
+                'type': 'Feature',
+                'geometry': {'type': 'Point', 'coordinates': [-122.1, 37.7]},
+                'properties': {'name': '', 'description': 'First'}
+            },
+            {
+                'type': 'Feature',
+                'geometry': {'type': 'Point', 'coordinates': [-122.2, 37.8]},
+                'properties': {'name': '', 'description': 'Second'}
+            },
+            {
+                'type': 'Feature',
+                'geometry': {'type': 'Point', 'coordinates': [-122.3, 37.9]},
+                'properties': {'name': '', 'description': 'Third'}
+            }
+        ]
+        
+        for feature in features:
+            feature['properties']['geojson_hash'] = generate_geojson_hash(feature)
+        
+        remaining, duplicates, log = find_duplicates_for_source(
+            features,
+            self.user.id,
+            source='feature_store',
+            exclude_queue_id=None,
+            exclude_timestamp=None
+        )
+        
+        # Should not incorrectly group all empty-named features together
+        self.assertEqual(len(remaining), 3, "All 3 features should remain (no duplicates)")
+        self.assertEqual(len(duplicates), 0, "Should have no duplicates")
+        
+        print("✓ Test passed: Multiple empty name features with different geometry are not duplicates")
