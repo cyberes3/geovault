@@ -228,14 +228,13 @@ class ProcessJob(BaseJob):
         try:
             import_queue = ImportQueue.objects.get(id=import_queue_id)
             assert import_queue.log_id
-            log_uuid = str(import_queue.log_id)
             # Check if this is a replacement upload (fast path)
             is_replacement = import_queue.replacement is not None
         except ImportQueue.DoesNotExist:
             # ImportQueue was deleted (likely by user deletion), stop processing
             return
 
-        realtime_log = RealTimeImportLog(user_id, log_uuid)
+        realtime_log = RealTimeImportLog(user_id, import_queue.log_id)
         overall_start_time = time.time()
 
         # Queue worker ensures sequential processing, no lock needed
@@ -485,9 +484,11 @@ class ProcessJob(BaseJob):
             _logger.debug(f"Processing timeout for job {job_id}")
             realtime_log.add(PROCESSING_TIMEOUT, "ProcessJob", DatabaseLogLevel.ERROR)
             self._handle_processing_error(job_id, user_id, PROCESSING_TIMEOUT, realtime_log)
-        except (SecurityError, FileValidationError):
-            _logger.debug(f"Security error in job {job_id}: {traceback.format_exc()}")
-            self._handle_processing_error(job_id, user_id, FILE_VALIDATION_FAILED, realtime_log)
+        except (SecurityError, FileValidationError) as e:
+            # Security or validation error - use the specific error message
+            _logger.debug(f"Security/validation error in job {job_id}: {traceback.format_exc()}")
+            error_msg = str(e) if str(e) else FILE_VALIDATION_FAILED
+            self._handle_processing_error(job_id, user_id, f"{FILE_VALIDATION_FAILED}: {error_msg}", realtime_log)
         except:
             file_size_mb = len(file_data) / (1024 * 1024) if file_data else 0
             _logger.error(f"Processing error in job {job_id} for file '{filename}' ({file_size_mb:.2f} MB): {traceback.format_exc}")

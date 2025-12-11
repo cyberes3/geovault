@@ -437,6 +437,9 @@ class TestSequentialProcessing(TransactionTestCase):
         Tests the exact scenario from the UI where all files show as 'Processing'.
         """
         # This test simulates what the frontend receives
+        # Use an event to precisely control when processing advances
+        processing_event = threading.Event()
+        
         def slow_execute(job_id, kwargs):
             # Call the original method to set status to PROCESSING, but catch it early
             # We'll manually set the status and then sleep
@@ -444,9 +447,9 @@ class TestSequentialProcessing(TransactionTestCase):
                 job_id, ProcessingStatus.PROCESSING,
                 "Processing...", 50.0
             )
-            # Slow processing to keep jobs in different states
-            time.sleep(0.5)
-        
+            # Wait for the test to signal us to continue (or timeout after 2 seconds)
+            processing_event.wait(timeout=2.0)
+
         with patch.object(self.process_job, '_execute_job', side_effect=slow_execute):
             # Upload 4 files
             job_ids = []
@@ -459,8 +462,7 @@ class TestSequentialProcessing(TransactionTestCase):
             
             # Give time for worker to start and process first job
             # Worker needs time to: start thread, dequeue job, call _execute_job (which sets PROCESSING)
-            # Use a shorter sleep to catch the state right after first job starts but before second job dequeues
-            time.sleep(0.2)
+            time.sleep(0.3)
             
             # Check statuses (simulating what frontend would see)
             jobs_status = []
@@ -474,10 +476,13 @@ class TestSequentialProcessing(TransactionTestCase):
                     })
             
             # At this point:
-            # - First job should be PROCESSING
+            # - First job should be PROCESSING (blocked on the event)
             # - Other jobs should be WAITING
             processing_count = sum(1 for j in jobs_status if j['status'] == 'processing')
             waiting_count = sum(1 for j in jobs_status if j['status'] == 'waiting')
+            
+            # Signal processing can complete
+            processing_event.set()
             
             assert processing_count == 1, \
                 f"Expected exactly 1 job PROCESSING, found {processing_count}. Statuses: {jobs_status}"

@@ -179,6 +179,12 @@ class BaseProcessor(ABC):
                 error_msg = "Conversion returned invalid GeoJSON data"
                 step_log.add(error_msg, "File Conversion", DatabaseLogLevel.ERROR)
                 raise Exception(error_msg)
+            
+            # Check if file has any features
+            if len(self.geojson_data.get('features', [])) == 0:
+                error_msg = "File contains no geographic features (placemarks, waypoints, or tracks)"
+                step_log.add(error_msg, "File Conversion", DatabaseLogLevel.ERROR)
+                raise Exception(error_msg)
 
         except Exception as e:
             if not self._is_canceled():

@@ -1,7 +1,7 @@
 import math
 
-from geo_lib.processing.tagging.modules.driving_detection import EARTH_RADIUS_METERS
-
+# Earth radius constants
+EARTH_RADIUS_METERS = 6371000
 EARTH_RADIUS_MILES = 3958.8
 
 

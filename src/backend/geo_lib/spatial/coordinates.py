@@ -1,4 +1,4 @@
-from typing import List
+from typing import List, Tuple
 
 from geo_lib.processing.duplicate_detection.constants import COORDINATE_TOLERANCE
 
@@ -21,3 +21,17 @@ def coordinates_match(coord1: List, coord2: List, tolerance: float = COORDINATE_
     norm1 = normalize_coordinates(coord1, tolerance)
     norm2 = normalize_coordinates(coord2, tolerance)
     return norm1 == norm2
+
+
+def round_coordinate(latitude: float, longitude: float) -> Tuple[float, float]:
+    """
+    Round coordinates to cache precision (~111m).
+
+    Args:
+        latitude: Latitude coordinate
+        longitude: Longitude coordinate
+
+    Returns:
+        Tuple of (rounded_lat, rounded_lon)
+    """
+    return round(latitude, 3), round(longitude, 3)

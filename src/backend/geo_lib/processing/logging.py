@@ -6,8 +6,7 @@ import traceback
 import uuid
 from contextlib import contextmanager
 from enum import Enum
-from typing import List
-from typing import Optional
+from typing import List, Optional
 
 from asgiref.sync import async_to_sync, sync_to_async
 from channels.layers import get_channel_layer
@@ -90,13 +89,10 @@ class RealTimeImportLog:
     This allows for real-time log updates during async processing.
     """
 
-    def __init__(self, user_id: int, log_id: str = None):
-        if log_id is not None:
-            assert isinstance(log_id, str), "log_id must be a string"
-            uuid.UUID(log_id)
+    def __init__(self, user_id: int, log_id: uuid.UUID):
         self._messages: List[DatabaseLogMsg] = []
         self.user_id = user_id
-        self.log_id = log_id  # This should be a UUID string
+        self.log_id = log_id
 
     def add(self, msg: str, source: str, level=DatabaseLogLevel.INFO, duration: float = None):
         """Add a log message and immediately write it to the database."""
@@ -129,9 +125,8 @@ class RealTimeImportLog:
             log_msg.id = db_log.id
             _logger.debug(f"Real-time log written: {source} - {msg}")
 
-            # Broadcast to WebSocket if we have a log_id (indicating this is for an import item)
-            if self.log_id:
-                self._broadcast_log_to_websocket(log_msg)
+            # Broadcast to WebSocket
+            self._broadcast_log_to_websocket(log_msg)
 
         except:
             _logger.error(f"Failed to write real-time log to database: {traceback.format_exc()}")
@@ -176,7 +171,7 @@ class RealTimeImportLog:
                 messages_to_add[i].id = log.id
 
             # 3. Batch Broadcast
-            if self.log_id and len(messages_to_add) > 0:
+            if len(messages_to_add) > 0:
                 self._broadcast_logs_batch_to_websocket(messages_to_add)
 
         except:

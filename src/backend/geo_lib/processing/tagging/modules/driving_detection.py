@@ -15,9 +15,6 @@ from geo_lib.types.feature import GeoFeatureSupported
 MIN_DRIVING_SPEED_MPS = 6.7056  # 15 mph
 MAX_DRIVING_SPEED_MPS = 53.6448  # 120 mph
 
-# Earth radius in meters
-EARTH_RADIUS_METERS = 6371000
-
 # Moving average window size (same as frontend)
 MOVING_AVERAGE_WINDOW_SIZE = 10
 

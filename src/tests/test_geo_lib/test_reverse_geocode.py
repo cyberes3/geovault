@@ -13,10 +13,10 @@ from django.test import TestCase
 from django.core.cache import cache, caches
 
 from geo_lib.geocoding.reverse_geocode import (
-    get_reverse_geocoding_service,
-    _get_cache_key,
-    load_ski_resorts
+    get_reverse_geocoding_service
 )
+from geo_lib.geocoding.cache import _get_cache_key
+from geo_lib.geocoding.ski_resorts import load_ski_resorts
 from geo_lib.spatial.haversine import haversine_distance_miles
 
 

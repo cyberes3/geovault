@@ -15,7 +15,10 @@ from geo_lib.processing.jobs.helpers.redis_job_storage import (
     COMPLETED_JOB_TTL
 )
 from geo_lib.utils.redis_connection import get_redis_connection
-from geo_lib.processing.jobs import import_job, delete_job, bulk_import_job, bulk_delete_job
+from geo_lib.processing.jobs.import_job import ImportJob
+from geo_lib.processing.jobs.delete_job import DeleteJob
+from geo_lib.processing.jobs.bulk_import_job import BulkImportJob
+from geo_lib.processing.jobs.bulk_delete_job import BulkDeleteJob
 from geo_lib.feature_id import generate_geojson_hash
 
 User = get_user_model()
@@ -35,6 +38,12 @@ class TestRedisJobStatusAPI(TransactionTestCase):
             username='testuser'
         )
         self.client.force_login(self.user)
+        
+        # Create job instances
+        self.import_job = ImportJob(status_tracker)
+        self.delete_job = DeleteJob(status_tracker)
+        self.bulk_import_job = BulkImportJob(status_tracker)
+        self.bulk_delete_job = BulkDeleteJob(status_tracker)
         
         # Clean up Redis job keys before each test
         self._cleanup_redis_jobs()
@@ -99,7 +108,7 @@ class TestRedisJobStatusAPI(TransactionTestCase):
         )
 
         # Start import job
-        job_id = import_job.start_import_job(
+        job_id = self.import_job.start_import_job(
             item_id=import_item.id,
             user_id=self.user.id
         )
@@ -144,7 +153,7 @@ class TestRedisJobStatusAPI(TransactionTestCase):
         )
 
         # Start delete job
-        job_id = delete_job.start_delete_job(
+        job_id = self.delete_job.start_delete_job(
             item_id=import_item.id,
             user_id=self.user.id,
             filename=import_item.original_filename
@@ -203,7 +212,7 @@ class TestRedisJobStatusAPI(TransactionTestCase):
         )
 
         # Start bulk import job
-        job_id = bulk_import_job.start_bulk_import_job(
+        job_id = self.bulk_import_job.start_bulk_import_job(
             item_ids=[import_item1.id, import_item2.id],
             user_id=self.user.id
         )
@@ -245,7 +254,7 @@ class TestRedisJobStatusAPI(TransactionTestCase):
         )
 
         # Start bulk delete job
-        job_id = bulk_delete_job.start_bulk_delete_job(
+        job_id = self.bulk_delete_job.start_bulk_delete_job(
             item_ids=[import_item1.id, import_item2.id],
             user_id=self.user.id
         )
@@ -403,7 +412,7 @@ class TestRedisJobStatusAPI(TransactionTestCase):
         )
 
         # Start import job
-        job_id = import_job.start_import_job(
+        job_id = self.import_job.start_import_job(
             item_id=import_item.id,
             user_id=self.user.id
         )
@@ -438,7 +447,7 @@ class TestRedisJobStatusAPI(TransactionTestCase):
         )
 
         # Start import job
-        job_id = import_job.start_import_job(
+        job_id = self.import_job.start_import_job(
             item_id=import_item.id,
             user_id=self.user.id
         )

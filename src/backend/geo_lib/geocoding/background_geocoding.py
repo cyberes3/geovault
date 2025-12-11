@@ -17,7 +17,7 @@ from geo_lib.types.feature import (
     PointFeature, LineStringFeature, MultiLineStringFeature, PolygonFeature
 )
 
-logger = get_tagged_logger('BackgroundGeocoding')
+_logger = get_tagged_logger('BackgroundGeocoding')
 
 
 def _get_feature_class_from_geojson(geojson: dict):
@@ -68,19 +68,19 @@ def geocode_feature_async(feature_id: int):
                 try:
                     feature_store = FeatureStore.objects.select_for_update().get(id=feature_id)
                 except FeatureStore.DoesNotExist:
-                    logger.warning(f"Feature {feature_id} not found for background geocoding")
+                    _logger.warning(f"Feature {feature_id} not found for background geocoding")
                     return
 
                 # Get the geojson data
                 geojson = feature_store.geojson
                 if not geojson:
-                    logger.warning(f"Feature {feature_id} has no geojson data")
+                    _logger.warning(f"Feature {feature_id} has no geojson data")
                     return
 
                 # Determine the appropriate feature class
                 feature_class = _get_feature_class_from_geojson(geojson)
                 if not feature_class:
-                    logger.warning(f"Feature {feature_id} has unsupported geometry type for geocoding")
+                    _logger.warning(f"Feature {feature_id} has unsupported geometry type for geocoding")
                     return
 
                 geojson_for_validation = geojson.copy()
@@ -92,7 +92,7 @@ def geocode_feature_async(feature_id: int):
                 try:
                     geocoding_tags = geocoding_generator.process(feature_instance, import_log=None)
                 except:
-                    logger.warning(f"Geocoding tag generation failed for feature {feature_id}: {traceback.format_exc()}")
+                    _logger.warning(f"Geocoding tag generation failed for feature {feature_id}: {traceback.format_exc()}")
                     return
 
                 geojson.setdefault('properties', {})
@@ -104,9 +104,9 @@ def geocode_feature_async(feature_id: int):
                 feature_store.save(update_fields=['geojson'])
         except:
             # Log error but don't raise - this is background processing
-            logger.error(f"Error in background geocoding for feature {feature_id}: {traceback.format_exc()}")
+            _logger.error(f"Error in background geocoding for feature {feature_id}: {traceback.format_exc()}")
 
     # Start the geocoding in a background thread
     thread = threading.Thread(target=_geocode_worker, daemon=True, name=f"GeocodeFeature-{feature_id}")
     thread.start()
-    logger.debug(f"Started background geocoding thread for feature {feature_id}")
+    _logger.debug(f"Started background geocoding thread for feature {feature_id}")

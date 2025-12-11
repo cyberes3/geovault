@@ -31,7 +31,7 @@ from django.conf import settings
 from django.contrib.sites.models import Site
 from django.db import connection
 
-from geo_lib.geocoding.reverse_geocode import load_ski_resorts
+from geo_lib.geocoding.ski_resorts import load_ski_resorts
 from geo_lib.logging.console import get_tagged_logger
 from geo_lib.processing.file_types import FILE_TYPE_CONFIGS
 from geo_lib.utils.redis_connection import get_redis_connection
