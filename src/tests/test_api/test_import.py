@@ -94,6 +94,9 @@ class TestImportAPI(TransactionTestCase):
       <trkpt lat="37.7749" lon="-122.4194">
         <ele>100</ele>
       </trkpt>
+      <trkpt lat="37.7750" lon="-122.4195">
+        <ele>105</ele>
+      </trkpt>
     </trkseg>
   </trk>
 </gpx>"""

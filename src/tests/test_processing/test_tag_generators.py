@@ -734,15 +734,14 @@ class TestGeocodingTagGenerator:
         
         assert tags == []
     
-    @patch('geo_lib.processing.tagging.modules.geocoding.get_reverse_geocoding_service')
+    @patch('geo_lib.processing.tagging.modules.geocoding.batch_geocode_coordinates')
     @patch('geo_lib.processing.tagging.modules.geocoding.get_required_setting')
-    def test_geocoding_for_point(self, mock_setting, mock_get_service):
+    def test_geocoding_for_point(self, mock_setting, mock_batch_geocode):
         """Test that geocoding tags are generated for points."""
         mock_setting.return_value = True
         
-        # Mock the geocoding service - batch_geocode_coordinates returns dict mapping (lat, lon) to (tags, log_messages)
-        mock_service = Mock()
-        mock_service.batch_geocode_coordinates.return_value = {
+        # Mock batch_geocode_coordinates - returns dict mapping (lat, lon) to (tags, log_messages)
+        mock_batch_geocode.return_value = {
             (37.7749, -122.4194): (
                 [
                     'geo-city:San Francisco',
@@ -752,7 +751,6 @@ class TestGeocodingTagGenerator:
                 []  # Empty log messages
             )
         }
-        mock_get_service.return_value = mock_service
         
         generator = GeocodingTagGenerator()
         feature = PointFeature(
@@ -768,15 +766,14 @@ class TestGeocodingTagGenerator:
         assert 'geo-state:California' in tags
         assert 'geo-country:United States' in tags
     
-    @patch('geo_lib.processing.tagging.modules.geocoding.get_reverse_geocoding_service')
+    @patch('geo_lib.processing.tagging.modules.geocoding.batch_geocode_coordinates')
     @patch('geo_lib.processing.tagging.modules.geocoding.get_required_setting')
-    def test_geocoding_for_linestring(self, mock_setting, mock_get_service):
+    def test_geocoding_for_linestring(self, mock_setting, mock_batch_geocode):
         """Test that geocoding tags are generated for linestrings."""
         mock_setting.return_value = True
         
-        # Mock the geocoding service - batch_geocode_coordinates returns dict mapping (lat, lon) to (tags, log_messages)
-        mock_service = Mock()
-        mock_service.batch_geocode_coordinates.return_value = {
+        # Mock batch_geocode_coordinates - returns dict mapping (lat, lon) to (tags, log_messages)
+        mock_batch_geocode.return_value = {
             (37.775, -122.4195): (
                 [
                     'geo-state:California',
@@ -785,7 +782,6 @@ class TestGeocodingTagGenerator:
                 []  # Empty log messages
             )
         }
-        mock_get_service.return_value = mock_service
         
         generator = GeocodingTagGenerator()
         feature = LineStringFeature(
@@ -828,18 +824,16 @@ class TestGeocodingTagGenerator:
         
         assert tags == []
     
-    @patch('geo_lib.processing.tagging.modules.geocoding.get_reverse_geocoding_service')
+    @patch('geo_lib.processing.tagging.modules.geocoding.batch_geocode_coordinates')
     @patch('geo_lib.processing.tagging.modules.geocoding.get_required_setting')
-    def test_geocoding_with_none_result(self, mock_setting, mock_get_service):
+    def test_geocoding_with_none_result(self, mock_setting, mock_batch_geocode):
         """Test that no tags are generated when geocoding returns empty list."""
         mock_setting.return_value = True
         
-        # Mock the geocoding service - batch_geocode_coordinates returns dict with empty tags
-        mock_service = Mock()
-        mock_service.batch_geocode_coordinates.return_value = {
+        # Mock batch_geocode_coordinates - returns dict with empty tags
+        mock_batch_geocode.return_value = {
             (37.7749, -122.4194): ([], [])  # Empty tags and log messages
         }
-        mock_get_service.return_value = mock_service
         
         generator = GeocodingTagGenerator()
         feature = PointFeature(

@@ -93,10 +93,10 @@ class TestImportEdgeCases(TransactionTestCase):
         
         print("✓ Test passed: large_batch_import")
 
-    def test_mixed_valid_invalid_features(self):
-        """Test import with some features having issues, others are fine."""
-        # Note: Features without feature_hash will cause filter_features_to_process to fail
-        # This test verifies that the import system handles this error gracefully
+    def test_features_with_missing_geometry_skipped(self):
+        """Test that features with missing or empty geometry are skipped gracefully."""
+        # This can happen if processing fails to extract geometry from corrupted data
+        # The import system should skip these and continue with valid features
         
         # Create valid feature
         valid_feature = {
@@ -107,12 +107,18 @@ class TestImportEdgeCases(TransactionTestCase):
         valid_hash = generate_geojson_hash(valid_feature)
         valid_feature['properties']['geojson_hash'] = valid_hash
         
-        # Create feature without hash (invalid) - this will cause an error
-        invalid_feature = {
+        # Create feature with missing geometry (edge case from corrupted processing)
+        missing_geometry_feature = {
             'type': 'Feature',
-            'geometry': {'type': 'Point', 'coordinates': [-122.2, 37.8]},
-            'properties': {'name': 'Invalid Feature'}
-            # Missing feature_hash - will cause KeyError in filter_features_to_process
+            'properties': {'name': 'No Geometry Feature', 'geojson_hash': 'fake-hash'}
+            # Missing 'geometry' key entirely
+        }
+        
+        # Create feature with empty geometry
+        empty_geometry_feature = {
+            'type': 'Feature',
+            'geometry': None,
+            'properties': {'name': 'Empty Geometry Feature', 'geojson_hash': 'fake-hash-2'}
         }
         
         # Create another valid feature
@@ -124,12 +130,12 @@ class TestImportEdgeCases(TransactionTestCase):
         valid_hash2 = generate_geojson_hash(valid_feature2)
         valid_feature2['properties']['geojson_hash'] = valid_hash2
         
-        # Create import item with mixed features
+        # Create import item with mix of valid and geometry-less features
         import_item = ImportQueue.objects.create(
             user=self.user,
-            original_filename='mixed.kml',
+            original_filename='mixed_geometry.kml',
             raw_file='<kml></kml>',
-            geofeatures=[valid_feature, invalid_feature, valid_feature2],
+            geofeatures=[valid_feature, missing_geometry_feature, empty_geometry_feature, valid_feature2],
             duplicate_features=[],
             skipped_feature_ids=[],
             imported=False
@@ -146,14 +152,14 @@ class TestImportEdgeCases(TransactionTestCase):
         # Wait for completion
         job_status = self._wait_for_job_completion(job_id)
         
-        # Verify job completed (invalid features are skipped, not causing job failure)
+        # Verify job completed successfully (geometry-less features are skipped, not causing failure)
         self.assertEqual(job_status['status'], ProcessingStatus.COMPLETED.value)
         
-        # Verify only valid features were created (invalid feature was skipped)
+        # Verify only valid features were created (2 valid, 2 skipped)
         features_count = FeatureStore.objects.filter(user=self.user).count()
-        self.assertEqual(features_count, 2, "Should have created 2 valid features, skipping the invalid one")
+        self.assertEqual(features_count, 2, "Should have created 2 valid features, skipping the 2 without geometry")
         
-        print("✓ Test passed: mixed_valid_invalid_features")
+        print("✓ Test passed: features_with_missing_geometry_skipped")
 
     def test_all_three_skip_types_combined(self):
         """Test import with geometry duplicates + hash duplicates + manual skips."""

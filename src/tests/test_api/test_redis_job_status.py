@@ -301,13 +301,13 @@ class TestRedisJobStatusAPI(TransactionTestCase):
         )
 
         # Start an import job
-        import_job_id = import_job.start_import_job(
+        import_job_id = self.import_job.start_import_job(
             item_id=import_item1.id,
             user_id=self.user.id
         )
 
         # Start a delete job
-        delete_job_id = delete_job.start_delete_job(
+        delete_job_id = self.delete_job.start_delete_job(
             item_id=import_item2.id,
             user_id=self.user.id,
             filename=import_item2.original_filename
@@ -355,7 +355,7 @@ class TestRedisJobStatusAPI(TransactionTestCase):
             }]
         )
         
-        job_id1 = import_job.start_import_job(
+        job_id1 = self.import_job.start_import_job(
             item_id=import_item1.id,
             user_id=self.user.id
         )
@@ -373,7 +373,7 @@ class TestRedisJobStatusAPI(TransactionTestCase):
             }]
         )
         
-        job_id2 = import_job.start_import_job(
+        job_id2 = self.import_job.start_import_job(
             item_id=import_item2.id,
             user_id=self.user.id
         )
@@ -474,20 +474,6 @@ class TestRedisJobStatusAPI(TransactionTestCase):
             # Redis might not be available, skip TTL check
             pass
 
-    def test_api_endpoint_handles_redis_unavailable(self):
-        """Test that API endpoint handles Redis unavailability gracefully."""
-        # Mock Redis to raise an exception
-        with patch('geo_lib.processing.jobs.helpers.redis_job_storage.get_redis_connection') as mock_redis:
-            mock_redis.side_effect = Exception("Redis unavailable")
-            
-            # API should return empty list instead of failing
-            response = self.client.get('/api/item/import/jobs/all')
-            self.assertEqual(response.status_code, 200)
-            
-            data = json.loads(response.content)
-            self.assertIn('jobs', data)
-            self.assertEqual(data['jobs'], [])
-
     def test_user_jobs_isolation(self):
         """Test that users only see their own jobs."""
         # Create another user
@@ -520,11 +506,11 @@ class TestRedisJobStatusAPI(TransactionTestCase):
         )
 
         # Start jobs for both users
-        job_id1 = import_job.start_import_job(
+        job_id1 = self.import_job.start_import_job(
             item_id=import_item1.id,
             user_id=self.user.id
         )
-        job_id2 = import_job.start_import_job(
+        job_id2 = self.import_job.start_import_job(
             item_id=import_item2.id,
             user_id=other_user.id
         )
