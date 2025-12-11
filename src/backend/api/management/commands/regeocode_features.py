@@ -6,7 +6,7 @@ from django.core.management.base import BaseCommand
 from django.db import transaction
 
 from api.models import FeatureStore
-from geo_lib.geocoding.reverse_geocode import get_reverse_geocoding_service
+from geo_lib.geocoding.location_tags import get_location_tags
 from geo_lib.processing.tagging.modules.geocoding import get_representative_points
 
 
@@ -69,10 +69,6 @@ class Command(BaseCommand):
             return
 
         self.stdout.write(f'Found {total_count} features to re-geocode')
-
-        # Initialize geocoding service
-        geocoding_service = get_reverse_geocoding_service()
-        self.stdout.write('Geocoding service initialized')
 
         # Statistics
         processed = 0
@@ -147,8 +143,15 @@ class Command(BaseCommand):
                                 all_location_tags = set()
                                 for lat, lon in points:
                                     try:
-                                        location_tags = geocoding_service.get_location_tags(lat, lon)
+                                        location_tags, log_messages = get_location_tags(lat, lon)
                                         all_location_tags.update(location_tags)
+                                        
+                                        # Display any warnings or errors from geocoding
+                                        for log_msg in log_messages:
+                                            if log_msg.level == 'ERROR':
+                                                self.stdout.write(self.style.ERROR(f'  {log_msg.message}'))
+                                            elif log_msg.level == 'WARNING':
+                                                self.stdout.write(self.style.WARNING(f'  {log_msg.message}'))
                                     except Exception as e:
                                         self.stdout.write(
                                             self.style.WARNING(

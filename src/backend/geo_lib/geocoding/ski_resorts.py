@@ -1,9 +1,19 @@
+"""
+Ski resort lookup using a pre-compiled database.
+
+This module provides ski resort detection using a local JSON database
+of major ski resorts with bounding boxes, avoiding the limitations of
+OpenStreetMap data which often lacks proper ski resort tagging.
+"""
 import json
 from pathlib import Path
 from threading import Lock
 from typing import List, Dict, Any
 
+from geo_lib.geocoding.cache import _GEOCODING_CACHE, _get_cache_key
+from geo_lib.geocoding.constants import REVERSE_GEOCODING_CACHE_TTL
 from geo_lib.logging.console import get_tagged_logger
+from geo_lib.spatial.haversine import haversine_distance_miles
 
 _SKI_RESORTS = None
 _SKI_RESORTS_LOCK = Lock()
@@ -32,7 +42,7 @@ def load_ski_resorts() -> List[Dict[str, Any]]:
     return _SKI_RESORTS
 
 
-def _search_nearby_ski_resorts(latitude: float, longitude: float, proximity_miles: float = 2.0) -> List[Dict[str, Any]]:
+def search_nearby_ski_resorts(latitude: float, longitude: float, proximity_miles: float = 2.0) -> List[Dict[str, Any]]:
     """
     Search for ski resorts within proximity_miles of a point using local database.
 
@@ -45,7 +55,7 @@ def _search_nearby_ski_resorts(latitude: float, longitude: float, proximity_mile
         proximity_miles: Distance threshold in miles (not used for bbox check)
 
     Returns:
-        List of ski resort dicts with name and distance
+        List of ski resort dicts with name, distance, country, and state
     """
     # Check cache first
     cache_key = _get_cache_key(latitude, longitude, prefix="geocode:ski")
@@ -97,5 +107,5 @@ def _search_nearby_ski_resorts(latitude: float, longitude: float, proximity_mile
     matching_resorts.sort(key=lambda x: x['distance_miles'])
 
     # Cache for 30 days
-    _GEOCODING_CACHE.set(cache_key, matching_resorts, GEOCODING_CACHE_TTL)
+    _GEOCODING_CACHE.set(cache_key, matching_resorts, REVERSE_GEOCODING_CACHE_TTL)
     return matching_resorts

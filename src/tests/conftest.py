@@ -354,12 +354,12 @@ def conditional_external_api_mocking():
     # Always mock geocoding services with realistic data from real Overpass API responses
     # Mock the Overpass API calls directly so the actual tag generation logic is tested
     # This provides fast, deterministic tests while using real Overpass response data
-    geocoding_patch1 = patch('geo_lib.geocoding.reverse_geocode.ReverseGeocodingService._query_overpass')
+    geocoding_patch1 = patch('geo_lib.geocoding.overpass_api.query_overpass')
     mock_overpass = geocoding_patch1.start()
     
     # Return real Overpass API responses based on coordinates in the query
     # This allows the actual geocoding logic to run and generate tags
-    mock_overpass.side_effect = lambda query, max_retries=3: get_mock_overpass_response(query)
+    mock_overpass.side_effect = lambda query, max_retries=3, latitude=None, longitude=None: get_mock_overpass_response(query)
     
     patches.append(geocoding_patch1)
     
@@ -378,13 +378,16 @@ def conditional_external_api_mocking():
     elevation_patch = patch('geo_lib.processing.elevation_service.requests.post')
     mock_elevation_post = elevation_patch.start()
     
-    def mock_elevation_response(url, json=None, headers=None, timeout=None):
+    def mock_elevation_response(url, json=None, data=None, headers=None, timeout=None):
         """
         Mock elevation API responses based on coordinates.
         Returns real elevation data captured from racemap API.
         
         Elevation data format: array of [lat, lon] pairs -> array of elevation values in meters
+        
+        Note: Accepts both 'json' (for elevation API) and 'data' (for Overpass API) parameters.
         """
+        # Use json parameter if available, ignore data (for Overpass compatibility)
         if not json or not isinstance(json, list):
             # Return empty list for invalid requests
             response = MagicMock()

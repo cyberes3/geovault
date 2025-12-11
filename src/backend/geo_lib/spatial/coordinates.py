@@ -1,5 +1,6 @@
 from typing import List, Tuple
 
+from geo_lib.geocoding.constants import COORDINATE_PRECISION
 from geo_lib.processing.duplicate_detection.constants import COORDINATE_TOLERANCE
 
 
@@ -34,4 +35,4 @@ def round_coordinate(latitude: float, longitude: float) -> Tuple[float, float]:
     Returns:
         Tuple of (rounded_lat, rounded_lon)
     """
-    return round(latitude, 3), round(longitude, 3)
+    return round(latitude, COORDINATE_PRECISION), round(longitude, COORDINATE_PRECISION)

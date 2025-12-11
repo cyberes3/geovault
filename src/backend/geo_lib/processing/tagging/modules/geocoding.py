@@ -8,7 +8,7 @@ from typing import List, Tuple, Dict
 from website.settings_utils import get_required_setting
 
 from geo_lib.types.feature import GeoFeatureSupported
-from geo_lib.geocoding.reverse_geocode import get_reverse_geocoding_service
+from geo_lib.geocoding.location_tags import batch_geocode_coordinates
 from geo_lib.processing.tagging.base import TagGenerator
 from geo_lib.processing.logging import DatabaseLogLevel
 from geo_lib.logging.console import get_tagged_logger
@@ -97,8 +97,7 @@ class GeocodingTagGenerator(TagGenerator):
             return {i: [] for i in range(len(features))}
         
         # Step 2: SINGLE CALL to batch geocode all coordinates with deduplication
-        geocoding_service = get_reverse_geocoding_service()
-        geocode_results = geocoding_service.batch_geocode_coordinates(all_coordinates)
+        geocode_results = batch_geocode_coordinates(all_coordinates)
         
         # Step 3: Assign tags back to features
         feature_tags = {}

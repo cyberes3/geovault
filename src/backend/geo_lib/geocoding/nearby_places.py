@@ -1,0 +1,159 @@
+"""
+Nearby place searches (cities, lakes, water bodies).
+
+This module provides proximity-based searches for places near a coordinate,
+including cities, towns, villages, and water bodies like lakes and reservoirs.
+"""
+from typing import List, Dict, Any
+
+from django.conf import settings
+
+from geo_lib.geocoding.cache import _GEOCODING_CACHE, _get_cache_key
+from geo_lib.geocoding.constants import REVERSE_GEOCODING_CACHE_TTL
+from geo_lib.geocoding.overpass_api import query_overpass
+from geo_lib.geocoding.osm_tags import get_name_from_tags
+from geo_lib.spatial.haversine import haversine_distance_miles
+
+
+def find_nearby_cities(
+    latitude: float,
+    longitude: float,
+    threshold_miles: float = None
+) -> List[Dict[str, Any]]:
+    """
+    Find cities/towns within threshold_miles of a point.
+    
+    Args:
+        latitude: Latitude coordinate
+        longitude: Longitude coordinate
+        threshold_miles: Search radius in miles (defaults to CITY_PROXIMITY_MILES setting)
+    
+    Returns:
+        List of dicts with 'name', 'distance_miles', 'place_type' keys, sorted by distance
+    """
+    if threshold_miles is None:
+        threshold_miles = settings.CITY_PROXIMITY_MILES
+    
+    # Check cache first
+    cache_key = _get_cache_key(latitude, longitude, prefix=f"geocode:cities:{threshold_miles}")
+    cached = _GEOCODING_CACHE.get(cache_key)
+    if cached is not None:
+        return cached
+
+    # Convert miles to meters (1 mile = 1609.34 meters)
+    radius_meters = int(threshold_miles * 1609.34)
+
+    query = f"""
+[out:json];
+(
+  node["place"~"town|city|village"](around:{radius_meters},{latitude},{longitude});
+);
+out center;
+"""
+
+    cities = []
+    response = query_overpass(query, latitude=latitude, longitude=longitude)
+    if response:
+        for element in response.get('elements', []):
+            tags = element.get('tags', {})
+            name = get_name_from_tags(tags)
+            lat = element.get('lat')
+            lon = element.get('lon')
+
+            if name and lat is not None and lon is not None:
+                distance = haversine_distance_miles(latitude, longitude, lat, lon)
+                if distance <= threshold_miles:
+                    cities.append({
+                        'name': name,
+                        'distance_miles': distance,
+                        'place_type': tags.get('place', '')
+                    })
+
+        # Sort by distance
+        cities.sort(key=lambda x: x['distance_miles'])
+
+        # Only cache on successful API response
+        _GEOCODING_CACHE.set(cache_key, cities, REVERSE_GEOCODING_CACHE_TTL)
+    else:
+        # Sort by distance even if no response (for consistency)
+        cities.sort(key=lambda x: x['distance_miles'])
+
+    return cities
+
+
+def search_nearby_lakes(
+    latitude: float,
+    longitude: float,
+    proximity_miles: float = None
+) -> List[Dict[str, Any]]:
+    """
+    Search for lakes and water bodies within proximity_miles of a point.
+    
+    Args:
+        latitude: Latitude coordinate
+        longitude: Longitude coordinate
+        proximity_miles: Distance threshold in miles (defaults to LAKE_PROXIMITY_MILES setting)
+    
+    Returns:
+        List of lake dicts with name, distance, and water type, sorted by distance
+    """
+    if proximity_miles is None:
+        proximity_miles = settings.LAKE_PROXIMITY_MILES
+    
+    # Check cache first
+    cache_key = _get_cache_key(latitude, longitude, prefix=f"geocode:lakes:{proximity_miles}")
+    cached = _GEOCODING_CACHE.get(cache_key)
+    if cached is not None:
+        return cached
+
+    # Convert miles to meters
+    radius_meters = int(proximity_miles * 1609.34)
+
+    query = f"""
+[out:json];
+(
+  way["natural"="water"]["name"](around:{radius_meters},{latitude},{longitude});
+  relation["natural"="water"]["name"](around:{radius_meters},{latitude},{longitude});
+  way["water"="lake"]["name"](around:{radius_meters},{latitude},{longitude});
+  relation["water"="lake"]["name"](around:{radius_meters},{latitude},{longitude});
+);
+out tags center;
+"""
+
+    lakes = []
+    response = query_overpass(query, latitude=latitude, longitude=longitude)
+    if response:
+        for element in response.get('elements', []):
+            tags = element.get('tags', {})
+            name = get_name_from_tags(tags)
+            water_type = tags.get('water', '')
+
+            # Only include lakes, not rivers/streams
+            if name and water_type in ['lake', 'reservoir', 'pond', '']:
+                # Get center coordinates
+                lat = element.get('lat')
+                lon = element.get('lon')
+                center = element.get('center', {})
+                if not lat:
+                    lat = center.get('lat')
+                    lon = center.get('lon')
+
+                if lat and lon:
+                    distance = haversine_distance_miles(latitude, longitude, lat, lon)
+                    if distance <= proximity_miles:
+                        lakes.append({
+                            'name': name,
+                            'distance_miles': distance,
+                            'water_type': water_type or 'water'
+                        })
+
+        # Sort by distance
+        lakes.sort(key=lambda x: x['distance_miles'])
+
+        # Only cache on successful API response
+        _GEOCODING_CACHE.set(cache_key, lakes, REVERSE_GEOCODING_CACHE_TTL)
+    else:
+        # Sort by distance even if no response (for consistency)
+        lakes.sort(key=lambda x: x['distance_miles'])
+
+    return lakes
