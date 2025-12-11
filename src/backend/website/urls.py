@@ -18,9 +18,9 @@ from django.conf.urls import include
 from django.contrib import admin
 from django.urls import path, re_path
 
-from website.views import index
-from website.exception_handler import custom_exception_handler
 from users.views.account_management import block_account_email_view
+from website.exception_handler import custom_exception_handler
+from website.views import index
 
 # Set custom exception handler
 handler500 = custom_exception_handler
