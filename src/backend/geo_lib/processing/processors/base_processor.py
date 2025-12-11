@@ -31,6 +31,7 @@ from geo_lib.processing.jobs.helpers.status_tracker import ProcessingStatusTrack
 from geo_lib.processing.logging import ImportLog, DatabaseLogLevel
 from geo_lib.processing.utils import inject_feature_hashes
 from geo_lib.security.SecureFileValidator import validate_file
+from geo_lib.security.exceptions import FileValidationError
 from geo_lib.tags.const_strings import CONST_INTERNAL_TAGS, filter_protected_tags, prepare_user_tags
 from geo_lib.types.feature import PointFeature, LineStringFeature, MultiLineStringFeature, PolygonFeature
 from geo_lib.types.geojson import GeojsonRawProperty
@@ -90,13 +91,13 @@ class BaseProcessor(ABC):
             self.file_type = detect_file_type(self.file_data, self.filename)
         return self.file_type
 
-    def validate(self) -> bool:
+    def validate(self) -> tuple[bool, str] | tuple[bool, None]:
         """
         Validate file security and format.
         Uses the existing validate_file function.
         
         Returns:
-            True if validation passes, False otherwise
+            Tuple of (is_valid, error_message)
         """
         try:
             # Create a mock uploaded file for validation
@@ -122,15 +123,16 @@ class BaseProcessor(ABC):
 
             if not is_valid:
                 self.import_log.add(f"File validation failed: {validation_message}", "Validation", DatabaseLogLevel.ERROR)
-                return False
+                return False, validation_message
 
             self.import_log.add("File validation passed successfully", "Validation", DatabaseLogLevel.INFO)
-            return True
+            return True, None
 
         except Exception as e:
-            self.import_log.add(f"File validation error: {str(e)}", "Validation", DatabaseLogLevel.ERROR)
+            error_msg = str(e)
+            self.import_log.add(f"File validation error: {error_msg}", "Validation", DatabaseLogLevel.ERROR)
             _logger.error(f"Validation error: {traceback.format_exc()}")
-            return False
+            return False, error_msg
 
     @abstractmethod
     def convert_to_geojson(self) -> Dict[str, Any]:
@@ -184,7 +186,7 @@ class BaseProcessor(ABC):
             if len(self.geojson_data.get('features', [])) == 0:
                 error_msg = "File contains no geographic features (placemarks, waypoints, or tracks)"
                 step_log.add(error_msg, "File Conversion", DatabaseLogLevel.ERROR)
-                raise Exception(error_msg)
+                raise FileValidationError(error_msg)
 
         except Exception as e:
             if not self._is_canceled():

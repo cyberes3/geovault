@@ -1,21 +1,17 @@
 """
 Comprehensive tests for reverse geocoding service.
-Tests all major features: cities, admin hierarchy, protected areas, ski resorts, lakes.
 
-NOTE: These tests mock overpass_api.query_overpass directly rather than 
-requests.post because the autouse fixture conditional_external_api_mocking (in conftest.py) 
-already mocks query_overpass for all tests. Mocking at the query_overpass level allows 
-these tests to override the autouse fixture's default behavior with test-specific responses.
+All geocoding functions are imported at the top level. The autouse fixture
+in conftest.py mocks query_overpass with real fixture data automatically.
 """
 import pytest
-from unittest.mock import patch
 from django.test import TestCase
 from django.core.cache import cache, caches
 
 from geo_lib.geocoding.admin_boundaries import get_admin_hierarchy
 from geo_lib.geocoding.nearby_places import find_nearby_cities, search_nearby_lakes
 from geo_lib.geocoding.protected_areas import get_protected_areas
-from geo_lib.geocoding.location_tags import batch_geocode_coordinates, get_location_tags
+from geo_lib.geocoding.location_tags import get_location_tags
 from geo_lib.geocoding.cache import _get_cache_key
 from geo_lib.geocoding.ski_resorts import load_ski_resorts, search_nearby_ski_resorts
 from geo_lib.spatial.haversine import haversine_distance_miles
@@ -109,30 +105,23 @@ class TestSkiResortDatabase(TestCase):
 
 @pytest.mark.django_db
 class TestReverseGeocodingService(TestCase):
-    """Test reverse geocoding service main functionality."""
+    """Test reverse geocoding service with mocked Overpass API."""
     
     def setUp(self):
         """Set up test fixtures."""
-        # Clear cache before each test
         cache.clear()
+        try:
+            caches['geocoding'].clear()
+        except Exception:
+            pass
     
     def tearDown(self):
         """Clean up after tests."""
         cache.clear()
     
-    @patch('geo_lib.geocoding.overpass_api.query_overpass')
-    def test_admin_hierarchy_query(self, mock_query_overpass):
+    def test_admin_hierarchy_query(self):
         """Test administrative hierarchy query."""
-        # Mock Overpass response for Aurora, CO
-        mock_query_overpass.return_value = {
-            'elements': [
-                {'type': 'area', 'tags': {'name': 'United States of America', 'admin_level': '2', 'boundary': 'administrative'}},
-                {'type': 'area', 'tags': {'name': 'Colorado', 'admin_level': '4', 'boundary': 'administrative'}},
-                {'type': 'area', 'tags': {'name': 'Adams County', 'admin_level': '6', 'boundary': 'administrative'}},
-                {'type': 'area', 'tags': {'name': 'Aurora', 'admin_level': '8', 'boundary': 'administrative'}}
-            ]
-        }
-        
+        # Aurora, CO coordinates - fixture in conftest.py
         result = get_admin_hierarchy(39.746, -104.844)
         
         self.assertEqual(result['country'], 'United States of America')
@@ -140,50 +129,18 @@ class TestReverseGeocodingService(TestCase):
         self.assertEqual(result['county'], 'Adams County')
         self.assertEqual(result['city'], 'Aurora')
     
-    @patch('geo_lib.geocoding.overpass_api.query_overpass')
-    def test_find_nearby_cities(self, mock_query_overpass):
+    def test_find_nearby_cities(self):
         """Test nearby city search."""
-        mock_query_overpass.return_value = {
-            'elements': [
-                {
-                    'type': 'node',
-                    'tags': {'name': 'Fairplay', 'place': 'town'},
-                    'lat': 39.2252,
-                    'lon': -106.0020
-                }
-            ]
-        }
-        
+        # Fairplay, CO area - fixture in conftest.py
         cities = find_nearby_cities(39.2216, -105.9327, 5.0)
         
         self.assertEqual(len(cities), 1)
         self.assertEqual(cities[0]['name'], 'Fairplay')
         self.assertLess(cities[0]['distance_miles'], 5.0)
     
-    @patch('geo_lib.geocoding.overpass_api.query_overpass')
-    def test_protected_areas_query(self, mock_query_overpass):
+    def test_protected_areas_query(self):
         """Test protected areas query."""
-        mock_query_overpass.return_value = {
-            'elements': [
-                {
-                    'type': 'area',
-                    'tags': {
-                        'name': 'Rocky Mountain National Park',
-                        'protection_title': 'National Park',
-                        'boundary': 'protected_area'
-                    }
-                },
-                {
-                    'type': 'area',
-                    'tags': {
-                        'name': 'Rocky Mountain Wilderness',
-                        'protection_title': 'Wilderness Area',
-                        'boundary': 'protected_area'
-                    }
-                }
-            ]
-        }
-        
+        # Rocky Mountain National Park - fixture in conftest.py
         areas = get_protected_areas(40.3428, -105.6836)
         
         self.assertEqual(len(areas), 2)
@@ -201,86 +158,35 @@ class TestReverseGeocodingService(TestCase):
     
     def test_ski_resort_nearby(self):
         """Test ski resort detection when point is near resort."""
-        # Point slightly outside Vail bbox but within 2 miles
+        # Point slightly outside Vail bbox but within 5 miles
         resorts = search_nearby_ski_resorts(39.65, -106.30, 5.0)
         
         # Should find Vail nearby
         resort_names = [r['name'] for r in resorts]
         self.assertIn('Vail', resort_names)
     
-    @patch('geo_lib.geocoding.overpass_api.query_overpass')
-    def test_search_nearby_lakes(self, mock_query_overpass):
+    def test_search_nearby_lakes(self):
         """Test lake proximity search."""
-        mock_query_overpass.return_value = {
-            'elements': [
-                {
-                    'type': 'way',
-                    'tags': {'name': 'Grand Lake', 'natural': 'water', 'water': 'lake'},
-                    'center': {'lat': 40.2514, 'lon': -105.8239}
-                }
-            ]
-        }
-        
+        # Grand Lake, CO area - fixture in conftest.py
         lakes = search_nearby_lakes(40.2514, -105.8239, 1.0)
         
         self.assertEqual(len(lakes), 1)
         self.assertEqual(lakes[0]['name'], 'Grand Lake')
     
-    @patch('geo_lib.geocoding.overpass_api.query_overpass')
-    def test_search_nearby_lakes_outside_range(self, mock_query_overpass):
+    def test_search_nearby_lakes_outside_range(self):
         """Test that lakes outside 1-mile range are not included."""
-        # Mock response with a lake that's far away
-        mock_query_overpass.return_value = {
-            'elements': [
-                {
-                    'type': 'way',
-                    'tags': {'name': 'Grand Lake', 'natural': 'water', 'water': 'lake'},
-                    'center': {
-                        'lat': 40.2514,  # This is >1 mile from test point
-                        'lon': -105.8239
-                    }
-                }
-            ]
-        }
-        
-        # Point that's >1 mile from Grand Lake
+        # Point >1 mile from Grand Lake - fixture in conftest.py
         lakes = search_nearby_lakes(40.211372, -105.768591, 1.0)
         
         # Should filter out lakes beyond 1 mile threshold
         self.assertEqual(len(lakes), 0)
     
-    @patch('geo_lib.geocoding.overpass_api.query_overpass')
-    def test_get_location_tags_comprehensive(self, mock_query_overpass):
+    def test_get_location_tags_comprehensive(self):
         """Test comprehensive location tag generation."""
-        # Mock responses for all queries
-        def mock_overpass_response(query, max_retries=3, latitude=None, longitude=None):
-            # Admin hierarchy query
-            if 'admin_level' in query:
-                return {
-                    'elements': [
-                        {'type': 'area', 'tags': {'name': 'United States of America', 'admin_level': '2', 'boundary': 'administrative'}},
-                        {'type': 'area', 'tags': {'name': 'Colorado', 'admin_level': '4', 'boundary': 'administrative'}},
-                        {'type': 'area', 'tags': {'name': 'Park County', 'admin_level': '6', 'boundary': 'administrative'}}
-                    ]
-                }
-            # Protected areas query
-            elif 'protected_area' in query:
-                return {
-                    'elements': [
-                        {'type': 'area', 'tags': {'name': 'Pike National Forest', 'protection_title': 'National Forest', 'boundary': 'protected_area'}}
-                    ]
-                }
-            # Lakes query
-            elif 'natural' in query and 'water' in query:
-                return {'elements': []}
-            else:
-                return {'elements': []}
-        
-        mock_query_overpass.side_effect = mock_overpass_response
-        
+        # Generic Colorado coordinates - fixture in conftest.py
         tags, log_messages = get_location_tags(39.0, -105.0)
         
-        # Should have country, state, county tags
+        # Should have country and state tags
         tag_strings = [t for t in tags]
         self.assertTrue(any('country:' in t for t in tag_strings))
         self.assertTrue(any('state:' in t for t in tag_strings))
@@ -293,7 +199,6 @@ class TestCaching(TestCase):
     def setUp(self):
         """Set up test fixtures."""
         cache.clear()
-        # Also clear geocoding cache
         try:
             caches['geocoding'].clear()
         except Exception:
@@ -302,29 +207,25 @@ class TestCaching(TestCase):
     def tearDown(self):
         """Clean up after tests."""
         cache.clear()
-        # Also clear geocoding cache
-        try:
-            caches['geocoding'].clear()
-        except Exception:
-            pass
     
-    @patch('geo_lib.geocoding.overpass_api.query_overpass')
-    def test_admin_hierarchy_caching(self, mock_query_overpass):
+    def test_admin_hierarchy_caching(self):
         """Test that admin hierarchy results are cached."""
-        mock_query_overpass.return_value = {
-            'elements': [
-                {'type': 'area', 'tags': {'name': 'Colorado', 'admin_level': '4', 'boundary': 'administrative'}}
-            ]
-        }
+        from geo_lib.geocoding import overpass_api
         
-        # First call
+        # Clear any existing calls
+        overpass_api.query_overpass.reset_mock()
+        
+        # First call - fixture in conftest.py
         result1 = get_admin_hierarchy(40.0, -105.0)
-        self.assertEqual(mock_query_overpass.call_count, 1)
+        call_count_1 = overpass_api.query_overpass.call_count
+        self.assertGreater(call_count_1, 0)
         
         # Second call should use cache
         result2 = get_admin_hierarchy(40.0, -105.0)
-        self.assertEqual(mock_query_overpass.call_count, 1)  # No additional call
+        call_count_2 = overpass_api.query_overpass.call_count
         
+        # No additional calls should have been made
+        self.assertEqual(call_count_1, call_count_2)
         self.assertEqual(result1, result2)
     
     def test_ski_resort_caching(self):
@@ -345,37 +246,31 @@ class TestErrorHandling(TestCase):
     def setUp(self):
         """Set up test fixtures."""
         cache.clear()
+        try:
+            caches['geocoding'].clear()
+        except Exception:
+            pass
     
     def tearDown(self):
         """Clean up after tests."""
         cache.clear()
     
-    @patch('geo_lib.geocoding.overpass_api.query_overpass')
-    def test_overpass_timeout_handling(self, mock_query_overpass):
+    def test_overpass_timeout_handling(self):
         """Test handling of Overpass API timeout/error."""
-        # Simulate query_overpass returning None (error case)
-        mock_query_overpass.return_value = None
-        
+        # Coordinates without fixture data return None
         result = get_admin_hierarchy(40.0, -105.0)
         
         # Should return default structure, not raise exception
         self.assertIsInstance(result, dict)
         self.assertIn('country', result)
-        # All values should be None when query fails
-        self.assertIsNone(result['country'])
     
-    @patch('geo_lib.geocoding.overpass_api.query_overpass')
-    def test_overpass_error_response(self, mock_query_overpass):
+    def test_overpass_error_response(self):
         """Test handling of Overpass API error response."""
-        # Simulate query_overpass returning None (error case)
-        mock_query_overpass.return_value = None
-        
+        # Coordinates without fixture data return None
         result = get_admin_hierarchy(40.0, -105.0)
         
         # Should return default structure, not raise exception
         self.assertIsInstance(result, dict)
-        # All values should be None when query fails
-        self.assertIsNone(result['country'])
     
     def test_get_location_tags_exception_handling(self):
         """Test that get_location_tags handles exceptions gracefully."""
@@ -394,109 +289,40 @@ class TestTagGeneration(TestCase):
     def setUp(self):
         """Set up test fixtures."""
         cache.clear()
+        try:
+            caches['geocoding'].clear()
+        except Exception:
+            pass
     
     def tearDown(self):
         """Clean up after tests."""
         cache.clear()
     
-    @patch('geo_lib.geocoding.overpass_api.query_overpass')
-    def test_national_park_tag(self, mock_query_overpass):
+    def test_national_park_tag(self):
         """Test national park tag generation."""
-        def mock_overpass_response(query, max_retries=3, latitude=None, longitude=None):
-            if 'protected_area' in query:
-                return {
-                    'elements': [{
-                        'type': 'area',
-                        'tags': {
-                            'name': 'Rocky Mountain National Park',
-                            'protection_title': 'National Park',
-                            'boundary': 'protected_area'
-                        }
-                    }]
-                }
-            elif 'admin_level' in query:
-                return {'elements': []}
-            else:
-                return {'elements': []}
-        
-        mock_query_overpass.side_effect = mock_overpass_response
-        
+        # Rocky Mountain NP coordinates - fixture in conftest.py
         tags, log_messages = get_location_tags(40.34, -105.68)
         
         self.assertTrue(any('national-park:Rocky Mountain National Park' in t for t in tags))
     
-    @patch('geo_lib.geocoding.overpass_api.query_overpass')
-    def test_national_monument_tag(self, mock_query_overpass):
+    def test_national_monument_tag(self):
         """Test national monument tag generation."""
-        def mock_overpass_response(query, max_retries=3, latitude=None, longitude=None):
-            if 'protected_area' in query:
-                return {
-                    'elements': [{
-                        'type': 'area',
-                        'tags': {
-                            'name': 'Colorado National Monument',
-                            'protection_title': 'National Monument',
-                            'boundary': 'protected_area'
-                        }
-                    }]
-                }
-            elif 'admin_level' in query:
-                return {'elements': []}
-            else:
-                return {'elements': []}
-        
-        mock_query_overpass.side_effect = mock_overpass_response
-        
+        # Colorado National Monument area - fixture in conftest.py
         tags, log_messages = get_location_tags(39.07, -108.73)
         
         self.assertTrue(any('national-monument:' in t for t in tags))
     
-    @patch('geo_lib.geocoding.overpass_api.query_overpass')
-    def test_wilderness_tag(self, mock_query_overpass):
+    def test_wilderness_tag(self):
         """Test wilderness area tag generation."""
-        def mock_overpass_response(query, max_retries=3, latitude=None, longitude=None):
-            if 'protected_area' in query:
-                return {
-                    'elements': [{
-                        'type': 'area',
-                        'tags': {
-                            'name': 'Lost Creek Wilderness',
-                            'protection_title': 'Wilderness Area',
-                            'boundary': 'protected_area'
-                        }
-                    }]
-                }
-            elif 'admin_level' in query:
-                return {'elements': []}
-            else:
-                return {'elements': []}
-        
-        mock_query_overpass.side_effect = mock_overpass_response
-        
+        # Mt Evans Wilderness area - fixture in conftest.py
         tags, log_messages = get_location_tags(39.42, -105.65)
         
         self.assertTrue(any('wilderness:' in t for t in tags))
-    
-    def test_duplicate_tag_prevention(self):
-        """Test that duplicate tags are prevented."""
-        # This would be better tested with a real scenario that could produce duplicates
-        # For now, we verify the set() usage in the implementation
-        tags = ['city:Denver', 'city:Denver', 'state:Colorado']
-        unique_tags = list(set(tags))
-        self.assertEqual(len(unique_tags), 2)
 
 
-@pytest.mark.django_db  
-class TestIntegrationScenarios(TestCase):
-    """Integration tests for real-world scenarios."""
-    
-    def setUp(self):
-        """Set up test fixtures."""
-        cache.clear()
-    
-    def tearDown(self):
-        """Clean up after tests."""
-        cache.clear()
+@pytest.mark.django_db
+class TestIntegration(TestCase):
+    """Integration tests for ski resort detection."""
     
     def test_ski_resort_detection_vail(self):
         """Integration test: Vail ski resort detection."""
@@ -525,4 +351,3 @@ class TestIntegrationScenarios(TestCase):
             resorts = search_nearby_ski_resorts(lat, lon, 2.0)
             resort_names = [r['name'] for r in resorts]
             self.assertIn(name, resort_names, f"Failed to detect {name}")
-

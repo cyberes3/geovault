@@ -1634,15 +1634,14 @@ class TestQuickPointCreationBackgroundGeocoding(TransactionTestCase):
     
     @patch('api.views.features.creation._fetch_elevation_for_point')
     @patch('geo_lib.processing.tagging.modules.geocoding.get_required_setting')
-    @patch('geo_lib.geocoding.reverse_geocode.get_reverse_geocoding_service')
-    def test_background_geocoding_adds_tags(self, mock_get_service, mock_setting, mock_elevation):
+    @patch('geo_lib.processing.tagging.modules.geocoding.batch_geocode_coordinates')
+    def test_background_geocoding_adds_tags(self, mock_batch_geocode, mock_setting, mock_elevation):
         """Test that background geocoding actually adds tags to the feature."""
         mock_elevation.return_value = 1500.0
         mock_setting.return_value = True
         
-        # Mock geocoding service - batch_geocode_coordinates returns dict mapping (lat, lon) to (tags, log_messages)
-        mock_service = MagicMock()
-        mock_service.batch_geocode_coordinates.return_value = {
+        # Mock batch_geocode_coordinates - returns dict mapping (lat, lon) to (tags, log_messages)
+        mock_batch_geocode.return_value = {
             (37.7749, -122.4194): (
                 [
                     'geo-city:San Francisco',
@@ -1652,7 +1651,6 @@ class TestQuickPointCreationBackgroundGeocoding(TransactionTestCase):
                 []  # Empty log messages
             )
         }
-        mock_get_service.return_value = mock_service
         
         payload = {
             'latitude': 37.7749,

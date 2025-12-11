@@ -91,15 +91,14 @@ class TestBackgroundGeocoding(TransactionTestCase):
         return feature_store
     
     @patch('geo_lib.processing.tagging.modules.geocoding.get_required_setting')
-    @patch('geo_lib.processing.tagging.modules.geocoding.get_reverse_geocoding_service')
-    def test_background_geocoding_adds_tags(self, mock_get_service, mock_setting):
+    @patch('geo_lib.processing.tagging.modules.geocoding.batch_geocode_coordinates')
+    def test_background_geocoding_adds_tags(self, mock_batch_geocode, mock_setting):
         """Test that background geocoding adds tags to a feature."""
         # Enable geocoding
         mock_setting.return_value = True
         
-        # Mock geocoding service - batch_geocode_coordinates returns dict mapping (lat, lon) to (tags, log_messages)
-        mock_service = MagicMock()
-        mock_service.batch_geocode_coordinates.return_value = {
+        # Mock batch_geocode_coordinates - returns dict mapping (lat, lon) to (tags, log_messages)
+        mock_batch_geocode.return_value = {
             (37.7749, -122.4194): (
                 [
                     'geo-city:San Francisco',
@@ -109,7 +108,6 @@ class TestBackgroundGeocoding(TransactionTestCase):
                 []  # Empty log messages
             )
         }
-        mock_get_service.return_value = mock_service
         
         # Create feature without geocoding tags
         feature_store = self._create_test_feature(with_geocoding_tags=False)
@@ -139,16 +137,14 @@ class TestBackgroundGeocoding(TransactionTestCase):
         self.assertIn('quick-point', system_tags)
     
     @patch('geo_lib.processing.tagging.modules.geocoding.get_required_setting')
-    @patch('geo_lib.processing.tagging.modules.geocoding.get_reverse_geocoding_service')
-    def test_background_geocoding_handles_errors_gracefully(self, mock_get_service, mock_setting):
+    @patch('geo_lib.processing.tagging.modules.geocoding.batch_geocode_coordinates')
+    def test_background_geocoding_handles_errors_gracefully(self, mock_batch_geocode, mock_setting):
         """Test that background geocoding handles errors without affecting the feature."""
         # Enable geocoding
         mock_setting.return_value = True
         
-        # Mock geocoding service to raise an error
-        mock_service = MagicMock()
-        mock_service.batch_geocode_coordinates.side_effect = Exception("Geocoding API error")
-        mock_get_service.return_value = mock_service
+        # Mock batch_geocode_coordinates to raise an error
+        mock_batch_geocode.side_effect = Exception("Geocoding API error")
         
         # Create feature
         feature_store = self._create_test_feature(with_geocoding_tags=False)
@@ -202,15 +198,14 @@ class TestBackgroundGeocoding(TransactionTestCase):
         # This test just verifies it doesn't crash
     
     @patch('geo_lib.processing.tagging.modules.geocoding.get_required_setting')
-    @patch('geo_lib.processing.tagging.modules.geocoding.get_reverse_geocoding_service')
-    def test_background_geocoding_prevents_duplicate_tags(self, mock_get_service, mock_setting):
+    @patch('geo_lib.processing.tagging.modules.geocoding.batch_geocode_coordinates')
+    def test_background_geocoding_prevents_duplicate_tags(self, mock_batch_geocode, mock_setting):
         """Test that background geocoding doesn't add duplicate tags."""
         # Enable geocoding
         mock_setting.return_value = True
         
-        # Mock geocoding service - batch_geocode_coordinates returns dict mapping (lat, lon) to (tags, log_messages)
-        mock_service = MagicMock()
-        mock_service.batch_geocode_coordinates.return_value = {
+        # Mock batch_geocode_coordinates - returns dict mapping (lat, lon) to (tags, log_messages)
+        mock_batch_geocode.return_value = {
             (37.7749, -122.4194): (
                 [
                     'geo-city:San Francisco',
@@ -219,7 +214,6 @@ class TestBackgroundGeocoding(TransactionTestCase):
                 []  # Empty log messages
             )
         }
-        mock_get_service.return_value = mock_service
         
         # Create feature with one geocoding tag already present
         feature_store = self._create_test_feature(with_geocoding_tags=True)
@@ -249,22 +243,19 @@ class TestBackgroundGeocoding(TransactionTestCase):
         self.assertIn('geo-state:California', system_tags)
     
     @patch('geo_lib.processing.tagging.modules.geocoding.get_required_setting')
-    @patch('geo_lib.processing.tagging.modules.geocoding.get_reverse_geocoding_service')
-    def test_background_geocoding_row_locking(self, mock_get_service, mock_setting):
+    @patch('geo_lib.processing.tagging.modules.geocoding.batch_geocode_coordinates')
+    def test_background_geocoding_row_locking(self, mock_batch_geocode, mock_setting):
         """Test that background geocoding uses row locking to prevent race conditions."""
         # Enable geocoding
         mock_setting.return_value = True
         
-        # Mock geocoding service with a delay to simulate slow geocoding
-        mock_service = MagicMock()
-        
+        # Mock batch_geocode_coordinates with a delay to simulate slow geocoding
         def slow_batch_geocode(coordinates):
             time.sleep(0.1)  # Simulate slow geocoding
             # Return dict mapping each coordinate to (tags, log_messages)
             return {coord: (['geo-city:San Francisco'], []) for coord in coordinates}
         
-        mock_service.batch_geocode_coordinates.side_effect = slow_batch_geocode
-        mock_get_service.return_value = mock_service
+        mock_batch_geocode.side_effect = slow_batch_geocode
         
         # Create feature
         feature_store = self._create_test_feature(with_geocoding_tags=False)
@@ -311,23 +302,20 @@ class TestSkipGeocodingParameter(TestCase):
         )
     
     @patch('geo_lib.processing.tagging.modules.geocoding.get_required_setting')
-    @patch('geo_lib.processing.tagging.modules.geocoding.get_reverse_geocoding_service')
-    def test_generate_auto_tags_skips_geocoding(self, mock_get_service, mock_setting):
+    @patch('geo_lib.processing.tagging.modules.geocoding.batch_geocode_coordinates')
+    def test_generate_auto_tags_skips_geocoding(self, mock_batch_geocode, mock_setting):
         """Test that generate_auto_tags skips geocoding when flag is set."""
         from geo_lib.processing.tagging.generate import generate_auto_tags
 
         # Enable geocoding
         mock_setting.return_value = True
         
-        # Mock geocoding service
-        # batch_geocode_coordinates returns a dict mapping (lat, lon) -> (tags, log_messages)
-        mock_service = MagicMock()
-        # Use side_effect to return results for any coordinate passed
-        def mock_batch_geocode(coordinates):
+        # Mock batch_geocode_coordinates
+        # It returns a dict mapping (lat, lon) -> (tags, log_messages)
+        def mock_batch_geocode_impl(coordinates):
             # Return a dict with results for all coordinates passed
             return {coord: (['geo-city:San Francisco'], []) for coord in coordinates}
-        mock_service.batch_geocode_coordinates.side_effect = mock_batch_geocode
-        mock_get_service.return_value = mock_service
+        mock_batch_geocode.side_effect = mock_batch_geocode_impl
         
         # Create feature
         feature = PointFeature(

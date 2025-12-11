@@ -352,16 +352,36 @@ def conditional_external_api_mocking():
     patches = []
     
     # Always mock geocoding services with realistic data from real Overpass API responses
-    # Mock the Overpass API calls directly so the actual tag generation logic is tested
-    # This provides fast, deterministic tests while using real Overpass response data
-    geocoding_patch1 = patch('geo_lib.geocoding.overpass_api.query_overpass')
-    mock_overpass = geocoding_patch1.start()
+    # We need to mock query_overpass in all modules that import it
     
-    # Return real Overpass API responses based on coordinates in the query
-    # This allows the actual geocoding logic to run and generate tags
-    mock_overpass.side_effect = lambda query, max_retries=3, latitude=None, longitude=None: get_mock_overpass_response(query)
+    # Mock implementation that returns fixture data based on query
+    def mock_query_overpass_func(query, max_retries=3, latitude=None, longitude=None):
+        """Mock implementation that returns fixture data based on query."""
+        return get_mock_overpass_response(query)
     
-    patches.append(geocoding_patch1)
+    # Patch query_overpass in all modules that import it
+    # We need to patch where it's used, not where it's defined
+    # We patch the original module first so tests can access it
+    modules_to_patch = [
+        'geo_lib.geocoding.overpass_api.query_overpass',  # Original module (tests access this)
+        'geo_lib.geocoding.admin_boundaries.query_overpass',  # Used in admin_boundaries
+        'geo_lib.geocoding.nearby_places.query_overpass',  # Used in nearby_places
+        'geo_lib.geocoding.protected_areas.query_overpass',  # Used in protected_areas
+    ]
+    
+    # Store the primary mock so all patches share the same call count
+    primary_mock = None
+    for i, module_path in enumerate(modules_to_patch):
+        if i == 0:
+            # Create the primary mock for the first patch
+            geocoding_patch = patch(module_path, side_effect=mock_query_overpass_func)
+            primary_mock = geocoding_patch.start()
+            patches.append(geocoding_patch)
+        else:
+            # All other patches should use the same mock object for consistent call counts
+            geocoding_patch = patch(module_path, new=primary_mock)
+            geocoding_patch.start()
+            patches.append(geocoding_patch)
     
     # Mock IP geolocation service
     geocoding_patch2 = patch('geo_lib.ip_geolocation.get_geolocation_service')

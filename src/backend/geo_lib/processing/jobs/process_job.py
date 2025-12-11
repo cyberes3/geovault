@@ -281,9 +281,9 @@ class ProcessJob(BaseJob):
             realtime_log.add("Validating file format and security", "ProcessJob", DatabaseLogLevel.INFO)
 
             # Validate file using processor
-            if not processor.validate():
-                # Validation failed - handle error
-                error_msg = f"{FILE_VALIDATION_FAILED}: File validation failed"
+            is_valid, validation_error = processor.validate()
+            if not is_valid:
+                error_msg = f"{FILE_VALIDATION_FAILED}: {validation_error}"
                 realtime_log.add(error_msg, "ProcessJob", DatabaseLogLevel.ERROR)
 
                 # Mark ImportQueue item as unparsable
