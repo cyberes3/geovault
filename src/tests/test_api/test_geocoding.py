@@ -2,6 +2,7 @@
 Tests for geocoding API endpoints.
 """
 import json
+import requests
 from unittest.mock import MagicMock, patch
 from django.test import TestCase
 from django.core.cache import cache
@@ -268,8 +269,6 @@ class TestGeocodingAPI(TestCase):
     @patch('api.views.services.geocoding.requests.get')
     def test_geocoding_search_timeout(self, mock_get, mock_config_loader):
         """Test geocoding search when API request times out."""
-        import requests
-
         # Mock config loader to return API key
         mock_config = MagicMock()
         mock_config.get_maptiler_api_key.return_value = 'test_api_key'

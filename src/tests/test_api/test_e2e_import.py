@@ -18,7 +18,7 @@ from django.contrib.gis.geos import Point
 from django.test import TransactionTestCase
 from django.core.files.uploadedfile import SimpleUploadedFile
 
-from api.models import ImportQueue, FeatureStore
+from api.models import ImportQueue, FeatureStore, DatabaseLogging
 from geo_lib.feature_id import generate_geojson_hash
 from geo_lib.processing.duplicate_detection.models import DuplicateMatchType, DuplicateSource
 from geo_lib.processing.jobs.helpers.status_tracker import status_tracker, ProcessingStatus
@@ -248,7 +248,6 @@ class TestE2EImport(TransactionTestCase):
         import_item = ImportQueue.objects.get(id=item_id, user=self.user)
         
         if hasattr(import_item, 'log_id') and import_item.log_id:
-            from api.models import DatabaseLogging
             log_entries = DatabaseLogging.objects.filter(log_id=import_item.log_id).order_by('timestamp')
             
             # Extract all log messages and timing entries
@@ -330,7 +329,6 @@ class TestE2EImport(TransactionTestCase):
         import_item = ImportQueue.objects.get(id=item_id, user=self.user)
         if hasattr(import_item, 'log_id') and import_item.log_id:
             # Check that the processing log contains the new granular steps
-            from api.models import DatabaseLogging
             log_entries = DatabaseLogging.objects.filter(log_id=import_item.log_id).order_by('timestamp')
             
             log_messages = [entry.text for entry in log_entries]
@@ -451,7 +449,6 @@ class TestE2EImport(TransactionTestCase):
         
         # Verify the new processing steps are present in logs for GPX
         if hasattr(import_item, 'log_id') and import_item.log_id:
-            from api.models import DatabaseLogging
             log_entries = DatabaseLogging.objects.filter(log_id=import_item.log_id).order_by('timestamp')
             log_messages = [entry.text for entry in log_entries]
             
@@ -537,7 +534,6 @@ class TestE2EImport(TransactionTestCase):
         
         # Verify the new processing steps are present in logs for KMZ
         if hasattr(import_item, 'log_id') and import_item.log_id:
-            from api.models import DatabaseLogging
             log_entries = DatabaseLogging.objects.filter(log_id=import_item.log_id).order_by('timestamp')
             log_messages = [entry.text for entry in log_entries]
             

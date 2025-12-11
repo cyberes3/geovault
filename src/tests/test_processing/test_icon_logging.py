@@ -3,6 +3,7 @@ Tests for icon processing logging behavior.
 Verifies that errors and warnings are properly passed to import_log.
 """
 from unittest.mock import Mock, patch, MagicMock
+from urllib.error import HTTPError, URLError
 import pytest
 
 from geo_lib.processing.icons.icon_manager import (
@@ -172,7 +173,6 @@ class TestIconLoggingBehavior:
         import_log = ImportLog()
         
         with patch('geo_lib.processing.icons.get.urlopen') as mock_urlopen:
-            from urllib.error import HTTPError
             mock_urlopen.side_effect = HTTPError('http://example.com/icon.png', 404, 'Not Found', {}, None)
             
             result = fetch_remote_icon('http://example.com/icon.png', 5.0, import_log)
@@ -190,7 +190,6 @@ class TestIconLoggingBehavior:
         import_log = ImportLog()
         
         with patch('geo_lib.processing.icons.get.urlopen') as mock_urlopen:
-            from urllib.error import URLError
             mock_urlopen.side_effect = URLError('Connection refused')
             
             result = fetch_remote_icon('http://example.com/icon.png', 5.0, import_log)
@@ -611,7 +610,6 @@ class TestFailureMessageContent:
         import_log = ImportLog()
         
         with patch('geo_lib.processing.icons.get.urlopen') as mock_urlopen:
-            from urllib.error import HTTPError
             mock_urlopen.side_effect = HTTPError('http://example.com/icon.png', 404, 'Not Found', {}, None)
             
             fetch_remote_icon('http://example.com/icon.png', 5.0, import_log)
@@ -626,9 +624,7 @@ class TestFailureMessageContent:
         import_log = ImportLog()
         
         url = 'http://example.com/missing_icon.png'
-        
         with patch('geo_lib.processing.icons.get.urlopen') as mock_urlopen:
-            from urllib.error import HTTPError
             mock_urlopen.side_effect = HTTPError(url, 500, 'Server Error', {}, None)
             
             fetch_remote_icon(url, 5.0, import_log)
@@ -714,7 +710,6 @@ class TestFailureMessageContent:
         store_icon(b'data', 'test.txt', import_log, stats)  # Invalid extension
         
         with patch('geo_lib.processing.icons.get.urlopen') as mock_urlopen:
-            from urllib.error import HTTPError
             mock_urlopen.side_effect = HTTPError('http://example.com/icon.png', 404, 'Not Found', {}, None)
             fetch_remote_icon('http://example.com/icon.png', 5.0, import_log)
         
@@ -737,7 +732,6 @@ class TestFailureMessageContent:
         
         # WARNING: HTTP error
         with patch('geo_lib.processing.icons.get.urlopen') as mock_urlopen:
-            from urllib.error import HTTPError
             mock_urlopen.side_effect = HTTPError('http://example.com/icon.png', 404, 'Not Found', {}, None)
             fetch_remote_icon('http://example.com/icon.png', 5.0, import_log)
         

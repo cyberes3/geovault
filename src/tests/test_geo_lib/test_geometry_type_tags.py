@@ -12,6 +12,8 @@ from geo_lib.types.feature import (
     PolygonFeature
 )
 from geo_lib.processing.tagging.modules.geometry_type import GeometryTypeTagGenerator
+from geo_lib.processing.tagging.generate import generate_auto_tags
+from geo_lib.processing.logging import ImportLog
 
 
 @pytest.mark.django_db
@@ -133,9 +135,6 @@ class TestLineVsTrackTags(TestCase):
     
     def test_regular_line_gets_type_line(self):
         """Test that regular LineStrings (no time data) get type:line tag."""
-        from geo_lib.processing.tagging.generate import generate_auto_tags
-        from geo_lib.processing.logging import ImportLog
-
         regular_line = LineStringFeature(**{
             'type': 'Feature',
             'geometry': {'type': 'LineString', 'coordinates': [[0, 0], [1, 1]]},
@@ -155,9 +154,6 @@ class TestLineVsTrackTags(TestCase):
     
     def test_gpx_track_gets_type_track_not_line(self):
         """Test that GPX tracks (with coordinateProperties.times) get type:track, NOT type:line."""
-        from geo_lib.processing.tagging.generate import generate_auto_tags
-        from geo_lib.processing.logging import ImportLog
-
         gpx_track = LineStringFeature(**{
             'type': 'Feature',
             'geometry': {'type': 'LineString', 'coordinates': [[0, 0], [1, 1]]},
@@ -183,9 +179,6 @@ class TestLineVsTrackTags(TestCase):
     
     def test_gpx_route_gets_type_track(self):
         """Test that GPX routes (with time property) get type:track."""
-        from geo_lib.processing.tagging.generate import generate_auto_tags
-        from geo_lib.processing.logging import ImportLog
-
         gpx_route = LineStringFeature(**{
             'type': 'Feature',
             'geometry': {'type': 'LineString', 'coordinates': [[0, 0], [1, 1]]},
@@ -207,9 +200,6 @@ class TestLineVsTrackTags(TestCase):
     
     def test_multilinestring_track(self):
         """Test that MultiLineString tracks also get type:track."""
-        from geo_lib.processing.tagging.generate import generate_auto_tags
-        from geo_lib.processing.logging import ImportLog
-
         multi_track = MultiLineStringFeature(**{
             'type': 'Feature',
             'geometry': {'type': 'MultiLineString', 'coordinates': [[[0, 0], [1, 1]]]},
@@ -233,9 +223,6 @@ class TestLineVsTrackTags(TestCase):
     
     def test_track_tag_overrides_line_tag(self):
         """Test that type:track replaces type:line in the tag generation pipeline."""
-        from geo_lib.processing.tagging.generate import generate_auto_tags
-        from geo_lib.processing.logging import ImportLog
-
         # This tests the pipeline integration
         # GeometryTypeTagGenerator runs first (priority 10) and adds type:line
         # TrackDetectionTagGenerator runs later (priority 40) and adds type:track
@@ -264,9 +251,6 @@ class TestLineVsTrackTags(TestCase):
     
     def test_caltopo_route_is_line_not_track(self):
         """Test that CalTopo routes (no time data) are type:line, not type:track."""
-        from geo_lib.processing.tagging.generate import generate_auto_tags
-        from geo_lib.processing.logging import ImportLog
-
         caltopo_route = LineStringFeature(**{
             'type': 'Feature',
             'geometry': {

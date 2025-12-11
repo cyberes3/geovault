@@ -5,6 +5,7 @@ stored in Redis and can be queried via the API endpoint.
 """
 import json
 import time
+from unittest.mock import patch
 from django.test import TransactionTestCase
 from django.contrib.auth import get_user_model
 
@@ -476,8 +477,6 @@ class TestRedisJobStatusAPI(TransactionTestCase):
     def test_api_endpoint_handles_redis_unavailable(self):
         """Test that API endpoint handles Redis unavailability gracefully."""
         # Mock Redis to raise an exception
-        from unittest.mock import patch
-        
         with patch('geo_lib.processing.jobs.helpers.redis_job_storage.get_redis_connection') as mock_redis:
             mock_redis.side_effect = Exception("Redis unavailable")
             

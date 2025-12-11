@@ -1,6 +1,7 @@
 """
 Tests for coordinate validation utilities.
 """
+import math
 import pytest
 from geo_lib.validation.coordinate.helpers import (
     CoordinateValidationError,
@@ -79,14 +80,12 @@ class TestCoordinateValidation:
 
     def test_coordinates_with_nan_rejected(self):
         """Test that coordinates with NaN are rejected."""
-        import math
         with pytest.raises(CoordinateValidationError) as exc_info:
             validate_coordinates_for_geometry_type([math.nan, 39.43], 'Point')
         assert 'nan' in str(exc_info.value).lower()
 
     def test_coordinates_with_infinity_rejected(self):
         """Test that coordinates with Infinity are rejected."""
-        import math
         with pytest.raises(CoordinateValidationError) as exc_info:
             validate_coordinates_for_geometry_type([math.inf, 39.43], 'Point')
         assert 'infinity' in str(exc_info.value).lower()
@@ -213,7 +212,6 @@ class TestCoordinateValidationInComplexGeometries:
 
     def test_polygon_invalid_coordinate_with_nan_in_middle(self):
         """Test that NaN coordinate in middle of polygon ring is caught."""
-        import math
         coordinates = [[
             [-104.26, 39.43],    # Valid
             [-104.25, 39.43],    # Valid
@@ -388,7 +386,6 @@ class TestCoordinateValidationInComplexGeometries:
 
     def test_polygon_with_infinity_in_middle(self):
         """Test that Infinity coordinate in middle of polygon is caught."""
-        import math
         coordinates = [[
             [-104.26, 39.43],     # Valid
             [-104.25, 39.43],     # Valid

@@ -15,6 +15,7 @@ from geo_lib.geocoding.location_tags import get_location_tags
 from geo_lib.geocoding.cache import _get_cache_key
 from geo_lib.geocoding.ski_resorts import load_ski_resorts, search_nearby_ski_resorts
 from geo_lib.spatial.haversine import haversine_distance_miles
+from geo_lib.geocoding import overpass_api
 
 
 @pytest.mark.django_db
@@ -210,8 +211,6 @@ class TestCaching(TestCase):
     
     def test_admin_hierarchy_caching(self):
         """Test that admin hierarchy results are cached."""
-        from geo_lib.geocoding import overpass_api
-        
         # Clear any existing calls
         overpass_api.query_overpass.reset_mock()
         

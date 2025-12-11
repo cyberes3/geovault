@@ -13,6 +13,8 @@ from api.models import FeatureStore
 from geo_lib.geocoding.background_geocoding import geocode_feature_async
 from geo_lib.types.feature import PointFeature
 from geo_lib.feature_id import generate_geojson_hash
+from geo_lib.processing.tagging.generate import generate_auto_tags
+from geo_lib.processing.logging import ImportLog
 
 User = get_user_model()
 
@@ -305,8 +307,6 @@ class TestSkipGeocodingParameter(TestCase):
     @patch('geo_lib.processing.tagging.modules.geocoding.batch_geocode_coordinates')
     def test_generate_auto_tags_skips_geocoding(self, mock_batch_geocode, mock_setting):
         """Test that generate_auto_tags skips geocoding when flag is set."""
-        from geo_lib.processing.tagging.generate import generate_auto_tags
-
         # Enable geocoding
         mock_setting.return_value = True
         
@@ -325,7 +325,6 @@ class TestSkipGeocodingParameter(TestCase):
         )
         
         # Generate tags without skipping geocoding
-        from geo_lib.processing.logging import ImportLog
         tags_with_geocoding = generate_auto_tags(feature, import_log=ImportLog(), skip_geocoding=False)
         
         # Generate tags with geocoding skipped
@@ -343,9 +342,6 @@ class TestSkipGeocodingParameter(TestCase):
     
     def test_generate_auto_tags_backward_compatibility(self):
         """Test that generate_auto_tags maintains backward compatibility."""
-        from geo_lib.processing.tagging.generate import generate_auto_tags
-        from geo_lib.processing.logging import ImportLog
-
         # Create feature
         feature = PointFeature(
             type='Feature',
