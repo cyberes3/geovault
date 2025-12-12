@@ -47,7 +47,7 @@ class TestCacheKey(TestCase):
     def test_cache_key_format(self):
         """Test cache key has correct format."""
         key = _get_cache_key(40.123456, -105.789012)
-        self.assertTrue(key.startswith("geocode:"))
+        self.assertTrue(key.startswith("reverse_geocode:"))
         self.assertIn("40.123", key)
         self.assertIn("-105.789", key)
     
@@ -56,9 +56,9 @@ class TestCacheKey(TestCase):
         key1 = _get_cache_key(40.1234, -105.7899)
         key2 = _get_cache_key(40.1235, -105.7891)
         # First rounds to 40.123, -105.79
-        self.assertEqual(key1, "geocode:40.123,-105.79")
+        self.assertEqual(key1, "reverse_geocode:40.123,-105.79")
         # Second rounds to 40.123, -105.789 (different longitude)
-        self.assertEqual(key2, "geocode:40.123,-105.789")
+        self.assertEqual(key2, "reverse_geocode:40.123,-105.789")
         
         # Test that similar coords get same key
         key3 = _get_cache_key(40.12299, -105.78999)
