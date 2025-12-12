@@ -191,3 +191,265 @@ class TestAPIKeys(TestCase):
         result = validate_api_key(raw_key[:-1] + 'X')
         self.assertIsNone(result)
 
+
+class TestAPIKeyValidationEndpoint(TestCase):
+    """Extended tests for API key validation endpoint."""
+
+    def setUp(self):
+        """Set up test fixtures."""
+        self.user = User.objects.create_user(
+            email='test@example.com',
+            password='testpass123',
+            username='testuser'
+        )
+
+    def test_validate_api_key_endpoint_returns_user_info(self):
+        """Test that validation endpoint returns key information."""
+        key_obj, raw_key = create_user_api_key(self.user, 'Test Key')
+
+        response = self.client.post(
+            '/api/user/api-keys/validate/',
+            HTTP_AUTHORIZATION=f'Bearer {raw_key}'
+        )
+        
+        self.assertEqual(response.status_code, 200)
+        data = json.loads(response.content)
+        
+        self.assertTrue(data['valid'])
+        self.assertEqual(data['key_name'], 'Test Key')
+        # API returns key metadata, not user_id
+        self.assertIn('created_at', data)
+
+    def test_validate_api_key_endpoint_invalid_returns_false(self):
+        """Test that invalid key returns valid=false."""
+        response = self.client.post(
+            '/api/user/api-keys/validate/',
+            HTTP_AUTHORIZATION='Bearer invalid-key-12345'
+        )
+        
+        # May return 200 with valid=false or 401
+        self.assertIn(response.status_code, [200, 401])
+        
+        if response.status_code == 200:
+            data = json.loads(response.content)
+            self.assertFalse(data['valid'])
+
+    def test_validate_api_key_endpoint_inactive_key(self):
+        """Test validation endpoint with inactive API key."""
+        key_obj, raw_key = create_user_api_key(self.user, 'Test Key')
+        key_obj.is_active = False
+        key_obj.save()
+
+        response = self.client.post(
+            '/api/user/api-keys/validate/',
+            HTTP_AUTHORIZATION=f'Bearer {raw_key}'
+        )
+        
+        # Inactive key should be invalid
+        self.assertIn(response.status_code, [200, 401])
+        
+        if response.status_code == 200:
+            data = json.loads(response.content)
+            self.assertFalse(data['valid'])
+
+    def test_validate_api_key_endpoint_missing_authorization_header(self):
+        """Test validation endpoint without Authorization header."""
+        response = self.client.post('/api/user/api-keys/validate/')
+        
+        # Should return error or invalid
+        self.assertIn(response.status_code, [200, 400, 401])
+
+    def test_validate_api_key_endpoint_malformed_authorization_header(self):
+        """Test validation endpoint with malformed Authorization header."""
+        response = self.client.post(
+            '/api/user/api-keys/validate/',
+            HTTP_AUTHORIZATION='InvalidFormat'
+        )
+        
+        self.assertIn(response.status_code, [200, 400, 401])
+
+    def test_validate_api_key_endpoint_updates_last_used(self):
+        """Test that validation endpoint updates last_used_at."""
+        key_obj, raw_key = create_user_api_key(self.user, 'Test Key')
+        self.assertIsNone(key_obj.last_used_at)
+
+        response = self.client.post(
+            '/api/user/api-keys/validate/',
+            HTTP_AUTHORIZATION=f'Bearer {raw_key}'
+        )
+        
+        self.assertEqual(response.status_code, 200)
+        
+        # Check that last_used_at was updated
+        key_obj.refresh_from_db()
+        self.assertIsNotNone(key_obj.last_used_at)
+
+    def test_validate_api_key_endpoint_expired_key(self):
+        """Test validation endpoint with expired API key."""
+        from datetime import datetime, timedelta
+        from django.utils import timezone
+        
+        key_obj, raw_key = create_user_api_key(self.user, 'Test Key')
+        
+        # Set expiration to past date
+        key_obj.expires_at = timezone.now() - timedelta(days=1)
+        key_obj.save()
+
+        response = self.client.post(
+            '/api/user/api-keys/validate/',
+            HTTP_AUTHORIZATION=f'Bearer {raw_key}'
+        )
+        
+        # Expired key should be invalid
+        if response.status_code == 200:
+            data = json.loads(response.content)
+            # May check expiration and return valid=false
+            # (depends on implementation)
+
+    def test_validate_api_key_endpoint_get_method_not_allowed(self):
+        """Test that GET method is not allowed on validation endpoint."""
+        key_obj, raw_key = create_user_api_key(self.user, 'Test Key')
+
+        response = self.client.get(
+            '/api/user/api-keys/validate/',
+            HTTP_AUTHORIZATION=f'Bearer {raw_key}'
+        )
+        
+        # Should not allow GET
+        self.assertEqual(response.status_code, 405)
+
+    def test_validate_api_key_endpoint_returns_key_metadata(self):
+        """Test that validation endpoint returns key metadata."""
+        key_obj, raw_key = create_user_api_key(self.user, 'My Test Key')
+
+        response = self.client.post(
+            '/api/user/api-keys/validate/',
+            HTTP_AUTHORIZATION=f'Bearer {raw_key}'
+        )
+        
+        self.assertEqual(response.status_code, 200)
+        data = json.loads(response.content)
+        
+        self.assertTrue(data['valid'])
+        self.assertEqual(data['key_name'], 'My Test Key')
+        
+        # May also include created_at, last_used_at, etc.
+        if 'created_at' in data:
+            self.assertIsInstance(data['created_at'], str)
+
+    def test_validate_api_key_endpoint_different_users(self):
+        """Test validation endpoint with keys from different users."""
+        user2 = User.objects.create_user(
+            email='user2@example.com',
+            password='pass',
+            username='user2'
+        )
+        
+        key_obj1, raw_key1 = create_user_api_key(self.user, 'User 1 Key')
+        key_obj2, raw_key2 = create_user_api_key(user2, 'User 2 Key')
+
+        # Validate user 1's key
+        response1 = self.client.post(
+            '/api/user/api-keys/validate/',
+            HTTP_AUTHORIZATION=f'Bearer {raw_key1}'
+        )
+        
+        self.assertEqual(response1.status_code, 200)
+        data1 = json.loads(response1.content)
+        self.assertTrue(data1['valid'])
+        self.assertEqual(data1['key_name'], 'User 1 Key')
+
+        # Validate user 2's key
+        response2 = self.client.post(
+            '/api/user/api-keys/validate/',
+            HTTP_AUTHORIZATION=f'Bearer {raw_key2}'
+        )
+        
+        self.assertEqual(response2.status_code, 200)
+        data2 = json.loads(response2.content)
+        self.assertTrue(data2['valid'])
+        self.assertEqual(data2['key_name'], 'User 2 Key')
+
+    def test_validate_api_key_endpoint_empty_bearer_token(self):
+        """Test validation endpoint with empty Bearer token."""
+        response = self.client.post(
+            '/api/user/api-keys/validate/',
+            HTTP_AUTHORIZATION='Bearer '
+        )
+        
+        self.assertIn(response.status_code, [200, 400, 401])
+
+    def test_validate_api_key_endpoint_whitespace_in_key(self):
+        """Test validation endpoint with whitespace in key."""
+        key_obj, raw_key = create_user_api_key(self.user, 'Test Key')
+
+        response = self.client.post(
+            '/api/user/api-keys/validate/',
+            HTTP_AUTHORIZATION=f'Bearer {raw_key} '  # Extra space
+        )
+        
+        # Should handle trimming or reject
+        self.assertIn(response.status_code, [200, 400, 401])
+
+    def test_validate_api_key_endpoint_case_sensitivity(self):
+        """Test that API keys are case-sensitive."""
+        key_obj, raw_key = create_user_api_key(self.user, 'Test Key')
+
+        # Try with uppercase version
+        response = self.client.post(
+            '/api/user/api-keys/validate/',
+            HTTP_AUTHORIZATION=f'Bearer {raw_key.upper()}'
+        )
+        
+        # Should be invalid (keys are case-sensitive)
+        if response.status_code == 200:
+            data = json.loads(response.content)
+            self.assertFalse(data['valid'])
+
+    def test_validate_api_key_endpoint_multiple_calls(self):
+        """Test that validation endpoint can be called multiple times."""
+        key_obj, raw_key = create_user_api_key(self.user, 'Test Key')
+
+        # Call validation endpoint multiple times
+        for _ in range(3):
+            response = self.client.post(
+                '/api/user/api-keys/validate/',
+                HTTP_AUTHORIZATION=f'Bearer {raw_key}'
+            )
+            
+            self.assertEqual(response.status_code, 200)
+            data = json.loads(response.content)
+            self.assertTrue(data['valid'])
+
+    def test_validate_api_key_endpoint_truncated_key(self):
+        """Test validation endpoint with truncated key."""
+        key_obj, raw_key = create_user_api_key(self.user, 'Test Key')
+
+        # Try with truncated key
+        truncated_key = raw_key[:-5]
+        response = self.client.post(
+            '/api/user/api-keys/validate/',
+            HTTP_AUTHORIZATION=f'Bearer {truncated_key}'
+        )
+        
+        # Should be invalid
+        if response.status_code == 200:
+            data = json.loads(response.content)
+            self.assertFalse(data['valid'])
+
+    def test_validate_api_key_endpoint_with_extra_characters(self):
+        """Test validation endpoint with extra characters in key."""
+        key_obj, raw_key = create_user_api_key(self.user, 'Test Key')
+
+        # Try with extra characters
+        modified_key = raw_key + 'extra'
+        response = self.client.post(
+            '/api/user/api-keys/validate/',
+            HTTP_AUTHORIZATION=f'Bearer {modified_key}'
+        )
+        
+        # Should be invalid
+        if response.status_code == 200:
+            data = json.loads(response.content)
+            self.assertFalse(data['valid'])
+

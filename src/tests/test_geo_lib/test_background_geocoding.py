@@ -186,7 +186,20 @@ class TestBackgroundGeocoding(TransactionTestCase):
         geojson = feature_store.geojson
         
         # Verify feature was not modified
-        self.assertEqual(geojson, original_geojson)
+        # Normalize tags by sorting them since order doesn't matter
+        original_geojson_normalized = original_geojson.copy()
+        geojson_normalized = geojson.copy()
+        
+        # Sort system_tags for comparison (order doesn't matter)
+        if 'properties' in original_geojson_normalized and 'system_tags' in original_geojson_normalized['properties']:
+            original_geojson_normalized['properties'] = original_geojson_normalized['properties'].copy()
+            original_geojson_normalized['properties']['system_tags'] = sorted(original_geojson_normalized['properties']['system_tags'])
+        
+        if 'properties' in geojson_normalized and 'system_tags' in geojson_normalized['properties']:
+            geojson_normalized['properties'] = geojson_normalized['properties'].copy()
+            geojson_normalized['properties']['system_tags'] = sorted(geojson_normalized['properties']['system_tags'])
+        
+        self.assertEqual(geojson_normalized, original_geojson_normalized, "Feature should not be modified when geocoding is disabled")
     
     def test_background_geocoding_handles_nonexistent_feature(self):
         """Test that background geocoding handles nonexistent feature gracefully."""

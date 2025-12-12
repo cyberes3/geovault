@@ -365,11 +365,6 @@ class TestE2EImport(TransactionTestCase):
         # Verify ImportQueue entry was created with geofeatures
         self.assertEqual(import_item.original_filename, 'Test Items.kml')
         self.assertGreater(len(import_item.geofeatures), 0, "Should have extracted features from KML")
-        
-        # Verify ImportQueue entry was created with geofeatures
-        import_item = ImportQueue.objects.get(id=item_id, user=self.user)
-        self.assertEqual(import_item.original_filename, 'Test Items.kml')
-        self.assertGreater(len(import_item.geofeatures), 0, "Should have extracted features from KML")
         self.assertFalse(import_item.imported, "Should not be marked as imported yet")
         
         # Count features before import
@@ -698,11 +693,15 @@ class TestE2EImport(TransactionTestCase):
   </Document>
 </kml>"""
         
-        # Upload both files at once (or very quickly one after another)
-        # This creates a race condition where both files process simultaneously
+        # Upload first file
         process_job_id1, item_id1, process_status1 = self._upload_file(
             point_kml.encode('utf-8'), 'first_item.kml'
         )
+        
+        # Add explicit delay to ensure deterministic timestamp ordering
+        time.sleep(0.5)
+        
+        # Upload second file - should be newer based on timestamp
         process_job_id2, item_id2, process_status2 = self._upload_file(
             point_kml.encode('utf-8'), 'second_item.kml'
         )
@@ -716,6 +715,10 @@ class TestE2EImport(TransactionTestCase):
         # Refresh both items from database to get latest state
         import_item1 = ImportQueue.objects.get(id=item_id1, user=self.user)
         import_item2 = ImportQueue.objects.get(id=item_id2, user=self.user)
+        
+        # Verify timestamp ordering (item1 should be older due to explicit delay)
+        self.assertLess(import_item1.timestamp, import_item2.timestamp,
+                       "First upload should have earlier timestamp than second upload")
         
         # Verify both items were created and have features
         self.assertGreater(len(import_item1.geofeatures), 0, "First item should have features")
@@ -792,40 +795,23 @@ class TestE2EImport(TransactionTestCase):
                     'queue_item_filename': queue_info['queue_item_filename']
                 })
         
-        # Determine which item is older based on timestamp
-        # Only the newer item should be marked as a duplicate of the older one
-        if import_item1.timestamp < import_item2.timestamp:
-            # Item1 is older, so item2 should be marked as duplicate
-            older_item_id = item_id1
-            newer_item_id = item_id2
-            older_filename = 'first_item.kml'
-            newer_filename = 'second_item.kml'
-            older_duplicates = queue_duplicates_found_item1
-            newer_duplicates = queue_duplicates_found_item2
-            newer_feature_hash = second_feature_hash
-        else:
-            # Item2 is older, so item1 should be marked as duplicate
-            older_item_id = item_id2
-            newer_item_id = item_id1
-            older_filename = 'second_item.kml'
-            newer_filename = 'first_item.kml'
-            older_duplicates = queue_duplicates_found_item2
-            newer_duplicates = queue_duplicates_found_item1
-            newer_feature_hash = first_feature_hash
+        # Since we know the order (item1 is older due to explicit delay):
+        # - item1 should NOT have any cross-queue duplicates (it was first)
+        # - item2 should have cross-queue duplicates pointing to item1
         
-        # Only the newer item should have its feature marked as a cross-queue duplicate
-        self.assertEqual(len(newer_duplicates), 1,
-                        f"Newer item ({newer_filename}) should have exactly one duplicate detected")
-        self.assertEqual(len(older_duplicates), 0,
-                        f"Older item ({older_filename}) should NOT have any duplicates detected")
+        # Only the newer item (item2) should have its feature marked as a cross-queue duplicate
+        self.assertEqual(len(queue_duplicates_found_item2), 1,
+                        "Newer item (second_item.kml) should have exactly one duplicate detected")
+        self.assertEqual(len(queue_duplicates_found_item1), 0,
+                        "Older item (first_item.kml) should NOT have any duplicates detected")
         
-        # Verify the duplicate points to the older item
-        dup = newer_duplicates[0]
-        self.assertEqual(dup['queue_item_id'], older_item_id,
-                        f"Newer item's duplicate should point to older item ({older_item_id})")
-        self.assertEqual(dup['queue_item_filename'], older_filename,
-                        f"Newer item's duplicate should have correct filename ({older_filename})")
-        self.assertEqual(dup['hash'], newer_feature_hash,
+        # Verify the duplicate in item2 points to item1
+        dup = queue_duplicates_found_item2[0]
+        self.assertEqual(dup['queue_item_id'], item_id1,
+                        f"Newer item's duplicate should point to older item ({item_id1})")
+        self.assertEqual(dup['queue_item_filename'], 'first_item.kml',
+                        "Newer item's duplicate should have correct filename")
+        self.assertEqual(dup['hash'], second_feature_hash,
                         "Newer item's duplicate should have correct hash")
 
     def test_e2e_file_level_duplicate_detection(self):

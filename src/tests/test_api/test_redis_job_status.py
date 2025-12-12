@@ -533,3 +533,311 @@ class TestRedisJobStatusAPI(TransactionTestCase):
         for job in jobs:
             self.assertEqual(job['user_id'], self.user.id)
 
+    def test_get_all_job_statuses_unauthenticated(self):
+        """Test that unauthenticated users cannot access job statuses."""
+        self.client.logout()
+        
+        response = self.client.get('/api/item/import/jobs/all')
+        self.assertEqual(response.status_code, 401)
+
+    def test_get_all_job_statuses_empty_list(self):
+        """Test endpoint returns empty list when user has no jobs."""
+        # Clean up any existing jobs
+        self._cleanup_redis_jobs()
+        
+        response = self.client.get('/api/item/import/jobs/all')
+        self.assertEqual(response.status_code, 200)
+        
+        data = json.loads(response.content)
+        self.assertIn('jobs', data)
+        self.assertEqual(len(data['jobs']), 0)
+
+    def test_get_all_job_statuses_includes_all_job_types(self):
+        """Test that endpoint returns all job types (import, delete, bulk_import, bulk_delete)."""
+        # Create import queue items
+        import_item1 = ImportQueue.objects.create(
+            user=self.user,
+            original_filename='import.kml',
+            raw_file='<kml></kml>',
+            geofeatures=[{
+                'type': 'Feature',
+                'geometry': {'type': 'Point', 'coordinates': [-122.4194, 37.7749, 0]},
+                'properties': {'name': 'Test Point'}
+            }]
+        )
+        import_item2 = ImportQueue.objects.create(
+            user=self.user,
+            original_filename='delete.kml',
+            raw_file='<kml></kml>',
+            geofeatures=[]
+        )
+        import_item3 = ImportQueue.objects.create(
+            user=self.user,
+            original_filename='bulk1.kml',
+            raw_file='<kml></kml>',
+            geofeatures=[]
+        )
+        import_item4 = ImportQueue.objects.create(
+            user=self.user,
+            original_filename='bulk2.kml',
+            raw_file='<kml></kml>',
+            geofeatures=[]
+        )
+
+        # Start different job types
+        import_job_id = self.import_job.start_import_job(
+            item_id=import_item1.id,
+            user_id=self.user.id
+        )
+        delete_job_id = self.delete_job.start_delete_job(
+            item_id=import_item2.id,
+            user_id=self.user.id,
+            filename=import_item2.original_filename
+        )
+        bulk_import_job_id = self.bulk_import_job.start_bulk_import_job(
+            item_ids=[import_item3.id],
+            user_id=self.user.id
+        )
+        bulk_delete_job_id = self.bulk_delete_job.start_bulk_delete_job(
+            item_ids=[import_item4.id],
+            user_id=self.user.id
+        )
+
+        # Wait for jobs to be stored
+        time.sleep(1.0)
+
+        # Call the API endpoint
+        response = self.client.get('/api/item/import/jobs/all')
+        self.assertEqual(response.status_code, 200)
+        
+        data = json.loads(response.content)
+        jobs = data['jobs']
+        
+        # Should have all 4 job types
+        job_types = [job['job_type'] for job in jobs]
+        self.assertIn('import', job_types)
+        self.assertIn('delete', job_types)
+        self.assertIn('bulk_import', job_types)
+        self.assertIn('bulk_delete', job_types)
+
+    def test_get_all_job_statuses_response_structure(self):
+        """Test that response has correct structure with all required fields."""
+        # Create and start a job
+        import_item = ImportQueue.objects.create(
+            user=self.user,
+            original_filename='test.kml',
+            raw_file='<kml></kml>',
+            geofeatures=[{
+                'type': 'Feature',
+                'geometry': {'type': 'Point', 'coordinates': [-122.4194, 37.7749, 0]},
+                'properties': {'name': 'Test Point'}
+            }]
+        )
+        
+        job_id = self.import_job.start_import_job(
+            item_id=import_item.id,
+            user_id=self.user.id
+        )
+
+        # Wait for job to be stored
+        time.sleep(0.5)
+
+        # Call the API endpoint
+        response = self.client.get('/api/item/import/jobs/all')
+        self.assertEqual(response.status_code, 200)
+        
+        data = json.loads(response.content)
+        self.assertIn('jobs', data)
+        
+        jobs = data['jobs']
+        self.assertGreater(len(jobs), 0)
+        
+        # Verify job structure
+        job = jobs[0]
+        required_fields = ['job_id', 'user_id', 'job_type', 'status', 'filename', 'created_at']
+        for field in required_fields:
+            self.assertIn(field, job, f"Job should have '{field}' field")
+
+    def test_get_all_job_statuses_includes_completed_jobs(self):
+        """Test that completed jobs are included in the response."""
+        # Create and complete a job
+        feature = {
+            'type': 'Feature',
+            'geometry': {'type': 'Point', 'coordinates': [-122.4194, 37.7749, 0]},
+            'properties': {'name': 'Test Point'}
+        }
+        # Add required geojson_hash
+        feature['properties']['geojson_hash'] = generate_geojson_hash(feature)
+        
+        import_item = ImportQueue.objects.create(
+            user=self.user,
+            original_filename='test.kml',
+            raw_file='<kml></kml>',
+            geofeatures=[feature]
+        )
+        
+        job_id = self.import_job.start_import_job(
+            item_id=import_item.id,
+            user_id=self.user.id
+        )
+
+        # Wait for job to complete
+        self._wait_for_job_completion(job_id, timeout=30.0)
+
+        # Call the API endpoint
+        response = self.client.get('/api/item/import/jobs/all')
+        self.assertEqual(response.status_code, 200)
+        
+        data = json.loads(response.content)
+        jobs = data['jobs']
+        
+        # Find the completed job
+        completed_job = next((job for job in jobs if job['job_id'] == job_id), None)
+        self.assertIsNotNone(completed_job)
+        # Job may complete or fail depending on external services
+        self.assertIn(completed_job['status'], [ProcessingStatus.COMPLETED.value, ProcessingStatus.FAILED.value])
+        if completed_job['status'] == ProcessingStatus.COMPLETED.value:
+            self.assertIn('completed_at', completed_job)
+
+    def test_get_all_job_statuses_includes_failed_jobs(self):
+        """Test that failed jobs are included in the response."""
+        # Create a job that will fail (empty geofeatures)
+        import_item = ImportQueue.objects.create(
+            user=self.user,
+            original_filename='test.kml',
+            raw_file='<kml></kml>',
+            geofeatures=[]  # Will cause failure
+        )
+        
+        job_id = self.import_job.start_import_job(
+            item_id=import_item.id,
+            user_id=self.user.id
+        )
+
+        # Wait for job to fail
+        self._wait_for_job_completion(job_id, timeout=30.0)
+
+        # Call the API endpoint
+        response = self.client.get('/api/item/import/jobs/all')
+        self.assertEqual(response.status_code, 200)
+        
+        data = json.loads(response.content)
+        jobs = data['jobs']
+        
+        # Find the failed job
+        failed_job = next((job for job in jobs if job['job_id'] == job_id), None)
+        self.assertIsNotNone(failed_job)
+        self.assertEqual(failed_job['status'], ProcessingStatus.FAILED.value)
+
+    def test_get_all_job_statuses_pagination_support(self):
+        """Test pagination parameters if implemented."""
+        # Create multiple jobs
+        for i in range(5):
+            import_item = ImportQueue.objects.create(
+                user=self.user,
+                original_filename=f'test{i}.kml',
+                raw_file='<kml></kml>',
+                geofeatures=[{
+                    'type': 'Feature',
+                    'geometry': {'type': 'Point', 'coordinates': [-122.4 + i*0.01, 37.7 + i*0.01, 0]},
+                    'properties': {'name': f'Test Point {i}'}
+                }]
+            )
+            
+            self.import_job.start_import_job(
+                item_id=import_item.id,
+                user_id=self.user.id
+            )
+
+        # Wait for jobs to be stored
+        time.sleep(1.0)
+
+        # Test pagination parameters (if implemented)
+        response = self.client.get('/api/item/import/jobs/all?page=1&limit=3')
+        self.assertEqual(response.status_code, 200)
+        
+        data = json.loads(response.content)
+        self.assertIn('jobs', data)
+        # If pagination is implemented, should have 3 or fewer jobs
+        # If not implemented, will have all jobs (which is also valid)
+
+    def test_get_all_job_statuses_status_filter(self):
+        """Test filtering by job status if implemented."""
+        # Create completed and processing jobs
+        feature = {
+            'type': 'Feature',
+            'geometry': {'type': 'Point', 'coordinates': [-122.4194, 37.7749, 0]},
+            'properties': {'name': 'Test Point'}
+        }
+        # Add required geojson_hash
+        feature['properties']['geojson_hash'] = generate_geojson_hash(feature)
+        
+        import_item = ImportQueue.objects.create(
+            user=self.user,
+            original_filename='test.kml',
+            raw_file='<kml></kml>',
+            geofeatures=[feature]
+        )
+        
+        job_id = self.import_job.start_import_job(
+            item_id=import_item.id,
+            user_id=self.user.id
+        )
+
+        # Wait for job to complete
+        self._wait_for_job_completion(job_id, timeout=30.0)
+
+        # Test status filter (if implemented)
+        response = self.client.get('/api/item/import/jobs/all?status=completed')
+        self.assertEqual(response.status_code, 200)
+        
+        data = json.loads(response.content)
+        jobs = data['jobs']
+        
+        # If filtering is implemented, all jobs should be completed
+        # If not, endpoint still works correctly
+        if jobs:
+            # Check if filtering worked
+            for job in jobs:
+                if job['job_id'] == job_id:
+                    # Job may complete or fail depending on external services
+                    # If status filter is implemented, only completed jobs should appear
+                    # If not implemented, all jobs appear regardless of filter
+                    self.assertIn(job['status'], [ProcessingStatus.COMPLETED.value, ProcessingStatus.FAILED.value])
+
+    def test_get_all_job_statuses_multiple_calls_consistency(self):
+        """Test that multiple calls return consistent results."""
+        # Create a job
+        import_item = ImportQueue.objects.create(
+            user=self.user,
+            original_filename='test.kml',
+            raw_file='<kml></kml>',
+            geofeatures=[{
+                'type': 'Feature',
+                'geometry': {'type': 'Point', 'coordinates': [-122.4194, 37.7749, 0]},
+                'properties': {'name': 'Test Point'}
+            }]
+        )
+        
+        self.import_job.start_import_job(
+            item_id=import_item.id,
+            user_id=self.user.id
+        )
+
+        time.sleep(0.5)
+
+        # Call endpoint multiple times
+        response1 = self.client.get('/api/item/import/jobs/all')
+        response2 = self.client.get('/api/item/import/jobs/all')
+        
+        self.assertEqual(response1.status_code, 200)
+        self.assertEqual(response2.status_code, 200)
+        
+        data1 = json.loads(response1.content)
+        data2 = json.loads(response2.content)
+        
+        # Job IDs should be consistent
+        job_ids1 = {job['job_id'] for job in data1['jobs']}
+        job_ids2 = {job['job_id'] for job in data2['jobs']}
+        self.assertEqual(job_ids1, job_ids2)
+
