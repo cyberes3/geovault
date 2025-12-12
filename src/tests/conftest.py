@@ -374,8 +374,10 @@ def conditional_external_api_mocking():
     for i, module_path in enumerate(modules_to_patch):
         if i == 0:
             # Create the primary mock for the first patch
-            geocoding_patch = patch(module_path, side_effect=mock_query_overpass_func)
-            primary_mock = geocoding_patch.start()
+            # Use MagicMock with side_effect so we can track call_count
+            primary_mock = MagicMock(side_effect=mock_query_overpass_func)
+            geocoding_patch = patch(module_path, primary_mock)
+            geocoding_patch.start()
             patches.append(geocoding_patch)
         else:
             # All other patches should use the same mock object for consistent call counts

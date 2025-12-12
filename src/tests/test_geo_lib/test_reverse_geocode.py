@@ -112,7 +112,7 @@ class TestReverseGeocodingService(TestCase):
         """Set up test fixtures."""
         cache.clear()
         try:
-            caches['geocoding'].clear()
+            caches['reverse_geocoding'].clear()
         except Exception:
             pass
     
@@ -201,7 +201,7 @@ class TestCaching(TestCase):
         """Set up test fixtures."""
         cache.clear()
         try:
-            caches['geocoding'].clear()
+            caches['reverse_geocoding'].clear()
         except Exception:
             pass
     
@@ -246,7 +246,7 @@ class TestErrorHandling(TestCase):
         """Set up test fixtures."""
         cache.clear()
         try:
-            caches['geocoding'].clear()
+            caches['reverse_geocoding'].clear()
         except Exception:
             pass
     
@@ -289,7 +289,7 @@ class TestTagGeneration(TestCase):
         """Set up test fixtures."""
         cache.clear()
         try:
-            caches['geocoding'].clear()
+            caches['reverse_geocoding'].clear()
         except Exception:
             pass
     
