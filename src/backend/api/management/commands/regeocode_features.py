@@ -6,6 +6,7 @@ from django.core.management.base import BaseCommand
 from django.db import transaction
 
 from api.models import FeatureStore
+from geo_lib.geocoding.constants import REVERSE_GEOCODING_TAG_PREFIXES
 from geo_lib.geocoding.location_tags import get_location_tags
 from geo_lib.processing.tagging.modules.geocoding import get_representative_points
 
@@ -77,24 +78,8 @@ class Command(BaseCommand):
         errors = 0
 
         # List of reverse geocoding tag prefixes to remove
-        geocoding_prefixes = [
-            'country:',
-            'state:',
-            'county:',
-            'city:',
-            'national-park:',
-            'national-monument:',
-            'national-forest:',
-            'national-wildlife-refuge:',
-            'national-recreation-area:',
-            'national-historic-site:',
-            'national-seashore:',
-            'national-lakeshore:',
-            'state-park:',
-            'wilderness:',
-            'ski-resort:',
-            'lake:',
-        ]
+        # Add colons for prefix matching (e.g., 'city' -> 'city:')
+        geocoding_prefixes = [f"{prefix}:" for prefix in REVERSE_GEOCODING_TAG_PREFIXES]
 
         # Process in batches
         for offset in range(0, total_count, batch_size):

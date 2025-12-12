@@ -8,6 +8,7 @@ from typing import List, Tuple, Dict
 from website.settings_utils import get_required_setting
 
 from geo_lib.types.feature import GeoFeatureSupported
+from geo_lib.geocoding.constants import REVERSE_GEOCODING_TAG_PREFIXES
 from geo_lib.geocoding.location_tags import batch_geocode_coordinates
 from geo_lib.processing.tagging.base import TagGenerator
 from geo_lib.processing.logging import DatabaseLogLevel
@@ -59,7 +60,9 @@ class GeocodingTagGenerator(TagGenerator):
     priority = 100  # Execute last (geocoding can be slow)
     
     def __init__(self):
-        super().__init__('geocoding')
+        # Register all reverse geocoding tag prefixes that this generator produces
+        # Use the centralized constant to ensure consistency
+        super().__init__(REVERSE_GEOCODING_TAG_PREFIXES)
     
     def process_batch(
         self,
