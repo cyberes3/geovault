@@ -23,6 +23,10 @@
           Tags are labels attached to your geographic features that help you organize, filter, and find them easily.
           You can create custom tags, edit or delete them, share them with others, and each feature can have multiple tags for flexible categorization.
         </p>
+        <p class="text-sm text-gray-700 mt-2">
+          <strong>Note:</strong> Deleting a tag will permanently delete all features that have that tag. 
+          To remove a tag from a single feature without deleting it, use the × button next to the feature.
+        </p>
       </div>
 
       <!-- Search Input -->
@@ -159,9 +163,8 @@
                 <RectangleStackIcon class="w-4 h-4" />
               </button>
               <button
-                  v-if="!isSystemTag(tag)"
                   class="p-2 sm:p-1.5 min-w-[44px] min-h-[44px] sm:min-w-0 sm:min-h-0 text-gray-400 hover:text-red-600 focus:outline-none focus:ring-2 focus:ring-red-500 focus:ring-offset-1 rounded"
-                  title="Delete tag"
+                  :title="isSystemTag(tag) ? 'Delete system tag and all its features' : 'Delete tag'"
                   type="button"
                   @click.stop.prevent="deleteTag(tag)"
                   @mousedown.stop.prevent
@@ -365,7 +368,7 @@ import BulkStylingModal from "@/components/import/parts/BulkStylingModal.vue";
 import { createEmptyBulkOperations, cloneBulkOperations } from "@/utils/bulkOperations.js";
 import { sortTagsByPriority, sortUserTagsAlphabetically, isSystemTag } from "@/utils/tagUtils.js";
 import { MagnifyingGlassIcon, ExclamationCircleIcon, TagIcon, ShareIcon, ArrowDownTrayIcon, PencilIcon, TrashIcon, CheckIcon, MapIcon, ArrowLeftIcon, ArrowRightIcon, XMarkIcon, RectangleStackIcon } from '@heroicons/vue/24/outline';
-import { deleteTag as deleteTagUtil, removeTagFromFeature as removeTagFromFeatureUtil, buildDeleteTagMessage, buildRemoveTagMessage, scrollToTag as scrollToTagUtil } from "@/utils/tags/tagOperations.js";
+import { deleteTag, removeTagFromFeature as removeTagFromFeatureUtil, buildDeleteTagMessage, buildRemoveTagMessage, scrollToTag as scrollToTagUtil } from "@/utils/tags/tagOperations.js";
 
 export default {
   name: 'TagsPage',
@@ -811,32 +814,24 @@ export default {
       scrollToTagUtil(this.$el, tagName);
     },
     async deleteTag(tag) {
-      // Prevent deleting system tags
-      if (this.isSystemTag(tag)) {
-        alert('System tags cannot be deleted');
-        return;
-      }
-
       // Get the number of features with this tag
       const features = this.tagsData[tag] || [];
       const featureCount = features.length;
+      const isSystem = this.isSystemTag(tag);
 
-      // Show confirmation dialog using utility
-      const confirmMessage = buildDeleteTagMessage(tag, featureCount);
+      // Show confirmation dialog with appropriate message
+      const confirmMessage = buildDeleteTagMessage(tag, featureCount, isSystem);
       if (!confirm(confirmMessage)) {
         return;
       }
 
       try {
-        // Use utility function to delete tag
         const csrfToken = this.getCookie('csrftoken');
-        const result = await deleteTagUtil(tag, features, csrfToken);
-
-        // Check for any errors in the response
-        if (result.errors && result.errors.length > 0) {
-          const errorMessages = result.errors.map(e => `Feature ${e.feature_id}: ${e.error}`).join('\n');
-          console.warn('Some features failed to update:', errorMessages);
-        }
+        
+        // Delete tag and all features (works for both user and system tags)
+        const result = await deleteTag(tag, csrfToken);
+        
+        console.log(`Deleted ${result.deleted_count} features with tag "${tag}"`);
 
         // Remove tag from local state
         const newTagsData = {...this.tagsData};

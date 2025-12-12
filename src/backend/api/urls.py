@@ -13,7 +13,7 @@ from api.views.collections.management import (
 )
 from api.views.config import get_config
 from api.views.features.creation import create_quick_point
-from api.views.features.deletion import delete_feature
+from api.views.features.deletion import delete_feature, bulk_delete_features_by_tag
 from api.views.features.export import export_feature_kmz
 from api.views.features.get_geojson_data import get_geojson_data
 from api.views.features.retrieval import get_feature, get_feature_elevations_external, get_feature_elevations_internal
@@ -81,6 +81,7 @@ urlpatterns = [
     path('features/filter-by-tags/', filter_features_by_tags),
     path('features/all/', get_all_features),
     path('features/bulk-update-metadata/', bulk_update_features_metadata),
+    path('features/bulk-delete-by-tag/', bulk_delete_features_by_tag),
     path('features/bulk-operations/by-tag/<str:tag_name>/', apply_bulk_operations_to_tag),
     path('features/quick-point/create/', create_quick_point),
 

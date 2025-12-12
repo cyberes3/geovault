@@ -3,48 +3,31 @@
  */
 
 /**
- * Delete tag and remove from all features
+ * Delete tag and all features with this tag (works for both user and system tags)
  * @param {string} tag - Tag to delete
- * @param {Array} features - Features with this tag
  * @param {string} csrfToken - CSRF token
- * @returns {Promise<Object>} API response
+ * @returns {Promise<Object>} API response with deleted_count
  */
-export async function deleteTag(tag, features, csrfToken) {
-  const updates = [];
-  
-  for (const feature of features) {
-    if (!feature.properties.database_id) continue;
-    
-    const currentTags = Array.isArray(feature.properties.tags)
-      ? [...feature.properties.tags]
-      : [];
-    
-    const filteredTags = currentTags.filter(t => t !== tag);
-    
-    updates.push({
-      feature_id: feature.properties.database_id,
-      tags: filteredTags
-    });
-  }
-  
-  if (updates.length === 0) return { updated: 0 };
-  
-  const response = await fetch('/api/features/bulk-update-metadata/', {
+export async function deleteTag(tag, csrfToken) {
+  const response = await fetch('/api/features/bulk-delete-by-tag/', {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
       'X-CSRFToken': csrfToken || ''
     },
-    body: JSON.stringify({ updates })
+    body: JSON.stringify({ tag })
   });
   
   if (!response.ok) {
     const errorData = await response.json().catch(() => ({}));
-    throw new Error(errorData.error || `Failed to update features: ${response.status}`);
+    throw new Error(errorData.error || `Failed to delete features: ${response.status}`);
   }
   
   return await response.json();
 }
+
+// Alias for backwards compatibility (deleteSystemTag is now just deleteTag)
+export const deleteSystemTag = deleteTag;
 
 /**
  * Remove tag from a single feature
@@ -85,10 +68,12 @@ export async function removeTagFromFeature(tag, feature, csrfToken) {
  * Build delete tag confirmation message
  * @param {string} tag - Tag name
  * @param {number} featureCount - Number of features with tag
+ * @param {boolean} isSystemTag - Whether this is a system tag (for styling only)
  * @returns {string} Confirmation message
  */
-export function buildDeleteTagMessage(tag, featureCount) {
-  return `Are you sure you want to delete the tag "${tag}"?\n\nThis will remove the tag from ${featureCount} ${featureCount === 1 ? 'feature' : 'features'}.`;
+export function buildDeleteTagMessage(tag, featureCount, isSystemTag = false) {
+  const tagType = isSystemTag ? 'system tag' : 'tag';
+  return `Are you sure you want to delete the ${tagType} "${tag}"?\n\n⚠️ WARNING: This will PERMANENTLY DELETE ${featureCount} ${featureCount === 1 ? 'feature' : 'features'} from your library.\n\nThis action cannot be undone!`;
 }
 
 /**
