@@ -1547,8 +1547,8 @@ class TestQuickPointCreation(TestCase):
             'name': 'Non-blocking Point'
         }
         
-        # Mock geocode_feature_async to verify it's called but doesn't block
-        with patch('api.views.features.creation.geocode_feature_async') as mock_async_geocode:
+        # Mock reverse_geocode_feature_async to verify it's called but doesn't block
+        with patch('api.views.features.creation.reverse_geocode_feature_async') as mock_async_reverse_geocode:
             response = self.client.post(
                 '/api/features/quick-point/create/',
                 data=json.dumps(payload),
@@ -1564,14 +1564,14 @@ class TestQuickPointCreation(TestCase):
             self.assertIn('database_id', feature['properties'])
             feature_id = feature['properties']['database_id']
             
-            # Verify geocoding tags are NOT in initial response (geocoding happens in background)
-            # This is the key test: if geocoding was blocking, these tags would be present
+            # Verify reverse geocoding tags are NOT in initial response (reverse geocoding happens in background)
+            # This is the key test: if reverse geocoding was blocking, these tags would be present
             system_tags = feature['properties'].get('system_tags', [])
             self.assertNotIn('geo-city:San Francisco', system_tags)
             self.assertNotIn('geo-state:California', system_tags)
             
-            # Verify background geocoding was called (proving it's async, not blocking)
-            mock_async_geocode.assert_called_once_with(feature_id)
+            # Verify background reverse geocoding was called (proving it's async, not blocking)
+            mock_async_reverse_geocode.assert_called_once_with(feature_id)
             
             # Verify other system tags are present (proving tag generation worked)
             self.assertTrue(any('type:point' in tag for tag in system_tags))
@@ -1579,19 +1579,19 @@ class TestQuickPointCreation(TestCase):
     
     @patch('api.views.features.creation._fetch_elevation_for_point')
     @patch('geo_lib.processing.tagging.modules.geocoding.get_required_setting')
-    def test_create_quick_point_skips_geocoding_synchronously(self, mock_setting, mock_elevation):
-        """Test that quick point creation skips geocoding in generate_auto_tags."""
+    def test_create_quick_point_skips_reverse_geocoding_synchronously(self, mock_setting, mock_elevation):
+        """Test that quick point creation skips reverse geocoding in generate_auto_tags."""
         mock_elevation.return_value = 1500.0
         mock_setting.return_value = True
         
         payload = {
             'latitude': 37.7749,
             'longitude': -122.4194,
-            'name': 'Skip Geocoding Point'
+            'name': 'Skip Reverse Geocoding Point'
         }
         
-        # Mock geocode_feature_async to track if it's called
-        with patch('api.views.features.creation.geocode_feature_async') as mock_async_geocode:
+        # Mock reverse_geocode_feature_async to track if it's called
+        with patch('api.views.features.creation.reverse_geocode_feature_async') as mock_async_reverse_geocode:
             response = self.client.post(
                 '/api/features/quick-point/create/',
                 data=json.dumps(payload),
@@ -1601,11 +1601,11 @@ class TestQuickPointCreation(TestCase):
             # Verify response is successful
             self.assertEqual(response.status_code, 201)
             
-            # Verify background geocoding was started
-            mock_async_geocode.assert_called_once()
+            # Verify background reverse geocoding was started
+            mock_async_reverse_geocode.assert_called_once()
             
-            # Get the feature ID that was passed to background geocoding
-            call_args = mock_async_geocode.call_args
+            # Get the feature ID that was passed to background reverse geocoding
+            call_args = mock_async_reverse_geocode.call_args
             feature_id = call_args[0][0]
             
         # Verify feature exists
@@ -1634,14 +1634,14 @@ class TestQuickPointCreationBackgroundGeocoding(TransactionTestCase):
     
     @patch('api.views.features.creation._fetch_elevation_for_point')
     @patch('geo_lib.processing.tagging.modules.geocoding.get_required_setting')
-    @patch('geo_lib.processing.tagging.modules.geocoding.batch_geocode_coordinates')
-    def test_background_geocoding_adds_tags(self, mock_batch_geocode, mock_setting, mock_elevation):
-        """Test that background geocoding actually adds tags to the feature."""
+    @patch('geo_lib.processing.tagging.modules.geocoding.batch_reverse_geocode_coordinates')
+    def test_background_geocoding_adds_tags(self, mock_batch_reverse_geocode, mock_setting, mock_elevation):
+        """Test that background reverse geocoding actually adds tags to the feature."""
         mock_elevation.return_value = 1500.0
         mock_setting.return_value = True
         
-        # Mock batch_geocode_coordinates - returns dict mapping (lat, lon) to (tags, log_messages)
-        mock_batch_geocode.return_value = {
+        # Mock batch_reverse_geocode_coordinates - returns dict mapping (lat, lon) to (tags, log_messages)
+        mock_batch_reverse_geocode.return_value = {
             (37.7749, -122.4194): (
                 [
                     'geo-city:San Francisco',

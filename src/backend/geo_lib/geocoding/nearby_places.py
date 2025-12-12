@@ -8,7 +8,7 @@ from typing import List, Dict, Any
 
 from django.conf import settings
 
-from geo_lib.geocoding.cache import _GEOCODING_CACHE, _get_cache_key
+from geo_lib.geocoding.cache import _REVERSE_GEOCODING_CACHE, _get_cache_key
 from geo_lib.geocoding.constants import REVERSE_GEOCODING_CACHE_TTL
 from geo_lib.geocoding.overpass_api import query_overpass
 from geo_lib.geocoding.osm_tags import get_name_from_tags
@@ -35,8 +35,8 @@ def find_nearby_cities(
         threshold_miles = settings.CITY_PROXIMITY_MILES
     
     # Check cache first
-    cache_key = _get_cache_key(latitude, longitude, prefix=f"geocode:cities:{threshold_miles}")
-    cached = _GEOCODING_CACHE.get(cache_key)
+    cache_key = _get_cache_key(latitude, longitude, prefix=f"reverse_geocode:cities:{threshold_miles}")
+    cached = _REVERSE_GEOCODING_CACHE.get(cache_key)
     if cached is not None:
         return cached
 
@@ -73,7 +73,7 @@ out center;
         cities.sort(key=lambda x: x['distance_miles'])
 
         # Only cache on successful API response
-        _GEOCODING_CACHE.set(cache_key, cities, REVERSE_GEOCODING_CACHE_TTL)
+        _REVERSE_GEOCODING_CACHE.set(cache_key, cities, REVERSE_GEOCODING_CACHE_TTL)
     else:
         # Sort by distance even if no response (for consistency)
         cities.sort(key=lambda x: x['distance_miles'])
@@ -101,8 +101,8 @@ def search_nearby_lakes(
         proximity_miles = settings.LAKE_PROXIMITY_MILES
     
     # Check cache first
-    cache_key = _get_cache_key(latitude, longitude, prefix=f"geocode:lakes:{proximity_miles}")
-    cached = _GEOCODING_CACHE.get(cache_key)
+    cache_key = _get_cache_key(latitude, longitude, prefix=f"reverse_geocode:lakes:{proximity_miles}")
+    cached = _REVERSE_GEOCODING_CACHE.get(cache_key)
     if cached is not None:
         return cached
 
@@ -151,7 +151,7 @@ out tags center;
         lakes.sort(key=lambda x: x['distance_miles'])
 
         # Only cache on successful API response
-        _GEOCODING_CACHE.set(cache_key, lakes, REVERSE_GEOCODING_CACHE_TTL)
+        _REVERSE_GEOCODING_CACHE.set(cache_key, lakes, REVERSE_GEOCODING_CACHE_TTL)
     else:
         # Sort by distance even if no response (for consistency)
         lakes.sort(key=lambda x: x['distance_miles'])

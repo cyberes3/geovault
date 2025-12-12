@@ -13,7 +13,7 @@ from api.utils.responses import error_response, success_response
 from api.validation.feature_updates import validate_payload
 from api.views.features.payload import QuickPointCreatePayload
 from geo_lib.feature_id import generate_geojson_hash
-from geo_lib.geocoding.background_geocoding import geocode_feature_async
+from geo_lib.geocoding.background_geocoding import reverse_geocode_feature_async
 from geo_lib.logging.console import get_tagged_logger
 from geo_lib.processing.tagging.generate import generate_auto_tags
 from geo_lib.tags.const_strings import filter_protected_tags, prepare_user_tags, CONST_INTERNAL_TAGS
@@ -106,7 +106,7 @@ def create_quick_point(request, validated_data):
     # Generate system tags using PointFeature type (skip geocoding for async processing)
     from geo_lib.processing.logging import ImportLog
     point_feature = PointFeature(**normalized_feature)
-    system_tags = generate_auto_tags(point_feature, import_log=ImportLog(), filename='quick-point', skip_geocoding=True)
+    system_tags = generate_auto_tags(point_feature, import_log=ImportLog(), filename='quick-point', skip_reverse_geocoding=True)
 
     # Add 'quick-point' system tag to identify features created via this endpoint
     if 'quick-point' not in system_tags:
@@ -129,8 +129,8 @@ def create_quick_point(request, validated_data):
         geojson_hash=geojson_hash
     )
 
-    # Start background geocoding (non-blocking)
-    geocode_feature_async(feature_store.id)
+    # Start background reverse geocoding (non-blocking)
+    reverse_geocode_feature_async(feature_store.id)
 
     # Add database_id to properties for response
     normalized_feature['properties']['database_id'] = feature_store.id

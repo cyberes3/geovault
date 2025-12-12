@@ -10,7 +10,7 @@ from pathlib import Path
 from threading import Lock
 from typing import List, Dict, Any
 
-from geo_lib.geocoding.cache import _GEOCODING_CACHE, _get_cache_key
+from geo_lib.geocoding.cache import _REVERSE_GEOCODING_CACHE, _get_cache_key
 from geo_lib.geocoding.constants import REVERSE_GEOCODING_CACHE_TTL
 from geo_lib.logging.console import get_tagged_logger
 from geo_lib.spatial.haversine import haversine_distance_miles
@@ -58,8 +58,8 @@ def search_nearby_ski_resorts(latitude: float, longitude: float, proximity_miles
         List of ski resort dicts with name, distance, country, and state
     """
     # Check cache first
-    cache_key = _get_cache_key(latitude, longitude, prefix="geocode:ski")
-    cached = _GEOCODING_CACHE.get(cache_key)
+    cache_key = _get_cache_key(latitude, longitude, prefix="reverse_geocode:ski")
+    cached = _REVERSE_GEOCODING_CACHE.get(cache_key)
     if cached is not None:
         return cached
 
@@ -107,5 +107,5 @@ def search_nearby_ski_resorts(latitude: float, longitude: float, proximity_miles
     matching_resorts.sort(key=lambda x: x['distance_miles'])
 
     # Cache for 30 days
-    _GEOCODING_CACHE.set(cache_key, matching_resorts, REVERSE_GEOCODING_CACHE_TTL)
+    _REVERSE_GEOCODING_CACHE.set(cache_key, matching_resorts, REVERSE_GEOCODING_CACHE_TTL)
     return matching_resorts

@@ -26,7 +26,7 @@ class Properties(BaseModel):
     description: Optional[str] = None
     created: Optional[datetime] = None
     tags: Optional[List[str]] = Field(default_factory=list)  # User tags only
-    system_tags: Optional[List[str]] = Field(default_factory=list)  # System-generated tags (type, import-year, import-month, source-file, geocoding)
+    system_tags: Optional[List[str]] = Field(default_factory=list)  # System-generated tags (type, import-year, import-month, source-file, reverse geocoding)
 
     @field_validator('name', mode='before')
     @classmethod

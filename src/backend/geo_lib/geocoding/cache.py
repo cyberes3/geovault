@@ -2,10 +2,10 @@ from django.core.cache import caches
 
 from geo_lib.spatial.coordinates import round_coordinate
 
-_GEOCODING_CACHE = caches['geocoding']
+_REVERSE_GEOCODING_CACHE = caches['reverse_geocoding']
 
 
-def _get_cache_key(latitude: float, longitude: float, prefix: str = "geocode") -> str:
+def _get_cache_key(latitude: float, longitude: float, prefix: str = "reverse_geocode") -> str:
     """
     Generate cache key for coordinate (rounded to ~111m precision).
 

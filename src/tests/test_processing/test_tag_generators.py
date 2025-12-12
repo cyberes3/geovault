@@ -15,7 +15,7 @@ from geo_lib.processing.tagging.modules.track_detection import TrackDetectionTag
 from geo_lib.processing.tagging.modules.driving_detection import DrivingDetectionTagGenerator
 from geo_lib.processing.tagging.modules.source_file import SourceFileTagGenerator
 from geo_lib.processing.tagging.modules.elevation import ElevationTagGenerator
-from geo_lib.processing.tagging.modules.geocoding import GeocodingTagGenerator
+from geo_lib.processing.tagging.modules.geocoding import ReverseGeocodingTagGenerator
 from geo_lib.types.feature import (
     PointFeature, LineStringFeature, MultiLineStringFeature, PolygonFeature
 )
@@ -715,15 +715,15 @@ class TestElevationTagGenerator:
         assert tags == []
 
 
-class TestGeocodingTagGenerator:
-    """Test the geocoding tag generator."""
+class TestReverseGeocodingTagGenerator:
+    """Test the reverse geocoding tag generator."""
     
     @patch('geo_lib.processing.tagging.modules.geocoding.get_required_setting')
-    def test_geocoding_disabled(self, mock_setting):
-        """Test that no tags are generated when geocoding is disabled."""
+    def test_reverse_geocoding_disabled(self, mock_setting):
+        """Test that no tags are generated when reverse geocoding is disabled."""
         mock_setting.return_value = False
         
-        generator = GeocodingTagGenerator()
+        generator = ReverseGeocodingTagGenerator()
         feature = PointFeature(
             type='Feature',
             geometry={'type': 'Point', 'coordinates': [-122.4194, 37.7749]},
@@ -734,14 +734,14 @@ class TestGeocodingTagGenerator:
         
         assert tags == []
     
-    @patch('geo_lib.processing.tagging.modules.geocoding.batch_geocode_coordinates')
+    @patch('geo_lib.processing.tagging.modules.geocoding.batch_reverse_geocode_coordinates')
     @patch('geo_lib.processing.tagging.modules.geocoding.get_required_setting')
-    def test_geocoding_for_point(self, mock_setting, mock_batch_geocode):
-        """Test that geocoding tags are generated for points."""
+    def test_reverse_geocoding_for_point(self, mock_setting, mock_batch_reverse_geocode):
+        """Test that reverse geocoding tags are generated for points."""
         mock_setting.return_value = True
         
-        # Mock batch_geocode_coordinates - returns dict mapping (lat, lon) to (tags, log_messages)
-        mock_batch_geocode.return_value = {
+        # Mock batch_reverse_geocode_coordinates - returns dict mapping (lat, lon) to (tags, log_messages)
+        mock_batch_reverse_geocode.return_value = {
             (37.7749, -122.4194): (
                 [
                     'geo-city:San Francisco',
@@ -752,7 +752,7 @@ class TestGeocodingTagGenerator:
             )
         }
         
-        generator = GeocodingTagGenerator()
+        generator = ReverseGeocodingTagGenerator()
         feature = PointFeature(
             type='Feature',
             geometry={'type': 'Point', 'coordinates': [-122.4194, 37.7749]},
@@ -766,14 +766,14 @@ class TestGeocodingTagGenerator:
         assert 'geo-state:California' in tags
         assert 'geo-country:United States' in tags
     
-    @patch('geo_lib.processing.tagging.modules.geocoding.batch_geocode_coordinates')
+    @patch('geo_lib.processing.tagging.modules.geocoding.batch_reverse_geocode_coordinates')
     @patch('geo_lib.processing.tagging.modules.geocoding.get_required_setting')
-    def test_geocoding_for_linestring(self, mock_setting, mock_batch_geocode):
-        """Test that geocoding tags are generated for linestrings."""
+    def test_reverse_geocoding_for_linestring(self, mock_setting, mock_batch_reverse_geocode):
+        """Test that reverse geocoding tags are generated for linestrings."""
         mock_setting.return_value = True
         
-        # Mock batch_geocode_coordinates - returns dict mapping (lat, lon) to (tags, log_messages)
-        mock_batch_geocode.return_value = {
+        # Mock batch_reverse_geocode_coordinates - returns dict mapping (lat, lon) to (tags, log_messages)
+        mock_batch_reverse_geocode.return_value = {
             (37.775, -122.4195): (
                 [
                     'geo-state:California',
@@ -783,7 +783,7 @@ class TestGeocodingTagGenerator:
             )
         }
         
-        generator = GeocodingTagGenerator()
+        generator = ReverseGeocodingTagGenerator()
         feature = LineStringFeature(
             type='Feature',
             geometry={
@@ -801,10 +801,10 @@ class TestGeocodingTagGenerator:
     
     @patch('geo_lib.processing.tagging.modules.geocoding.get_required_setting')
     def test_polygon_not_processed(self, mock_setting):
-        """Test that polygons are not processed for geocoding."""
+        """Test that polygons are not processed for reverse geocoding."""
         mock_setting.return_value = True
         
-        generator = GeocodingTagGenerator()
+        generator = ReverseGeocodingTagGenerator()
         feature = PolygonFeature(
             type='Feature',
             geometry={
@@ -824,18 +824,18 @@ class TestGeocodingTagGenerator:
         
         assert tags == []
     
-    @patch('geo_lib.processing.tagging.modules.geocoding.batch_geocode_coordinates')
+    @patch('geo_lib.processing.tagging.modules.geocoding.batch_reverse_geocode_coordinates')
     @patch('geo_lib.processing.tagging.modules.geocoding.get_required_setting')
-    def test_geocoding_with_none_result(self, mock_setting, mock_batch_geocode):
-        """Test that no tags are generated when geocoding returns empty list."""
+    def test_reverse_geocoding_with_none_result(self, mock_setting, mock_batch_reverse_geocode):
+        """Test that no tags are generated when reverse geocoding returns empty list."""
         mock_setting.return_value = True
         
-        # Mock batch_geocode_coordinates - returns dict with empty tags
-        mock_batch_geocode.return_value = {
+        # Mock batch_reverse_geocode_coordinates - returns dict with empty tags
+        mock_batch_reverse_geocode.return_value = {
             (37.7749, -122.4194): ([], [])  # Empty tags and log messages
         }
         
-        generator = GeocodingTagGenerator()
+        generator = ReverseGeocodingTagGenerator()
         feature = PointFeature(
             type='Feature',
             geometry={'type': 'Point', 'coordinates': [-122.4194, 37.7749]},

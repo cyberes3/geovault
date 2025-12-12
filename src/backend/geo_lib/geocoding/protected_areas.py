@@ -7,7 +7,7 @@ wilderness areas, and other protected lands.
 """
 from typing import List, Dict
 
-from geo_lib.geocoding.cache import _GEOCODING_CACHE, _get_cache_key
+from geo_lib.geocoding.cache import _REVERSE_GEOCODING_CACHE, _get_cache_key
 from geo_lib.geocoding.constants import REVERSE_GEOCODING_CACHE_TTL
 from geo_lib.geocoding.overpass_api import query_overpass
 from geo_lib.geocoding.osm_tags import get_name_from_tags
@@ -35,8 +35,8 @@ def get_protected_areas(latitude: float, longitude: float) -> List[Dict[str, str
         - boundary: Boundary type (e.g., protected_area, national_park)
     """
     # Check cache first
-    cache_key = _get_cache_key(latitude, longitude, prefix="geocode:protected")
-    cached = _GEOCODING_CACHE.get(cache_key)
+    cache_key = _get_cache_key(latitude, longitude, prefix="reverse_geocode:protected")
+    cached = _REVERSE_GEOCODING_CACHE.get(cache_key)
     if cached is not None:
         return cached
 
@@ -82,7 +82,7 @@ out tags;
                 protected_areas.append(area_info)
 
         # Cache the results
-        _GEOCODING_CACHE.set(cache_key, protected_areas, REVERSE_GEOCODING_CACHE_TTL)
+        _REVERSE_GEOCODING_CACHE.set(cache_key, protected_areas, REVERSE_GEOCODING_CACHE_TTL)
 
     return protected_areas
 

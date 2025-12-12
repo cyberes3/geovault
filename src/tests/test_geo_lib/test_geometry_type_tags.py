@@ -143,7 +143,7 @@ class TestLineVsTrackTags(TestCase):
         
         # Generate all tags (skip geocoding for speed)
         import_log = ImportLog()
-        tags = generate_auto_tags(regular_line, import_log=import_log, skip_geocoding=True)
+        tags = generate_auto_tags(regular_line, import_log=import_log, skip_reverse_geocoding=True)
         
         # Should have type:line
         self.assertIn('type:line', tags)
@@ -168,7 +168,7 @@ class TestLineVsTrackTags(TestCase):
         
         # Generate all tags (skip geocoding for speed)
         import_log = ImportLog()
-        tags = generate_auto_tags(gpx_track, import_log=import_log, skip_geocoding=True)
+        tags = generate_auto_tags(gpx_track, import_log=import_log, skip_reverse_geocoding=True)
         
         # Should have type:track
         self.assertIn('type:track', tags)
@@ -191,7 +191,7 @@ class TestLineVsTrackTags(TestCase):
         
         # Generate all tags (skip geocoding for speed)
         import_log = ImportLog()
-        tags = generate_auto_tags(gpx_route, import_log=import_log, skip_geocoding=True)
+        tags = generate_auto_tags(gpx_route, import_log=import_log, skip_reverse_geocoding=True)
         
         # Should have type:track
         self.assertIn('type:track', tags)
@@ -214,7 +214,7 @@ class TestLineVsTrackTags(TestCase):
         
         # Generate all tags (skip geocoding for speed)
         import_log = ImportLog()
-        tags = generate_auto_tags(multi_track, import_log=import_log, skip_geocoding=True)
+        tags = generate_auto_tags(multi_track, import_log=import_log, skip_reverse_geocoding=True)
         
         # Should have type:track
         self.assertIn('type:track', tags)
@@ -241,7 +241,7 @@ class TestLineVsTrackTags(TestCase):
         })
         
         import_log = ImportLog()
-        tags = generate_auto_tags(gpx_track, import_log=import_log, skip_geocoding=True)
+        tags = generate_auto_tags(gpx_track, import_log=import_log, skip_reverse_geocoding=True)
         type_tags = [t for t in tags if t.startswith('type:')]
         
         # Should have exactly one type tag
@@ -265,7 +265,7 @@ class TestLineVsTrackTags(TestCase):
         })
         
         import_log = ImportLog()
-        tags = generate_auto_tags(caltopo_route, import_log=import_log, skip_geocoding=True)
+        tags = generate_auto_tags(caltopo_route, import_log=import_log, skip_reverse_geocoding=True)
         
         # Should have type:line (it's a planned route, not a GPS track)
         self.assertIn('type:line', tags)

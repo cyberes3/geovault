@@ -9,7 +9,7 @@ from website.settings_utils import get_required_setting
 
 from geo_lib.types.feature import GeoFeatureSupported
 from geo_lib.geocoding.constants import REVERSE_GEOCODING_TAG_PREFIXES
-from geo_lib.geocoding.location_tags import batch_geocode_coordinates
+from geo_lib.geocoding.location_tags import batch_reverse_geocode_coordinates
 from geo_lib.processing.tagging.base import TagGenerator
 from geo_lib.processing.logging import DatabaseLogLevel
 from geo_lib.logging.console import get_tagged_logger
@@ -54,10 +54,10 @@ def get_representative_points(feature: GeoFeatureSupported) -> List[Tuple[float,
     return points
 
 
-class GeocodingTagGenerator(TagGenerator):
+class ReverseGeocodingTagGenerator(TagGenerator):
     """Generates location-based tags using reverse geocoding."""
     
-    priority = 100  # Execute last (geocoding can be slow)
+    priority = 100  # Execute last (reverse geocoding can be slow)
     
     def __init__(self):
         # Register all reverse geocoding tag prefixes that this generator produces
@@ -99,8 +99,8 @@ class GeocodingTagGenerator(TagGenerator):
         if not all_coordinates:
             return {i: [] for i in range(len(features))}
         
-        # Step 2: SINGLE CALL to batch geocode all coordinates with deduplication
-        geocode_results = batch_geocode_coordinates(all_coordinates)
+        # Step 2: SINGLE CALL to batch reverse geocode all coordinates with deduplication
+        reverse_geocode_results = batch_reverse_geocode_coordinates(all_coordinates)
         
         # Step 3: Assign tags back to features
         feature_tags = {}
@@ -108,7 +108,7 @@ class GeocodingTagGenerator(TagGenerator):
             all_location_tags = set()
             
             for lat, lon in coords:
-                tags, log_messages = geocode_results.get((lat, lon), ([], []))
+                tags, log_messages = reverse_geocode_results.get((lat, lon), ([], []))
                 all_location_tags.update(tags)
                 
                 # Add log messages to import log

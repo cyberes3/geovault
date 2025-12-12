@@ -4,7 +4,7 @@ Backwards-compatibility wrapper for reverse geocoding.
 This module re-exports the new functional API for backwards compatibility.
 All functionality has been refactored into separate modules:
 
-- location_tags.py: Main public API (batch_geocode_coordinates, get_location_tags)
+- location_tags.py: Main public API (batch_reverse_geocode_coordinates, get_location_tags)
 - admin_boundaries.py: Administrative hierarchy lookup
 - protected_areas.py: Protected area detection
 - nearby_places.py: Cities and lakes proximity search
@@ -13,22 +13,22 @@ All functionality has been refactored into separate modules:
 - cache.py: Caching utilities
 - osm_tags.py: OSM tag utilities
 
-PUBLIC API (maintained for backwards compatibility):
-    batch_geocode_coordinates(coordinates) -> Dict
-        Main entry point: Batch geocode multiple coordinates
+PUBLIC API:
+    batch_reverse_geocode_coordinates(coordinates) -> Dict
+        Main entry point: Batch reverse geocode multiple coordinates
         
-    get_location_tags(lat, lon) -> Tuple[List[str], List[GeocodingLogMessage]]
+    get_location_tags(lat, lon) -> Tuple[List[str], List[ReverseGeocodingLogMessage]]
         Generate tags for a single coordinate
         
-    GeocodingLogMessage
+    ReverseGeocodingLogMessage
         Log message dataclass
 """
 
 # Re-export the public API from the new modules
 from geo_lib.geocoding.location_tags import (
-    batch_geocode_coordinates,
+    batch_reverse_geocode_coordinates,
     get_location_tags,
-    GeocodingLogMessage,
+    ReverseGeocodingLogMessage,
 )
 
 # Deprecated: For backwards compatibility only
@@ -38,15 +38,15 @@ def get_reverse_geocoding_service():
     DEPRECATED: Returns a dummy object for backwards compatibility.
     
     This function exists only for backwards compatibility with old code.
-    New code should call batch_geocode_coordinates() or get_location_tags() directly.
+    New code should call batch_reverse_geocode_coordinates() or get_location_tags() directly.
     
     The old class-based API has been replaced with module-level functions.
     """
     class _DeprecatedServiceWrapper:
         """Wrapper that delegates to the new functional API."""
         
-        def batch_geocode_coordinates(self, coordinates):
-            return batch_geocode_coordinates(coordinates)
+        def batch_reverse_geocode_coordinates(self, coordinates):
+            return batch_reverse_geocode_coordinates(coordinates)
         
         def get_location_tags(self, latitude, longitude):
             return get_location_tags(latitude, longitude)
@@ -67,9 +67,9 @@ class ReverseGeocodingService:
         """Initialize (does nothing, maintained for compatibility)."""
         pass
     
-    def batch_geocode_coordinates(self, coordinates):
+    def batch_reverse_geocode_coordinates(self, coordinates):
         """Delegate to the new functional API."""
-        return batch_geocode_coordinates(coordinates)
+        return batch_reverse_geocode_coordinates(coordinates)
     
     def get_location_tags(self, latitude, longitude):
         """Delegate to the new functional API."""
@@ -109,9 +109,9 @@ class ReverseGeocodingService:
 
 
 __all__ = [
-    'batch_geocode_coordinates',
+    'batch_reverse_geocode_coordinates',
     'get_location_tags',
-    'GeocodingLogMessage',
+    'ReverseGeocodingLogMessage',
     'get_reverse_geocoding_service',  # Deprecated
     'ReverseGeocodingService',  # Deprecated
 ]

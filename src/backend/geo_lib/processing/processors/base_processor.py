@@ -398,7 +398,7 @@ class BaseProcessor(ABC):
                 [f for f in feature_instances if f is not None],
                 import_log=feature_log,
                 filename=self.filename,
-                skip_geocoding=True  # Skip geocoding - done in step 7
+                skip_reverse_geocoding=True  # Skip reverse geocoding - done in step 7
             )
 
             # Check for cancellation after tag generation
@@ -520,31 +520,31 @@ class BaseProcessor(ABC):
                 feature_log.add("Processing canceled during feature instance creation", "Reverse Geocoding", DatabaseLogLevel.WARNING)
                 return feature_log
 
-            # Use the geocoding tag generator directly for batch processing
-            from geo_lib.processing.tagging.modules.geocoding import GeocodingTagGenerator
-            geocoding_gen = GeocodingTagGenerator()
+            # Use the reverse geocoding tag generator directly for batch processing
+            from geo_lib.processing.tagging.modules.geocoding import ReverseGeocodingTagGenerator
+            reverse_geocoding_gen = ReverseGeocodingTagGenerator()
 
-            # Get valid feature instances for geocoding
+            # Get valid feature instances for reverse geocoding
             valid_features = [f for f in feature_instances if f is not None]
 
             if valid_features:
-                geocode_tags = geocoding_gen.process_batch(valid_features, import_log=feature_log)
+                reverse_geocode_tags = reverse_geocoding_gen.process_batch(valid_features, import_log=feature_log)
 
-                # Check for cancellation after geocoding
+                # Check for cancellation after reverse geocoding
                 if self._is_canceled():
                     feature_log.add("Processing canceled after reverse geocoding", "Reverse Geocoding", DatabaseLogLevel.WARNING)
                     return feature_log
 
-                # Apply geocoding tags to features
+                # Apply reverse geocoding tags to features
                 tag_index = 0
                 for i, feature in enumerate(self.processed_features):
                     if feature_instances[i] is None:
                         continue
 
                     try:
-                        if tag_index in geocode_tags:
-                            geo_tags = geocode_tags[tag_index]
-                            # Append geocoding tags to existing system_tags
+                        if tag_index in reverse_geocode_tags:
+                            geo_tags = reverse_geocode_tags[tag_index]
+                            # Append reverse geocoding tags to existing system_tags
                             existing_system_tags = feature.get('properties', {}).get('system_tags', [])
                             if not isinstance(existing_system_tags, list):
                                 existing_system_tags = []
@@ -553,7 +553,7 @@ class BaseProcessor(ABC):
                     except Exception as tag_error:
                         feature_name = feature.get('properties', {}).get('name', 'Unnamed')
                         feature_log.add(
-                            f"Geocoding tag application failed for feature '{feature_name}': {str(tag_error)}",
+                            f"Reverse geocoding tag application failed for feature '{feature_name}': {str(tag_error)}",
                             "Reverse Geocoding",
                             DatabaseLogLevel.WARNING
                         )

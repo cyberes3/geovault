@@ -4,7 +4,7 @@ Management command for managing the reverse geocoding cache.
 Usage:
     python manage.py geocache list          - List all cached queries
     python manage.py geocache stats         - Show cache statistics
-    python manage.py geocache clear         - Clear all geocoding cache
+    python manage.py geocache clear         - Clear all reverse geocoding cache
     python manage.py geocache clear <key>   - Clear specific cache key
 """
 
@@ -42,16 +42,16 @@ class Command(BaseCommand):
         limit = options['limit']
 
         try:
-            cache = caches['geocoding']
+            cache = caches['reverse_geocoding']
         except Exception as e:
-            self.stdout.write(self.style.ERROR(f'Failed to get geocoding cache: {e}'))
+            self.stdout.write(self.style.ERROR(f'Failed to get reverse geocoding cache: {e}'))
             self.stdout.write(self.style.WARNING('Falling back to default cache'))
             cache = caches['default']
 
         # Check if this is a Redis cache (has _cache attribute with client)
         try:
             from django_redis import get_redis_connection
-            redis_conn = get_redis_connection('geocoding')
+            redis_conn = get_redis_connection('reverse_geocoding')
             is_redis = True
         except Exception:
             is_redis = False
@@ -69,15 +69,15 @@ class Command(BaseCommand):
 
     def _list_keys(self, cache, redis_conn, limit):
         """List all cached query keys."""
-        self.stdout.write(self.style.SUCCESS(f'\nGeocoding Cache Keys (limit: {limit}):\n'))
+        self.stdout.write(self.style.SUCCESS(f'\nReverse Geocoding Cache Keys (limit: {limit}):\n'))
         
         if not redis_conn:
             self.stdout.write(self.style.WARNING('Cannot list keys for non-Redis cache'))
             return
 
         try:
-            # Get all keys with the geocode prefix
-            pattern = 'geocode:*:geocode:*'
+            # Get all keys with the reverse_geocode prefix
+            pattern = 'reverse_geocode:*:reverse_geocode:*'
             keys = redis_conn.keys(pattern)
             
             if not keys:
@@ -96,7 +96,7 @@ class Command(BaseCommand):
                 ttl = redis_conn.ttl(key)
                 ttl_days = ttl / (24 * 60 * 60) if ttl > 0 else 0
                 
-                # Extract coordinates from key (format: geocode:<version>:geocode:<type>[:<radius>]:<lat>,<lon>)
+                # Extract coordinates from key (format: reverse_geocode:<version>:reverse_geocode:<type>[:<radius>]:<lat>,<lon>)
                 parts = key.split(':')
                 if len(parts) >= 4:
                     # Skip prefix and version, get type and coords
@@ -119,15 +119,15 @@ class Command(BaseCommand):
 
     def _show_stats(self, cache, redis_conn):
         """Show cache statistics."""
-        self.stdout.write(self.style.SUCCESS('\nGeocoding Cache Statistics:\n'))
+        self.stdout.write(self.style.SUCCESS('\nReverse Geocoding Cache Statistics:\n'))
         
         if not redis_conn:
             self.stdout.write(self.style.WARNING('Cannot show stats for non-Redis cache'))
             return
 
         try:
-            # Get all keys with the geocode prefix
-            pattern = 'geocode:*:geocode:*'
+            # Get all keys with the reverse_geocode prefix
+            pattern = 'reverse_geocode:*:reverse_geocode:*'
             keys = redis_conn.keys(pattern)
             
             total_keys = len(keys)
@@ -141,7 +141,7 @@ class Command(BaseCommand):
                 if isinstance(key, bytes):
                     key = key.decode('utf-8')
                 
-                # Extract type from key (format: geocode:<version>:geocode:<type>[:<radius>]:<lat>,<lon>)
+                # Extract type from key (format: reverse_geocode:<version>:reverse_geocode:<type>[:<radius>]:<lat>,<lon>)
                 parts = key.split(':')
                 if len(parts) >= 4:
                     key_type = parts[3]  # The type is the 4th part (index 3)
@@ -188,8 +188,8 @@ class Command(BaseCommand):
             self.stdout.write(self.style.ERROR(f'Error clearing key: {e}'))
 
     def _clear_all(self, cache, redis_conn):
-        """Clear all geocoding cache."""
-        confirm = input('Are you sure you want to clear ALL geocoding cache? (yes/no): ')
+        """Clear all reverse geocoding cache."""
+        confirm = input('Are you sure you want to clear ALL reverse geocoding cache? (yes/no): ')
         
         if confirm.lower() != 'yes':
             self.stdout.write(self.style.WARNING('Canceled'))
@@ -197,8 +197,8 @@ class Command(BaseCommand):
 
         try:
             if redis_conn:
-                # For Redis, delete all keys with geocode prefix
-                pattern = 'geocode:*:geocode:*'
+                # For Redis, delete all keys with reverse_geocode prefix
+                pattern = 'reverse_geocode:*:reverse_geocode:*'
                 keys = redis_conn.keys(pattern)
                 count = len(keys)
                 
@@ -210,7 +210,7 @@ class Command(BaseCommand):
             else:
                 # For other cache backends, just clear everything
                 cache.clear()
-                self.stdout.write(self.style.SUCCESS('Cleared geocoding cache'))
+                self.stdout.write(self.style.SUCCESS('Cleared reverse geocoding cache'))
                 
         except Exception as e:
             self.stdout.write(self.style.ERROR(f'Error clearing cache: {e}'))

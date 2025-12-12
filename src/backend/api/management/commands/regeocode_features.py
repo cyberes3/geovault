@@ -1,6 +1,6 @@
 """
-Management command to re-geocode all features.
-Removes existing reverse geocoding tags and regenerates them using current geocoding service.
+Management command to re-reverse-geocode all features.
+Removes existing reverse geocoding tags and regenerates them using current reverse geocoding service.
 """
 from django.core.management.base import BaseCommand
 from django.db import transaction
@@ -12,7 +12,7 @@ from geo_lib.processing.tagging.modules.geocoding import get_representative_poin
 
 
 class Command(BaseCommand):
-    help = 'Re-geocode all features by removing existing reverse geocoding tags and regenerating them'
+    help = 'Re-reverse-geocode all features by removing existing reverse geocoding tags and regenerating them'
 
     def add_arguments(self, parser):
         parser.add_argument(
@@ -203,7 +203,7 @@ class Command(BaseCommand):
         # Print summary
         self.stdout.write('')
         self.stdout.write(self.style.SUCCESS('=' * 60))
-        self.stdout.write(self.style.SUCCESS('Re-geocoding complete!'))
+        self.stdout.write(self.style.SUCCESS('Re-reverse-geocoding complete!'))
         self.stdout.write('')
         self.stdout.write(f'Total features processed: {processed}')
         self.stdout.write(f'Features updated: {updated}')

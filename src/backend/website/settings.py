@@ -215,13 +215,13 @@ CACHES = {
     },
     # Separate Redis cache for reverse geocoding results
     # Uses a different Redis DB to persist across restarts (not cleared on startup)
-    'geocoding': {
+    'reverse_geocoding': {
         'BACKEND': 'django_redis.cache.RedisCache',
         'LOCATION': f"redis://{config.get_str('redis.host', '127.0.0.1')}:{config.get_int('redis.port', 6379)}/1",
         'OPTIONS': {
             'CLIENT_CLASS': 'django_redis.client.DefaultClient',
         },
-        'KEY_PREFIX': 'geocode',
+        'KEY_PREFIX': 'reverse_geocode',
         'TIMEOUT': 30 * 24 * 60 * 60,  # 30 days default timeout
     }
 }
@@ -557,7 +557,7 @@ LOGGING = {
             'level': 'INFO',
             'propagate': False,
         },
-        # Geocode logging - Geocoding, reverse geocoding
+        # Reverse geocode logging - Reverse geocoding
         'geocode': {
             'handlers': ['console'],
             'level': 'INFO',

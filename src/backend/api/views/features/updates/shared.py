@@ -25,7 +25,7 @@ def _validate_tags(tags):
         # Check if tag is a system tag (protected tag)
         if is_protected_tag(tag, CONST_INTERNAL_TAGS):
             return False, error_response(
-                'System tags (type, import-year, import-month, feature-year, feature-month, source-file, track, elevation, geocoding) cannot be added as user tags',
+                'System tags (type, import-year, import-month, feature-year, feature-month, source-file, track, elevation, reverse geocoding) cannot be added as user tags',
                 400
             )
 

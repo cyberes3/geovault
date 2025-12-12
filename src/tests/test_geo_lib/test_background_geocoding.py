@@ -10,7 +10,7 @@ from django.contrib.gis.geos import Point
 from django.contrib.auth import get_user_model
 
 from api.models import FeatureStore
-from geo_lib.geocoding.background_geocoding import geocode_feature_async
+from geo_lib.geocoding.background_geocoding import reverse_geocode_feature_async
 from geo_lib.types.feature import PointFeature
 from geo_lib.feature_id import generate_geojson_hash
 from geo_lib.processing.tagging.generate import generate_auto_tags
@@ -93,14 +93,14 @@ class TestBackgroundGeocoding(TransactionTestCase):
         return feature_store
     
     @patch('geo_lib.processing.tagging.modules.geocoding.get_required_setting')
-    @patch('geo_lib.processing.tagging.modules.geocoding.batch_geocode_coordinates')
-    def test_background_geocoding_adds_tags(self, mock_batch_geocode, mock_setting):
-        """Test that background geocoding adds tags to a feature."""
-        # Enable geocoding
+    @patch('geo_lib.processing.tagging.modules.geocoding.batch_reverse_geocode_coordinates')
+    def test_background_geocoding_adds_tags(self, mock_batch_reverse_geocode, mock_setting):
+        """Test that background reverse geocoding adds tags to a feature."""
+        # Enable reverse geocoding
         mock_setting.return_value = True
         
-        # Mock batch_geocode_coordinates - returns dict mapping (lat, lon) to (tags, log_messages)
-        mock_batch_geocode.return_value = {
+        # Mock batch_reverse_geocode_coordinates - returns dict mapping (lat, lon) to (tags, log_messages)
+        mock_batch_reverse_geocode.return_value = {
             (37.7749, -122.4194): (
                 [
                     'geo-city:San Francisco',
@@ -115,7 +115,7 @@ class TestBackgroundGeocoding(TransactionTestCase):
         feature_store = self._create_test_feature(with_geocoding_tags=False)
         
         # Start background geocoding
-        geocode_feature_async(feature_store.id)
+        reverse_geocode_feature_async(feature_store.id)
         
         # Wait for geocoding to complete
         expected_tags = ['geo-city:San Francisco', 'geo-state:California', 'geo-country:United States']
@@ -139,13 +139,13 @@ class TestBackgroundGeocoding(TransactionTestCase):
         self.assertIn('quick-point', system_tags)
     
     @patch('geo_lib.processing.tagging.modules.geocoding.get_required_setting')
-    @patch('geo_lib.processing.tagging.modules.geocoding.batch_geocode_coordinates')
+    @patch('geo_lib.processing.tagging.modules.geocoding.batch_reverse_geocode_coordinates')
     def test_background_geocoding_handles_errors_gracefully(self, mock_batch_geocode, mock_setting):
         """Test that background geocoding handles errors without affecting the feature."""
         # Enable geocoding
         mock_setting.return_value = True
         
-        # Mock batch_geocode_coordinates to raise an error
+        # Mock batch_reverse_geocode_coordinates to raise an error
         mock_batch_geocode.side_effect = Exception("Geocoding API error")
         
         # Create feature
@@ -153,7 +153,7 @@ class TestBackgroundGeocoding(TransactionTestCase):
         original_geojson = feature_store.geojson.copy()
         
         # Start background geocoding
-        geocode_feature_async(feature_store.id)
+        reverse_geocode_feature_async(feature_store.id)
         
         # Wait a bit for the error to be handled (errors are logged but don't modify feature)
         time.sleep(0.3)
@@ -176,7 +176,7 @@ class TestBackgroundGeocoding(TransactionTestCase):
         original_geojson = feature_store.geojson.copy()
         
         # Start background geocoding
-        geocode_feature_async(feature_store.id)
+        reverse_geocode_feature_async(feature_store.id)
         
         # Wait a bit (geocoding is disabled, so nothing should happen)
         time.sleep(0.3)
@@ -204,7 +204,7 @@ class TestBackgroundGeocoding(TransactionTestCase):
     def test_background_geocoding_handles_nonexistent_feature(self):
         """Test that background geocoding handles nonexistent feature gracefully."""
         # Try to geocode a non-existent feature
-        geocode_feature_async(99999)
+        reverse_geocode_feature_async(99999)
         
         # Wait for background thread to complete
         time.sleep(0.5)
@@ -213,13 +213,13 @@ class TestBackgroundGeocoding(TransactionTestCase):
         # This test just verifies it doesn't crash
     
     @patch('geo_lib.processing.tagging.modules.geocoding.get_required_setting')
-    @patch('geo_lib.processing.tagging.modules.geocoding.batch_geocode_coordinates')
+    @patch('geo_lib.processing.tagging.modules.geocoding.batch_reverse_geocode_coordinates')
     def test_background_geocoding_prevents_duplicate_tags(self, mock_batch_geocode, mock_setting):
         """Test that background geocoding doesn't add duplicate tags."""
         # Enable geocoding
         mock_setting.return_value = True
         
-        # Mock batch_geocode_coordinates - returns dict mapping (lat, lon) to (tags, log_messages)
+        # Mock batch_reverse_geocode_coordinates - returns dict mapping (lat, lon) to (tags, log_messages)
         mock_batch_geocode.return_value = {
             (37.7749, -122.4194): (
                 [
@@ -234,7 +234,7 @@ class TestBackgroundGeocoding(TransactionTestCase):
         feature_store = self._create_test_feature(with_geocoding_tags=True)
         
         # Start background geocoding
-        geocode_feature_async(feature_store.id)
+        reverse_geocode_feature_async(feature_store.id)
         
         # Wait for geocoding to complete
         expected_tags = ['geo-state:California']
@@ -258,13 +258,13 @@ class TestBackgroundGeocoding(TransactionTestCase):
         self.assertIn('geo-state:California', system_tags)
     
     @patch('geo_lib.processing.tagging.modules.geocoding.get_required_setting')
-    @patch('geo_lib.processing.tagging.modules.geocoding.batch_geocode_coordinates')
+    @patch('geo_lib.processing.tagging.modules.geocoding.batch_reverse_geocode_coordinates')
     def test_background_geocoding_row_locking(self, mock_batch_geocode, mock_setting):
         """Test that background geocoding uses row locking to prevent race conditions."""
         # Enable geocoding
         mock_setting.return_value = True
         
-        # Mock batch_geocode_coordinates with a delay to simulate slow geocoding
+        # Mock batch_reverse_geocode_coordinates with a delay to simulate slow geocoding
         def slow_batch_geocode(coordinates):
             time.sleep(0.1)  # Simulate slow geocoding
             # Return dict mapping each coordinate to (tags, log_messages)
@@ -276,7 +276,7 @@ class TestBackgroundGeocoding(TransactionTestCase):
         feature_store = self._create_test_feature(with_geocoding_tags=False)
         
         # Start background geocoding
-        geocode_feature_async(feature_store.id)
+        reverse_geocode_feature_async(feature_store.id)
         
         # Immediately try to update the feature (simulating concurrent access)
         # This should work because select_for_update() locks the row
@@ -305,8 +305,8 @@ class TestBackgroundGeocoding(TransactionTestCase):
 
 
 @pytest.mark.django_db
-class TestSkipGeocodingParameter(TestCase):
-    """Test the skip_geocoding parameter in generate_auto_tags."""
+class TestSkipReverseGeocodingParameter(TestCase):
+    """Test the skip_reverse_geocoding parameter in generate_auto_tags."""
     
     def setUp(self):
         """Set up test fixtures."""
@@ -317,18 +317,18 @@ class TestSkipGeocodingParameter(TestCase):
         )
     
     @patch('geo_lib.processing.tagging.modules.geocoding.get_required_setting')
-    @patch('geo_lib.processing.tagging.modules.geocoding.batch_geocode_coordinates')
-    def test_generate_auto_tags_skips_geocoding(self, mock_batch_geocode, mock_setting):
-        """Test that generate_auto_tags skips geocoding when flag is set."""
-        # Enable geocoding
+    @patch('geo_lib.processing.tagging.modules.geocoding.batch_reverse_geocode_coordinates')
+    def test_generate_auto_tags_skips_reverse_geocoding(self, mock_batch_reverse_geocode, mock_setting):
+        """Test that generate_auto_tags skips reverse geocoding when flag is set."""
+        # Enable reverse geocoding
         mock_setting.return_value = True
         
-        # Mock batch_geocode_coordinates
+        # Mock batch_reverse_geocode_coordinates
         # It returns a dict mapping (lat, lon) -> (tags, log_messages)
-        def mock_batch_geocode_impl(coordinates):
+        def mock_batch_reverse_geocode_impl(coordinates):
             # Return a dict with results for all coordinates passed
             return {coord: (['geo-city:San Francisco'], []) for coord in coordinates}
-        mock_batch_geocode.side_effect = mock_batch_geocode_impl
+        mock_batch_reverse_geocode.side_effect = mock_batch_reverse_geocode_impl
         
         # Create feature
         feature = PointFeature(
@@ -337,21 +337,21 @@ class TestSkipGeocodingParameter(TestCase):
             properties={'name': 'Test Point', 'geojson_hash': 'test'}
         )
         
-        # Generate tags without skipping geocoding
-        tags_with_geocoding = generate_auto_tags(feature, import_log=ImportLog(), skip_geocoding=False)
+        # Generate tags without skipping reverse geocoding
+        tags_with_reverse_geocoding = generate_auto_tags(feature, import_log=ImportLog(), skip_reverse_geocoding=False)
         
-        # Generate tags with geocoding skipped
-        tags_without_geocoding = generate_auto_tags(feature, import_log=ImportLog(), skip_geocoding=True)
+        # Generate tags with reverse geocoding skipped
+        tags_without_reverse_geocoding = generate_auto_tags(feature, import_log=ImportLog(), skip_reverse_geocoding=True)
         
-        # Verify geocoding tags are present when not skipped
-        self.assertTrue(any('geo-city' in tag for tag in tags_with_geocoding))
+        # Verify reverse geocoding tags are present when not skipped
+        self.assertTrue(any('geo-city' in tag for tag in tags_with_reverse_geocoding))
         
-        # Verify geocoding tags are absent when skipped
-        self.assertFalse(any('geo-city' in tag for tag in tags_without_geocoding))
+        # Verify reverse geocoding tags are absent when skipped
+        self.assertFalse(any('geo-city' in tag for tag in tags_without_reverse_geocoding))
         
         # Verify other tags are still present in both cases
-        self.assertTrue(any('type:point' in tag for tag in tags_with_geocoding))
-        self.assertTrue(any('type:point' in tag for tag in tags_without_geocoding))
+        self.assertTrue(any('type:point' in tag for tag in tags_with_reverse_geocoding))
+        self.assertTrue(any('type:point' in tag for tag in tags_without_reverse_geocoding))
     
     def test_generate_auto_tags_backward_compatibility(self):
         """Test that generate_auto_tags maintains backward compatibility."""
@@ -362,7 +362,7 @@ class TestSkipGeocodingParameter(TestCase):
             properties={'name': 'Test Point', 'geojson_hash': 'test'}
         )
         
-        # Call without skip_geocoding parameter (should default to False)
+        # Call without skip_reverse_geocoding parameter (should default to False)
         tags = generate_auto_tags(feature, import_log=ImportLog())
         
         # Should still generate tags (at least type tags)

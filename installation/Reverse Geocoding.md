@@ -1,6 +1,6 @@
 # Reverse Geocoding
 
-If you want advanced tagging of your features you will have to set up a very heavy service. This feature is disabled by default via the `geocoding.enabled` config value.
+If you want advanced tagging of your features you will have to set up a very heavy service. This feature is disabled by default via the `reverse_geocoding.enabled` config value.
 
 
 [Overpass API](https://github.com/wiktorn/Overpass-API) is used to find all other features.

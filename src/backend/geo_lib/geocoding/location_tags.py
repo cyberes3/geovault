@@ -17,7 +17,7 @@ from datetime import datetime
 from typing import List, Tuple, Dict
 
 from geo_lib.geocoding.admin_boundaries import get_admin_hierarchy
-from geo_lib.geocoding.cache import _GEOCODING_CACHE, _get_cache_key
+from geo_lib.geocoding.cache import _REVERSE_GEOCODING_CACHE, _get_cache_key
 from geo_lib.geocoding.constants import REVERSE_GEOCODING_CACHE_TTL
 from geo_lib.geocoding.nearby_places import find_nearby_cities, search_nearby_lakes
 from geo_lib.geocoding.protected_areas import get_protected_areas, classify_protected_area
@@ -29,8 +29,8 @@ _logger = get_tagged_logger()
 
 
 @dataclass
-class GeocodingLogMessage:
-    """Log message from geocoding operations."""
+class ReverseGeocodingLogMessage:
+    """Log message from reverse geocoding operations."""
     timestamp: datetime
     message: str
     level: str  # 'INFO', 'WARNING', 'ERROR'
@@ -40,7 +40,7 @@ class GeocodingLogMessage:
 def get_location_tags(
     latitude: float,
     longitude: float
-) -> Tuple[List[str], List[GeocodingLogMessage]]:
+) -> Tuple[List[str], List[ReverseGeocodingLogMessage]]:
     """
     Generate comprehensive location tags for a coordinate.
     
@@ -86,7 +86,7 @@ def get_location_tags(
                 f"({latitude}, {longitude}) - possible API failures (check console logs)"
             )
             _logger.warning(error_msg)
-            log_messages.append(GeocodingLogMessage(
+            log_messages.append(ReverseGeocodingLogMessage(
                 timestamp=datetime.now(),
                 message=error_msg,
                 level='WARNING',
@@ -149,7 +149,7 @@ def get_location_tags(
     except Exception as e:
         error_msg = f"Error generating location tags for ({latitude}, {longitude}): {e}"
         _logger.error(error_msg)
-        log_messages.append(GeocodingLogMessage(
+        log_messages.append(ReverseGeocodingLogMessage(
             timestamp=datetime.now(),
             message=error_msg,
             level='ERROR',
@@ -161,7 +161,7 @@ def get_location_tags(
 def _get_from_cache_or_fetch(
     latitude: float,
     longitude: float
-) -> Tuple[List[str], List[GeocodingLogMessage]]:
+) -> Tuple[List[str], List[ReverseGeocodingLogMessage]]:
     """
     Internal helper: Check cache first, fetch from API if needed.
     
@@ -175,8 +175,8 @@ def _get_from_cache_or_fetch(
         Tuple of (tags list, log messages list)
     """
     # Check top-level cache for complete tag results
-    cache_key = _get_cache_key(latitude, longitude, prefix="geocode:tags")
-    cached = _GEOCODING_CACHE.get(cache_key)
+    cache_key = _get_cache_key(latitude, longitude, prefix="reverse_geocode:tags")
+    cached = _REVERSE_GEOCODING_CACHE.get(cache_key)
 
     if cached is not None:
         # Return cached tags and empty log messages (already processed)
@@ -186,16 +186,16 @@ def _get_from_cache_or_fetch(
     tags, log_messages = get_location_tags(latitude, longitude)
 
     # Cache the results for 30 days
-    _GEOCODING_CACHE.set(cache_key, tags, REVERSE_GEOCODING_CACHE_TTL)
+    _REVERSE_GEOCODING_CACHE.set(cache_key, tags, REVERSE_GEOCODING_CACHE_TTL)
 
     return tags, log_messages
 
 
-def batch_geocode_coordinates(
+def batch_reverse_geocode_coordinates(
     coordinates: List[Tuple[float, float]]
-) -> Dict[Tuple[float, float], Tuple[List[str], List[GeocodingLogMessage]]]:
+) -> Dict[Tuple[float, float], Tuple[List[str], List[ReverseGeocodingLogMessage]]]:
     """
-    THE MAIN ENTRY POINT: Batch geocode multiple coordinates with deduplication.
+    THE MAIN ENTRY POINT: Batch reverse geocode multiple coordinates with deduplication.
     
     This is the primary function that should be called for optimal performance.
     
