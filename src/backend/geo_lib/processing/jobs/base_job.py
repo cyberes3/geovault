@@ -99,7 +99,7 @@ class BaseJob(ABC):
             if job.status == ProcessingStatus.CANCELED:
                 _logger.info(f"Job {job_id} was canceled during processing")
 
-        except Exception as e:
+        except:
             # Don't log error if job was canceled
             job = self.status_tracker.get_job(job_id)
             if job.status == ProcessingStatus.CANCELED:

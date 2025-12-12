@@ -9,6 +9,7 @@ import traceback
 from typing import Dict, Optional
 
 from geo_lib.logging.console import get_tagged_logger
+from geo_lib.processing.jobs.helpers.redis_job_storage import store_job_started
 from geo_lib.processing.jobs.helpers.status_tracker import ProcessingStatus
 from geo_lib.processing.redis_queue import get_processing_queue
 
@@ -112,9 +113,21 @@ class QueueWorker:
                             0.0
                         )
 
-                        # Call _job_worker to ensure proper job initialization (Redis storage, etc.)
-                        # This matches the pattern used by other job types
-                        self.process_job._job_worker(job_id, job_data)
+                        # Store job in Redis when it starts processing
+                        job = self.process_job.status_tracker.get_job(job_id)
+                        store_job_started(
+                            job_id=job_id,
+                            user_id=job.user_id,
+                            job_type=self.process_job.get_job_type(),
+                            filename=job.filename,
+                            created_at=job.created_at,
+                            import_queue_id=getattr(job, 'import_queue_id', None)
+                        )
+
+                        # Call _execute_job directly (NOT _job_worker) to process synchronously
+                        # The queue worker thread already provides sequential execution,
+                        # so we don't need _job_worker to spawn another thread
+                        self.process_job._execute_job(job_id, job_data)
                     except:
                         _logger.error(f"Error processing job {job_data['job_id']} for user {self.user_id}: {traceback.format_exc()}", exc_info=True)
                         # Continue processing next job even if this one failed
