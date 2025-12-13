@@ -24,7 +24,7 @@
           You can create custom tags, edit or delete them, share them with others, and each feature can have multiple tags for flexible categorization.
         </p>
         <p class="text-sm text-gray-700 mt-2">
-          <strong>Note:</strong> Deleting a tag will permanently delete all features that have that tag. 
+          <strong>Note:</strong> When deleting a tag, you can choose to either delete all features with that tag or just remove the tag from those features. 
           To remove a tag from a single feature without deleting it, use the × button next to the feature.
         </p>
       </div>
@@ -166,7 +166,7 @@
                   class="p-2 sm:p-1.5 min-w-[44px] min-h-[44px] sm:min-w-0 sm:min-h-0 text-gray-400 hover:text-red-600 focus:outline-none focus:ring-2 focus:ring-red-500 focus:ring-offset-1 rounded"
                   :title="isSystemTag(tag) ? 'Delete system tag and all its features' : 'Delete tag'"
                   type="button"
-                  @click.stop.prevent="deleteTag(tag)"
+                  @click.stop.prevent="openDeleteModal(tag)"
                   @mousedown.stop.prevent
               >
                 <TrashIcon class="w-4 h-4" />
@@ -349,6 +349,17 @@
         @close="shareDialogOpen = false"
     />
 
+    <!-- Delete Modal -->
+    <TagDeleteModal
+        :isOpen="deleteModalOpen"
+        :tag="selectedTagForDelete"
+        :featureCount="getFeatureCountForTag(selectedTagForDelete)"
+        :isSystemTag="isSystemTag(selectedTagForDelete)"
+        @close="closeDeleteModal"
+        @delete-all-features="handleDeleteAllFeatures"
+        @remove-tag-only="handleRemoveTagOnly"
+    />
+
     <!-- Bulk Operations Modal -->
     <BulkStylingModal
         :isOpen="bulkOperationsModalOpen"
@@ -363,17 +374,19 @@
 
 <script>
 import TagShareDialog from "./TagShareDialog.vue";
+import TagDeleteModal from "./TagDeleteModal.vue";
 import Loader from "../parts/Loader.vue";
 import BulkStylingModal from "@/components/import/parts/BulkStylingModal.vue";
 import { createEmptyBulkOperations, cloneBulkOperations } from "@/utils/bulkOperations.js";
 import { sortTagsByPriority, sortUserTagsAlphabetically, isSystemTag } from "@/utils/tagUtils.js";
 import { MagnifyingGlassIcon, ExclamationCircleIcon, TagIcon, ShareIcon, ArrowDownTrayIcon, PencilIcon, TrashIcon, CheckIcon, MapIcon, ArrowLeftIcon, ArrowRightIcon, XMarkIcon, RectangleStackIcon } from '@heroicons/vue/24/outline';
-import { deleteTag, removeTagFromFeature as removeTagFromFeatureUtil, buildDeleteTagMessage, buildRemoveTagMessage, scrollToTag as scrollToTagUtil } from "@/utils/tags/tagOperations.js";
+import { deleteTag, removeTagFromAllFeatures, removeTagFromFeature as removeTagFromFeatureUtil, buildDeleteTagMessage, buildRemoveTagMessage, scrollToTag as scrollToTagUtil } from "@/utils/tags/tagOperations.js";
 
 export default {
   name: 'TagsPage',
   components: {
     TagShareDialog,
+    TagDeleteModal,
     Loader,
     MagnifyingGlassIcon,
     ExclamationCircleIcon,
@@ -403,6 +416,8 @@ export default {
       editingTagValue: '', // Value of tag being edited
       shareDialogOpen: false, // Whether share dialog is open
       selectedTagForShare: '', // Tag selected for sharing
+      deleteModalOpen: false, // Whether delete modal is open
+      selectedTagForDelete: '', // Tag selected for deletion
       currentPage: 1, // Current page number
       pageSize: 10, // Number of tags per page
       gotoPageInput: null, // Input value for jumping to a page
@@ -813,17 +828,21 @@ export default {
     scrollToTag(tagName) {
       scrollToTagUtil(this.$el, tagName);
     },
-    async deleteTag(tag) {
-      // Get the number of features with this tag
+    getFeatureCountForTag(tag) {
       const features = this.tagsData[tag] || [];
-      const featureCount = features.length;
-      const isSystem = this.isSystemTag(tag);
-
-      // Show confirmation dialog with appropriate message
-      const confirmMessage = buildDeleteTagMessage(tag, featureCount, isSystem);
-      if (!confirm(confirmMessage)) {
-        return;
-      }
+      return features.length;
+    },
+    openDeleteModal(tag) {
+      this.selectedTagForDelete = tag;
+      this.deleteModalOpen = true;
+    },
+    closeDeleteModal() {
+      this.deleteModalOpen = false;
+      this.selectedTagForDelete = '';
+    },
+    async handleDeleteAllFeatures(tag) {
+      // Get the features for this tag
+      const features = this.tagsData[tag] || [];
 
       try {
         const csrfToken = this.getCookie('csrftoken');
@@ -846,11 +865,46 @@ export default {
           delete this.systemTagsData[tag];
         }
 
+        // Close the modal
+        this.closeDeleteModal();
+
         // Refresh the data to ensure consistency (merge mode to update only changed tags)
         await this.fetchTagsData(true, true);
       } catch (error) {
         console.error('Error deleting tag:', error);
         alert(`Failed to delete tag: ${error.message}`);
+      }
+    },
+    async handleRemoveTagOnly(tag) {
+      // Get the features for this tag
+      const features = this.tagsData[tag] || [];
+
+      try {
+        const csrfToken = this.getCookie('csrftoken');
+        
+        // Remove tag from all features
+        const result = await removeTagFromAllFeatures(tag, features, csrfToken);
+        
+        console.log(`Removed tag "${tag}" from features`);
+
+        // Remove tag from local state
+        const newTagsData = {...this.tagsData};
+        delete newTagsData[tag];
+        this.tagsData = newTagsData;
+        
+        // Also remove from userTagsData
+        if (this.userTagsData[tag]) {
+          delete this.userTagsData[tag];
+        }
+
+        // Close the modal
+        this.closeDeleteModal();
+
+        // Refresh the data to ensure consistency (merge mode to update only changed tags)
+        await this.fetchTagsData(true, true);
+      } catch (error) {
+        console.error('Error removing tag:', error);
+        alert(`Failed to remove tag: ${error.message}`);
       }
     },
     async removeTagFromFeature(tag, feature) {

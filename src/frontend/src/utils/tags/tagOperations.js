@@ -30,6 +30,50 @@ export async function deleteTag(tag, csrfToken) {
 export const deleteSystemTag = deleteTag;
 
 /**
+ * Remove tag from all features (bulk operation)
+ * @param {string} tag - Tag to remove
+ * @param {Array} features - Features with this tag
+ * @param {string} csrfToken - CSRF token
+ * @returns {Promise<Object>} API response with updated count
+ */
+export async function removeTagFromAllFeatures(tag, features, csrfToken) {
+  const updates = [];
+  
+  for (const feature of features) {
+    if (!feature.properties.database_id) continue;
+    
+    const currentTags = Array.isArray(feature.properties.tags)
+      ? [...feature.properties.tags]
+      : [];
+    
+    const filteredTags = currentTags.filter(t => t !== tag);
+    
+    updates.push({
+      feature_id: feature.properties.database_id,
+      tags: filteredTags
+    });
+  }
+  
+  if (updates.length === 0) return { updated: 0 };
+  
+  const response = await fetch('/api/features/bulk-update-metadata/', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'X-CSRFToken': csrfToken || ''
+    },
+    body: JSON.stringify({ updates })
+  });
+  
+  if (!response.ok) {
+    const errorData = await response.json().catch(() => ({}));
+    throw new Error(errorData.error || `Failed to update features: ${response.status}`);
+  }
+  
+  return await response.json();
+}
+
+/**
  * Remove tag from a single feature
  * @param {string} tag - Tag to remove
  * @param {Object} feature - Feature object

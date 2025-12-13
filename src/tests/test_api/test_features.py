@@ -228,6 +228,122 @@ class TestFeatureAPI(TestCase):
         )
         self.assertEqual(response.status_code, 200)
 
+    def test_update_feature_metadata_preserves_system_tags(self):
+        """Test that system tags cannot be removed when updating feature metadata."""
+        # Create a feature with system tags
+        feature_with_system_tags_data = {
+            'type': 'Feature',
+            'geometry': {
+                'type': 'Point',
+                'coordinates': [-122.4194, 37.7749, 0.0]
+            },
+            'properties': {
+                'name': 'Feature with System Tags',
+                'tags': ['user-tag-1', 'user-tag-2'],
+                'system_tags': ['type:point', 'elevation:high', 'import-year:2024']
+            }
+        }
+        feature_with_system_tags = FeatureStore.objects.create(
+            user=self.user,
+            geojson=feature_with_system_tags_data,
+            geometry=Point(-122.4194, 37.7749, 0.0),
+            geojson_hash=generate_geojson_hash(feature_with_system_tags_data)
+        )
+        
+        # Store original system tags
+        original_system_tags = feature_with_system_tags_data['properties']['system_tags']
+        self.assertEqual(len(original_system_tags), 3)
+        
+        # Update feature metadata - change name, description, and tags
+        metadata = {
+            'name': 'Updated Feature Name',
+            'description': 'Updated description',
+            'tags': ['new-user-tag-1', 'new-user-tag-2']  # Completely different user tags
+        }
+        response = self.client.put(
+            f'/api/feature/{feature_with_system_tags.id}/update-metadata/',
+            data=json.dumps(metadata),
+            content_type='application/json'
+        )
+        self.assertEqual(response.status_code, 200)
+        
+        # Refresh from database
+        feature_with_system_tags.refresh_from_db()
+        updated_properties = feature_with_system_tags.geojson['properties']
+        
+        # Verify metadata was updated
+        self.assertEqual(updated_properties['name'], 'Updated Feature Name')
+        self.assertEqual(updated_properties['description'], 'Updated description')
+        self.assertEqual(updated_properties['tags'], ['new-user-tag-1', 'new-user-tag-2'])
+        
+        # Verify system tags were preserved and not removed
+        preserved_system_tags = updated_properties.get('system_tags', [])
+        self.assertEqual(
+            set(preserved_system_tags),
+            set(original_system_tags),
+            'System tags should be preserved and cannot be removed via update-metadata endpoint'
+        )
+        self.assertEqual(len(preserved_system_tags), 3)
+        self.assertIn('type:point', preserved_system_tags)
+        self.assertIn('elevation:high', preserved_system_tags)
+        self.assertIn('import-year:2024', preserved_system_tags)
+
+    def test_update_feature_metadata_rejects_system_tags_in_tags_field(self):
+        """Test that system tags sent in the tags field are rejected and cannot be added as user tags."""
+        # Create a feature with system tags
+        feature_data = {
+            'type': 'Feature',
+            'geometry': {
+                'type': 'Point',
+                'coordinates': [-122.4194, 37.7749, 0.0]
+            },
+            'properties': {
+                'name': 'Test Feature',
+                'tags': ['user-tag'],
+                'system_tags': ['type:point', 'elevation:low']
+            }
+        }
+        feature = FeatureStore.objects.create(
+            user=self.user,
+            geojson=feature_data,
+            geometry=Point(-122.4194, 37.7749, 0.0),
+            geojson_hash=generate_geojson_hash(feature_data)
+        )
+        
+        original_system_tags = feature_data['properties']['system_tags']
+        
+        # Try to update tags field with system tags mixed in
+        # This simulates a malicious request trying to add system tags as user tags
+        metadata = {
+            'tags': ['new-user-tag', 'type:point', 'elevation:high']  # Mix of user and system tags
+        }
+        response = self.client.put(
+            f'/api/feature/{feature.id}/update-metadata/',
+            data=json.dumps(metadata),
+            content_type='application/json'
+        )
+        # Should reject with 400 error
+        self.assertEqual(response.status_code, 400)
+        error_data = json.loads(response.content)
+        self.assertIn('error', error_data)
+        self.assertIn('System tags', error_data['error'])
+        self.assertIn('cannot be added as user tags', error_data['error'])
+        
+        # Verify feature was not modified
+        feature.refresh_from_db()
+        updated_properties = feature.geojson['properties']
+        
+        # Original tags should be unchanged
+        self.assertEqual(updated_properties.get('tags'), ['user-tag'])
+        
+        # System tags should still be preserved
+        preserved_system_tags = updated_properties.get('system_tags', [])
+        self.assertEqual(
+            set(preserved_system_tags),
+            set(original_system_tags),
+            'System tags should be preserved when update is rejected'
+        )
+
     def test_update_feature_metadata_coordinates_valid(self):
         """Test updating coordinates via metadata endpoint with valid coordinates."""
         metadata = {
