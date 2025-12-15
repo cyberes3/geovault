@@ -125,6 +125,7 @@ def _initialize_tile_sources():
     from geo_lib.tile_sources.global_imagery import GlobalImageryTileSource
     from geo_lib.tile_sources.maptiler_hillshade import MapTilerHillshadeTileSource
     from geo_lib.tile_sources.maptiler_terrain import MapTilerTerrainTileSource
+    from geo_lib.tile_sources.hereapi import HereApiTileSource
     from geo_lib.tile_sources.maptiler import generate_maptiler_sources
 
     # Register single tile sources
@@ -135,6 +136,7 @@ def _initialize_tile_sources():
         GlobalImageryTileSource(),
         MapTilerHillshadeTileSource(),
         MapTilerTerrainTileSource(),
+        HereApiTileSource(),
     ]
     single_sources.extend(generate_maptiler_sources())
 

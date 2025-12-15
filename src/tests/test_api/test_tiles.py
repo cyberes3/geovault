@@ -9,6 +9,8 @@ from urllib.response import addinfourl
 from django.contrib.auth import get_user_model
 from django.test import TestCase
 
+from geo_lib.tile_sources.registry import get_tile_source
+
 
 class TestTilesAPI(TestCase):
     """Test tile API endpoints."""
@@ -29,6 +31,16 @@ class TestTilesAPI(TestCase):
         self.assertEqual(response.status_code, 200)
         data = json.loads(response.content)
         self.assertIn('sources', data)
+
+    def test_hereapi_tile_source_registered(self):
+        """Test that HERE API tile source is registered correctly."""
+        hereapi_source = get_tile_source('hereapi')
+        self.assertIsNotNone(hereapi_source)
+        self.assertEqual(hereapi_source['name'], 'HERE Streets')
+        self.assertTrue(hereapi_source['requires_proxy'])
+        self.assertIn('url_template', hereapi_source)
+        self.assertIn('proxy_config', hereapi_source)
+        self.assertIn('client_config', hereapi_source)
 
     @patch('urllib.request.urlopen')
     def test_tile_proxy(self, mock_urlopen):
