@@ -2113,6 +2113,11 @@ export default {
           data.features = data.features.filter(f => f.properties?.database_id !== featureId)
           source.setData(data)
           this.updateFeatureCount()
+          
+          // Remove label marker for deleted feature if labels are visible
+          if (this.showAllLabels && this.labelMarkerManager) {
+            this.labelMarkerManager.removeMarker(String(featureId))
+          }
         }
       }
 
