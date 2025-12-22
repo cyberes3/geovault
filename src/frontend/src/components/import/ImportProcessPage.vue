@@ -2361,18 +2361,41 @@ export default {
     async goToSearchResult(result) {
       // Navigate to the page containing the search result
       if (result.page && result.page >= 1 && result.page <= this.pagination.totalPages) {
-        await this.goToPage(result.page);
-
-        // Wait for the page to finish loading
-        await this.waitForPageLoad();
-
-        // Scroll to the feature using its global index
-        this.$nextTick(() => {
-          setTimeout(() => {
-            this.scrollToFeature(result.feature_index);
-          }, 100);
-        });
-
+        const featureHash = result.feature?.properties?.geojson_hash;
+        if (!featureHash) {
+          console.warn('Search result missing feature hash');
+          this.clearSearch();
+          return;
+        }
+        
+        // Check if we're already on the correct page
+        const isAlreadyOnPage = this.pagination.currentPage === result.page;
+        
+        if (!isAlreadyOnPage) {
+          // Navigate to the page from the search result
+          await this.goToPage(result.page);
+          
+          // Wait for the page to finish loading
+          await this.waitForPageLoad();
+          await this.waitForItems();
+        }
+        
+        // Wait for DOM to be fully updated
+        await this.$nextTick();
+        await new Promise(resolve => setTimeout(resolve, isAlreadyOnPage ? 0 : 100));
+        
+        // Find feature by hash in current page
+        const localIndex = this.itemsForUser.findIndex(item =>
+          item.properties && item.properties.geojson_hash === featureHash
+        );
+        
+        if (localIndex >= 0) {
+          const globalIndex = (this.pagination.currentPage - 1) * this.pagination.pageSize + localIndex;
+          this.scrollToFeature(globalIndex);
+        } else {
+          console.warn(`Feature with hash ${featureHash} not found on page ${result.page}`);
+        }
+        
         // Clear search after navigating
         this.clearSearch();
       }
