@@ -33,4 +33,7 @@ def get_config(request):
 
         config['maptiler'] = maptiler_config
 
-    return JsonResponse(config)
+    response = JsonResponse(config)
+    # Cache for 1 day (86400 seconds)
+    response['Cache-Control'] = 'public, max-age=86400'
+    return response

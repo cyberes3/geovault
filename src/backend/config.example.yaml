@@ -60,6 +60,14 @@ tilesources:
   # Number of days before cached tiles expire
   cache_expiry_days: 30
 
+  # List of tile source IDs that should be proxied through the server.
+  # Useful for enabling proxying on sources that normally load directly (e.g., OSM, OpenTopoMap)
+  # since it enables your server to cache the tiles locally.
+  # proxy_sources:
+  #    - osm
+  #    - opentopomap
+  #    - openhikingmap
+
 
 maptiler:
   # MapTiler API key for accessing MapTiler maps and 3D terrain tiles

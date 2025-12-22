@@ -39,7 +39,7 @@
     </div>
 
     <!-- Map Layer Attributions -->
-    <div class="mt-6 pt-6 border-t border-gray-200">
+    <div class="mt-6 pt-6 border-t border-gray-200 attribution-section">
       <h3 class="text-sm font-semibold text-gray-700 mb-2">
         Map Layer Attributions
       </h3>
@@ -50,7 +50,7 @@
           class="text-xs text-gray-600"
         >
           <span class="font-medium text-gray-700">{{ source.name }}:</span>
-          <span class="ml-1">{{ source.attribution }}</span>
+          <span class="ml-1" v-html="source.attribution"></span>
         </div>
         <div v-if="tileSourcesWithAttribution.length === 0" class="text-xs text-gray-500 italic">
           No map sources available.
@@ -112,7 +112,7 @@ export default {
         .map(source => ({
           id: source.id,
           name: source.name || source.id,
-          attribution: source.client_config?.attribution || 'No attribution available'
+          attribution: this.processAttributionLinks(source.client_config?.attribution || 'No attribution available')
         }))
         .sort((a, b) => a.name.localeCompare(b.name));
     },
@@ -126,6 +126,44 @@ export default {
     this.populateBasemapOptions();
   },
   methods: {
+    processAttributionLinks(html) {
+      if (!html || typeof html !== 'string') {
+        return html;
+      }
+      
+      // Process all <a> tags to add target="_blank" and rel="noopener noreferrer"
+      return html.replace(/<a(\s+[^>]*|)>/gi, (match, attributes) => {
+        // Normalize attributes - handle case where there's no space after <a
+        let attrs = (attributes || '').trim();
+        
+        // Check if target already exists
+        if (attrs.includes('target=')) {
+          // Replace existing target
+          attrs = attrs.replace(/target=["'][^"']*["']/gi, 'target="_blank"');
+        } else {
+          // Add target attribute
+          attrs = attrs ? attrs + ' target="_blank"' : 'target="_blank"';
+        }
+        
+        // Check if rel already exists
+        if (attrs.includes('rel=')) {
+          // Add noopener noreferrer to existing rel if not present
+          const relMatch = attrs.match(/rel=["']([^"']*)["']/i);
+          if (relMatch) {
+            const existingRel = relMatch[1];
+            if (!existingRel.includes('noopener') || !existingRel.includes('noreferrer')) {
+              const newRel = existingRel.split(/\s+/).concat(['noopener', 'noreferrer']).filter((v, i, a) => a.indexOf(v) === i).join(' ');
+              attrs = attrs.replace(/rel=["'][^"']*["']/gi, `rel="${newRel}"`);
+            }
+          }
+        } else {
+          // Add rel attribute
+          attrs = attrs ? attrs + ' rel="noopener noreferrer"' : 'rel="noopener noreferrer"';
+        }
+        
+        return attrs ? `<a ${attrs}>` : '<a>';
+      });
+    },
     async fetchTileSources() {
       try {
         const response = await fetch('/api/tiles/sources/');
@@ -201,4 +239,24 @@ export default {
 }
 </script>
 
+<style scoped>
+.attribution-section :deep(a) {
+  color: var(--color-blue-600);
+  text-decoration: underline;
+  transition: color 0.2s ease;
+}
+
+.attribution-section :deep(a:hover) {
+  color: var(--color-blue-700);
+  text-decoration: underline;
+}
+
+.attribution-section :deep(a:visited) {
+  color: var(--color-blue-700);
+}
+
+.attribution-section :deep(a:visited:hover) {
+  color: var(--color-blue-800);
+}
+</style>
 

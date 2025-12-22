@@ -1,7 +1,7 @@
 """
-OpenTopoMap tile source configuration.
+OpenHikingMap tile source configuration.
 
-This tile source uses openmaps.fr, which provides OpenTopoMap tiles.
+This tile source uses openmaps.fr, which provides OpenHikingMap tiles.
 See: https://openmaps.fr/tile-usage-policy.html
 
 This tile source does not require a proxy as it can be accessed directly.
@@ -11,16 +11,16 @@ from geo_lib.tile_sources.base import TileSource
 from geo_lib.utils.version import get_user_agent
 
 
-class OpenTopoMapTileSource(TileSource):
-    """OpenTopoMap tile source from openmaps.fr."""
+class OpenHikingMapTileSource(TileSource):
+    """OpenHikingMap tile source from openmaps.fr."""
     
     @property
     def id(self):
-        return 'opentopomap'
+        return 'openhikingmap'
     
     @property
     def name(self):
-        return 'OpenTopoMap'
+        return 'OpenHikingMap'
     
     @property
     def type(self):
@@ -28,14 +28,14 @@ class OpenTopoMapTileSource(TileSource):
     
     @property
     def url_template(self):
-        return 'https://tile.openmaps.fr/opentopomap/{z}/{x}/{y}.png'
+        return 'https://tile.openmaps.fr/openhikingmap/{z}/{x}/{y}.png'
     
     @property
     def client_config(self):
         return {
             'type': 'xyz',
-            'url': 'https://tile.openmaps.fr/opentopomap/{z}/{x}/{y}.png',
-            'attribution': '<a href="https://github.com/sletuffe/OpenTopoMap">&copy; OpenTopoMap-R</a> <a href="https://openmaps.fr/donate">❤️ Donation</a> <a href="http://www.openstreetmap.org/copyright">&copy; OpenStreetMap</a>'
+            'url': 'https://tile.openmaps.fr/openhikingmap/{z}/{x}/{y}.png',
+            'attribution': '<a href="https://wiki.openstreetmap.org/wiki/OpenHikingMap">&copy; OpenHikingMap</a> <a href="https://openmaps.fr/donate">❤️ Donation</a> <a href="http://www.openstreetmap.org/copyright">&copy; OpenStreetMap</a>'
         }
     
     @property
@@ -46,3 +46,4 @@ class OpenTopoMapTileSource(TileSource):
                 'User-Agent': get_user_agent()
             }
         }
+

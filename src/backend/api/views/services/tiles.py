@@ -40,6 +40,9 @@ def tile_proxy(request, service, z, x, y):
     if not url_template:
         return HttpResponse('Service configuration error: missing url_template', status=500)
 
+    # Calculate HTTP cache max-age from cache_expiry_days (convert days to seconds)
+    cache_max_age_seconds = settings.TILE_CACHE_EXPIRY_DAYS * 24 * 60 * 60
+
     # Determine file extension from URL template (fallback, will be updated from response if needed)
     url_extension = 'tile'
     if url_template:
@@ -76,7 +79,7 @@ def tile_proxy(request, service, z, x, y):
             }
             content_type = content_type_map.get(url_extension, 'image/png')
             http_response = HttpResponse(tile_data, content_type=content_type)
-            http_response['Cache-Control'] = 'public, max-age=2592000'  # Cache for 1 month
+            http_response['Cache-Control'] = f'public, max-age={cache_max_age_seconds}'
             http_response['Access-Control-Allow-Origin'] = '*'
             return http_response
 
@@ -125,7 +128,7 @@ def tile_proxy(request, service, z, x, y):
 
         # Return the tile with appropriate headers
         http_response = HttpResponse(tile_data, content_type=content_type)
-        http_response['Cache-Control'] = 'public, max-age=2592000'  # Cache for 1 month
+        http_response['Cache-Control'] = f'public, max-age={cache_max_age_seconds}'
         http_response['Access-Control-Allow-Origin'] = '*'  # Allow cross-origin requests
         return http_response
 
@@ -139,9 +142,13 @@ def get_tile_sources(request):
     API endpoint to get all available tile sources with their configurations.
 
     Returns JSON response with tile source configurations for the client.
+    Cached for 1 day (86400 seconds).
     """
     sources = get_tile_sources_for_client()
-    return JsonResponse({'sources': sources})
+    response = JsonResponse({'sources': sources})
+    # Cache for 1 day (86400 seconds)
+    response['Cache-Control'] = 'public, max-age=86400'
+    return response
 
 
 def get_tile_cache_path(service, z, x, y, extension='tile'):

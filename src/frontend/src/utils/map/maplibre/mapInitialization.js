@@ -12,6 +12,7 @@ import maplibregl from 'maplibre-gl'
  * @param {number} config.zoom - Initial zoom level
  * @param {string} config.glyphsUrl - Glyphs URL template
  * @param {boolean} config.antialias - Enable anti-aliasing (default: false)
+ * @param {Function} config.transformRequest - Optional transformRequest function for custom headers
  * @returns {Object} MapLibre map instance
  */
 export function initializeMap(container, config) {
@@ -20,9 +21,9 @@ export function initializeMap(container, config) {
     throw new Error('Invalid container: must be an HTMLElement')
   }
 
-  const { center, zoom, glyphsUrl = '/api/fonts/{fontstack}/{range}.pbf', antialias = false } = config
+  const { center, zoom, glyphsUrl = '/api/fonts/{fontstack}/{range}.pbf', antialias = false, transformRequest } = config
 
-  const map = new maplibregl.Map({
+  const mapConfig = {
     container: container,
     style: {
       version: 8,
@@ -36,7 +37,14 @@ export function initializeMap(container, config) {
     maxPitch: 85,
     attributionControl: false,
     antialias: antialias // Enable anti-aliasing based on user setting
-  })
+  }
+
+  // Add transformRequest if provided (for custom headers like User-Agent)
+  if (transformRequest) {
+    mapConfig.transformRequest = transformRequest
+  }
+
+  const map = new maplibregl.Map(mapConfig)
 
   return map
 }

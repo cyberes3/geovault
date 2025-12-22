@@ -6,8 +6,10 @@ from geo_lib.tile_sources.maptiler import generate_maptiler_sources
 from geo_lib.tile_sources.maptiler_hillshade import MapTilerHillshadeTileSource
 from geo_lib.tile_sources.maptiler_terrain import MapTilerTerrainTileSource
 from geo_lib.tile_sources.mb_topo import MapbuilderTopoTileSource
+from geo_lib.tile_sources.openhikingmap import OpenHikingMapTileSource
 from geo_lib.tile_sources.opentopomap import OpenTopoMapTileSource
 from geo_lib.tile_sources.osm import OSMTileSource
+from website.config_loader import get_config_loader
 
 _tile_sources = {}
 _registered = False
@@ -26,6 +28,7 @@ def _initialize_tile_sources():
     single_sources = [
         OSMTileSource(),
         OpenTopoMapTileSource(),
+        OpenHikingMapTileSource(),
         MapbuilderTopoTileSource(),
         GlobalImageryTileSource(),
         MapTilerHillshadeTileSource(),
@@ -36,10 +39,29 @@ def _initialize_tile_sources():
     ]
     single_sources.extend(generate_maptiler_sources())
 
+    # Get list of tile sources that should be proxied from config
+    config_loader = get_config_loader()
+    proxy_sources = config_loader.get('tilesources.proxy_sources', [])
+    if not isinstance(proxy_sources, list):
+        proxy_sources = []
+
     for source in single_sources:
         config = source.to_dict()
         if config:
-            _tile_sources[config['id']] = config
+            source_id = config['id']
+            
+            # Override requires_proxy if this source is in the proxy_sources config list
+            if source_id in proxy_sources:
+                config['requires_proxy'] = True
+                # Update client_config URL to use proxy endpoint if it's currently a direct URL
+                client_config = config.get('client_config', {})
+                url = client_config.get('url', '')
+                # If URL is a direct external URL, change it to proxy endpoint
+                if url and (url.startswith('https://') or url.startswith('http://')):
+                    client_config['url'] = f'/api/tiles/{source_id}/{{z}}/{{x}}/{{y}}'
+                    config['client_config'] = client_config
+            
+            _tile_sources[source_id] = config
 
     _registered = True
 
