@@ -12,7 +12,7 @@ from api.models import ImportQueue
 from geo_lib.logging.console import get_tagged_logger
 
 """
-This is a really shitt implementation of background process daemons. Has a few issues.
+This is a really shit implementation of background process daemons. Has a few issues.
 It works for now but if we need to add another background daemon we need to move to Celery.
 """
 

@@ -21,5 +21,9 @@ class TaggedLoggerAdapter(logging.LoggerAdapter):
 
 def get_tagged_logger(name: str = None):
     if not name:
-        name = __name__
+        full_name = __name__
+        # Extract top-level module name for cleaner tags
+        # e.g., "geo_lib.logging.console" -> tag is "GEO_LIB", but logger name is still "geo_lib.logging.console"
+        tag_name = full_name.split('.')[0] if '.' in full_name else full_name
+        return TaggedLoggerAdapter(logging.getLogger(full_name.lower()), tag_name.upper())
     return TaggedLoggerAdapter(logging.getLogger(name.lower()), name.upper())

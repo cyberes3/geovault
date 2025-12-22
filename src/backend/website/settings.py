@@ -12,11 +12,8 @@ https://docs.djangoproject.com/en/5.0/ref/settings/
 import logging
 import os
 from pathlib import Path
-from urllib.parse import urlparse
 
 from website.config_loader import get_config_loader
-
-from geo_lib.tile_sources.registry import get_all_tile_sources
 
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
 BASE_DIR = Path(__file__).resolve().parent.parent
@@ -475,7 +472,7 @@ BBOX_SUSPICIOUS_RESULT_MIN_COUNT = 10
 # Logging configuration with activity tags
 LOGGING = {
     'version': 1,
-    'disable_existing_loggers': True,  # Disable default Django logging
+    'disable_existing_loggers': True,  # Disable all existing loggers (system loggers)
     'formatters': {
         'console': {
             'format': '[{asctime}] {levelname} {message}',
@@ -485,94 +482,100 @@ LOGGING = {
     },
     'handlers': {
         'console': {
-            'level': 'DEBUG',  # Set to DEBUG for troubleshooting
+            'level': 'DEBUG',
             'class': 'logging.StreamHandler',
             'formatter': 'console',
+            'stream': 'ext://sys.stdout',
         },
     },
     'loggers': {
-        # Root logger - catches all unhandled loggers
+        # Root logger - handles all our custom loggers
         '': {
             'handlers': ['console'],
-            'level': 'WARNING',  # Only show warnings and errors by default
+            'level': 'INFO',
             'propagate': False,
         },
-        # Django mail logging
-        'django.core.mail': {
+        # Explicitly enable our custom tagged loggers (they use lowercase names)
+        'processjob': {
             'handlers': ['console'],
             'level': 'INFO',
             'propagate': False,
         },
-        # Users app logging
-        'users': {
+        'replacementcleanupservice': {
             'handlers': ['console'],
             'level': 'INFO',
             'propagate': False,
         },
-        # Access logging - HTTP requests, API endpoints, views
-        'access': {
-            'handlers': ['console'],
-            'level': 'INFO',
-            'propagate': False,
-        },
-        # Import logging - File uploads, processing, import operations
-        'import': {
-            'handlers': ['console'],
-            'level': 'INFO',
-            'propagate': False,
-        },
-        # WebSocket logging - Connections, messages, disconnections
-        'websocket': {
-            'handlers': ['console'],
-            'level': 'INFO',
-            'propagate': False,
-        },
-        # Job logging - Background job processing
-        'job': {
-            'handlers': ['console'],
-            'level': 'DEBUG',  # Set to DEBUG for troubleshooting
-            'propagate': False,
-        },
-        # API app logging - App initialization, background services
-        'api.apps': {
-            'handlers': ['console'],
-            'level': 'DEBUG',  # Set to DEBUG for troubleshooting
-            'propagate': False,
-        },
-        # Database logging - Database operations, queries
-        'database': {
-            'handlers': ['console'],
-            'level': 'INFO',
-            'propagate': False,
-        },
-        # Security logging - Security events, file validation
-        'security': {
-            'handlers': ['console'],
-            'level': 'WARNING',
-            'propagate': False,
-        },
-        # Tile logging - Tile proxy, caching operations
-        'tile': {
-            'handlers': ['console'],
-            'level': 'INFO',
-            'propagate': False,
-        },
-        # Reverse geocode logging - Reverse geocoding
-        'geocode': {
-            'handlers': ['console'],
-            'level': 'INFO',
-            'propagate': False,
-        },
-        # Startup logging - Server startup checks
         'startup': {
             'handlers': ['console'],
             'level': 'INFO',
             'propagate': False,
         },
-        # Config logging - Configuration loading
-        'config': {
+        'website.middleware': {
             'handlers': ['console'],
             'level': 'INFO',
+            'propagate': False,
+        },
+        # Enable all loggers under our application namespaces
+        'geo_lib': {
+            'handlers': ['console'],
+            'level': 'INFO',
+            'propagate': False,
+        },
+        'api': {
+            'handlers': ['console'],
+            'level': 'INFO',
+            'propagate': False,
+        },
+        'website': {
+            'handlers': ['console'],
+            'level': 'INFO',
+            'propagate': False,
+        },
+        # Explicitly disable system loggers we don't want
+        'daphne': {
+            'handlers': [],
+            'level': 'WARNING',
+            'propagate': False,
+        },
+        'daphne.server': {
+            'handlers': [],
+            'level': 'WARNING',
+            'propagate': False,
+        },
+        'daphne.ws_protocol': {
+            'handlers': [],
+            'level': 'WARNING',
+            'propagate': False,
+        },
+        'daphne.http_protocol': {
+            'handlers': [],
+            'level': 'WARNING',
+            'propagate': False,
+        },
+        'django.utils.autoreload': {
+            'handlers': [],
+            'level': 'WARNING',
+            'propagate': False,
+        },
+        'django.server': {
+            'handlers': [],
+            'level': 'WARNING',
+            'propagate': False,
+        },
+        'channels': {
+            'handlers': [],
+            'level': 'WARNING',
+            'propagate': False,
+        },
+        'channels.server': {
+            'handlers': [],
+            'level': 'WARNING',
+            'propagate': False,
+        },
+        'twisted': {
+            'handlers': [],
+            'level': 'WARNING',
             'propagate': False,
         },
     },
@@ -581,76 +584,3 @@ LOGGING = {
 # MaxMind IP Geolocation Configuration
 # Default to GeoLite2-City database; can be overridden in config.yaml
 MAXMIND_DATABASE_PATH = config.get_str('maxmind.database_path', '/var/lib/GeoIP/GeoLite2-City.mmdb')
-
-
-def get_tile_source_origins():
-    """
-    Extract origins from external tile sources that don't require proxy.
-    These origins will be used for CORS and CSP configuration.
-    
-    Returns:
-        list: List of origin URLs (e.g., ['https://tile.opentopomap.org'])
-    """
-    
-    origins = set()
-    
-    try:
-        tile_sources = get_all_tile_sources()
-        for source_config in tile_sources.values():
-            # Only include external tile sources that don't require proxy
-            if not source_config.get('requires_proxy', False):
-                # Try to extract origin from url_template
-                url_template = source_config.get('url_template')
-                if url_template:
-                    try:
-                        # Replace common template variables before parsing
-                        clean_url = url_template.replace('{s}', 'a').replace('{z}', '0').replace('{x}', '0').replace('{y}', '0')
-                        parsed = urlparse(clean_url)
-                        if parsed.scheme and parsed.netloc:
-                            # Extract the base netloc without subdomain placeholders
-                            netloc = parsed.netloc
-                            # If the original had {s} in netloc, we need to handle wildcard
-                            if '{s}' in url_template:
-                                # Remove the placeholder subdomain part and use wildcard
-                                # For a.tile.opentopomap.org, we want tile.opentopomap.org
-                                parts = netloc.split('.')
-                                if len(parts) > 2:
-                                    # Use the last two parts (domain.tld) or last three for co.uk style
-                                    if len(parts) >= 3 and parts[-2] in ['co', 'org', 'com', 'net']:
-                                        netloc = '.'.join(parts[-3:])
-                                    else:
-                                        netloc = '.'.join(parts[-2:])
-                            origin = f"{parsed.scheme}://{netloc}"
-                            origins.add(origin)
-                    except Exception:
-                        pass
-                
-                # Also check client_config.url
-                client_config = source_config.get('client_config', {})
-                client_url = client_config.get('url')
-                if client_url and not client_url.startswith('/'):
-                    try:
-                        # Replace common template variables before parsing
-                        clean_url = client_url.replace('{s}', 'a').replace('{z}', '0').replace('{x}', '0').replace('{y}', '0')
-                        parsed = urlparse(clean_url)
-                        if parsed.scheme and parsed.netloc:
-                            netloc = parsed.netloc
-                            # Handle subdomain placeholders
-                            if '{s}' in client_url:
-                                parts = netloc.split('.')
-                                if len(parts) > 2:
-                                    if len(parts) >= 3 and parts[-2] in ['co', 'org', 'com', 'net']:
-                                        netloc = '.'.join(parts[-3:])
-                                    else:
-                                        netloc = '.'.join(parts[-2:])
-                            origin = f"{parsed.scheme}://{netloc}"
-                            origins.add(origin)
-                    except Exception:
-                        pass
-    except Exception as e:
-        # If tile sources aren't loaded yet (during startup), return empty list
-        # The middleware will call this again later when needed
-        logger = logging.getLogger('config')
-        logger.debug(f"Could not load tile source origins during settings initialization: {e}")
-    
-    return list(origins)

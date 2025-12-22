@@ -237,6 +237,10 @@ class ProcessJob(BaseJob):
         realtime_log = RealTimeImportLog(user_id, import_queue.log_id)
         overall_start_time = time.time()
 
+        # Log start of processing
+        file_size_mb = len(file_data) / (1024 * 1024)
+        _logger.info(f"Starting upload processing for job {job_id}: file '{filename}' ({file_size_mb:.2f} MB), replacement={is_replacement}")
+
         # Queue worker ensures sequential processing, no lock needed
         try:
             # Update status to processing
@@ -253,13 +257,11 @@ class ProcessJob(BaseJob):
                 'message': 'Processing started'
             })
 
-            # Get file size for logging
-            file_size_mb = len(file_data) / (1024 * 1024)
+            # Get file size for logging (already calculated above, but keep for realtime_log)
             realtime_log.add(f"Processing {file_size_mb:.1f}MB file", "ProcessJob", DatabaseLogLevel.INFO)
 
             # Create processor instance
             # Use minimal processing for replacement uploads (skip tags, geocoding)
-            _logger.info(f"Starting file processing for job {job_id}: file '{filename}' ({file_size_mb:.2f} MB), replacement={is_replacement}")
             processor = get_processor(
                 file_data,
                 filename,
@@ -476,22 +478,26 @@ class ProcessJob(BaseJob):
 
             # Finalize job success
             overall_duration = time.time() - overall_start_time
+            _logger.info(f"Completed upload processing for job {job_id}: {feature_count} features processed in {overall_duration:.2f}s")
             self._finalize_job_success(job_id, user_id, import_queue_id, feature_count,
                                        overall_duration, geojson_data, realtime_log)
 
         except (TimeoutError, subprocess.TimeoutExpired):
             # Timeout during processing (e.g., subprocess timeout)
-            _logger.debug(f"Processing timeout for job {job_id}")
+            overall_duration = time.time() - overall_start_time
+            _logger.error(f"Upload processing timeout for job {job_id} after {overall_duration:.2f}s")
             realtime_log.add(PROCESSING_TIMEOUT, "ProcessJob", DatabaseLogLevel.ERROR)
             self._handle_processing_error(job_id, user_id, PROCESSING_TIMEOUT, realtime_log)
         except (SecurityError, FileValidationError) as e:
             # Security or validation error - use the specific error message
-            _logger.debug(f"Security/validation error in job {job_id}: {traceback.format_exc()}")
+            overall_duration = time.time() - overall_start_time
+            _logger.error(f"Upload processing failed for job {job_id} after {overall_duration:.2f}s: Security/validation error - {str(e)}")
             error_msg = str(e) if str(e) else FILE_VALIDATION_FAILED
             self._handle_processing_error(job_id, user_id, f"{FILE_VALIDATION_FAILED}: {error_msg}", realtime_log)
         except:
+            overall_duration = time.time() - overall_start_time
             file_size_mb = len(file_data) / (1024 * 1024) if file_data else 0
-            _logger.error(f"Processing error in job {job_id} for file '{filename}' ({file_size_mb:.2f} MB): {traceback.format_exc}")
+            _logger.error(f"Upload processing error for job {job_id} after {overall_duration:.2f}s: file '{filename}' ({file_size_mb:.2f} MB): {traceback.format_exc()}")
             self._handle_processing_error(job_id, user_id, ERROR_OCCURRED_DURING_PROCESSING, realtime_log)
 
     def _create_initial_import_queue_entry(self, filename: str, user_id: int, job_id: str, replacement_feature_id: Optional[int] = None) -> int:

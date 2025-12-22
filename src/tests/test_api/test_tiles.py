@@ -9,7 +9,7 @@ from urllib.response import addinfourl
 from django.contrib.auth import get_user_model
 from django.test import TestCase
 
-from geo_lib.tile_sources.registry import get_tile_source
+from geo_lib.tile_sources.registry import get_all_tile_sources, get_tile_source
 
 
 class TestTilesAPI(TestCase):
@@ -60,6 +60,48 @@ class TestTilesAPI(TestCase):
         self.assertIn('key=', url_template)
         # Verify it's a Google Maps URL
         self.assertIn('mt0.google.com', url_template)
+
+    def test_google_terrain_tile_source_registered(self):
+        """Test that Google Terrain tile source is registered correctly."""
+        google_terrain_source = get_tile_source('google_terrain')
+        self.assertIsNotNone(google_terrain_source)
+        self.assertEqual(google_terrain_source['name'], 'Google Terrain')
+        self.assertTrue(google_terrain_source['requires_proxy'])
+        self.assertIn('url_template', google_terrain_source)
+        self.assertIn('proxy_config', google_terrain_source)
+        self.assertIn('client_config', google_terrain_source)
+
+    def test_google_terrain_url_template_contains_api_key(self):
+        """Test that Google Terrain URL template contains the API key."""
+        google_terrain_source = get_tile_source('google_terrain')
+        self.assertIsNotNone(google_terrain_source)
+        url_template = google_terrain_source['url_template']
+        self.assertIn('key=', url_template)
+        # Verify it's a Google Maps URL (terrain uses same domain)
+        self.assertIn('mt0.google.com', url_template)
+        # Verify it's using terrain layer (lyrs=p)
+        self.assertIn('lyrs=p', url_template)
+
+    def test_maptiler_sources_may_be_registered(self):
+        """Test that MapTiler sources may be registered if configured."""
+        all_sources = get_all_tile_sources()
+        maptiler_sources = {
+            source_id: config
+            for source_id, config in all_sources.items()
+            if source_id.startswith('maptiler_')
+        }
+        # MapTiler sources are optional and depend on configuration
+        # If they exist, verify they have the correct structure
+        for source_id, config in maptiler_sources.items():
+            self.assertIn('name', config)
+            self.assertEqual(config['type'], 'maptiler')
+            self.assertFalse(config.get('requires_proxy', True))  # MapTiler doesn't need proxy
+            self.assertIn('client_config', config)
+            client_config = config['client_config']
+            self.assertIn('type', client_config)
+            self.assertEqual(client_config['type'], 'maptiler')
+            self.assertIn('style_url', client_config)
+            self.assertIn('map_id', client_config)
 
     @patch('urllib.request.urlopen')
     def test_tile_proxy(self, mock_urlopen):

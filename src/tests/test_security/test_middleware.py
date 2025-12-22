@@ -11,8 +11,7 @@ from django.http import HttpResponse
 from django.test import TestCase, override_settings
 
 from geo_lib.tile_sources.registry import get_all_tile_sources
-from website.middleware import _get_content_length
-from website.settings import get_tile_source_origins
+from website.middleware import _get_content_length, get_tile_source_origins
 
 User = get_user_model()
 
