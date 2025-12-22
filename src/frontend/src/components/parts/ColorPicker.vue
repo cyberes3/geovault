@@ -2,11 +2,10 @@
   <!-- Modal Backdrop -->
   <div
     v-if="isOpen"
-    class="fixed inset-0 z-50"
+    class="color-picker-backdrop fixed top-0 left-0 right-0 bottom-0 z-50 m-0 overflow-hidden"
     role="dialog"
     aria-modal="true"
     @mousedown="handleBackdropMouseDown"
-    @keydown.esc="handleCancel"
   >
     <!-- Background overlay -->
     <div class="absolute inset-0 bg-black/50 transition-opacity"></div>
@@ -103,8 +102,12 @@ export default {
         this.initializeFromColor(this.modelValue)
         // Prevent body scroll when dialog is open
         document.body.style.overflow = 'hidden'
+        // Add escape key listener
+        document.addEventListener('keydown', this.handleEscapeKey)
       } else {
         document.body.style.overflow = ''
+        // Remove escape key listener
+        document.removeEventListener('keydown', this.handleEscapeKey)
       }
     },
     modelValue(newVal) {
@@ -142,12 +145,37 @@ export default {
       if (event.target === event.currentTarget) {
         this.handleCancel()
       }
+    },
+    handleEscapeKey(event) {
+      if (event.key === 'Escape' && this.isOpen) {
+        this.handleCancel()
+      }
     }
+  },
+  beforeUnmount() {
+    // Clean up event listener if component is destroyed while modal is open
+    document.removeEventListener('keydown', this.handleEscapeKey)
+    document.body.style.overflow = ''
   }
 }
 </script>
 
 <style scoped>
+/* Ensure modal backdrop covers entire viewport, including any body margins */
+.color-picker-backdrop {
+  position: fixed !important;
+  top: 0 !important;
+  left: 0 !important;
+  right: 0 !important;
+  bottom: 0 !important;
+  margin: 0 !important;
+  padding: 0 !important;
+  width: 100vw !important;
+  height: 100vh !important;
+  max-width: 100vw !important;
+  max-height: 100vh !important;
+}
+
 /* Fixed size for color picker dialog */
 .color-picker-dialog {
   width: 280px;
