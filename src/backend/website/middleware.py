@@ -5,6 +5,7 @@ from urllib.parse import urlparse
 
 from django.conf import settings
 from django.contrib.auth.models import AnonymousUser
+from django.contrib.sessions.middleware import SessionMiddleware
 
 from geo_lib.logging.console import get_tagged_logger
 from geo_lib.tile_sources.registry import get_all_tile_sources
@@ -18,6 +19,43 @@ _logger = get_tagged_logger()
 _activity_tracking_cache = {}
 # Throttle activity updates to at most once per 30 seconds per user
 ACTIVITY_TRACKING_THROTTLE_SECONDS = 30
+
+
+class CustomSessionMiddleware(SessionMiddleware):
+    """
+    Custom SessionMiddleware that prevents session cookies for tile requests.
+    Based on: https://stackoverflow.com/questions/62486176/how-to-disable-cookies-in-django-manually
+    """
+    
+    def process_response(self, request, response):
+        # Call parent to handle normal session processing
+        response = super().process_response(request, response)
+        
+        # Remove session cookie for tile requests to allow Cloudflare caching
+        if request.path.startswith('/api/tiles/'):
+            # Delete the session cookie from response.cookies
+            # This prevents Set-Cookie header from being set
+            if settings.SESSION_COOKIE_NAME in response.cookies:
+                del response.cookies[settings.SESSION_COOKIE_NAME]
+            
+            # Also remove CSRF cookie if present
+            if settings.CSRF_COOKIE_NAME in response.cookies:
+                del response.cookies[settings.CSRF_COOKIE_NAME]
+            
+            # Remove Vary: Cookie header which also prevents caching
+            # Django's SessionMiddleware sets this when cookies are present
+            if response.has_header('Vary'):
+                vary_value = response['Vary']
+                # Remove 'Cookie' from Vary header if present (case-insensitive)
+                vary_parts = [v.strip() for v in vary_value.split(',')]
+                vary_parts = [v for v in vary_parts if v.lower() != 'cookie']
+                if vary_parts:
+                    response['Vary'] = ', '.join(vary_parts)
+                else:
+                    # If Vary becomes empty, remove it entirely
+                    del response['Vary']
+        
+        return response
 
 
 def _get_content_length(response):
@@ -329,18 +367,29 @@ class CustomHeaderMiddleware:
         response['Content-Security-Policy'] = csp_policy
 
     def __call__(self, request):
+        # Track if this is a tile request BEFORE getting the response
+        # This allows us to prevent session saving for tile requests
+        is_tile_request = request.path.startswith('/api/tiles/')
+        
+        # Prevent session from being saved for tile requests
+        # This stops the session middleware from setting Set-Cookie headers
+        if is_tile_request and hasattr(request, 'session'):
+            # Mark session as not modified to prevent saving
+            request.session.modified = False
+        
         response = self.get_response(request)
 
-        # Track if this is a tile request
-        is_tile_request = request.path.startswith('/api/tiles/')
-
-        # Remove Set-Cookie headers from tile proxy responses to allow Cloudflare caching
+        # Remove Set-Cookie headers from tile proxy responses (fallback safety measure)
+        # TileCacheSessionMiddleware should handle this, but we do it here too as a safety net
         # Cloudflare does not cache responses with Set-Cookie headers
         if is_tile_request:
+            # Clear all cookies from the response (Django stores them in response.cookies)
             response.cookies.clear()
-            if response.has_header('Set-Cookie'):
+            
+            # Remove any Set-Cookie headers that might have been set
+            while response.has_header('Set-Cookie'):
                 del response['Set-Cookie']
-
+            
         # Set CORS headers on all responses
         self._set_cors_headers(request, response)
 

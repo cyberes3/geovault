@@ -76,7 +76,7 @@ MIDDLEWARE = [
     'django.middleware.security.SecurityMiddleware',
     'website.middleware.LoggingMiddleware',  # Log BEFORE WhiteNoise to catch static file requests
     'whitenoise.middleware.WhiteNoiseMiddleware',  # Serve static files in production
-    'django.contrib.sessions.middleware.SessionMiddleware',
+    'website.middleware.CustomSessionMiddleware',  # Custom SessionMiddleware that prevents cookies for tile requests
     'django.middleware.common.CommonMiddleware',
     'django.middleware.csrf.CsrfViewMiddleware',
     'django.contrib.auth.middleware.AuthenticationMiddleware',

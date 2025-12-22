@@ -392,18 +392,50 @@ class TestTilesAPI(TestCase):
             self.skipTest("mb_topo tile source not available or doesn't require proxy")
 
         # Make a proxy request (user is logged in, so session middleware would normally set Set-Cookie)
+        # Modify the session to ensure it would be saved (which triggers Set-Cookie)
         import random
         z = random.randint(1, 10)
         x = random.randint(0, 2**z - 1)
         y = random.randint(0, 2**z - 1)
+        
+        # Modify session to trigger session save (which would normally set Set-Cookie)
+        self.client.session['test_key'] = 'test_value'
+        self.client.session.save()
         
         response = self.client.get(f'/api/tiles/mb_topo/{z}/{x}/{y}')
         self.assertEqual(response.status_code, 200)
         
         # Verify Set-Cookie header is NOT present (Cloudflare won't cache if it is)
         # Django's session middleware normally sets this for authenticated users
-        self.assertNotIn('Set-Cookie', response, 
-                        "Tile proxy responses should not include Set-Cookie header for Cloudflare caching")
+        # Check multiple ways to ensure we catch it:
+        
+        # Method 1: Check response.items() for Set-Cookie headers
+        set_cookie_headers = [h for h in response.items() if h[0].lower() == 'set-cookie']
+        self.assertEqual(len(set_cookie_headers), 0,
+                        f"Tile proxy responses should not include Set-Cookie header for Cloudflare caching. Found in items(): {set_cookie_headers}")
+        
+        # Method 2: Check response.has_header() and response.get()
+        self.assertFalse(response.has_header('Set-Cookie'),
+                        "Tile proxy responses should not have Set-Cookie header (checked via has_header)")
+        self.assertIsNone(response.get('Set-Cookie', None),
+                         "Tile proxy responses should not have Set-Cookie header (checked via get())")
+        
+        # Method 3: Check response.cookies directly (Django stores cookies here)
+        # This is the most important check - response.cookies is what gets serialized to Set-Cookie headers
+        from django.conf import settings
+        self.assertNotIn(settings.SESSION_COOKIE_NAME, response.cookies,
+                        f"Tile proxy responses should not include {settings.SESSION_COOKIE_NAME} cookie in response.cookies")
+        self.assertNotIn(settings.CSRF_COOKIE_NAME, response.cookies,
+                        f"Tile proxy responses should not include {settings.CSRF_COOKIE_NAME} cookie in response.cookies")
+        # Verify no cookies at all
+        self.assertEqual(len(response.cookies), 0,
+                        f"Tile proxy responses should not include any cookies. Found: {list(response.cookies.keys())}")
+        
+        # Verify Vary: Cookie header is also removed (prevents caching)
+        if response.has_header('Vary'):
+            vary_value = response['Vary']
+            self.assertNotIn('Cookie', vary_value,
+                           f"Tile proxy responses should not include 'Cookie' in Vary header. Found: {vary_value}")
         
         # Verify Access-Control-Allow-Credentials is NOT present (also prevents caching)
         self.assertNotIn('Access-Control-Allow-Credentials', response,
