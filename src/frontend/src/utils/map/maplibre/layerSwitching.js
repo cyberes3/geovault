@@ -8,8 +8,12 @@ import { ensureLayersExist, addFeaturesToMap } from './index.js'
  * @param {Object} labelMarkerManager - Label marker manager instance
  */
 export async function restoreGeoJsonFeatures(map, geojsonData, showAllLabels, labelMarkerManager) {
-  if (!geojsonData || !map) return
+  if (!map) return
 
+  // Always ensure the geojson-data source exists (setStyle() destroys all sources)
+  // Wait a brief moment to ensure style is fully loaded before adding source
+  await new Promise(resolve => setTimeout(resolve, 50))
+  
   if (!map.getSource('geojson-data')) {
     map.addSource('geojson-data', {
       type: 'geojson',
@@ -20,9 +24,37 @@ export async function restoreGeoJsonFeatures(map, geojsonData, showAllLabels, la
     })
   }
 
+  // Ensure layers exist before adding features
   ensureLayersExist(map, showAllLabels)
-  const zoom = map.getZoom()
-  await addFeaturesToMap(map, geojsonData, showAllLabels, zoom)
+
+  // Restore features - setStyle() destroys all sources, so source should be empty
+  // Use addFeaturesToMap which handles all the processing (icons, labels, etc.)
+  // Since the source is empty after setStyle(), this will effectively set the features directly
+  if (geojsonData && geojsonData.features && geojsonData.features.length > 0) {
+    try {
+      const zoom = map.getZoom()
+      // addFeaturesToMap will merge with existing features, but since setStyle() destroyed
+      // all sources, the source should be empty, so this effectively sets the features
+      await addFeaturesToMap(map, geojsonData, showAllLabels, zoom)
+      
+      // Verify features were actually added
+      const source = map.getSource('geojson-data')
+      if (source) {
+        const serialized = source.serialize()
+        const data = serialized.data
+        const featuresAdded = data && data.features && data.features.length > 0
+        if (!featuresAdded) {
+          console.warn('Features were not added to map during restoration', {
+            expectedCount: geojsonData.features.length,
+            sourceExists: !!source
+          })
+        }
+      }
+    } catch (error) {
+      console.error('Error restoring features to map:', error)
+      // Don't throw - allow the function to continue
+    }
+  }
 
   // Ensure feature layers are positioned after all base layers
   const style = map.getStyle()

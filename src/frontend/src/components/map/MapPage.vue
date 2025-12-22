@@ -363,6 +363,8 @@ export default {
       currentAbortController: null,
       selectedLayer: 'osm',
       featuresInExtent: [],
+      // Persistent cache of GeoJSON features that survives setStyle() calls
+      cachedGeoJsonData: null,
       featureListUpdateTimeout: null,
       featureCleanupTimeout: null,
       selectedFeature: null,
@@ -865,6 +867,24 @@ export default {
         : true
       await addFeaturesToMap(this.map, geojsonData, this.showAllLabels, zoom, replaceIconsLowZoom)
       
+      // Update persistent cache with current map state (survives setStyle() calls)
+      if (this.map && this.map.getSource('geojson-data')) {
+        try {
+          const source = this.map.getSource('geojson-data')
+          const serialized = source.serialize()
+          const currentData = serialized.data
+          if (currentData && currentData.features) {
+            // Deep clone to avoid reactivity issues
+            this.cachedGeoJsonData = markRaw({
+              type: 'FeatureCollection',
+              features: currentData.features.map(f => markRaw(f))
+            })
+          }
+        } catch (error) {
+          console.warn('Failed to update cached GeoJSON data:', error)
+        }
+      }
+      
       // Update label markers only if labels are visible
       // Skip expensive label processing when labels are hidden
       if (this.showAllLabels && this.labelMarkerManager && geojsonData && geojsonData.features) {
@@ -970,6 +990,18 @@ export default {
       const serialized = source.serialize()
       const data = serialized.data || { type: 'FeatureCollection', features: [] }
       const features = data.features || []
+
+      // Update persistent cache with current source state
+      if (features.length > 0) {
+        try {
+          this.cachedGeoJsonData = markRaw({
+            type: 'FeatureCollection',
+            features: features.map(f => markRaw(f))
+          })
+        } catch (error) {
+          console.warn('Failed to update cached GeoJSON data:', error)
+        }
+      }
 
       // Filter features in current bounds using utility function
       const featuresInBounds = filterFeaturesByBounds(features, bounds, true, true)
@@ -1511,7 +1543,45 @@ export default {
       const mapState = getMapState(this.map)
       if (!mapState) return
 
-      const geojsonData = getGeoJsonData(this.map)
+      // Save GeoJSON data BEFORE any style changes (setStyle() destroys all sources)
+      // Use persistent cache first, then try to get from source, then fall back to cache
+      let geojsonData = null
+      
+      // First, try to get from persistent cache (most reliable)
+      if (this.cachedGeoJsonData && this.cachedGeoJsonData.features && this.cachedGeoJsonData.features.length > 0) {
+        geojsonData = this.cachedGeoJsonData
+      }
+      
+      // If cache is empty or doesn't exist, try to get from source
+      if (!geojsonData || !geojsonData.features || geojsonData.features.length === 0) {
+        let attempts = 0
+        while (!geojsonData && attempts < 3) {
+          const sourceData = getGeoJsonData(this.map)
+          if (sourceData && sourceData.features && sourceData.features.length > 0) {
+            geojsonData = sourceData
+            // Update cache with fresh data from source
+            this.cachedGeoJsonData = markRaw({
+              type: 'FeatureCollection',
+              features: sourceData.features.map(f => markRaw(f))
+            })
+            break
+          }
+          if (attempts < 2) {
+            // Wait a brief moment and try again (source might be in transitional state)
+            await new Promise(resolve => setTimeout(resolve, 10))
+          }
+          attempts++
+        }
+      }
+      
+      // Ensure we have a valid FeatureCollection structure even if source doesn't exist
+      if (!geojsonData) {
+        geojsonData = { type: 'FeatureCollection', features: [] }
+      }
+      
+      // Store whether we actually had features to restore
+      const hadFeaturesToRestore = geojsonData.features && geojsonData.features.length > 0
+      
       const terrainEnabled = this.terrainEnabled && this.maptilerConfig?.isAvailable()
       const hillshadeEnabled = this.hillshadeEnabled
 
@@ -1523,19 +1593,80 @@ export default {
         return
       }
 
-      // For initial setup, just apply the tile source without recreating the map
-      if (isInitialSetup) {
+      // Check if this is a style-based source (MapTiler) - these can preserve the map
+      const clientConfig = tileSource.client_config || {}
+      const isStyleBased = clientConfig.style_url || clientConfig.type === 'maptiler'
+
+      // For initial setup or style-based sources, preserve the map and just change the style
+      if (isInitialSetup || isStyleBased) {
+        // For style-based sources, preserve features by restoring immediately after style change
         await this.applyTileSource(layerValue)
+        
+        // Restore map view immediately after style loads (before other operations)
+        // This prevents the visible reset that happens when setStyle() resets pitch/bearing
+        restoreMapView(this.map, mapState.center, mapState.zoom, mapState.pitch, mapState.bearing)
+        
         // Wait for style to be ready
         await this.waitForMapEvent('idle')
-        // Restore features
+        
+        // Restore features immediately (setStyle() destroys sources, but we restore them right away)
         await restoreGeoJsonFeatures(this.map, geojsonData, this.showAllLabels, this.labelMarkerManager)
+        
+        // Wait a moment for the source to stabilize before checking
+        await new Promise(resolve => setTimeout(resolve, 100))
+        
+        // Verify features were actually restored and update cache
+        const sourceAfterRestore = this.map.getSource('geojson-data')
+        let featuresRestored = false
+        if (sourceAfterRestore) {
+          const serialized = sourceAfterRestore.serialize()
+          const restoredData = serialized.data
+          featuresRestored = restoredData && restoredData.features && restoredData.features.length > 0
+          
+          // Update persistent cache with restored data
+          if (featuresRestored) {
+            this.cachedGeoJsonData = markRaw({
+              type: 'FeatureCollection',
+              features: restoredData.features.map(f => markRaw(f))
+            })
+          }
+        }
+        
+        // If we had features to restore but they weren't restored, try restoring again with cached data
+        if (hadFeaturesToRestore && !featuresRestored) {
+          console.log('Features were not restored, attempting to restore from cached data')
+          await restoreGeoJsonFeatures(this.map, geojsonData, this.showAllLabels, this.labelMarkerManager)
+          
+          // Verify again after second attempt and update cache
+          await new Promise(resolve => setTimeout(resolve, 100))
+          const sourceAfterRetry = this.map.getSource('geojson-data')
+          if (sourceAfterRetry) {
+            const serialized = sourceAfterRetry.serialize()
+            const retryData = serialized.data
+            featuresRestored = retryData && retryData.features && retryData.features.length > 0
+            
+            // Update cache with retry data
+            if (featuresRestored) {
+              this.cachedGeoJsonData = markRaw({
+                type: 'FeatureCollection',
+                features: retryData.features.map(f => markRaw(f))
+              })
+            }
+          }
+          
+          // Only reload from API if restoration still failed and we have no cached bounds
+          if (!featuresRestored && this.loadedBounds.size === 0) {
+            console.log('Restoration failed, loading from API (no cached bounds)')
+            await this.loadDataForCurrentView()
+          }
+        }
+        
         // Apply terrain and hillshade
         await this.applyTerrainAndHillshade(layerValue)
         return
       }
 
-      // For layer switching, completely reset the map
+      // For raster-based layer switching, completely reset the map
       // 1. Destroy the map
       this.destroyMap()
 
@@ -1571,6 +1702,60 @@ export default {
 
         // 8. Restore GeoJSON features
         await restoreGeoJsonFeatures(this.map, geojsonData, this.showAllLabels, this.labelMarkerManager)
+
+        // 8a. Verify features were actually restored and update cache
+        // Wait a moment for the source to stabilize before checking
+        await new Promise(resolve => setTimeout(resolve, 100))
+        
+        const sourceAfterRestore = this.map.getSource('geojson-data')
+        let featuresRestored = false
+        if (sourceAfterRestore) {
+          const serialized = sourceAfterRestore.serialize()
+          const restoredData = serialized.data
+          featuresRestored = restoredData && restoredData.features && restoredData.features.length > 0
+          
+          // Update persistent cache with restored data
+          if (featuresRestored) {
+            this.cachedGeoJsonData = markRaw({
+              type: 'FeatureCollection',
+              features: restoredData.features.map(f => markRaw(f))
+            })
+          }
+        }
+
+        // If we had features to restore but they weren't restored, try restoring again with cached data
+        if (hadFeaturesToRestore && !featuresRestored) {
+          // Features existed but weren't restored - try restoring again with the cached geojsonData
+          console.log('Features were not restored, attempting to restore from cached data')
+          await restoreGeoJsonFeatures(this.map, geojsonData, this.showAllLabels, this.labelMarkerManager)
+          
+          // Verify again after second attempt and update cache
+          await new Promise(resolve => setTimeout(resolve, 100))
+          const sourceAfterRetry = this.map.getSource('geojson-data')
+          if (sourceAfterRetry) {
+            const serialized = sourceAfterRetry.serialize()
+            const retryData = serialized.data
+            featuresRestored = retryData && retryData.features && retryData.features.length > 0
+            
+            // Update cache with retry data
+            if (featuresRestored) {
+              this.cachedGeoJsonData = markRaw({
+                type: 'FeatureCollection',
+                features: retryData.features.map(f => markRaw(f))
+              })
+            }
+          }
+          
+          // Only reload from API if restoration still failed and we have no cached bounds
+          if (!featuresRestored && this.loadedBounds.size === 0) {
+            console.log('Restoration failed, loading from API (no cached bounds)')
+            await this.loadDataForCurrentView()
+          }
+        } else if (!hadFeaturesToRestore && !featuresRestored && this.loadedBounds.size === 0) {
+          // No features existed before, but ensure we have data loaded for current viewport
+          // This handles the case where the map was just created or features haven't been loaded yet
+          await this.loadDataForCurrentView()
+        }
 
         // 9. Apply terrain and hillshade with conditional atmosphere
         await this.applyTerrainAndHillshade(layerValue)
