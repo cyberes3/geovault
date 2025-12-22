@@ -1262,13 +1262,21 @@ export default {
           geojsonData = serialized.data
         }
         
-        // Load the new style
-        this.map.setStyle(styleUrl)
-        
-        // Restore GeoJSON data and terrain after style loads
-        // Use 'style.load' event to ensure style is fully loaded before restoring terrain
-        this.map.once('style.load', async () => {
-          // Small delay to ensure everything is ready
+        // Use 'styledata' event instead of 'style.load' for MapLibre
+        // MapLibre uses 'styledata' when the style is loaded
+        // Note: styledata can fire multiple times, so we wait for the style to be fully loaded
+        this.map.once('styledata', async () => {
+          // Wait for the style to be fully loaded - MapTiler styles have 100+ layers
+          // Keep checking until the style is ready (has name property and many layers)
+          while (true) {
+            const style = this.map.getStyle()
+            if (style && style.name && style.layers && style.layers.length > 50) {
+              break
+            }
+            await new Promise(resolve => setTimeout(resolve, 50))
+          }
+          
+          // Small additional delay to ensure everything is ready
           await new Promise(resolve => setTimeout(resolve, 50))
           
           // Restore GeoJSON source and features
@@ -1287,7 +1295,12 @@ export default {
             // Add layers first (they need to exist before adding features)
             ensureLayersExist(this.map, this.showAllLabels)
             
-            // Ensure feature layers are positioned AFTER all MapTiler base layers
+            // Re-add features to the map with proper styling and icons
+            const zoom = this.map ? this.map.getZoom() : null
+            await addFeaturesToMap(this.map, geojsonData, this.showAllLabels, zoom)
+            
+            // CRITICAL: Ensure feature layers are positioned AFTER all MapTiler base layers
+            // This must happen AFTER addFeaturesToMap, as that function may recreate layers
             // MapTiler styles include their own base layers (roads, water, buildings, etc.)
             // We need our features to render on top of these
             const style = this.map.getStyle()
@@ -1307,10 +1320,6 @@ export default {
                 })
               }
             }
-            
-            // Re-add features to the map with proper styling and icons
-            const zoom = this.map ? this.map.getZoom() : null
-            await addFeaturesToMap(this.map, geojsonData, this.showAllLabels, zoom)
             
             // Update label markers if labels are visible
             if (this.showAllLabels && this.labelMarkerManager) {
@@ -1335,6 +1344,9 @@ export default {
             this.addHillshadeIfNeeded()
           }
         })
+        
+        // Set the style (event handler is already registered above)
+        this.map.setStyle(styleUrl)
       } else {
         // Raster-based source - need to reset style if coming from a style-based source
         const currentStyle = this.map.getStyle()
@@ -1370,7 +1382,8 @@ export default {
           })
           
           // Wait for style to load, then add raster layer and restore GeoJSON
-          this.map.once('style.load', async () => {
+          // Use 'styledata' event for MapLibre compatibility
+          this.map.once('styledata', async () => {
             await new Promise(resolve => setTimeout(resolve, 50))
             
             // Add raster source and layer
