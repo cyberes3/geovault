@@ -681,9 +681,10 @@ class TestTilesAPI(TestCase):
             call_args = call.args
             call_kwargs = call.kwargs
             
-            # Extension can be passed as 4th positional arg or as 'extension' keyword
-            if len(call_args) >= 4:
-                extension = call_args[3]
+            # Extension can be passed as 5th positional arg (index 4) or as 'extension' keyword
+            # Function signature: get_tile_cache_path(service, z, x, y, extension='tile')
+            if len(call_args) >= 5:
+                extension = call_args[4]
             elif 'extension' in call_kwargs:
                 extension = call_kwargs['extension']
             else:
