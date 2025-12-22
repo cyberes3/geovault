@@ -41,6 +41,8 @@ def get_protected_areas(latitude: float, longitude: float) -> List[Dict[str, str
         return cached
 
     # Query for protected areas
+    # This query finds areas (ways/relations converted to areas) that contain the point
+    # and match various park/protected area tags
     query = f"""
 [out:json];
 is_in({latitude},{longitude})->.a;
@@ -48,6 +50,8 @@ is_in({latitude},{longitude})->.a;
   area.a["boundary"="protected_area"];
   area.a["leisure"="nature_reserve"];
   area.a["boundary"="national_park"];
+  area.a["leisure"="park"];
+  area.a["landuse"="recreation_ground"];
 );
 out tags;
 """
@@ -64,11 +68,17 @@ out tags;
                 continue
 
             boundary = tags.get('boundary', '')
+            leisure = tags.get('leisure', '')
+            landuse = tags.get('landuse', '')
 
-            # Check if this is a protected area
+            # Check if this is a protected area or park
+            # Include boundary=protected_area, leisure=nature_reserve/park, 
+            # boundary=national_park, and landuse=recreation_ground
             if (boundary == 'protected_area' or 
                 boundary == 'national_park' or
-                tags.get('leisure') == 'nature_reserve'):
+                leisure == 'nature_reserve' or
+                leisure == 'park' or
+                landuse == 'recreation_ground'):
                 
                 area_info = {
                     'name': name,
@@ -76,7 +86,8 @@ out tags;
                     'protect_class': tags.get('protect_class', ''),
                     'designation': tags.get('designation', ''),
                     'operator': tags.get('operator', ''),
-                    'leisure': tags.get('leisure', ''),
+                    'leisure': leisure,
+                    'landuse': landuse,
                     'boundary': boundary
                 }
                 protected_areas.append(area_info)
@@ -91,19 +102,20 @@ def classify_protected_area(area: Dict[str, str]) -> str:
     """
     Classify a protected area into a specific category based on OSM tags.
     
-    Returns a tag prefix like "national-park", "state-park", "wilderness", etc.
+    Returns a tag prefix like "national-park", "state-park", "wilderness", "park", etc.
     based on the area's protection_title, designation, operator, and boundary tags.
     
     Args:
         area: Protected area dict with classification info
     
     Returns:
-        Tag prefix string (e.g., "national-park", "state-park", "wilderness")
+        Tag prefix string (e.g., "national-park", "state-park", "wilderness", "park", "protected-area")
     """
     protection_title = area.get('protection_title', '').lower()
     designation = area.get('designation', '').lower()
     operator = area.get('operator', '').lower()
     boundary = area.get('boundary', '').lower()
+    leisure = area.get('leisure', '').lower()
 
     # Check in priority order (most specific first)
     if 'national forest' in protection_title:
@@ -126,6 +138,9 @@ def classify_protected_area(area: Dict[str, str]) -> str:
         return "national-lakeshore"
     elif 'state park' in protection_title or 'state park' in designation or 'state park' in operator:
         return "state-park"
+    # City parks: leisure=park but no boundary=protected_area
+    elif leisure == 'park' and boundary != 'protected_area':
+        return "park"
     
-    # Default fallback
+    # Default fallback for protected areas
     return "protected-area"

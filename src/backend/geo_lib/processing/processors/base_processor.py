@@ -997,7 +997,6 @@ class BaseProcessor(ABC):
             # Use the JavaScript converter with file path
             # Note: Timing is handled by the base processor's process() method
             self.import_log.add(f"Converting {file_type_name} file to GeoJSON format", "File Conversion", DatabaseLogLevel.INFO)
-            _logger.info(f"Starting {file_type_name} conversion for file '{filename}' ({file_size_mb:.2f} MB)")
 
             result = subprocess.run(
                 ['node', togeojson_path, file_path],
@@ -1033,7 +1032,6 @@ class BaseProcessor(ABC):
 
             try:
                 geojson_data = json.loads(result.stdout)
-                _logger.info(f"Successfully converted {file_type_name} file '{filename}' to GeoJSON")
                 return geojson_data
             except json.JSONDecodeError as json_err:
                 # Log the actual output that failed to parse

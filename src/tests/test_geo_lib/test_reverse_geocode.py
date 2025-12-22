@@ -148,6 +148,61 @@ class TestReverseGeocodingService(TestCase):
         self.assertEqual(areas[0]['name'], 'Rocky Mountain National Park')
         self.assertEqual(areas[1]['name'], 'Rocky Mountain Wilderness')
     
+    def test_protected_areas_misc_parks(self):
+        """Test that misc parks are correctly identified and tagged as protected-area."""
+        from geo_lib.geocoding.protected_areas import classify_protected_area
+        
+        # South Valley Park, Colorado - should be tagged as protected-area
+        areas = get_protected_areas(39.5626793, -105.1501089)
+        self.assertEqual(len(areas), 1)
+        self.assertEqual(areas[0]['name'], 'South Valley Park')
+        self.assertEqual(areas[0]['boundary'], 'protected_area')
+        self.assertEqual(areas[0]['landuse'], 'recreation_ground')
+        area_type = classify_protected_area(areas[0])
+        self.assertEqual(area_type, 'protected-area')
+        
+        # Blue Hills Reservation, Massachusetts - should be tagged as state-park
+        areas = get_protected_areas(42.22314472038681, -71.09840390005273)
+        self.assertEqual(len(areas), 1)
+        self.assertEqual(areas[0]['name'], 'Blue Hills Reservation')
+        self.assertEqual(areas[0]['boundary'], 'protected_area')
+        self.assertEqual(areas[0]['leisure'], 'nature_reserve')
+        area_type = classify_protected_area(areas[0])
+        self.assertEqual(area_type, 'state-park')
+        
+        # Bells Bend Park, Tennessee - should be tagged as protected-area
+        areas = get_protected_areas(36.15564975174452, -86.92466166278994)
+        self.assertEqual(len(areas), 1)
+        self.assertEqual(areas[0]['name'], 'Bells Bend Park')
+        self.assertEqual(areas[0]['boundary'], 'protected_area')
+        area_type = classify_protected_area(areas[0])
+        self.assertEqual(area_type, 'protected-area')
+    
+    def test_city_park_classification(self):
+        """Test that city parks (leisure=park without boundary=protected_area) are tagged as 'park'."""
+        from geo_lib.geocoding.protected_areas import classify_protected_area
+        
+        # James N. Manley Park, Colorado - city park with leisure=park but no boundary=protected_area
+        areas = get_protected_areas(39.72294740028117, -104.95773491586752)
+        self.assertEqual(len(areas), 1)
+        self.assertEqual(areas[0]['name'], 'James N. Manley Park')
+        self.assertEqual(areas[0]['leisure'], 'park')
+        self.assertEqual(areas[0].get('boundary', ''), '')  # No boundary tag
+        area_type = classify_protected_area(areas[0])
+        self.assertEqual(area_type, 'park')
+        
+        # Test that parks with boundary=protected_area are still protected-area
+        area_with_boundary = {
+            'name': 'Some Park',
+            'leisure': 'park',
+            'boundary': 'protected_area',
+            'protection_title': '',
+            'designation': '',
+            'operator': ''
+        }
+        area_type = classify_protected_area(area_with_boundary)
+        self.assertEqual(area_type, 'protected-area')
+    
     def test_ski_resort_inside_bbox(self):
         """Test ski resort detection when point is inside resort bbox."""
         # Vail coordinates (inside Vail resort bbox)
