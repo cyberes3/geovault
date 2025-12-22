@@ -694,11 +694,7 @@ export default {
       this.createMapInstance(mapConfig)
       
       // Resize map after load event
-      this.map.once('load', () => {
-        if (this.map) {
-          this.map.resize()
-        }
-      })
+      this.ensureMapResize()
     },
     convertMapLibreFeature(mlFeature) {
       return convertMapLibreFeature(mlFeature)
@@ -1129,53 +1125,6 @@ export default {
         this.map.easeTo({ pitch: 0, duration: 800 })
       }
     },
-    /**
-     * Wait for terrain source to be ready
-     * @returns {Promise} Resolves when terrain is ready
-     */
-    waitForTerrainReady() {
-      if (!this.map) {
-        return Promise.resolve()
-      }
-
-      return new Promise((resolve) => {
-        // Check if terrain source exists
-        const terrainSource = this.map.getSource('terrain-source')
-        if (!terrainSource) {
-          resolve()
-          return
-        }
-
-        // Wait for sourcedata event for terrain source
-        const timeout = setTimeout(() => {
-          // Timeout after 3 seconds to prevent hanging
-          resolve()
-        }, 3000)
-
-        // Listen for sourcedata event on terrain source
-        const onSourceData = (e) => {
-          if (e.sourceId === 'terrain-source' && e.isSourceLoaded) {
-            clearTimeout(timeout)
-            this.map.off('sourcedata', onSourceData)
-            resolve()
-          }
-        }
-
-        this.map.on('sourcedata', onSourceData)
-
-        // Also check if already loaded
-        try {
-          if (terrainSource.loaded) {
-            clearTimeout(timeout)
-            this.map.off('sourcedata', onSourceData)
-            resolve()
-          }
-        } catch (e) {
-          // If checking loaded throws an error, just wait for the event
-          console.warn('Error checking terrain source loaded state:', e)
-        }
-      })
-    },
     async setupTerrain() {
       if (!this.maptilerConfig) return
       
@@ -1228,6 +1177,59 @@ export default {
       } catch (error) {
         console.error('Error fetching available tags:', error)
         this.availableTags = []
+      }
+    },
+
+    /**
+     * Wait for a Vue ref element to be available in the DOM
+     * @param {string} refName - Name of the ref to wait for
+     * @param {number} timeout - Optional timeout in milliseconds (default: 2000)
+     * @returns {Promise<HTMLElement>} Resolves with the element when available
+     * @throws {Error} If element is not found within timeout
+     */
+    waitForElement(refName, timeout = 2000) {
+      // Return immediately if element exists
+      if (this.$refs[refName] instanceof HTMLElement) {
+        return Promise.resolve(this.$refs[refName])
+      }
+
+      return new Promise((resolve, reject) => {
+        const observer = new MutationObserver(() => {
+          if (this.$refs[refName] instanceof HTMLElement) {
+            observer.disconnect()
+            clearTimeout(timeoutId)
+            resolve(this.$refs[refName])
+          }
+        })
+
+        // Watch for DOM changes
+        observer.observe(this.$el, { childList: true, subtree: true })
+
+        // Safety timeout
+        const timeoutId = setTimeout(() => {
+          observer.disconnect()
+          reject(new Error(`Element ${refName} not found within ${timeout}ms`))
+        }, timeout)
+      })
+    },
+
+    /**
+     * Ensure map is resized after operations
+     * Resizes immediately if map is loaded, otherwise waits for 'load' event
+     */
+    ensureMapResize() {
+      if (!this.map) return
+
+      // If map is already loaded, resize immediately
+      if (this.map.loaded()) {
+        this.map.resize()
+      } else {
+        // Otherwise wait for load event
+        this.map.once('load', () => {
+          if (this.map) {
+            this.map.resize()
+          }
+        })
       }
     },
 
@@ -1432,6 +1434,12 @@ export default {
     async switchMapLayer(layerValue, isInitialSetup = false) {
       if (!this.map) return
 
+      // Cancel any pending API requests to prevent race conditions
+      if (this.currentAbortController) {
+        this.currentAbortController.abort()
+        this.currentAbortController = null
+      }
+
       // Save current map state and features
       const mapState = getMapState(this.map)
       if (!mapState) return
@@ -1500,8 +1508,8 @@ export default {
         // 9. Apply terrain and hillshade with conditional atmosphere
         await this.applyTerrainAndHillshade(layerValue)
 
-        // 11. Resize map to ensure proper rendering
-        this.map.resize()
+        // 10. Resize map to ensure proper rendering
+        this.ensureMapResize()
       } catch (error) {
         console.error('Error switching map layer:', error)
         this.loadError = error.message || 'Failed to switch map layer'
@@ -2540,6 +2548,12 @@ export default {
     },
     // Map Destruction Abstraction Layer
     performMapDestruction() {
+      // Cancel any pending API requests to prevent race conditions
+      if (this.currentAbortController) {
+        this.currentAbortController.abort()
+        this.currentAbortController = null
+      }
+
       // Save current map position and zoom before destruction (if not already saved)
       if (this.map && !this.savedMapCenter) {
         this.savedMapCenter = this.map.getCenter()
@@ -2630,16 +2644,11 @@ export default {
       // Ensure map container is available (with retry for hot reload scenarios)
       await this.$nextTick()
       
-      // Wait for container to be truly ready
-      let retries = 0
-      const maxRetries = 10
-      while ((!this.$refs.mapContainer || !(this.$refs.mapContainer instanceof HTMLElement)) && retries < maxRetries) {
-        await new Promise(resolve => setTimeout(resolve, 50))
-        retries++
-      }
-      
-      if (!this.$refs.mapContainer || !(this.$refs.mapContainer instanceof HTMLElement)) {
-        console.error('Map container not available for restore after retries')
+      // Wait for container to be truly ready (event-driven)
+      try {
+        await this.waitForElement('mapContainer')
+      } catch (error) {
+        console.error('Map container not available for restore:', error.message)
         this.isMapInitializing = false
         this.isRestoring = false
         return
@@ -2701,13 +2710,7 @@ export default {
         }
 
         // Update map size after load
-        if (this.map) {
-          this.map.once('load', () => {
-            if (this.map) {
-              this.map.resize()
-            }
-          })
-        }
+        this.ensureMapResize()
 
         // Initial feature list update
         this.updateFeaturesInExtent()
@@ -2741,16 +2744,11 @@ export default {
     // Ensure map container is available (with retry for hot reload scenarios)
     await this.$nextTick()
     
-    // Wait for container to be truly ready (important for hot reload)
-    let retries = 0
-    const maxRetries = 10
-    while ((!this.$refs.mapContainer || !(this.$refs.mapContainer instanceof HTMLElement)) && retries < maxRetries) {
-      await new Promise(resolve => setTimeout(resolve, 50))
-      retries++
-    }
-    
-    if (!this.$refs.mapContainer || !(this.$refs.mapContainer instanceof HTMLElement)) {
-      console.error('Map container not available after retries')
+    // Wait for container to be truly ready (important for hot reload, event-driven)
+    try {
+      await this.waitForElement('mapContainer')
+    } catch (error) {
+      console.error('Map container not available:', error.message)
       this.isMapInitializing = false
       this.loadError = 'Map container failed to initialize. Please refresh the page.'
       return
@@ -2895,13 +2893,27 @@ export default {
         this.loadDataForCurrentView().then(() => {
           this.isMapInitializing = false
           this.updateFeaturesInExtent()
-          // Resize map after data loads
+          // Resize map after data loads (wait for idle since data is loading)
           if (this.map) {
-            this.map.once('idle', () => {
-              if (this.map) {
-                this.map.resize()
-              }
-            })
+            if (this.map.loaded()) {
+              // Map is loaded, wait for idle to ensure data is rendered
+              this.map.once('idle', () => {
+                if (this.map) {
+                  this.map.resize()
+                }
+              })
+            } else {
+              // Map not loaded yet, wait for load then idle
+              this.map.once('load', () => {
+                if (this.map) {
+                  this.map.once('idle', () => {
+                    if (this.map) {
+                      this.map.resize()
+                    }
+                  })
+                }
+              })
+            }
           }
         })
       } else {
