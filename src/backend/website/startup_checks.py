@@ -22,6 +22,9 @@ Warning checks (don't fail startup):
 - Email configuration
 """
 
+import grp
+import os
+import pwd
 import sys
 from pathlib import Path
 
@@ -267,25 +270,47 @@ def check_writable_directories():
     try:
         all_ok = True
 
-        # Check tile cache directory if caching is enabled
-        if get_required_setting('TILE_CACHE_ENABLED'):
-            tile_cache_dir = Path(get_required_setting('TILE_CACHE_DIR'))
-            try:
-                # Create directory if it doesn't exist
-                tile_cache_dir.mkdir(parents=True, exist_ok=True)
+        # Get the root data directory
+        data_dir = settings.BASE_DIR / 'data'
+        
+        # Get current user and group names
+        try:
+            current_uid = os.getuid()
+            current_gid = os.getgid()
+            current_user = pwd.getpwuid(current_uid).pw_name
+            current_group = grp.getgrgid(current_gid).gr_name
+            user_group = f"{current_user}:{current_group}"
+        except (KeyError, OSError):
+            # Fallback if we can't determine user/group
+            user_group = "USER:GROUP"
 
-                # Test write permissions by creating a test file
-                test_file = tile_cache_dir / '.startup_test'
-                try:
-                    test_file.write_text('test')
-                    test_file.unlink()
-                    _logger.info(f"✓ Tile cache directory is writable: {tile_cache_dir}")
-                except Exception as e:
-                    _logger.error(f"✗ Tile cache directory is not writable: {tile_cache_dir} - {e}")
-                    all_ok = False
-            except Exception as e:
-                _logger.error(f"✗ Failed to create/access tile cache directory {tile_cache_dir}: {e}")
+        # Check data directory if caching is enabled
+        try:
+            # Create directory if it doesn't exist
+            data_dir.mkdir(parents=True, exist_ok=True)
+
+            # Test write permissions by creating a test file
+            test_file = data_dir / '.startup_test'
+            try:
+                test_file.write_text('test')
+                test_file.unlink()
+                _logger.info(f"✓ Data directory is writable: {data_dir}")
+            except PermissionError:
+                _logger.error(f"✗ Data directory is not writable: {data_dir}")
+                _logger.error(f"  Permission denied. Fix with: sudo chown -R {user_group} {data_dir}")
+                _logger.error(f"  Then: sudo chmod -R u+rwX,go+rX {data_dir}")
                 all_ok = False
+            except Exception as e:
+                _logger.error(f"✗ Data directory is not writable: {data_dir} - {e}")
+                all_ok = False
+        except PermissionError:
+            _logger.error(f"✗ Failed to create/access data directory {data_dir}")
+            _logger.error(f"  Permission denied. Fix with: sudo chown -R {user_group} {data_dir}")
+            _logger.error(f"  Then: sudo chmod -R u+rwX,go+rX {data_dir}")
+            all_ok = False
+        except Exception as e:
+            _logger.error(f"✗ Failed to create/access data directory {data_dir}: {e}")
+            all_ok = False
 
         # Check icon storage directory if icon processing is enabled
         if get_required_setting('ICON_PROCESSING_ENABLED'):

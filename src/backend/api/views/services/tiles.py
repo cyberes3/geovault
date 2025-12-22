@@ -265,7 +265,11 @@ def is_tile_cached(cache_path):
     Returns:
         True if cached and valid, False otherwise
     """
-    if not cache_path.exists():
+    try:
+        if not cache_path.exists():
+            return False
+    except PermissionError:
+        # If we can't check if file exists due to permissions, treat as cache miss
         return False
 
     try:
