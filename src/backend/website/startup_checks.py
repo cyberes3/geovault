@@ -298,7 +298,6 @@ def check_writable_directories():
             except PermissionError:
                 _logger.error(f"✗ Data directory is not writable: {data_dir}")
                 _logger.error(f"  Permission denied. Fix with: sudo chown -R {user_group} {data_dir}")
-                _logger.error(f"  Then: sudo chmod -R u+rwX,go+rX {data_dir}")
                 all_ok = False
             except Exception as e:
                 _logger.error(f"✗ Data directory is not writable: {data_dir} - {e}")
@@ -306,7 +305,6 @@ def check_writable_directories():
         except PermissionError:
             _logger.error(f"✗ Failed to create/access data directory {data_dir}")
             _logger.error(f"  Permission denied. Fix with: sudo chown -R {user_group} {data_dir}")
-            _logger.error(f"  Then: sudo chmod -R u+rwX,go+rX {data_dir}")
             all_ok = False
         except Exception as e:
             _logger.error(f"✗ Failed to create/access data directory {data_dir}: {e}")
