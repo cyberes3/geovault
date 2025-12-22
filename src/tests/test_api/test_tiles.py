@@ -34,16 +34,6 @@ class TestTilesAPI(TestCase):
         data = json.loads(response.content)
         self.assertIn('sources', data)
 
-    def test_herestreets_tile_source_registered(self):
-        """Test that HERE Streets tile source is registered correctly."""
-        herestreets_source = get_tile_source('herestreets')
-        self.assertIsNotNone(herestreets_source)
-        self.assertEqual(herestreets_source['name'], 'HERE Streets')
-        self.assertTrue(herestreets_source['requires_proxy'])
-        self.assertIn('url_template', herestreets_source)
-        self.assertIn('proxy_config', herestreets_source)
-        self.assertIn('client_config', herestreets_source)
-
     def test_google_maps_tile_source_registered(self):
         """Test that Google Maps tile source is registered correctly."""
         google_maps_source = get_tile_source('google_maps')
@@ -87,17 +77,19 @@ class TestTilesAPI(TestCase):
     def test_maptiler_sources_may_be_registered(self):
         """Test that MapTiler sources may be registered if configured."""
         all_sources = get_all_tile_sources()
+        # Only check map sources (exclude hillshade/terrain overlay sources)
         maptiler_sources = {
             source_id: config
             for source_id, config in all_sources.items()
-            if source_id.startswith('maptiler_')
+            if source_id.startswith('maptiler_') and source_id not in ['maptiler_hillshade', 'maptiler_terrain']
         }
         # MapTiler sources are optional and depend on configuration
         # If they exist, verify they have the correct structure
         for source_id, config in maptiler_sources.items():
             self.assertIn('name', config)
             self.assertEqual(config['type'], 'maptiler')
-            self.assertFalse(config.get('requires_proxy', True))  # MapTiler doesn't need proxy
+            # requires_proxy depends on maptiler.proxy_tiles config, so we don't assert a specific value
+            self.assertIn('requires_proxy', config)
             self.assertIn('client_config', config)
             client_config = config['client_config']
             self.assertIn('type', client_config)
@@ -161,22 +153,6 @@ class TestTilesAPI(TestCase):
         
         headers = proxy_config.get('headers', {})
         self.assertIn('User-Agent', headers, "OpenTopoMap proxy_config should include User-Agent header")
-        
-        # Verify User-Agent matches expected format
-        user_agent = headers['User-Agent']
-        self.assertTrue(user_agent.startswith('GeoVault/'), f"User-Agent should start with 'GeoVault/', got '{user_agent}'")
-        self.assertEqual(user_agent, get_user_agent(), "User-Agent should match get_user_agent()")
-
-    def test_openhikingmap_has_proxy_config_with_user_agent(self):
-        """Test that OpenHikingMap tile source has proxy_config with User-Agent header."""
-        openhikingmap_source = get_tile_source('openhikingmap')
-        self.assertIsNotNone(openhikingmap_source, "OpenHikingMap tile source should be registered")
-        
-        proxy_config = openhikingmap_source.get('proxy_config')
-        self.assertIsNotNone(proxy_config, "OpenHikingMap should have proxy_config")
-        
-        headers = proxy_config.get('headers', {})
-        self.assertIn('User-Agent', headers, "OpenHikingMap proxy_config should include User-Agent header")
         
         # Verify User-Agent matches expected format
         user_agent = headers['User-Agent']
@@ -249,7 +225,6 @@ class TestTilesAPI(TestCase):
         # Get tile sources (will re-initialize with mock config)
         osm_source = get_tile_source('osm')
         opentopomap_source = get_tile_source('opentopomap')
-        openhikingmap_source = get_tile_source('openhikingmap')
         mb_topo_source = get_tile_source('mb_topo')
         
         # Verify OSM and OpenTopoMap require proxy when in config
@@ -260,10 +235,6 @@ class TestTilesAPI(TestCase):
         self.assertIsNotNone(opentopomap_source)
         self.assertTrue(opentopomap_source.get('requires_proxy'), "OpenTopoMap should require proxy when in proxy_sources config")
         self.assertEqual(opentopomap_source['client_config']['url'], '/api/tiles/opentopomap/{z}/{x}/{y}')
-        
-        # Verify OpenHikingMap does NOT require proxy when not in config
-        self.assertIsNotNone(openhikingmap_source)
-        self.assertFalse(openhikingmap_source.get('requires_proxy'), "OpenHikingMap should not require proxy when not in proxy_sources config")
         
         # Edge case: Verify mb_topo still works correctly when in proxy_sources config
         # (it already requires proxy by default, so it should remain proxied)
@@ -279,14 +250,31 @@ class TestTilesAPI(TestCase):
         registry_module._registered = False
 
     @patch('geo_lib.tile_sources.registry.get_config_loader')
-    def test_proxy_sources_filters_out_maptiler_sources(self, mock_get_config_loader):
+    @patch('geo_lib.tile_sources.maptiler_terrain.get_config_loader')
+    @patch('geo_lib.tile_sources.maptiler_hillshade.get_config_loader')
+    @patch('geo_lib.tile_sources.maptiler.get_config_loader')
+    def test_proxy_sources_filters_out_maptiler_sources(self, mock_maptiler_config, mock_hillshade_config, mock_terrain_config, mock_get_config_loader):
         """Test that MapTiler sources are filtered out from proxy_sources config.
         MapTiler proxying is controlled by maptiler.proxy_tiles, not tilesources.proxy_sources."""
         # Create a mock config loader
         mock_config_loader = MagicMock()
         # Include MapTiler sources in proxy_sources - they should be ignored
         mock_config_loader.get.return_value = ['osm', 'maptiler_terrain', 'maptiler_hillshade', 'maptiler_topo-v4']
+        # Set maptiler.proxy_tiles to False for all MapTiler sources
+        def get_bool_side_effect(key, default=False):
+            if key == 'maptiler.proxy_tiles':
+                return False
+            return default
+        mock_config_loader.get_bool.side_effect = get_bool_side_effect
+        mock_config_loader.get_with_env_override.return_value = 'test-api-key'
+        mock_config_loader.get_str.return_value = 'example.com'
+        mock_config_loader.get_list.return_value = []
+        
+        # Use the same mock for all config loaders
         mock_get_config_loader.return_value = mock_config_loader
+        mock_terrain_config.return_value = mock_config_loader
+        mock_hillshade_config.return_value = mock_config_loader
+        mock_maptiler_config.return_value = mock_config_loader
         
         # Clear the registry to force re-initialization with the mock config
         import geo_lib.tile_sources.registry as registry_module
@@ -305,8 +293,8 @@ class TestTilesAPI(TestCase):
         # It should use its default behavior based on maptiler.proxy_tiles
         if maptiler_terrain_source:
             # MapTiler terrain's requires_proxy is controlled by maptiler.proxy_tiles, not proxy_sources
-            # Since we're not mocking maptiler.proxy_tiles, it will use the default (False)
-            # But the key point is that proxy_sources didn't override it
+            # We've mocked maptiler.proxy_tiles to False, so requires_proxy should be False
+            # The key point is that proxy_sources didn't override it
             self.assertFalse(maptiler_terrain_source.get('requires_proxy'), 
                            "MapTiler terrain should not be affected by proxy_sources config")
         

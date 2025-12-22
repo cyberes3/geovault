@@ -63,7 +63,7 @@ class MapTilerMapTileSource(TileSource):
 
     @property
     def client_config(self):
-        style_url = f'https://api.maptiler.com/maps/{self._map_id}/style.json?key={self._api_key}',
+        style_url = f'https://api.maptiler.com/maps/{self._map_id}/style.json?key={self._api_key}'
         if self._use_proxy:
             style_url = f'/api/tiles/style/{self._map_id}'
         return {
