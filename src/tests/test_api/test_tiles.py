@@ -375,6 +375,46 @@ class TestTilesAPI(TestCase):
         # Verify it's NOT using the default 30 days
         self.assertNotIn('max-age=2592000', cache_control)
 
+    @patch('api.views.services.tiles.requests.get')
+    @override_settings(TILE_CACHE_ENABLED=False)
+    def test_tile_proxy_removes_set_cookie_header_for_cloudflare_caching(self, mock_requests_get):
+        """Test that tile proxy responses do not include Set-Cookie headers to allow Cloudflare caching."""
+        # Create a mock response
+        mock_response = MagicMock()
+        mock_response.status_code = 200
+        mock_response.content = b'fake tile data'
+        mock_response.headers = {'Content-Type': 'image/png'}
+        mock_requests_get.return_value = mock_response
+
+        # Use mb_topo which requires proxy by default
+        mb_topo_source = get_tile_source('mb_topo')
+        if not mb_topo_source or not mb_topo_source.get('requires_proxy'):
+            self.skipTest("mb_topo tile source not available or doesn't require proxy")
+
+        # Make a proxy request (user is logged in, so session middleware would normally set Set-Cookie)
+        import random
+        z = random.randint(1, 10)
+        x = random.randint(0, 2**z - 1)
+        y = random.randint(0, 2**z - 1)
+        
+        response = self.client.get(f'/api/tiles/mb_topo/{z}/{x}/{y}')
+        self.assertEqual(response.status_code, 200)
+        
+        # Verify Set-Cookie header is NOT present (Cloudflare won't cache if it is)
+        # Django's session middleware normally sets this for authenticated users
+        self.assertNotIn('Set-Cookie', response, 
+                        "Tile proxy responses should not include Set-Cookie header for Cloudflare caching")
+        
+        # Verify Access-Control-Allow-Credentials is NOT present (also prevents caching)
+        self.assertNotIn('Access-Control-Allow-Credentials', response,
+                        "Tile proxy responses should not include Access-Control-Allow-Credentials for maximum cacheability")
+        
+        # Verify Cache-Control header is still present and correct
+        self.assertIn('Cache-Control', response)
+        cache_control = response['Cache-Control']
+        self.assertIn('public', cache_control)
+        self.assertIn('max-age=', cache_control)
+
     @patch('geo_lib.tile_sources.maptiler.get_config_loader')
     def test_maptiler_map_sources_exclude_api_key_when_proxying(self, mock_get_config_loader):
         """Test that MapTiler map sources exclude API key from client_config when proxying is enabled."""

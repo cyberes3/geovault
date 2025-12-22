@@ -86,6 +86,13 @@ def tile_proxy(request, service, z, x, y):
             http_response = HttpResponse(tile_data, content_type=content_type)
             http_response['Cache-Control'] = f'public, max-age={cache_max_age_seconds}'
             http_response['Access-Control-Allow-Origin'] = '*'
+            
+            # Remove Set-Cookie header to allow Cloudflare caching
+            # Cloudflare does not cache responses with Set-Cookie headers
+            http_response.cookies.clear()
+            if http_response.has_header('Set-Cookie'):
+                del http_response['Set-Cookie']
+            
             return http_response
 
     # Cache miss or cache disabled - fetch from external service
@@ -137,6 +144,13 @@ def tile_proxy(request, service, z, x, y):
         http_response = HttpResponse(tile_data, content_type=content_type)
         http_response['Cache-Control'] = f'public, max-age={cache_max_age_seconds}'
         http_response['Access-Control-Allow-Origin'] = '*'  # Allow cross-origin requests
+        
+        # Remove Set-Cookie header to allow Cloudflare caching
+        # Cloudflare does not cache responses with Set-Cookie headers
+        http_response.cookies.clear()
+        if http_response.has_header('Set-Cookie'):
+            del http_response['Set-Cookie']
+        
         return http_response
 
     except:

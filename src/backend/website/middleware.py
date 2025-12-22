@@ -331,8 +331,24 @@ class CustomHeaderMiddleware:
     def __call__(self, request):
         response = self.get_response(request)
 
+        # Track if this is a tile request
+        is_tile_request = request.path.startswith('/api/tiles/')
+
+        # Remove Set-Cookie headers from tile proxy responses to allow Cloudflare caching
+        # Cloudflare does not cache responses with Set-Cookie headers
+        if is_tile_request:
+            response.cookies.clear()
+            if response.has_header('Set-Cookie'):
+                del response['Set-Cookie']
+
         # Set CORS headers on all responses
         self._set_cors_headers(request, response)
+
+        # For tile requests, ensure Access-Control-Allow-Credentials is not set
+        # to maximize cacheability (CORS spec also requires credentials=false when
+        # Access-Control-Allow-Origin is *)
+        if is_tile_request and response.has_header('Access-Control-Allow-Credentials'):
+            del response['Access-Control-Allow-Credentials']
 
         # Set CSP headers on HTML responses
         content_type = response.get('Content-Type', '')
