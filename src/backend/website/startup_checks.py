@@ -272,7 +272,7 @@ def check_writable_directories():
 
         # Get the root data directory
         data_dir = settings.BASE_DIR / 'data'
-        
+
         # Get current user and group names
         try:
             current_uid = os.getuid()
@@ -309,33 +309,6 @@ def check_writable_directories():
         except Exception as e:
             _logger.error(f"✗ Failed to create/access data directory {data_dir}: {e}")
             all_ok = False
-
-        # Check icon storage directory if icon processing is enabled
-        if get_required_setting('ICON_PROCESSING_ENABLED'):
-            icon_storage_dir_value = get_required_setting('ICON_STORAGE_DIR')
-            if icon_storage_dir_value is None:
-                icon_storage_dir = settings.BASE_DIR / 'data' / 'icons'
-            elif isinstance(icon_storage_dir_value, Path):
-                icon_storage_dir = icon_storage_dir_value
-            else:
-                icon_storage_dir = Path(icon_storage_dir_value)
-            try:
-                # Create directory if it doesn't exist
-                icon_storage_dir.mkdir(parents=True, exist_ok=True)
-
-                # Test write permissions by creating a test file
-                test_file = icon_storage_dir / '.startup_test'
-                try:
-                    test_file.write_text('test')
-                    test_file.unlink()
-                    _logger.info(f"✓ Icon storage directory is writable: {icon_storage_dir}")
-                except Exception as e:
-                    _logger.error(f"✗ Icon storage directory is not writable: {icon_storage_dir} - {e}")
-                    all_ok = False
-            except Exception as e:
-                _logger.error(f"✗ Failed to create/access icon storage directory {icon_storage_dir}: {e}")
-                all_ok = False
-
         return all_ok
 
     except Exception as e:
