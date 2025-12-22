@@ -64,15 +64,14 @@ def tile_proxy(request, service, z, x, y):
     cache_path = None
 
     if settings.TILE_CACHE_ENABLED:
-        # Try common extensions for cached files (including .pbf for vector tiles)
-        for ext in ['pbf', 'webp', 'png', 'jpg', 'tile']:
-            test_cache_path = get_tile_cache_path(service, z, x, y, ext)
-            if is_tile_cached(test_cache_path):
-                tile_data = read_tile_from_cache(test_cache_path)
-                if tile_data:
-                    cache_path = test_cache_path
-                    url_extension = ext
-                    break
+        # Only check for the extension from URL template (no fallback)
+        if url_extension != 'tile':
+            cache_path = get_tile_cache_path(service, z, x, y, url_extension)
+            if is_tile_cached(cache_path):
+                tile_data = read_tile_from_cache(cache_path)
+                if not tile_data:
+                    return HttpResponse('Cached file not found', status=400)
+        
         if tile_data:
             _logger.debug(f"Tile cache hit: {service}/{z}/{x}/{y}")
             # Determine content type from extension

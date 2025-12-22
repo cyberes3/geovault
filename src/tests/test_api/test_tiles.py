@@ -558,4 +558,73 @@ class TestTilesAPI(TestCase):
         response = self.client.get('/api/tiles/style/nonexistent-map')
         self.assertEqual(response.status_code, 404)
 
+    @patch('api.views.services.tiles.get_tile_cache_path')
+    @patch('api.views.services.tiles.is_tile_cached')
+    @patch('api.views.services.tiles.read_tile_from_cache')
+    @patch('api.views.services.tiles.requests.get')
+    @override_settings(TILE_CACHE_ENABLED=True)
+    def test_tile_proxy_uses_correct_extension_from_url_template(self, mock_requests_get, 
+                                                                   mock_read_tile_from_cache,
+                                                                   mock_is_tile_cached,
+                                                                   mock_get_tile_cache_path):
+        """Test that raster tiles (like mb_topo with .png) only check for the correct extension, not .pbf."""
+        from pathlib import Path
+        
+        # Use mb_topo which is a raster tile with .png extension
+        mb_topo_source = get_tile_source('mb_topo')
+        if not mb_topo_source or not mb_topo_source.get('requires_proxy'):
+            self.skipTest("mb_topo tile source not available or doesn't require proxy")
+        
+        # Verify mb_topo uses .png in its URL template
+        url_template = mb_topo_source.get('url_template', '')
+        self.assertIn('.png', url_template, "mb_topo should use .png extension")
+        
+        # Mock cache functions
+        mock_is_tile_cached.return_value = False  # Cache miss
+        mock_get_tile_cache_path.return_value = Path('/fake/cache/path/tile.png')
+        
+        # Create a mock response for when we fetch from upstream
+        mock_response = MagicMock()
+        mock_response.status_code = 200
+        mock_response.content = b'fake tile data'
+        mock_response.headers = {'Content-Type': 'image/png'}
+        mock_requests_get.return_value = mock_response
+
+        # Make a proxy request
+        z = 10
+        x = 512
+        y = 512
+        
+        response = self.client.get(f'/api/tiles/mb_topo/{z}/{x}/{y}')
+        self.assertEqual(response.status_code, 200)
+        
+        # Verify get_tile_cache_path was called with 'png' extension (from URL template)
+        # and NOT with 'pbf'
+        calls = mock_get_tile_cache_path.call_args_list
+        self.assertGreater(len(calls), 0, "get_tile_cache_path should have been called")
+        
+        # Check that all calls use 'png' extension, not 'pbf'
+        for call in calls:
+            # Check both positional and keyword arguments
+            call_args = call.args
+            call_kwargs = call.kwargs
+            
+            # Extension can be passed as 4th positional arg or as 'extension' keyword
+            if len(call_args) >= 4:
+                extension = call_args[3]
+            elif 'extension' in call_kwargs:
+                extension = call_kwargs['extension']
+            else:
+                continue  # Skip if extension not found in this call
+            
+            self.assertEqual(extension, 'png', 
+                           f"Cache path should use 'png' extension for mb_topo, got '{extension}'")
+            self.assertNotEqual(extension, 'pbf',
+                              "Cache path should NOT use 'pbf' extension for raster tiles")
+        
+        # Verify is_tile_cached was only called once (for .png, not for multiple extensions)
+        # Since we're only checking one extension now, it should be called once
+        self.assertEqual(mock_is_tile_cached.call_count, 1,
+                        "is_tile_cached should be called once for the correct extension only")
+
 
