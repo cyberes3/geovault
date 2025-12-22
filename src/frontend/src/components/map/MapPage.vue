@@ -212,6 +212,12 @@ import {
   filterPointsOnBorders,
   updateSmallFeatureFlags
 } from '@/utils/map/maplibre'
+import {
+  restoreGeoJsonFeatures,
+  restoreMapView,
+  getMapState,
+  getGeoJsonData
+} from '@/utils/map/maplibre/layerSwitching.js'
 import { getIconSourceUrl, getFeatureIconUrl, loadIconImage, shouldUseIcon } from '@/utils/map/maplibre/featureStyling.js'
 import { 
   MapTilerConfig,
@@ -668,7 +674,9 @@ export default {
       // Resize map to ensure proper rendering after initialization
       if (this.map) {
         setTimeout(() => {
-          this.map.resize()
+          if (this.map) {
+            this.map.resize()
+          }
         }, 100)
       }
     },
@@ -1068,8 +1076,8 @@ export default {
       await this.maptilerConfig.fetchConfig(tileSources)
     },
     add3DTerrainControl() {
-      // Only add control if MapTiler is configured
-      if (!this.maptilerConfig || !this.maptilerConfig.isAvailable()) {
+      // Only add control if MapTiler is configured and map exists
+      if (!this.map || !this.maptilerConfig || !this.maptilerConfig.isAvailable()) {
         return
       }
 
@@ -1215,146 +1223,236 @@ export default {
         this.availableTags = []
       }
     },
-    updateMapLayer(layerValue) {
+
+    /**
+     * Restore terrain and hillshade settings
+     */
+    restoreTerrainAndHillshade(terrainEnabled, hillshadeEnabled) {
+      // Re-apply terrain if it was enabled (with delay to allow terrain tiles to load)
+      if (terrainEnabled) {
+        setTimeout(() => {
+          if (this.map && this.terrainEnabled) {
+            this.setupTerrain()
+          }
+        }, 500)
+      }
+
+      // Re-apply hillshade if it was enabled
+      if (hillshadeEnabled) {
+        this.addHillshadeIfNeeded()
+      }
+    },
+
+    /**
+     * Recreate map instance with saved state
+     */
+    async recreateMapInstance(mapState) {
+      try {
+        // Clean up label markers
+        if (this.labelMarkerManager) {
+          this.labelMarkerManager.clearAllMarkers()
+        }
+
+        // Completely destroy the map
+        if (this.map) {
+          this.map.remove()
+        }
+        this.map = null
+
+        // Wait a bit for cleanup
+        await new Promise(resolve => setTimeout(resolve, 100))
+
+        // Ensure map container is still available
+        await this.$nextTick()
+        if (!this.$refs.mapContainer || !(this.$refs.mapContainer instanceof HTMLElement)) {
+          console.error('Map container not available after cleanup')
+          this.loadError = 'Map container not available'
+          return false
+        }
+
+        // Recreate the map instance with saved position
+        this.map = markRaw(initializeMap(this.$refs.mapContainer, {
+          center: [mapState.center.lng, mapState.center.lat],
+          zoom: mapState.zoom,
+          pitch: mapState.pitch,
+          bearing: mapState.bearing,
+          glyphsUrl: '/api/fonts/{fontstack}/{range}.pbf'
+        }))
+
+        if (!this.map) {
+          console.error('Failed to create map instance')
+          this.loadError = 'Failed to create map instance'
+          return false
+        }
+
+        // Add navigation controls
+        this.map.addControl(
+          new maplibregl.NavigationControl({
+            visualizePitch: true,
+            showCompass: true,
+            showZoom: true
+          }),
+          'top-left'
+        )
+
+        // Reinitialize label marker manager
+        this.labelMarkerManager = new LabelMarkerManager(this.map)
+        this.labelMarkerManager.setVisibility(this.showAllLabels)
+
+        // Setup GeoJSON source
+        setupGeoJsonSource(this.map, () => {
+          // Map source loaded
+        })
+
+        // Setup all map event handlers
+        this.setupMapEventHandlers()
+
+        // Wait for map to load
+        await new Promise((resolve) => {
+          if (this.map && this.map.loaded()) {
+            resolve()
+          } else if (this.map) {
+            this.map.once('load', resolve)
+          } else {
+            resolve() // Map was destroyed, exit
+          }
+        })
+
+        // Resize map to ensure proper rendering
+        if (this.map) {
+          this.map.resize()
+        }
+
+        return true
+      } catch (error) {
+        console.error('Error recreating map:', error)
+        this.loadError = error.message || 'Failed to recreate map'
+        return false
+      }
+    },
+
+    async updateMapLayer(layerValue, isInitialSetup = false) {
       if (!this.map) return
 
-      // Save current states to reapply after layer switch
+      // Save current map state using utility function
+      const mapState = getMapState(this.map)
+      if (!mapState) return
+
       const terrainEnabled = this.terrainEnabled && this.maptilerConfig?.isAvailable()
       const hillshadeEnabled = this.hillshadeEnabled
 
+      // Save current GeoJSON data using utility function
+      const geojsonData = getGeoJsonData(this.map)
+
+      // Update selected layer
       this.selectedLayer = layerValue
       const tileSource = this.tileSources.find(s => s.id === layerValue)
       if (!tileSource) return
 
+      // Only destroy and recreate if not initial setup
+      if (!isInitialSetup) {
+        const success = await this.recreateMapInstance(mapState)
+        if (!success) {
+          return
+        }
+      }
+
+      // Now set up the tile layer based on the selected source
       const clientConfig = tileSource.client_config || {}
-
-      // Remove hillshade before removing base layer
-      this.removeHillshade()
-
-      // Remove existing raster layers (generic)
-      const existingRasterLayers = ['osm-layer', 'tile-layer', 'raster-layer']
-      existingRasterLayers.forEach(layerId => {
-        if (this.map.getLayer(layerId)) {
-          this.map.removeLayer(layerId)
-        }
-      })
-      
-      // Remove existing raster sources (generic)
-      const existingRasterSources = ['osm', 'tile-source', 'raster-source']
-      existingRasterSources.forEach(sourceId => {
-        if (this.map.getSource(sourceId)) {
-          this.map.removeSource(sourceId)
-        }
-      })
-
-      // Check if this is a style-based source (MapTiler) or raster-based
       const isStyleBased = clientConfig.style_url || clientConfig.type === 'maptiler'
-      
+
       if (isStyleBased) {
-        // Style-based source (e.g., MapTiler) - replaces entire style
+        // Style-based source (e.g., MapTiler)
         const styleUrl = clientConfig.style_url
-        
-        // Save current state before switching styles
-        const geojsonSource = this.map.getSource('geojson-data')
-        let geojsonData = null
-        if (geojsonSource) {
-          const serialized = geojsonSource.serialize()
-          geojsonData = serialized.data
+
+        if (!this.map) {
+          console.error('Map not available when setting style')
+          return
         }
-        
-        // Use 'styledata' event instead of 'style.load' for MapLibre
-        // MapLibre uses 'styledata' when the style is loaded
-        // Note: styledata can fire multiple times, so we wait for the style to be fully loaded
-        this.map.once('styledata', async () => {
-          // Wait for the style to be fully loaded - MapTiler styles have 100+ layers
-          // Keep checking until the style is ready (has name property and many layers)
-          while (true) {
-            const style = this.map.getStyle()
-            if (style && style.name && style.layers && style.layers.length > 50) {
-              break
-            }
-            await new Promise(resolve => setTimeout(resolve, 50))
-          }
-          
-          // Small additional delay to ensure everything is ready
-          await new Promise(resolve => setTimeout(resolve, 50))
-          
-          // Restore GeoJSON source and features
-          if (geojsonData) {
-            // Add GeoJSON source directly
-            if (!this.map.getSource('geojson-data')) {
-              this.map.addSource('geojson-data', {
-                type: 'geojson',
-                data: {
-                  type: 'FeatureCollection',
-                  features: []
-                }
-              })
-            }
-            
-            // Add layers first (they need to exist before adding features)
-            ensureLayersExist(this.map, this.showAllLabels)
-            
-            // Re-add features to the map with proper styling and icons
-            const zoom = this.map ? this.map.getZoom() : null
-            await addFeaturesToMap(this.map, geojsonData, this.showAllLabels, zoom)
-            
-            // CRITICAL: Ensure feature layers are positioned AFTER all MapTiler base layers
-            // This must happen AFTER addFeaturesToMap, as that function may recreate layers
-            // MapTiler styles include their own base layers (roads, water, buildings, etc.)
-            // We need our features to render on top of these
-            const style = this.map.getStyle()
-            if (style && style.layers) {
-              // Find the topmost MapTiler layer (anything that's not our feature layers)
-              const ourFeatureLayers = ['polygons', 'polygon-outlines', 'lines', 'points', 'replacement-points', 'point-icons']
-              const maptilerLayers = style.layers.filter(l => !ourFeatureLayers.includes(l.id))
-              
-              if (maptilerLayers.length > 0) {
-                // Move each of our feature layers to be after all MapTiler layers
-                // Start with the first feature layer and move them in order
-                ourFeatureLayers.forEach(layerId => {
-                  if (this.map.getLayer(layerId)) {
-                    // Move to the very end (on top of everything)
-                    this.map.moveLayer(layerId)
+
+        // Wait for style to load and be fully configured
+        await new Promise((resolveStyle) => {
+          const timeout = setTimeout(() => {
+            console.error('Timeout waiting for styledata event')
+            resolveStyle()
+          }, 30000) // 30 second timeout
+
+          this.map.once('styledata', async () => {
+            clearTimeout(timeout)
+            try {
+              if (!this.map) {
+                console.error('Map was destroyed during style load')
+                resolveStyle()
+                return
+              }
+
+              // Wait for the style to be fully loaded
+              // Satellite styles may have fewer layers, so check for style.name and any layers
+              let attempts = 0
+              while (attempts < 100) { // Max 5 seconds
+                const style = this.map.getStyle()
+                if (style && style.name && style.layers && Array.isArray(style.layers) && style.layers.length > 0) {
+                  // Additional check: ensure style sources are loaded
+                  if (style.sources && Object.keys(style.sources).length > 0) {
+                    break
                   }
-                })
-              }
-            }
-            
-            // Update label markers if labels are visible
-            if (this.showAllLabels && this.labelMarkerManager) {
-              const source = this.map.getSource('geojson-data')
-              if (source) {
-                const serialized = source.serialize()
-                const data = serialized.data
-                if (data && data.features) {
-                  this.labelMarkerManager.updateMarkers(data.features)
                 }
+                await new Promise(resolve => setTimeout(resolve, 50))
+                attempts++
               }
-            }
-          }
-          
-          // Re-apply terrain if it was enabled
-          if (terrainEnabled) {
-            this.setupTerrain()
-          }
-          
-          // Re-apply hillshade if it was enabled
-          if (hillshadeEnabled) {
-            this.addHillshadeIfNeeded()
+
+              await new Promise(resolve => setTimeout(resolve, 50))
+
+              // Restore GeoJSON features
+              await restoreGeoJsonFeatures(this.map, geojsonData, this.showAllLabels, this.labelMarkerManager)
+
+              // Restore terrain and hillshade
+              this.restoreTerrainAndHillshade(terrainEnabled, hillshadeEnabled)
+
+              // Always add 3D terrain control if MapTiler is available (not just on initial setup)
+              // This ensures the control is present when switching between sources
+              if (this.maptilerConfig?.isAvailable()) {
+                this.add3DTerrainControl()
+              }
+
+              // Restore map view immediately - don't wait for idle to prevent hanging
+              // The view will be stable once style is loaded
+              restoreMapView(this.map, mapState.center, mapState.zoom, mapState.pitch, mapState.bearing)
+
+              // Wait a bit to ensure map is ready and has bounds before resolving
+              // This ensures loadDataForCurrentView can proceed
+              await new Promise(resolve => setTimeout(resolve, 100))
+              
+              // Verify map has bounds before resolving (required for data loading)
+              let attempts = 0
+              while (attempts < 20) { // Max 1 second
+                try {
+                  const bounds = this.map.getBounds()
+                  if (bounds) {
+                    break
+                  }
+                } catch (e) {
+                  // Map not ready yet
+                }
+                await new Promise(resolve => setTimeout(resolve, 50))
+                attempts++
+              }
+
+              // Resolve the promise after everything is complete
+              resolveStyle()
+          } catch (error) {
+            console.error('Error in styledata callback:', error)
+            // Resolve even on error to prevent hanging
+            resolveStyle()
           }
         })
-        
-        // Set the style (event handler is already registered above)
+
         this.map.setStyle(styleUrl)
+      })
       } else {
-        // Raster-based source - need to reset style if coming from a style-based source
-        const currentStyle = this.map.getStyle()
-        const needsStyleReset = currentStyle && currentStyle.name // MapTiler styles have a name property
-        
+        // Raster-based source
         const url = clientConfig.url || `/api/tiles/${layerValue}/{z}/{x}/{y}`
-        
-        // Handle tile subdomains if provided
+
         let tiles
         if (clientConfig.tileSubdomains && Array.isArray(clientConfig.tileSubdomains)) {
           tiles = clientConfig.tileSubdomains.map(subdomain =>
@@ -1363,131 +1461,96 @@ export default {
         } else {
           tiles = [url.replace('{s}', clientConfig.tileSubdomains?.[0] || 'a')]
         }
-        
-        if (needsStyleReset) {
-          // Coming from a style-based source - reset to blank style first
-          const geojsonSource = this.map.getSource('geojson-data')
-          let geojsonData = null
-          if (geojsonSource) {
-            const serialized = geojsonSource.serialize()
-            geojsonData = serialized.data
-          }
-          
-          // Reset to blank style
-          this.map.setStyle({
-            version: 8,
-            glyphs: '/api/fonts/{fontstack}/{range}.pbf',
-            sources: {},
-            layers: []
-          })
-          
-          // Wait for style to load, then add raster layer and restore GeoJSON
-          // Use 'styledata' event for MapLibre compatibility
-          this.map.once('styledata', async () => {
-            await new Promise(resolve => setTimeout(resolve, 50))
-            
-            // Add raster source and layer
-            this.map.addSource('raster-source', {
-              type: 'raster',
-              tiles: tiles,
-              tileSize: clientConfig.tileSize || 256
-            })
-            this.map.addLayer({
-              id: 'raster-layer',
-              type: 'raster',
-              source: 'raster-source',
-              minzoom: clientConfig.minzoom || 0,
-              maxzoom: clientConfig.maxzoom || 22
-            })
-            
-            // Ensure raster layer is at the bottom (before all other layers)
-            // This is critical: layers render in order, so raster must be first
-            const style = this.map.getStyle()
-            if (style && style.layers && style.layers.length > 1) {
-              // Find the first non-raster layer to position raster before it
-              const firstLayer = style.layers.find(l => l.id !== 'raster-layer')
-              if (firstLayer) {
-                this.map.moveLayer('raster-layer', firstLayer.id)
-              }
-            }
-            
-            // Restore GeoJSON if we had data
-            if (geojsonData) {
-              if (!this.map.getSource('geojson-data')) {
-                this.map.addSource('geojson-data', {
-                  type: 'geojson',
-                  data: {
-                    type: 'FeatureCollection',
-                    features: []
-                  }
-                })
-              }
-              
-              ensureLayersExist(this.map, this.showAllLabels)
-              const zoom = this.map ? this.map.getZoom() : null
-              await addFeaturesToMap(this.map, geojsonData, this.showAllLabels, zoom)
-              
-              if (this.showAllLabels && this.labelMarkerManager) {
-                const source = this.map.getSource('geojson-data')
-                if (source) {
-                  const serialized = source.serialize()
-                  const data = serialized.data
-                  if (data && data.features) {
-                    this.labelMarkerManager.updateMarkers(data.features)
-                  }
-                }
-              }
-            }
-            
-            // Re-apply terrain if it was enabled
-            if (terrainEnabled) {
-              this.setupTerrain()
-            }
-            
-            // Re-apply hillshade if it was enabled
-            if (hillshadeEnabled) {
-              this.addHillshadeIfNeeded()
-            }
-          })
-        } else {
-          // Not coming from a style-based source - just add raster layer
-          this.map.addSource('raster-source', {
-            type: 'raster',
-            tiles: tiles,
-            tileSize: clientConfig.tileSize || 256
-          })
-          this.map.addLayer({
-            id: 'raster-layer',
-            type: 'raster',
-            source: 'raster-source',
-            minzoom: clientConfig.minzoom || 0,
-            maxzoom: clientConfig.maxzoom || 22
-          })
-          
-          // Ensure raster layer is at the bottom (before all other layers)
-          // This is critical: layers render in order, so raster must be first
-          const style = this.map.getStyle()
-          if (style && style.layers && style.layers.length > 1) {
-            // Find the first non-raster layer to position raster before it
-            const firstLayer = style.layers.find(l => l.id !== 'raster-layer')
-            if (firstLayer) {
-              this.map.moveLayer('raster-layer', firstLayer.id)
-            }
-          }
-          
-          // Ensure GeoJSON layers exist and are on top
-          ensureLayersExist(this.map, this.showAllLabels)
-          
-          // Re-apply terrain if it was enabled
-          if (terrainEnabled) {
-            this.setupTerrain()
-          }
-          
-          // Re-apply hillshade if it was enabled
-          if (hillshadeEnabled) {
-            this.addHillshadeIfNeeded()
-          }
+
+        if (!this.map) {
+          console.error('Map not available when setting raster style')
+          return
         }
+
+        // Wait for style to load and be fully configured
+        await new Promise((resolveStyle) => {
+          const timeout = setTimeout(() => {
+            console.error('Timeout waiting for styledata event (raster)')
+            resolveStyle()
+          }, 30000) // 30 second timeout
+
+          this.map.once('styledata', async () => {
+            clearTimeout(timeout)
+            try {
+              if (!this.map) {
+                console.error('Map was destroyed during style load (raster)')
+                resolveStyle()
+                return
+              }
+
+              await new Promise(resolve => setTimeout(resolve, 50))
+
+              // Add raster source and layer
+              this.map.addSource('raster-source', {
+                type: 'raster',
+                tiles: tiles,
+                tileSize: clientConfig.tileSize || 256
+              })
+              this.map.addLayer({
+                id: 'raster-layer',
+                type: 'raster',
+                source: 'raster-source',
+                minzoom: clientConfig.minzoom || 0,
+                maxzoom: clientConfig.maxzoom || 22
+              })
+
+              // Restore GeoJSON features
+              await restoreGeoJsonFeatures(this.map, geojsonData, this.showAllLabels, this.labelMarkerManager)
+
+              // Restore terrain and hillshade
+              this.restoreTerrainAndHillshade(terrainEnabled, hillshadeEnabled)
+
+              // Always add 3D terrain control if MapTiler is available (not just on initial setup)
+              // This ensures the control is present when switching between sources
+              if (this.maptilerConfig?.isAvailable()) {
+                this.add3DTerrainControl()
+              }
+
+              // Restore map view immediately - don't wait for idle to prevent hanging
+              // The view will be stable once style is loaded
+              restoreMapView(this.map, mapState.center, mapState.zoom, mapState.pitch, mapState.bearing)
+
+              // Wait a bit to ensure map is ready and has bounds before resolving
+              // This ensures loadDataForCurrentView can proceed
+              await new Promise(resolve => setTimeout(resolve, 100))
+              
+              // Verify map has bounds before resolving (required for data loading)
+              let attempts = 0
+              while (attempts < 20) { // Max 1 second
+                try {
+                  const bounds = this.map.getBounds()
+                  if (bounds) {
+                    break
+                  }
+                } catch (e) {
+                  // Map not ready yet
+                }
+                await new Promise(resolve => setTimeout(resolve, 50))
+                attempts++
+              }
+
+              // Resolve the promise after everything is complete
+              resolveStyle()
+          } catch (error) {
+            console.error('Error in styledata callback (raster):', error)
+            // Resolve even on error to prevent hanging
+            resolveStyle()
+          }
+        })
+
+        // Set blank style first
+        this.map.setStyle({
+          version: 8,
+          glyphs: '/api/fonts/{fontstack}/{range}.pbf',
+          sources: {},
+          layers: []
+        })
+      })
       }
     },
     /**
@@ -2690,7 +2753,9 @@ export default {
         await this.$nextTick()
         if (this.map) {
           setTimeout(() => {
-            this.map.resize()
+            if (this.map) {
+              this.map.resize()
+            }
           }, 100)
         }
 
@@ -2778,31 +2843,24 @@ export default {
       }
     })
 
-    // Update map layer to use the selected source (in case it's not the default OSM)
-    if (this.selectedLayer && this.tileSources.length > 0) {
-      this.updateMapLayer(this.selectedLayer)
-    }
-
-    // Setup terrain based on user's default preference (after baselayer is configured)
+    // Setup terrain and hillshade preferences BEFORE updating map layer
+    // so they can be applied during the initial setup
     const userSettings = this.$store.state.userSettings || {}
     const defaultTerrainOn = userSettings.map?.enable_3d_terrain || false
     const defaultHillshadeOn = userSettings.map?.enable_hillshade || false
     
-    if (defaultTerrainOn && this.maptilerConfig?.isAvailable()) {
-      this.terrainEnabled = true
-      this.setupTerrain()
-      // Tilt the map for 3D view
-      this.map.setPitch(50)
-    } else {
-      this.terrainEnabled = false
+    this.terrainEnabled = defaultTerrainOn && this.maptilerConfig?.isAvailable()
+    this.hillshadeEnabled = defaultHillshadeOn && this.maptilerConfig?.isAvailable()
+
+    // Update map layer to use the selected source (in case it's not the default OSM)
+    // Pass true for isInitialSetup to avoid destroying and recreating the map
+    if (this.selectedLayer && this.tileSources.length > 0) {
+      await this.updateMapLayer(this.selectedLayer, true)
     }
-    
-    // Setup hillshade based on user's default preference (after baselayer is configured)
-    if (defaultHillshadeOn && this.maptilerConfig?.isAvailable()) {
-      this.hillshadeEnabled = true
-      this.addHillshadeIfNeeded()
-    } else {
-      this.hillshadeEnabled = false
+
+    // Tilt the map if terrain is enabled
+    if (this.terrainEnabled && this.map) {
+      this.map.setPitch(50)
     }
 
     // Add 3D terrain toggle control AFTER setting terrainEnabled (only if MapTiler is configured)
@@ -2837,7 +2895,9 @@ export default {
     await this.$nextTick()
     if (this.map) {
       setTimeout(() => {
-        this.map.resize()
+        if (this.map) {
+          this.map.resize()
+        }
       }, 100)
     }
 
@@ -2892,7 +2952,9 @@ export default {
           // Resize map after data loads
           if (this.map) {
             setTimeout(() => {
-              this.map.resize()
+              if (this.map) {
+                this.map.resize()
+              }
             }, 100)
           }
         })

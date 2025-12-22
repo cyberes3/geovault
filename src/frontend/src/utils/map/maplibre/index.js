@@ -11,4 +11,5 @@ export * from './labelPlacement.js'
 export * from './layerManagement.js'
 export * from './mapInitialization.js'
 export * from './featureManagement.js'
+export * from './layerSwitching.js'
 
