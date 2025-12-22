@@ -7,8 +7,6 @@ from geo_lib.tile_sources.base import TileSource
 class GoogleMapsTileSource(TileSource):
     """Google Maps tile source with proxying support."""
 
-    # Base64 encoded API key from the curl command
-    # Decode: 
     _API_KEY_B64 = 'QUl6YVN5QW8wZzBuWmg1YU9FaE1XMlM4NzZLTWpKOE9xYU4tVndR'
 
     @property
