@@ -9,7 +9,7 @@ import functools
 
 import requests
 
-from geo_lib.tile_sources.registry import TileSource
+from geo_lib.tile_sources.base import TileSource
 from website.config_loader import get_config_loader
 
 

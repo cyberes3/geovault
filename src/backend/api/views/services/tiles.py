@@ -1,4 +1,5 @@
 import os
+import traceback
 from datetime import datetime, timedelta
 from pathlib import Path
 
@@ -39,7 +40,7 @@ def tile_proxy(request, service, z, x, y):
     if not url_template:
         return HttpResponse('Service configuration error: missing url_template', status=500)
 
-    # Determine file extension from URL template
+    # Determine file extension from URL template (fallback, will be updated from response if needed)
     url_extension = 'tile'
     if url_template:
         # Extract extension from URL template (e.g., .png, .webp, .jpg)
@@ -55,27 +56,29 @@ def tile_proxy(request, service, z, x, y):
     cache_path = None
 
     if settings.TILE_CACHE_ENABLED:
-        try:
-            cache_path = get_tile_cache_path(service, z, x, y, url_extension)
-            if is_tile_cached(cache_path):
-                tile_data = read_tile_from_cache(cache_path)
+        # Try common extensions for cached files
+        for ext in ['webp', 'png', 'jpg', 'tile']:
+            test_cache_path = get_tile_cache_path(service, z, x, y, ext)
+            if is_tile_cached(test_cache_path):
+                tile_data = read_tile_from_cache(test_cache_path)
                 if tile_data:
-                    _logger.debug(f"Tile cache hit: {service}/{z}/{x}/{y}")
-                    # Determine content type from extension
-                    content_type_map = {
-                        'png': 'image/png',
-                        'webp': 'image/webp',
-                        'jpg': 'image/jpeg',
-                        'tile': 'application/octet-stream'
-                    }
-                    content_type = content_type_map.get(url_extension, 'image/png')
-                    http_response = HttpResponse(tile_data, content_type=content_type)
-                    http_response['Cache-Control'] = 'public, max-age=2592000'  # Cache for 1 month
-                    http_response['Access-Control-Allow-Origin'] = '*'
-                    return http_response
-        except Exception as e:
-            # Log cache error but continue to fetch from source
-            _logger.warning(f"Cache check failed for {service}/{z}/{x}/{y}: {e}")
+                    cache_path = test_cache_path
+                    url_extension = ext
+                    break
+        if tile_data:
+            _logger.debug(f"Tile cache hit: {service}/{z}/{x}/{y}")
+            # Determine content type from extension
+            content_type_map = {
+                'png': 'image/png',
+                'webp': 'image/webp',
+                'jpg': 'image/jpeg',
+                'tile': 'application/octet-stream'
+            }
+            content_type = content_type_map.get(url_extension, 'image/png')
+            http_response = HttpResponse(tile_data, content_type=content_type)
+            http_response['Cache-Control'] = 'public, max-age=2592000'  # Cache for 1 month
+            http_response['Access-Control-Allow-Origin'] = '*'
+            return http_response
 
     # Cache miss or cache disabled - fetch from external service
     tile_url = url_template.format(z=z, x=x, y=y)
@@ -90,14 +93,30 @@ def tile_proxy(request, service, z, x, y):
         if response.status_code != 200:
             return HttpResponse(f'Upstream error: {response.status_code}', status=response.status_code)
 
-        content_type = response.headers.get('Content-Type', 'image/png')
+        # Get Content-Type from response, parse to extract just the MIME type
+        raw_content_type = response.headers.get('Content-Type', '')
+        # Extract MIME type (remove parameters like charset, boundary, etc.)
+        if raw_content_type:
+            content_type = raw_content_type.split(';')[0].strip()
+        else:
+            # Fallback only if no Content-Type header at all
+            content_type = 'image/png'
+
+        # Determine file extension from Content-Type header for caching
+        if 'image/webp' in content_type:
+            url_extension = 'webp'
+        elif 'image/png' in content_type:
+            url_extension = 'png'
+        elif 'image/jpeg' in content_type or 'image/jpg' in content_type:
+            url_extension = 'jpg'
 
         # Read tile data
         tile_data = response.content
 
-        # Save to cache if enabled
-        if settings.TILE_CACHE_ENABLED and cache_path:
+        # Save to cache if enabled (use correct extension based on Content-Type)
+        if settings.TILE_CACHE_ENABLED:
             try:
+                cache_path = get_tile_cache_path(service, z, x, y, url_extension)
                 save_tile_to_cache(cache_path, tile_data)
                 _logger.debug(f"Tile cached: {service}/{z}/{x}/{y}")
             except Exception as e:
@@ -110,12 +129,9 @@ def tile_proxy(request, service, z, x, y):
         http_response['Access-Control-Allow-Origin'] = '*'  # Allow cross-origin requests
         return http_response
 
-    except requests.exceptions.RequestException as e:
-        _logger.error(f"Error fetching tile {service}/{z}/{x}/{y}: {str(e)}")
-        return HttpResponse(f'Error fetching tile: {str(e)}', status=502)
-    except Exception as e:
-        _logger.error(f"Unexpected error fetching tile {service}/{z}/{x}/{y}: {str(e)}")
-        return HttpResponse(f'Unexpected error: {str(e)}', status=500)
+    except:
+        _logger.error(f"Unexpected error fetching tile {service}/{z}/{x}/{y}: {traceback.format_exc()}")
+        return HttpResponse(f'Unexpected error', status=500)
 
 
 def get_tile_sources(request):
@@ -189,8 +205,8 @@ def ensure_cache_directory(cache_path):
     Returns:
         True if successful, False otherwise
     """
+    cache_dir = cache_path.parent
     try:
-        cache_dir = cache_path.parent
         # Create directory structure with 0o700 permissions
         original_umask = os.umask(0o077)  # Restrict permissions to owner only
         try:
@@ -200,8 +216,8 @@ def ensure_cache_directory(cache_path):
         finally:
             os.umask(original_umask)
         return True
-    except OSError as e:
-        _logger.warning(f"Failed to create cache directory {cache_dir}: {e}")
+    except:
+        _logger.error(f"Failed to create cache directory {cache_dir}: {traceback.format_exc()}")
         return False
 
 
@@ -231,8 +247,8 @@ def save_tile_to_cache(cache_path, tile_data):
             os.umask(original_umask)
 
         return True
-    except OSError as e:
-        _logger.warning(f"Failed to save tile to cache {cache_path}: {e}")
+    except:
+        _logger.error(f"Failed to save tile to cache {cache_path}: {traceback.format_exc()}")
         return False
 
 
@@ -248,6 +264,6 @@ def read_tile_from_cache(cache_path):
     """
     try:
         return cache_path.read_bytes()
-    except OSError as e:
-        _logger.warning(f"Failed to read tile from cache {cache_path}: {e}")
+    except:
+        _logger.error(f"Failed to read tile from cache {cache_path}: {traceback.format_exc()}")
         return None

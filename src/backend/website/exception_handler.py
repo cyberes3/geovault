@@ -25,16 +25,12 @@ def log_unhandled_exception(sender, request, **kwargs):
     Signal handler that logs unhandled exceptions.
     This is called by Django when an unhandled exception occurs during request processing.
     """
-    exception = kwargs.get('exception')
-    if exception is None:
-        # Try to get exception from sys.exc_info if not passed
-        exc_type, exc_value, exc_traceback = sys.exc_info()
-        if exc_value:
-            exception = exc_value
+    # Get exception info from sys.exc_info() which is always available in exception handlers
+    exc_type, exc_value, exc_traceback = sys.exc_info()
     
-    if exception:
-        # Log just the traceback
-        traceback_str = traceback.format_exc()
+    if exc_value:
+        # Format the full traceback from the exception info
+        traceback_str = ''.join(traceback.format_exception(exc_type, exc_value, exc_traceback))
         access_logger.error(traceback_str)
 
 

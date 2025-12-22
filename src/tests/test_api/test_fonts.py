@@ -47,10 +47,10 @@ class TestFontGlyphAPI(TestCase):
             self.assertIn('immutable', response['Cache-Control'])
             # CORS header should match the origin we sent
             self.assertIn('Access-Control-Allow-Origin', response)
-            # Check that CORS header matches origin (or is '*')
+            # Check that CORS header matches origin (not '*')
             cors_header = response['Access-Control-Allow-Origin']
-            self.assertIn(cors_header, [mock_origin, '*'], 
-                         f"CORS header should match origin '{mock_origin}' or be '*', got '{cors_header}'")
+            self.assertEqual(cors_header, mock_origin, 
+                         f"CORS header should match origin '{mock_origin}', got '{cors_header}'")
 
     def test_serve_font_glyph_without_pbf_extension(self):
         """Test that range without .pbf extension is handled correctly."""
@@ -153,9 +153,9 @@ class TestFontGlyphAPI(TestCase):
             # CORS header should match the origin we sent
             self.assertIn('Access-Control-Allow-Origin', response)
             cors_header = response['Access-Control-Allow-Origin']
-            # Check that CORS header matches origin (or is '*')
-            self.assertIn(cors_header, [mock_origin, '*'],
-                         f"CORS header should match origin '{mock_origin}' or be '*', got '{cors_header}'")
+            # Check that CORS header matches origin (not '*')
+            self.assertEqual(cors_header, mock_origin,
+                         f"CORS header should match origin '{mock_origin}', got '{cors_header}'")
 
     def test_serve_font_glyph_content_type(self):
         """Test that correct content type is set for PBF files."""

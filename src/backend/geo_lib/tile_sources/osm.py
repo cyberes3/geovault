@@ -1,4 +1,4 @@
-from geo_lib.tile_sources.registry import TileSource
+from geo_lib.tile_sources.base import TileSource
 
 
 class OSMTileSource(TileSource):

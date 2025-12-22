@@ -32,15 +32,34 @@ class TestTilesAPI(TestCase):
         data = json.loads(response.content)
         self.assertIn('sources', data)
 
-    def test_hereapi_tile_source_registered(self):
-        """Test that HERE API tile source is registered correctly."""
-        hereapi_source = get_tile_source('hereapi')
-        self.assertIsNotNone(hereapi_source)
-        self.assertEqual(hereapi_source['name'], 'HERE Streets')
-        self.assertTrue(hereapi_source['requires_proxy'])
-        self.assertIn('url_template', hereapi_source)
-        self.assertIn('proxy_config', hereapi_source)
-        self.assertIn('client_config', hereapi_source)
+    def test_herestreets_tile_source_registered(self):
+        """Test that HERE Streets tile source is registered correctly."""
+        herestreets_source = get_tile_source('herestreets')
+        self.assertIsNotNone(herestreets_source)
+        self.assertEqual(herestreets_source['name'], 'HERE Streets')
+        self.assertTrue(herestreets_source['requires_proxy'])
+        self.assertIn('url_template', herestreets_source)
+        self.assertIn('proxy_config', herestreets_source)
+        self.assertIn('client_config', herestreets_source)
+
+    def test_google_maps_tile_source_registered(self):
+        """Test that Google Maps tile source is registered correctly."""
+        google_maps_source = get_tile_source('google_maps')
+        self.assertIsNotNone(google_maps_source)
+        self.assertEqual(google_maps_source['name'], 'Google Maps')
+        self.assertTrue(google_maps_source['requires_proxy'])
+        self.assertIn('url_template', google_maps_source)
+        self.assertIn('proxy_config', google_maps_source)
+        self.assertIn('client_config', google_maps_source)
+
+    def test_google_maps_url_template_contains_api_key(self):
+        """Test that Google Maps URL template contains the API key."""
+        google_maps_source = get_tile_source('google_maps')
+        self.assertIsNotNone(google_maps_source)
+        url_template = google_maps_source['url_template']
+        self.assertIn('key=', url_template)
+        # Verify it's a Google Maps URL
+        self.assertIn('mt0.google.com', url_template)
 
     @patch('urllib.request.urlopen')
     def test_tile_proxy(self, mock_urlopen):

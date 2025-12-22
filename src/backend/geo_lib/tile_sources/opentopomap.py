@@ -41,7 +41,7 @@ This tile source does not require a proxy as it can be accessed directly.
 Note: Only pre-rendered tiles for zoom levels 0-13 are available after the main server shutdown.
 """
 
-from geo_lib.tile_sources.registry import TileSource
+from geo_lib.tile_sources.base import TileSource
 
 
 class OpenTopoMapTileSource(TileSource):

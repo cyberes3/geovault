@@ -1,5 +1,5 @@
 from website.config_loader import get_config_loader
-from geo_lib.tile_sources.registry import TileSource
+from geo_lib.tile_sources.base import TileSource
 
 
 class MapTilerHillshadeTileSource(TileSource):

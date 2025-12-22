@@ -164,6 +164,9 @@
         @hillshade-change="handleHillshadeChange"
         @quick-point="showQuickPointDialog = true"
     />
+
+    <!-- Toast Notifications -->
+    <Toast ref="toast" />
   </div>
 </template>
 
@@ -186,6 +189,7 @@ import FeatureInfoBox from './FeatureInfoBox.vue'
 import MapErrorOverlay from './MapErrorOverlay.vue'
 import MapLoadingIndicator from './MapLoadingIndicator.vue'
 import MobileControlsBar from './MobileControlsBar.vue'
+import Toast from '@/components/parts/Toast.vue'
 
 // Lazy-loaded components - only loaded when needed
 const FeatureEditBox = defineAsyncComponent(() => import('./FeatureEditBox.vue'))
@@ -233,6 +237,7 @@ export default {
     MapLoadingIndicator,
     QuickPointDialog,
     MobileControlsBar,
+    Toast,
     HomeIcon,
     ExclamationCircleIcon,
     ShareIcon,
@@ -597,6 +602,37 @@ export default {
       // Reset cursor when leaving the map
       this.map.on('mouseout', () => {
         this.map.getCanvas().style.cursor = ''
+      })
+
+      // Add contextmenu (right-click) handler to copy coordinates
+      this.map.on('contextmenu', (e) => {
+        // Prevent default browser context menu
+        e.preventDefault()
+        
+        // Get coordinates and zoom level
+        const { lng, lat } = e.lngLat
+        const zoom = Math.round(this.map.getZoom())
+        
+        // Format coordinates with 6 decimal places
+        const coordinateString = `${lat.toFixed(6)}, ${lng.toFixed(6)}`
+        
+        // Generate CalTopo URL
+        const caltopoUrl = `https://caltopo.com/map.html#ll=${lat.toFixed(5)},${lng.toFixed(5)}&z=${zoom}`
+        
+        // Copy to clipboard
+        navigator.clipboard.writeText(coordinateString).then(() => {
+          // Show success message with CalTopo link
+          if (this.$refs.toast) {
+            const html = `Coordinates copied! <a href="${caltopoUrl}" target="_blank" rel="noopener noreferrer">Open in CalTopo</a>`
+            this.$refs.toast.success('', { html, timeout: 5000 })
+          }
+        }).catch((err) => {
+          console.error('Failed to copy coordinates:', err)
+          // Show error message
+          if (this.$refs.toast) {
+            this.$refs.toast.error('Failed to copy coordinates')
+          }
+        })
       })
     },
     getLocationDisplayName() {

@@ -1,9 +1,9 @@
 import base64
 
-from geo_lib.tile_sources.registry import TileSource
+from geo_lib.tile_sources.base import TileSource
 
 
-class HereApiTileSource(TileSource):
+class HereStreetsTileSource(TileSource):
     """HERE API base map tile source."""
 
     # Base64 encoded API key
@@ -11,7 +11,7 @@ class HereApiTileSource(TileSource):
 
     @property
     def id(self):
-        return 'hereapi'
+        return 'herestreets'
 
     @property
     def name(self):
@@ -20,6 +20,11 @@ class HereApiTileSource(TileSource):
     @property
     def type(self):
         return 'xyz'
+
+    @property
+    def enabled(self):
+        """Disable HERE map tile source."""
+        return False
 
     @property
     def requires_proxy(self):
@@ -54,6 +59,6 @@ class HereApiTileSource(TileSource):
     def client_config(self):
         return {
             'type': 'xyz',
-            'url': '/api/tiles/hereapi/{z}/{x}/{y}',
+            'url': '/api/tiles/herestreets/{z}/{x}/{y}',
             'tileSize': 512
         }

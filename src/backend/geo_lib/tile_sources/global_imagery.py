@@ -1,4 +1,5 @@
-from geo_lib.tile_sources.registry import TileSource
+from geo_lib.tile_sources.caltopo import CALTOPO_HEADERS
+from geo_lib.tile_sources.base import TileSource
 
 
 class GlobalImageryTileSource(TileSource):
@@ -27,11 +28,7 @@ class GlobalImageryTileSource(TileSource):
     @property
     def proxy_config(self):
         return {
-            'headers': {
-                'Origin': 'https://caltopo.com',
-                'Referer': 'https://caltopo.com/map.html',
-                'User-Agent': 'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36'
-            }
+            'headers': CALTOPO_HEADERS
         }
     
     @property
