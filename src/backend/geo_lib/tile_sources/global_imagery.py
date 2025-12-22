@@ -36,5 +36,6 @@ class GlobalImageryTileSource(TileSource):
         return {
             'type': 'xyz',
             'url': '/api/tiles/global_imagery/{z}/{x}/{y}',
+            'tileSize': 256,
             'attribution': '© CalTopo, © MapBox, © Maxar, USDA Farm Service Agency, © EOX IT, contains modified Copernicus data (2019)'
         }

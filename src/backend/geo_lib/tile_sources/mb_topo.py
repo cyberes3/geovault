@@ -36,5 +36,6 @@ class MapbuilderTopoTileSource(TileSource):
         return {
             'type': 'xyz',
             'url': '/api/tiles/mb_topo/{z}/{x}/{y}',
+            'tileSize': 256,
             'attribution': '© CalTopo, © OpenStreetMap contributors, Various DEM sources'
         }

@@ -39,6 +39,7 @@ class OpenHikingMapTileSource(TileSource):
         return {
             'type': 'xyz',
             'url': 'https://tile.openmaps.fr/openhikingmap/{z}/{x}/{y}.png',
+            'tileSize': 256,
             'attribution': '<a href="https://wiki.openstreetmap.org/wiki/OpenHikingMap">&copy; OpenHikingMap</a> <a href="https://openmaps.fr/donate">❤️ Donation</a> <a href="http://www.openstreetmap.org/copyright">&copy; OpenStreetMap</a>'
         }
 
