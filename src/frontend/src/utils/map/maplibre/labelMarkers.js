@@ -304,8 +304,39 @@ function getPointRadiusAtZoom(zoom, hasIcon = false) {
 }
 
 /**
+ * Truncate label text based on zoom level
+ * @param {string} text - Full label text
+ * @param {number} zoom - Current zoom level
+ * @returns {string} Truncated or full text based on zoom
+ */
+function truncateLabelText(text, zoom) {
+  if (!text) return text
+  
+  // Ensure zoom is a number
+  const zoomLevel = typeof zoom === 'number' ? zoom : parseFloat(zoom) || 10
+  
+  // At zoom 10 and above, show full text
+  if (zoomLevel >= 10) {
+    return text
+  }
+  
+  // At zoom 9, show up to 15 characters
+  if (zoomLevel >= 9) {
+    return text.length > 15 ? text.substring(0, 12) + '...' : text
+  }
+  
+  // At zoom 8, show up to 10 characters
+  if (zoomLevel >= 8) {
+    return text.length > 10 ? text.substring(0, 7) + '...' : text
+  }
+  
+  // At zoom 7 and below, show up to 8 characters
+  return text.length > 8 ? text.substring(0, 5) + '...' : text
+}
+
+/**
  * Create an HTML element for a label marker
- * @param {string} text - Label text
+ * @param {string} text - Label text (will be truncated based on zoom)
  * @param {boolean} isLabelPoint - Whether this is a label point (polygon/line)
  * @param {number} zoom - Current zoom level
  * @param {boolean} hasIcon - Whether the point has an icon
@@ -313,6 +344,8 @@ function getPointRadiusAtZoom(zoom, hasIcon = false) {
  * @returns {HTMLElement} HTML element for the marker
  */
 function createLabelElement(text, isLabelPoint = false, zoom = 10, hasIcon = false, placeLabelBelow = false) {
+  // Truncate text based on zoom level
+  const displayText = truncateLabelText(text, zoom)
   // Create white text outline using multiple text-shadows
   const textOutline = `
     -1px -1px 0 #ffffff,
@@ -328,7 +361,7 @@ function createLabelElement(text, isLabelPoint = false, zoom = 10, hasIcon = fal
   // Create label element
   const el = document.createElement('div')
   el.className = 'maplibre-label-marker'
-  el.textContent = text
+  el.textContent = displayText
   
   // Calculate margin-top based on point size at current zoom
   let marginTop
@@ -397,7 +430,7 @@ function getLabelPosition(feature) {
 export class LabelMarkerManager {
   constructor(map) {
     this.map = map
-    this.markers = new Map() // Map of featureId -> { marker, isLabelPoint, text, position, hasIcon, zoom }
+    this.markers = new Map() // Map of featureId -> { marker, isLabelPoint, text, fullText, position, hasIcon, zoom }
     this.showAllLabels = true
     this.updateTimeout = null // Debounce updates
     this.isUpdating = false // Prevent concurrent updates
@@ -426,7 +459,7 @@ export class LabelMarkerManager {
    */
   updateMarkers(features, immediate = false) {
     const now = Date.now()
-    const currentZoom = this.map ? Math.round(this.map.getZoom()) : null
+    const currentZoom = this.map ? this.map.getZoom() : null
     
     // If immediate update is requested (during zoom), update right away
     if (immediate) {
@@ -587,6 +620,9 @@ export class LabelMarkerManager {
           shouldHaveMarker.add(id)
           this.ensureMarker(id, name, position, isLabelPoint, hasIcon, zoom, placeLabelBelow)
         })
+        
+        // Update text truncation for existing markers when zoom changes
+        this.updateLabelTexts(zoom)
 
         // Batch remove markers that are no longer needed
         const markersToRemove = []
@@ -753,9 +789,34 @@ export class LabelMarkerManager {
   }
 
   /**
+   * Update label texts for all markers based on current zoom level
+   * @param {number} zoom - Current zoom level
+   */
+  updateLabelTexts(zoom) {
+    this.markers.forEach((data, featureId) => {
+      const { marker, fullText } = data
+      // If no fullText stored, try to get it from the current text content
+      // This handles markers created before fullText was added
+      const textToUse = fullText || (marker.getElement()?.textContent || '')
+      if (!textToUse) return
+      
+      const displayText = truncateLabelText(textToUse, zoom)
+      const el = marker.getElement()
+      if (el && el.textContent !== displayText) {
+        el.textContent = displayText
+      }
+      // Update stored zoom and fullText if not already stored
+      data.zoom = zoom
+      if (!data.fullText && textToUse) {
+        data.fullText = textToUse
+      }
+    })
+  }
+
+  /**
    * Ensure a marker exists for a feature (optimized for performance)
    * @param {string} featureId - Feature ID
-   * @param {string} text - Label text
+   * @param {string} text - Label text (full text)
    * @param {Array<number>} position - [lon, lat] coordinates
    * @param {boolean} isLabelPoint - Whether this is a label point (polygon/line) or regular point
    * @param {boolean} hasIcon - Whether the feature has an icon
@@ -768,11 +829,11 @@ export class LabelMarkerManager {
     const existingMarker = this.markers.get(featureId)
     
     if (existingMarker) {
-      const { marker, isLabelPoint: existingIsLabelPoint, text: existingText, position: existingPosition, hasIcon: existingHasIcon, zoom: existingZoom, placeLabelBelow: existingPlaceLabelBelow } = existingMarker
+      const { marker, isLabelPoint: existingIsLabelPoint, fullText: existingFullText, position: existingPosition, hasIcon: existingHasIcon, zoom: existingZoom, placeLabelBelow: existingPlaceLabelBelow } = existingMarker
       
       // Check if anything actually changed to avoid unnecessary DOM updates
       const positionChanged = existingPosition[0] !== position[0] || existingPosition[1] !== position[1]
-      const textChanged = existingText !== text
+      const textChanged = existingFullText !== text
       const anchorChanged = existingIsLabelPoint !== isLabelPoint
       const iconChanged = existingHasIcon !== hasIcon
       const zoomChanged = Math.abs((existingZoom || 10) - zoom) > 0.5 // Only recreate if zoom changed significantly
@@ -785,9 +846,16 @@ export class LabelMarkerManager {
         (!isLabelPoint && zoomChanged) // Only regular points need recreation on zoom change
       
       if (!positionChanged && !textChanged && !needsRecreate) {
-        // Nothing changed, skip update
-        // Update stored zoom for tracking, but don't recreate marker
-        this.markers.set(featureId, { marker, isLabelPoint, text, position: [...position], hasIcon, zoom, placeLabelBelow })
+        // Nothing changed, but still update text truncation if zoom changed
+        if (zoomChanged) {
+          const displayText = truncateLabelText(text, zoom)
+          const el = marker.getElement()
+          if (el && el.textContent !== displayText) {
+            el.textContent = displayText
+          }
+        }
+        // Always update stored data to ensure fullText and zoom are current
+        this.markers.set(featureId, { marker, isLabelPoint, fullText: text || existingFullText, position: [...position], hasIcon, zoom, placeLabelBelow })
         return
       }
       
@@ -808,7 +876,7 @@ export class LabelMarkerManager {
         })
           .setLngLat(position)
           .addTo(this.map)
-        this.markers.set(featureId, { marker: newMarker, isLabelPoint, text, position: [...position], hasIcon, zoom, placeLabelBelow })
+        this.markers.set(featureId, { marker: newMarker, isLabelPoint, fullText: text, position: [...position], hasIcon, zoom, placeLabelBelow })
         return
       }
       
@@ -817,14 +885,20 @@ export class LabelMarkerManager {
         marker.setLngLat(position)
       }
       
-      // Update text if changed
+      // Update text if changed (use truncated version for display)
       if (textChanged) {
+        const displayText = truncateLabelText(text, zoom)
         const el = marker.getElement()
-        if (el) el.textContent = text
+        if (el) el.textContent = displayText
+      } else if (zoomChanged) {
+        // Text didn't change but zoom did, update truncation
+        const displayText = truncateLabelText(text, zoom)
+        const el = marker.getElement()
+        if (el) el.textContent = displayText
       }
       
       // Update stored data
-      this.markers.set(featureId, { marker, isLabelPoint, text, position: [...position], hasIcon, zoom, placeLabelBelow })
+      this.markers.set(featureId, { marker, isLabelPoint, fullText: text, position: [...position], hasIcon, zoom, placeLabelBelow })
       
       // Ensure visibility is correct
       const el = marker.getElement()
@@ -846,7 +920,7 @@ export class LabelMarkerManager {
         .setLngLat(position)
         .addTo(this.map)
 
-      this.markers.set(featureId, { marker, isLabelPoint, text, position: [...position], hasIcon, zoom, placeLabelBelow })
+      this.markers.set(featureId, { marker, isLabelPoint, fullText: text, position: [...position], hasIcon, zoom, placeLabelBelow })
     }
   }
 
