@@ -62,12 +62,14 @@ class MapTilerTerrainTileSource(TileSource):
                 'type': 'raster-dem',
                 'tiles': ['/api/tiles/maptiler_terrain/{z}/{x}/{y}'],
                 'tileSize': 512,
-                'maxzoom': 14
+                'maxzoom': 14,
+                'attribution': '© MapTiler © OpenStreetMap contributors'
             }
         else:
             return {
                 'type': 'raster-dem',
-                'url': f'https://api.maptiler.com/tiles/terrain-rgb-v2/tiles.json?key={self._api_key}'
+                'url': f'https://api.maptiler.com/tiles/terrain-rgb-v2/tiles.json?key={self._api_key}',
+                'attribution': '© MapTiler © OpenStreetMap contributors'
             }
     
     @property

@@ -35,5 +35,6 @@ class GlobalImageryTileSource(TileSource):
     def client_config(self):
         return {
             'type': 'xyz',
-            'url': '/api/tiles/global_imagery/{z}/{x}/{y}'
+            'url': '/api/tiles/global_imagery/{z}/{x}/{y}',
+            'attribution': '© CalTopo, © MapBox, © Maxar, USDA Farm Service Agency, © EOX IT, contains modified Copernicus data (2019)'
         }

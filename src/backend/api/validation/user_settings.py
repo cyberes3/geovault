@@ -55,6 +55,11 @@ class MapSettings(BaseModel):
         description="Default hillshade to on when loading the map. User can still toggle it on/off with the map control."
     )
     
+    enable_antialias: Optional[bool] = Field(
+        default=False,
+        description="Enable anti-aliasing for smoother map rendering. May have a slight performance impact."
+    )
+    
     @field_validator('default_basemap')
     @classmethod
     def validate_default_basemap(cls, v):

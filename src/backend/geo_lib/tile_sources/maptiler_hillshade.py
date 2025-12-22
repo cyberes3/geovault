@@ -61,12 +61,14 @@ class MapTilerHillshadeTileSource(TileSource):
             return {
                 'type': 'raster',
                 'tiles': ['/api/tiles/maptiler_hillshade/{z}/{x}/{y}'],
-                'tileSize': 256
+                'tileSize': 256,
+                'attribution': '© MapTiler © OpenStreetMap contributors'
             }
         else:
             return {
                 'type': 'raster',
-                'url': f'https://api.maptiler.com/tiles/hillshade/tiles.json?key={self._api_key}'
+                'url': f'https://api.maptiler.com/tiles/hillshade/tiles.json?key={self._api_key}',
+                'attribution': '© MapTiler © OpenStreetMap contributors'
             }
     
     @property

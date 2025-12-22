@@ -48,5 +48,6 @@ class GoogleMapsTileSource(TileSource):
         return {
             'type': 'xyz',
             'url': '/api/tiles/google_maps/{z}/{x}/{y}',
-            'tileSize': 256
+            'tileSize': 256,
+            'attribution': '© Google'
         }

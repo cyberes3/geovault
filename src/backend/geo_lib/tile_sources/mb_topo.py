@@ -35,5 +35,6 @@ class MapbuilderTopoTileSource(TileSource):
     def client_config(self):
         return {
             'type': 'xyz',
-            'url': '/api/tiles/mb_topo/{z}/{x}/{y}'
+            'url': '/api/tiles/mb_topo/{z}/{x}/{y}',
+            'attribution': '© CalTopo, © OpenStreetMap contributors, Various DEM sources'
         }

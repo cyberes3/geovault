@@ -60,5 +60,6 @@ class HereStreetsTileSource(TileSource):
         return {
             'type': 'xyz',
             'url': '/api/tiles/herestreets/{z}/{x}/{y}',
-            'tileSize': 512
+            'tileSize': 512,
+            'attribution': '© HERE'
         }

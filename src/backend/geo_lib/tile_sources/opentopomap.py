@@ -68,5 +68,6 @@ class OpenTopoMapTileSource(TileSource):
         return {
             'type': 'xyz',
             'url': 'https://{s}.tile.opentopomap.org/{z}/{x}/{y}.png',
-            'tileSubdomains': ['a', 'b', 'c']
+            'tileSubdomains': ['a', 'b', 'c'],
+            'attribution': '© OpenTopoMap, © OpenStreetMap contributors'
         }

@@ -52,6 +52,14 @@
     "description": "When enabled, hillshade will be turned on by default when you load the map. You can still toggle it on/off using the map control."
   },
   {
+    "key": "map.enable_antialias",
+    "title": "Enable Anti-Aliasing",
+    "type": "toggle",
+    "section": "map",
+    "defaultValue": false,
+    "description": "Enable anti-aliasing for smoother map rendering. This makes lines and edges appear smoother but may have a slight performance impact."
+  },
+  {
     "key": "import.overwrite_single_track_name_with_filename",
     "title": "Overwrite Single Track Name with Filename",
     "type": "checkbox",

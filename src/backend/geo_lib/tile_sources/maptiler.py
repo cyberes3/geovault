@@ -39,7 +39,8 @@ class MapTilerMapTileSource(TileSource):
         return {
             'type': 'maptiler',
             'style_url': f'https://api.maptiler.com/maps/{self._map_id}/style.json?key={self._api_key}',
-            'map_id': self._map_id
+            'map_id': self._map_id,
+            'attribution': '© MapTiler © OpenStreetMap contributors'
         }
 
 

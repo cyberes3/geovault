@@ -37,6 +37,26 @@
         @unhide-all="unhideAll"
       />
     </div>
+
+    <!-- Map Layer Attributions -->
+    <div class="mt-6 pt-6 border-t border-gray-200">
+      <h3 class="text-sm font-semibold text-gray-700 mb-2">
+        Map Layer Attributions
+      </h3>
+      <div class="space-y-1.5">
+        <div
+          v-for="source in tileSourcesWithAttribution"
+          :key="source.id"
+          class="text-xs text-gray-600"
+        >
+          <span class="font-medium text-gray-700">{{ source.name }}:</span>
+          <span class="ml-1">{{ source.attribution }}</span>
+        </div>
+        <div v-if="tileSourcesWithAttribution.length === 0" class="text-xs text-gray-500 italic">
+          No map sources available.
+        </div>
+      </div>
+    </div>
   </div>
 </template>
 
@@ -85,6 +105,16 @@ export default {
     isMobile() {
       // Simple viewport width check for mobile detection
       return window.innerWidth < 768;
+    },
+    tileSourcesWithAttribution() {
+      // Return tile sources with their attributions, sorted by name
+      return this.tileSources
+        .map(source => ({
+          id: source.id,
+          name: source.name || source.id,
+          attribution: source.client_config?.attribution || 'No attribution available'
+        }))
+        .sort((a, b) => a.name.localeCompare(b.name));
     },
   },
   async created() {

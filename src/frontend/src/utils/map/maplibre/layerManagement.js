@@ -361,11 +361,13 @@ export function updateMapLayerSource(map, layerId, tileSource) {
   }
 
   // Add new source
+  // Support both direct attribution and client_config.attribution
+  const attribution = tileSource.attribution || tileSource.client_config?.attribution || ''
   map.addSource('tile-source', {
     type: 'raster',
     tiles: tileSource.tiles,
     tileSize: tileSource.tileSize || 256,
-    attribution: tileSource.attribution || ''
+    attribution: attribution
   })
 
   // Add or update layer
