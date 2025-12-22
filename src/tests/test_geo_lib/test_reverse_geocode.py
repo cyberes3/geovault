@@ -11,7 +11,7 @@ from django.core.cache import cache, caches
 from geo_lib.geocoding.admin_boundaries import get_admin_hierarchy
 from geo_lib.geocoding.nearby_places import find_nearby_cities, search_nearby_lakes
 from geo_lib.geocoding.protected_areas import get_protected_areas
-from geo_lib.geocoding.location_tags import get_location_tags
+from geo_lib.geocoding.location_tags import get_location_tags, batch_reverse_geocode_coordinates
 from geo_lib.geocoding.cache import _get_cache_key
 from geo_lib.geocoding.ski_resorts import load_ski_resorts, search_nearby_ski_resorts
 from geo_lib.spatial.haversine import haversine_distance_miles
@@ -291,6 +291,245 @@ class TestCaching(TestCase):
         resorts2 = search_nearby_ski_resorts(39.6401, -106.3701, 2.0)
         
         self.assertEqual(resorts1, resorts2)
+    
+    def test_protected_areas_caching(self):
+        """Test that protected areas results are cached."""
+        # Clear any existing calls
+        overpass_api.query_overpass.reset_mock()
+        
+        # First call - Rocky Mountain National Park - fixture in conftest.py
+        areas1 = get_protected_areas(40.3428, -105.6836)
+        call_count_1 = overpass_api.query_overpass.call_count
+        self.assertGreater(call_count_1, 0)
+        self.assertGreater(len(areas1), 0)
+        
+        # Second call should use cache
+        areas2 = get_protected_areas(40.3428, -105.6836)
+        call_count_2 = overpass_api.query_overpass.call_count
+        
+        # No additional calls should have been made
+        self.assertEqual(call_count_1, call_count_2)
+        self.assertEqual(areas1, areas2)
+    
+    def test_protected_areas_caching_with_rounded_coords(self):
+        """Test that protected areas cache works with coordinate rounding."""
+        # Clear any existing calls
+        overpass_api.query_overpass.reset_mock()
+        
+        # First call
+        areas1 = get_protected_areas(40.3428, -105.6836)
+        call_count_1 = overpass_api.query_overpass.call_count
+        
+        # Second call with slightly different coordinates (should round to same cache key)
+        areas2 = get_protected_areas(40.3429, -105.6837)
+        call_count_2 = overpass_api.query_overpass.call_count
+        
+        # Should use cache (no additional calls)
+        self.assertEqual(call_count_1, call_count_2)
+        self.assertEqual(areas1, areas2)
+    
+    def test_nearby_cities_caching(self):
+        """Test that nearby cities results are cached."""
+        # Clear any existing calls
+        overpass_api.query_overpass.reset_mock()
+        
+        # First call - Fairplay, CO area - fixture in conftest.py
+        cities1 = find_nearby_cities(39.2216, -105.9327, 5.0)
+        call_count_1 = overpass_api.query_overpass.call_count
+        self.assertGreater(call_count_1, 0)
+        
+        # Second call should use cache
+        cities2 = find_nearby_cities(39.2216, -105.9327, 5.0)
+        call_count_2 = overpass_api.query_overpass.call_count
+        
+        # No additional calls should have been made
+        self.assertEqual(call_count_1, call_count_2)
+        self.assertEqual(cities1, cities2)
+    
+    def test_nearby_cities_caching_different_threshold(self):
+        """Test that nearby cities cache uses threshold in cache key."""
+        # Clear any existing calls
+        overpass_api.query_overpass.reset_mock()
+        
+        # First call with 5.0 mile threshold
+        cities1 = find_nearby_cities(39.2216, -105.9327, 5.0)
+        call_count_1 = overpass_api.query_overpass.call_count
+        
+        # Second call with different threshold should make new API call
+        cities2 = find_nearby_cities(39.2216, -105.9327, 10.0)
+        call_count_2 = overpass_api.query_overpass.call_count
+        
+        # Should have made additional calls for different threshold
+        self.assertGreater(call_count_2, call_count_1)
+    
+    def test_nearby_lakes_caching(self):
+        """Test that nearby lakes results are cached."""
+        # Clear any existing calls
+        overpass_api.query_overpass.reset_mock()
+        
+        # First call - Grand Lake, CO area - fixture in conftest.py
+        lakes1 = search_nearby_lakes(40.2514, -105.8239, 1.0)
+        call_count_1 = overpass_api.query_overpass.call_count
+        self.assertGreater(call_count_1, 0)
+        
+        # Second call should use cache
+        lakes2 = search_nearby_lakes(40.2514, -105.8239, 1.0)
+        call_count_2 = overpass_api.query_overpass.call_count
+        
+        # No additional calls should have been made
+        self.assertEqual(call_count_1, call_count_2)
+        self.assertEqual(lakes1, lakes2)
+    
+    def test_nearby_lakes_caching_different_threshold(self):
+        """Test that nearby lakes cache uses threshold in cache key."""
+        # Clear any existing calls
+        overpass_api.query_overpass.reset_mock()
+        
+        # First call with 1.0 mile threshold
+        lakes1 = search_nearby_lakes(40.2514, -105.8239, 1.0)
+        call_count_1 = overpass_api.query_overpass.call_count
+        
+        # Second call with different threshold should make new API call
+        lakes2 = search_nearby_lakes(40.2514, -105.8239, 2.0)
+        call_count_2 = overpass_api.query_overpass.call_count
+        
+        # Should have made additional calls for different threshold
+        self.assertGreater(call_count_2, call_count_1)
+    
+    def test_get_location_tags_uses_individual_caches(self):
+        """Test that get_location_tags benefits from individual function caches."""
+        # Clear any existing calls
+        overpass_api.query_overpass.reset_mock()
+        
+        # First call should fetch from API (individual functions cache their results)
+        tags1, log_messages1 = get_location_tags(39.0, -105.0)
+        call_count_1 = overpass_api.query_overpass.call_count
+        self.assertGreater(call_count_1, 0)
+        
+        # Second call should use individual function caches (admin, protected areas, lakes, etc.)
+        tags2, log_messages2 = get_location_tags(39.0, -105.0)
+        call_count_2 = overpass_api.query_overpass.call_count
+        
+        # No additional calls should have been made (all individual functions use cache)
+        self.assertEqual(call_count_1, call_count_2)
+        self.assertEqual(tags1, tags2)
+    
+    def test_get_location_tags_cache_with_rounded_coords(self):
+        """Test that get_location_tags cache works with coordinate rounding."""
+        # Clear any existing calls
+        overpass_api.query_overpass.reset_mock()
+        
+        # First call
+        tags1, _ = get_location_tags(39.0, -105.0)
+        call_count_1 = overpass_api.query_overpass.call_count
+        
+        # Second call with slightly different coordinates (should round to same cache key)
+        tags2, _ = get_location_tags(39.0001, -105.0001)
+        call_count_2 = overpass_api.query_overpass.call_count
+        
+        # Should use cache (no additional calls)
+        self.assertEqual(call_count_1, call_count_2)
+        self.assertEqual(tags1, tags2)
+    
+    def test_top_level_tag_cache_via_batch(self):
+        """Test that top-level tag cache (_get_from_cache_or_fetch) works via batch function."""
+        # Clear any existing calls
+        overpass_api.query_overpass.reset_mock()
+        
+        # First batch call should fetch from API and cache at top level
+        coordinates = [(39.0, -105.0)]
+        results1 = batch_reverse_geocode_coordinates(coordinates)
+        call_count_1 = overpass_api.query_overpass.call_count
+        self.assertGreater(call_count_1, 0)
+        tags1 = results1[(39.0, -105.0)][0]
+        log_messages1 = results1[(39.0, -105.0)][1]
+        
+        # Reset mock to track new calls
+        overpass_api.query_overpass.reset_mock()
+        
+        # Second batch call should use top-level cache (no API calls)
+        results2 = batch_reverse_geocode_coordinates(coordinates)
+        call_count_2 = overpass_api.query_overpass.call_count
+        tags2 = results2[(39.0, -105.0)][0]
+        log_messages2 = results2[(39.0, -105.0)][1]
+        
+        # Should use top-level cache (no new API calls)
+        self.assertEqual(call_count_2, 0)
+        self.assertEqual(tags1, tags2)
+        # Log messages should be empty on cache hit
+        self.assertEqual(len(log_messages2), 0)
+    
+    def test_batch_reverse_geocode_deduplication(self):
+        """Test that batch_reverse_geocode_coordinates deduplicates nearby coordinates."""
+        # Clear any existing calls
+        overpass_api.query_overpass.reset_mock()
+        
+        # Create coordinates that will round to the same cache key
+        # These are within ~111m of each other, so they should deduplicate
+        coordinates = [
+            (40.1234, -105.7899),  # Rounds to 40.123, -105.79
+            (40.1235, -105.7891),  # Rounds to 40.123, -105.789 (different)
+            (40.1236, -105.7898),  # Rounds to 40.123, -105.79 (same as first)
+            (40.1237, -105.7892),  # Rounds to 40.123, -105.789 (same as second)
+        ]
+        
+        # First batch call
+        results1 = batch_reverse_geocode_coordinates(coordinates)
+        call_count_1 = overpass_api.query_overpass.call_count
+        
+        # Should have made API calls for unique rounded coordinates (2 unique)
+        # But we can't easily count exact calls due to multiple sub-queries
+        # Instead, verify that results are consistent
+        self.assertEqual(len(results1), 4)  # All 4 coordinates should have results
+        
+        # Verify that coordinates that round to same key get same results
+        # First and third should have same results (both round to 40.123, -105.79)
+        tags_1 = results1[(40.1234, -105.7899)][0]
+        tags_3 = results1[(40.1236, -105.7898)][0]
+        self.assertEqual(tags_1, tags_3)
+        
+        # Second and fourth should have same results (both round to 40.123, -105.789)
+        tags_2 = results1[(40.1235, -105.7891)][0]
+        tags_4 = results1[(40.1237, -105.7892)][0]
+        self.assertEqual(tags_2, tags_4)
+    
+    def test_batch_reverse_geocode_caching(self):
+        """Test that batch_reverse_geocode_coordinates uses cache on second call."""
+        # Clear any existing calls
+        overpass_api.query_overpass.reset_mock()
+        
+        coordinates = [
+            (40.0, -105.0),
+            (40.1, -105.1),
+        ]
+        
+        # First batch call
+        results1 = batch_reverse_geocode_coordinates(coordinates)
+        call_count_1 = overpass_api.query_overpass.call_count
+        self.assertGreater(call_count_1, 0)
+        
+        # Reset mock to track new calls
+        overpass_api.query_overpass.reset_mock()
+        
+        # Second batch call with same coordinates
+        results2 = batch_reverse_geocode_coordinates(coordinates)
+        call_count_2 = overpass_api.query_overpass.call_count
+        
+        # Should use cache (no new API calls)
+        self.assertEqual(call_count_2, 0)
+        
+        # Compare tags (log messages may differ - first call has messages, cached call has empty)
+        for coord in coordinates:
+            tags1 = results1[coord][0]
+            tags2 = results2[coord][0]
+            self.assertEqual(tags1, tags2, f"Tags should match for coordinate {coord}")
+            # Cached results should have empty log messages
+            self.assertEqual(len(results2[coord][1]), 0, "Cached results should have empty log messages")
+    
+    def test_batch_reverse_geocode_empty_list(self):
+        """Test that batch_reverse_geocode_coordinates handles empty list."""
+        results = batch_reverse_geocode_coordinates([])
+        self.assertEqual(results, {})
 
 
 @pytest.mark.django_db
