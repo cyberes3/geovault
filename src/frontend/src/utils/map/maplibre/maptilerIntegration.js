@@ -101,10 +101,13 @@ export class MapTilerConfig {
 
 /**
  * Setup 3D terrain on the map
+ * Parallelizes terrain source setup and sky/atmosphere setup for faster initialization
  * @param {Object} map - MapLibre map instance
  * @param {MapTilerConfig} config - MapTiler configuration
+ * @param {boolean} applyAtmosphere - Whether to apply atmosphere effects (default: true)
+ * @returns {Promise} Resolves when setup is complete
  */
-export function setupTerrain(map, config) {
+export async function setupTerrain(map, config, applyAtmosphere = true) {
   if (!map || !config.isAvailable()) {
     return
   }
@@ -120,20 +123,37 @@ export function setupTerrain(map, config) {
       map.removeSource('terrain-source')
     }
 
-    // Add terrain source
-    const terrainSource = config.createTerrainSource()
-    map.addSource('terrain-source', terrainSource)
+    // Parallelize terrain source setup and sky/atmosphere setup
+    // These operations are independent and can happen simultaneously
+    await Promise.all([
+      // Setup terrain source (tiles will load asynchronously in background)
+      (async () => {
+        const terrainSource = config.createTerrainSource()
+        map.addSource('terrain-source', terrainSource)
 
-    // Configure terrain in map style using exaggeration from config
-    if (map.getStyle()) {
-      map.setTerrain({
-        source: 'terrain-source',
-        exaggeration: config.terrainExaggeration
-      })
-    }
+        // Configure terrain in map style using exaggeration from config
+        if (map.getStyle()) {
+          map.setTerrain({
+            source: 'terrain-source',
+            exaggeration: config.terrainExaggeration
+          })
+        }
+      })(),
+      
+      // Setup sky/atmosphere (independent of terrain source)
+      (async () => {
+        // Remove any existing sky/atmosphere first to ensure clean state
+        removeAtmosphere(map)
 
-    // Add atmospheric fog effect for enhanced 3D visualization
-    setupAtmosphere(map)
+        // Always set blue sky when terrain is enabled
+        // Only apply full atmosphere effects (fog) on imagery/satellite layers
+        if (applyAtmosphere) {
+          setupAtmosphere(map)
+        } else {
+          setupSky(map)
+        }
+      })()
+    ])
   } catch (error) {
     console.error('Error setting up terrain:', error)
   }
@@ -235,8 +255,39 @@ export function removeHillshade(map) {
 }
 
 /**
+ * Setup blue sky only (no fog effects) for 3D visualization
+ * Uses MapLibre's setSky() method to add a simple blue sky
+ * @param {Object} map - MapLibre map instance
+ */
+export function setupSky(map) {
+  if (!map) {
+    return
+  }
+
+  try {
+    // Add simple blue sky without fog effects
+    // Only set sky and horizon properties, omit fog properties entirely
+    // This ensures no fog effect is applied
+    const skyConfig = {
+      'sky-color': '#80b3ff',           // Light blue sky color
+      'sky-horizon-blend': 0.2,         // Minimal blend between sky and horizon
+      'horizon-color': '#d1e7ff'        // Lighter blue horizon color
+    }
+    
+    // Explicitly disable fog if setFog method exists
+    if (typeof map.setFog === 'function') {
+      map.setFog(null)
+    }
+    
+    map.setSky(skyConfig)
+  } catch (error) {
+    console.error('Error setting up sky:', error)
+  }
+}
+
+/**
  * Setup atmospheric sky and fog effect for enhanced 3D visualization
- * Uses MapLibre's setSky() method to add realistic atmosphere
+ * Uses MapLibre's setSky() method to add realistic atmosphere with fog
  * @param {Object} map - MapLibre map instance
  */
 export function setupAtmosphere(map) {
@@ -252,9 +303,9 @@ export function setupAtmosphere(map) {
       'sky-color': '#80b3ff',           // Light blue sky color
       'sky-horizon-blend': 0.5,         // Smooth blend between sky and horizon (0-1)
       'horizon-color': '#d1e7ff',       // Lighter blue horizon color
-      'horizon-fog-blend': 0.5,         // Blend between horizon and fog (0-1)
+      'horizon-fog-blend': 0.21,        // Blend between horizon and fog (reduced 75% total from 0.5)
       'fog-color': '#c0d8f0',           // Soft blue-gray fog color
-      'fog-ground-blend': 0.1           // How fog blends with ground (0-1)
+      'fog-ground-blend': 0.042         // How fog blends with ground (reduced 75% total from 0.1)
     })
   } catch (error) {
     console.error('Error setting up atmosphere:', error)
@@ -271,6 +322,10 @@ export function removeAtmosphere(map) {
   }
 
   try {
+    // Remove fog if setFog method exists
+    if (typeof map.setFog === 'function') {
+      map.setFog(null)
+    }
     // Remove sky and fog effect by passing undefined
     map.setSky(undefined)
   } catch (error) {

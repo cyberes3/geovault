@@ -629,7 +629,22 @@ export class LabelMarkerManager {
       const textHeightPixels = fontHeightPixels
       
       // Convert geographic position to screen pixel coordinates
-      const point = this.map.project([position[0], position[1]])
+      // Handle terrain errors gracefully - terrain tiles may not be loaded yet
+      let point
+      try {
+        point = this.map.project([position[0], position[1]])
+      } catch (error) {
+        // If terrain is not ready or coordinates are out of range, skip this label
+        // This can happen when terrain tiles are still loading
+        if (error.message && error.message.includes('DEM')) {
+          return null // Skip this label
+        }
+        throw error // Re-throw other errors
+      }
+      
+      if (!point) {
+        return null // Skip if projection failed
+      }
       
       // Calculate bounding box in screen space
       // Labels are positioned relative to the point based on their type
@@ -666,7 +681,7 @@ export class LabelMarkerManager {
         bbox: [left, top, right, bottom],
         area: (right - left) * (bottom - top) // Larger labels have priority
       }
-    })
+    }).filter(box => box !== null) // Filter out labels that failed to project
 
     // Sort by area (larger labels first) and then by position (top to bottom, left to right)
     // This ensures more important/visible labels are kept

@@ -41,6 +41,30 @@
           ]"
         ></div>
 
+        <!-- 3D Terrain Toggle Button -->
+        <div
+            v-if="maptilerConfig"
+            class="maplibregl-ctrl maplibregl-ctrl-group"
+            style="position: absolute; top: 100px; left: 10px; z-index: 2;"
+        >
+          <button
+              :class="[
+                'maplibregl-ctrl-terrain',
+                terrainEnabled ? 'maplibregl-ctrl-terrain-enabled' : ''
+              ]"
+              type="button"
+              title="Toggle 3D Terrain"
+              aria-label="Toggle 3D Terrain"
+              @click="toggleTerrain"
+          ></button>
+          <div
+              v-if="showTerrainTooltip"
+              class="maplibregl-ctrl-terrain-tooltip maplibregl-ctrl-terrain-tooltip-visible"
+          >
+            {{ isMobile ? 'Use gestures to tilt and rotate.' : 'Use the left mouse button to tilt and rotate.' }}
+          </div>
+        </div>
+
         <!-- Error Overlay for Invalid Share -->
         <MapErrorOverlay
             :message="publicShareError"
@@ -157,7 +181,7 @@
         :hillshade-available="maptilerConfig && maptilerConfig.isAvailable()"
         :hillshade-enabled="hillshadeEnabled"
         @close="activeMobileSidebar = null"
-        @layer-change="updateMapLayer"
+        @layer-change="switchMapLayer"
         @unhide-feature="handleUnhideFeature"
         @unhide-all="handleUnhideAllHidden"
         @labels-visibility-change="handleLabelsVisibilityChange"
@@ -379,9 +403,7 @@ export default {
       handleKeyDown: null, // Keyboard event handler for escape key
       maptilerConfig: null, // MapTilerConfig instance
       terrainEnabled: false, // Current state of terrain (on/off)
-      tooltipShown: false, // Track if 3D tooltip has been shown
-      terrainTooltipElement: null, // Reference to tooltip element
-      terrainButtonElement: null, // Reference to terrain button element
+      showTerrainTooltip: false, // Track if 3D tooltip should be shown
       hillshadeEnabled: false, // Current state of hillshade (on/off)
       // Saved map state for restoration after destruction
       savedMapCenter: null,
@@ -671,14 +693,12 @@ export default {
       // Create map instance with controls and event handlers
       this.createMapInstance(mapConfig)
       
-      // Resize map to ensure proper rendering after initialization
-      if (this.map) {
-        setTimeout(() => {
-          if (this.map) {
-            this.map.resize()
-          }
-        }, 100)
-      }
+      // Resize map after load event
+      this.map.once('load', () => {
+        if (this.map) {
+          this.map.resize()
+        }
+      })
     },
     convertMapLibreFeature(mlFeature) {
       return convertMapLibreFeature(mlFeature)
@@ -1075,118 +1095,105 @@ export default {
       this.maptilerConfig = new MapTilerConfig()
       await this.maptilerConfig.fetchConfig(tileSources)
     },
-    add3DTerrainControl() {
-      // Only add control if MapTiler is configured and map exists
-      if (!this.map || !this.maptilerConfig || !this.maptilerConfig.isAvailable()) {
-        return
-      }
+    async toggleTerrain() {
+      if (!this.map) return
 
-      // Create custom control with tooltip support
-      const self = this
-      const terrainControl = {
-        onAdd: (map) => {
-          const container = document.createElement('div')
-          container.className = 'maplibregl-ctrl maplibregl-ctrl-group'
-          container.style.position = 'relative'
+      const newState = !this.terrainEnabled
 
-          const button = document.createElement('button')
-          button.className = 'maplibregl-ctrl-terrain'
-          button.type = 'button'
-          button.title = 'Toggle 3D Terrain'
-          button.setAttribute('aria-label', 'Toggle 3D Terrain')
-
-          // Set initial state
-          if (self.terrainEnabled) {
-            button.classList.add('maplibregl-ctrl-terrain-enabled')
-          }
-
-          // Create tooltip element
-          const tooltip = document.createElement('div')
-          tooltip.className = 'maplibregl-ctrl-terrain-tooltip'
-          tooltip.style.display = 'none'
-          
-          // Detect mobile vs desktop
-          const isMobile = window.innerWidth < 768 || 'ontouchstart' in window
-          tooltip.textContent = isMobile 
-            ? 'Use gestures to tilt and rotate.' 
-            : 'Use the left mouse button to tilt and rotate.'
-          
-          container.appendChild(button)
-          container.appendChild(tooltip)
-          
-          // Store references for later updates
-          self.terrainTooltipElement = tooltip
-          self.terrainButtonElement = button
-
-          // Click handler
-          button.onclick = () => {
-            const isEnabled = button.classList.contains('maplibregl-ctrl-terrain-enabled')
-            const newState = !isEnabled
-
-            if (newState) {
-              button.classList.add('maplibregl-ctrl-terrain-enabled')
-              // Enable 3D: add terrain and tilt the map
-              self.terrainEnabled = true
-              self.setupTerrain()
-              self.map.easeTo({ pitch: 50, duration: 800 })
-              
-              // Show tooltip if not shown before
-              if (!self.tooltipShown) {
-                self.showTooltip(tooltip)
-                self.tooltipShown = true
-              }
-            } else {
-              button.classList.remove('maplibregl-ctrl-terrain-enabled')
-              // Disable 3D: remove terrain and reset tilt
-              self.terrainEnabled = false
-              self.removeTerrain()
-              self.map.easeTo({ pitch: 0, duration: 800 })
-            }
-          }
-
-          return container
-        },
-        onRemove: () => {
-          // Cleanup handled by MapLibre
+      if (newState) {
+        // Enable 3D: add terrain and tilt the map
+        this.terrainEnabled = true
+        
+        // Setup terrain (parallelizes source setup and sky/atmosphere)
+        // We need to await this to ensure the terrain source is added before tilting
+        // But we don't wait for tiles to load - they'll load in background
+        await this.setupTerrain()
+        
+        // Tilt immediately after source is added - terrain tiles will load in background
+        // The terrain source exists, so DEM errors won't occur
+        // Tiles will load progressively as the user views different areas
+        this.map.easeTo({ pitch: 50, duration: 800 })
+        
+        // Show tooltip if not shown before
+        if (!this.showTerrainTooltip) {
+          this.showTerrainTooltip = true
+          // Hide after 3 seconds
+          setTimeout(() => {
+            this.showTerrainTooltip = false
+          }, 3000)
         }
+      } else {
+        // Disable 3D: remove terrain and reset tilt
+        this.terrainEnabled = false
+        this.removeTerrain()
+        this.map.easeTo({ pitch: 0, duration: 800 })
       }
-      
-      this.map.addControl(terrainControl, 'top-left')
     },
-    showTooltip(tooltipElement) {
-      // Show tooltip
-      tooltipElement.style.display = 'block'
-      // Force reflow to trigger transition
-      tooltipElement.offsetHeight
-      tooltipElement.classList.add('maplibregl-ctrl-terrain-tooltip-visible')
-      
-      // Hide after 3 seconds
-      setTimeout(() => {
-        tooltipElement.classList.remove('maplibregl-ctrl-terrain-tooltip-visible')
-        setTimeout(() => {
-          tooltipElement.style.display = 'none'
-        }, 300) // Wait for fade-out transition
-      }, 3000)
+    /**
+     * Wait for terrain source to be ready
+     * @returns {Promise} Resolves when terrain is ready
+     */
+    waitForTerrainReady() {
+      if (!this.map) {
+        return Promise.resolve()
+      }
+
+      return new Promise((resolve) => {
+        // Check if terrain source exists
+        const terrainSource = this.map.getSource('terrain-source')
+        if (!terrainSource) {
+          resolve()
+          return
+        }
+
+        // Wait for sourcedata event for terrain source
+        const timeout = setTimeout(() => {
+          // Timeout after 3 seconds to prevent hanging
+          resolve()
+        }, 3000)
+
+        // Listen for sourcedata event on terrain source
+        const onSourceData = (e) => {
+          if (e.sourceId === 'terrain-source' && e.isSourceLoaded) {
+            clearTimeout(timeout)
+            this.map.off('sourcedata', onSourceData)
+            resolve()
+          }
+        }
+
+        this.map.on('sourcedata', onSourceData)
+
+        // Also check if already loaded
+        try {
+          if (terrainSource.loaded) {
+            clearTimeout(timeout)
+            this.map.off('sourcedata', onSourceData)
+            resolve()
+          }
+        } catch (e) {
+          // If checking loaded throws an error, just wait for the event
+          console.warn('Error checking terrain source loaded state:', e)
+        }
+      })
     },
-    setupTerrain() {
+    async setupTerrain() {
       if (!this.maptilerConfig) return
       
-      maptilerSetupTerrain(this.map, this.maptilerConfig)
-      this.addHillshadeIfNeeded()
+      // Check if atmosphere should be applied based on current layer
+      const tileSource = this.tileSources.find(s => s.id === this.selectedLayer)
+      const layerName = tileSource?.name || ''
+      const applyAtmosphere = this.shouldApplyAtmosphere(layerName)
       
-      // Update button state to reflect terrain is enabled
-      if (this.terrainButtonElement) {
-        this.terrainButtonElement.classList.add('maplibregl-ctrl-terrain-enabled')
-      }
+      // Parallelize terrain setup and hillshade setup
+      await Promise.all([
+        maptilerSetupTerrain(this.map, this.maptilerConfig, applyAtmosphere),
+        // Hillshade can be set up in parallel if enabled
+        this.hillshadeEnabled ? Promise.resolve(this.addHillshadeIfNeeded()) : Promise.resolve()
+      ])
     },
     removeTerrain() {
       this.removeHillshade()
       maptilerRemoveTerrain(this.map)
-      
-      // Update button state to reflect terrain is disabled
-      if (this.terrainButtonElement) {
-        this.terrainButtonElement.classList.remove('maplibregl-ctrl-terrain-enabled')
-      }
     },
     addHillshadeIfNeeded() {
       if (!this.map || !this.maptilerConfig) return
@@ -1225,230 +1232,58 @@ export default {
     },
 
     /**
-     * Restore terrain and hillshade settings
+     * Wait for a specific map event to fire
+     * @param {string} eventName - Name of the event to wait for
+     * @param {number} timeout - Optional timeout in milliseconds (default: 30000)
+     * @returns {Promise} Resolves when event fires or timeout occurs
      */
-    restoreTerrainAndHillshade(terrainEnabled, hillshadeEnabled) {
-      // Re-apply terrain if it was enabled (with delay to allow terrain tiles to load)
-      if (terrainEnabled) {
-        setTimeout(() => {
-          if (this.map && this.terrainEnabled) {
-            this.setupTerrain()
-          }
-        }, 500)
+    waitForMapEvent(eventName, timeout = 30000) {
+      if (!this.map) {
+        return Promise.resolve()
       }
 
-      // Re-apply hillshade if it was enabled
-      if (hillshadeEnabled) {
-        this.addHillshadeIfNeeded()
-      }
+      return new Promise((resolve) => {
+        // If map is already loaded and we're waiting for 'load', resolve immediately
+        if (eventName === 'load' && this.map.loaded()) {
+          resolve()
+          return
+        }
+
+        const timeoutId = setTimeout(() => {
+          console.warn(`Timeout waiting for ${eventName} event`)
+          resolve()
+        }, timeout)
+
+        this.map.once(eventName, () => {
+          clearTimeout(timeoutId)
+          resolve()
+        })
+      })
     },
 
     /**
-     * Recreate map instance with saved state
+     * Apply tile source to the map (style-based or raster)
+     * @param {string} layerValue - Layer ID to apply
+     * @returns {Promise} Resolves when tile source is applied
      */
-    async recreateMapInstance(mapState) {
-      try {
-        // Clean up label markers
-        if (this.labelMarkerManager) {
-          this.labelMarkerManager.clearAllMarkers()
-        }
-
-        // Completely destroy the map
-        if (this.map) {
-          this.map.remove()
-        }
-        this.map = null
-
-        // Wait a bit for cleanup
-        await new Promise(resolve => setTimeout(resolve, 100))
-
-        // Ensure map container is still available
-        await this.$nextTick()
-        if (!this.$refs.mapContainer || !(this.$refs.mapContainer instanceof HTMLElement)) {
-          console.error('Map container not available after cleanup')
-          this.loadError = 'Map container not available'
-          return false
-        }
-
-        // Recreate the map instance with saved position
-        this.map = markRaw(initializeMap(this.$refs.mapContainer, {
-          center: [mapState.center.lng, mapState.center.lat],
-          zoom: mapState.zoom,
-          pitch: mapState.pitch,
-          bearing: mapState.bearing,
-          glyphsUrl: '/api/fonts/{fontstack}/{range}.pbf'
-        }))
-
-        if (!this.map) {
-          console.error('Failed to create map instance')
-          this.loadError = 'Failed to create map instance'
-          return false
-        }
-
-        // Add navigation controls
-        this.map.addControl(
-          new maplibregl.NavigationControl({
-            visualizePitch: true,
-            showCompass: true,
-            showZoom: true
-          }),
-          'top-left'
-        )
-
-        // Reinitialize label marker manager
-        this.labelMarkerManager = new LabelMarkerManager(this.map)
-        this.labelMarkerManager.setVisibility(this.showAllLabels)
-
-        // Setup GeoJSON source
-        setupGeoJsonSource(this.map, () => {
-          // Map source loaded
-        })
-
-        // Setup all map event handlers
-        this.setupMapEventHandlers()
-
-        // Wait for map to load
-        await new Promise((resolve) => {
-          if (this.map && this.map.loaded()) {
-            resolve()
-          } else if (this.map) {
-            this.map.once('load', resolve)
-          } else {
-            resolve() // Map was destroyed, exit
-          }
-        })
-
-        // Resize map to ensure proper rendering
-        if (this.map) {
-          this.map.resize()
-        }
-
-        return true
-      } catch (error) {
-        console.error('Error recreating map:', error)
-        this.loadError = error.message || 'Failed to recreate map'
-        return false
-      }
-    },
-
-    async updateMapLayer(layerValue, isInitialSetup = false) {
+    async applyTileSource(layerValue) {
       if (!this.map) return
 
-      // Save current map state using utility function
-      const mapState = getMapState(this.map)
-      if (!mapState) return
-
-      const terrainEnabled = this.terrainEnabled && this.maptilerConfig?.isAvailable()
-      const hillshadeEnabled = this.hillshadeEnabled
-
-      // Save current GeoJSON data using utility function
-      const geojsonData = getGeoJsonData(this.map)
-
-      // Update selected layer
-      this.selectedLayer = layerValue
       const tileSource = this.tileSources.find(s => s.id === layerValue)
-      if (!tileSource) return
-
-      // Only destroy and recreate if not initial setup
-      if (!isInitialSetup) {
-        const success = await this.recreateMapInstance(mapState)
-        if (!success) {
-          return
-        }
+      if (!tileSource) {
+        console.error(`Tile source not found: ${layerValue}`)
+        return
       }
 
-      // Now set up the tile layer based on the selected source
       const clientConfig = tileSource.client_config || {}
       const isStyleBased = clientConfig.style_url || clientConfig.type === 'maptiler'
 
       if (isStyleBased) {
         // Style-based source (e.g., MapTiler)
         const styleUrl = clientConfig.style_url
-
-        if (!this.map) {
-          console.error('Map not available when setting style')
-          return
-        }
-
-        // Wait for style to load and be fully configured
-        await new Promise((resolveStyle) => {
-          const timeout = setTimeout(() => {
-            console.error('Timeout waiting for styledata event')
-            resolveStyle()
-          }, 30000) // 30 second timeout
-
-          this.map.once('styledata', async () => {
-            clearTimeout(timeout)
-            try {
-              if (!this.map) {
-                console.error('Map was destroyed during style load')
-                resolveStyle()
-                return
-              }
-
-              // Wait for the style to be fully loaded
-              // Satellite styles may have fewer layers, so check for style.name and any layers
-              let attempts = 0
-              while (attempts < 100) { // Max 5 seconds
-                const style = this.map.getStyle()
-                if (style && style.name && style.layers && Array.isArray(style.layers) && style.layers.length > 0) {
-                  // Additional check: ensure style sources are loaded
-                  if (style.sources && Object.keys(style.sources).length > 0) {
-                    break
-                  }
-                }
-                await new Promise(resolve => setTimeout(resolve, 50))
-                attempts++
-              }
-
-              await new Promise(resolve => setTimeout(resolve, 50))
-
-              // Restore GeoJSON features
-              await restoreGeoJsonFeatures(this.map, geojsonData, this.showAllLabels, this.labelMarkerManager)
-
-              // Restore terrain and hillshade
-              this.restoreTerrainAndHillshade(terrainEnabled, hillshadeEnabled)
-
-              // Always add 3D terrain control if MapTiler is available (not just on initial setup)
-              // This ensures the control is present when switching between sources
-              if (this.maptilerConfig?.isAvailable()) {
-                this.add3DTerrainControl()
-              }
-
-              // Restore map view immediately - don't wait for idle to prevent hanging
-              // The view will be stable once style is loaded
-              restoreMapView(this.map, mapState.center, mapState.zoom, mapState.pitch, mapState.bearing)
-
-              // Wait a bit to ensure map is ready and has bounds before resolving
-              // This ensures loadDataForCurrentView can proceed
-              await new Promise(resolve => setTimeout(resolve, 100))
-              
-              // Verify map has bounds before resolving (required for data loading)
-              let attempts = 0
-              while (attempts < 20) { // Max 1 second
-                try {
-                  const bounds = this.map.getBounds()
-                  if (bounds) {
-                    break
-                  }
-                } catch (e) {
-                  // Map not ready yet
-                }
-                await new Promise(resolve => setTimeout(resolve, 50))
-                attempts++
-              }
-
-              // Resolve the promise after everything is complete
-              resolveStyle()
-          } catch (error) {
-            console.error('Error in styledata callback:', error)
-            // Resolve even on error to prevent hanging
-            resolveStyle()
-          }
-        })
-
         this.map.setStyle(styleUrl)
-      })
+        // Wait for styledata event to ensure style is loaded
+        await this.waitForMapEvent('styledata')
       } else {
         // Raster-based source
         const url = clientConfig.url || `/api/tiles/${layerValue}/{z}/{x}/{y}`
@@ -1462,87 +1297,6 @@ export default {
           tiles = [url.replace('{s}', clientConfig.tileSubdomains?.[0] || 'a')]
         }
 
-        if (!this.map) {
-          console.error('Map not available when setting raster style')
-          return
-        }
-
-        // Wait for style to load and be fully configured
-        await new Promise((resolveStyle) => {
-          const timeout = setTimeout(() => {
-            console.error('Timeout waiting for styledata event (raster)')
-            resolveStyle()
-          }, 30000) // 30 second timeout
-
-          this.map.once('styledata', async () => {
-            clearTimeout(timeout)
-            try {
-              if (!this.map) {
-                console.error('Map was destroyed during style load (raster)')
-                resolveStyle()
-                return
-              }
-
-              await new Promise(resolve => setTimeout(resolve, 50))
-
-              // Add raster source and layer
-              this.map.addSource('raster-source', {
-                type: 'raster',
-                tiles: tiles,
-                tileSize: clientConfig.tileSize || 256
-              })
-              this.map.addLayer({
-                id: 'raster-layer',
-                type: 'raster',
-                source: 'raster-source',
-                minzoom: clientConfig.minzoom || 0,
-                maxzoom: clientConfig.maxzoom || 22
-              })
-
-              // Restore GeoJSON features
-              await restoreGeoJsonFeatures(this.map, geojsonData, this.showAllLabels, this.labelMarkerManager)
-
-              // Restore terrain and hillshade
-              this.restoreTerrainAndHillshade(terrainEnabled, hillshadeEnabled)
-
-              // Always add 3D terrain control if MapTiler is available (not just on initial setup)
-              // This ensures the control is present when switching between sources
-              if (this.maptilerConfig?.isAvailable()) {
-                this.add3DTerrainControl()
-              }
-
-              // Restore map view immediately - don't wait for idle to prevent hanging
-              // The view will be stable once style is loaded
-              restoreMapView(this.map, mapState.center, mapState.zoom, mapState.pitch, mapState.bearing)
-
-              // Wait a bit to ensure map is ready and has bounds before resolving
-              // This ensures loadDataForCurrentView can proceed
-              await new Promise(resolve => setTimeout(resolve, 100))
-              
-              // Verify map has bounds before resolving (required for data loading)
-              let attempts = 0
-              while (attempts < 20) { // Max 1 second
-                try {
-                  const bounds = this.map.getBounds()
-                  if (bounds) {
-                    break
-                  }
-                } catch (e) {
-                  // Map not ready yet
-                }
-                await new Promise(resolve => setTimeout(resolve, 50))
-                attempts++
-              }
-
-              // Resolve the promise after everything is complete
-              resolveStyle()
-          } catch (error) {
-            console.error('Error in styledata callback (raster):', error)
-            // Resolve even on error to prevent hanging
-            resolveStyle()
-          }
-        })
-
         // Set blank style first
         this.map.setStyle({
           version: 8,
@@ -1550,7 +1304,207 @@ export default {
           sources: {},
           layers: []
         })
+
+        // Wait for styledata event
+        await this.waitForMapEvent('styledata')
+
+        // Add raster source and layer
+        this.map.addSource('raster-source', {
+          type: 'raster',
+          tiles: tiles,
+          tileSize: clientConfig.tileSize || 256
+        })
+        this.map.addLayer({
+          id: 'raster-layer',
+          type: 'raster',
+          source: 'raster-source',
+          minzoom: clientConfig.minzoom || 0,
+          maxzoom: clientConfig.maxzoom || 22
+        })
+      }
+    },
+
+    /**
+     * Check if atmosphere should be applied for a given layer
+     * @param {string} layerName - Name of the layer
+     * @returns {boolean} True if atmosphere should be applied
+     */
+    shouldApplyAtmosphere(layerName) {
+      if (!this.terrainEnabled) return false
+      const name = (layerName || '').toLowerCase()
+      return name.includes('imagery') || name.includes('satellite')
+    },
+
+    /**
+     * Apply terrain and hillshade with conditional atmosphere
+     * Parallelizes terrain and hillshade setup for faster initialization
+     * @param {string} layerValue - Layer ID to check for atmosphere eligibility
+     */
+    async applyTerrainAndHillshade(layerValue) {
+      if (!this.map || !this.maptilerConfig?.isAvailable()) return
+
+      const tileSource = this.tileSources.find(s => s.id === layerValue)
+      const layerName = tileSource?.name || ''
+
+      // Parallelize terrain and hillshade setup
+      const promises = []
+
+      // Apply terrain with conditional atmosphere
+      if (this.terrainEnabled) {
+        const applyAtmosphere = this.shouldApplyAtmosphere(layerName)
+        promises.push(maptilerSetupTerrain(this.map, this.maptilerConfig, applyAtmosphere))
+      }
+
+      // Apply hillshade if enabled (can happen in parallel with terrain)
+      if (this.hillshadeEnabled) {
+        promises.push(Promise.resolve(this.addHillshadeIfNeeded()))
+      }
+
+      // Wait for all setup operations to complete
+      await Promise.all(promises)
+    },
+
+    /**
+     * Destroy the map instance completely
+     */
+    destroyMap() {
+      // Clean up label markers
+      if (this.labelMarkerManager) {
+        this.labelMarkerManager.clearAllMarkers()
+        this.labelMarkerManager = null
+      }
+
+      // Completely destroy the map
+      if (this.map) {
+        this.map.remove()
+        this.map = null
+      }
+    },
+
+    /**
+     * Create a new map instance with the given configuration
+     * @param {Object} mapConfig - Map configuration (center, zoom, pitch, bearing)
+     */
+    createMapInstance(mapConfig) {
+      // Ensure map container is available
+      if (!this.$refs.mapContainer || !(this.$refs.mapContainer instanceof HTMLElement)) {
+        throw new Error('Map container is not available')
+      }
+
+      // Create MapLibre map
+      this.map = markRaw(initializeMap(this.$refs.mapContainer, {
+        center: mapConfig.center,
+        zoom: mapConfig.zoom,
+        pitch: mapConfig.pitch || 0,
+        bearing: mapConfig.bearing || 0,
+        glyphsUrl: '/api/fonts/{fontstack}/{range}.pbf'
+      }))
+
+      // Add navigation controls
+      this.map.addControl(
+        new maplibregl.NavigationControl({
+          visualizePitch: true,
+          showCompass: true,
+          showZoom: true
+        }),
+        'top-left'
+      )
+
+      // Initialize label marker manager
+      this.labelMarkerManager = new LabelMarkerManager(this.map)
+      this.labelMarkerManager.setVisibility(this.showAllLabels)
+
+      // Setup GeoJSON source
+      setupGeoJsonSource(this.map, () => {
+        // Map source loaded
       })
+
+      // Setup all map event handlers
+      this.setupMapEventHandlers()
+    },
+
+    /**
+     * Switch map layer - completely resets map and re-renders with new tilesource
+     * Uses event-driven architecture instead of polling/waiting
+     * @param {string} layerValue - Layer ID to switch to
+     * @param {boolean} isInitialSetup - If true, skip map recreation (for initial load)
+     */
+    async switchMapLayer(layerValue, isInitialSetup = false) {
+      if (!this.map) return
+
+      // Save current map state and features
+      const mapState = getMapState(this.map)
+      if (!mapState) return
+
+      const geojsonData = getGeoJsonData(this.map)
+      const terrainEnabled = this.terrainEnabled && this.maptilerConfig?.isAvailable()
+      const hillshadeEnabled = this.hillshadeEnabled
+
+      // Update selected layer
+      this.selectedLayer = layerValue
+      const tileSource = this.tileSources.find(s => s.id === layerValue)
+      if (!tileSource) {
+        console.error(`Tile source not found: ${layerValue}`)
+        return
+      }
+
+      // For initial setup, just apply the tile source without recreating the map
+      if (isInitialSetup) {
+        await this.applyTileSource(layerValue)
+        // Wait for style to be ready
+        await this.waitForMapEvent('idle')
+        // Restore features
+        await restoreGeoJsonFeatures(this.map, geojsonData, this.showAllLabels, this.labelMarkerManager)
+        // Apply terrain and hillshade
+        await this.applyTerrainAndHillshade(layerValue)
+        return
+      }
+
+      // For layer switching, completely reset the map
+      // 1. Destroy the map
+      this.destroyMap()
+
+      // 2. Ensure container is available
+      await this.$nextTick()
+      if (!this.$refs.mapContainer || !(this.$refs.mapContainer instanceof HTMLElement)) {
+        console.error('Map container not available')
+        this.loadError = 'Map container not available'
+        return
+      }
+
+      // 3. Create new map instance with saved state
+      try {
+        this.createMapInstance({
+          center: [mapState.center.lng, mapState.center.lat],
+          zoom: mapState.zoom,
+          pitch: mapState.pitch,
+          bearing: mapState.bearing
+        })
+
+        // 4. Wait for map to load (event-driven)
+        await this.waitForMapEvent('load')
+
+        // 5. Apply new tile source (event-driven)
+        await this.applyTileSource(layerValue)
+
+        // 6. Restore map view immediately after style loads (before other operations)
+        // This prevents the visible reset that happens when setStyle() resets pitch/bearing
+        restoreMapView(this.map, mapState.center, mapState.zoom, mapState.pitch, mapState.bearing)
+
+        // 7. Wait for style to be ready (event-driven)
+        await this.waitForMapEvent('idle')
+
+        // 8. Restore GeoJSON features
+        await restoreGeoJsonFeatures(this.map, geojsonData, this.showAllLabels, this.labelMarkerManager)
+
+        // 9. Apply terrain and hillshade with conditional atmosphere
+        await this.applyTerrainAndHillshade(layerValue)
+
+        // 11. Resize map to ensure proper rendering
+        this.map.resize()
+      } catch (error) {
+        console.error('Error switching map layer:', error)
+        this.loadError = error.message || 'Failed to switch map layer'
       }
     },
     /**
@@ -2726,21 +2680,18 @@ export default {
 
         // Restore layer selection
         if (this.selectedLayer && this.tileSources.length > 0) {
-          this.updateMapLayer(this.selectedLayer)
+          this.switchMapLayer(this.selectedLayer)
         }
 
         // Restore terrain state if it was enabled
         if (this.terrainEnabled && this.maptilerConfig?.isAvailable()) {
-          this.setupTerrain()
+          await this.setupTerrain()
         }
 
         // Restore hillshade state if it was enabled
         if (this.hillshadeEnabled && this.maptilerConfig?.isAvailable()) {
           this.addHillshadeIfNeeded()
         }
-
-        // Add 3D terrain control
-        this.add3DTerrainControl()
 
         // Reload data
         if (this.collectionId) {
@@ -2749,14 +2700,13 @@ export default {
           await this.loadDataForCurrentView()
         }
 
-        // Update map size
-        await this.$nextTick()
+        // Update map size after load
         if (this.map) {
-          setTimeout(() => {
+          this.map.once('load', () => {
             if (this.map) {
               this.map.resize()
             }
-          }, 100)
+          })
         }
 
         // Initial feature list update
@@ -2855,7 +2805,7 @@ export default {
     // Update map layer to use the selected source (in case it's not the default OSM)
     // Pass true for isInitialSetup to avoid destroying and recreating the map
     if (this.selectedLayer && this.tileSources.length > 0) {
-      await this.updateMapLayer(this.selectedLayer, true)
+      await this.switchMapLayer(this.selectedLayer, true)
     }
 
     // Tilt the map if terrain is enabled
@@ -2863,9 +2813,6 @@ export default {
       this.map.setPitch(50)
     }
 
-    // Add 3D terrain toggle control AFTER setting terrainEnabled (only if MapTiler is configured)
-    this.add3DTerrainControl()
-    
     // Show tooltip on initial load if terrain is enabled
     if (defaultTerrainOn && this.terrainEnabled && !this.tooltipShown) {
       this.$nextTick(() => {
@@ -2891,14 +2838,13 @@ export default {
     // This allows map move/zoom events to trigger data loads from now on
     this.isMapInitializing = false
 
-    // Update map size to ensure it renders properly
-    await this.$nextTick()
+    // Update map size after load
     if (this.map) {
-      setTimeout(() => {
+      this.map.once('load', () => {
         if (this.map) {
           this.map.resize()
         }
-      }, 100)
+      })
     }
 
     // Initial feature list update
@@ -2951,11 +2897,11 @@ export default {
           this.updateFeaturesInExtent()
           // Resize map after data loads
           if (this.map) {
-            setTimeout(() => {
+            this.map.once('idle', () => {
               if (this.map) {
                 this.map.resize()
               }
-            }, 100)
+            })
           }
         })
       } else {
