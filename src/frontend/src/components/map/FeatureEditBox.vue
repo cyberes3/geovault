@@ -907,8 +907,8 @@ export default {
           return
         }
 
-        // Emit deleted event
-        this.$emit('deleted')
+        // Emit deleted event with feature
+        this.$emit('deleted', this.feature)
 
       } catch (error) {
         console.error('Error deleting feature:', error)
