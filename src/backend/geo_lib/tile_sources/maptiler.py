@@ -16,10 +16,11 @@ from website.config_loader import get_config_loader
 class MapTilerMapTileSource(TileSource):
     """Individual MapTiler map tile source."""
 
-    def __init__(self, map_id, api_key, site_domain):
+    def __init__(self, map_id, api_key, site_domain, use_proxy=False):
         self._map_id = map_id
         self._api_key = api_key
         self._site_domain = site_domain
+        self._use_proxy = use_proxy
         self._display_name = _fetch_map_name(map_id, api_key, site_domain)
 
     @property
@@ -35,10 +36,39 @@ class MapTilerMapTileSource(TileSource):
         return 'maptiler'
 
     @property
+    def requires_proxy(self):
+        return self._use_proxy
+
+    @property
+    def url_template(self):
+        """URL template for vector tiles when proxying.
+        MapTiler vector tiles use a pattern like: https://api.maptiler.com/tiles/v3/{z}/{x}/{y}.pbf?key={key}
+        But the actual tile URLs come from the style.json, so we use a generic pattern."""
+        if self._use_proxy:
+            # This is a generic pattern - actual tile URLs will be in the style.json
+            # The proxy endpoint will handle extracting the correct URL from the style
+            return f'https://api.maptiler.com/tiles/v3/{{z}}/{{x}}/{{y}}.pbf?key={self._api_key}'
+        return None
+
+    @property
+    def proxy_config(self):
+        """Proxy configuration with Origin header for MapTiler."""
+        if self._use_proxy:
+            return {
+                'headers': {
+                    'Origin': self._site_domain
+                }
+            }
+        return None
+
+    @property
     def client_config(self):
+        style_url = f'https://api.maptiler.com/maps/{self._map_id}/style.json?key={self._api_key}',
+        if self._use_proxy:
+            style_url = f'/api/tiles/style/{self._map_id}'
         return {
             'type': 'maptiler',
-            'style_url': f'https://api.maptiler.com/maps/{self._map_id}/style.json?key={self._api_key}',
+            'style_url': style_url,
             'map_id': self._map_id,
             'attribution': '© MapTiler © OpenStreetMap contributors'
         }
@@ -75,13 +105,16 @@ def generate_maptiler_sources():
     # Get site domain for MapTiler API requests
     site_domain = config.get_str('site.domain', '')
 
+    # Get proxy setting
+    use_proxy = config.get_bool('maptiler.proxy_tiles', False)
+
     # Build tile sources for each map
     sources = []
     for map_id in map_ids:
         if not map_id or not isinstance(map_id, str):
             continue
 
-        sources.append(MapTilerMapTileSource(map_id, api_key, site_domain))
+        sources.append(MapTilerMapTileSource(map_id, api_key, site_domain, use_proxy))
 
     return sources
 

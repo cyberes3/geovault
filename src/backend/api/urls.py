@@ -45,7 +45,7 @@ from api.views.imports.queue_management import (
 from api.views.imports.upload import upload_item
 from api.views.services.geocoding import geocoding_search
 from api.views.services.geolocation import get_user_location, get_location_by_ip
-from api.views.services.tiles import tile_proxy, get_tile_sources
+from api.views.services.tiles import tile_proxy, get_tile_sources, style_proxy
 from api.views.sharing.collections import create_collection_share, get_public_collection_share
 from api.views.sharing.management import list_shares, delete_share
 from api.views.sharing.tags import create_share, get_public_share_info, get_public_share
@@ -143,6 +143,7 @@ urlpatterns = [
 
     # Tile API endpoints
     path('tiles/sources/', get_tile_sources),
+    path('tiles/style/<str:map_id>', style_proxy),
     path('tiles/<str:service>/<int:z>/<int:x>/<int:y>', tile_proxy),
 
     # Geocoding API endpoints

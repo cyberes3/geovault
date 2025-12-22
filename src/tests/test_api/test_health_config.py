@@ -133,3 +133,56 @@ class TestHealthConfigAPI(TestCase):
         response = self.client.get('/api/config/')
         self.assertEqual(response.status_code, 200)
 
+    @patch('api.views.config.get_config_loader')
+    def test_maptiler_config_excludes_api_key_when_proxying(self, mock_get_config_loader):
+        """Test that MapTiler API key is excluded from config when proxy_tiles is enabled."""
+        mock_config_loader = mock_get_config_loader.return_value
+        mock_config_loader.get_maptiler_api_key.return_value = 'test-api-key-12345'
+        # Mock get_bool to return True specifically for 'maptiler.proxy_tiles'
+        def get_bool_side_effect(key, default=False):
+            if key == 'maptiler.proxy_tiles':
+                return True
+            return default
+        mock_config_loader.get_bool.side_effect = get_bool_side_effect
+        
+        response = self.client.get('/api/config/')
+        self.assertEqual(response.status_code, 200)
+        data = json.loads(response.content)
+        
+        # Verify MapTiler config is present
+        self.assertIn('maptiler', data)
+        maptiler_config = data['maptiler']
+        
+        # Verify proxy_tiles is True
+        self.assertTrue(maptiler_config.get('proxy_tiles'))
+        
+        # Verify API key is NOT present
+        self.assertNotIn('apiKey', maptiler_config, "API key should not be exposed when proxying is enabled")
+
+    @patch('api.views.config.get_config_loader')
+    def test_maptiler_config_includes_api_key_when_not_proxying(self, mock_get_config_loader):
+        """Test that MapTiler API key is included in config when proxy_tiles is disabled."""
+        mock_config_loader = mock_get_config_loader.return_value
+        mock_config_loader.get_maptiler_api_key.return_value = 'test-api-key-12345'
+        # Mock get_bool to return False specifically for 'maptiler.proxy_tiles'
+        def get_bool_side_effect(key, default=False):
+            if key == 'maptiler.proxy_tiles':
+                return False
+            return default
+        mock_config_loader.get_bool.side_effect = get_bool_side_effect
+        
+        response = self.client.get('/api/config/')
+        self.assertEqual(response.status_code, 200)
+        data = json.loads(response.content)
+        
+        # Verify MapTiler config is present
+        self.assertIn('maptiler', data)
+        maptiler_config = data['maptiler']
+        
+        # Verify proxy_tiles is False
+        self.assertFalse(maptiler_config.get('proxy_tiles'))
+        
+        # Verify API key IS present
+        self.assertIn('apiKey', maptiler_config, "API key should be exposed when proxying is disabled")
+        self.assertEqual(maptiler_config['apiKey'], 'test-api-key-12345')
+

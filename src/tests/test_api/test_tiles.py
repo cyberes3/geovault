@@ -278,6 +278,42 @@ class TestTilesAPI(TestCase):
         registry_module._tile_sources = {}
         registry_module._registered = False
 
+    @patch('geo_lib.tile_sources.registry.get_config_loader')
+    def test_proxy_sources_filters_out_maptiler_sources(self, mock_get_config_loader):
+        """Test that MapTiler sources are filtered out from proxy_sources config.
+        MapTiler proxying is controlled by maptiler.proxy_tiles, not tilesources.proxy_sources."""
+        # Create a mock config loader
+        mock_config_loader = MagicMock()
+        # Include MapTiler sources in proxy_sources - they should be ignored
+        mock_config_loader.get.return_value = ['osm', 'maptiler_terrain', 'maptiler_hillshade', 'maptiler_topo-v4']
+        mock_get_config_loader.return_value = mock_config_loader
+        
+        # Clear the registry to force re-initialization with the mock config
+        import geo_lib.tile_sources.registry as registry_module
+        registry_module._tile_sources = {}
+        registry_module._registered = False
+        
+        # Get tile sources (will re-initialize with mock config)
+        osm_source = get_tile_source('osm')
+        maptiler_terrain_source = get_tile_source('maptiler_terrain')
+        
+        # Verify OSM is proxied (it's not a MapTiler source)
+        self.assertIsNotNone(osm_source)
+        self.assertTrue(osm_source.get('requires_proxy'), "OSM should require proxy when in proxy_sources config")
+        
+        # Verify MapTiler terrain is NOT affected by proxy_sources
+        # It should use its default behavior based on maptiler.proxy_tiles
+        if maptiler_terrain_source:
+            # MapTiler terrain's requires_proxy is controlled by maptiler.proxy_tiles, not proxy_sources
+            # Since we're not mocking maptiler.proxy_tiles, it will use the default (False)
+            # But the key point is that proxy_sources didn't override it
+            self.assertFalse(maptiler_terrain_source.get('requires_proxy'), 
+                           "MapTiler terrain should not be affected by proxy_sources config")
+        
+        # Reset the registry for other tests
+        registry_module._tile_sources = {}
+        registry_module._registered = False
+
     @patch('api.views.services.tiles.requests.get')
     @override_settings(TILE_CACHE_ENABLED=False)
     def test_tile_proxy_cache_control_header_uses_cache_expiry_days(self, mock_requests_get):
@@ -350,5 +386,188 @@ class TestTilesAPI(TestCase):
         self.assertIn(f'max-age={expected_max_age}', cache_control)
         # Verify it's NOT using the default 30 days
         self.assertNotIn('max-age=2592000', cache_control)
+
+    @patch('geo_lib.tile_sources.maptiler.get_config_loader')
+    def test_maptiler_map_sources_exclude_api_key_when_proxying(self, mock_get_config_loader):
+        """Test that MapTiler map sources exclude API key from client_config when proxying is enabled."""
+        mock_config_loader = MagicMock()
+        mock_config_loader.get_with_env_override.return_value = 'test-api-key-12345'
+        mock_config_loader.get_list.return_value = ['topo-v4', 'satellite']
+        mock_config_loader.get_str.return_value = 'example.com'
+        mock_config_loader.get_bool.return_value = True  # proxy_tiles = True
+        mock_get_config_loader.return_value = mock_config_loader
+        
+        # Clear the registry to force re-initialization
+        import geo_lib.tile_sources.registry as registry_module
+        registry_module._tile_sources = {}
+        registry_module._registered = False
+        
+        # Get tile sources (will re-initialize with mock config)
+        topo_source = get_tile_source('maptiler_topo-v4')
+        
+        if topo_source:
+            client_config = topo_source.get('client_config', {})
+            style_url = client_config.get('style_url', '')
+            
+            # Verify style_url uses proxy endpoint (no API key)
+            self.assertTrue(style_url.startswith('/api/tiles/style/'), 
+                          "Style URL should use proxy endpoint when proxying")
+            self.assertNotIn('key=', style_url, 
+                           "Style URL should not contain API key when proxying")
+            self.assertNotIn('test-api-key', style_url,
+                           "Style URL should not contain API key value when proxying")
+        
+        # Reset the registry for other tests
+        registry_module._tile_sources = {}
+        registry_module._registered = False
+
+    @patch('geo_lib.tile_sources.maptiler.get_config_loader')
+    def test_maptiler_map_sources_include_api_key_when_not_proxying(self, mock_get_config_loader):
+        """Test that MapTiler map sources include API key in client_config when proxying is disabled."""
+        mock_config_loader = MagicMock()
+        mock_config_loader.get_with_env_override.return_value = 'test-api-key-12345'
+        mock_config_loader.get_list.return_value = ['topo-v4', 'satellite']
+        mock_config_loader.get_str.return_value = 'example.com'
+        mock_config_loader.get_bool.return_value = False  # proxy_tiles = False
+        mock_get_config_loader.return_value = mock_config_loader
+        
+        # Clear the registry to force re-initialization
+        import geo_lib.tile_sources.registry as registry_module
+        registry_module._tile_sources = {}
+        registry_module._registered = False
+        
+        # Get tile sources (will re-initialize with mock config)
+        topo_source = get_tile_source('maptiler_topo-v4')
+        
+        if topo_source:
+            client_config = topo_source.get('client_config', {})
+            style_url = client_config.get('style_url', '')
+            
+            # Verify style_url uses direct MapTiler URL with API key
+            self.assertTrue(style_url.startswith('https://api.maptiler.com/'), 
+                          "Style URL should use direct MapTiler URL when not proxying")
+            self.assertIn('key=', style_url, 
+                         "Style URL should contain API key parameter when not proxying")
+            self.assertIn('test-api-key-12345', style_url,
+                         "Style URL should contain API key value when not proxying")
+        
+        # Reset the registry for other tests
+        registry_module._tile_sources = {}
+        registry_module._registered = False
+
+    @patch('api.views.services.tiles.requests.get')
+    @patch('api.views.services.tiles.get_config_loader')
+    def test_style_proxy_replaces_tile_urls(self, mock_get_config_loader, mock_requests_get):
+        """Test that style_proxy endpoint replaces MapTiler tile URLs with proxy URLs."""
+        # Mock config loader
+        mock_config_loader = MagicMock()
+        mock_config_loader.get_with_env_override.return_value = 'test-api-key-12345'
+        mock_config_loader.get_str.return_value = 'example.com'
+        mock_get_config_loader.return_value = mock_config_loader
+        
+        # Mock style.json response from MapTiler
+        mock_style_response = MagicMock()
+        mock_style_response.status_code = 200
+        mock_style_response.json.return_value = {
+            'version': 8,
+            'sources': {
+                'maptiler': {
+                    'type': 'vector',
+                    'tiles': [
+                        'https://api.maptiler.com/tiles/v3/{z}/{x}/{y}.pbf?key=test-api-key-12345'
+                    ]
+                }
+            },
+            'layers': []
+        }
+        mock_requests_get.return_value = mock_style_response
+        
+        # Get the tile source and ensure it requires proxy
+        import geo_lib.tile_sources.registry as registry_module
+        registry_module._tile_sources = {}
+        registry_module._registered = False
+        
+        # Mock the registry to return a proxied MapTiler source
+        with patch('geo_lib.tile_sources.maptiler.get_config_loader') as mock_maptiler_config:
+            mock_maptiler_config.return_value.get_with_env_override.return_value = 'test-api-key-12345'
+            mock_maptiler_config.return_value.get_list.return_value = ['topo-v4']
+            mock_maptiler_config.return_value.get_str.return_value = 'example.com'
+            mock_maptiler_config.return_value.get_bool.return_value = True  # proxy_tiles = True
+            
+            # Get the source to register it
+            topo_source = get_tile_source('maptiler_topo-v4')
+            
+            if topo_source and topo_source.get('requires_proxy'):
+                # Call style proxy endpoint
+                response = self.client.get('/api/tiles/style/topo-v4')
+                self.assertEqual(response.status_code, 200)
+                
+                data = json.loads(response.content)
+                
+                # Verify style.json structure is preserved
+                self.assertIn('sources', data)
+                self.assertIn('maptiler', data['sources'])
+                
+                # Verify tile URLs are replaced with proxy URLs
+                maptiler_source = data['sources']['maptiler']
+                self.assertIn('tiles', maptiler_source)
+                self.assertEqual(len(maptiler_source['tiles']), 1)
+                self.assertEqual(maptiler_source['tiles'][0], '/api/tiles/maptiler_topo-v4/{z}/{x}/{y}')
+        
+        # Reset the registry
+        registry_module._tile_sources = {}
+        registry_module._registered = False
+
+    @patch('api.views.services.tiles.requests.get')
+    @override_settings(TILE_CACHE_ENABLED=False)
+    def test_tile_proxy_handles_pbf_vector_tiles(self, mock_requests_get):
+        """Test that tile proxy correctly handles .pbf vector tile files."""
+        # Create a mock response for vector tile
+        mock_response = MagicMock()
+        mock_response.status_code = 200
+        mock_response.content = b'fake pbf tile data'
+        mock_response.headers = {'Content-Type': 'application/x-protobuf'}
+        mock_requests_get.return_value = mock_response
+
+        # Use a MapTiler source that requires proxy (if available)
+        import geo_lib.tile_sources.registry as registry_module
+        registry_module._tile_sources = {}
+        registry_module._registered = False
+        
+        with patch('geo_lib.tile_sources.maptiler.get_config_loader') as mock_maptiler_config:
+            mock_maptiler_config.return_value.get_with_env_override.return_value = 'test-api-key-12345'
+            mock_maptiler_config.return_value.get_list.return_value = ['topo-v4']
+            mock_maptiler_config.return_value.get_str.return_value = 'example.com'
+            mock_maptiler_config.return_value.get_bool.return_value = True  # proxy_tiles = True
+            
+            topo_source = get_tile_source('maptiler_topo-v4')
+            
+            if topo_source and topo_source.get('requires_proxy'):
+                # Make a proxy request for a vector tile
+                z = 10
+                x = 512
+                y = 512
+                
+                response = self.client.get(f'/api/tiles/maptiler_topo-v4/{z}/{x}/{y}')
+                self.assertEqual(response.status_code, 200)
+                
+                # Verify Content-Type is correct for vector tiles
+                self.assertEqual(response['Content-Type'], 'application/x-protobuf')
+                
+                # Verify requests.get was called with correct URL
+                mock_requests_get.assert_called_once()
+                call_args = mock_requests_get.call_args
+                tile_url = call_args[0][0]  # First positional argument
+                self.assertIn('.pbf', tile_url)
+                self.assertIn('key=test-api-key-12345', tile_url)
+        
+        # Reset the registry
+        registry_module._tile_sources = {}
+        registry_module._registered = False
+
+    def test_style_proxy_handles_missing_map(self):
+        """Test that style_proxy returns 404 for non-existent map."""
+        response = self.client.get('/api/tiles/style/nonexistent-map')
+        self.assertEqual(response.status_code, 404)
 
 

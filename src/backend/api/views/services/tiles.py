@@ -1,4 +1,6 @@
+import json
 import os
+import re
 import traceback
 from datetime import datetime, timedelta
 from pathlib import Path
@@ -9,6 +11,7 @@ from django.http import HttpResponse, JsonResponse
 
 from geo_lib.logging.console import get_tagged_logger
 from geo_lib.tile_sources.registry import get_tile_source, get_tile_sources_for_client
+from website.config_loader import get_config_loader
 
 _logger = get_tagged_logger()
 
@@ -46,8 +49,10 @@ def tile_proxy(request, service, z, x, y):
     # Determine file extension from URL template (fallback, will be updated from response if needed)
     url_extension = 'tile'
     if url_template:
-        # Extract extension from URL template (e.g., .png, .webp, .jpg)
-        if '.png' in url_template:
+        # Extract extension from URL template (e.g., .png, .webp, .jpg, .pbf)
+        if '.pbf' in url_template:
+            url_extension = 'pbf'
+        elif '.png' in url_template:
             url_extension = 'png'
         elif '.webp' in url_template:
             url_extension = 'webp'
@@ -59,8 +64,8 @@ def tile_proxy(request, service, z, x, y):
     cache_path = None
 
     if settings.TILE_CACHE_ENABLED:
-        # Try common extensions for cached files
-        for ext in ['webp', 'png', 'jpg', 'tile']:
+        # Try common extensions for cached files (including .pbf for vector tiles)
+        for ext in ['pbf', 'webp', 'png', 'jpg', 'tile']:
             test_cache_path = get_tile_cache_path(service, z, x, y, ext)
             if is_tile_cached(test_cache_path):
                 tile_data = read_tile_from_cache(test_cache_path)
@@ -72,6 +77,7 @@ def tile_proxy(request, service, z, x, y):
             _logger.debug(f"Tile cache hit: {service}/{z}/{x}/{y}")
             # Determine content type from extension
             content_type_map = {
+                'pbf': 'application/x-protobuf',
                 'png': 'image/png',
                 'webp': 'image/webp',
                 'jpg': 'image/jpeg',
@@ -106,7 +112,9 @@ def tile_proxy(request, service, z, x, y):
             content_type = 'image/png'
 
         # Determine file extension from Content-Type header for caching
-        if 'image/webp' in content_type:
+        if 'application/x-protobuf' in content_type or 'application/vnd.mapbox-vector-tile' in content_type:
+            url_extension = 'pbf'
+        elif 'image/webp' in content_type:
             url_extension = 'webp'
         elif 'image/png' in content_type:
             url_extension = 'png'
@@ -149,6 +157,83 @@ def get_tile_sources(request):
     # Cache for 1 day (86400 seconds)
     response['Cache-Control'] = 'public, max-age=86400'
     return response
+
+
+def style_proxy(request, map_id):
+    """
+    Proxy MapTiler style.json requests and modify tile URLs to use proxy endpoints.
+    
+    Args:
+        map_id: The MapTiler map ID (e.g., 'topo-v4')
+    """
+    # Get the tile source
+    source_id = f'maptiler_{map_id}'
+    tile_source = get_tile_source(source_id)
+    
+    if not tile_source:
+        return HttpResponse('Map not found', status=404)
+    
+    # Check if this source requires a proxy
+    if not tile_source.get('requires_proxy', False):
+        return HttpResponse('Map does not require proxy', status=400)
+    
+    # Get the original style URL from the source's original config
+    # We need to fetch it from MapTiler to get the actual style.json
+    proxy_config = tile_source.get('proxy_config', {})
+    config_loader = get_config_loader()
+    api_key = config_loader.get_with_env_override(
+        'maptiler.api_key',
+        'MAPTILER_API_KEY',
+        None
+    )
+    site_domain = config_loader.get_str('site.domain', '')
+    
+    if not api_key:
+        return HttpResponse('MapTiler API key not configured', status=500)
+    
+    style_url = f'https://api.maptiler.com/maps/{map_id}/style.json?key={api_key}'
+    
+    try:
+        # Fetch the style.json from MapTiler
+        headers = proxy_config.get('headers', {})
+        response = requests.get(style_url, headers=headers, timeout=10)
+        
+        if response.status_code != 200:
+            return HttpResponse(f'Upstream error: {response.status_code}', status=response.status_code)
+        
+        # Parse the style.json
+        style_data = response.json()
+        
+        # Replace tile URLs in sources to use proxy endpoints
+        # MapTiler style.json has sources with "tiles" arrays containing URLs
+        if 'sources' in style_data:
+            for source_name, source_config in style_data['sources'].items():
+                if 'tiles' in source_config and isinstance(source_config['tiles'], list):
+                    # Replace each tile URL with proxy URL
+                    # MapTiler tile URLs look like: https://api.maptiler.com/tiles/v3/{z}/{x}/{y}.pbf?key=...
+                    # We need to extract the z/x/y pattern and replace with proxy endpoint
+                    new_tiles = []
+                    for tile_url in source_config['tiles']:
+                        # Extract the tile path pattern (e.g., /tiles/v3/{z}/{x}/{y}.pbf)
+                        # MapTiler uses patterns like: https://api.maptiler.com/tiles/v3/{z}/{x}/{y}.pbf
+                        # Replace with our proxy endpoint
+                        proxy_url = f'/api/tiles/{source_id}/{{z}}/{{x}}/{{y}}'
+                        new_tiles.append(proxy_url)
+                    source_config['tiles'] = new_tiles
+        
+        # Return the modified style.json
+        http_response = JsonResponse(style_data)
+        # Cache style.json for 1 hour (3600 seconds) - styles don't change often
+        http_response['Cache-Control'] = 'public, max-age=3600'
+        http_response['Access-Control-Allow-Origin'] = '*'
+        return http_response
+        
+    except json.JSONDecodeError:
+        _logger.error(f"Invalid JSON in style.json for {map_id}")
+        return HttpResponse('Invalid style.json', status=500)
+    except Exception as e:
+        _logger.error(f"Unexpected error fetching style.json for {map_id}: {traceback.format_exc()}")
+        return HttpResponse(f'Unexpected error', status=500)
 
 
 def get_tile_cache_path(service, z, x, y, extension='tile'):

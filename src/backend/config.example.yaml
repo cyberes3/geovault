@@ -63,6 +63,7 @@ tilesources:
   # List of tile source IDs that should be proxied through the server.
   # Useful for enabling proxying on sources that normally load directly (e.g., OSM, OpenTopoMap)
   # since it enables your server to cache the tiles locally.
+  # Proxying for Maptiler sources is controlled by maptiler.proxy_tiles instead.
   # proxy_sources:
   #    - osm
   #    - opentopomap
