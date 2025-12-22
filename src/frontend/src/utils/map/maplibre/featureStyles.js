@@ -22,7 +22,7 @@ import {
  * @param {number} scaleFactor - Exponential scaling factor (default: 0.6)
  * @returns {Array} MapLibre expression for circle-radius
  */
-function createZoomBasedRadiusExpression(baseRadius, minRadius, baseZoom = 10, scaleFactor = 0.6) {
+export function createZoomBasedRadiusExpression(baseRadius, minRadius, baseZoom = 10, scaleFactor = 0.6) {
   const exponentialBase = Math.pow(2, scaleFactor) // 2^0.6 ≈ 1.516
   
   // Calculate zoom level where we hit minimum radius

@@ -3,14 +3,24 @@
     <!-- Header (Sticky) -->
     <div class="sticky top-0 z-10 flex-none flex items-center justify-between px-6 py-4 border-b border-gray-200 bg-gray-50 sm:rounded-t-lg">
       <h3 class="text-lg font-medium text-gray-900 truncate">Edit Feature</h3>
-      <button
-        @click="$emit('cancel')"
-        :disabled="isSaving"
-        class="text-gray-400 hover:text-gray-600 focus:outline-none focus:text-gray-600 transition ease-in-out duration-150 disabled:opacity-50 disabled:cursor-not-allowed"
-        title="Close edit dialog"
-      >
-        <XMarkIcon class="h-6 w-6" />
-      </button>
+      <div class="flex items-center gap-2">
+        <button
+          @click="$emit('zoom')"
+          :disabled="isSaving"
+          class="text-gray-500 hover:text-blue-600 transition ease-in-out duration-150 disabled:opacity-50 disabled:cursor-not-allowed"
+          title="Zoom to feature"
+        >
+          <MapPinIcon class="h-5 w-5" />
+        </button>
+        <button
+          @click="$emit('cancel')"
+          :disabled="isSaving"
+          class="text-gray-400 hover:text-gray-600 focus:outline-none focus:text-gray-600 transition ease-in-out duration-150 disabled:opacity-50 disabled:cursor-not-allowed"
+          title="Close edit dialog"
+        >
+          <BoldXMarkIcon class="h-6 w-6" />
+        </button>
+      </div>
     </div>
 
     <!-- Scrollable Content -->
@@ -227,7 +237,8 @@ import CoordinatesDialog from './CoordinatesDialog.vue'
 import TagPicker from '@/components/parts/TagPicker.vue'
 import ColorPickerElement from '@/components/parts/ColorPickerElement.vue'
 import IconSelector from '@/components/parts/IconSelector.vue'
-import { XMarkIcon, MapIcon, ArrowUpTrayIcon } from '@heroicons/vue/24/outline'
+import BoldXMarkIcon from '@/components/icons/BoldXMarkIcon.vue'
+import { MapIcon, ArrowUpTrayIcon, MapPinIcon } from '@heroicons/vue/24/outline'
 import { sortTagsByPriority } from '@/utils/tagUtils.js'
 import { restoreElevationInGeometry } from '@/utils/elevationUtils.js'
 import { validateCoordinates } from '@/utils/coordinateValidation.js'
@@ -249,9 +260,10 @@ export default {
     TagPicker,
     ColorPicker: ColorPickerElement,
     IconSelector,
-    XMarkIcon,
+    BoldXMarkIcon,
     MapIcon,
-    ArrowUpTrayIcon
+    ArrowUpTrayIcon,
+    MapPinIcon
   },
   props: {
     feature: {
@@ -272,7 +284,7 @@ export default {
       default: false
     }
   },
-  emits: ['cancel', 'saved', 'deleted', 'visibility-change'],
+  emits: ['cancel', 'saved', 'deleted', 'visibility-change', 'zoom'],
   data() {
     return {
       formData: {

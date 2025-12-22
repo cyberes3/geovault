@@ -118,6 +118,156 @@ export function getStrokeWidthExpression(defaultWidth = 2) {
 }
 
 /**
+ * Get MapLibre expression for stroke width with hover/selected highlighting
+ * Makes lines thicker when hovered or selected
+ * @param {number} defaultWidth - Default width if property not found
+ * @param {string|null} hoveredFeatureId - ID of currently hovered feature
+ * @param {string|null} selectedFeatureId - ID of currently selected feature
+ * @param {number} highlightMultiplier - Multiplier for hovered/selected features (default: 1.5)
+ * @returns {Array} MapLibre expression array
+ */
+export function getStrokeWidthExpressionWithHighlight(defaultWidth = 2, hoveredFeatureId = null, selectedFeatureId = null, highlightMultiplier = 1.5) {
+  const baseWidthExpression = [
+    'coalesce',
+    ['get', 'stroke-width'],
+    defaultWidth
+  ]
+  
+  // If no hover or selection, return base expression
+  if (!hoveredFeatureId && !selectedFeatureId) {
+    return baseWidthExpression
+  }
+  
+  // Build condition to check if feature is hovered or selected
+  const conditions = []
+  if (hoveredFeatureId) {
+    conditions.push(['==', ['get', 'database_id'], hoveredFeatureId])
+  }
+  if (selectedFeatureId) {
+    conditions.push(['==', ['get', 'database_id'], selectedFeatureId])
+  }
+  
+  const isHighlighted = conditions.length === 1 
+    ? conditions[0]
+    : ['any', ...conditions]
+  
+  // Return expression that multiplies width by highlightMultiplier if highlighted
+  return [
+    'case',
+    isHighlighted,
+    ['*', baseWidthExpression, highlightMultiplier],
+    baseWidthExpression
+  ]
+}
+
+/**
+ * Get MapLibre expression for circle radius with hover/selected highlighting
+ * Makes points larger when hovered or selected
+ * @param {Array} baseRadiusExpression - Base radius expression (from createZoomBasedRadiusExpression)
+ * @param {string|null} hoveredFeatureId - ID of currently hovered feature
+ * @param {string|null} selectedFeatureId - ID of currently selected feature
+ * @param {number} highlightMultiplier - Multiplier for hovered/selected features (default: 1.5)
+ * @returns {Array} MapLibre expression array
+ */
+export function getCircleRadiusExpressionWithHighlight(baseRadiusExpression, hoveredFeatureId = null, selectedFeatureId = null, highlightMultiplier = 1.5) {
+  // If no hover or selection, return base expression
+  if (!hoveredFeatureId && !selectedFeatureId) {
+    return baseRadiusExpression
+  }
+  
+  // Build condition to check if feature is hovered or selected
+  const conditions = []
+  if (hoveredFeatureId) {
+    conditions.push(['==', ['get', 'database_id'], hoveredFeatureId])
+  }
+  if (selectedFeatureId) {
+    conditions.push(['==', ['get', 'database_id'], selectedFeatureId])
+  }
+  
+  const isHighlighted = conditions.length === 1 
+    ? conditions[0]
+    : ['any', ...conditions]
+  
+  // MapLibre doesn't allow multiple interpolate expressions in the same expression tree
+  // Instead, we need to modify the interpolate stops to include the highlighting logic
+  // We'll multiply the output values conditionally within the interpolate stops
+  if (baseRadiusExpression[0] === 'interpolate') {
+    // baseRadiusExpression structure: ['interpolate', interpolation, input, ...stops]
+    // stops are pairs of [input_value, output_value]
+    const interpolation = baseRadiusExpression[1]
+    const input = baseRadiusExpression[2]
+    const stops = baseRadiusExpression.slice(3)
+    
+    // Create new stops where each output value is conditionally multiplied
+    const highlightedStops = []
+    for (let i = 0; i < stops.length; i += 2) {
+      const inputValue = stops[i]
+      const outputValue = stops[i + 1]
+      
+      // For each stop, use a case expression to multiply if highlighted
+      highlightedStops.push(inputValue) // input value
+      highlightedStops.push([
+        'case',
+        isHighlighted,
+        outputValue * highlightMultiplier,
+        outputValue
+      ])
+    }
+    
+    // Return modified interpolate expression with conditional stops
+    return ['interpolate', interpolation, input, ...highlightedStops]
+  }
+  
+  // Fallback: if not an interpolate expression, just multiply conditionally
+  return [
+    'case',
+    isHighlighted,
+    ['*', baseRadiusExpression, highlightMultiplier],
+    baseRadiusExpression
+  ]
+}
+
+/**
+ * Get MapLibre expression for icon size with hover/selected highlighting
+ * Makes point icons larger when hovered or selected
+ * @param {number|Array} baseSize - Base icon size (number or expression)
+ * @param {string|null} hoveredFeatureId - ID of currently hovered feature
+ * @param {string|null} selectedFeatureId - ID of currently selected feature
+ * @param {number} highlightMultiplier - Multiplier for hovered/selected features (default: 1.5)
+ * @returns {Array} MapLibre expression array
+ */
+export function getIconSizeExpressionWithHighlight(baseSize = 1.0, hoveredFeatureId = null, selectedFeatureId = null, highlightMultiplier = 1.5) {
+  // Convert baseSize to expression if it's a number
+  const baseSizeExpression = typeof baseSize === 'number' ? baseSize : baseSize
+  
+  // If no hover or selection, return base expression
+  if (!hoveredFeatureId && !selectedFeatureId) {
+    return baseSizeExpression
+  }
+  
+  // Build condition to check if feature is hovered or selected
+  const conditions = []
+  if (hoveredFeatureId) {
+    conditions.push(['==', ['get', 'database_id'], hoveredFeatureId])
+  }
+  if (selectedFeatureId) {
+    conditions.push(['==', ['get', 'database_id'], selectedFeatureId])
+  }
+  
+  const isHighlighted = conditions.length === 1 
+    ? conditions[0]
+    : ['any', ...conditions]
+  
+  // Return expression that multiplies size by highlightMultiplier if highlighted
+  return [
+    'case',
+    isHighlighted,
+    ['*', baseSizeExpression, highlightMultiplier],
+    baseSizeExpression
+  ]
+}
+
+/**
  * Get MapLibre expression for fill opacity
  * Checks fill-opacity property and applies it to fill color
  * @returns {Array} MapLibre expression array for fill-opacity

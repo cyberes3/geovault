@@ -118,6 +118,7 @@
             @deleted="handleFeatureDeleted"
             @saved="handleFeatureSaved"
             @visibility-change="handleEditBoxVisibilityChange"
+            @zoom="zoomToFeature(selectedFeature)"
         />
 
         <!-- Elevation Profile Dialog -->
@@ -242,7 +243,8 @@ import {
   getMapState,
   getGeoJsonData
 } from '@/utils/map/maplibre/layerSwitching.js'
-import { getIconSourceUrl, getFeatureIconUrl, loadIconImage, shouldUseIcon } from '@/utils/map/maplibre/featureStyling.js'
+import { getIconSourceUrl, getFeatureIconUrl, loadIconImage, shouldUseIcon, getStrokeWidthExpressionWithHighlight, getCircleRadiusExpressionWithHighlight, getIconSizeExpressionWithHighlight } from '@/utils/map/maplibre/featureStyling.js'
+import { createZoomBasedRadiusExpression } from '@/utils/map/maplibre/featureStyles.js'
 import { 
   MapTilerConfig,
   setupTerrain as maptilerSetupTerrain,
@@ -346,6 +348,20 @@ export default {
         featureStats: true,
         userLocation: true
       }
+    }
+  },
+  watch: {
+    selectedFeature(newFeature, oldFeature) {
+      // Update highlighting when feature is selected/deselected (dialog opens/closes)
+      this.$nextTick(() => {
+        this.updateFeatureHighlighting()
+      })
+    },
+    isEditingFeature(newVal) {
+      // Update highlighting when edit dialog opens/closes
+      this.$nextTick(() => {
+        this.updateFeatureHighlighting()
+      })
     }
   },
   data() {
@@ -632,11 +648,30 @@ export default {
 
         const hoverableFeatures = features.filter(f => !f.properties?._isLabelPoint)
         this.map.getCanvas().style.cursor = hoverableFeatures.length > 0 ? 'pointer' : ''
+        
+        // Track hovered feature for highlighting
+        if (hoverableFeatures.length > 0) {
+          const hoveredFeature = hoverableFeatures[0]
+          const hoveredId = hoveredFeature.properties?.database_id
+          if (this.hoveredFeatureId !== hoveredId) {
+            this.hoveredFeatureId = hoveredId
+            this.updateFeatureHighlighting()
+          }
+        } else {
+          if (this.hoveredFeatureId !== null) {
+            this.hoveredFeatureId = null
+            this.updateFeatureHighlighting()
+          }
+        }
       })
 
       // Reset cursor when leaving the map
       this.map.on('mouseout', () => {
         this.map.getCanvas().style.cursor = ''
+        if (this.hoveredFeatureId !== null) {
+          this.hoveredFeatureId = null
+          this.updateFeatureHighlighting()
+        }
       })
 
       // Add contextmenu (right-click) handler to copy coordinates
@@ -866,6 +901,9 @@ export default {
         ? userSettings.map.replace_icons_low_zoom 
         : true
       await addFeaturesToMap(this.map, geojsonData, this.showAllLabels, zoom, replaceIconsLowZoom)
+      
+      // Initialize feature highlighting after layers are set up
+      this.updateFeatureHighlighting()
       
       // Update persistent cache with current map state (survives setStyle() calls)
       if (this.map && this.map.getSource('geojson-data')) {
@@ -1612,6 +1650,9 @@ export default {
         // Restore features immediately (setStyle() destroys sources, but we restore them right away)
         await restoreGeoJsonFeatures(this.map, geojsonData, this.showAllLabels, this.labelMarkerManager)
         
+        // Re-initialize feature highlighting after features are restored
+        this.updateFeatureHighlighting()
+        
         // Wait a moment for the source to stabilize before checking
         await new Promise(resolve => setTimeout(resolve, 100))
         
@@ -1636,6 +1677,9 @@ export default {
         if (hadFeaturesToRestore && !featuresRestored) {
           console.log('Features were not restored, attempting to restore from cached data')
           await restoreGeoJsonFeatures(this.map, geojsonData, this.showAllLabels, this.labelMarkerManager)
+          
+          // Re-initialize feature highlighting after retry restore
+          this.updateFeatureHighlighting()
           
           // Verify again after second attempt and update cache
           await new Promise(resolve => setTimeout(resolve, 100))
@@ -1703,6 +1747,9 @@ export default {
         // 8. Restore GeoJSON features
         await restoreGeoJsonFeatures(this.map, geojsonData, this.showAllLabels, this.labelMarkerManager)
 
+        // Re-initialize feature highlighting after features are restored
+        this.updateFeatureHighlighting()
+
         // 8a. Verify features were actually restored and update cache
         // Wait a moment for the source to stabilize before checking
         await new Promise(resolve => setTimeout(resolve, 100))
@@ -1728,6 +1775,9 @@ export default {
           // Features existed but weren't restored - try restoring again with the cached geojsonData
           console.log('Features were not restored, attempting to restore from cached data')
           await restoreGeoJsonFeatures(this.map, geojsonData, this.showAllLabels, this.labelMarkerManager)
+          
+          // Re-initialize feature highlighting after retry restore
+          this.updateFeatureHighlighting()
           
           // Verify again after second attempt and update cache
           await new Promise(resolve => setTimeout(resolve, 100))
@@ -2545,6 +2595,80 @@ export default {
       if (this.hoverMarker) {
         this.hoverMarker.remove()
         this.hoverMarker = null
+      }
+    },
+    /**
+     * Update paint properties for lines, polygon-outlines, and points
+     * to highlight hovered and selected features
+     */
+    updateFeatureHighlighting() {
+      if (!this.map) return
+      
+      // Get selected feature ID if dialog is open (either info or edit dialog)
+      let selectedFeatureId = null
+      if (this.selectedFeature) {
+        selectedFeatureId = this.selectedFeature.properties?.database_id || this.selectedFeature.get?.('properties')?.database_id
+      }
+      
+      // Generate stroke width expression with highlight for lines and polygon outlines
+      const lineWidthExpression = getStrokeWidthExpressionWithHighlight(
+        2, // default width
+        this.hoveredFeatureId,
+        selectedFeatureId,
+        1.5 // multiplier for highlighted features (50% thicker)
+      )
+      
+      // Update lines layer
+      if (this.map.getLayer('lines')) {
+        this.map.setPaintProperty('lines', 'line-width', lineWidthExpression)
+      }
+      
+      // Update polygon-outlines layer
+      if (this.map.getLayer('polygon-outlines')) {
+        this.map.setPaintProperty('polygon-outlines', 'line-width', lineWidthExpression)
+      }
+      
+      // Generate circle radius expressions with highlight for points
+      // Regular points: 4px base, 2px min
+      const baseRadiusExpression = createZoomBasedRadiusExpression(4, 2)
+      const radiusExpression = getCircleRadiusExpressionWithHighlight(
+        baseRadiusExpression,
+        this.hoveredFeatureId,
+        selectedFeatureId,
+        1.5 // multiplier for highlighted features (50% larger)
+      )
+      
+      // Update points layer (circles without icons)
+      if (this.map.getLayer('points')) {
+        this.map.setPaintProperty('points', 'circle-radius', radiusExpression)
+      }
+      
+      // Replacement points: 3px base, 1.5px min
+      const replacementRadiusExpression = createZoomBasedRadiusExpression(3, 1.5)
+      const replacementRadiusHighlight = getCircleRadiusExpressionWithHighlight(
+        replacementRadiusExpression,
+        this.hoveredFeatureId,
+        selectedFeatureId,
+        1.5 // multiplier for highlighted features (50% larger)
+      )
+      
+      // Update replacement-points layer
+      if (this.map.getLayer('replacement-points')) {
+        this.map.setPaintProperty('replacement-points', 'circle-radius', replacementRadiusHighlight)
+      }
+      
+      // Generate icon size expression with highlight for point icons
+      // Use smaller multiplier for icons (1.05x) compared to circles (1.5x)
+      const iconSizeExpression = getIconSizeExpressionWithHighlight(
+        1.0, // base icon size
+        this.hoveredFeatureId,
+        selectedFeatureId,
+        1.05 // multiplier for highlighted features (5% larger, less than circles)
+      )
+      
+      // Update point-icons layer (icons)
+      if (this.map.getLayer('point-icons')) {
+        this.map.setLayoutProperty('point-icons', 'icon-size', iconSizeExpression)
       }
     },
     handleClickPoint(point) {
