@@ -117,26 +117,8 @@
                   </div>
 
                   <!-- Selected Tags -->
-                  <div v-if="formData.tags.length > 0" class="mt-3">
-                    <p class="text-xs text-gray-500 mb-2">Selected tags:</p>
-                    <div class="flex flex-wrap gap-2">
-                      <span
-                        v-for="tag in formData.tags"
-                        :key="tag"
-                        @click="removeTag(tag)"
-                        class="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium bg-blue-100 text-blue-700 cursor-pointer hover:bg-blue-200"
-                      >
-                        {{ tag }}
-                        <button
-                          type="button"
-                          @click.stop="removeTag(tag)"
-                          class="ml-1 text-blue-500 hover:text-blue-700"
-                          title="Remove tag"
-                        >
-                          <XMarkIcon class="w-3 h-3" />
-                        </button>
-                      </span>
-                    </div>
+                  <div class="mt-3">
+                    <p class="text-xs text-gray-500 mb-2">Selected tags: {{ formData.tags.length }}</p>
                   </div>
                 </div>
 
@@ -274,11 +256,11 @@ export default {
     filteredTags() {
       let tags;
       if (!this.tagSearchQuery.trim()) {
-        tags = this.availableTags.filter(tag => !this.formData.tags.includes(tag));
+        tags = this.availableTags;
       } else {
         const query = this.tagSearchQuery.toLowerCase();
         tags = this.availableTags.filter(tag => 
-          tag.toLowerCase().includes(query) && !this.formData.tags.includes(tag)
+          tag.toLowerCase().includes(query)
         );
       }
       // Separate and sort: user tags alphabetically, system tags by priority
