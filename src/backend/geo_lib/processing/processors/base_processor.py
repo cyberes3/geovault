@@ -480,7 +480,7 @@ class BaseProcessor(ABC):
         if geocoding_count == 0:
             return feature_log
 
-        feature_log.add(f"Reverse geocoding {geocoding_count} feature(s) with coordinate deduplication", "Reverse Geocoding", DatabaseLogLevel.INFO)
+        feature_log.add(f"Reverse geocoding {geocoding_count} feature(s)", "Reverse Geocoding", DatabaseLogLevel.INFO)
 
         try:
             # Check for cancellation before starting

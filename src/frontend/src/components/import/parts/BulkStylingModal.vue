@@ -1,14 +1,23 @@
 <template>
-  <!-- Modal Backdrop -->
-  <div v-if="isOpen" class="fixed inset-0 z-50" @mousedown="handleBackdropMouseDown">
-    <div class="flex items-center justify-center min-h-screen pt-4 px-4 pb-20 text-center sm:block sm:p-0">
-      <!-- Background overlay -->
-      <div class="fixed inset-0 bg-gray-500 bg-opacity-75 transition-opacity"></div>
+  <div
+    v-if="isOpen"
+    class="fixed inset-0 z-50"
+    role="dialog"
+    aria-modal="true"
+    @mousedown="handleBackdropMouseDown"
+  >
+    <!-- Backdrop -->
+    <div class="absolute inset-0 bg-black/50"></div>
 
-      <!-- Modal panel -->
-      <div class="inline-block align-bottom bg-white rounded-lg text-left overflow-hidden shadow-xl transform transition-all sm:my-8 sm:align-middle sm:max-w-2xl sm:w-full" @click.stop @mousedown.stop>
+    <!-- Modal panel -->
+    <div class="absolute inset-0 flex items-stretch justify-stretch sm:items-center sm:justify-center">
+      <div
+        class="bg-white flex flex-col w-full h-full sm:h-[90vh] sm:max-w-2xl sm:rounded-lg shadow-xl overflow-hidden"
+        @mousedown.stop
+        @click.stop
+      >
         <!-- Header -->
-        <div class="bg-white px-4 sm:px-6 py-4 border-b border-gray-200 rounded-t-lg">
+        <div class="bg-white px-4 sm:px-6 py-4 border-b border-gray-200 sm:rounded-t-lg">
           <div class="flex items-center justify-between">
             <h3 class="text-lg font-medium text-gray-900">Bulk Operations</h3>
             <button
@@ -22,7 +31,7 @@
         </div>
 
         <!-- Content -->
-        <div class="bg-white p-4 sm:p-6 max-h-[70vh] overflow-y-auto">
+        <div class="bg-white p-4 sm:p-6 flex-1 overflow-y-auto min-h-0">
           <!-- Tags Section -->
           <div class="mb-6">
             <TagPicker
@@ -151,7 +160,7 @@
         </div>
 
         <!-- Footer -->
-        <div class="bg-gray-50 px-4 sm:px-6 py-3 border-t border-gray-200 rounded-b-lg">
+        <div class="bg-gray-50 px-4 sm:px-6 py-3 border-t border-gray-200 sm:rounded-b-lg">
           <div class="flex flex-col sm:flex-row justify-end space-y-2 sm:space-y-0 sm:space-x-3">
             <button
               @click="closeModal"
@@ -265,19 +274,23 @@ export default {
   watch: {
     isOpen(newVal) {
       if (newVal) {
-        // Initialize form with current bulk operations when modal opens
-        this.initializeForm()
+        // Prevent background scroll
+        document.body.classList.add('overflow-hidden')
+        // Move modal to body to avoid layout offsets
+        this.$nextTick(() => {
+          if (this.$el && this.$el.parentNode !== document.body) {
+            document.body.appendChild(this.$el)
+          }
+          // Initialize form with current bulk operations when modal opens
+          this.initializeForm()
+        })
         // Add escape key listener
         document.addEventListener('keydown', this.handleEscapeKey)
-        // Prevent background scrolling when modal is open
-        document.documentElement.classList.add('overflow-hidden')
-        document.body.classList.add('overflow-hidden')
       } else {
+        // Restore background scroll
+        document.body.classList.remove('overflow-hidden')
         // Remove escape key listener
         document.removeEventListener('keydown', this.handleEscapeKey)
-        // Restore background scrolling
-        document.documentElement.classList.remove('overflow-hidden')
-        document.body.classList.remove('overflow-hidden')
       }
     },
     currentBulkOps: {
@@ -407,6 +420,12 @@ export default {
         this.closeModal()
       }
     }
+  },
+  beforeUnmount() {
+    // Restore background scroll
+    document.body.classList.remove('overflow-hidden')
+    // Remove escape key listener if component is unmounted while modal is open
+    document.removeEventListener('keydown', this.handleEscapeKey)
   }
 }
 </script>

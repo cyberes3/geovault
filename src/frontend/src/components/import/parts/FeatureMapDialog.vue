@@ -1,14 +1,23 @@
 <template>
-  <!-- Modal Backdrop -->
-  <div v-if="isOpen" class="fixed inset-0 z-50 overflow-y-auto" @mousedown="handleBackdropMouseDown">
-    <div class="flex items-center justify-center min-h-screen pt-4 px-4 pb-20 text-center sm:block sm:p-0">
-      <!-- Background overlay -->
-      <div class="fixed inset-0 bg-gray-500 bg-opacity-75 transition-opacity"></div>
+  <div
+    v-if="isOpen"
+    class="fixed inset-0 z-50"
+    role="dialog"
+    aria-modal="true"
+    @mousedown="handleBackdropMouseDown"
+  >
+    <!-- Backdrop -->
+    <div class="absolute inset-0 bg-black/50"></div>
 
-      <!-- Modal panel -->
-      <div class="inline-block align-bottom bg-white rounded-lg text-left overflow-hidden shadow-xl transform transition-all sm:my-8 sm:align-middle sm:max-w-6xl sm:w-full" @click.stop @mousedown.stop>
+    <!-- Modal panel -->
+    <div class="absolute inset-0 flex items-stretch justify-stretch sm:items-center sm:justify-center">
+      <div
+        class="bg-white flex flex-col w-full h-full sm:h-[90vh] sm:max-w-6xl sm:rounded-lg shadow-xl overflow-hidden"
+        @mousedown.stop
+        @click.stop
+      >
         <!-- Header -->
-        <div class="bg-white px-6 py-4 border-b border-gray-200 rounded-t-lg">
+        <div class="bg-white px-6 py-4 border-b border-gray-200 sm:rounded-t-lg">
           <div class="flex items-center justify-between">
             <div>
               <h3 class="text-lg font-medium text-gray-900">Feature Map View</h3>
@@ -25,28 +34,26 @@
         </div>
 
         <!-- Map Container -->
-        <div class="bg-white p-6">
-          <div class="relative">
-            <!-- Map -->
-            <div ref="mapContainer" class="w-full h-96 md:h-[600px] border border-gray-300 rounded-lg"></div>
+        <div class="flex-1 bg-white min-h-0 flex flex-col overflow-hidden relative">
+          <!-- Map -->
+          <div ref="mapContainer" class="flex-1 w-full border-0"></div>
 
-            <!-- Loading Indicator -->
-            <div v-show="isLoading" class="absolute top-4 right-4 bg-white bg-opacity-90 px-4 py-2 rounded-lg shadow-md z-10">
-              <Loader size="sm" layout="inline" message="Loading map..." />
-            </div>
+          <!-- Loading Indicator -->
+          <div v-show="isLoading" class="absolute top-4 right-4 bg-white bg-opacity-90 px-4 py-2 rounded-lg shadow-md z-10">
+            <Loader size="sm" layout="inline" message="Loading map..." />
+          </div>
 
-            <!-- Feature Info -->
-            <div class="absolute bottom-4 left-4 bg-white bg-opacity-90 px-4 py-2 rounded-lg shadow-md z-10 text-xs">
-              <div class="space-y-1">
-                <div>Total Features: <span class="font-medium">{{ featureCount }}</span></div>
-                <div>Selected: <span class="font-medium">{{ selectedFeatureName }}</span></div>
-              </div>
+          <!-- Feature Info -->
+          <div class="absolute bottom-4 left-4 bg-white bg-opacity-90 px-4 py-2 rounded-lg shadow-md z-10 text-xs">
+            <div class="space-y-1">
+              <div>Total Features: <span class="font-medium">{{ featureCount }}</span></div>
+              <div>Selected: <span class="font-medium">{{ selectedFeatureName }}</span></div>
             </div>
           </div>
         </div>
 
         <!-- Footer -->
-        <div class="bg-gray-50 px-6 py-3 border-t border-gray-200 rounded-b-lg">
+        <div class="bg-gray-50 px-6 py-3 border-t border-gray-200 sm:rounded-b-lg">
           <div class="flex justify-end">
             <button
               @click="closeDialog"
@@ -121,13 +128,21 @@ export default {
   watch: {
     isOpen(newVal) {
       if (newVal) {
+        // Prevent background scroll
+        document.body.classList.add('overflow-hidden')
+        // Move modal to body to avoid layout offsets
         this.$nextTick(() => {
+          if (this.$el && this.$el.parentNode !== document.body) {
+            document.body.appendChild(this.$el)
+          }
           this.initializeMap()
           this.loadFeatures()
         })
         // Add escape key listener when dialog opens
         document.addEventListener('keydown', this.handleEscapeKey)
       } else {
+        // Restore background scroll
+        document.body.classList.remove('overflow-hidden')
         this.cleanup()
         // Remove escape key listener when dialog closes
         document.removeEventListener('keydown', this.handleEscapeKey)
@@ -540,6 +555,8 @@ export default {
   },
 
   beforeUnmount() {
+    // Restore background scroll
+    document.body.classList.remove('overflow-hidden')
     this.cleanup()
     // Remove escape key listener if component is unmounted while dialog is open
     document.removeEventListener('keydown', this.handleEscapeKey)

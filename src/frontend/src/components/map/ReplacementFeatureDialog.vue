@@ -1,14 +1,23 @@
 <template>
-  <!-- Modal Backdrop -->
-  <div v-if="isOpen" class="fixed inset-0 z-50 overflow-y-auto" @mousedown="handleBackdropMouseDown">
-    <div class="flex items-center justify-center min-h-screen pt-4 px-4 pb-20 text-center sm:block sm:p-0">
-      <!-- Background overlay -->
-      <div class="fixed inset-0 bg-gray-500 bg-opacity-75 transition-opacity"></div>
+  <div
+    v-if="isOpen"
+    class="fixed inset-0 z-50"
+    role="dialog"
+    aria-modal="true"
+    @mousedown="handleBackdropMouseDown"
+  >
+    <!-- Backdrop -->
+    <div class="absolute inset-0 bg-black/50"></div>
 
-      <!-- Modal panel -->
-      <div class="inline-block align-bottom bg-white rounded-lg text-left overflow-hidden shadow-xl transform transition-all sm:my-8 sm:align-middle sm:max-w-4xl sm:w-full" @click.stop @mousedown.stop>
+    <!-- Modal panel -->
+    <div class="absolute inset-0 flex items-stretch justify-stretch sm:items-center sm:justify-center">
+      <div
+        class="bg-white flex flex-col w-full h-full sm:h-[90vh] sm:max-w-4xl sm:rounded-lg shadow-xl overflow-hidden"
+        @mousedown.stop
+        @click.stop
+      >
         <!-- Header -->
-        <div class="bg-white px-6 py-4 border-b border-gray-200 rounded-t-lg">
+        <div class="bg-white px-6 py-4 border-b border-gray-200 sm:rounded-t-lg">
           <div class="flex items-center justify-between">
             <h3 class="text-lg font-medium text-gray-900">Update Spatial Data</h3>
             <button
@@ -22,7 +31,7 @@
         </div>
 
         <!-- Content -->
-        <div class="bg-white px-6 py-4">
+        <div class="bg-white px-6 py-4 flex-1 overflow-y-auto min-h-0">
           <!-- File Selection Section (shown before upload starts) -->
           <div v-if="!importQueueId && !processing" class="space-y-4">
             <!-- Help Text -->
@@ -222,7 +231,7 @@
         </div>
 
         <!-- Footer -->
-        <div class="bg-gray-50 px-6 py-4 border-t border-gray-200 rounded-b-lg flex justify-end space-x-3">
+        <div class="bg-gray-50 px-6 py-4 border-t border-gray-200 sm:rounded-b-lg flex justify-end space-x-3">
           <!-- Upload Button (shown when file is selected but not yet uploaded) -->
           <button
             v-if="selectedFile && !importQueueId && !processing"
@@ -397,9 +406,19 @@ export default {
   watch: {
     isOpen(newVal) {
       if (newVal) {
-        this.resetDialog()
-        this.fetchExistingFeatureGeometryType()
+        // Prevent background scroll
+        document.body.classList.add('overflow-hidden')
+        // Move modal to body to avoid layout offsets
+        this.$nextTick(() => {
+          if (this.$el && this.$el.parentNode !== document.body) {
+            document.body.appendChild(this.$el)
+          }
+          this.resetDialog()
+          this.fetchExistingFeatureGeometryType()
+        })
       } else {
+        // Restore background scroll
+        document.body.classList.remove('overflow-hidden')
         this.cleanup()
       }
     },
@@ -1100,6 +1119,8 @@ export default {
     }
   },
   beforeUnmount() {
+    // Restore background scroll
+    document.body.classList.remove('overflow-hidden')
     this.cleanup()
   }
 }
