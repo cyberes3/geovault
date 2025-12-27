@@ -447,13 +447,10 @@ class ProcessStatusModule(BaseWebSocketModule):
                 elif source == DuplicateSource.CROSS_QUEUE:
                     cross_queue_geometry_duplicates.append(dup_obj)
 
-        # Filter skipped_feature_ids to only include geometry duplicates
-        # Hash duplicates are always blocked and should not be in skipped list
-        original_skipped_feature_ids = self.import_item.skipped_feature_ids if self.import_item.skipped_feature_ids else []
-        filtered_skipped_ids = [
-            fid for fid in original_skipped_feature_ids
-            if fid in geometry_duplicate_hashes_for_skipping
-        ]
+        # Return all skipped_feature_ids (geometry duplicates + manually skipped non-duplicates)
+        # Hash duplicates are always blocked and should not be in skipped_feature_ids (enforced during processing)
+        # We return all skipped_feature_ids to preserve manually skipped non-duplicate features
+        skipped_feature_ids = self.import_item.skipped_feature_ids if self.import_item.skipped_feature_ids else []
 
         # End duplicate mapping
         # ======================================================================================================================
@@ -474,7 +471,7 @@ class ProcessStatusModule(BaseWebSocketModule):
                 'cross_queue_hash': cross_queue_hash_duplicates,
                 'cross_queue_geometry': cross_queue_geometry_duplicates
             },
-            'skipped_feature_ids': filtered_skipped_ids
+            'skipped_feature_ids': skipped_feature_ids
         }
 
     async def _get_logs(self, after_id: Optional[int] = None) -> list:
