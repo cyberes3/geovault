@@ -92,7 +92,8 @@
       >
         <!-- Tag Header -->
         <div class="bg-gray-50 px-6 py-4 border-b border-gray-200">
-          <div class="flex items-center justify-between gap-4">
+          <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 sm:gap-4">
+            <!-- Title Row -->
             <div class="flex items-center space-x-3 flex-1 min-w-0">
               <span v-if="editingTag !== tag" :class="[
                 'inline-flex items-center px-3 py-1 rounded-full text-sm font-medium border truncate max-w-full',
@@ -101,7 +102,7 @@
                   : 'bg-blue-100 text-blue-700 border-blue-200'
               ]">
                 <span class="truncate">{{ tag }}</span>
-                <span v-if="isSystemTag(tag)" class="ml-1.5 text-xs opacity-75 flex-shrink-0" title="System tag">🔒</span>
+<!--                <span v-if="isSystemTag(tag)" class="ml-1.5 text-xs opacity-75 flex-shrink-0" title="System tag">🔒</span>-->
               </span>
               <input
                   v-else
@@ -114,8 +115,17 @@
                   @focus.stop
                   @click.stop
               />
+              <button
+                  v-if="editingTag === tag"
+                  class="ml-2 p-2 sm:p-1.5 min-w-[44px] min-h-[44px] sm:min-w-0 sm:min-h-0 bg-blue-500 text-white hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-1 rounded"
+                  title="Save tag name"
+                  @click.stop="saveTagEdit(tag)"
+              >
+                <CheckIcon class="w-4 h-4" />
+              </button>
             </div>
-            <div v-if="editingTag !== tag" class="flex items-center space-x-1">
+            <!-- Control Buttons Row -->
+            <div v-if="editingTag !== tag" class="flex items-center space-x-1 flex-wrap">
               <button
                   class="p-2 sm:p-1.5 min-w-[44px] min-h-[44px] sm:min-w-0 sm:min-h-0 text-gray-400 hover:text-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-1 rounded"
                   title="View on Map"
@@ -172,14 +182,6 @@
                 <TrashIcon class="w-4 h-4" />
               </button>
             </div>
-            <button
-                v-else
-                class="ml-2 p-2 sm:p-1.5 min-w-[44px] min-h-[44px] sm:min-w-0 sm:min-h-0 bg-blue-500 text-white hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-1 rounded"
-                title="Save tag name"
-                @click.stop="saveTagEdit(tag)"
-            >
-              <CheckIcon class="w-4 h-4" />
-            </button>
           </div>
         </div>
 

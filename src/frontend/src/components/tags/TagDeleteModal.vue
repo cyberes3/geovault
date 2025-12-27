@@ -43,7 +43,7 @@
                     : 'bg-blue-100 text-blue-700 border-blue-200'
                 ]">
                   {{ tag }}
-                  <span v-if="isSystemTag" class="ml-1.5 text-xs opacity-75" title="System tag">🔒</span>
+<!--                  <span v-if="isSystemTag" class="ml-1.5 text-xs opacity-75" title="System tag">🔒</span>-->
                 </span>
               </div>
               <p class="mt-2 text-sm text-gray-600">
