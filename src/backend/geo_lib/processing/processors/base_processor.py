@@ -27,6 +27,7 @@ from geo_lib.processing.geo import (
     geojson_property_generation,
     split_complex_geometries
 )
+from geo_lib.utils.date_parser import parse_date_field
 from geo_lib.processing.jobs.helpers.status_tracker import ProcessingStatusTracker, ProcessingStatus
 from geo_lib.processing.logging import ImportLog, DatabaseLogLevel
 from geo_lib.processing.utils import inject_feature_hashes
@@ -871,6 +872,19 @@ class BaseProcessor(ABC):
                     # Set created date in properties BEFORE normalization so it's preserved
                     if track_timestamp:
                         split_feature['properties']['created'] = track_timestamp
+
+                # Check if created date is the Unix epoch (1970-01-01 00:00:00) and log it
+                created_date_value = split_feature.get('properties', {}).get('created')
+                if created_date_value:
+                    parsed_date = parse_date_field(created_date_value)
+                    if parsed_date is None:
+                        # The date was filtered out as epoch date
+                        feature_name = split_feature.get('properties', {}).get('name', 'Unnamed')
+                        feature_log.add(
+                            f"Feature '{feature_name}' has created date 1970-01-01 00:00:00 (Unix epoch), treating as no date provided",
+                            'Feature Processing',
+                            DatabaseLogLevel.DEBUG
+                        )
 
                 # First, normalize raw togeojson output (converts feature_tags -> tags, etc.)
                 split_feature['properties'] = GeojsonRawProperty(**split_feature['properties']).model_dump(mode='json', exclude_none=True, by_alias=True)
