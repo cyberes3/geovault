@@ -362,6 +362,17 @@ export default {
       this.$nextTick(() => {
         this.updateFeatureHighlighting()
       })
+    },
+    '$route.query.featureId': {
+      handler(newFeatureId, oldFeatureId) {
+        // Handle featureId query parameter changes for subsequent navigations
+        // This catches cases where the component is already mounted and user
+        // clicks another "View on Map" button from tags page
+        if (newFeatureId && newFeatureId !== oldFeatureId) {
+          this.handleUrlFeatureId()
+        }
+      },
+      immediate: false  // Don't run on mount since mounted() already handles it
     }
   },
   data() {
@@ -2018,7 +2029,7 @@ export default {
           padding = { top: 50, bottom: infoBoxMaxHeight + 20, left: 50, right: 50 }
         }
         
-        this.navigateAndRefresh(() => {
+        return this.navigateAndRefresh(() => {
           this.map.flyTo({
             center: [minLon, minLat],
             zoom: 10,
@@ -2026,7 +2037,6 @@ export default {
             padding: padding
           })
         })
-        return
       }
 
       // Calculate padding based on screen size and feature info box visibility
@@ -2047,7 +2057,7 @@ export default {
       }
 
       // Fly to feature
-      this.navigateAndRefresh(() => {
+      return this.navigateAndRefresh(() => {
         try {
           // Create LngLatBounds: sw corner [minLon, minLat], ne corner [maxLon, maxLat]
           const bounds = new maplibregl.LngLatBounds(
@@ -2866,10 +2876,14 @@ export default {
       }
 
       try {
+        // Set loading for the feature fetch
+        this.isDataLoading = true
+        
         const response = await fetch(`${APIHOST}/api/feature/${featureId}/`)
         if (!response.ok) {
           console.error(`Failed to fetch feature ${featureId}: ${response.statusText}`)
           this.removeFeatureIdFromUrl()
+          this.isDataLoading = false
           return
         }
 
@@ -2877,6 +2891,7 @@ export default {
         if (!response.ok || !data.feature) {
           console.error(`Feature ${featureId} not found or access denied`)
           this.removeFeatureIdFromUrl()
+          this.isDataLoading = false
           return
         }
 
@@ -2889,6 +2904,12 @@ export default {
           properties: properties,
           geometry: geojsonData.geometry
         }
+
+        // Feature fetch complete - loading flag will be managed by loadDataForCurrentView during zoom
+        this.isDataLoading = false
+
+        // Wait for map to be ready (in case it's being restored from keep-alive)
+        await this.waitForMap()
 
         // Add feature to map
         if (this.map && this.map.getSource('geojson-data')) {
@@ -2906,17 +2927,19 @@ export default {
               features: existingFeatures
             })
           }
-        }
 
-        // Zoom to feature
-        await this.$nextTick()
-        setTimeout(() => {
-          this.zoomToFeature(markRaw(this.convertMapLibreFeature(feature)))
+          // Wait for map to process the new data, then zoom
+          await this.$nextTick()
+          
+          // Zoom to feature - navigateAndRefresh will trigger loadDataForCurrentView
+          // which manages isDataLoading for the bbox call
+          await this.zoomToFeature(markRaw(this.convertMapLibreFeature(feature)))
           this.removeFeatureIdFromUrl()
-        }, 100)
+        }
       } catch (error) {
         console.error(`Error fetching feature ${featureId}:`, error)
         this.removeFeatureIdFromUrl()
+        this.isDataLoading = false
       }
     },
     removeFeatureIdFromUrl() {
@@ -2926,6 +2949,20 @@ export default {
         path: this.$route.path,
         query: query
       })
+    },
+    async waitForMap() {
+      // Wait for map to be initialized (handles keep-alive restore scenarios)
+      const maxWait = 5000 // 5 seconds max wait
+      const checkInterval = 50 // Check every 50ms
+      const startTime = Date.now()
+      
+      while (!this.map || !this.map.getSource('geojson-data')) {
+        if (Date.now() - startTime > maxWait) {
+          console.error('Timeout waiting for map to be ready')
+          return
+        }
+        await new Promise(resolve => setTimeout(resolve, checkInterval))
+      }
     },
     // Map Destruction Abstraction Layer
     performMapDestruction() {
@@ -3205,12 +3242,14 @@ export default {
     // Check for collection query parameter
     if (this.collectionId) {
       await this.handleCollectionFilter(this.collectionId)
-    } else {
-      // Initial data load
-      await this.loadDataForCurrentView()
-      
-      // Check for featureId in URL
+    } else if (this.$route.query.featureId) {
+      // Feature-first strategy: zoom to feature immediately for snappy UX
+      // Note: zoomToFeature calls navigateAndRefresh which will load bbox data
+      // after the zoom animation completes, so we don't need to call loadDataForCurrentView here
       await this.handleUrlFeatureId()
+    } else {
+      // Normal flow for non-featureId navigation
+      await this.loadDataForCurrentView()
     }
 
     // Set isMapInitializing to false after initial data load completes
@@ -3265,12 +3304,16 @@ export default {
 
     const hasTagQuery = !!this.$route.query.tag
     const hasCollectionQuery = !!this.$route.query.collection
+    const hasFeatureId = !!this.$route.query.featureId
 
     // Reload data based on route query parameters
     if (this.map) {
       if (hasCollectionQuery) {
         // Collection mode - load collection features
         this.handleCollectionFilter(this.collectionId)
+      } else if (hasFeatureId) {
+        // Feature-first strategy: zoom to feature immediately
+        this.handleUrlFeatureId()
       } else if (!hasTagQuery) {
         // Normal view - reload bbox data
         this.isMapInitializing = true
