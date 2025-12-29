@@ -109,51 +109,45 @@ def _find_geometry_duplicates_batched(
             if not batch_geometries:
                 continue
 
-            # Single database query for the entire batch using spatial index (only if not filtering for cross_queue)
+            # Query FeatureStore using dwithin for each geometry to handle tolerance (only if not filtering for cross_queue)
             try:
-                # Extract GEOS objects for spatial query (temporary, not stored in feature dicts)
-                geometries = [geom for _, _, _, geom in batch_geometries]
-
-                # Create a lookup map for existing features using normalized coordinates
-                # This handles floating point precision differences better than WKT comparison
+                # Create a lookup map for existing features by geometry
+                # Use dwithin for each geometry to properly handle coordinate tolerance
                 existing_lookup = {}
 
                 # Query FeatureStore only if not filtering for cross_queue
                 if source_filter != 'cross_queue':
-                    existing_features = FeatureStore.objects.filter(
-                        user_id=user_id,
-                        geometry__in=geometries
-                    ).values('id', 'geojson', 'timestamp')
+                    # Process each geometry individually with dwithin to handle tolerance
+                    for idx, feature, normalized_coords, geometry in batch_geometries:
+                        # Use dwithin to find features within tolerance
+                        candidates = FeatureStore.objects.filter(
+                            user_id=user_id,
+                            geometry__dwithin=(geometry, COORDINATE_TOLERANCE)
+                        ).values('id', 'geojson', 'timestamp')
 
-                    for existing in existing_features:
-                        # Format the feature using the helper
-                        formatted_existing = _normalize_feature_for_hashing(existing)
-                        existing_geojson = formatted_existing['geojson']
+                        # Filter by geometry type and collect matches
+                        feature_geom_type = feature.get('geometry', {}).get('type', '').lower()
+                        matches = []
+                        for existing in candidates:
+                            formatted_existing = _normalize_feature_for_hashing(existing)
+                            existing_geojson = formatted_existing['geojson']
+                            existing_geom_type = existing_geojson.get('geometry', {}).get('type', '').lower()
+                            
+                            if existing_geom_type == feature_geom_type:
+                                matches.append(formatted_existing)
+                        
+                        if matches:
+                            existing_lookup[idx] = matches
 
-                        # Get coordinates from formatted geojson and normalize them
-                        existing_coords = existing_geojson.get('geometry', {}).get('coordinates', [])
-                        if existing_coords:
-                            normalized_existing_coords = normalize_coordinates(existing_coords)
-
-                            # Use normalized coordinates as key for lookup
-                            coords_key = json.dumps(normalized_existing_coords, sort_keys=True)
-                            if coords_key not in existing_lookup:
-                                existing_lookup[coords_key] = []
-                            existing_lookup[coords_key].append(formatted_existing)
-
-                # Check each feature in the batch using normalized coordinate comparison
+                # Check each feature in the batch
                 for idx, feature, normalized_coords, _ in batch_geometries:
-                    # Use the already normalized coordinates
-                    coords_key = json.dumps(normalized_coords, sort_keys=True)
-
-                    if coords_key in existing_lookup:
-
+                    if idx in existing_lookup:
                         # This is a duplicate from FeatureStore
                         duplicate_info = {
                             'feature': feature,
                             'source': DuplicateSource.FEATURE_STORE,
                             'match_type': DuplicateMatchType.GEOMETRY,
-                            'existing_features': existing_lookup[coords_key]
+                            'existing_features': existing_lookup[idx]
                         }
                         duplicate_features.append(duplicate_info)
                         feature_store_coord_count += 1
@@ -238,13 +232,15 @@ def _find_existing_features_by_coordinates(coordinates: List, geom_type: str, us
             return []
 
         # Use spatial index to find candidates within small tolerance
-        # 1e-6 degrees is roughly 10cm
+        # 5e-6 degrees is roughly 0.5 meters, which handles GPS coordinate precision differences
         candidates = FeatureStore.objects.filter(
             user_id=user_id,
             geometry__dwithin=(target_geometry, COORDINATE_TOLERANCE)
         ).values('id', 'geojson', 'timestamp')
 
-        # Filter candidates using exact normalized coordinate comparison
+        # Filter candidates by geometry type
+        # Since dwithin already handles tolerance, we trust those results
+        # and only filter by geometry type to ensure we're comparing like with like
         existing_features = []
 
         for feat in candidates:
@@ -252,11 +248,9 @@ def _find_existing_features_by_coordinates(coordinates: List, geom_type: str, us
             feat_geom_type = feat_geojson.get('geometry', {}).get('type', '').lower()
 
             if feat_geom_type == geom_type:
-                feature_coords = feat_geojson.get('geometry', {}).get('coordinates', [])
-                if feature_coords:
-                    normalized_feature_coords = normalize_coordinates(feature_coords)
-                    if normalized_coords == normalized_feature_coords:
-                        existing_features.append(feat)
+                # Since dwithin already verified the coordinates are within tolerance,
+                # we can trust this match without exact coordinate comparison
+                existing_features.append(feat)
 
         # Convert to result format
         result = []

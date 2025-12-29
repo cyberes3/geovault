@@ -20,6 +20,7 @@ from django.contrib.gis.geos import Point
 
 from api.models import FeatureStore, ImportQueue
 from geo_lib.feature_id import generate_geojson_hash
+from geo_lib.processing.duplicate_detection.constants import COORDINATE_TOLERANCE
 from geo_lib.processing.duplicate_detection.duplicate_detection import (
     find_duplicates_for_source,
 )
@@ -212,6 +213,95 @@ class TestDuplicateDetectionIndividual(TestCase):
         self.assertEqual(duplicates[0]['existing_features'][0]['id'], older_queue.id)
         
         print("✓ Test 4 passed: Cross-queue geometry duplicate detected correctly")
+
+    def test_coordinate_precision_edge_case(self):
+        """
+        Test edge case: Features with same name and slightly different coordinate precision
+        should still be detected as geometry duplicates.
+        
+        This tests the fix for coordinates with different precision that are within tolerance.
+        Uses the actual coordinates from the user's GPX files:
+        - File 1: 38.79543, -105.64053 (5 decimal places)
+        - File 2: 38.79542922973633, -105.64053344726562 (14 decimal places)
+        
+        These coordinates are about 0.28 meters apart, which is within the updated
+        tolerance of 5e-6 degrees (≈0.5 meters). The fix ensures that dwithin (spatial
+        tolerance) is used instead of exact coordinate matching.
+        """
+        # Create first feature with lower precision coordinates (5 decimal places)
+        # From GPX file 1: lat="38.79543" lon="-105.64053"
+        feature1 = {
+            'type': 'Feature',
+            'geometry': {'type': 'Point', 'coordinates': [-105.64053, 38.79543]},
+            'properties': {'name': "Dick's Peak", 'description': 'First file'}
+        }
+        
+        feature1_hash = generate_geojson_hash(feature1)
+        feature1['properties']['geojson_hash'] = feature1_hash
+        
+        # Create geometry object for feature store
+        coords1 = feature1['geometry']['coordinates']
+        point_geom1 = Point(coords1[0], coords1[1], 0, srid=4326)
+        
+        store_feature = FeatureStore.objects.create(
+            user=self.user,
+            geojson=feature1,
+            geojson_hash=feature1_hash,
+            geometry=point_geom1
+        )
+        
+        # Create second feature with higher precision coordinates (14 decimal places)
+        # From GPX file 2: lat="38.79542922973633" lon="-105.64053344726562"
+        feature2 = {
+            'type': 'Feature',
+            'geometry': {'type': 'Point', 'coordinates': [-105.64053344726562, 38.79542922973633]},
+            'properties': {'name': "Dick's Peak", 'description': 'Second file'}
+        }
+        
+        # These should be detected as geometry duplicates because they're within tolerance
+        # even though the coordinate precision differs
+        remaining, duplicates, log = find_duplicates_for_source(
+            [feature2],
+            self.user.id,
+            source='feature_store',
+            exclude_queue_id=None,
+            exclude_timestamp=None
+        )
+        
+        # Assertions
+        self.assertEqual(len(remaining), 0, 
+                        "Feature with slightly different coordinate precision should be detected as duplicate")
+        self.assertEqual(len(duplicates), 1, "Should have 1 duplicate")
+        self.assertEqual(duplicates[0]['source'], DuplicateSource.FEATURE_STORE)
+        self.assertEqual(duplicates[0]['match_type'], DuplicateMatchType.GEOMETRY,
+                        "Should be detected as geometry duplicate (not hash, since properties differ)")
+        self.assertEqual(duplicates[0]['existing_features'][0]['id'], store_feature.id)
+        
+        # Verify the coordinates are actually different (not exact match)
+        coords1_normalized = feature1['geometry']['coordinates']
+        coords2_normalized = feature2['geometry']['coordinates']
+        # They should be different when compared directly
+        self.assertNotEqual(coords1_normalized, coords2_normalized,
+                           "Coordinates should be different to test the edge case")
+        
+        # But they should be within tolerance (less than 5e-6 degrees difference)
+        lat_diff = abs(coords1_normalized[1] - coords2_normalized[1])
+        lon_diff = abs(coords1_normalized[0] - coords2_normalized[0])
+        # Calculate distance in meters for verification
+        lat_meters = lat_diff * 111000
+        lon_meters = lon_diff * 111000 * 0.707  # Approximate cos(38.8°)
+        distance_meters = (lat_meters**2 + lon_meters**2)**0.5
+        
+        # Use a small epsilon to account for floating point precision
+        epsilon = 1e-9
+        self.assertLess(lat_diff, COORDINATE_TOLERANCE + epsilon,
+                       f"Latitude difference ({lat_diff:.2e} degrees, {lat_meters:.3f}m) should be within tolerance ({COORDINATE_TOLERANCE})")
+        self.assertLess(lon_diff, COORDINATE_TOLERANCE + epsilon,
+                       f"Longitude difference ({lon_diff:.2e} degrees, {lon_meters:.3f}m) should be within tolerance ({COORDINATE_TOLERANCE})")
+        self.assertLess(distance_meters, 0.5,
+                       f"Total distance ({distance_meters:.3f}m) should be less than 0.5 meters")
+        
+        print("✓ Test coordinate precision edge case passed: Features with different coordinate precision detected as duplicates")
 
 
 class TestDuplicatePriorityRules(TestCase):
