@@ -200,7 +200,7 @@ class BaseProcessor(ABC):
     def step_4_split_and_validate_features(self, geojson_data: Dict[str, Any]) -> Tuple[List[Dict[str, Any]], ImportLog]:
         """
         Step 4: Split complex geometries and validate coordinates.
-        Does NOT generate tags - that happens after elevation filling in step 6.
+        Does NOT generate tags - that happens in step 7 (tagging and reverse geocoding).
         
         Args:
             geojson_data: GeoJSON data dictionary
@@ -335,29 +335,28 @@ class BaseProcessor(ABC):
 
         return step_log
 
-    def step_6_tag_features(self) -> ImportLog:
+    def step_7_tag_features(self) -> ImportLog:
         """
-        Step 6: Generate tags for already-processed (split and validated) features.
-        Tags include: type, import date, source file, and elevation.
-        Does NOT include reverse geocoding - that's in step 7.
-        Uses the processed_features stored in self.processed_features.
+        Step 7: Generate all tags for features including reverse geocoding.
+        Generates tags for: type, import date, source file, elevation,
+        and location-based tags (city, state, country, protected areas, etc.)
+        Uses batch processing with coordinate deduplication.
         
         Returns:
-            ImportLog with tagging information
+            ImportLog with tagging and geocoding information
         """
         feature_log = ImportLog()
 
         if not self.processed_features or self.minimal_processing:
             return feature_log
 
-        # Log start of tagging process
-        feature_log.add(f"Starting feature tagging for {len(self.processed_features)} feature(s)", "Feature Tagging", DatabaseLogLevel.INFO)
+        # Log start of tagging and reverse geocoding process
+        feature_log.add(f"Starting tagging and reverse geocoding for {len(self.processed_features)} feature(s)", "Tagging and Reverse Geocoding", DatabaseLogLevel.INFO)
 
-        # Batch process all features at once (without geocoding)
         try:
             # Check for cancellation before starting
             if self._is_canceled():
-                feature_log.add("Processing canceled before feature tagging", "Feature Tagging", DatabaseLogLevel.WARNING)
+                feature_log.add("Processing canceled before tagging and reverse geocoding", "Tagging and Reverse Geocoding", DatabaseLogLevel.WARNING)
                 return feature_log
 
             # Create feature instances for all features
@@ -390,22 +389,22 @@ class BaseProcessor(ABC):
 
             # Check for cancellation after creating instances
             if self._is_canceled():
-                feature_log.add("Processing canceled during feature instance creation", "Feature Tagging", DatabaseLogLevel.WARNING)
+                feature_log.add("Processing canceled during feature instance creation", "Tagging and Reverse Geocoding", DatabaseLogLevel.WARNING)
                 return feature_log
 
-            # Batch generate tags for all features at once (SKIP geocoding)
+            # Batch generate all tags for all features at once (including reverse geocoding)
             from geo_lib.processing.tagging.generate import generate_auto_tags_batch
             all_feature_tags = generate_auto_tags_batch(
                 [f for f in feature_instances if f is not None],
                 import_log=feature_log,
                 filename=self.filename,
-                skip_reverse_geocoding=True,  # Skip reverse geocoding - done in step 7
+                skip_reverse_geocoding=False,  # Include reverse geocoding
                 file_content=self.file_data
             )
 
             # Check for cancellation after tag generation
             if self._is_canceled():
-                feature_log.add("Processing canceled after tag generation", "Feature Tagging", DatabaseLogLevel.WARNING)
+                feature_log.add("Processing canceled after tag generation", "Tagging and Reverse Geocoding", DatabaseLogLevel.WARNING)
                 return feature_log
 
             # Apply tags to features
@@ -438,136 +437,18 @@ class BaseProcessor(ABC):
                     feature_name = feature.get('properties', {}).get('name', 'Unnamed')
                     feature_log.add(
                         f"Tag application failed for feature '{feature_name}': {str(tag_error)}",
-                        "Tag Generation",
+                        "Tagging and Reverse Geocoding",
                         DatabaseLogLevel.WARNING
                     )
                     _logger.warning(f"Tag application failed for feature '{feature_name}': {traceback.format_exc()}")
 
         except Exception as e:
             feature_log.add(
-                f"Batch tag generation failed: {str(e)}",
-                "Tag Generation",
+                f"Tagging and reverse geocoding failed: {str(e)}",
+                "Tagging and Reverse Geocoding",
                 DatabaseLogLevel.ERROR
             )
-            _logger.error(f"Batch tag generation error: {traceback.format_exc()}")
-
-        return feature_log
-
-    def step_7_reverse_geocode(self) -> ImportLog:
-        """
-        Step 7: Perform reverse geocoding for features.
-        Adds location-based tags (city, state, country, protected areas, etc.)
-        Uses batch processing with coordinate deduplication.
-        
-        Returns:
-            ImportLog with geocoding information
-        """
-        feature_log = ImportLog()
-
-        if not self.processed_features or self.minimal_processing:
-            return feature_log
-
-        # Check if geocoding is enabled
-        geocoding_enabled = get_required_setting('REVERSE_GEOCODING_ENABLED')
-        if not geocoding_enabled:
-            return feature_log
-
-        # Count features that will be reverse geocoded (points and lines only)
-        geocoding_count = 0
-        for feature in self.processed_features:
-            geometry_type = feature.get('geometry', {}).get('type', '').lower()
-            if geometry_type in ['point', 'linestring', 'multilinestring']:
-                geocoding_count += 1
-
-        if geocoding_count == 0:
-            return feature_log
-
-        feature_log.add(f"Reverse geocoding {geocoding_count} feature(s)", "Reverse Geocoding", DatabaseLogLevel.INFO)
-
-        try:
-            # Check for cancellation before starting
-            if self._is_canceled():
-                feature_log.add("Processing canceled before reverse geocoding", "Reverse Geocoding", DatabaseLogLevel.WARNING)
-                return feature_log
-
-            # Create feature instances for all features
-            feature_instances = []
-            for feature in self.processed_features:
-                try:
-                    geometry_type = feature['geometry']['type'].lower()
-
-                    # Determine the appropriate feature class
-                    feature_class = None
-                    if geometry_type in ['point', 'multipoint']:
-                        feature_class = PointFeature
-                    elif geometry_type == 'linestring':
-                        feature_class = LineStringFeature
-                    elif geometry_type == 'multilinestring':
-                        feature_class = MultiLineStringFeature
-                    elif geometry_type in ['polygon', 'multipolygon']:
-                        feature_class = PolygonFeature
-                    else:
-                        feature_instances.append(None)
-                        continue
-
-                    # Create feature instance
-                    feature_instance = feature_class(**feature)
-                    feature_instances.append(feature_instance)
-                except Exception as e:
-                    _logger.warning(f"Failed to create feature instance for geocoding: {e}")
-                    feature_instances.append(None)
-
-            # Check for cancellation after creating instances
-            if self._is_canceled():
-                feature_log.add("Processing canceled during feature instance creation", "Reverse Geocoding", DatabaseLogLevel.WARNING)
-                return feature_log
-
-            # Use the reverse geocoding tag generator directly for batch processing
-            from geo_lib.processing.tagging.modules.geocoding import ReverseGeocodingTagGenerator
-            reverse_geocoding_gen = ReverseGeocodingTagGenerator()
-
-            # Get valid feature instances for reverse geocoding
-            valid_features = [f for f in feature_instances if f is not None]
-
-            if valid_features:
-                reverse_geocode_tags = reverse_geocoding_gen.process_batch(valid_features, import_log=feature_log)
-
-                # Check for cancellation after reverse geocoding
-                if self._is_canceled():
-                    feature_log.add("Processing canceled after reverse geocoding", "Reverse Geocoding", DatabaseLogLevel.WARNING)
-                    return feature_log
-
-                # Apply reverse geocoding tags to features
-                tag_index = 0
-                for i, feature in enumerate(self.processed_features):
-                    if feature_instances[i] is None:
-                        continue
-
-                    try:
-                        if tag_index in reverse_geocode_tags:
-                            geo_tags = reverse_geocode_tags[tag_index]
-                            # Append reverse geocoding tags to existing system_tags
-                            existing_system_tags = feature.get('properties', {}).get('system_tags', [])
-                            if not isinstance(existing_system_tags, list):
-                                existing_system_tags = []
-                            feature['properties']['system_tags'] = existing_system_tags + geo_tags
-                        tag_index += 1
-                    except Exception as tag_error:
-                        feature_name = feature.get('properties', {}).get('name', 'Unnamed')
-                        feature_log.add(
-                            f"Reverse geocoding tag application failed for feature '{feature_name}': {str(tag_error)}",
-                            "Reverse Geocoding",
-                            DatabaseLogLevel.WARNING
-                        )
-                        _logger.warning(f"Geocoding tag application failed for feature '{feature_name}': {traceback.format_exc()}")
-
-        except Exception as e:
-            feature_log.add(
-                f"Reverse geocoding failed: {str(e)}",
-                "Reverse Geocoding",
-                DatabaseLogLevel.ERROR
-            )
-            _logger.error(f"Reverse geocoding error: {traceback.format_exc()}")
+            _logger.error(f"Tagging and reverse geocoding error: {traceback.format_exc()}")
 
         return feature_log
 
@@ -812,7 +693,7 @@ class BaseProcessor(ABC):
     def _step_4_process_single_feature(self, feature: Dict[str, Any]) -> Tuple[List[Dict[str, Any]], ImportLog, int, bool]:
         """
         Worker for step 4: Split and validate a single feature.
-        Does NOT generate tags - that happens in step 6.
+        Does NOT generate tags - that happens in step 7 (tagging and reverse geocoding).
         
         Args:
             feature: Single feature dictionary from GeoJSON

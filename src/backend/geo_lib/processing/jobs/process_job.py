@@ -402,40 +402,23 @@ class ProcessJob(BaseJob):
                 elevation_log = processor.step_5_fill_elevations()
                 realtime_log.extend(elevation_log)
 
-            # Step 5: Generate feature tags (minimal_processing flag skips this)
+            # Step 5: Tagging and Reverse Geocoding (minimal_processing flag skips this)
+            # Note: All tagging (including reverse geocoding) is now done in step 7
             if not is_replacement:
                 self._update_and_broadcast_status(
                     job_id, user_id, import_queue_id,
-                    "Generating feature tags...", tagging_progress
+                    "Tagging and Reverse Geocoding...", geocoding_progress
                 )
-                realtime_log.add("Generating feature tags", "ProcessJob", DatabaseLogLevel.INFO)
+                realtime_log.add("Tagging and Reverse Geocoding", "ProcessJob", DatabaseLogLevel.INFO)
 
                 tagging_start = time.time()
-                tagging_log = processor.step_6_tag_features()
+                tagging_log = processor.step_7_tag_features()
                 tagging_duration = time.time() - tagging_start
                 realtime_log.extend(tagging_log)
-                realtime_log.add_timing("Feature tagging", tagging_duration, "ProcessJob")
+                realtime_log.add_timing("Tagging and Reverse Geocoding", tagging_duration, "ProcessJob")
 
-                # Check for cancellation after tagging
-                if self._check_cancellation(job_id, realtime_log, "after feature tagging"):
-                    return
-
-            # Step 6: Reverse geocoding (minimal_processing flag skips this)
-            if not is_replacement:
-                self._update_and_broadcast_status(
-                    job_id, user_id, import_queue_id,
-                    "Reverse geocoding features...", geocoding_progress
-                )
-                realtime_log.add("Reverse geocoding features", "ProcessJob", DatabaseLogLevel.INFO)
-
-                geocoding_start = time.time()
-                geocoding_log = processor.step_7_reverse_geocode()
-                geocoding_duration = time.time() - geocoding_start
-                realtime_log.extend(geocoding_log)
-                realtime_log.add_timing("Reverse geocoding", geocoding_duration, "ProcessJob")
-
-                # Check for cancellation after geocoding
-                if self._check_cancellation(job_id, realtime_log, "after reverse geocoding"):
+                # Check for cancellation after tagging and geocoding
+                if self._check_cancellation(job_id, realtime_log, "after tagging and reverse geocoding"):
                     return
 
             # Check if job was canceled before finalization

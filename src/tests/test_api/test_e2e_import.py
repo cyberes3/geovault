@@ -263,8 +263,7 @@ class TestE2EImport(TransactionTestCase):
                 'KML conversion',  # Step 3: File conversion
                 'Feature splitting and validation',  # Step 4
                 # 'Elevation data filling' is optional (depends on settings)
-                'Feature tagging',  # Step 6
-                # 'Reverse geocoding' is optional (depends on settings)
+                'Tagging and Reverse Geocoding',  # Step 7: All tagging (including reverse geocoding)
             ]
             
             for expected_step in expected_timing_steps:
@@ -281,7 +280,7 @@ class TestE2EImport(TransactionTestCase):
             splitting_idx = next((i for i, msg in enumerate(log_messages) 
                                  if 'Splitting and validating features' in msg or 'splitting' in msg.lower()), None)
             tagging_idx = next((i for i, msg in enumerate(log_messages) 
-                               if 'Generating feature tags' in msg or 'Feature tagging' in msg), None)
+                               if 'Tagging and Reverse Geocoding' in msg or 'tagging' in msg.lower()), None)
             
             # Verify order if steps are present
             if conversion_idx is not None and splitting_idx is not None:
@@ -290,22 +289,7 @@ class TestE2EImport(TransactionTestCase):
             
             if splitting_idx is not None and tagging_idx is not None:
                 self.assertLess(splitting_idx, tagging_idx,
-                              "Feature splitting should happen before tagging")
-            
-            # Check for reverse geocoding as a separate step (if enabled)
-            geocoding_entries = [msg for msg in log_messages if 'reverse geocoding' in msg.lower()]
-            if geocoding_entries:
-                # If geocoding happened, verify it's after tagging
-                geocoding_idx = next((i for i, msg in enumerate(log_messages) 
-                                     if 'Reverse geocoding features' in msg), None)
-                if geocoding_idx is not None and tagging_idx is not None:
-                    self.assertLess(tagging_idx, geocoding_idx,
-                                  "Reverse geocoding should happen after tagging (as a separate step)")
-                
-                # Verify there's a separate timing entry for reverse geocoding
-                has_geocoding_timing = any('Reverse geocoding' in label for label in timing_labels)
-                self.assertTrue(has_geocoding_timing,
-                              "Should have separate timing entry for reverse geocoding step")
+                              "Feature splitting should happen before tagging and reverse geocoding")
         
         # Verify the processing produced valid output
         self.assertGreater(len(import_item.geofeatures), 0, "Should have processed features")
@@ -348,13 +332,13 @@ class TestE2EImport(TransactionTestCase):
             )
             
             # Step 5: Elevation filling (may be skipped if disabled, so optional check)
-            # Step 6: Feature tagging
+            # Step 7: Tagging and Reverse Geocoding (combined)
             self.assertTrue(
-                any('tagging' in msg.lower() or 'tag' in msg.lower() for msg in log_messages),
-                "Should have feature tagging step in logs"
+                any('Tagging and Reverse Geocoding' in msg or 'tagging' in msg.lower() for msg in log_messages),
+                "Should have tagging and reverse geocoding step in logs"
             )
             
-            # Step 7: Reverse geocoding (may be skipped if disabled, check if present)
+            # Reverse geocoding is now part of the tagging step, but may be skipped if disabled
             has_geocoding_step = any('geocoding' in msg.lower() or 'Reverse geocoding' in msg for msg in log_messages)
             # If geocoding is enabled in settings, it should be present
             # Note: We don't fail the test if it's not present, as it may be disabled
