@@ -894,8 +894,10 @@ class BaseProcessor(ABC):
             # Note: Timing is handled by the base processor's process() method
             self.import_log.add(f"Converting {file_type_name} file to GeoJSON format", "File Conversion", DatabaseLogLevel.INFO)
 
+            # Increase Node.js heap size to handle large files (8GB)
+            # Use --max-old-space-size to allow Node.js to use more memory
             result = subprocess.run(
-                ['node', togeojson_path, file_path],
+                ['node', '--max-old-space-size=8192', togeojson_path, file_path],
                 capture_output=True,
                 text=True,
                 timeout=self._calculate_timeout()
