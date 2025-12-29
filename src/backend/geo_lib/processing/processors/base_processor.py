@@ -399,7 +399,8 @@ class BaseProcessor(ABC):
                 [f for f in feature_instances if f is not None],
                 import_log=feature_log,
                 filename=self.filename,
-                skip_reverse_geocoding=True  # Skip reverse geocoding - done in step 7
+                skip_reverse_geocoding=True,  # Skip reverse geocoding - done in step 7
+                file_content=self.file_data
             )
 
             # Check for cancellation after tag generation

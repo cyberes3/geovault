@@ -13,6 +13,7 @@ from geo_lib.processing.tagging.modules.import_date import ImportDateTagGenerato
 from geo_lib.processing.tagging.modules.feature_date import FeatureDateTagGenerator
 from geo_lib.processing.tagging.modules.track_detection import TrackDetectionTagGenerator
 from geo_lib.processing.tagging.modules.driving_detection import DrivingDetectionTagGenerator
+from geo_lib.processing.tagging.modules.source_device import SourceDeviceTagGenerator
 from geo_lib.processing.tagging.modules.source_file import SourceFileTagGenerator
 from geo_lib.processing.tagging.modules.elevation import ElevationTagGenerator
 from geo_lib.processing.tagging.modules.geocoding import ReverseGeocodingTagGenerator
@@ -576,6 +577,167 @@ class TestSourceFileTagGenerator:
         tags = generator.process(feature, filename='')
         
         assert tags == []
+
+
+class TestSourceDeviceTagGenerator:
+    """Test the source device tag generator."""
+    
+    def test_source_device_tag_with_gpx_creator(self):
+        """Test that source-device tag is generated from GPX file with creator attribute."""
+        generator = SourceDeviceTagGenerator()
+        feature = PointFeature(
+            type='Feature',
+            geometry={'type': 'Point', 'coordinates': [-122.4194, 37.7749]},
+            properties={'name': 'Test Point', 'geojson_hash': 'test'}
+        )
+        
+        gpx_content = '<?xml version="1.0" encoding="UTF-8"?><gpx version="1.1" creator="Dakota 20" xmlns="http://www.topografix.com/GPX/1/1"><wpt lat="37.7749" lon="-122.4194"><name>Test Point</name></wpt></gpx>'
+        
+        tags = generator.process(feature, file_content=gpx_content)
+        
+        assert 'source-device:Dakota 20' in tags
+    
+    def test_source_device_tag_with_gpx_creator_bytes(self):
+        """Test that source-device tag is generated from GPX file content as bytes."""
+        generator = SourceDeviceTagGenerator()
+        feature = PointFeature(
+            type='Feature',
+            geometry={'type': 'Point', 'coordinates': [-122.4194, 37.7749]},
+            properties={'name': 'Test Point', 'geojson_hash': 'test'}
+        )
+        
+        gpx_content = b'<?xml version="1.0" encoding="UTF-8"?><gpx version="1.1" creator="Garmin Edge 530" xmlns="http://www.topografix.com/GPX/1/1"><wpt lat="37.7749" lon="-122.4194"><name>Test Point</name></wpt></gpx>'
+        
+        tags = generator.process(feature, file_content=gpx_content)
+        
+        assert 'source-device:Garmin Edge 530' in tags
+    
+    def test_source_device_tag_without_creator(self):
+        """Test that no tag is generated when GPX file has no creator attribute."""
+        generator = SourceDeviceTagGenerator()
+        feature = PointFeature(
+            type='Feature',
+            geometry={'type': 'Point', 'coordinates': [-122.4194, 37.7749]},
+            properties={'name': 'Test Point', 'geojson_hash': 'test'}
+        )
+        
+        gpx_content = '<?xml version="1.0" encoding="UTF-8"?><gpx version="1.1" xmlns="http://www.topografix.com/GPX/1/1"><wpt lat="37.7749" lon="-122.4194"><name>Test Point</name></wpt></gpx>'
+        
+        tags = generator.process(feature, file_content=gpx_content)
+        
+        assert tags == []
+    
+    def test_source_device_tag_with_empty_creator(self):
+        """Test that no tag is generated when GPX file has empty creator attribute."""
+        generator = SourceDeviceTagGenerator()
+        feature = PointFeature(
+            type='Feature',
+            geometry={'type': 'Point', 'coordinates': [-122.4194, 37.7749]},
+            properties={'name': 'Test Point', 'geojson_hash': 'test'}
+        )
+        
+        gpx_content = '<?xml version="1.0" encoding="UTF-8"?><gpx version="1.1" creator="" xmlns="http://www.topografix.com/GPX/1/1"><wpt lat="37.7749" lon="-122.4194"><name>Test Point</name></wpt></gpx>'
+        
+        tags = generator.process(feature, file_content=gpx_content)
+        
+        assert tags == []
+    
+    def test_source_device_tag_without_file_content(self):
+        """Test that no tag is generated without file content."""
+        generator = SourceDeviceTagGenerator()
+        feature = PointFeature(
+            type='Feature',
+            geometry={'type': 'Point', 'coordinates': [-122.4194, 37.7749]},
+            properties={'name': 'Test Point', 'geojson_hash': 'test'}
+        )
+        
+        tags = generator.process(feature)
+        
+        assert tags == []
+    
+    def test_source_device_tag_with_non_gpx_file(self):
+        """Test that no tag is generated for non-GPX files."""
+        generator = SourceDeviceTagGenerator()
+        feature = PointFeature(
+            type='Feature',
+            geometry={'type': 'Point', 'coordinates': [-122.4194, 37.7749]},
+            properties={'name': 'Test Point', 'geojson_hash': 'test'}
+        )
+        
+        kml_content = '<?xml version="1.0" encoding="UTF-8"?><kml xmlns="http://www.opengis.net/kml/2.2"><Placemark><name>Test Point</name><Point><coordinates>-122.4194,37.7749</coordinates></Point></Placemark></kml>'
+        
+        tags = generator.process(feature, file_content=kml_content)
+        
+        assert tags == []
+    
+    def test_source_device_tag_with_invalid_xml(self):
+        """Test that no tag is generated for invalid XML."""
+        generator = SourceDeviceTagGenerator()
+        feature = PointFeature(
+            type='Feature',
+            geometry={'type': 'Point', 'coordinates': [-122.4194, 37.7749]},
+            properties={'name': 'Test Point', 'geojson_hash': 'test'}
+        )
+        
+        invalid_xml = '<?xml version="1.0"?><gpx version="1.1" creator="Dakota 20"><invalid>'
+        
+        tags = generator.process(feature, file_content=invalid_xml)
+        
+        assert tags == []
+    
+    def test_source_device_tag_with_namespace(self):
+        """Test that source-device tag is generated from GPX file with namespace."""
+        generator = SourceDeviceTagGenerator()
+        feature = PointFeature(
+            type='Feature',
+            geometry={'type': 'Point', 'coordinates': [-122.4194, 37.7749]},
+            properties={'name': 'Test Point', 'geojson_hash': 'test'}
+        )
+        
+        gpx_content = '<?xml version="1.0" encoding="UTF-8" standalone="no" ?><gpx xmlns="http://www.topografix.com/GPX/1/1" xmlns:gpxx="http://www.garmin.com/xmlschemas/GpxExtensions/v3" creator="Dakota 20" version="1.1"><wpt lat="37.7749" lon="-122.4194"><name>Test Point</name></wpt></gpx>'
+        
+        tags = generator.process(feature, file_content=gpx_content)
+        
+        assert 'source-device:Dakota 20' in tags
+    
+    def test_source_device_tag_garmin_desktop_app(self):
+        """Test that source-device tag is generated from Garmin Desktop App GPX file with many namespaces."""
+        generator = SourceDeviceTagGenerator()
+        feature = PointFeature(
+            type='Feature',
+            geometry={'type': 'Point', 'coordinates': [-105.4851, 39.4059]},
+            properties={'name': 'Test Point', 'geojson_hash': 'test'}
+        )
+        
+        gpx_content = '''<?xml version="1.0" encoding="utf-8"?><gpx creator="Garmin Desktop App" version="1.1" xsi:schemaLocation="http://www.topografix.com/GPX/1/1 http://www.topografix.com/GPX/1/1/gpx.xsd http://www.garmin.com/xmlschemas/WaypointExtension/v1 http://www8.garmin.com/xmlschemas/WaypointExtensionv1.xsd http://www.garmin.com/xmlschemas/TrackPointExtension/v1 http://www.garmin.com/xmlschemas/TrackPointExtensionv1.xsd http://www.garmin.com/xmlschemas/GpxExtensions/v3 http://www8.garmin.com/xmlschemas/GpxExtensionsv3.xsd http://www.garmin.com/xmlschemas/ActivityExtension/v1 http://www8.garmin.com/xmlschemas/ActivityExtensionv1.xsd http://www.garmin.com/xmlschemas/AdventuresExtensions/v1 http://www8.garmin.com/xmlschemas/AdventuresExtensionv1.xsd http://www.garmin.com/xmlschemas/PressureExtension/v1 http://www.garmin.com/xmlschemas/PressureExtensionv1.xsd http://www.garmin.com/xmlschemas/TripExtensions/v1 http://www.garmin.com/xmlschemas/TripExtensionsv1.xsd http://www.garmin.com/xmlschemas/TripMetaDataExtensions/v1 http://www.garmin.com/xmlschemas/TripMetaDataExtensionsv1.xsd http://www.garmin.com/xmlschemas/ViaPointTransportationModeExtensions/v1 http://www.garmin.com/xmlschemas/ViaPointTransportationModeExtensionsv1.xsd http://www.garmin.com/xmlschemas/CreationTimeExtension/v1 http://www.garmin.com/xmlschemas/CreationTimeExtensionsv1.xsd http://www.garmin.com/xmlschemas/AccelerationExtension/v1 http://www.garmin.com/xmlschemas/AccelerationExtensionv1.xsd http://www.garmin.com/xmlschemas/PowerExtension/v1 http://www.garmin.com/xmlschemas/PowerExtensionv1.xsd http://www.garmin.com/xmlschemas/VideoExtension/v1 http://www.garmin.com/xmlschemas/VideoExtensionv1.xsd" xmlns="http://www.topografix.com/GPX/1/1" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xmlns:wptx1="http://www.garmin.com/xmlschemas/WaypointExtension/v1" xmlns:gpxtrx="http://www.garmin.com/xmlschemas/GpxExtensions/v3" xmlns:gpxtpx="http://www.garmin.com/xmlschemas/TrackPointExtension/v1" xmlns:gpxx="http://www.garmin.com/xmlschemas/GpxExtensions/v3" xmlns:trp="http://www.garmin.com/xmlschemas/TripExtensions/v1" xmlns:adv="http://www.garmin.com/xmlschemas/AdventuresExtensions/v1" xmlns:prs="http://www.garmin.com/xmlschemas/PressureExtension/v1" xmlns:tmd="http://www.garmin.com/xmlschemas/TripMetaDataExtensions/v1" xmlns:vptm="http://www.garmin.com/xmlschemas/ViaPointTransportationModeExtensions/v1" xmlns:ctx="http://www.garmin.com/xmlschemas/CreationTimeExtension/v1" xmlns:gpxacc="http://www.garmin.com/xmlschemas/AccelerationExtension/v1" xmlns:gpxpx="http://www.garmin.com/xmlschemas/PowerExtension/v1" xmlns:vidx1="http://www.garmin.com/xmlschemas/VideoExtension/v1">
+  <metadata>
+    <link href="http://www.garmin.com">
+      <text>Garmin International</text>
+    </link>
+    <time>2024-06-28T00:04:51Z</time>
+    <bounds maxlat="39.40592042170465" maxlon="-105.48509982414544" minlat="39.346950463950634" minlon="-105.51547198556364" />
+  </metadata>
+</gpx>'''
+        
+        tags = generator.process(feature, file_content=gpx_content)
+        
+        assert 'source-device:Garmin Desktop App' in tags
+    
+    def test_source_device_tag_caltopo(self):
+        """Test that source-device tag is generated from CALTOPO GPX file."""
+        generator = SourceDeviceTagGenerator()
+        feature = PointFeature(
+            type='Feature',
+            geometry={'type': 'Point', 'coordinates': [-105.5333, 40.1743]},
+            properties={'name': 'Test Point', 'geojson_hash': 'test'}
+        )
+        
+        gpx_content = '''<?xml version="1.0"?>
+<gpx xmlns="http://www.topografix.com/GPX/1/1" xmlns:gpxx="http://www.garmin.com/xmlschemas/GpxExtensions/v3" version="1.1" creator="CALTOPO"><metadata><name><![CDATA[Saint Vrain Mountain trail]]></name></metadata><trk><name>11/11/2025</name><trkseg><trkpt lat="40.17433089" lon="-105.53333483"><ele>2719.0</ele><time>2025-11-11T17:28:16Z</time></trkpt><trkpt lat="40.17433096" lon="-105.5333347"><ele>2719.0</ele><time>2025-11-11T17:28:21Z</time></trkpt></trkseg></trk></gpx>'''
+        
+        tags = generator.process(feature, file_content=gpx_content)
+        
+        assert 'source-device:CALTOPO' in tags
 
 
 class TestElevationTagGenerator:
