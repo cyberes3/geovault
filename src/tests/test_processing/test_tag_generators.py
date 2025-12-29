@@ -961,6 +961,48 @@ class TestReverseGeocodingTagGenerator:
         assert 'geo-state:California' in tags
         assert 'geo-country:United States' in tags
     
+    @patch('geo_lib.processing.tagging.modules.geocoding.batch_reverse_geocode_coordinates')
+    @patch('geo_lib.processing.tagging.modules.geocoding.get_required_setting')
+    def test_reverse_geocoding_for_multilinestring(self, mock_setting, mock_batch_reverse_geocode):
+        """Test that reverse geocoding tags are generated for multilinestrings using centroid."""
+        mock_setting.return_value = True
+        
+        # Mock batch_reverse_geocode_coordinates - returns dict mapping (lat, lon) to (tags, log_messages)
+        # The centroid of the multilinestring should be calculated from all coordinates
+        # Line 1: [[-122.4194, 37.7749], [-122.4195, 37.7750]]
+        # Line 2: [[-122.4196, 37.7751], [-122.4197, 37.7752]]
+        # Centroid: average of all 4 points
+        # lat = (37.7749 + 37.7750 + 37.7751 + 37.7752) / 4 = 37.77505
+        # lon = (-122.4194 + -122.4195 + -122.4196 + -122.4197) / 4 = -122.41955
+        mock_batch_reverse_geocode.return_value = {
+            (37.77505, -122.41955): (
+                [
+                    'geo-state:California',
+                    'geo-country:United States'
+                ],
+                []  # Empty log messages
+            )
+        }
+        
+        generator = ReverseGeocodingTagGenerator()
+        feature = MultiLineStringFeature(
+            type='Feature',
+            geometry={
+                'type': 'MultiLineString',
+                'coordinates': [
+                    [[-122.4194, 37.7749], [-122.4195, 37.7750]],  # First linestring
+                    [[-122.4196, 37.7751], [-122.4197, 37.7752]]  # Second linestring
+                ]
+            },
+            properties={'name': 'Test MultiLineString', 'geojson_hash': 'test'}
+        )
+        import_log = ImportLog()
+        
+        tags = generator.process(feature, import_log=import_log)
+        
+        assert 'geo-state:California' in tags
+        assert 'geo-country:United States' in tags
+    
     @patch('geo_lib.processing.tagging.modules.geocoding.get_required_setting')
     def test_polygon_not_processed(self, mock_setting):
         """Test that polygons are not processed for reverse geocoding."""

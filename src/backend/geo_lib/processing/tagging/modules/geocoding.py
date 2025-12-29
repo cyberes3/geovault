@@ -21,7 +21,8 @@ def get_representative_points(feature: GeoFeatureSupported) -> List[Tuple[float,
     """
     Get representative points from a feature for reverse geocoding.
     For points: returns the point itself
-    For lines: returns only the middle point
+    For linestrings: returns only the middle point
+    For multilinestrings: returns the centroid (average) of all coordinates from all linestrings
     For polygons: returns empty list (not reverse geocoded)
     
     Returns:
@@ -35,19 +36,32 @@ def get_representative_points(feature: GeoFeatureSupported) -> List[Tuple[float,
         # GeoJSON coordinates are [longitude, latitude] or [longitude, latitude, elevation]
         points.append((coords[1], coords[0]))  # (lat, lon)
     
-    elif geometry.type.value.lower() in ['linestring', 'multilinestring']:
+    elif geometry.type.value.lower() == 'linestring':
         # For linestrings, use only the middle point
-        if geometry.type.value.lower() == 'linestring':
-            coords_list = geometry.coordinates
-        else:  # multilinestring
-            # Use the first linestring
-            coords_list = geometry.coordinates[0] if geometry.coordinates else []
-        
+        coords_list = geometry.coordinates
         if coords_list:
             # Middle point only
             mid_idx = len(coords_list) // 2
             mid_coords = coords_list[mid_idx]
             points.append((mid_coords[1], mid_coords[0]))  # (lat, lon)
+    
+    elif geometry.type.value.lower() == 'multilinestring':
+        # For multilinestrings, calculate the centroid of all linestrings
+        all_coords = []
+        for linestring in geometry.coordinates:
+            if linestring:
+                all_coords.extend(linestring)
+        
+        if all_coords:
+            # Calculate centroid (average) of all coordinates
+            # GeoJSON coordinates are [longitude, latitude] or [longitude, latitude, elevation]
+            total_lon = sum(coord[0] for coord in all_coords)
+            total_lat = sum(coord[1] for coord in all_coords)
+            count = len(all_coords)
+            
+            centroid_lon = total_lon / count
+            centroid_lat = total_lat / count
+            points.append((centroid_lat, centroid_lon))  # (lat, lon)
     
     # Polygons are not reverse geocoded (as per user's requirement)
     
