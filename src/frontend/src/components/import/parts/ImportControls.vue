@@ -52,7 +52,6 @@
             <h3 class="text-sm font-medium text-purple-800">All Features Are Duplicates</h3>
             <div class="mt-2 text-sm text-purple-700">
               <p>All features in this file are duplicates of existing features in your library or import queue.</p>
-              <p class="mt-1">The features will be automatically skipped during import.</p>
             </div>
           </div>
         </div>

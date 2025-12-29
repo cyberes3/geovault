@@ -36,6 +36,7 @@ from geo_lib.processing.utils import (
 from geo_lib.security.exceptions import FileValidationError, SecurityError
 from geo_lib.utils.advisory_locks import advisory_lock
 from geo_lib.utils.pydantic_serialization import convert_features_to_pydantic
+from website.config_loader import get_config_loader
 
 _logger = get_tagged_logger('ProcessJob')
 
@@ -494,11 +495,29 @@ class ProcessJob(BaseJob):
             _logger.error(f"Upload processing failed for job {job_id} after {overall_duration:.2f}s: Security/validation error - {str(e)}")
             error_msg = str(e) if str(e) else FILE_VALIDATION_FAILED
             self._handle_processing_error(job_id, user_id, f"{FILE_VALIDATION_FAILED}: {error_msg}", realtime_log)
-        except:
+        except Exception as e:
             overall_duration = time.time() - overall_start_time
             file_size_mb = len(file_data) / (1024 * 1024) if file_data else 0
             _logger.error(f"Upload processing error for job {job_id} after {overall_duration:.2f}s: file '{filename}' ({file_size_mb:.2f} MB): {traceback.format_exc()}")
-            self._handle_processing_error(job_id, user_id, ERROR_OCCURRED_DURING_PROCESSING, realtime_log)
+            
+            # Check if detailed error messages are enabled (default: True)
+            config_loader = get_config_loader()
+            show_detailed = config_loader.get_bool('processing.show_detailed_error_messages', True)
+            
+            if show_detailed:
+                # Capture exception type and message, truncate if too long
+                exception_type = type(e).__name__
+                exception_message = str(e) if e else "Unknown error"
+                max_message_length = 200
+                if len(exception_message) > max_message_length:
+                    exception_message = exception_message[:max_message_length] + "..."
+                
+                error_msg = f"{ERROR_OCCURRED_DURING_PROCESSING}: {exception_type}: {exception_message}"
+            else:
+                # Use generic error message
+                error_msg = ERROR_OCCURRED_DURING_PROCESSING
+            
+            self._handle_processing_error(job_id, user_id, error_msg, realtime_log)
 
     def _create_initial_import_queue_entry(self, filename: str, user_id: int, job_id: str, replacement_feature_id: Optional[int] = None) -> int:
         """Create an initial ImportQueue entry for async processing."""

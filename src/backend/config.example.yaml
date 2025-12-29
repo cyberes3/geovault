@@ -158,6 +158,9 @@ processing:
   # Maximum age before jobs are cleaned up (2 hours)
   max_job_age_seconds: 7200
 
+  # Show detailed error messages in import process logs (includes exception type and message)
+  show_detailed_error_messages: true
+
 
 validation:
   # Enable secure XML parsing
