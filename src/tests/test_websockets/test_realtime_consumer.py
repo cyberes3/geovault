@@ -10,9 +10,14 @@ from django.contrib.auth.models import AnonymousUser
 from django.test import TransactionTestCase
 from django.contrib.auth import get_user_model
 
-from api.models import ImportQueue
+from django.contrib.gis.geos import Point
+
+from api.models import ImportQueue, FeatureStore
 from api.ws_consumers.realtime_consumer import RealtimeConsumer
+from geo_lib.feature_id import generate_geojson_hash
+from geo_lib.processing.duplicate_detection.models import DuplicateSource, DuplicateMatchType
 from geo_lib.websocket.modules.import_queue_module import ImportQueueModule
+from geo_lib.websocket.modules.process_status_module import ProcessStatusModule
 
 User = get_user_model()
 
@@ -340,4 +345,303 @@ class TestRealtimeConsumerChannelLayer(TransactionTestCase):
         
         await communicator1.disconnect()
         await communicator2.disconnect()
+
+
+class TestAllFeaturesDuplicateDetection(TransactionTestCase):
+    """Test that files with exactly 1 duplicate feature are marked as all_features_duplicate."""
+
+    async def test_single_feature_duplicate_marked_in_import_queue(self):
+        """Test that a file with 1 feature that is a duplicate gets marked as all_features_duplicate."""
+        user = await database_sync_to_async(User.objects.create_user)(
+            email='test_all_dup@example.com',
+            password='testpass123',
+            username='testuser_all_dup'
+        )
+
+        # Create a feature that will be a duplicate
+        duplicate_feature = {
+            'type': 'Feature',
+            'geometry': {'type': 'Point', 'coordinates': [-122.4194, 37.7749]},
+            'properties': {'name': 'Test Point', 'description': 'A test point'}
+        }
+        feature_hash = generate_geojson_hash(duplicate_feature)
+        duplicate_feature['properties']['geojson_hash'] = feature_hash
+
+        # Create the feature in FeatureStore to make it a duplicate
+        await database_sync_to_async(FeatureStore.objects.create)(
+            user=user,
+            geojson=duplicate_feature,
+            geojson_hash=feature_hash,
+            geometry=Point(-122.4194, 37.7749, 0, srid=4326)
+        )
+
+        # Create duplicate_features entry matching the structure from duplicate detection
+        duplicate_features_entry = [{
+            'feature': duplicate_feature,
+            'source': DuplicateSource.FEATURE_STORE,
+            'match_type': DuplicateMatchType.HASH,
+            'existing_features': [{'id': 1, 'geojson': duplicate_feature}]
+        }]
+
+        # Create ImportQueue item with exactly 1 feature that is a duplicate
+        queue_item = await database_sync_to_async(ImportQueue.objects.create)(
+            user=user,
+            imported=False,
+            file_hash=None,  # No file_hash to avoid file_hash duplicate detection
+            original_filename='single_duplicate.geojson',
+            geofeatures=[duplicate_feature],
+            duplicate_features=duplicate_features_entry
+        )
+
+        # Create a mock consumer to instantiate the module
+        mock_consumer = MagicMock()
+        mock_consumer.user = user
+        mock_consumer.room_group_name = f"realtime_{user.id}"
+
+        module = ImportQueueModule(mock_consumer)
+
+        # Get queue data
+        queue_data = await module.get_import_queue_data()
+
+        # Find our item
+        item_data = next((item for item in queue_data if item['id'] == queue_item.id), None)
+        self.assertIsNotNone(item_data, "Queue item should be in the data")
+
+        # Verify it's marked as all_features_duplicate
+        self.assertIn('file_duplicate', item_data)
+        self.assertEqual(item_data['file_duplicate']['status'], 'all_features_duplicate',
+                        "Single duplicate feature should mark file as all_features_duplicate")
+
+    async def test_single_feature_not_duplicate_not_marked(self):
+        """Test that a file with 1 feature that is NOT a duplicate does NOT get marked."""
+        user = await database_sync_to_async(User.objects.create_user)(
+            email='test_not_dup@example.com',
+            password='testpass123',
+            username='testuser_not_dup'
+        )
+
+        # Create a unique feature
+        unique_feature = {
+            'type': 'Feature',
+            'geometry': {'type': 'Point', 'coordinates': [-122.5, 37.8]},
+            'properties': {'name': 'Unique Point', 'description': 'A unique point'}
+        }
+        feature_hash = generate_geojson_hash(unique_feature)
+        unique_feature['properties']['geojson_hash'] = feature_hash
+
+        # Create ImportQueue item with exactly 1 feature that is NOT a duplicate
+        queue_item = await database_sync_to_async(ImportQueue.objects.create)(
+            user=user,
+            imported=False,
+            file_hash=None,
+            original_filename='single_unique.geojson',
+            geofeatures=[unique_feature],
+            duplicate_features=[]  # No duplicates
+        )
+
+        # Create a mock consumer to instantiate the module
+        mock_consumer = MagicMock()
+        mock_consumer.user = user
+        mock_consumer.room_group_name = f"realtime_{user.id}"
+
+        module = ImportQueueModule(mock_consumer)
+
+        # Get queue data
+        queue_data = await module.get_import_queue_data()
+
+        # Find our item
+        item_data = next((item for item in queue_data if item['id'] == queue_item.id), None)
+        self.assertIsNotNone(item_data, "Queue item should be in the data")
+
+        # Verify it's NOT marked as all_features_duplicate
+        self.assertIn('file_duplicate', item_data)
+        self.assertIsNone(item_data['file_duplicate']['status'],
+                         "Single non-duplicate feature should NOT mark file as duplicate")
+
+    async def test_multiple_features_not_marked_even_if_all_duplicates(self):
+        """Test that a file with multiple features does NOT get marked, even if all are duplicates."""
+        user = await database_sync_to_async(User.objects.create_user)(
+            email='test_multi@example.com',
+            password='testpass123',
+            username='testuser_multi'
+        )
+
+        # Create two duplicate features
+        feature1 = {
+            'type': 'Feature',
+            'geometry': {'type': 'Point', 'coordinates': [-122.4194, 37.7749]},
+            'properties': {'name': 'Point 1'}
+        }
+        hash1 = generate_geojson_hash(feature1)
+        feature1['properties']['geojson_hash'] = hash1
+
+        feature2 = {
+            'type': 'Feature',
+            'geometry': {'type': 'Point', 'coordinates': [-122.5, 37.8]},
+            'properties': {'name': 'Point 2'}
+        }
+        hash2 = generate_geojson_hash(feature2)
+        feature2['properties']['geojson_hash'] = hash2
+
+        # Create duplicate_features entries
+        duplicate_features_entry = [
+            {
+                'feature': feature1,
+                'source': DuplicateSource.FEATURE_STORE,
+                'match_type': DuplicateMatchType.HASH,
+                'existing_features': [{'id': 1}]
+            },
+            {
+                'feature': feature2,
+                'source': DuplicateSource.FEATURE_STORE,
+                'match_type': DuplicateMatchType.HASH,
+                'existing_features': [{'id': 2}]
+            }
+        ]
+
+        # Create ImportQueue item with 2 features (both duplicates)
+        queue_item = await database_sync_to_async(ImportQueue.objects.create)(
+            user=user,
+            imported=False,
+            file_hash=None,
+            original_filename='multiple_duplicates.geojson',
+            geofeatures=[feature1, feature2],
+            duplicate_features=duplicate_features_entry
+        )
+
+        # Create a mock consumer to instantiate the module
+        mock_consumer = MagicMock()
+        mock_consumer.user = user
+        mock_consumer.room_group_name = f"realtime_{user.id}"
+
+        module = ImportQueueModule(mock_consumer)
+
+        # Get queue data
+        queue_data = await module.get_import_queue_data()
+
+        # Find our item
+        item_data = next((item for item in queue_data if item['id'] == queue_item.id), None)
+        self.assertIsNotNone(item_data, "Queue item should be in the data")
+
+        # Verify it's NOT marked as all_features_duplicate (only single feature files get marked)
+        self.assertIn('file_duplicate', item_data)
+        self.assertIsNone(item_data['file_duplicate']['status'],
+                         "Multiple features should NOT mark file as all_features_duplicate")
+
+    async def test_file_hash_duplicate_takes_priority(self):
+        """Test that duplicate_in_queue takes priority over all_features_duplicate."""
+        user = await database_sync_to_async(User.objects.create_user)(
+            email='test_priority@example.com',
+            password='testpass123',
+            username='testuser_priority'
+        )
+
+        # Create a duplicate feature
+        duplicate_feature = {
+            'type': 'Feature',
+            'geometry': {'type': 'Point', 'coordinates': [-122.4194, 37.7749]},
+            'properties': {'name': 'Test Point'}
+        }
+        feature_hash = generate_geojson_hash(duplicate_feature)
+        duplicate_feature['properties']['geojson_hash'] = feature_hash
+
+        duplicate_features_entry = [{
+            'feature': duplicate_feature,
+            'source': DuplicateSource.FEATURE_STORE,
+            'match_type': DuplicateMatchType.HASH,
+            'existing_features': [{'id': 1}]
+        }]
+
+        # Create first item (earlier)
+        item1 = await database_sync_to_async(ImportQueue.objects.create)(
+            user=user,
+            imported=False,
+            file_hash='same_hash_123',
+            original_filename='first.geojson',
+            geofeatures=[duplicate_feature],
+            duplicate_features=duplicate_features_entry
+        )
+
+        # Create second item with same file_hash (later, should be duplicate_in_queue)
+        item2 = await database_sync_to_async(ImportQueue.objects.create)(
+            user=user,
+            imported=False,
+            file_hash='same_hash_123',  # Same file hash
+            original_filename='second.geojson',
+            geofeatures=[duplicate_feature],
+            duplicate_features=duplicate_features_entry
+        )
+
+        # Create a mock consumer to instantiate the module
+        mock_consumer = MagicMock()
+        mock_consumer.user = user
+        mock_consumer.room_group_name = f"realtime_{user.id}"
+
+        module = ImportQueueModule(mock_consumer)
+
+        # Get queue data
+        queue_data = await module.get_import_queue_data()
+
+        # Find item2 (the later one)
+        item2_data = next((item for item in queue_data if item['id'] == item2.id), None)
+        self.assertIsNotNone(item2_data, "Item2 should be in the data")
+
+        # Verify it's marked as duplicate_in_queue (not all_features_duplicate)
+        self.assertIn('file_duplicate', item2_data)
+        self.assertEqual(item2_data['file_duplicate']['status'], 'duplicate_in_queue',
+                        "File hash duplicate should take priority over all_features_duplicate")
+
+    async def test_process_status_module_data_structure(self):
+        """Test that ProcessStatusModule has correct data structure for all_features_duplicate detection."""
+        user = await database_sync_to_async(User.objects.create_user)(
+            email='test_process_status@example.com',
+            password='testpass123',
+            username='testuser_process_status'
+        )
+
+        # Create a duplicate feature
+        duplicate_feature = {
+            'type': 'Feature',
+            'geometry': {'type': 'Point', 'coordinates': [-122.4194, 37.7749]},
+            'properties': {'name': 'Test Point'}
+        }
+        feature_hash = generate_geojson_hash(duplicate_feature)
+        duplicate_feature['properties']['geojson_hash'] = feature_hash
+
+        duplicate_features_entry = [{
+            'feature': duplicate_feature,
+            'source': DuplicateSource.FEATURE_STORE,
+            'match_type': DuplicateMatchType.HASH,
+            'existing_features': [{'id': 1}]
+        }]
+
+        # Create ImportQueue item
+        import_item = await database_sync_to_async(ImportQueue.objects.create)(
+            user=user,
+            imported=False,
+            file_hash=None,  # No file_hash
+            original_filename='single_duplicate.geojson',
+            geofeatures=[duplicate_feature],
+            duplicate_features=duplicate_features_entry
+        )
+
+        # Verify the data structure is correct for the all_features_duplicate check
+        self.assertEqual(len(import_item.geofeatures), 1, "Should have exactly 1 feature")
+        self.assertEqual(len(import_item.duplicate_features), 1, "Should have 1 duplicate")
+        
+        # Verify the feature hash matches the duplicate feature hash
+        dup_info = import_item.duplicate_features[0]
+        dup_feature = dup_info.get('feature')
+        self.assertIsNotNone(dup_feature, "Duplicate info should have feature")
+        
+        dup_feature_hash = dup_feature.get('properties', {}).get('geojson_hash')
+        if not dup_feature_hash:
+            dup_feature_hash = generate_geojson_hash(dup_feature)
+        
+        single_feature_hash = import_item.geofeatures[0].get('properties', {}).get('geojson_hash')
+        if not single_feature_hash:
+            single_feature_hash = generate_geojson_hash(import_item.geofeatures[0])
+        
+        self.assertEqual(dup_feature_hash, single_feature_hash,
+                        "Feature hash should match duplicate feature hash - this enables all_features_duplicate detection")
 

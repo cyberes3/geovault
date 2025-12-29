@@ -23,7 +23,7 @@
     <Loader size="sm" layout="inline" :showMessage="false" color="#854d0e" />
     <span class="ml-1">Processing</span>
   </span>
-  <span v-else-if="item.file_duplicate?.status === 'duplicate_in_queue' || item.file_duplicate?.status === 'duplicate_imported'" class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-purple-200 text-purple-900">
+  <span v-else-if="item.file_duplicate?.status === 'duplicate_in_queue' || item.file_duplicate?.status === 'duplicate_imported' || item.file_duplicate?.status === 'all_features_duplicate'" class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-purple-200 text-purple-900">
     <DocumentDuplicateIcon class="w-3 h-3 mr-1" />
     Duplicate
   </span>

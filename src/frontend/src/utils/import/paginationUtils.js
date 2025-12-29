@@ -50,15 +50,16 @@ export function calculateAdjustedHasPrevious(currentPage, hideDuplicates, origin
 }
 
 /**
- * Calculate importable feature count (non-duplicates, non-skipped)
+ * Calculate importable feature count (non-hash-duplicates, non-skipped)
  * @param {number} totalFeatures - Total number of features
- * @param {number} duplicateCount - Number of duplicate features
- * @param {Set} skippedFeatureIds - Set of skipped feature IDs
+ * @param {number} hashDuplicateCount - Number of hash duplicate features (permanently blocked)
+ * @param {Set} skippedFeatureIds - Set of skipped feature IDs (geometry duplicates that are skipped)
  * @returns {number} Importable feature count
  */
-export function calculateImportableCount(totalFeatures, duplicateCount, skippedFeatureIds) {
-  const blockedDuplicatesCount = duplicateCount;
-  return totalFeatures - blockedDuplicatesCount - skippedFeatureIds.size;
+export function calculateImportableCount(totalFeatures, hashDuplicateCount, skippedFeatureIds) {
+  // Only hash duplicates are permanently blocked
+  // Geometry duplicates can be restored (removed from skippedFeatureIds)
+  return totalFeatures - hashDuplicateCount - skippedFeatureIds.size;
 }
 
 /**

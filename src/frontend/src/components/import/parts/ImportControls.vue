@@ -42,6 +42,22 @@
         </div>
       </div>
     </div>
+    <div v-else-if="fileDuplicate.status === 'all_features_duplicate' && !isLoadingPage && showDuplicateMessage" class="bg-white rounded-lg shadow-sm border border-gray-200 p-4">
+      <div class="p-4 bg-purple-50 border border-purple-200 rounded-md">
+        <div class="flex">
+          <div class="flex-shrink-0">
+            <ClipboardDocumentIcon class="h-5 w-5 text-purple-400" />
+          </div>
+          <div class="ml-3">
+            <h3 class="text-sm font-medium text-purple-800">All Features Are Duplicates</h3>
+            <div class="mt-2 text-sm text-purple-700">
+              <p>All features in this file are duplicates of existing features in your library or import queue.</p>
+              <p class="mt-1">The features will be automatically skipped during import.</p>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
     <div v-else-if="errorMessage && errorMessage !== '' && !isLoadingPage && importableCount === 0" class="bg-white rounded-lg shadow-sm border border-gray-200 p-4">
       <div class="p-4 bg-red-50 border border-red-200 rounded-md">
         <div class="flex">

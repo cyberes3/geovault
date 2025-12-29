@@ -30,6 +30,26 @@ export function calculateTotalDuplicateCount(duplicates) {
 }
 
 /**
+ * Count hash duplicates only (permanently blocked, cannot be restored)
+ * @param {Object} duplicates - Duplicates object
+ * @param {Array} duplicates.featureStoreHash - Feature store hash duplicates
+ * @param {Array} duplicates.crossQueueHash - Cross-queue hash duplicates
+ * @returns {number} Hash duplicate count
+ */
+export function calculateHashDuplicateCount(duplicates) {
+  const featureStoreHashDups = duplicates.featureStoreHash || [];
+  const crossQueueHashDups = duplicates.crossQueueHash || [];
+
+  // Use a Set to avoid counting the same feature twice
+  const hashDuplicateHashes = new Set([
+    ...featureStoreHashDups.map(d => d.hash),
+    ...crossQueueHashDups.map(d => d.hash),
+  ]);
+
+  return hashDuplicateHashes.size;
+}
+
+/**
  * Mark duplicate features with appropriate flags
  * @param {Array} items - Array of feature items
  * @param {Object} duplicates - Duplicates object from backend
@@ -118,6 +138,18 @@ export function isItemDuplicate(item) {
 }
 
 /**
+ * Check if an item is a hash duplicate (always blocked, cannot be restored)
+ * @param {Object} item - Feature item
+ * @returns {boolean} True if item is a hash duplicate
+ */
+export function isItemHashDuplicate(item) {
+  return !!(item && (
+    item.isFeatureStoreHashDup || 
+    item.isCrossQueueHashDup
+  ));
+}
+
+/**
  * Get feature ID from item (hash or index-based)
  * @param {Object} item - Feature item
  * @param {number} index - Page-local index
@@ -152,7 +184,7 @@ export function isItemSkipped(item, index, skippedFeatureIds, currentPage, pageS
 }
 
 /**
- * Check if item is disabled (imported, duplicate, or skipped)
+ * Check if item is disabled (imported, hash duplicate, or skipped)
  * @param {Object} item - Feature item
  * @param {number} index - Page-local index
  * @param {boolean} isImported - Whether upload is imported
@@ -164,7 +196,7 @@ export function isItemSkipped(item, index, skippedFeatureIds, currentPage, pageS
  */
 export function isItemDisabled(item, index, isImported, isImporting, skippedFeatureIds, currentPage, pageSize) {
   return isImported ||
-         isItemDuplicate(item) ||
+         isItemHashDuplicate(item) ||
          isItemSkipped(item, index, skippedFeatureIds, currentPage, pageSize) ||
          isImporting;
 }

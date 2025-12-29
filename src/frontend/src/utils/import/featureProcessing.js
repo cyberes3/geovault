@@ -84,14 +84,14 @@ export function handleStrokeColorChange(item) {
 /**
  * Get CSS classes for feature item based on state
  * @param {Object} item - Feature item
- * @param {boolean} isDuplicate - Whether item is duplicate
+ * @param {boolean} isHashDuplicate - Whether item is a hash duplicate (permanently blocked)
  * @param {boolean} isSkipped - Whether item is skipped
  * @returns {string} CSS classes
  */
-export function getItemClasses(item, isDuplicate, isSkipped) {
+export function getItemClasses(item, isHashDuplicate, isSkipped) {
   let classes = 'rounded-lg shadow-sm border p-6 relative';
 
-  if (isDuplicate || isSkipped) {
+  if (isHashDuplicate || isSkipped) {
     classes += ' bg-gray-100 border-gray-300';
   } else {
     classes += ' bg-white border-gray-200';

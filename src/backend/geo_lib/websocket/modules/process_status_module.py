@@ -10,6 +10,7 @@ from geo_lib.processing.messages import ERROR_TYPE_FILE_UNPARSABLE, PROCESSING_F
 from geo_lib.processing.jobs.helpers.status_tracker import status_tracker
 from geo_lib.spatial.bbox import get_feature_bounding_box_center
 from geo_lib.websocket.base_module import BaseWebSocketModule
+from geo_lib.websocket.modules.file_duplicate_utils import check_all_features_duplicate
 
 logger = get_tagged_logger('websocket')
 
@@ -85,6 +86,15 @@ class ProcessStatusModule(BaseWebSocketModule):
                 if duplicate_imported:
                     file_duplicate['status'] = 'duplicate_imported'
                     file_duplicate['original_filename'] = duplicate_imported.original_filename
+
+        # Check if file has exactly 1 feature and that feature is a duplicate
+        # Only check if file_hash duplicate status hasn't been set (lower priority)
+        if file_duplicate['status'] is None:
+            geofeatures = self.import_item.geofeatures if self.import_item.geofeatures else []
+            duplicate_features = self.import_item.duplicate_features if self.import_item.duplicate_features else []
+            
+            if check_all_features_duplicate(geofeatures, duplicate_features):
+                file_duplicate['status'] = 'all_features_duplicate'
 
         # Only block if it's a duplicate in the queue
         # Allow duplicates of already-imported files to proceed (they'll be marked as duplicates)

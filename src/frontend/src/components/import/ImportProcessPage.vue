@@ -274,17 +274,17 @@
            :class="getItemClasses(entry.item, entry.originalIndex)">
         <!-- Button row - always fully visible -->
         <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 mb-4 sm:mb-6 relative z-20">
-          <h3 class="text-base sm:text-lg font-semibold text-gray-900" :class="isItemSkipped(entry.item, entry.originalIndex) && !isItemDuplicate(entry.item) ? 'opacity-50' : ''">
+          <h3 class="text-base sm:text-lg font-semibold text-gray-900" :class="isItemSkipped(entry.item, entry.originalIndex) && !isItemHashDuplicate(entry.item) ? 'opacity-50' : ''">
             Feature {{ (pagination.currentPage - 1) * pagination.pageSize + entry.originalIndex + 1 }} (of {{ pagination.totalFeatures }})
           </h3>
           <div class="flex flex-wrap items-center gap-2 sm:space-x-2">
             <!-- Skip/Restore Button -->
             <button
                 v-if="!isImported && !loading.importing"
-                :class="isItemDuplicate(entry.item) ? 'relative z-20 inline-flex items-center px-3 py-1.5 border border-gray-300 shadow-sm text-xs font-medium rounded-md text-gray-400 bg-gray-100 cursor-not-allowed' : (isItemSkipped(entry.item, entry.originalIndex) ? 'relative z-20 inline-flex items-center px-3 py-1.5 border border-transparent text-xs font-medium rounded-md text-white bg-green-600 hover:bg-green-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-green-500' : 'relative z-20 inline-flex items-center px-3 py-1.5 border border-gray-300 shadow-sm text-xs font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-gray-500')"
-                @click.stop="isItemDuplicate(entry.item) ? null : toggleSkipItem(entry.originalIndex)"
-                :disabled="isItemDuplicate(entry.item)"
-                :title="isItemDuplicate(entry.item) ? 'Cannot skip duplicate items' : (isItemSkipped(entry.item, entry.originalIndex) ? 'Restore this item' : 'Skip this item')"
+                :class="isItemHashDuplicate(entry.item) ? 'relative z-20 inline-flex items-center px-3 py-1.5 border border-gray-300 shadow-sm text-xs font-medium rounded-md text-gray-400 bg-gray-100 cursor-not-allowed' : (isItemSkipped(entry.item, entry.originalIndex) ? 'relative z-20 inline-flex items-center px-3 py-1.5 border border-transparent text-xs font-medium rounded-md text-white bg-green-600 hover:bg-green-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-green-500' : 'relative z-20 inline-flex items-center px-3 py-1.5 border border-gray-300 shadow-sm text-xs font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-gray-500')"
+                @click.stop="isItemHashDuplicate(entry.item) ? null : toggleSkipItem(entry.originalIndex)"
+                :disabled="isItemHashDuplicate(entry.item)"
+                :title="isItemHashDuplicate(entry.item) ? 'Hash duplicates cannot be restored' : (isItemSkipped(entry.item, entry.originalIndex) ? 'Restore this item' : 'Skip this item')"
                 type="button"
                 style="opacity: 1 !important;"
             >
@@ -315,8 +315,8 @@
           <DuplicateWarning type="cross_queue_geometry" :item="entry.item" />
         </div>
 
-        <!-- Content area - can be greyed out for skipped or duplicate items -->
-        <div :class="(isItemSkipped(entry.item, entry.originalIndex) && !isItemDuplicate(entry.item)) || isItemDuplicate(entry.item) ? 'opacity-50' : ''">
+        <!-- Content area - can be greyed out for skipped or hash duplicate items -->
+        <div :class="(isItemSkipped(entry.item, entry.originalIndex) && !isItemHashDuplicate(entry.item)) || isItemHashDuplicate(entry.item) ? 'opacity-50' : ''">
         <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
           <!-- Name Field -->
           <div>
@@ -573,7 +573,7 @@ import IconSelector from "@/components/parts/IconSelector.vue";
 import { DEFAULT_BULK_OPERATIONS, hasBulkOperationsConfigured, areBulkOperationsEqual, cloneBulkOperations } from "@/utils/bulkOperations.js";
 import { CheckIcon, ExclamationCircleIcon, ArrowTopRightOnSquareIcon, DocumentIcon, ExclamationTriangleIcon, ArrowDownTrayIcon, ArrowUpTrayIcon, XMarkIcon, MapIcon, ArrowPathIcon, MagnifyingGlassIcon, RectangleStackIcon, ChevronLeftIcon, ChevronRightIcon } from '@heroicons/vue/24/outline';
 import { connectWebSocket, sendWebSocketMessage, parseWebSocketMessage, shouldReconnect, getReconnectDelay } from '@/utils/import/websocketHandlers.js';
-import { calculateTotalDuplicateCount, markDuplicateFeatures, isItemDuplicate, getFeatureId, isItemSkipped, isItemDisabled } from '@/utils/import/duplicateDetection.js';
+import { calculateTotalDuplicateCount, calculateHashDuplicateCount, markDuplicateFeatures, isItemDuplicate, isItemHashDuplicate, getFeatureId, isItemSkipped, isItemDisabled } from '@/utils/import/duplicateDetection.js';
 import { getFeatureIconUrl, getFeatureIconUrlRaw, resolveIconUrl, hasCustomIcon, isSystemIcon, hasNonRecolorableIcon, handleIconError } from '@/utils/import/iconDetection.js';
 import { calculateAdjustedTotalPages, calculateAdjustedHasNext, calculateAdjustedHasPrevious, calculateImportableCount, isValidPageNumber } from '@/utils/import/paginationUtils.js';
 import { isPointGeometry, isLineGeometry, isPolygonGeometry, initializeFeatureDefaults, handleStrokeColorChange, getItemClasses, getLevelName, getLevelClass, filterWorkerLog } from '@/utils/import/featureProcessing.js';
@@ -594,10 +594,13 @@ export default {
       return this.originalFilename != null && !this.processing.active && !this.loading.page && this.itemsForUser.length === 0;
     },
 
+    hashDuplicateCount() {
+      return calculateHashDuplicateCount(this.duplicates);
+    },
     importableCount() {
       return calculateImportableCount(
         this.pagination.totalFeatures,
-        this.totalDuplicateCount,
+        this.hashDuplicateCount,
         this.skippedFeatureIds
       );
     },
@@ -1359,9 +1362,9 @@ export default {
       });
     },
     getItemClasses(item, index) {
-      const isDuplicate = isItemDuplicate(item);
+      const isHashDuplicate = isItemHashDuplicate(item);
       const isSkipped = isItemSkipped(item, index, this.skippedFeatureIds, this.pagination.currentPage, this.pagination.pageSize);
-      return getItemClasses(item, isDuplicate, isSkipped);
+      return getItemClasses(item, isHashDuplicate, isSkipped);
     },
     getFeatureId(item, index) {
       return getFeatureId(item, index, this.pagination.currentPage, this.pagination.pageSize);
@@ -1371,6 +1374,9 @@ export default {
     },
     isItemDuplicate(item) {
       return isItemDuplicate(item);
+    },
+    isItemHashDuplicate(item) {
+      return isItemHashDuplicate(item);
     },
     isItemDisabled(item, index) {
       return isItemDisabled(item, index, this.isImported, this.loading.importing, this.skippedFeatureIds, this.pagination.currentPage, this.pagination.pageSize);

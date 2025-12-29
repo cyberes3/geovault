@@ -9,6 +9,7 @@ from api.models import ImportQueue
 from geo_lib.logging.console import get_tagged_logger
 from geo_lib.processing.jobs.helpers.status_tracker import status_tracker
 from geo_lib.websocket.base_module import BaseWebSocketModule
+from geo_lib.websocket.modules.file_duplicate_utils import check_all_features_duplicate
 
 logger = get_tagged_logger('websocket')
 
@@ -42,7 +43,7 @@ class ImportQueueModule(BaseWebSocketModule):
             replacement__isnull=True
         ).order_by('-timestamp').values(
             'id', 'geofeatures', 'original_filename', 'file_hash',
-            'log_id', 'timestamp', 'imported', 'unparsable'
+            'log_id', 'timestamp', 'imported', 'unparsable', 'duplicate_features'
         )
 
         data = json.loads(json.dumps(list(user_items), cls=DjangoJSONEncoder))
@@ -133,6 +134,15 @@ class ImportQueueModule(BaseWebSocketModule):
                     file_duplicate_status = 'duplicate_in_queue'
                 elif file_hash in imported_hashes:
                     file_duplicate_status = 'duplicate_imported'
+
+            # Check if file has exactly 1 feature and that feature is a duplicate
+            # Only check if file_hash duplicate status hasn't been set (lower priority)
+            if file_duplicate_status is None:
+                geofeatures = item.get('geofeatures', [])
+                duplicate_features = item.get('duplicate_features', [])
+                
+                if check_all_features_duplicate(geofeatures, duplicate_features):
+                    file_duplicate_status = 'all_features_duplicate'
 
             item['file_duplicate'] = {
                 'status': file_duplicate_status,
