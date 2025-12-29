@@ -8,6 +8,7 @@ from django.contrib.auth import get_user_model
 from django.contrib.gis.geos import Point
 from django.test import TestCase, TransactionTestCase
 from django.core.files.uploadedfile import SimpleUploadedFile
+from django.utils import timezone
 
 from api.models import ImportQueue, FeatureStore
 from geo_lib.feature_id import generate_geojson_hash
@@ -1958,3 +1959,182 @@ class TestSequentialProcessing(TestCase):
 
         # Verify enqueue_job was called
         self.assertTrue(len(call_time) > 0)
+
+    def test_list_import_history_paginated(self):
+        """Test paginated import history endpoint."""
+        # Create 25 imported items
+        for i in range(25):
+            ImportQueue.objects.create(
+                user=self.user,
+                original_filename=f'test_{i}.kml',
+                raw_file='<kml></kml>',
+                geofeatures=[],
+                imported=True,
+                timestamp=timezone.now()
+            )
+        
+        # Test page 1 (default)
+        response = self.client.get('/api/item/import/history')
+        self.assertEqual(response.status_code, 200)
+        data = json.loads(response.content)
+        self.assertIn('items', data)
+        self.assertIn('pagination', data)
+        self.assertEqual(len(data['items']), 10)
+        self.assertEqual(data['pagination']['page'], 1)
+        self.assertEqual(data['pagination']['page_size'], 10)
+        self.assertEqual(data['pagination']['total_items'], 25)
+        self.assertEqual(data['pagination']['total_pages'], 3)
+        self.assertTrue(data['pagination']['has_next'])
+        self.assertFalse(data['pagination']['has_previous'])
+        
+        # Test page 2
+        response = self.client.get('/api/item/import/history?page=2')
+        self.assertEqual(response.status_code, 200)
+        data = json.loads(response.content)
+        self.assertEqual(len(data['items']), 10)
+        self.assertEqual(data['pagination']['page'], 2)
+        self.assertTrue(data['pagination']['has_next'])
+        self.assertTrue(data['pagination']['has_previous'])
+        
+        # Test page 3 (last page)
+        response = self.client.get('/api/item/import/history?page=3')
+        self.assertEqual(response.status_code, 200)
+        data = json.loads(response.content)
+        self.assertEqual(len(data['items']), 5)
+        self.assertEqual(data['pagination']['page'], 3)
+        self.assertFalse(data['pagination']['has_next'])
+        self.assertTrue(data['pagination']['has_previous'])
+        
+        # Test custom page-size
+        response = self.client.get('/api/item/import/history?page-size=5')
+        self.assertEqual(response.status_code, 200)
+        data = json.loads(response.content)
+        self.assertEqual(len(data['items']), 5)
+        self.assertEqual(data['pagination']['page_size'], 5)
+        self.assertEqual(data['pagination']['total_pages'], 5)
+
+    def test_list_import_history_page_boundaries(self):
+        """Test pagination boundary conditions."""
+        # Create 5 items
+        for i in range(5):
+            ImportQueue.objects.create(
+                user=self.user,
+                original_filename=f'test_{i}.kml',
+                raw_file='<kml></kml>',
+                geofeatures=[],
+                imported=True
+            )
+        
+        # Test page 1
+        response = self.client.get('/api/item/import/history?page=1')
+        self.assertEqual(response.status_code, 200)
+        
+        # Test page out of bounds
+        response = self.client.get('/api/item/import/history?page=999')
+        self.assertEqual(response.status_code, 400)
+        data = json.loads(response.content)
+        self.assertIn('error', data)
+        
+        # Test page 0
+        response = self.client.get('/api/item/import/history?page=0')
+        self.assertEqual(response.status_code, 400)
+        
+        # Test negative page
+        response = self.client.get('/api/item/import/history?page=-1')
+        self.assertEqual(response.status_code, 400)
+
+    def test_list_import_history_max_page_size(self):
+        """Test max page-size validation."""
+        # Test page-size > 100
+        response = self.client.get('/api/item/import/history?page-size=101')
+        self.assertEqual(response.status_code, 400)
+        data = json.loads(response.content)
+        self.assertIn('error', data)
+        self.assertIn('100', data['error'])
+        
+        # Test page-size = 100 (should work)
+        response = self.client.get('/api/item/import/history?page-size=100')
+        self.assertEqual(response.status_code, 200)
+        
+        # Test page-size = 0
+        response = self.client.get('/api/item/import/history?page-size=0')
+        self.assertEqual(response.status_code, 400)
+        
+        # Test invalid page-size
+        response = self.client.get('/api/item/import/history?page-size=invalid')
+        self.assertEqual(response.status_code, 400)
+
+    def test_list_import_history_excludes_replacements(self):
+        """Test that replacement uploads are excluded from history."""
+        # Create regular imported item
+        regular_item = ImportQueue.objects.create(
+            user=self.user,
+            original_filename='regular.kml',
+            raw_file='<kml></kml>',
+            geofeatures=[],
+            imported=True
+        )
+        
+        # Create replacement item
+        replacement_item = ImportQueue.objects.create(
+            user=self.user,
+            original_filename='replacement.kml',
+            raw_file='<kml></kml>',
+            geofeatures=[],
+            imported=True,
+            replacement=regular_item.id
+        )
+        
+        response = self.client.get('/api/item/import/history')
+        self.assertEqual(response.status_code, 200)
+        data = json.loads(response.content)
+        
+        # Should only include regular item, not replacement
+        item_ids = [item['id'] for item in data['items']]
+        self.assertIn(regular_item.id, item_ids)
+        self.assertNotIn(replacement_item.id, item_ids)
+        self.assertEqual(data['pagination']['total_items'], 1)
+
+    def test_list_import_history_empty(self):
+        """Test paginated history with no items."""
+        response = self.client.get('/api/item/import/history')
+        self.assertEqual(response.status_code, 200)
+        data = json.loads(response.content)
+        self.assertEqual(len(data['items']), 0)
+        self.assertEqual(data['pagination']['total_items'], 0)
+        self.assertEqual(data['pagination']['total_pages'], 0)
+        self.assertFalse(data['pagination']['has_next'])
+        self.assertFalse(data['pagination']['has_previous'])
+
+    def test_list_import_history_unauthorized(self):
+        """Test that users can only see their own history."""
+        User = get_user_model()
+        other_user = User.objects.create_user(
+            email='other@example.com',
+            password='pass',
+            username='other'
+        )
+        
+        # Create items for both users
+        ImportQueue.objects.create(
+            user=self.user,
+            original_filename='mine.kml',
+            raw_file='<kml></kml>',
+            geofeatures=[],
+            imported=True
+        )
+        ImportQueue.objects.create(
+            user=other_user,
+            original_filename='theirs.kml',
+            raw_file='<kml></kml>',
+            geofeatures=[],
+            imported=True
+        )
+        
+        response = self.client.get('/api/item/import/history')
+        self.assertEqual(response.status_code, 200)
+        data = json.loads(response.content)
+        
+        # Should only see own items
+        self.assertEqual(data['pagination']['total_items'], 1)
+        self.assertEqual(data['items'][0]['original_filename'], 'mine.kml')

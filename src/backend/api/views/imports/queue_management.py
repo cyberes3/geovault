@@ -1,5 +1,6 @@
 """Import queue management operations"""
 import copy
+import math
 
 from django.db import transaction
 from django.http import HttpResponse
@@ -78,6 +79,88 @@ def get_all_job_statuses(request):
     """
     jobs = get_user_jobs(request.user.id)
     return success_response({'jobs': jobs})
+
+
+@api_or_login_required_401()
+@require_http_methods(["GET"])
+def list_import_history(request):
+    """
+    List paginated import history for the current user.
+    
+    Query parameters:
+    - page: Page number (default: 1)
+    - page-size: Items per page (default: 10, max: 100)
+    
+    Returns:
+    {
+        "items": [...],
+        "pagination": {
+            "page": 1,
+            "page_size": 10,
+            "total_items": 25,
+            "total_pages": 3,
+            "has_next": true,
+            "has_previous": false
+        }
+    }
+    """
+    # Get query parameters
+    try:
+        page = int(request.GET.get('page', 1))
+        page_size = int(request.GET.get('page-size', 10))
+    except (ValueError, TypeError):
+        return error_response('Invalid page or page-size parameter', code=400)
+    
+    # Validate page
+    if page < 1:
+        return error_response('Page must be >= 1', code=400)
+    
+    # Validate page-size
+    if page_size < 1:
+        return error_response('page-size must be >= 1', code=400)
+    if page_size > 100:
+        return error_response('page-size cannot exceed 100', code=400)
+    
+    # Get user's imported items (exclude replacement uploads)
+    queryset = ImportQueue.objects.filter(
+        user=request.user,
+        imported=True,
+        replacement__isnull=True
+    ).order_by('-timestamp')
+    
+    # Calculate pagination
+    total_items = queryset.count()
+    total_pages = math.ceil(total_items / page_size) if total_items > 0 else 0
+    
+    # Validate page is within bounds
+    if page > total_pages and total_pages > 0:
+        return error_response(f'Page {page} does not exist. Total pages: {total_pages}', code=400)
+    
+    # Get paginated items
+    start = (page - 1) * page_size
+    end = start + page_size
+    items = queryset.values('id', 'original_filename', 'timestamp')[start:end]
+    
+    # Convert timestamps to ISO format strings
+    items_list = []
+    for item in items:
+        items_list.append({
+            'id': item['id'],
+            'original_filename': item['original_filename'],
+            'timestamp': item['timestamp'].isoformat() if item['timestamp'] else None
+        })
+    
+    return success_response({
+        'items': items_list,
+        'pagination': {
+            'page': page,
+            'page_size': page_size,
+            'total_items': total_items,
+            'total_pages': total_pages,
+            'has_next': page < total_pages,
+            'has_previous': page > 1
+        }
+    })
 
 
 @api_or_login_required_401()

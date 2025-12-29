@@ -137,6 +137,7 @@
 import axios from "axios";
 import { getCookie } from "@/assets/js/auth.js";
 import Loader from "@/components/parts/Loader.vue";
+import { formatDate } from "@/utils/dateUtils.js";
 
 export default {
   name: 'SharingSettingsTab',
@@ -251,10 +252,7 @@ export default {
         document.body.removeChild(textArea);
       }
     },
-    formatDate(dateString) {
-      const date = new Date(dateString);
-      return date.toLocaleDateString() + ' ' + date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-    }
+    formatDate
   },
   async created() {
     if (!this.dataLoaded) {

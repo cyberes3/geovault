@@ -65,7 +65,7 @@
         <!-- Created Date -->
         <div v-if="getFeatureCreatedDate(feature) !== null" class="flex items-center space-x-1 bg-gray-100 border border-gray-300 rounded px-1.5 py-0.5 md:px-2 md:py-1.5" title="Created Date">
           <CalendarDaysIcon class="w-3 h-3 md:w-4 md:h-4" />
-          <span class="text-xs text-gray-700">{{ formatCreatedDate(getFeatureCreatedDate(feature)) }}</span>
+          <span class="text-xs text-gray-700">{{ formatDate(getFeatureCreatedDate(feature)) }}</span>
         </div>
       </div>
 
@@ -146,6 +146,7 @@ import { marked } from 'marked'
 import * as turf from '@turf/turf'
 import { ChartBarIcon, ArrowDownTrayIcon, PencilSquareIcon, MapPinIcon, XMarkIcon, CalendarDaysIcon } from '@heroicons/vue/24/outline'
 import { formatElevation, formatDistance, formatArea } from '@/utils/units'
+import { formatDate } from '@/utils/dateUtils'
 import MeasurementIcon from '@/components/icons/MeasurementIcon.vue'
 import AreaIcon from '@/components/icons/AreaIcon.vue'
 import { getGeometryTypeColor } from '@/utils/geometryColors.js'
@@ -430,27 +431,7 @@ export default {
       const properties = feature.properties || {}
       return properties.created || null
     },
-    formatCreatedDate(dateString) {
-      if (!dateString) return ''
-      try {
-        const date = new Date(dateString)
-        if (isNaN(date.getTime())) return ''
-        // Format in local timezone with short format
-        const dateStr = date.toLocaleDateString(undefined, {
-          year: 'numeric',
-          month: 'short',
-          day: 'numeric'
-        })
-        const timeStr = date.toLocaleTimeString(undefined, {
-          hour: '2-digit',
-          minute: '2-digit'
-        })
-        return `${dateStr} ${timeStr}`
-      } catch (error) {
-        console.error('Error formatting created date:', error)
-        return ''
-      }
-    }
+    formatDate
   }
 }
 </script>

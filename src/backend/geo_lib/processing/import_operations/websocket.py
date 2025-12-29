@@ -16,13 +16,15 @@ def broadcast_item_imported(user_id: int, item_id: int):
         # Get item details for history broadcast
         try:
             item = ImportQueue.objects.get(id=item_id)
+            # New items are always on page 1 (ordered by -timestamp, newest first)
             item_data = {
                 'id': item_id,
                 'original_filename': item.original_filename,
-                'timestamp': item.timestamp.isoformat()
+                'timestamp': item.timestamp.isoformat() if item.timestamp else None,
+                'page': 1
             }
         except ImportQueue.DoesNotExist:
-            item_data = {'id': item_id}
+            item_data = {'id': item_id, 'page': 1}
 
         # Broadcast to import queue module
         async_to_sync(channel_layer.group_send)(

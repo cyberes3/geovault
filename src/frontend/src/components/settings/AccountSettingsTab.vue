@@ -299,6 +299,7 @@ import { getCookie } from "@/assets/js/auth.js";
 import settingsConfig from "@/components/settings-data.json";
 import SettingsMixin from "./mixins/SettingsMixin.js";
 import SettingsInput from "./components/SettingsInput.vue";
+import { formatDate } from "@/utils/dateUtils.js";
 
 export default {
   name: 'AccountSettingsTab',
@@ -775,15 +776,7 @@ export default {
         this.apiKeyMessageType = originalText ? 'success' : '';
       }, 2000);
     },
-    formatDate(dateString) {
-      if (!dateString) return 'N/A';
-      try {
-        const date = new Date(dateString);
-        return date.toLocaleString();
-      } catch (e) {
-        return dateString;
-      }
-    }
+    formatDate
   },
   async created() {
     if (!this.dataLoaded) {

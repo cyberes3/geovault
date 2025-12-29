@@ -29,6 +29,16 @@ interface UserSettings {
     [key: string]: any
 }
 
+// Define pagination interface
+interface PaginationState {
+    page: number
+    pageSize: number
+    totalPages: number
+    totalItems: number
+    hasNext: boolean
+    hasPrevious: boolean
+}
+
 // Define the state interface
 interface State {
     userInfo: UserInfo | null
@@ -37,6 +47,7 @@ interface State {
     importTable: ImportTableItem[]
     importHistory: ImportHistoryItem[]
     importHistoryLoaded: boolean
+    importHistoryPagination: PaginationState
     importTableRefreshTrigger: boolean
     websocketConnected: boolean
     websocketReconnectAttempts: number
@@ -57,6 +68,14 @@ export default createStore<State>({
         importTable: [],
         importHistory: [],
         importHistoryLoaded: false,
+        importHistoryPagination: {
+            page: 1,
+            pageSize: 10,
+            totalPages: 0,
+            totalItems: 0,
+            hasNext: false,
+            hasPrevious: false
+        },
         importTableRefreshTrigger: false,
         websocketConnected: false,
         websocketReconnectAttempts: 0,
@@ -148,14 +167,58 @@ export default createStore<State>({
         setRealtimeModuleData(state: State, { module, data }: { module: string, data: any }) {
             state.realtimeData[module] = data;
         },
-        setImportHistory(state: State, importHistory: ImportHistoryItem[]) {
-            state.importHistory = importHistory;
+        setImportHistory(state: State, payload: ImportHistoryItem[] | {items: ImportHistoryItem[], pagination: any}) {
+            // Handle both old format (array) and new format (paginated object)
+            if (Array.isArray(payload)) {
+                state.importHistory = payload;
+            } else {
+                state.importHistory = payload.items;
+                // Transform backend snake_case to frontend camelCase
+                const backendPagination = payload.pagination;
+                state.importHistoryPagination = {
+                    page: backendPagination.page,
+                    pageSize: backendPagination.page_size || backendPagination.pageSize,
+                    totalPages: backendPagination.total_pages || backendPagination.totalPages,
+                    totalItems: backendPagination.total_items || backendPagination.totalItems,
+                    hasNext: backendPagination.has_next !== undefined ? backendPagination.has_next : backendPagination.hasNext,
+                    hasPrevious: backendPagination.has_previous !== undefined ? backendPagination.has_previous : backendPagination.hasPrevious
+                };
+            }
         },
-        addImportHistoryItem(state: State, item: ImportHistoryItem) {
+        setImportHistoryPagination(state: State, pagination: PaginationState) {
+            state.importHistoryPagination = pagination;
+        },
+        setImportHistoryPage(state: State, page: number) {
+            state.importHistoryPagination.page = page;
+        },
+        addImportHistoryItem(state: State, payload: ImportHistoryItem | {item: ImportHistoryItem, page: number}) {
+            // Handle both old format (just item) and new format (item with page)
+            let item: ImportHistoryItem;
+            let page: number | undefined;
+            
+            if ('item' in payload && 'page' in payload) {
+                item = payload.item;
+                page = payload.page;
+            } else {
+                item = payload as ImportHistoryItem;
+            }
+            
             // Check if item already exists to avoid duplicates
             const existingIndex = state.importHistory.findIndex(existing => existing.id === item.id);
             if (existingIndex === -1) {
-                state.importHistory.unshift(item); // Add to beginning
+                // Always update pagination metadata regardless of current page
+                // When user navigates to a page, we'll fetch fresh data via REST API anyway
+                state.importHistoryPagination.totalItems += 1;
+                state.importHistoryPagination.totalPages = Math.ceil(
+                    state.importHistoryPagination.totalItems / state.importHistoryPagination.pageSize
+                );
+                state.importHistoryPagination.hasNext = state.importHistoryPagination.page < state.importHistoryPagination.totalPages;
+                
+                // Only add item to visible list if it belongs to page 1 (new items always go to page 1)
+                // Items for other pages will appear when user navigates to those pages via REST
+                if (page === undefined || page === 1) {
+                    state.importHistory.unshift(item); // Add to beginning
+                }
             }
         },
         setImportHistoryLoaded(state: State, loaded: boolean) {
@@ -195,11 +258,17 @@ export default createStore<State>({
         setRealtimeModuleData({ commit }: { commit: Commit }, payload: { module: string, data: any }) {
             commit('setRealtimeModuleData', payload);
         },
-        setImportHistory({ commit }: { commit: Commit }, importHistory: ImportHistoryItem[]) {
-            commit('setImportHistory', importHistory);
+        setImportHistory({ commit }: { commit: Commit }, payload: ImportHistoryItem[] | {items: ImportHistoryItem[], pagination: PaginationState}) {
+            commit('setImportHistory', payload);
         },
-        addImportHistoryItem({ commit }: { commit: Commit }, item: ImportHistoryItem) {
-            commit('addImportHistoryItem', item);
+        setImportHistoryPagination({ commit }: { commit: Commit }, pagination: PaginationState) {
+            commit('setImportHistoryPagination', pagination);
+        },
+        setImportHistoryPage({ commit }: { commit: Commit }, page: number) {
+            commit('setImportHistoryPage', page);
+        },
+        addImportHistoryItem({ commit }: { commit: Commit }, payload: ImportHistoryItem | {item: ImportHistoryItem, page: number}) {
+            commit('addImportHistoryItem', payload);
         },
         setImportHistoryLoaded({ commit }: { commit: Commit }, loaded: boolean) {
             commit('setImportHistoryLoaded', loaded);

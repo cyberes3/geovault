@@ -18,8 +18,8 @@
 </template>
 
 <script>
-import moment from 'moment';
 import { CheckIcon } from '@heroicons/vue/24/outline';
+import { formatDate } from '@/utils/dateUtils.js';
 
 export default {
   name: 'ImportProcessHeader',
@@ -42,8 +42,7 @@ export default {
   },
   computed: {
     formattedUploadDate() {
-      if (!this.uploadTimestamp) return '';
-      return moment(this.uploadTimestamp).format('LLL');
+      return formatDate(this.uploadTimestamp);
     }
   }
 };

@@ -19,16 +19,26 @@ export class ImportHistoryModule extends BaseModule {
 
         // Handle initial state
         this.subscribe('initial_state', (data) => {
+            // Data structure: {items: [...], pagination: {...}}
             this.store.dispatch('setRealtimeModuleData', {module: 'importHistory', data});
-            // Also update the legacy importHistory state for backward compatibility
-            this.store.commit('setImportHistory', data);
+            // Update import history with paginated data
+            this.store.dispatch('setImportHistory', data);
             // Mark as initially loaded
             this.store.commit('setImportHistoryLoaded', true);
         });
 
         // Handle new item added to history
         this.subscribe('item_added', (data) => {
-            this.store.dispatch('addImportHistoryItem', data);
+            // Data structure: {id, original_filename, timestamp, page}
+            // Always update the store regardless of current page
+            // When user navigates to a page, we'll fetch fresh data via REST API anyway
+            const itemPage = data.page !== undefined ? data.page : 1;
+            
+            // Add item with page information
+            this.store.dispatch('addImportHistoryItem', {
+                item: data,
+                page: itemPage
+            });
         });
     }
 

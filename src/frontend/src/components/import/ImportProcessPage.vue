@@ -545,7 +545,7 @@
 <script>
 import {mapState} from "vuex";
 import axios from "axios";
-import moment from "moment";
+import { formatDate } from "@/utils/dateUtils.js";
 import {capitalizeFirstLetter} from "@/assets/js/string.js";
 import {PROCESSING_MESSAGES} from "@/assets/js/constants/processing-messages.js";
 import ImportTable from "@/components/import/parts/ImportTable.vue";
@@ -1330,12 +1330,7 @@ export default {
       if (!timestamp) return '';
       return moment(timestamp).format('YYYY-MM-DD HH:mm:ss');
     },
-    formatUploadDate(timestamp) {
-      if (!timestamp) return '';
-      // Use moment.js for localized date formatting
-      // moment.js will automatically use the browser's locale if available
-      return moment(timestamp).format('LLL'); // e.g., "January 15, 2024 2:30 PM" (localized)
-    },
+    formatUploadDate: formatDate,
     getFeatureIconUrl(feature) {
       return getFeatureIconUrl(feature);
     },

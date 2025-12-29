@@ -42,7 +42,7 @@
         <!-- Header Row (Desktop only) -->
         <div class="hidden md:flex bg-gray-50 px-3 py-3 sm:px-6 sm:py-3 border-b border-gray-200">
           <div class="flex-1 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">File Name</div>
-          <div class="flex-1 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">Date/Time Imported</div>
+          <div class="flex-1 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">Date Imported</div>
         </div>
 
         <!-- Items -->
@@ -54,7 +54,7 @@
               </a>
             </div>
             <div class="flex-1 text-xs sm:text-sm text-gray-900 md:text-center">
-              {{ item.timestamp }}
+              {{ formatDate(item.timestamp) }}
             </div>
           </div>
 
@@ -77,6 +77,38 @@
           </div>
         </div>
       </div>
+
+      <!-- Pagination Controls -->
+      <div v-if="!combinedHistoryLoading && importHistoryPagination.totalPages > 1" class="bg-white rounded-lg shadow-sm border border-gray-200 p-4 mt-4">
+        <div class="flex items-center justify-between flex-wrap gap-4">
+          <div class="text-sm text-gray-700">
+            Showing {{ (importHistoryPagination.page - 1) * importHistoryPagination.pageSize + 1 }} - 
+            {{ Math.min(importHistoryPagination.page * importHistoryPagination.pageSize, importHistoryPagination.totalItems) }} 
+            of {{ importHistoryPagination.totalItems }}
+          </div>
+          <div class="flex items-center space-x-2">
+            <button
+              :disabled="!importHistoryPagination.hasPrevious || isLoadingHistoryPage || importHistoryPagination.totalPages <= 1"
+              class="inline-flex items-center px-3 py-2 border border-gray-300 shadow-sm text-sm font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 disabled:opacity-50 disabled:cursor-not-allowed"
+              @click="previousPage"
+              title="Go to previous page"
+            >
+              <ArrowLeftIcon class="w-4 h-4 mr-1" />
+              Previous
+            </button>
+            <span class="text-sm text-gray-700">Page {{ importHistoryPagination.page }} of {{ importHistoryPagination.totalPages }}</span>
+            <button
+              :disabled="!importHistoryPagination.hasNext || isLoadingHistoryPage || importHistoryPagination.totalPages <= 1"
+              class="inline-flex items-center px-3 py-2 border border-gray-300 shadow-sm text-sm font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 disabled:opacity-50 disabled:cursor-not-allowed"
+              @click="nextPage"
+              title="Go to next page"
+            >
+              Next
+              <ArrowRightIcon class="w-4 h-4 ml-1" />
+            </button>
+          </div>
+        </div>
+      </div>
     </div>
   </div>
 </template>
@@ -86,25 +118,33 @@ import {mapState} from "vuex"
 import {IMPORT_HISTORY_URL} from "@/assets/js/import/url.js";
 import ImportTable from "@/components/import/parts/ImportTable.vue";
 import Loader from "@/components/parts/Loader.vue";
-import { ArrowUpTrayIcon } from '@heroicons/vue/24/outline';
+import { ArrowUpTrayIcon, ArrowLeftIcon, ArrowRightIcon } from '@heroicons/vue/24/outline';
+import { formatDate } from "@/utils/dateUtils.js";
 
 export default {
+  components: {
+    ImportTable: ImportTable,
+    Loader,
+    ArrowUpTrayIcon,
+    ArrowLeftIcon,
+    ArrowRightIcon
+  },
   computed: {
-    ...mapState(["userInfo", "importTable", "importHistory", "importHistoryLoaded"]),
+    ...mapState(["userInfo", "importTable", "importHistory", "importHistoryLoaded", "importHistoryPagination"]),
     combinedHistoryLoading() {
       // Show loading placeholders only when:
       // 1. We haven't received initial data from WebSocket yet
       // 2. AND we don't have any data yet
       return !this.importHistoryLoaded && this.importHistory.length === 0;
-    }
+    },
   },
-  components: {ImportTable: ImportTable, Loader, ArrowUpTrayIcon},
   data() {
     return {
       importTableIsLoading: true,
       hasImportTableLoaded: false,
       refreshInterval: null,
       isRefreshing: false,
+      isLoadingHistoryPage: false,
     }
   },
   methods: {
@@ -154,6 +194,50 @@ export default {
         this.isRefreshing = false
       }
     },
+    async loadPage(page) {
+      // Load a specific page via REST API
+      if (this.isLoadingHistoryPage) {
+        return; // Prevent concurrent requests
+      }
+      
+      this.isLoadingHistoryPage = true;
+      try {
+        const response = await fetch(`/api/item/import/history?page=${page}&page-size=10`, {
+          credentials: 'include',
+          headers: {
+            'Content-Type': 'application/json',
+          }
+        });
+        
+        if (!response.ok) {
+          throw new Error(`Failed to load page ${page}`);
+        }
+        
+        const data = await response.json();
+        
+        // Update store with paginated data
+        this.$store.dispatch('setImportHistory', {
+          items: data.items,
+          pagination: data.pagination
+        });
+        this.$store.dispatch('setImportHistoryPage', page);
+      } catch (error) {
+        console.error('Error loading import history page:', error);
+      } finally {
+        this.isLoadingHistoryPage = false;
+      }
+    },
+    async nextPage() {
+      if (this.importHistoryPagination.hasNext) {
+        await this.loadPage(this.importHistoryPagination.page + 1);
+      }
+    },
+    async previousPage() {
+      if (this.importHistoryPagination.hasPrevious) {
+        await this.loadPage(this.importHistoryPagination.page - 1);
+      }
+    },
+    formatDate,
   },
   async created() {
     // If we already have data, mark as initially loaded

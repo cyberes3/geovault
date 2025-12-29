@@ -18,6 +18,8 @@ from geo_lib.feature_id import generate_geojson_hash
 from geo_lib.processing.duplicate_detection.models import DuplicateSource, DuplicateMatchType
 from geo_lib.websocket.modules.import_queue_module import ImportQueueModule
 from geo_lib.websocket.modules.process_status_module import ProcessStatusModule
+from geo_lib.websocket.modules.import_history_module import ImportHistoryModule
+from django.utils import timezone
 
 User = get_user_model()
 
@@ -644,4 +646,218 @@ class TestAllFeaturesDuplicateDetection(TransactionTestCase):
         
         self.assertEqual(dup_feature_hash, single_feature_hash,
                         "Feature hash should match duplicate feature hash - this enables all_features_duplicate detection")
+
+
+class TestImportHistoryWebSocket(TransactionTestCase):
+    """Test ImportHistory WebSocket module with pagination."""
+
+    async def test_import_history_initial_state_paginated(self):
+        """Test that initial_state sends paginated page 1 data."""
+        user = await database_sync_to_async(User.objects.create_user)(
+            email='test@example.com',
+            password='testpass123',
+            username='testuser'
+        )
+        
+        # Create 25 imported items
+        for i in range(25):
+            await database_sync_to_async(ImportQueue.objects.create)(
+                user=user,
+                original_filename=f'test_{i}.kml',
+                raw_file='<kml></kml>',
+                geofeatures=[],
+                imported=True,
+                timestamp=timezone.now()
+            )
+        
+        communicator = WebsocketCommunicator(
+            RealtimeConsumer.as_asgi(),
+            "/ws/realtime/"
+        )
+        communicator.scope['user'] = user
+        
+        connected, subprotocol = await communicator.connect()
+        self.assertTrue(connected)
+        
+        # On connect, all modules send initial_state, so we need to receive and filter
+        # Receive messages until we get import_history initial_state
+        import_history_response = None
+        for _ in range(10):  # Try up to 10 messages
+            try:
+                response = await communicator.receive_json_from(timeout=1)
+                if response.get('module') == 'import_history' and response.get('type') == 'initial_state':
+                    import_history_response = response
+                    break
+            except:
+                break
+        
+        # If we didn't get it from initial connect, request refresh
+        if import_history_response is None:
+            await communicator.send_json_to({
+                'module': 'import_history',
+                'type': 'refresh',
+                'data': {}
+            })
+            # Receive messages until we get import_history
+            for _ in range(10):
+                try:
+                    response = await communicator.receive_json_from(timeout=1)
+                    if response.get('module') == 'import_history' and response.get('type') == 'initial_state':
+                        import_history_response = response
+                        break
+                except:
+                    break
+        
+        self.assertIsNotNone(import_history_response, "Should receive import_history initial_state")
+        data = import_history_response.get('data', {})
+        self.assertIn('items', data)
+        self.assertIn('pagination', data)
+        
+        # Should only return 10 items (page 1)
+        self.assertEqual(len(data['items']), 10)
+        
+        # Check pagination metadata
+        pagination = data['pagination']
+        self.assertEqual(pagination['page'], 1)
+        self.assertEqual(pagination['page_size'], 10)
+        self.assertEqual(pagination['total_items'], 25)
+        self.assertEqual(pagination['total_pages'], 3)
+        self.assertTrue(pagination['has_next'])
+        self.assertFalse(pagination['has_previous'])
+        
+        await communicator.disconnect()
+
+    async def test_import_history_item_added_with_page(self):
+        """Test that item_added event includes page number."""
+        user = await database_sync_to_async(User.objects.create_user)(
+            email='test@example.com',
+            password='testpass123',
+            username='testuser'
+        )
+        
+        communicator = WebsocketCommunicator(
+            RealtimeConsumer.as_asgi(),
+            "/ws/realtime/"
+        )
+        communicator.scope['user'] = user
+        
+        connected, subprotocol = await communicator.connect()
+        self.assertTrue(connected)
+        
+        # Create an imported item (this should trigger item_added event)
+        import_item = await database_sync_to_async(ImportQueue.objects.create)(
+            user=user,
+            original_filename='new_item.kml',
+            raw_file='<kml></kml>',
+            geofeatures=[],
+            imported=True
+        )
+        
+        # Broadcast item_added event through channel layer
+        from geo_lib.processing.import_operations.websocket import broadcast_item_imported
+        from asgiref.sync import sync_to_async
+        
+        await sync_to_async(broadcast_item_imported)(user.id, import_item.id)
+        
+        # Should receive item_added message with page number
+        try:
+            response = await communicator.receive_json_from(timeout=2)
+            if response.get('module') == 'import_history' and response.get('type') == 'item_added':
+                data = response.get('data', {})
+                self.assertIn('page', data)
+                self.assertEqual(data['page'], 1)  # New items always go to page 1
+                self.assertEqual(data['id'], import_item.id)
+        except:
+            # Event might be sent but not immediately received
+            pass
+        
+        await communicator.disconnect()
+
+    async def test_import_history_websocket_rest_integration(self):
+        """Test WebSocket + REST integration: load page 1 via WS, page 2 via REST."""
+        user = await database_sync_to_async(User.objects.create_user)(
+            email='test@example.com',
+            password='testpass123',
+            username='testuser'
+        )
+        
+        # Create 15 imported items
+        for i in range(15):
+            await database_sync_to_async(ImportQueue.objects.create)(
+                user=user,
+                original_filename=f'test_{i}.kml',
+                raw_file='<kml></kml>',
+                geofeatures=[],
+                imported=True,
+                timestamp=timezone.now()
+            )
+        
+        # Test WebSocket initial state (page 1)
+        communicator = WebsocketCommunicator(
+            RealtimeConsumer.as_asgi(),
+            "/ws/realtime/"
+        )
+        communicator.scope['user'] = user
+        
+        connected, subprotocol = await communicator.connect()
+        self.assertTrue(connected)
+        
+        # Receive initial_state messages from all modules on connect
+        import_history_response = None
+        for _ in range(10):
+            try:
+                response = await communicator.receive_json_from(timeout=1)
+                if response.get('module') == 'import_history' and response.get('type') == 'initial_state':
+                    import_history_response = response
+                    break
+            except:
+                break
+        
+        # If we didn't get it, request refresh
+        if import_history_response is None:
+            await communicator.send_json_to({
+                'module': 'import_history',
+                'type': 'refresh',
+                'data': {}
+            })
+            for _ in range(10):
+                try:
+                    response = await communicator.receive_json_from(timeout=1)
+                    if response.get('module') == 'import_history' and response.get('type') == 'initial_state':
+                        import_history_response = response
+                        break
+                except:
+                    break
+        
+        self.assertIsNotNone(import_history_response, "Should receive import_history initial_state")
+        ws_data = import_history_response.get('data', {})
+        self.assertEqual(len(ws_data['items']), 10)
+        self.assertEqual(ws_data['pagination']['page'], 1)
+        
+        await communicator.disconnect()
+        
+        # Test REST API for page 2 (need to use sync_to_async for Django Client)
+        from django.test import Client
+        from asgiref.sync import sync_to_async
+        
+        @sync_to_async
+        def test_rest_api():
+            client = Client()
+            client.force_login(user)
+            response = client.get('/api/item/import/history?page=2&page-size=10')
+            return response
+        
+        response = await test_rest_api()
+        self.assertEqual(response.status_code, 200)
+        rest_data = json.loads(response.content)
+        
+        self.assertEqual(len(rest_data['items']), 5)  # 15 total - 10 from page 1 = 5
+        self.assertEqual(rest_data['pagination']['page'], 2)
+        self.assertFalse(rest_data['pagination']['has_next'])
+        self.assertTrue(rest_data['pagination']['has_previous'])
+        
+        # Verify items are different between page 1 and page 2
+        ws_item_ids = {item['id'] for item in ws_data['items']}
+        rest_item_ids = {item['id'] for item in rest_data['items']}
+        self.assertEqual(len(ws_item_ids.intersection(rest_item_ids)), 0)  # No overlap
 

@@ -1,4 +1,5 @@
 import json
+import math
 
 from channels.db import database_sync_to_async
 from django.core.serializers.json import DjangoJSONEncoder
@@ -25,24 +26,59 @@ class ImportHistoryModule(BaseWebSocketModule):
             logger.warning(f"Unknown message type for import_history module: {message_type}")
 
     async def send_initial_state(self) -> None:
-        """Send the current import history state to the client."""
-        history_data = await self.get_import_history_data()
+        """Send the current import history state to the client (page 1 only)."""
+        history_data = await self.get_import_history_data(page=1, page_size=10)
         await self.send_to_client('initial_state', history_data)
 
     @database_sync_to_async
-    def get_import_history_data(self):
-        """Get current import history data for the user."""
+    def get_import_history_data(self, page=1, page_size=10):
+        """
+        Get paginated import history data for the user.
+        
+        Args:
+            page: Page number (default: 1)
+            page_size: Items per page (default: 10)
+            
+        Returns:
+            Dictionary with items and pagination metadata
+        """
         # Get user's imported items from database (exclude replacement uploads)
-        user_items = ImportQueue.objects.filter(
+        queryset = ImportQueue.objects.filter(
             user=self.user,
             imported=True,
             replacement__isnull=True
-        ).order_by('-timestamp').values(
-            'id', 'original_filename', 'timestamp'
-        )
-
-        data = json.loads(json.dumps(list(user_items), cls=DjangoJSONEncoder))
-        return data
+        ).order_by('-timestamp')
+        
+        # Calculate pagination
+        total_items = queryset.count()
+        total_pages = math.ceil(total_items / page_size) if total_items > 0 else 0
+        
+        # Get paginated items
+        start = (page - 1) * page_size
+        end = start + page_size
+        user_items = queryset.values('id', 'original_filename', 'timestamp')[start:end]
+        
+        # Convert to list and format timestamps
+        items_list = []
+        for item in user_items:
+            items_list.append({
+                'id': item['id'],
+                'original_filename': item['original_filename'],
+                'timestamp': item['timestamp'].isoformat() if item['timestamp'] else None
+            })
+        
+        # Return paginated structure
+        return {
+            'items': items_list,
+            'pagination': {
+                'page': page,
+                'page_size': page_size,
+                'total_items': total_items,
+                'total_pages': total_pages,
+                'has_next': page < total_pages,
+                'has_previous': page > 1
+            }
+        }
 
     # WebSocket event handlers for channel layer events
     async def item_added(self, event):
