@@ -386,6 +386,7 @@ export default {
       lastUpdateTime: null,
       featureCount: 0,
       loadTimeout: null,
+      zoomUpdateFrame: null,
       userLocation: null,
       currentAbortController: null,
       selectedLayer: 'osm',
@@ -518,6 +519,14 @@ export default {
     setupMapEventHandlers() {
       if (!this.map) return
       
+      // Cancel pending bbox queries when user starts panning or zooming
+      this.map.on('move', () => {
+        this.cancelPendingBboxQuery()
+      })
+      this.map.on('zoom', () => {
+        this.cancelPendingBboxQuery()
+      })
+
       // Setup basic event listeners (moveend, zoomend, click)
       setupMapEventListeners(this.map, {
         onMoveEnd: () => {
@@ -613,28 +622,19 @@ export default {
         }
       })
 
-      // Add immediate zoom event listener for responsive label and icon updates
-      this.map.on('zoom', async () => {
-        const currentZoom = this.map.getZoom()
-        
-        // Update label markers immediately during zoom (no debouncing)
-        if (this.showAllLabels && this.labelMarkerManager) {
-          const source = this.map.getSource('geojson-data')
-          if (source) {
-            const serialized = source.serialize()
-            const data = serialized.data
-            if (data && data.features) {
-              // Pass true for immediate update during zoom
-              this.labelMarkerManager.updateMarkers(data.features, true)
-            }
-          }
+      // Add throttled zoom event listener for responsive label and icon updates
+      // Use requestAnimationFrame to batch updates and prevent choppiness
+      this.map.on('zoom', () => {
+        // Cancel any pending zoom updates
+        if (this.zoomUpdateFrame) {
+          cancelAnimationFrame(this.zoomUpdateFrame)
         }
         
-        // Update small feature flags first (synchronous, fast)
-        updateSmallFeatureFlags(this.map, currentZoom)
-        
-        // Then update icon visibility after small feature flags are set
-        await this.reprocessFeaturesForZoom()
+        // Schedule update for next animation frame
+        this.zoomUpdateFrame = requestAnimationFrame(() => {
+          this.handleZoomUpdate()
+          this.zoomUpdateFrame = null
+        })
       })
 
       // Add styleimagemissing event handler to load icons on-demand
@@ -751,6 +751,13 @@ export default {
     },
     convertMapLibreFeature(mlFeature) {
       return convertMapLibreFeature(mlFeature)
+    },
+    cancelPendingBboxQuery() {
+      // Cancel any pending bbox query when user starts panning or zooming
+      if (this.loadTimeout) {
+        clearTimeout(this.loadTimeout)
+        this.loadTimeout = null
+      }
     },
     debouncedLoadData() {
       // Skip debounced loads during initial map setup to prevent duplicate API calls
@@ -947,6 +954,33 @@ export default {
           }
         }
       }
+    },
+    async handleZoomUpdate() {
+      // Throttled zoom update handler - runs via requestAnimationFrame
+      // This prevents choppiness by batching updates
+      if (!this.map) return
+      
+      const currentZoom = this.map.getZoom()
+      
+      // Update label markers (lightweight operation)
+      if (this.showAllLabels && this.labelMarkerManager) {
+        const source = this.map.getSource('geojson-data')
+        if (source) {
+          const serialized = source.serialize()
+          const data = serialized.data
+          if (data && data.features) {
+            // Pass true for immediate update during zoom
+            this.labelMarkerManager.updateMarkers(data.features, true)
+          }
+        }
+      }
+      
+      // Update small feature flags (can be expensive, but needed for visual updates)
+      updateSmallFeatureFlags(this.map, currentZoom)
+      
+      // Update icon visibility (async, but non-blocking)
+      // Don't await - let it run in background to keep zoom smooth
+      this.reprocessFeaturesForZoom()
     },
     async reprocessFeaturesForZoom() {
       // This function updates icon metadata for features when zoom changes
@@ -3357,6 +3391,12 @@ export default {
     // Remove keyboard event listener
     if (this.handleKeyDown) {
       window.removeEventListener('keydown', this.handleKeyDown)
+    }
+    
+    // Cancel any pending zoom updates
+    if (this.zoomUpdateFrame) {
+      cancelAnimationFrame(this.zoomUpdateFrame)
+      this.zoomUpdateFrame = null
     }
     
     if (this.labelMarkerManager) {
