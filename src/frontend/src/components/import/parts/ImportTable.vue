@@ -815,6 +815,12 @@ export default {
       };
 
       const bulkImportCompleted = (data) => {
+        // Prevent duplicate alerts by checking if this is the current job
+        // If job_id doesn't match our tracked job, ignore it (already handled)
+        if (data.job_id && this.bulkImportJobId && data.job_id !== this.bulkImportJobId) {
+          return;
+        }
+
         this.isBulkImporting = false;
         this.bulkImportJobId = null;
 
@@ -826,6 +832,16 @@ export default {
 
         // Refresh the table to update status icons
         this.$store.dispatch('refreshImportTable');
+
+        // Show alert if there were failed imports
+        if (data.failed_count > 0 && data.failed_items && data.failed_items.length > 0) {
+          const failedDetails = data.failed_items.map(item => 
+            `  • ${item.filename}: ${item.error}`
+          ).join('\n');
+          
+          const alertMessage = `Bulk import completed with ${data.failed_count} failure(s):\n\n${failedDetails}`;
+          window.alert(alertMessage);
+        }
 
         this.$forceUpdate();
       };

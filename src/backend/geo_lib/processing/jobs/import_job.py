@@ -128,6 +128,9 @@ class ImportJob(BaseJob):
             import_item, skipped_feature_ids
         )
 
+        # Track total features in file
+        total_features_in_file = len(import_item.geofeatures) if import_item.geofeatures else 0
+
         # Filter out features to skip before processing
         # Note: Hash duplicates are always blocked by process_features_for_import, no need to filter here
         features_to_process, skipped_count = filter_features_to_process(import_item, all_features_to_skip)
@@ -143,6 +146,10 @@ class ImportJob(BaseJob):
         features_to_create, skipped_duplicates = process_features_for_import(
             import_item, user_id, import_custom_icons, features_to_process, geometry_duplicate_hashes
         )
+
+        # Count skipped duplicates
+        hash_duplicates_count = len(skipped_duplicates.hash) if skipped_duplicates else 0
+        geometry_duplicates_count = len(skipped_duplicates.geometry) if skipped_duplicates else 0
 
         # Update progress
         self.status_tracker.update_job_status(
@@ -206,22 +213,38 @@ class ImportJob(BaseJob):
             )
         else:
             # No features were successfully imported
-            # Determine reason for failure
-            if len(features_to_create) == 0:
-                if total_processed == 0:
-                    reason = "No features found in the file"
-                else:
-                    reason = f"All {total_processed} features were skipped (duplicates, missing geometry, or unsupported types)"
+            # Build detailed error message explaining why no features were imported
+            error_parts = []
+            
+            if total_features_in_file == 0:
+                error_parts.append("No features found in file")
             else:
-                reason = f"Failed to create {len(features_to_create)} features in the database"
-
-            error_msg = f'No features were imported. {reason}.'
+                error_parts.append(f"File contains {total_features_in_file} feature(s)")
+                
+                if skipped_count > 0:
+                    error_parts.append(f"{skipped_count} skipped before processing (geometry duplicates or manually skipped)")
+                
+                if hash_duplicates_count > 0:
+                    error_parts.append(f"{hash_duplicates_count} skipped as hash duplicates")
+                
+                if geometry_duplicates_count > 0:
+                    error_parts.append(f"{geometry_duplicates_count} skipped as geometry duplicates")
+                
+                if len(features_to_create) == 0:
+                    if len(features_to_process) == 0:
+                        error_parts.append("All features were filtered out before processing")
+                    else:
+                        error_parts.append(f"All {len(features_to_process)} processed feature(s) were skipped as duplicates")
+                else:
+                    error_parts.append(f"{len(features_to_create)} feature(s) ready to import but database insert failed")
+            
+            error_msg = "No features were imported. " + ". ".join(error_parts) + "."
             self._mark_job_failed(job_id, error_msg)
             self._broadcast_to_process_status_module(
                 user_id, item_id, 'item_failed',
                 {
                     'message': error_msg,
-                    'reason': reason
+                    'reason': ". ".join(error_parts)
                 }
             )
 

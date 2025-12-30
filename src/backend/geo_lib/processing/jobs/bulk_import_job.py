@@ -177,6 +177,14 @@ class BulkImportJob(BaseJob):
             )
 
             _logger.info(f"Successfully completed bulk import job {job_id}: {successful_imports} imported, {len(failed_imports)} failed")
+            
+            # Log details of failed imports
+            if failed_imports:
+                for failed_item in failed_imports:
+                    _logger.warning(
+                        f"Bulk import job {job_id}: Failed to import item {failed_item['item_id']} "
+                        f"({failed_item['filename']}): {failed_item['error']}"
+                    )
 
         except:
             _logger.error(f"Bulk import job {job_id} error: {traceback.format_exc()}")
@@ -220,13 +228,20 @@ class BulkImportJob(BaseJob):
                 import_item, user_skipped_feature_ids=None
             )
 
+            # Track total features in file
+            total_features_in_file = len(import_item.geofeatures) if import_item.geofeatures else 0
+
             # Filter out features to skip before processing
             # Note: Hash duplicates are always blocked by process_features_for_import, no need to filter here
-            features_to_process, _ = filter_features_to_process(import_item, all_features_to_skip)
+            features_to_process, skipped_before_processing = filter_features_to_process(import_item, all_features_to_skip)
 
             features_to_create, skipped_duplicates = process_features_for_import(
                 import_item, user_id, import_custom_icons, features_to_process, geometry_duplicate_hashes
             )
+
+            # Count skipped duplicates
+            hash_duplicates_count = len(skipped_duplicates.hash) if skipped_duplicates else 0
+            geometry_duplicates_count = len(skipped_duplicates.geometry) if skipped_duplicates else 0
 
             # Import to database using shared utility
             successful_imports, duplicates_skipped = bulk_create_features_with_fallback(
@@ -248,7 +263,33 @@ class BulkImportJob(BaseJob):
                     duplicates_skipped=duplicates_skipped_dict
                 )
             else:
-                return job_error_result('No features were imported')
+                # Build detailed error message explaining why no features were imported
+                error_parts = []
+                
+                if total_features_in_file == 0:
+                    error_parts.append("No features found in file")
+                else:
+                    error_parts.append(f"File contains {total_features_in_file} feature(s)")
+                    
+                    if skipped_before_processing > 0:
+                        error_parts.append(f"{skipped_before_processing} skipped before processing (geometry duplicates or manually skipped)")
+                    
+                    if hash_duplicates_count > 0:
+                        error_parts.append(f"{hash_duplicates_count} skipped as hash duplicates")
+                    
+                    if geometry_duplicates_count > 0:
+                        error_parts.append(f"{geometry_duplicates_count} skipped as geometry duplicates")
+                    
+                    if len(features_to_create) == 0:
+                        if len(features_to_process) == 0:
+                            error_parts.append("All features were filtered out before processing")
+                        else:
+                            error_parts.append(f"All {len(features_to_process)} processed feature(s) were skipped as duplicates")
+                    else:
+                        error_parts.append(f"{len(features_to_create)} feature(s) ready to import but database insert failed")
+                
+                error_msg = "No features were imported. " + ". ".join(error_parts) + "."
+                return job_error_result(error_msg)
 
         except:
             _logger.error(f"Error importing item {import_item.id}: {traceback.format_exc()}")
