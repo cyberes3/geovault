@@ -6,8 +6,6 @@ administrative boundaries that contain a given coordinate.
 """
 from typing import Dict, Optional
 
-from geo_lib.geocoding.cache import _REVERSE_GEOCODING_CACHE, _get_cache_key
-from geo_lib.geocoding.constants import REVERSE_GEOCODING_CACHE_TTL
 from geo_lib.geocoding.overpass_api import query_overpass
 from geo_lib.geocoding.osm_tags import get_name_from_tags
 
@@ -29,12 +27,6 @@ def get_admin_hierarchy(latitude: float, longitude: float) -> Dict[str, Optional
     Returns:
         Dict with 'country', 'state', 'county', 'city' keys (values may be None)
     """
-    # Check cache first
-    cache_key = _get_cache_key(latitude, longitude, prefix="reverse_geocode:admin")
-    cached = _REVERSE_GEOCODING_CACHE.get(cache_key)
-    if cached is not None:
-        return cached
-
     # Query for administrative boundaries at all levels
     query = f"""
 [out:json];
@@ -77,8 +69,5 @@ out tags;
                     result['county'] = name
                 elif admin_level == '8':
                     result['city'] = name
-
-        # Cache the results
-        _REVERSE_GEOCODING_CACHE.set(cache_key, result, REVERSE_GEOCODING_CACHE_TTL)
 
     return result

@@ -17,8 +17,6 @@ from datetime import datetime
 from typing import List, Tuple, Dict
 
 from geo_lib.geocoding.admin_boundaries import get_admin_hierarchy
-from geo_lib.geocoding.cache import _REVERSE_GEOCODING_CACHE, _get_cache_key
-from geo_lib.geocoding.constants import REVERSE_GEOCODING_CACHE_TTL
 from geo_lib.geocoding.nearby_places import find_nearby_cities, search_nearby_lakes
 from geo_lib.geocoding.protected_areas import get_protected_areas, classify_protected_area
 from geo_lib.geocoding.ski_resorts import search_nearby_ski_resorts
@@ -163,9 +161,7 @@ def _get_from_cache_or_fetch(
     longitude: float
 ) -> Tuple[List[str], List[ReverseGeocodingLogMessage]]:
     """
-    Internal helper: Check cache first, fetch from API if needed.
-    
-    This is the only place that checks/sets the top-level tag cache.
+    Internal helper: Fetch tags from API (caching happens at API level).
     
     Args:
         latitude: Latitude coordinate
@@ -174,19 +170,8 @@ def _get_from_cache_or_fetch(
     Returns:
         Tuple of (tags list, log messages list)
     """
-    # Check top-level cache for complete tag results
-    cache_key = _get_cache_key(latitude, longitude, prefix="reverse_geocode:tags")
-    cached = _REVERSE_GEOCODING_CACHE.get(cache_key)
-
-    if cached is not None:
-        # Return cached tags and empty log messages (already processed)
-        return cached, []
-
-    # Not in cache - fetch from API
+    # Fetch from API (caching is handled at the query_overpass level)
     tags, log_messages = get_location_tags(latitude, longitude)
-
-    # Cache the results for 30 days
-    _REVERSE_GEOCODING_CACHE.set(cache_key, tags, REVERSE_GEOCODING_CACHE_TTL)
 
     return tags, log_messages
 
@@ -204,6 +189,7 @@ def batch_reverse_geocode_coordinates(
     - Leverages multi-level caching (per-coordinate and top-level tag cache)
     - Minimizes API calls by batching and cache checking
     - Thread-safe coordinate deduplication
+    - Processes multiple coordinates in parallel for better performance
     
     Args:
         coordinates: List of (latitude, longitude) tuples
@@ -222,17 +208,31 @@ def batch_reverse_geocode_coordinates(
             coord_mapping[rounded] = []
         coord_mapping[rounded].append((lat, lon))
 
-    # Step 2: Fetch results for unique coordinates (cache-aware)
+    # Step 2: Fetch results for unique coordinates in parallel (cache-aware)
     results = {}
-    for rounded_coord in coord_mapping.keys():
-        lat, lon = rounded_coord
-        tags, log_messages = _get_from_cache_or_fetch(lat, lon)
-        results[rounded_coord] = (tags, log_messages)
+    unique_coords = list(coord_mapping.keys())
+    
+    # Process coordinates in parallel to avoid sequential delays
+    # Limit to 10 concurrent workers to avoid overwhelming the API
+    with ThreadPoolExecutor(max_workers=min(len(unique_coords), 10)) as executor:
+        future_to_coord = {
+            executor.submit(_get_from_cache_or_fetch, lat, lon): (lat, lon)
+            for lat, lon in unique_coords
+        }
+        
+        for future in future_to_coord:
+            lat, lon = future_to_coord[future]
+            try:
+                tags, log_messages = future.result()
+                results[(lat, lon)] = (tags, log_messages)
+            except Exception as e:
+                _logger.error(f"Error reverse geocoding ({lat}, {lon}): {e}")
+                results[(lat, lon)] = ([], [])
 
     # Step 3: Map all original coordinates back to results
     final_results = {}
     for rounded_coord, original_coords in coord_mapping.items():
-        result = results[rounded_coord]
+        result = results.get(rounded_coord, ([], []))
         for original_coord in original_coords:
             final_results[original_coord] = result
 

@@ -4,6 +4,7 @@ Low-level Overpass API client with error handling and retry logic.
 This module handles the raw HTTP communication with the Overpass API,
 including error logging, retries, and rate limiting.
 """
+import hashlib
 import json
 import time
 from typing import Optional, Dict, Any
@@ -11,17 +12,20 @@ from typing import Optional, Dict, Any
 import requests
 from django.conf import settings
 
+from geo_lib.geocoding.cache import _REVERSE_GEOCODING_CACHE
+from geo_lib.geocoding.constants import REVERSE_GEOCODING_CACHE_TTL
 from geo_lib.logging.console import get_tagged_logger
+from geo_lib.spatial.coordinates import round_coordinate
 
 _logger = get_tagged_logger()
 
 
 def _log_overpass_failure(
-    response: requests.Response,
-    error_type: str,
-    additional_info: str = "",
-    latitude: Optional[float] = None,
-    longitude: Optional[float] = None
+        response: requests.Response,
+        error_type: str,
+        additional_info: str = "",
+        latitude: Optional[float] = None,
+        longitude: Optional[float] = None
 ):
     """
     Log comprehensive information about an Overpass API failure.
@@ -70,32 +74,47 @@ def _log_overpass_failure(
 
 
 def query_overpass(
-    query: str,
-    max_retries: int = 3,
-    latitude: Optional[float] = None,
-    longitude: Optional[float] = None
+        query: str,
+        max_retries: int = 3,
+        latitude: Optional[float] = None,
+        longitude: Optional[float] = None
 ) -> Optional[Dict[str, Any]]:
     """
     Query Overpass API with error handling and retry logic.
     
+    Caches successful API responses to avoid redundant requests.
+    Only caches responses that contain data (doesn't cache empty/failed responses).
+    
     Args:
         query: Overpass QL query string
         max_retries: Maximum number of retry attempts
-        latitude: Optional latitude coordinate being geocoded (for error logging)
-        longitude: Optional longitude coordinate being geocoded (for error logging)
+        latitude: Optional latitude coordinate being geocoded (for error logging and cache key)
+        longitude: Optional longitude coordinate being geocoded (for error logging and cache key)
     
     Returns:
         JSON response dict or None on failure
     """
-    api_url = settings.OVERPASS_API_URL
-    timeout = settings.OVERPASS_API_TIMEOUT
-    
+    # Generate cache key from query hash and coordinates (if provided)
+    query_hash = hashlib.sha256(query.encode('utf-8')).hexdigest()[:16]
+    if latitude is not None and longitude is not None:
+        # Use rounded coordinates for cache key to deduplicate nearby queries
+        lat_rounded, lon_rounded = round_coordinate(latitude, longitude)
+        cache_key = f"overpass:query:{query_hash}:{lat_rounded},{lon_rounded}"
+    else:
+        # If no coordinates provided, just use query hash
+        cache_key = f"overpass:query:{query_hash}"
+
+    # Check cache first
+    cached_response = _REVERSE_GEOCODING_CACHE.get(cache_key)
+    if cached_response is not None:
+        return cached_response
+
     for attempt in range(max_retries):
         try:
             response = requests.post(
-                api_url,
+                settings.OVERPASS_API_URL,
                 data=query,
-                timeout=timeout,
+                timeout=settings.OVERPASS_API_TIMEOUT,
                 headers={'Content-Type': 'text/plain; charset=utf-8'}
             )
 
@@ -125,7 +144,15 @@ def query_overpass(
                     return None
 
                 try:
-                    return response.json()
+                    json_response = response.json()
+
+                    # Only cache if response contains data (has elements)
+                    # Don't cache empty responses from API failures
+                    elements = json_response.get('elements', [])
+                    if elements:
+                        _REVERSE_GEOCODING_CACHE.set(cache_key, json_response, REVERSE_GEOCODING_CACHE_TTL)
+
+                    return json_response
                 except json.JSONDecodeError as json_err:
                     # Log the response content to help debug
                     _log_overpass_failure(
