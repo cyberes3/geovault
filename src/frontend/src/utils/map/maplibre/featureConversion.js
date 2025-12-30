@@ -46,6 +46,26 @@ export function convertMapLibreFeature(mlFeature) {
         }
     }
 
+    // Parse _coordinateProperties if it's a string (for timestamp data)
+    if (typeof normalizedProperties._coordinateProperties === 'string') {
+        try {
+            normalizedProperties._coordinateProperties = JSON.parse(normalizedProperties._coordinateProperties)
+        } catch (e) {
+            console.warn('Failed to parse _coordinateProperties as JSON:', normalizedProperties._coordinateProperties)
+            normalizedProperties._coordinateProperties = null
+        }
+    }
+
+    // Parse coordinateProperties if it's a string (for timestamp data)
+    if (typeof normalizedProperties.coordinateProperties === 'string') {
+        try {
+            normalizedProperties.coordinateProperties = JSON.parse(normalizedProperties.coordinateProperties)
+        } catch (e) {
+            console.warn('Failed to parse coordinateProperties as JSON:', normalizedProperties.coordinateProperties)
+            normalizedProperties.coordinateProperties = null
+        }
+    }
+
     // Return pure GeoJSON feature
     return {
         type: 'Feature',

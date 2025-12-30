@@ -1,5 +1,5 @@
 <template>
-  <div v-if="feature" class="fixed inset-0 z-50 bg-white flex flex-col w-full h-full md:absolute md:inset-auto md:bottom-4 md:right-4 md:w-96 md:max-w-md md:h-auto md:max-h-[calc(100%-2rem)] rounded-t-xl md:rounded-lg shadow-[0_-4px_6px_-1px_rgba(0,0,0,0.1)] md:shadow-xl md:border md:border-gray-200">
+  <div v-if="feature" class="fixed inset-0 z-50 bg-white flex flex-col w-full h-full md:absolute md:inset-auto md:bottom-16 md:right-0 md:w-96 md:max-w-md md:h-auto md:max-h-[calc(100vh-12rem)] lg:bottom-0 lg:right-4 rounded-t-xl md:rounded-lg lg:rounded-lg shadow-[0_-4px_6px_-1px_rgba(0,0,0,0.1)] md:shadow-xl md:border-l md:border-b lg:border md:border-gray-200 lg:border-gray-200">
     <!-- Header (Sticky) -->
     <div class="sticky top-0 z-10 flex-none flex items-center justify-between px-6 py-4 border-b border-gray-200 bg-gray-50 sm:rounded-t-lg">
       <h3 class="text-lg font-medium text-gray-900 truncate">Edit Feature</h3>

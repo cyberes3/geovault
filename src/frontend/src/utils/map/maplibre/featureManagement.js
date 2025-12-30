@@ -187,11 +187,11 @@ export function updateSmallFeatureFlags(map, zoom) {
 
 
 /**
- * Extract elevation from geometry coordinates and store in properties
+ * Extract elevation and timestamps from geometry coordinates and store in properties
  * MapLibre strips the 3rd coordinate (elevation) when storing internally,
- * so we need to preserve it in properties
+ * and may not preserve coordinateProperties, so we need to preserve them
  * @param {Object} feature - GeoJSON feature
- * @returns {Object} Feature with elevation in properties
+ * @returns {Object} Feature with elevation and timestamps in properties
  */
 function preserveElevationInProperties(feature) {
   if (!feature || !feature.geometry) return feature
@@ -228,6 +228,15 @@ function preserveElevationInProperties(feature) {
         feature.properties._elevations = elevations
       }
     }
+    
+    // Preserve timestamps from coordinateProperties if they exist
+    // This is needed for track statistics (speed, moving time, etc.)
+    if (feature.properties?.coordinateProperties?.times) {
+      if (!feature.properties._coordinateProperties) {
+        feature.properties._coordinateProperties = {}
+      }
+      feature.properties._coordinateProperties.times = feature.properties.coordinateProperties.times
+    }
   } else if (geometry.type === 'MultiLineString') {
     // Flatten and store all elevation values from all line segments
     if (Array.isArray(coords) && coords.length > 0) {
@@ -248,6 +257,15 @@ function preserveElevationInProperties(feature) {
         // Store just the elevation values
         feature.properties._elevations = elevations
       }
+    }
+    
+    // Preserve timestamps from coordinateProperties if they exist
+    // For MultiLineString, flatten the nested timestamp arrays
+    if (feature.properties?.coordinateProperties?.times) {
+      if (!feature.properties._coordinateProperties) {
+        feature.properties._coordinateProperties = {}
+      }
+      feature.properties._coordinateProperties.times = feature.properties.coordinateProperties.times
     }
   }
   

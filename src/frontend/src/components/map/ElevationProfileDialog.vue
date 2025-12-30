@@ -1,6 +1,6 @@
 <template>
-  <div v-if="feature" class="fixed bottom-0 left-0 right-0 w-full bg-white z-30 rounded-t-xl shadow-[0_-4px_6px_-1px_rgba(0,0,0,0.1)] border-t border-gray-200 flex flex-col md:absolute md:bottom-0 md:left-0 md:right-0 md:h-1/4 md:rounded-none md:shadow-none md:z-20">
-    <div class="flex flex-col h-full">
+  <div v-if="feature" class="fixed bottom-0 left-0 right-0 w-full bg-white z-30 rounded-t-xl shadow-[0_-4px_6px_-1px_rgba(0,0,0,0.1)] border-t border-gray-200 flex flex-col max-h-[80vh] md:absolute md:bottom-16 md:left-0 md:right-0 md:h-1/3 md:max-h-none md:rounded-none md:shadow-none md:z-20 lg:bottom-0 lg:left-0 lg:right-0">
+    <div class="flex flex-col h-full min-h-0">
       <!-- Header -->
       <div class="relative flex items-center justify-between px-3 py-2 md:px-4 md:py-3 border-b border-gray-200 bg-gray-50 md:bg-white rounded-t-xl md:rounded-none flex-none">
         <h3 class="text-sm md:text-lg font-semibold text-gray-900">
@@ -109,9 +109,9 @@
       </div>
 
       <!-- Chart Container, Loading Spinner, or Warning -->
-      <div class="h-32 md:h-auto md:flex-1 overflow-hidden relative bg-white">
+      <div class="flex-1 min-h-0 overflow-y-auto overflow-x-hidden relative bg-white">
         <!-- Chart Container -->
-        <div v-if="hasElevationData" ref="chartContainer" class="h-full w-full relative">
+        <div v-if="hasElevationData" ref="chartContainer" class="chart-container w-full relative">
           <canvas ref="chartCanvas"></canvas>
           <!-- Loading Spinner Overlay -->
           <div v-if="isUpdatingChart" class="absolute inset-0 flex items-center justify-center z-10 pointer-events-none">
@@ -129,6 +129,11 @@
             <p class="text-gray-700 font-medium text-xs md:text-base">No elevation data</p>
           </div>
         </div>
+      </div>
+
+      <!-- Label text for small screens - outside scrollable area -->
+      <div v-if="hasElevationData" class="md:hidden text-center py-3 px-3 flex-none border-t border-gray-100">
+        <p class="text-sm text-gray-500">Elevation Profile</p>
       </div>
     </div>
   </div>
@@ -203,21 +208,22 @@ export default {
       if (!this.stats) return []
       const items = [
         { label: 'Dist', value: this.stats.totalDistance },
-        { label: 'Change', value: this.stats.totalElevationChange },
+        { label: 'Elev. Change', value: this.stats.totalElevationChange },
         { label: 'Asc', value: this.stats.grossAscent },
         { label: 'Des', value: this.stats.grossDescent },
-        { label: 'Min', value: this.stats.minElevation },
-        { label: 'Max', value: this.stats.maxElevation },
-        { label: 'Avg', value: this.stats.averageElevation }
+        { label: 'Min Elv', value: this.stats.minElevation },
+        { label: 'Max Elv', value: this.stats.maxElevation },
+        { label: 'Avg. Elv', value: this.stats.averageElevation }
       ]
-      if (this.stats.movingAverageSpeed) {
-        items.push({ label: 'Mov Avg', value: this.stats.movingAverageSpeed })
+      // Add track-specific stats (only for tracks with timestamps)
+      if (this.stats.totalTrackTime) {
+        items.push({ label: 'Total Time', value: this.stats.totalTrackTime })
       }
       if (this.stats.totalMovingTime) {
-        items.push({ label: 'Moving', value: this.stats.totalMovingTime })
+        items.push({ label: 'Moving Time', value: this.stats.totalMovingTime })
       }
-      if (this.stats.totalTrackTime) {
-        items.push({ label: 'Total', value: this.stats.totalTrackTime })
+      if (this.stats.averageMovingSpeed) {
+        items.push({ label: 'Avg. Moving Speed', value: this.stats.averageMovingSpeed })
       }
       return items
     },
@@ -481,8 +487,8 @@ export default {
         totalDistance,
         totalElevationChange: totalElevationChangeFormatted,
         elevationRange,
-        grossAscent: `${this.formatElevationNumber(grossAscent)} ${elevUnit}`,
-        grossDescent: `${this.formatElevationNumber(grossDescent)} ${elevUnit}`,
+        grossAscent: `+${this.formatElevationNumber(grossAscent)} ${elevUnit}`,
+        grossDescent: `-${this.formatElevationNumber(grossDescent)} ${elevUnit}`,
         minElevation: `${this.formatElevationNumber(minElevation)} ${elevUnit}`,
         maxElevation: `${this.formatElevationNumber(maxElevation)} ${elevUnit}`,
         averageElevation: `${this.formatElevationNumber(averageElevation)} ${elevUnit}`
@@ -495,7 +501,8 @@ export default {
         const speeds = calculateSpeeds(distancesMeters, timestamps)
         const speedStats = calculateSpeedStats(speeds, distancesMeters, timestamps)
         if (speedStats) {
-          stats.movingAverageSpeed = speedStats.movingAverageSpeed
+          stats.averageSpeed = speedStats.averageSpeed
+          stats.averageMovingSpeed = speedStats.averageMovingSpeed
           stats.totalMovingTime = speedStats.totalMovingTime
           stats.totalTrackTime = speedStats.totalTrackTime
         }
@@ -566,22 +573,13 @@ export default {
         return
       }
 
-      // Extract base coordinates from geometry
-      let coordinates = extractCoordinates(geometry)
-      if (coordinates.length === 0) {
-        this.hasElevationData = false
-        this.stats = null
-        this.isUpdatingChart = false
-        return
-      }
-
-      // Check if coordinates have elevation data (3rd element)
-      // MapLibre strips Z coordinates, so coordinates may only have [lon, lat]
-      const hasElevationInCoords = coordinates.length > 0 && coordinates[0].length >= 3
-      const featureId = this.feature.properties?.database_id || this.feature.properties?.geojson_hash
+      // For LineString and MultiLineString features, MapLibre simplifies the geometry
+      // for rendering performance, which loses most coordinates. We need the full
+      // coordinates for accurate elevation profiles and track statistics.
+      // Always fetch from API if we have a feature ID.
       
-      // Check if we have preserved elevation data in properties
-      const preservedElevations = this.feature.properties?._elevations
+      const featureId = this.feature.properties?.database_id || this.feature.properties?.geojson_hash
+      let coordinates = null
       
       // Determine elevation source and fetch coordinates with elevation data
       if (this.elevationProfileSource === 'api') {
@@ -610,35 +608,41 @@ export default {
         // === GPS ELEVATION SOURCE ===
         // User wants GPS elevations from the original imported data
         
-        if (!hasElevationInCoords) {
-          // GPS elevations not available in geometry (MapLibre strips Z coordinates)
-          
-          // First, try to use preserved elevations from properties
-          if (preservedElevations && Array.isArray(preservedElevations) && preservedElevations.length > 0) {
-            // Reconstruct coordinates with preserved elevations
-            coordinates = coordinates.map((coord, index) => {
-              if (index < preservedElevations.length) {
-                return [coord[0], coord[1], preservedElevations[index]]
-              }
-              return coord
-            })
-          } else if (featureId) {
-            // Fallback: fetch from API if no preserved data
-            const apiCoordinates = await this.fetchElevationsFromAPI(featureId, 'internal')
-            if (apiCoordinates && apiCoordinates.length > 0) {
-              coordinates = apiCoordinates
-            } else {
-              console.warn('GPS elevations unavailable')
-              this.hasElevationData = false
-              this.stats = null
-              this.isUpdatingChart = false
-              return
-            }
+        // For LineString/MultiLineString, always fetch full coordinates from API
+        // because MapLibre simplifies the geometry (e.g., 2807 points -> 16 points)
+        if (featureId && (geometry.type === 'LineString' || geometry.type === 'MultiLineString')) {
+          const apiCoordinates = await this.fetchElevationsFromAPI(featureId, 'internal')
+          if (apiCoordinates && apiCoordinates.length > 0) {
+            coordinates = apiCoordinates
           } else {
-            throw new Error('GPS elevations unavailable and no feature ID for API fallback')
+            console.warn('GPS elevations unavailable from API')
+            this.hasElevationData = false
+            this.stats = null
+            this.isUpdatingChart = false
+            return
+          }
+        } else {
+          // For Point features or if no feature ID, use geometry coordinates
+          coordinates = extractCoordinates(geometry)
+          
+          if (coordinates.length === 0) {
+            this.hasElevationData = false
+            this.stats = null
+            this.isUpdatingChart = false
+            return
+          }
+          
+          // Check if coordinates have elevation data (3rd element)
+          const hasElevationInCoords = coordinates.length > 0 && coordinates[0].length >= 3
+          
+          if (!hasElevationInCoords) {
+            console.warn('No elevation data in geometry coordinates')
+            this.hasElevationData = false
+            this.stats = null
+            this.isUpdatingChart = false
+            return
           }
         }
-        // else: GPS elevations are available in coordinates, use them as-is
       }
 
       // Extract timestamps from coordinateProperties
@@ -1032,9 +1036,13 @@ export default {
 </script>
 
 <style scoped>
-/* Ensure chart container takes full height */
+/* Chart container styling - fit to available space */
+.chart-container {
+  height: 100%;
+}
+
 canvas {
-  max-height: 100%;
+  display: block;
 }
 </style>
 

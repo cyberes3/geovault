@@ -90,7 +90,9 @@ export function extractTimestamps(feature) {
   if (!feature) return null
 
   const properties = feature.properties || {}
-  const coordinateProperties = properties.coordinateProperties
+  
+  // First try to get from preserved coordinateProperties (MapLibre may strip the original)
+  let coordinateProperties = properties._coordinateProperties || properties.coordinateProperties
 
   // Timestamps are stored in coordinateProperties.times for GPX tracks
   // If coordinateProperties doesn't exist, the feature likely doesn't have timestamps
@@ -285,11 +287,91 @@ export function smoothElevationData(elevations, windowSize = 10) {
 }
 
 /**
- * Calculate speeds for each segment from distances and timestamps
- * Returns array of speeds in m/s, filtering out invalid segments
+ * Filter GPS outliers from speed data
+ * Removes unrealistic speeds and distance spikes caused by GPS inaccuracy
+ * @param {Array} speeds - Array of speeds in m/s with segment info
  * @param {Array} distances - Array of cumulative distances in meters
  * @param {Array} timestamps - Array of ISO timestamp strings
- * @returns {Array} Array of speeds in m/s
+ * @returns {Array} Array of filtered speed objects with {speed, segmentIndex, isValid}
+ */
+export function filterGPSOutliers(speeds, distances, timestamps) {
+  if (!speeds || speeds.length === 0) {
+    return []
+  }
+
+  // Maximum realistic speed: 150 mph = 67 m/s (covers most activities including driving)
+  const MAX_REALISTIC_SPEED = 67 // m/s
+
+  // Maximum realistic distance jump in 1 second: 100 meters
+  // This catches GPS position jumps/spikes
+  const MAX_DISTANCE_PER_SECOND = 100 // meters
+
+  const filteredSpeeds = []
+
+  // First pass: filter out obviously unrealistic speeds
+  for (let i = 0; i < speeds.length; i++) {
+    const speedData = speeds[i]
+    const speed = speedData.speed
+    const timestampStartIndex = speedData.timestampStartIndex
+    const timestampEndIndex = speedData.timestampEndIndex
+
+    // Check for unrealistic speed
+    if (speed > MAX_REALISTIC_SPEED) {
+      filteredSpeeds.push({ ...speedData, isValid: false })
+      continue
+    }
+
+    // Check for distance spikes (GPS jumps)
+    if (timestampEndIndex < distances.length) {
+      const distanceMeters = distances[timestampEndIndex] - distances[timestampStartIndex]
+      const time1 = new Date(timestamps[timestampStartIndex])
+      const time2 = new Date(timestamps[timestampEndIndex])
+      
+      if (!isNaN(time1.getTime()) && !isNaN(time2.getTime())) {
+        const timeDiffSeconds = (time2.getTime() - time1.getTime()) / 1000
+        
+        // If distance per second is too high, it's likely a GPS spike
+        if (timeDiffSeconds > 0 && (distanceMeters / timeDiffSeconds) > MAX_DISTANCE_PER_SECOND) {
+          filteredSpeeds.push({ ...speedData, isValid: false })
+          continue
+        }
+      }
+    }
+
+    filteredSpeeds.push({ ...speedData, isValid: true })
+  }
+
+  // Second pass: statistical outlier detection using median
+  // Only apply to valid speeds from first pass
+  const validSpeeds = filteredSpeeds.filter(s => s.isValid).map(s => s.speed)
+  
+  if (validSpeeds.length > 0) {
+    // Calculate median speed
+    const sortedSpeeds = [...validSpeeds].sort((a, b) => a - b)
+    const medianSpeed = sortedSpeeds[Math.floor(sortedSpeeds.length / 2)]
+    
+    // Mark speeds > 3x median as outliers (likely GPS spikes)
+    // Only apply if we have enough data points (at least 10)
+    if (validSpeeds.length >= 10) {
+      const outlierThreshold = medianSpeed * 3
+      
+      for (let i = 0; i < filteredSpeeds.length; i++) {
+        if (filteredSpeeds[i].isValid && filteredSpeeds[i].speed > outlierThreshold) {
+          filteredSpeeds[i].isValid = false
+        }
+      }
+    }
+  }
+
+  return filteredSpeeds
+}
+
+/**
+ * Calculate speeds for each segment from distances and timestamps
+ * Returns array of speed objects with GPS outlier filtering applied
+ * @param {Array} distances - Array of cumulative distances in meters
+ * @param {Array} timestamps - Array of ISO timestamp strings
+ * @returns {Array} Array of speed objects {speed, segmentIndex, isValid}
  */
 export function calculateSpeeds(distances, timestamps) {
   if (!timestamps || timestamps.length < 2 || distances.length < 2) {
@@ -299,6 +381,8 @@ export function calculateSpeeds(distances, timestamps) {
   const speeds = []
   
   // Calculate speed for each segment
+  // Segment i connects point i-1 to point i
+  // So segment 0 connects point 0 to point 1, etc.
   for (let i = 1; i < distances.length && i < timestamps.length; i++) {
     const distanceMeters = distances[i] - distances[i - 1]
     const time1 = new Date(timestamps[i - 1])
@@ -314,17 +398,26 @@ export function calculateSpeeds(distances, timestamps) {
     // Filter out invalid segments (zero or negative time, zero distance)
     if (timeDiffSeconds > 0 && distanceMeters > 0) {
       const speedMps = distanceMeters / timeDiffSeconds
-      speeds.push(speedMps)
+      speeds.push({
+        speed: speedMps,
+        segmentIndex: i - 1, // Index of the starting point of this segment
+        timestampStartIndex: i - 1, // Index in timestamps array for start
+        timestampEndIndex: i, // Index in timestamps array for end
+        isValid: true // Will be updated by filterGPSOutliers
+      })
     }
   }
   
-  return speeds
+  // Apply GPS outlier filtering
+  const filteredSpeeds = filterGPSOutliers(speeds, distances, timestamps)
+  
+  return filteredSpeeds
 }
 
 /**
- * Calculate speed statistics from segment speeds
+ * Calculate speed statistics from segment speeds with GPS outlier filtering
  * Returns formatted stats object with averageSpeed, movingAverageSpeed, totalTrackTime, and totalMovingTime
- * @param {Array} speeds - Array of speeds in m/s
+ * @param {Array} speeds - Array of speed objects {speed, segmentIndex, isValid}
  * @param {Array} distances - Array of cumulative distances in meters
  * @param {Array} timestamps - Array of ISO timestamp strings
  * @returns {Object|null} Stats object with formatted speed and time strings or null if insufficient data
@@ -352,23 +445,43 @@ export function calculateSpeedStats(speeds, distances, timestamps) {
     averageSpeed = formatSpeed(totalDistanceMeters / totalTimeSeconds)
   }
 
+  // Filter to only valid speeds (after GPS outlier filtering)
+  const validSpeeds = speeds.filter(s => s.isValid)
+  
+  if (validSpeeds.length === 0) {
+    // No valid speeds, return basic stats only
+    return {
+      averageSpeed,
+      movingAverageSpeed: null,
+      totalTrackTime,
+      totalMovingTime: formatDuration(0)
+    }
+  }
+
   // Calculate moving time: sum of time segments where speed > threshold (0.5 m/s = 1.8 km/h to filter GPS noise)
   // This represents time actually spent moving, excluding stops
-  // speeds array has one element per segment (between consecutive points)
-  // timestamps array has one element per point
-  // So segment i is between timestamps[i] and timestamps[i+1], with speed speeds[i]
+  // Only use VALID speeds (after GPS outlier filtering)
   const MOVING_SPEED_THRESHOLD = 0.5 // m/s (1.8 km/h or ~1.1 mph)
   let totalMovingTimeSeconds = 0
+  let totalMovingDistanceMeters = 0
   
-  for (let i = 0; i < speeds.length && i + 1 < timestamps.length; i++) {
-    const segmentSpeed = speeds[i]
+  for (let i = 0; i < validSpeeds.length; i++) {
+    const speedData = validSpeeds[i]
+    const segmentSpeed = speedData.speed
+    const timestampStartIndex = speedData.timestampStartIndex
+    const timestampEndIndex = speedData.timestampEndIndex
+    
     if (segmentSpeed > MOVING_SPEED_THRESHOLD) {
-      const segTime1 = new Date(timestamps[i])
-      const segTime2 = new Date(timestamps[i + 1])
+      const segTime1 = new Date(timestamps[timestampStartIndex])
+      const segTime2 = new Date(timestamps[timestampEndIndex])
       if (!isNaN(segTime1.getTime()) && !isNaN(segTime2.getTime())) {
         const segmentTimeSeconds = (segTime2.getTime() - segTime1.getTime()) / 1000
         if (segmentTimeSeconds > 0) {
           totalMovingTimeSeconds += segmentTimeSeconds
+          // Also track distance during moving segments for accurate moving average speed
+          if (timestampEndIndex < distances.length) {
+            totalMovingDistanceMeters += distances[timestampEndIndex] - distances[timestampStartIndex]
+          }
         }
       }
     }
@@ -376,28 +489,16 @@ export function calculateSpeedStats(speeds, distances, timestamps) {
   
   const totalMovingTime = formatDuration(totalMovingTimeSeconds)
 
-  // Calculate moving average speed (rolling window of 10 points, then average of that)
-  let movingAverageSpeed = null
-  if (speeds.length > 0) {
-    const windowSize = Math.min(10, speeds.length)
-    const movingAverages = []
-    
-    for (let i = 0; i < speeds.length; i++) {
-      const start = Math.max(0, i - Math.floor(windowSize / 2))
-      const end = Math.min(speeds.length, i + Math.ceil(windowSize / 2))
-      const window = speeds.slice(start, end)
-      const avg = window.reduce((a, b) => a + b, 0) / window.length
-      movingAverages.push(avg)
-    }
-    
-    // Average of all moving averages
-    const overallMovingAvg = movingAverages.reduce((a, b) => a + b, 0) / movingAverages.length
-    movingAverageSpeed = formatSpeed(overallMovingAvg)
+  // Calculate average moving speed: distance while moving / time while moving
+  // This is more accurate than the rolling window average
+  let averageMovingSpeed = null
+  if (totalMovingTimeSeconds > 0 && totalMovingDistanceMeters > 0) {
+    averageMovingSpeed = formatSpeed(totalMovingDistanceMeters / totalMovingTimeSeconds)
   }
 
   return {
     averageSpeed,
-    movingAverageSpeed,
+    averageMovingSpeed,
     totalTrackTime,
     totalMovingTime
   }

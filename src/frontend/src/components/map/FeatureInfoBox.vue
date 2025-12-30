@@ -1,6 +1,6 @@
 <template>
-  <div v-if="feature" class="fixed bottom-0 left-0 right-0 w-full bg-white z-20 rounded-t-xl shadow-[0_-4px_6px_-1px_rgba(0,0,0,0.1)] md:absolute md:bottom-4 md:right-4 md:left-auto md:max-w-md md:w-80 md:rounded-lg md:border-r md:border-b md:border-l md:border-gray-200 md:shadow-xl max-h-[60vh] flex flex-col" :style="{ borderTopWidth: '4px', borderTopColor: getFeatureColor(), borderTopStyle: 'solid' }">
-    <div class="p-3 md:p-4 overflow-y-auto">
+  <div v-if="feature" class="fixed bottom-0 left-0 right-0 w-full bg-white z-20 rounded-t-xl shadow-[0_-4px_6px_-1px_rgba(0,0,0,0.1)] md:absolute md:bottom-16 md:right-0 md:left-auto md:max-w-md md:w-80 md:rounded-lg md:border-l md:border-b md:border-gray-200 md:shadow-xl lg:bottom-0 lg:right-4 lg:rounded-lg lg:border-r lg:border-b lg:border-l max-h-[60vh] md:max-h-[calc(100vh-12rem)] flex flex-col" :style="{ borderTopWidth: '4px', borderTopColor: getFeatureColor(), borderTopStyle: 'solid' }">
+    <div class="p-3 md:p-4 overflow-y-auto flex-1 min-h-0">
       <!-- Header -->
       <div class="flex items-start justify-between mb-2 md:mb-4 relative">
         <div
@@ -105,7 +105,7 @@
     </div>
 
     <!-- Action Buttons Bar (Bottom) -->
-    <div class="border-t border-gray-200 bg-gray-50 px-2 md:px-3 py-1.5 md:py-2 flex items-center justify-center gap-1.5 md:gap-2 flex-shrink-0">
+    <div class="border-t border-gray-200 bg-gray-50 px-2 md:px-3 py-1.5 md:py-2 flex items-center justify-center gap-1.5 md:gap-2 flex-none">
       <button
         v-if="showEditButton"
         @click="$emit('edit')"
