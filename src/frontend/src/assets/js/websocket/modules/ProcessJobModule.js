@@ -43,14 +43,14 @@ export class ProcessJobModule extends BaseModule {
         let updates = {
             processing: data.status === 'processing',
             processing_failed: data.status === 'failed',
-            waiting: data.status === 'waiting'
+            queued: data.status === 'queued'
         };
 
         // Handle completed status - need to get the actual feature count from the server
         if (data.status === 'completed') {
             updates.processing = false;
             updates.processing_failed = false;
-            updates.waiting = false;
+            updates.queued = false;
             // Request a refresh of import table to get the updated item with correct feature count
             this.socket.requestRefresh('import_queue');
             return;
@@ -59,11 +59,11 @@ export class ProcessJobModule extends BaseModule {
         // For processing status, set feature_count to -1 to indicate processing
         if (data.status === 'processing') {
             updates.feature_count = -1;
-            updates.waiting = false;
+            updates.queued = false;
         }
 
-        // For waiting status, clear processing flag
-        if (data.status === 'waiting') {
+        // For queued status, clear processing flag
+        if (data.status === 'queued') {
             updates.processing = false;
         }
 

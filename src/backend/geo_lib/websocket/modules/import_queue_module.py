@@ -1,13 +1,12 @@
 import json
-from datetime import datetime, timedelta
 
 from channels.db import database_sync_to_async
 from django.core.serializers.json import DjangoJSONEncoder
-from django.utils import timezone
 
 from api.models import ImportQueue
 from geo_lib.logging.console import get_tagged_logger
 from geo_lib.processing.jobs.helpers.status_tracker import status_tracker
+from geo_lib.utils.redis_connection import get_redis_connection
 from geo_lib.websocket.base_module import BaseWebSocketModule
 from geo_lib.websocket.modules.file_duplicate_utils import check_all_features_duplicate
 
@@ -55,11 +54,27 @@ class ImportQueueModule(BaseWebSocketModule):
             if job.status.value == 'processing' and job.import_queue_id
         }
 
-        # Get all waiting jobs for this user
-        waiting_job_ids = {
+        # Get all queued jobs for this user
+        queued_job_ids = {
             job.import_queue_id for job in user_jobs
-            if job.status.value == 'waiting' and job.import_queue_id
+            if job.status.value == 'queued' and job.import_queue_id
         }
+
+        # Check if there are items queued in Redis for this user
+        # (This handles recovered jobs that haven't started processing yet)
+        queued_import_ids = set()
+        redis_client = get_redis_connection()
+        queue_key = f"processing_queue:user:{self.user.id}"
+
+        # Get all items in the queue without removing them (LRANGE 0 -1)
+        queue_items = redis_client.lrange(queue_key, 0, -1)
+        for item_json in queue_items:
+            try:
+                job_data = json.loads(item_json)
+                if 'import_queue_id' in job_data:
+                    queued_import_ids.add(job_data['import_queue_id'])
+            except (json.JSONDecodeError, TypeError) as e:
+                logger.error(f"Error parsing queue item for user {self.user.id}: {e}")
 
         # Build a map of file hash to items for duplicate detection (hash of raw file content)
         hash_to_items = {}
@@ -93,26 +108,15 @@ class ImportQueueModule(BaseWebSocketModule):
             # Check if this item is currently being processed
             item['processing'] = item['id'] in active_job_ids
 
-            # Check if this item is waiting in queue
-            item['waiting'] = item['id'] in waiting_job_ids
-
-            # Also consider items with empty geofeatures as processing if they were created recently
-            if not item['processing'] and count == 0 and not item.get('unparsable'):
-                # If item was created within the last 10 seconds, consider it as processing
-                item_timestamp = item['timestamp']
-                if isinstance(item_timestamp, str):
-                    item_timestamp = datetime.fromisoformat(item_timestamp.replace('Z', '+00:00'))
-
-                time_since_creation = timezone.now() - item_timestamp
-                if time_since_creation < timedelta(seconds=10):
-                    item['processing'] = True
+            # Check if this item is queued (from job tracker or Redis queue)
+            item['queued'] = item['id'] in queued_job_ids or item['id'] in queued_import_ids
 
             # Check if there's an error in the geofeatures or if marked as unparsable
             if item.get('unparsable') or (count == 1 and item['geofeatures'] and isinstance(item['geofeatures'][0], dict) and 'error' in item['geofeatures'][0]):
                 item['feature_count'] = 0
                 item['processing_failed'] = True
-            elif count == 0 and (item['processing'] or item['waiting']):
-                item['feature_count'] = -1  # Special value to indicate processing or waiting
+            elif count == 0 and (item['processing'] or item['queued']):
+                item['feature_count'] = -1  # Special value to indicate processing or queued
                 item['processing_failed'] = False
             else:
                 item['feature_count'] = count

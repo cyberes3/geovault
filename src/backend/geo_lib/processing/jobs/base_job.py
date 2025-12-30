@@ -99,16 +99,34 @@ class BaseJob(ABC):
             if job.status == ProcessingStatus.CANCELED:
                 _logger.info(f"Job {job_id} was canceled during processing")
 
-        except:
+        except Exception as e:
+            # Check if this is a shutdown-related error
+            # These errors occur when the server is killed while a job is processing
+            # The job will be recovered on restart, so don't mark it as failed
+            error_str = str(e)
+            is_shutdown_error = (
+                isinstance(e, RuntimeError) and 
+                ('cannot schedule new futures after interpreter shutdown' in error_str or
+                 'cannot schedule new futures after shutdown' in error_str)
+            )
+            
+            if is_shutdown_error:
+                _logger.info(f"Job {job_id} interrupted by server shutdown - will be recovered on restart")
+                return
+            
             # Don't log error if job was canceled
             job = self.status_tracker.get_job(job_id)
-            if job.status == ProcessingStatus.CANCELED:
+            if job and job.status == ProcessingStatus.CANCELED:
                 _logger.info(f"Job {job_id} was canceled, stopping error handling")
             else:
                 # Log detailed error internally
                 _logger.error(f"Error in {self.get_job_type()} job {job_id}: {traceback.format_exc()}")
                 # Use generic error message for user
-                self._handle_job_error(job_id, JOB_FAILED_GENERIC)
+                try:
+                    self._handle_job_error(job_id, JOB_FAILED_GENERIC)
+                except Exception as handler_error:
+                    # If error handling itself fails (e.g., during shutdown), log but don't crash
+                    _logger.error(f"Failed to handle job error for {job_id}: {handler_error}")
 
         finally:
             # Clean up thread reference

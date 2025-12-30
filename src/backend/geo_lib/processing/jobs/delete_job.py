@@ -154,11 +154,11 @@ class DeleteJob(BaseJob):
             # Get all user jobs
             user_jobs = self.status_tracker.get_user_jobs(user_id)
 
-            # Find active process jobs for this item (including waiting jobs)
+            # Find active process jobs for this item (including queued jobs)
             active_process_jobs = [
                 job for job in user_jobs
                 if (job.import_queue_id == item_id and
-                    job.status in (ProcessingStatus.PROCESSING, ProcessingStatus.WAITING) and
+                    job.status in (ProcessingStatus.PROCESSING, ProcessingStatus.QUEUED) and
                     job.job_type == JobType.PROCESS)
             ]
 

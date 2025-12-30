@@ -3,7 +3,9 @@ Process job processor for asynchronous file processing.
 Handles converting uploaded files to geojson representation.
 """
 
+import base64
 import json
+import re
 import subprocess
 import time
 import traceback
@@ -61,19 +63,20 @@ class ProcessJob(BaseJob):
             user_id: ID of the user who uploaded the file
             replacement_feature_id: Optional ID of the feature being updated (for replacement uploads)
         """
-        # Create initial ImportQueue entry so it shows up in the UI
-        import_queue_id = self._create_initial_import_queue_entry(filename, user_id, job_id, replacement_feature_id=replacement_feature_id)
+        # Create initial ImportQueue entry WITH raw file data so it can be recovered if server restarts
+        import_queue_id = self._create_initial_import_queue_entry(
+            filename, user_id, job_id, file_data, replacement_feature_id=replacement_feature_id
+        )
         self.status_tracker.set_job_result(job_id, {}, import_queue_id)
         self._broadcast_item_added(user_id, import_queue_id)
 
-        # Enqueue job to Redis
+        # Enqueue job to Redis (only metadata - file data is in database)
         queue = get_processing_queue(user_id)
         job_data = {
             'job_id': job_id,
             'import_queue_id': import_queue_id,
             'filename': filename,
             'user_id': user_id,
-            'file_data': file_data,
             'timestamp': time.time(),
             'replacement_feature_id': replacement_feature_id
         }
@@ -83,10 +86,10 @@ class ProcessJob(BaseJob):
             _logger.error(f"Failed to enqueue job {job_id} for user {user_id}")
             return
 
-        # Update job status to WAITING (will be set to PROCESSING when worker picks it up)
+        # Update job status to QUEUED (will be set to PROCESSING when worker picks it up)
         self.status_tracker.update_job_status(
             job_id,
-            ProcessingStatus.WAITING,
+            ProcessingStatus.QUEUED,
             "Waiting in queue for processing"
         )
 
@@ -94,7 +97,7 @@ class ProcessJob(BaseJob):
         self._broadcast_job_status_updated(
             user_id,
             job_id,
-            'waiting',
+            'queued',
             0.0,
             "Waiting in queue for processing",
             import_queue_id=import_queue_id
@@ -209,11 +212,10 @@ class ProcessJob(BaseJob):
         
         Args:
             job_id: Job ID (part of BaseJob interface, also in kwargs)
-            kwargs: Job data from Redis queue containing job_id, file_data, filename, user_id
+            kwargs: Job data from Redis queue containing job_id, import_queue_id, filename, user_id
         """
         # Extract job parameters (kwargs is actually job_data from Redis)
         job_data = kwargs
-        file_data = job_data['file_data']
         filename = job_data['filename']
         user_id = job_data['user_id']
 
@@ -225,10 +227,44 @@ class ProcessJob(BaseJob):
 
         import_queue_id = job.import_queue_id
 
-        # Get the UUID from the ImportQueue for logging
+        # Get the ImportQueue entry and read raw_file from database
         try:
             import_queue = ImportQueue.objects.get(id=import_queue_id)
             assert import_queue.log_id
+            
+            # Read raw_file from database and convert to bytes
+            raw_file = import_queue.raw_file
+            if not raw_file:
+                _logger.error(f"ImportQueue {import_queue_id} has no raw_file data")
+                self._handle_processing_error(
+                    job_id, user_id,
+                    "File data not found in database",
+                    RealTimeImportLog(user_id, import_queue.log_id)
+                )
+                return
+            
+            # Convert raw_file string back to bytes
+            # raw_file is stored as UTF-8 string for text files, or base64 string for binary files
+            # Heuristic: if string looks like base64 (only base64 chars, reasonable length), try base64 first
+            # Otherwise, treat as UTF-8 text
+            base64_pattern = re.compile(r'^[A-Za-z0-9+/]*={0,2}$')
+            is_likely_base64 = (
+                len(raw_file) > 20 and  # Base64 strings are typically longer
+                base64_pattern.match(raw_file.replace('\n', '').replace('\r', '')) and
+                len(raw_file) % 4 == 0  # Base64 length is multiple of 4 (after padding)
+            )
+            
+            if is_likely_base64:
+                try:
+                    # Try base64 decode for binary files (KMZ, etc.)
+                    file_data = base64.b64decode(raw_file)
+                except Exception:
+                    # If base64 decode fails, fall back to UTF-8
+                    file_data = raw_file.encode('utf-8')
+            else:
+                # Treat as UTF-8 text (GPX, KML)
+                file_data = raw_file.encode('utf-8')
+            
             # Check if this is a replacement upload (fast path)
             is_replacement = import_queue.replacement is not None
         except ImportQueue.DoesNotExist:
@@ -479,6 +515,20 @@ class ProcessJob(BaseJob):
             error_msg = str(e) if str(e) else FILE_VALIDATION_FAILED
             self._handle_processing_error(job_id, user_id, f"{FILE_VALIDATION_FAILED}: {error_msg}", realtime_log)
         except Exception as e:
+            # Check if this is a shutdown-related error
+            # These occur when the server is killed while a job is processing
+            # The job will be recovered on restart, so don't mark it as failed
+            error_str = str(e)
+            is_shutdown_error = (
+                isinstance(e, RuntimeError) and 
+                ('cannot schedule new futures after interpreter shutdown' in error_str or
+                 'cannot schedule new futures after shutdown' in error_str)
+            )
+            
+            if is_shutdown_error:
+                _logger.info(f"Job {job_id} interrupted by server shutdown - will be recovered on restart")
+                return
+            
             overall_duration = time.time() - overall_start_time
             file_size_mb = len(file_data) / (1024 * 1024) if file_data else 0
             _logger.error(f"Upload processing error for job {job_id} after {overall_duration:.2f}s: file '{filename}' ({file_size_mb:.2f} MB): {traceback.format_exc()}")
@@ -502,12 +552,24 @@ class ProcessJob(BaseJob):
             
             self._handle_processing_error(job_id, user_id, error_msg, realtime_log)
 
-    def _create_initial_import_queue_entry(self, filename: str, user_id: int, job_id: str, replacement_feature_id: Optional[int] = None) -> int:
-        """Create an initial ImportQueue entry for async processing."""
+    def _create_initial_import_queue_entry(self, filename: str, user_id: int, job_id: str, 
+                                           file_data: bytes, replacement_feature_id: Optional[int] = None) -> int:
+        """
+        Create an initial ImportQueue entry for async processing.
+        
+        The raw file data is saved immediately so that if the server restarts before
+        processing completes, the job can be recovered and re-processed.
+        """
         with transaction.atomic():
             user = User.objects.get(id=user_id)
+            
+            # Encode the raw file data for storage
+            # This will be re-encoded later in _finalize_and_save_processed_features, but that's okay
+            # as it ensures we have the data available for recovery
+            raw_file_content, _ = encode_raw_file_data(file_data)
+            
             import_queue = ImportQueue.objects.create(
-                raw_file='{"type": "FeatureCollection", "features": []}',  # Empty GeoJSON
+                raw_file=raw_file_content,  # Save actual file content for recovery
                 original_filename=filename,
                 user=user,
                 geofeatures=[],  # Empty array during processing

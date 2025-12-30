@@ -1,10 +1,12 @@
 """
 Redis-based FIFO queue for sequential file processing per user.
 Ensures files are processed in upload order.
+
+Note: This queue only stores job metadata. The actual file data is stored
+in the database (ImportQueue.raw_file) and read from there during processing.
 """
 
 import json
-import base64
 from typing import Optional, Dict, Any
 from geo_lib.utils.redis_connection import get_redis_connection
 from geo_lib.logging.console import get_tagged_logger
@@ -39,21 +41,17 @@ class RedisProcessingQueue:
                 - import_queue_id: int
                 - filename: str
                 - user_id: int
-                - file_data: bytes
                 - timestamp: float
                 - replacement_feature_id: Optional[int]
+        
+        Note: file_data is NOT stored in Redis - it's read from the database when processing.
         
         Returns:
             True if enqueued successfully, False otherwise
         """
         try:
-            # Encode file_data as base64 for JSON serialization
-            encoded_data = job_data.copy()
-            if 'file_data' in encoded_data and isinstance(encoded_data['file_data'], bytes):
-                encoded_data['file_data'] = base64.b64encode(encoded_data['file_data']).decode('utf-8')
-            
             # Serialize to JSON
-            job_json = json.dumps(encoded_data)
+            job_json = json.dumps(job_data)
             
             # Add to queue (RPUSH adds to tail)
             self.redis_client.rpush(self.queue_key, job_json)
@@ -91,9 +89,7 @@ class RedisProcessingQueue:
             # Deserialize from JSON
             job_data = json.loads(job_json)
             
-            # Decode file_data from base64
-            if 'file_data' in job_data and isinstance(job_data['file_data'], str):
-                job_data['file_data'] = base64.b64decode(job_data['file_data'])
+            # Note: file_data is not in Redis - it will be read from database during processing
             
             logger.info(f"Dequeued job {job_data['job_id']} for user {self.user_id}")
             
@@ -149,9 +145,7 @@ class RedisProcessingQueue:
             
             job_data = json.loads(job_json)
             
-            # Decode file_data from base64
-            if 'file_data' in job_data and isinstance(job_data['file_data'], str):
-                job_data['file_data'] = base64.b64decode(job_data['file_data'])
+            # Note: file_data is not in Redis - it will be read from database during processing
             
             return job_data
             

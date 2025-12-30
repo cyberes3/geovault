@@ -14,6 +14,7 @@ This module performs essential checks when the server starts up:
 10. Clean up stale Redis queues and job status data
 11. Clear Redis cache (ensures fresh data on startup)
 12. Preload ski resorts database (for reverse geocoding)
+13. Recover interrupted jobs (re-enqueue jobs that were processing when server stopped)
 
 Warning checks (don't fail startup):
 - Configuration file exists
@@ -26,6 +27,7 @@ import grp
 import os
 import pwd
 import sys
+import traceback
 from pathlib import Path
 
 from asgiref.sync import async_to_sync
@@ -38,6 +40,7 @@ from django.db import connection
 from geo_lib.geocoding.ski_resorts import load_ski_resorts
 from geo_lib.logging.console import get_tagged_logger
 from geo_lib.processing.file_types import FILE_TYPE_CONFIGS
+from geo_lib.processing.job_recovery import recover_interrupted_jobs as do_job_recovery
 from geo_lib.utils.redis_connection import get_redis_connection
 from website.config_loader import get_config_loader
 from website.settings_utils import get_required_setting
@@ -793,6 +796,33 @@ def preload_ski_resorts():
         _logger.warning("⚠ Ski resorts database is empty or failed to load")
 
 
+def recover_interrupted_jobs():
+    """
+    Recover and re-enqueue jobs that were interrupted during processing.
+    
+    When the server restarts, Redis queues are cleared but ImportQueue entries
+    persist in the database. This function finds jobs that were being processed
+    but didn't complete, and re-enqueues them for processing.
+    
+    This is non-critical - if recovery fails, the server can still start.
+    """
+    try:
+        result = do_job_recovery()
+
+        if result['total_found'] == 0:
+            _logger.info("✓ No interrupted jobs to recover")
+        else:
+            _logger.info(f"✓ Job recovery: {result['recovered']}/{result['total_found']} jobs recovered")
+            if result['failed'] > 0:
+                _logger.warning(f"⚠ Failed to recover {result['failed']} job(s)")
+            if result['users_affected'] > 0:
+                _logger.info(f"  Affected users: {result['users_affected']}")
+
+    except:
+        _logger.warning(f"⚠ Failed to recover interrupted jobs: {traceback.format_exc()}")
+        # This is not critical - server can still start
+
+
 def run_startup_checks():
     """
     Run all startup checks and exit if any fail.
@@ -812,6 +842,7 @@ def run_startup_checks():
     12. Clean up stale Redis processing queues and job status data
     13. Clear Redis cache (ensures fresh data on startup)
     14. Preload ski resorts database (for reverse geocoding)
+    15. Recover interrupted jobs (re-enqueue jobs that were processing when server stopped)
     
     Warning checks (don't fail startup):
     - Configuration file
@@ -865,6 +896,10 @@ def run_startup_checks():
     # Preload ski resorts database (non-critical, improves first-time performance)
     _logger.info("Preloading ski resorts database...")
     preload_ski_resorts()
+
+    # Recover interrupted jobs (non-critical, re-enqueues jobs that were processing when server stopped)
+    _logger.info("Recovering interrupted jobs...")
+    recover_interrupted_jobs()
 
     if failed_checks:
         _logger.error("=" * 60)

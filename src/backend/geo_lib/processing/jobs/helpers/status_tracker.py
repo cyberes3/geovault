@@ -16,7 +16,6 @@ from website.settings_utils import get_required_setting
 class ProcessingStatus(Enum):
     """Status of file processing."""
     QUEUED = "queued"  # File uploaded, waiting to start processing
-    WAITING = "waiting"  # Waiting for earlier files to finish processing
     PROCESSING = "processing"  # Currently being processed
     COMPLETED = "completed"  # Processing completed successfully
     FAILED = "failed"  # Processing failed

@@ -9,7 +9,7 @@ export class ImportTableItem {
     feature_count: number;
     imported: boolean;
     processing_failed: boolean;
-    waiting: boolean;
+    queued: boolean;
     file_duplicate: {
         status: string | null;
         originalFilename: string | null;
@@ -29,7 +29,7 @@ export class ImportTableItem {
         this.feature_count = data.feature_count;
         this.imported = data.imported || false;
         this.processing_failed = data.processing_failed || false;
-        this.waiting = data.waiting || false;
+        this.queued = data.queued || false;
         this.file_duplicate = data.file_duplicate || {
             status: null,
             originalFilename: null
