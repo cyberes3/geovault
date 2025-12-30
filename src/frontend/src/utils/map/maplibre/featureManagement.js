@@ -84,7 +84,7 @@ function calculateLineScreenSize(geometry, zoom) {
 
 /**
  * Update small feature flags for all features at the current zoom level
- * This is more efficient than reprocessing all features
+ * Optimized to prioritize visible features for better performance
  * @param {Object} map - MapLibre map instance
  * @param {number} zoom - Current zoom level
  */
@@ -100,14 +100,34 @@ export function updateSmallFeatureFlags(map, zoom) {
   
   if (features.length === 0) return
 
+  // Get visible features first to prioritize processing them
+  let visibleFeatureIds = new Set()
+  try {
+    const visibleFeatures = map.queryRenderedFeatures(null, {
+      layers: ['lines', 'polygons', 'polygon-outlines']
+    })
+    visibleFeatureIds = new Set(
+      visibleFeatures
+        .map(f => f.properties?.database_id)
+        .filter(id => id !== undefined)
+    )
+  } catch (e) {
+    // If query fails, process all features (fallback)
+    console.warn('Failed to query visible features, processing all:', e)
+  }
+
   const MIN_PIXEL_SIZE = 2
   let needsUpdate = false
   const replacementPointsToAdd = []
   const featuresToKeep = []
+  
+  // Separate visible and non-visible features for prioritized processing
+  const visibleFeaturesToProcess = []
+  const nonVisibleFeatures = []
 
-  // First pass: update flags and collect features to keep
+  // First pass: separate features by visibility
   for (const feature of features) {
-    // Skip label points
+    // Skip label points - always keep them
     if (feature.properties?._isLabelPoint) {
       featuresToKeep.push(feature)
       continue
@@ -119,8 +139,27 @@ export function updateSmallFeatureFlags(map, zoom) {
       continue
     }
 
+    const featureId = feature.properties?.database_id
+    if (featureId && visibleFeatureIds.has(String(featureId))) {
+      visibleFeaturesToProcess.push(feature)
+    } else {
+      nonVisibleFeatures.push(feature)
+    }
+  }
+
+  // Process visible features first (higher priority), then non-visible
+  // This ensures visible features get updated immediately while non-visible
+  // features are processed when they come into view
+  const processFeature = (feature) => {
     const geometry = feature.geometry
     const geometryType = geometry?.type
+
+    // Only process polygons and lines (points don't need this check)
+    if (geometryType !== 'Polygon' && geometryType !== 'MultiPolygon' &&
+        geometryType !== 'LineString' && geometryType !== 'MultiLineString') {
+      featuresToKeep.push(feature)
+      return
+    }
 
     // Check if polygon or line is too small
     let isSmallFeature = false
@@ -173,6 +212,26 @@ export function updateSmallFeatureFlags(map, zoom) {
         }
       })
     }
+  }
+
+  // Process visible features first (priority)
+  for (const feature of visibleFeaturesToProcess) {
+    processFeature(feature)
+  }
+
+  // Process non-visible features (they'll be updated when they come into view)
+  // For performance, we can skip processing non-visible features if there are many
+  // and only process visible ones. Non-visible features will be processed when
+  // they come into view during pan/zoom.
+  const MAX_NON_VISIBLE_TO_PROCESS = 1000 // Limit processing of off-screen features
+  const nonVisibleToProcess = nonVisibleFeatures.slice(0, MAX_NON_VISIBLE_TO_PROCESS)
+  for (const feature of nonVisibleToProcess) {
+    processFeature(feature)
+  }
+  
+  // Keep remaining non-visible features as-is (they'll be processed when visible)
+  for (let i = MAX_NON_VISIBLE_TO_PROCESS; i < nonVisibleFeatures.length; i++) {
+    featuresToKeep.push(nonVisibleFeatures[i])
   }
 
   // Only update if something changed

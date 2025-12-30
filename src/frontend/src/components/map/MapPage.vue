@@ -396,11 +396,19 @@ export default {
       // Cache for serialized source data to avoid expensive serialize() calls
       cachedSerializedData: null,
       lastSerializedZoom: null,
+      // Local cache of features array to avoid serialization entirely when possible
+      localFeaturesCache: null,
+      lastCacheZoom: null,
+      lastCacheUpdateTime: null,
       lastProcessedZoom: null,
       lastLabelUpdateZoom: null,
       lastIconVisibilityZoom: null,
       featureListUpdateTimeout: null,
       featureCleanupTimeout: null,
+      isMapMoving: false,
+      movementTimeout: null,
+      lastMouseMoveTime: 0,
+      smallFeatureFlagsUpdateTimeout: null,
       selectedFeature: null,
       tileSources: [],
       showQuickPointDialog: false,
@@ -526,23 +534,47 @@ export default {
       if (!this.map) return
       
       // Cancel pending bbox queries when user starts panning or zooming
+      // Track movement state to prevent expensive operations during pan/zoom
       this.map.on('move', () => {
         this.cancelPendingBboxQuery()
+        this.isMapMoving = true
+        if (this.movementTimeout) clearTimeout(this.movementTimeout)
+        this.movementTimeout = setTimeout(() => {
+          this.isMapMoving = false
+        }, 150) // Map stopped moving
       })
       this.map.on('zoom', () => {
         this.cancelPendingBboxQuery()
+        this.isMapMoving = true
+        if (this.movementTimeout) clearTimeout(this.movementTimeout)
+        this.movementTimeout = setTimeout(() => {
+          this.isMapMoving = false
+        }, 150) // Map stopped moving
       })
 
       // Setup basic event listeners (moveend, zoomend, click)
       setupMapEventListeners(this.map, {
         onMoveEnd: () => {
+          // Clear movement flag immediately since moveend only fires when movement stops
+          this.isMapMoving = false
+          if (this.movementTimeout) {
+            clearTimeout(this.movementTimeout)
+            this.movementTimeout = null
+          }
           this.debouncedLoadData()
           this.debouncedUpdateFeaturesInExtent()
         },
         onZoomEnd: () => {
+          // Clear movement flag immediately since zoomend only fires when zoom stops
+          this.isMapMoving = false
+          if (this.movementTimeout) {
+            clearTimeout(this.movementTimeout)
+            this.movementTimeout = null
+          }
           this.debouncedLoadData()
           this.debouncedUpdateFeaturesInExtent()
           this.reprocessFeaturesForZoom()
+          this.debouncedUpdateSmallFeatureFlags()
         },
         onClick: (e) => {
           // Check if layers exist before querying
@@ -649,7 +681,15 @@ export default {
       })
 
       // Add hover event listener to change cursor to pointer over features
+      // Throttle to reduce expensive queries during panning
+      const MOUSE_MOVE_THROTTLE = 100 // Only check every 100ms
       this.map.on('mousemove', (e) => {
+        const now = Date.now()
+        if (now - this.lastMouseMoveTime < MOUSE_MOVE_THROTTLE) {
+          return // Skip this event
+        }
+        this.lastMouseMoveTime = now
+        
         const layersToQuery = ['points', 'point-icons', 'replacement-points', 'lines', 'polygons', 'polygon-outlines']
           .filter(layerId => this.map.getLayer(layerId))
         
@@ -766,8 +806,8 @@ export default {
       }
     },
     getCachedSourceData() {
-      // Cache serialized source data to avoid expensive serialize() calls
-      // Returns cached data if zoom hasn't changed significantly (within 0.1)
+      // Aggressively cache source data to avoid expensive serialize() calls
+      // Uses local features cache when possible, falls back to serialization
       if (!this.map || !this.map.getSource('geojson-data')) {
         return null
       }
@@ -775,24 +815,57 @@ export default {
       const source = this.map.getSource('geojson-data')
       const currentZoom = this.map.getZoom()
       
-      // Check if we can use cached data (zoom hasn't changed significantly)
+      // First check: Can we use local features cache?
+      // Only use if zoom hasn't changed significantly (within 0.2) and cache is recent
+      const now = Date.now()
+      if (this.localFeaturesCache && 
+          this.lastCacheZoom !== null && 
+          Math.abs(currentZoom - this.lastCacheZoom) < 0.2 &&
+          this.lastCacheUpdateTime !== null &&
+          (now - this.lastCacheUpdateTime) < 5000) { // Cache valid for 5 seconds
+        // Return cached data without serialization
+        return {
+          data: {
+            type: 'FeatureCollection',
+            features: this.localFeaturesCache
+          }
+        }
+      }
+      
+      // Second check: Can we use serialized cache?
       if (this.cachedSerializedData && 
           this.lastSerializedZoom !== null && 
           Math.abs(currentZoom - this.lastSerializedZoom) < 0.1) {
+        // Update local cache from serialized data
+        if (this.cachedSerializedData.data && this.cachedSerializedData.data.features) {
+          this.localFeaturesCache = this.cachedSerializedData.data.features
+          this.lastCacheZoom = currentZoom
+          this.lastCacheUpdateTime = now
+        }
         return this.cachedSerializedData
       }
       
-      // Serialize and cache
+      // Need to serialize - expensive operation
       const serialized = source.serialize()
       this.cachedSerializedData = serialized
       this.lastSerializedZoom = currentZoom
       
+      // Update local cache
+      if (serialized.data && serialized.data.features) {
+        this.localFeaturesCache = serialized.data.features
+        this.lastCacheZoom = currentZoom
+        this.lastCacheUpdateTime = now
+      }
+      
       return serialized
     },
     invalidateSourceCache() {
-      // Invalidate cached serialized data when source data changes
+      // Invalidate all cached data when source data changes
       this.cachedSerializedData = null
       this.lastSerializedZoom = null
+      this.localFeaturesCache = null
+      this.lastCacheZoom = null
+      this.lastCacheUpdateTime = null
     },
     debouncedLoadData() {
       // Skip debounced loads during initial map setup to prevent duplicate API calls
@@ -804,25 +877,69 @@ export default {
         clearTimeout(this.loadTimeout)
       }
       this.loadTimeout = setTimeout(() => {
-        this.loadDataForCurrentView()
-      }, 300)
+        // Check map isn't moving before loading (in case user started moving again)
+        if (!this.isMapMoving) {
+          this.loadDataForCurrentView()
+        }
+      }, 500) // Increased from 300ms to 500ms for better performance
     },
     debouncedUpdateFeaturesInExtent() {
       if (this.featureListUpdateTimeout) {
         clearTimeout(this.featureListUpdateTimeout)
       }
+      
       // Use requestIdleCallback for non-critical updates when available
       if (window.requestIdleCallback) {
         this.featureListUpdateTimeout = setTimeout(() => {
-          requestIdleCallback(() => {
-            this.updateFeaturesInExtent()
-          }, { timeout: 1000 })
-        }, 500)
+          // Check map isn't moving before updating (in case user started moving again)
+          if (!this.isMapMoving) {
+            requestIdleCallback(() => {
+              this.updateFeaturesInExtent()
+            }, { timeout: 1000 })
+          }
+        }, 800) // Increased from 500ms to 800ms
       } else {
         this.featureListUpdateTimeout = setTimeout(() => {
-          this.updateFeaturesInExtent()
-        }, 500)
+          // Check map isn't moving before updating (in case user started moving again)
+          if (!this.isMapMoving) {
+            this.updateFeaturesInExtent()
+          }
+        }, 800) // Increased from 500ms to 800ms
       }
+    },
+    debouncedUpdateSmallFeatureFlags() {
+      // Debounce expensive small feature flag updates
+      // Only run after zoom has stopped
+      if (this.smallFeatureFlagsUpdateTimeout) {
+        clearTimeout(this.smallFeatureFlagsUpdateTimeout)
+      }
+      
+      // Don't update while map is actively moving
+      if (this.isMapMoving) {
+        return
+      }
+      
+      this.smallFeatureFlagsUpdateTimeout = setTimeout(() => {
+        if (!this.map || !this.map.getSource('geojson-data') || this.isMapMoving) {
+          return
+        }
+        
+        const zoom = this.map.getZoom()
+        // Use requestIdleCallback for this expensive operation
+        if (window.requestIdleCallback) {
+          requestIdleCallback(() => {
+            if (!this.isMapMoving) {
+              updateSmallFeatureFlags(this.map, zoom)
+              this.invalidateSourceCache()
+            }
+          }, { timeout: 2000 })
+        } else {
+          if (!this.isMapMoving) {
+            updateSmallFeatureFlags(this.map, zoom)
+            this.invalidateSourceCache()
+          }
+        }
+      }, 1000) // Wait 1 second after zoom ends
     },
     async loadDataForCurrentView() {
       if (!this.map) return
@@ -1005,15 +1122,20 @@ export default {
     async handleZoomUpdate() {
       // Throttled zoom update handler - runs via requestAnimationFrame
       // This prevents choppiness by batching updates
+      // Only performs lightweight visual updates - expensive operations moved to zoomend
       if (!this.map) return
       
       const currentZoom = this.map.getZoom()
       
-      // Only update label markers when zoom crosses significant threshold (0.5+)
-      // This reduces expensive marker DOM updates
+      // Only update label markers when zoom crosses integer boundaries
+      // This reduces expensive marker DOM updates significantly
       if (this.showAllLabels && this.labelMarkerManager) {
         const lastLabelZoom = this.lastLabelUpdateZoom || 0
-        if (Math.abs(currentZoom - lastLabelZoom) >= 0.5) {
+        const currentZoomInt = Math.floor(currentZoom)
+        const lastZoomInt = Math.floor(lastLabelZoom)
+        
+        if (currentZoomInt !== lastZoomInt) {
+          // Only update on integer zoom changes
           const serialized = this.getCachedSourceData()
           if (serialized && serialized.data && serialized.data.features) {
             // Pass true for immediate update during zoom
@@ -1023,11 +1145,8 @@ export default {
         }
       }
       
-      // Update small feature flags (needed for visual feedback during zoom)
-      // This is relatively lightweight and provides immediate visual feedback
-      updateSmallFeatureFlags(this.map, currentZoom)
-      // Invalidate cache since updateSmallFeatureFlags may have modified data
-      this.invalidateSourceCache()
+      // REMOVED: updateSmallFeatureFlags - moved to zoomend with debouncing
+      // This was causing performance issues by processing all features on every zoom frame
       
       // Lightweight icon visibility update during zoom to prevent icons showing when zooming out
       // Only updates when crossing the threshold (zoom 8) to keep it performant
@@ -1086,11 +1205,18 @@ export default {
           
           if (needsUpdate) {
             const source = this.map.getSource('geojson-data')
+            const updatedFeatures = features.map(f => markRaw(f))
             source.setData(markRaw({
               type: 'FeatureCollection',
-              features: features.map(f => markRaw(f))
+              features: updatedFeatures
             }))
-            this.invalidateSourceCache()
+            // Update local cache directly
+            this.localFeaturesCache = updatedFeatures
+            this.lastCacheZoom = currentZoom
+            this.lastCacheUpdateTime = Date.now()
+            // Invalidate serialized cache
+            this.cachedSerializedData = null
+            this.lastSerializedZoom = null
           }
         }
       } else if (!shouldHideIcons && this.lastIconVisibilityZoom !== null && this.lastIconVisibilityZoom <= ICON_THRESHOLD) {
@@ -1177,12 +1303,19 @@ export default {
       // Only update source if we actually changed something
       if (needsUpdate) {
         const source = this.map.getSource('geojson-data')
+        const updatedFeatures = features.map(f => markRaw(f))
         source.setData(markRaw({
           type: 'FeatureCollection',
-          features: features.map(f => markRaw(f))
+          features: updatedFeatures
         }))
-        // Invalidate cache since data changed
-        this.invalidateSourceCache()
+        // Update local cache directly instead of invalidating
+        const currentZoom = this.map.getZoom()
+        this.localFeaturesCache = updatedFeatures
+        this.lastCacheZoom = currentZoom
+        this.lastCacheUpdateTime = Date.now()
+        // Still invalidate serialized cache since we updated data
+        this.cachedSerializedData = null
+        this.lastSerializedZoom = null
       }
       
       // Ensure point-icons layer visibility matches zoom level
@@ -1276,11 +1409,19 @@ export default {
         console.log(`Cleaned up ${removedCount} features more than 500 miles outside viewport`)
         
         const source = this.map.getSource('geojson-data')
+        const filteredFeatures = featuresWithinBuffer.map(f => markRaw(f))
         // Update the source with filtered features
         source.setData(markRaw({
           type: 'FeatureCollection',
-          features: featuresWithinBuffer.map(f => markRaw(f))
+          features: filteredFeatures
         }))
+        // Update local cache
+        this.localFeaturesCache = filteredFeatures
+        this.lastCacheZoom = this.map.getZoom()
+        this.lastCacheUpdateTime = Date.now()
+        // Invalidate serialized cache
+        this.cachedSerializedData = null
+        this.lastSerializedZoom = null
         
         // Invalidate cache since data changed
         this.invalidateSourceCache()
