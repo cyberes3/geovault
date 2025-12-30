@@ -6,6 +6,7 @@ including error logging, retries, and rate limiting.
 """
 import hashlib
 import json
+import re
 import time
 from typing import Optional, Dict, Any
 
@@ -23,6 +24,7 @@ _logger = get_tagged_logger()
 def _log_overpass_failure(
         response: requests.Response,
         error_type: str,
+        query: str = "",
         additional_info: str = "",
         latitude: Optional[float] = None,
         longitude: Optional[float] = None
@@ -33,6 +35,7 @@ def _log_overpass_failure(
     Args:
         response: The requests Response object
         error_type: Type of error (e.g., "Invalid JSON", "Empty Response", "Rate Limited")
+        query: The Overpass query string that failed
         additional_info: Additional error information to log
         latitude: Optional latitude coordinate being geocoded
         longitude: Optional longitude coordinate being geocoded
@@ -41,12 +44,24 @@ def _log_overpass_failure(
     content_type = response.headers.get('content-type', 'unknown')
     content_length = len(response.content) if response.content else 0
 
-    # Get response preview (truncated to 500 chars)
+    # Get response preview and strip HTML tags
     content_preview = ""
     if response.text:
-        content_preview = response.text[:500]
+        content_preview = response.text
+        # Strip HTML tags
+        content_preview = re.sub(r'<[^>]+>', '', content_preview)
+        # Clean up extra whitespace
+        content_preview = re.sub(r'\s+', ' ', content_preview).strip()
         # Replace newlines with escaped version for single-line logging
         content_preview = content_preview.replace('\n', '\\n').replace('\r', '\\r')
+
+    # Get query preview (truncated to 500 chars, with newlines escaped)
+    query_preview = ""
+    if query:
+        query_preview = query[:500]
+        query_preview = query_preview.replace('\n', '\\n').replace('\r', '\\r')
+        if len(query) > 500:
+            query_preview += "... (truncated)"
 
     # Build complete error message on one line
     error_parts = [
@@ -56,6 +71,10 @@ def _log_overpass_failure(
         f"Length={content_length}bytes",
         f"URL={settings.OVERPASS_API_URL}"
     ]
+
+    # Add query if available
+    if query_preview:
+        error_parts.append(f"Query=[{query_preview}]")
 
     # Add coordinates if available
     if latitude is not None and longitude is not None:
@@ -124,6 +143,7 @@ def query_overpass(
                     _log_overpass_failure(
                         response,
                         "Empty Response",
+                        query,
                         "API returned 200 OK but with no content",
                         latitude,
                         longitude
@@ -137,6 +157,7 @@ def query_overpass(
                     _log_overpass_failure(
                         response,
                         "HTML/XML Error Page",
+                        query,
                         f"Expected JSON but got {content_type}",
                         latitude,
                         longitude
@@ -158,6 +179,7 @@ def query_overpass(
                     _log_overpass_failure(
                         response,
                         "Invalid JSON",
+                        query,
                         str(json_err),
                         latitude,
                         longitude
@@ -168,6 +190,7 @@ def query_overpass(
                 _log_overpass_failure(
                     response,
                     "Rate Limited",
+                    query,
                     f"Attempt {attempt + 1}/{max_retries}, waiting 60s",
                     latitude,
                     longitude
@@ -178,6 +201,7 @@ def query_overpass(
                 _log_overpass_failure(
                     response,
                     "Gateway Timeout",
+                    query,
                     f"Attempt {attempt + 1}/{max_retries}, waiting 5s",
                     latitude,
                     longitude
@@ -188,6 +212,7 @@ def query_overpass(
                 _log_overpass_failure(
                     response,
                     f"HTTP {response.status_code}",
+                    query,
                     "Unexpected status code",
                     latitude,
                     longitude
@@ -195,14 +220,31 @@ def query_overpass(
                 return None
 
         except requests.exceptions.Timeout:
-            _logger.warning(f"Overpass request timeout, attempt {attempt + 1}/{max_retries}")
+            # Log query for timeout errors
+            query_preview = query[:500].replace('\n', '\\n').replace('\r', '\\r')
+            if len(query) > 500:
+                query_preview += "... (truncated)"
+            coord_info = ""
+            if latitude is not None and longitude is not None:
+                coord_info = f" | Coordinates=({latitude},{longitude})"
+            _logger.warning(
+                f"Overpass request timeout, attempt {attempt + 1}/{max_retries} | "
+                f"Query=[{query_preview}]{coord_info}"
+            )
             if attempt < max_retries - 1:
                 time.sleep(2 ** attempt)  # Exponential backoff
         except json.JSONDecodeError:
             # Already handled above, but catch it here in case it happens elsewhere
             pass
         except Exception as e:
-            _logger.error(f"Overpass query failed: {e}")
+            # Log query for general exceptions
+            query_preview = query[:500].replace('\n', '\\n').replace('\r', '\\r')
+            if len(query) > 500:
+                query_preview += "... (truncated)"
+            coord_info = ""
+            if latitude is not None and longitude is not None:
+                coord_info = f" | Coordinates=({latitude},{longitude})"
+            _logger.error(f"Overpass query failed: {e} | Query=[{query_preview}]{coord_info}")
             return None
 
     return None

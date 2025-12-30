@@ -396,21 +396,21 @@ class TestCaching(TestCase):
         # Should have made additional calls for different threshold
         self.assertGreater(call_count_2, call_count_1)
     
-    def test_get_location_tags_uses_individual_caches(self):
-        """Test that get_location_tags benefits from individual function caches."""
+    def test_get_location_tags_uses_query_cache(self):
+        """Test that get_location_tags benefits from query_overpass caching."""
         # Clear any existing calls
         overpass_api.query_overpass.reset_mock()
         
-        # First call should fetch from API (individual functions cache their results)
+        # First call should fetch from API (query_overpass caches responses)
         tags1, log_messages1 = get_location_tags(39.0, -105.0)
         call_count_1 = overpass_api.query_overpass.call_count
         self.assertGreater(call_count_1, 0)
         
-        # Second call should use individual function caches (admin, protected areas, lakes, etc.)
+        # Second call should use query_overpass cache (admin, protected areas, lakes queries are cached)
         tags2, log_messages2 = get_location_tags(39.0, -105.0)
         call_count_2 = overpass_api.query_overpass.call_count
         
-        # No additional calls should have been made (all individual functions use cache)
+        # No additional calls should have been made (all queries are cached at API level)
         self.assertEqual(call_count_1, call_count_2)
         self.assertEqual(tags1, tags2)
     
@@ -431,12 +431,12 @@ class TestCaching(TestCase):
         self.assertEqual(call_count_1, call_count_2)
         self.assertEqual(tags1, tags2)
     
-    def test_top_level_tag_cache_via_batch(self):
-        """Test that top-level tag cache (_get_from_cache_or_fetch) works via batch function."""
+    def test_query_cache_via_batch(self):
+        """Test that query_overpass cache works via batch function."""
         # Clear any existing calls
         overpass_api.query_overpass.reset_mock()
         
-        # First batch call should fetch from API and cache at top level
+        # First batch call should fetch from API and cache at query level
         coordinates = [(39.0, -105.0)]
         results1 = batch_reverse_geocode_coordinates(coordinates)
         call_count_1 = overpass_api.query_overpass.call_count
@@ -447,16 +447,16 @@ class TestCaching(TestCase):
         # Reset mock to track new calls
         overpass_api.query_overpass.reset_mock()
         
-        # Second batch call should use top-level cache (no API calls)
+        # Second batch call should use query_overpass cache (no API calls)
         results2 = batch_reverse_geocode_coordinates(coordinates)
         call_count_2 = overpass_api.query_overpass.call_count
         tags2 = results2[(39.0, -105.0)][0]
         log_messages2 = results2[(39.0, -105.0)][1]
         
-        # Should use top-level cache (no new API calls)
+        # Should use query cache (no new API calls)
         self.assertEqual(call_count_2, 0)
         self.assertEqual(tags1, tags2)
-        # Log messages should be empty on cache hit
+        # Log messages should be empty on cache hit (cached responses don't have log messages)
         self.assertEqual(len(log_messages2), 0)
     
     def test_batch_reverse_geocode_deduplication(self):
@@ -494,7 +494,7 @@ class TestCaching(TestCase):
         self.assertEqual(tags_2, tags_4)
     
     def test_batch_reverse_geocode_caching(self):
-        """Test that batch_reverse_geocode_coordinates uses cache on second call."""
+        """Test that batch_reverse_geocode_coordinates uses query_overpass cache on second call."""
         # Clear any existing calls
         overpass_api.query_overpass.reset_mock()
         
@@ -515,7 +515,7 @@ class TestCaching(TestCase):
         results2 = batch_reverse_geocode_coordinates(coordinates)
         call_count_2 = overpass_api.query_overpass.call_count
         
-        # Should use cache (no new API calls)
+        # Should use query_overpass cache (no new API calls)
         self.assertEqual(call_count_2, 0)
         
         # Compare tags (log messages may differ - first call has messages, cached call has empty)
