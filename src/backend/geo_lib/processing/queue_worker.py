@@ -168,8 +168,14 @@ class WorkerRegistry:
             existing_worker = cls._workers.get(user_id)
             if existing_worker is not None:
                 if existing_worker.is_alive():
-                    _logger.debug(f"Worker for user {user_id} already running")
-                    return True
+                    # Check if worker is actually running (not just alive)
+                    if not existing_worker.running:
+                        # Worker is exiting, start a new one
+                        _logger.debug(f"Worker for user {user_id} is alive but not running, starting new worker")
+                        # Don't delete - let it unregister itself, just start new worker
+                    else:
+                        _logger.debug(f"Worker for user {user_id} already running")
+                        return True
                 else:
                     # Worker thread died, remove it
                     _logger.debug(f"Removing dead worker for user {user_id}")
