@@ -94,7 +94,7 @@ export default {
         case 'feature_store_geometry':
           return 'This feature has the same location as an existing feature in your feature library. It is skipped by default, but you can restore it if needed.'
         case 'cross_queue_hash':
-          return 'This feature is identical to one in another item in your import table and will be automatically blocked during import.'
+          return 'This feature is identical to one in another item in your queue and will be automatically blocked during import.'
         case 'cross_queue_geometry':
           return 'This feature has the same location as a feature in another item in your import table. It is skipped by default, but you can restore it if needed.'
         default:
