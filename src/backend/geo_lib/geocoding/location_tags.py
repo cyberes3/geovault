@@ -213,8 +213,8 @@ def batch_reverse_geocode_coordinates(
     unique_coords = list(coord_mapping.keys())
     
     # Process coordinates in parallel to avoid sequential delays
-    # Limit to 10 concurrent workers to avoid overwhelming the API
-    with ThreadPoolExecutor(max_workers=min(len(unique_coords), 5)) as executor:
+    # Limit to 2 concurrent workers to avoid overwhelming the API
+    with ThreadPoolExecutor(max_workers=min(len(unique_coords), 1)) as executor:
         future_to_coord = {
             executor.submit(_get_from_cache_or_fetch, lat, lon): (lat, lon)
             for lat, lon in unique_coords

@@ -81,10 +81,24 @@
                     />
                   </div>
                 </div>
+                <div class="mb-2">
+                  <div class="flex items-center justify-between">
+                    <label class="block text-xs font-medium text-gray-700">Default Icon</label>
+                    <div class="flex items-center space-x-2">
+                      <ToggleButton
+                        v-model="useDefaultIcon"
+                        :label="''"
+                        size="sm"
+                        :disabled="!enabled.pointIcon"
+                        @update:modelValue="onDefaultIconToggle"
+                      />
+                    </div>
+                  </div>
+                </div>
                 <div class="flex flex-col sm:flex-row sm:items-center space-y-2 sm:space-y-0 sm:space-x-2">
                   <button
                     @click="showIconPicker = true"
-                    :disabled="!enabled.pointIcon"
+                    :disabled="!enabled.pointIcon || useDefaultIcon"
                     class="w-full sm:w-auto inline-flex items-center justify-center px-4 py-2 border border-gray-300 shadow-sm text-sm font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 disabled:opacity-50 disabled:cursor-not-allowed disabled:bg-gray-100"
                   >
                     <PhotoIcon class="w-4 h-4 mr-2" />
@@ -93,13 +107,13 @@
                   <button
                     v-if="bulkData.pointIcon"
                     @click="clearPointIcon"
-                    :disabled="!enabled.pointIcon"
+                    :disabled="!enabled.pointIcon || useDefaultIcon"
                     class="w-full sm:w-auto inline-flex items-center justify-center px-3 py-2 border border-gray-300 shadow-sm text-sm font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-red-500 disabled:opacity-50 disabled:cursor-not-allowed disabled:bg-gray-100"
                   >
                     <XMarkIcon class="w-4 h-4 mr-1" />
                     Clear
                   </button>
-                  <div v-if="bulkData.pointIcon" class="flex items-center">
+                  <div v-if="bulkData.pointIcon && !useDefaultIcon" class="flex items-center">
                     <img
                       :src="resolveIconUrl(bulkData.pointIcon)"
                       alt="Selected icon"
@@ -256,6 +270,7 @@ export default {
   data() {
     return {
       showIconPicker: false,
+      useDefaultIcon: false,
       bulkData: {
         tags: [],
         pointColor: null,
@@ -291,6 +306,8 @@ export default {
         document.body.classList.remove('overflow-hidden')
         // Remove escape key listener
         document.removeEventListener('keydown', this.handleEscapeKey)
+        // Reset modal state when it closes
+        this.resetModal()
       }
     },
     currentBulkOps: {
@@ -309,6 +326,24 @@ export default {
     }
   },
   methods: {
+    resetModal() {
+      // Reset all internal state to default values
+      this.bulkData = {
+        tags: [],
+        pointColor: null,
+        pointIcon: null,
+        lineColor: null,
+        polyColor: null
+      }
+      this.enabled = {
+        pointColor: false,
+        pointIcon: false,
+        lineColor: false,
+        polyColor: false
+      }
+      this.showIconPicker = false
+      this.useDefaultIcon = false
+    },
     initializeForm() {
       // Initialize with current bulk operations or defaults
       const ops = this.currentBulkOps || {}
@@ -320,12 +355,17 @@ export default {
         polyColor: ops.polyColor || null
       }
       // Set enabled state based on whether values are set
+      // For pointIcon, check if it's explicitly in the ops dict (even if null)
+      // This distinguishes between "not set" and "explicitly set to null (default icon)"
+      const pointIconExplicitlySet = 'pointIcon' in ops
       this.enabled = {
         pointColor: ops.pointColor !== null && ops.pointColor !== undefined,
-        pointIcon: ops.pointIcon !== null && ops.pointIcon !== undefined,
+        pointIcon: pointIconExplicitlySet,
         lineColor: ops.lineColor !== null && ops.lineColor !== undefined,
         polyColor: ops.polyColor !== null && ops.polyColor !== undefined
       }
+      // Set useDefaultIcon to true if pointIcon is enabled but the value is null (meaning default icon)
+      this.useDefaultIcon = this.enabled.pointIcon && !this.bulkData.pointIcon
       // Note: Default values are set by toggle handlers when toggles are enabled
       this.showIconPicker = false
     },
@@ -344,6 +384,7 @@ export default {
     },
     handleIconSelected(iconUrl) {
       this.bulkData.pointIcon = iconUrl
+      this.useDefaultIcon = false // Clear default icon flag when an icon is selected
       this.showIconPicker = false
     },
     clearPointIcon() {
@@ -362,8 +403,16 @@ export default {
     },
     onPointIconToggle(enabled) {
       if (!enabled) {
-        // When disabling, set to null
+        // When disabling, set to null and reset default icon toggle
         this.bulkData.pointIcon = null
+        this.useDefaultIcon = false
+      }
+    },
+    onDefaultIconToggle(enabled) {
+      if (enabled) {
+        // When enabling default icon, clear any selected icon
+        this.bulkData.pointIcon = null
+        this.showIconPicker = false
       }
     },
     onLineColorToggle(enabled) {
@@ -408,13 +457,21 @@ export default {
     },
     handleApply() {
       // Emit the bulk data to parent, ensuring null values for disabled options
+      // If useDefaultIcon is enabled, set pointIcon to null (removes custom icons)
       const dataToEmit = {
         tags: this.bulkData.tags,
         pointColor: this.enabled.pointColor ? this.bulkData.pointColor : null,
-        pointIcon: this.enabled.pointIcon ? this.bulkData.pointIcon : null,
         lineColor: this.enabled.lineColor ? this.bulkData.lineColor : null,
         polyColor: this.enabled.polyColor ? this.bulkData.polyColor : null
       }
+      
+      // Only include pointIcon if the toggle is enabled
+      // If useDefaultIcon is enabled, set to null to remove custom icons
+      // Otherwise, include the selected icon (or null if none selected)
+      if (this.enabled.pointIcon) {
+        dataToEmit.pointIcon = this.useDefaultIcon ? null : (this.bulkData.pointIcon || null)
+      }
+      
       this.$emit('apply', dataToEmit)
       if (this.autoCloseOnApply && !this.saving) {
         this.closeModal()

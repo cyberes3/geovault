@@ -121,9 +121,14 @@ def apply_bulk_operations(features: List[Dict[str, Any]], bulk_ops: Dict[str, An
                     # Invalid color - set to default red
                     modified_feature['properties']['marker-color'] = DEFAULT_COLOR
 
-            if bulk_ops.get('pointIcon') is not None:
+            # Check if pointIcon is explicitly set in bulk_ops (even if None)
+            # This allows us to distinguish between "don't change icons" and "remove icons"
+            if 'pointIcon' in bulk_ops:
                 icon_value = bulk_ops['pointIcon']
-                if is_valid_icon_url(icon_value):
+                if icon_value is None or icon_value == '':
+                    # Explicitly remove icon properties (use default icon)
+                    modified_feature = strip_icon_properties(modified_feature)
+                elif is_valid_icon_url(icon_value):
                     # Keep a single canonical property plus common aliases for compatibility
                     modified_feature['properties']['icon'] = icon_value
                     modified_feature['properties']['icon_url'] = icon_value

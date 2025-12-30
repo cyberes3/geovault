@@ -39,6 +39,25 @@ export function hasBulkOperationsConfigured(ops) {
 }
 
 export function areBulkOperationsEqual(a, b) {
+  // Check if keys exist in original dicts (before normalization)
+  // This distinguishes between "key not set" and "key set to null"
+  const aHasPointIcon = a && 'pointIcon' in a;
+  const bHasPointIcon = b && 'pointIcon' in b;
+  if (aHasPointIcon !== bHasPointIcon) return false;
+  
+  const aHasPointColor = a && 'pointColor' in a;
+  const bHasPointColor = b && 'pointColor' in b;
+  if (aHasPointColor !== bHasPointColor) return false;
+  
+  const aHasLineColor = a && 'lineColor' in a;
+  const bHasLineColor = b && 'lineColor' in b;
+  if (aHasLineColor !== bHasLineColor) return false;
+  
+  const aHasPolyColor = a && 'polyColor' in a;
+  const bHasPolyColor = b && 'polyColor' in b;
+  if (aHasPolyColor !== bHasPolyColor) return false;
+
+  // Now compare normalized values
   const left = cloneBulkOperations(a);
   const right = cloneBulkOperations(b);
 

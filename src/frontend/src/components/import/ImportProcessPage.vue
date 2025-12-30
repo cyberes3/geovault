@@ -1959,19 +1959,23 @@ export default {
         if (response.status === 200 && response.data.bulk_operations) {
           const ops = response.data.bulk_operations;
           this.bulkOperations = cloneBulkOperations(ops);
+          // Store the raw ops (before normalization) as original state
+          // This preserves which keys were explicitly set vs not set
+          this.originalBulkOperations = ops && typeof ops === 'object' ? { ...ops } : {};
         } else {
-          // No bulk operations found, use defaults
-          this.bulkOperations = cloneBulkOperations(DEFAULT_BULK_OPERATIONS);
+          // No bulk operations found, use empty object (not DEFAULT_BULK_OPERATIONS)
+          // This allows us to detect when keys are added (e.g., pointIcon: null for default icon)
+          this.bulkOperations = cloneBulkOperations({});
+          // Store empty object as original (no keys set)
+          this.originalBulkOperations = {};
         }
-
-        // Store as original state
-        this.originalBulkOperations = cloneBulkOperations(this.bulkOperations);
       } catch (error) {
-        // Log error and use defaults
+        // Log error and use empty object (not DEFAULT_BULK_OPERATIONS)
+        // This allows us to detect when keys are added (e.g., pointIcon: null for default icon)
         console.error('Error loading bulk operations:', error);
-        this.bulkOperations = cloneBulkOperations(DEFAULT_BULK_OPERATIONS);
-        // Store as original state
-        this.originalBulkOperations = cloneBulkOperations(this.bulkOperations);
+        this.bulkOperations = cloneBulkOperations({});
+        // Store empty object as original (no keys set)
+        this.originalBulkOperations = {};
       }
     },
     updateBulkOperations(bulkData) {
@@ -1995,8 +1999,8 @@ export default {
         if (response.status === 200) {
           // Update local state with the data we sent (request data)
           this.bulkOperations = cloneBulkOperations(bulkData);
-          // Update original state to reflect saved state
-          this.originalBulkOperations = cloneBulkOperations(bulkData);
+          // Update original state to reflect saved state (store raw object to preserve key presence)
+          this.originalBulkOperations = bulkData && typeof bulkData === 'object' ? { ...bulkData } : {};
         }
       } catch (error) {
         this.msg = 'Error saving bulk operations: ' + (error.response?.data?.error || error.response?.data?.msg || error.message);
