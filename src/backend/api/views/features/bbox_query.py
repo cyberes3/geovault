@@ -2,7 +2,6 @@ import time
 import uuid
 from typing import List, Tuple, Dict, NamedTuple, Union, Any
 
-from django.contrib.gis.geos import Polygon
 from django.db.models import QuerySet, Q
 from django.http import JsonResponse
 
@@ -261,97 +260,3 @@ def _convert_feature_to_geojson(feature: FeatureStore, public_safe: bool = False
         "properties": properties,
         "geojson_hash": feature.geojson_hash
     }
-
-
-def _get_features_in_bbox(bbox: Tuple[float, float, float, float], user_id: int, tag: str | None = None, collection_id: uuid.UUID | None = None, public_safe: bool = False, include_tags: bool = False, allow_downloads: bool = False) -> BboxQueryResult:
-    """
-    Get features within bounding box from database, handling world-wide extents that cross the International Date Line.
-    Returns both the features and the total count in a single optimized operation.
-    
-    Args:
-        bbox: Bounding box tuple (min_lon, min_lat, max_lon, max_lat)
-        user_id: User ID to filter features by
-        tag: Optional tag to filter features by
-        collection_id: Optional collection ID to filter features by
-        public_safe: If True, excludes _id from properties (for public shares)
-        include_tags: If True and public_safe=True, includes tags in properties (otherwise tags are excluded for public shares)
-    
-    Returns:
-        BboxQueryResult with features, total_count, and fallback_used flag
-    """
-    # Detect world-wide extent
-    crosses_dateline, world_wide_extent, lon_span, lat_span = _detect_world_wide_extent(bbox)
-
-    # Get the maximum features limit from settings
-    max_features = get_required_setting('MAX_FEATURES_PER_REQUEST')
-
-    # Build base query with user filter, optional tag/collection filter, and ordering
-    base_query_filter = _build_base_query(user_id, tag, collection_id)
-
-    if crosses_dateline or world_wide_extent:
-        # Handle world-wide bbox that crosses the International Date Line or spans most of the globe
-        base_query = base_query_filter
-    else:
-        # Normal bbox that doesn't cross the International Date Line
-        # Use spatial query with error handling
-        try:
-            bbox_polygon = Polygon.from_bbox(bbox)
-            base_query = base_query_filter.filter(geometry__intersects=bbox_polygon)
-        except Exception as e:
-            logger.warning(f"Error creating bbox polygon or spatial query: {e}. Falling back to world-wide query.")
-            # Fallback to world-wide query if spatial query fails
-            base_query = base_query_filter
-
-    # Get total count first (this is a lightweight operation)
-    total_count = base_query.count()
-
-    # Apply limit if configured (max_features = -1 means no limit)
-    if max_features > 0:
-        features_query = base_query[:max_features]
-    else:
-        features_query = base_query
-
-    # Convert to GeoJSON format
-    geojson_features = []
-    for feature in features_query:
-        geojson_feature = _convert_feature_to_geojson(feature, public_safe, include_tags, allow_downloads)
-        if geojson_feature:
-            geojson_features.append(geojson_feature)
-
-    # Fallback mechanism: if spatial query returned suspiciously few results for a large extent,
-    # fall back to world-wide query
-    fallback_used = False
-    if not (crosses_dateline or world_wide_extent):
-        # If we used a spatial query but got very few results for a large extent, something might be wrong
-        # Check if the extent is large (>200° longitude or >150° latitude) but we got very few results
-        large_extent_lon_threshold = get_required_setting('BBOX_LARGE_EXTENT_LON_THRESHOLD')
-        large_extent_lat_threshold = get_required_setting('BBOX_LARGE_EXTENT_LAT_THRESHOLD')
-        suspicious_result_min_count = get_required_setting('BBOX_SUSPICIOUS_RESULT_MIN_COUNT')
-
-        is_large_extent = lon_span > large_extent_lon_threshold or lat_span > large_extent_lat_threshold
-        suspicious_result = is_large_extent and suspicious_result_min_count > total_count > 0
-
-        if suspicious_result:
-            logger.warning(
-                f"Suspicious result: large extent (lon_span={lon_span:.1f}°, lat_span={lat_span:.1f}°) "
-                f"but only {total_count} features found. Falling back to world-wide query."
-            )
-            fallback_used = True
-            # Fall back to world-wide query
-            base_query = base_query_filter
-            total_count = base_query.count()
-
-            # Re-apply limit if configured
-            if max_features > 0:
-                features_query = base_query[:max_features]
-            else:
-                features_query = base_query
-
-            # Re-convert to GeoJSON format
-            geojson_features = []
-            for feature in features_query:
-                geojson_feature = _convert_feature_to_geojson(feature, public_safe, include_tags, allow_downloads)
-                if geojson_feature:
-                    geojson_features.append(geojson_feature)
-
-    return BboxQueryResult(features=geojson_features, total_count=total_count, fallback_used=fallback_used)
