@@ -3,6 +3,7 @@
 Supports both JSON and geobuf (protobuf) formats with content negotiation
 via query parameters or Accept headers.
 """
+import gzip
 import logging
 
 import geobuf
@@ -17,6 +18,12 @@ FORMAT_PROTOBUF = 'protobuf'
 # Content types
 CONTENT_TYPE_JSON = 'application/json'
 CONTENT_TYPE_PROTOBUF = 'application/x-protobuf'
+
+# Geobuf encoding settings
+# Precision: 5 decimal places = ~1.1 meters accuracy (good for map display)
+# Lower precision = smaller file size
+GEOBUF_PRECISION = 5
+GEOBUF_DIMENSIONS = 2  # 2D coordinates (lat, lon)
 
 
 def detect_response_format(request) -> str:
@@ -77,8 +84,9 @@ def encode_bbox_response(response_data: dict, format_type: str) -> tuple:
         if not geojson_data or geojson_data.get('type') != 'FeatureCollection':
             raise ValueError("Response data must contain a GeoJSON FeatureCollection")
 
-        # Encode to geobuf
-        geobuf_bytes = geobuf.encode(geojson_data)
+        # Encode to geobuf with reduced precision for better compression
+        # geobuf.encode() accepts precision and dim as positional arguments
+        geobuf_bytes = geobuf.encode(geojson_data, GEOBUF_PRECISION, GEOBUF_DIMENSIONS)
 
         # Build metadata headers
         headers = {}
@@ -128,7 +136,11 @@ def create_bbox_response(response_data: dict, request) -> HttpResponse:
         return JsonResponse(encoded_data)
     
     if format_type == FORMAT_PROTOBUF:
-        response = HttpResponse(encoded_data, content_type=CONTENT_TYPE_PROTOBUF)
+        # Always compress with gzip for maximum compression
+        compressed_data = gzip.compress(encoded_data, compresslevel=9)  # Maximum compression
+        response = HttpResponse(compressed_data, content_type=CONTENT_TYPE_PROTOBUF)
+        response['Content-Encoding'] = 'gzip'
+        
         # Set metadata headers
         if headers:
             for key, value in headers.items():

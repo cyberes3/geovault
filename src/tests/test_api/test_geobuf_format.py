@@ -1,6 +1,7 @@
 """
 Tests for geobuf (protobuf) format support in bbox queries.
 """
+import gzip
 import json
 import uuid
 import geobuf
@@ -85,8 +86,13 @@ class TestGeobufFormat(TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertEqual(response['Content-Type'], 'application/x-protobuf')
         
+        # Handle gzip compression if present
+        content = response.content
+        if response.get('Content-Encoding') == 'gzip':
+            content = gzip.decompress(content)
+        
         # Decode protobuf
-        geojson_data = geobuf.decode(response.content)
+        geojson_data = geobuf.decode(content)
         
         # Verify structure
         self.assertEqual(geojson_data['type'], 'FeatureCollection')
@@ -110,8 +116,13 @@ class TestGeobufFormat(TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertEqual(response['Content-Type'], 'application/x-protobuf')
         
+        # Handle gzip compression if present
+        content = response.content
+        if response.get('Content-Encoding') == 'gzip':
+            content = gzip.decompress(content)
+        
         # Decode protobuf
-        geojson_data = geobuf.decode(response.content)
+        geojson_data = geobuf.decode(content)
         self.assertEqual(geojson_data['type'], 'FeatureCollection')
 
     def test_format_query_param_overrides_accept_header(self):
@@ -142,7 +153,11 @@ class TestGeobufFormat(TestCase):
             '/api/geojson/',
             {'bbox': '-123,37,-122,38', 'zoom': '10', 'format': 'protobuf'}
         )
-        pbf_geojson = geobuf.decode(pbf_response.content)
+        # Handle gzip compression if present
+        pbf_content = pbf_response.content
+        if pbf_response.get('Content-Encoding') == 'gzip':
+            pbf_content = gzip.decompress(pbf_content)
+        pbf_geojson = geobuf.decode(pbf_content)
         
         # Compare feature counts
         json_feature_count = len(json_data['data']['features'])
@@ -280,8 +295,13 @@ class TestGeobufPublicShare(TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertEqual(response['Content-Type'], 'application/x-protobuf')
         
+        # Handle gzip compression if present
+        content = response.content
+        if response.get('Content-Encoding') == 'gzip':
+            content = gzip.decompress(content)
+        
         # Decode protobuf
-        geojson_data = geobuf.decode(response.content)
+        geojson_data = geobuf.decode(content)
         self.assertEqual(geojson_data['type'], 'FeatureCollection')
         
         # Check metadata headers
@@ -308,8 +328,13 @@ class TestGeobufPublicShare(TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertEqual(response['Content-Type'], 'application/x-protobuf')
         
+        # Handle gzip compression if present
+        content = response.content
+        if response.get('Content-Encoding') == 'gzip':
+            content = gzip.decompress(content)
+        
         # Decode protobuf
-        geojson_data = geobuf.decode(response.content)
+        geojson_data = geobuf.decode(content)
         self.assertEqual(geojson_data['type'], 'FeatureCollection')
         
         # Check for collection name in headers
@@ -400,8 +425,13 @@ class TestGeobufWithCollection(TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertEqual(response['Content-Type'], 'application/x-protobuf')
         
+        # Handle gzip compression if present
+        content = response.content
+        if response.get('Content-Encoding') == 'gzip':
+            content = gzip.decompress(content)
+        
         # Decode protobuf
-        geojson_data = geobuf.decode(response.content)
+        geojson_data = geobuf.decode(content)
         self.assertEqual(geojson_data['type'], 'FeatureCollection')
         
         # Should only have features in collection
