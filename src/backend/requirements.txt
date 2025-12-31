@@ -20,4 +20,4 @@ dateparser==1.2.2
 pytest==9.0.1
 pytest-django==4.11.1
 coordinate-parser==0.1.1
-
+geobuf==2.0.0

@@ -255,6 +255,7 @@ import {
 } from '@/utils/map/maplibre/maptilerIntegration.js'
 import { fetchUserLocation } from '@/utils/map/locationUtils.js'
 import { getCoordinatesFromGeometry, filterFeaturesByBounds, cleanupDistantFeatures as cleanupDistantFeaturesUtil } from '@/utils/map/featureExtent.js'
+import { parseBboxResponse } from '@/utils/format/geobuf.js'
 
 export default {
   name: 'MapPage',
@@ -1017,9 +1018,9 @@ export default {
           }
 
           if (this.publicShareInfo.share_type === 'tag') {
-            url = `${this.SHARE_API_BASE_URL}${this.shareId}/?bbox=${bboxString}&zoom=${roundedZoom}`
+            url = `${this.SHARE_API_BASE_URL}${this.shareId}/?bbox=${bboxString}&zoom=${roundedZoom}&format=protobuf`
           } else if (this.publicShareInfo.share_type === 'collection') {
-            url = `/api/sharing/public/collection/${this.shareId}/?bbox=${bboxString}&zoom=${roundedZoom}`
+            url = `/api/sharing/public/collection/${this.shareId}/?bbox=${bboxString}&zoom=${roundedZoom}&format=protobuf`
           } else {
             this.publicShareError = 'Unknown share type'
             return
@@ -1028,9 +1029,15 @@ export default {
           response = await fetch(url, {
             signal: this.currentAbortController.signal
           })
-          data = await response.json()
+          
+          // Parse response (errors are always JSON, successful responses may be protobuf)
+          if (!response.ok) {
+            data = await response.json()
+          } else {
+            data = await parseBboxResponse(response)
+          }
         } else {
-          url = `${this.API_BASE_URL}?bbox=${bboxString}&zoom=${roundedZoom}`
+          url = `${this.API_BASE_URL}?bbox=${bboxString}&zoom=${roundedZoom}&format=protobuf`
           if (this.isCollectionMode && this.collectionId) {
             url += `&collection=${this.collectionId}`
           }
@@ -1038,9 +1045,16 @@ export default {
           response = await fetch(url, {
             signal: this.currentAbortController.signal
           })
-          data = await response.json()
+          
+          // Parse response (errors are always JSON, successful responses may be protobuf)
+          if (!response.ok) {
+            data = await response.json()
+          } else {
+            data = await parseBboxResponse(response)
+          }
         }
 
+        // Handle error responses
         if (!response.ok) {
           if (this.isPublicShareMode) {
             this.handlePublicShareError(data.error || 'Failed to load shared features.')

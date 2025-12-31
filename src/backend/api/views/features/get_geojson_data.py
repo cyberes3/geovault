@@ -5,6 +5,7 @@ from django.views.decorators.http import require_http_methods
 
 from api.models import Collection
 from api.utils.authorization import get_object_or_404_for_user
+from api.utils.format_encoding import create_bbox_response
 from api.utils.responses import handle_404
 from api.views.features.bbox_utils import _validate_bbox_params, get_features_in_bbox, _build_bbox_response
 from geo_lib.website.auth import api_or_login_required_401
@@ -51,4 +52,4 @@ def get_geojson_data(request):
     # Build response using helper function
     response_data = _build_bbox_response(features, total_features_in_bbox, zoom_level, fallback_used)
 
-    return JsonResponse(response_data)
+    return create_bbox_response(response_data, request)

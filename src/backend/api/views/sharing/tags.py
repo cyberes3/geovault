@@ -6,6 +6,7 @@ from django.http import JsonResponse
 from django.views.decorators.http import require_http_methods
 
 from api.models import TagShare, CollectionShare, FeatureStore
+from api.utils.format_encoding import create_bbox_response
 from api.utils.responses import error_response, not_found_response
 from api.validation.feature_updates import validate_payload, TagSharePayload
 from api.views.features.bbox_utils import _build_bbox_response, _validate_bbox_params, get_features_in_bbox
@@ -154,4 +155,4 @@ def get_public_share(request, share_id):
     # Increment access count atomically only on successful response
     TagShare.objects.filter(share_id=share_id).update(access_count=F('access_count') + 1)
 
-    return JsonResponse(response_data)
+    return create_bbox_response(response_data, request)
