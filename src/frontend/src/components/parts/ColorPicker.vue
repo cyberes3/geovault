@@ -34,6 +34,7 @@
           <!-- Vue Color SketchPicker -->
           <div class="color-picker-wrapper">
             <sketch-picker
+              :key="pickerKey"
               :model-value="colorValue"
               :preset-colors="predefinedColors"
               :disable-alpha="true"
@@ -61,7 +62,7 @@
 import { XMarkIcon } from '@heroicons/vue/24/outline'
 import { SketchPicker } from 'vue-color'
 import 'vue-color/style.css'
-import { normalizeHex } from '@/utils/colorUtils.js'
+import { normalizeHex, hexToRgb, rgbToHsl } from '@/utils/colorUtils.js'
 
 export default {
   name: 'ColorPickerDialog',
@@ -93,7 +94,8 @@ export default {
         '#009AFF',
         '#A200FF'
       ],
-      colorValue: null
+      colorValue: null,
+      pickerKey: 0
     }
   },
   watch: {
@@ -121,11 +123,38 @@ export default {
       const normalized = normalizeHex(color)
       // vue-color expects a hex string for modelValue
       this.colorValue = normalized
+      
+      // Force re-render for problematic colors (black, grey, red) that have hue=0
+      // This works around a bug in vue-color where the gradient doesn't update
+      // when hue is 0 and saturation is 0 (grayscale) or when hue is 0 (red)
+      const rgb = hexToRgb(normalized)
+      const hsl = rgbToHsl(rgb.r, rgb.g, rgb.b)
+      
+      // If it's a problematic color (hue=0 with saturation=0 or saturation=100%),
+      // increment the key to force a re-render
+      if (hsl.h === 0 && (hsl.s === 0 || hsl.s === 100)) {
+        this.pickerKey += 1
+      }
     },
     handleColorChange(color) {
-      this.colorValue = color
       // color can be a string (hex) or an object with hex property
       const hexColor = typeof color === 'string' ? color : (color.hex || color)
+      const normalized = normalizeHex(hexColor)
+      
+      // Check if this is a problematic color that needs a forced re-render
+      // This handles the case when a preset is clicked (black, grey, or red)
+      const rgb = hexToRgb(normalized)
+      const hsl = rgbToHsl(rgb.r, rgb.g, rgb.b)
+      
+      // If it's a problematic color (hue=0 with saturation=0 or saturation=100%),
+      // increment the key to force a re-render to fix the gradient
+      // This works around a bug in vue-color where the gradient doesn't update
+      // when hue is 0 and saturation is 0 (grayscale) or when hue is 0 (red)
+      if (hsl.h === 0 && (hsl.s === 0 || hsl.s === 100)) {
+        this.pickerKey += 1
+      }
+      
+      this.colorValue = normalized
       this.$emit('update:modelValue', hexColor)
     },
     handleOk() {
