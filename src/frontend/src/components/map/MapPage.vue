@@ -1415,7 +1415,7 @@ export default {
         features, 
         bounds, 
         this.getFeatureCoordinates, 
-        500
+        3000
       )
       
       // Only update if we actually removed features
