@@ -536,6 +536,7 @@
         :is-open="dialogs.bulkOperations"
         :available-tags="availableUserTags"
         :current-bulk-ops="bulkOperations"
+        :original-bulk-ops="originalBulkOperations"
         @close="closeBulkOperationsModal"
         @apply="updateBulkOperations"
     />
@@ -802,8 +803,9 @@ export default {
       availableUserTags: [],
 
       // Bulk operations state
-      bulkOperations: cloneBulkOperations(DEFAULT_BULK_OPERATIONS),
-      originalBulkOperations: cloneBulkOperations(DEFAULT_BULK_OPERATIONS),
+      bulkOperations: cloneBulkOperations(DEFAULT_BULK_OPERATIONS), // Normalized, for display
+      originalBulkOperations: {}, // Raw, for comparison and saving
+      loadedBulkOperations: {}, // Raw, what was originally loaded from DB
 
       // Search state
       searchQuery: '',
@@ -1722,8 +1724,9 @@ export default {
       return hasFeatureChanges || hasBulkOpsChanges;
     },
     _hasBulkOperationsChanged() {
-      // Compare current bulk operations with original using shared helper
-      return !areBulkOperationsEqual(this.bulkOperations, this.originalBulkOperations);
+      // Compare current raw bulk operations with what was originally loaded
+      // Both should be raw objects to properly detect key presence changes
+      return !areBulkOperationsEqual(this.originalBulkOperations, this.loadedBulkOperations);
     },
     async _saveChangesInternal() {
       // Internal save function that doesn't manage locks
@@ -1739,8 +1742,9 @@ export default {
       const hasBulkOpsChanges = this._hasBulkOperationsChanged();
 
       // Save bulk operations if they've changed
+      // Use originalBulkOperations (raw) to preserve which keys are present vs not present
       if (hasBulkOpsChanges) {
-        await this.saveBulkOperations(this.bulkOperations);
+        await this.saveBulkOperations(this.originalBulkOperations);
       }
 
       // Always save skip state, even if no other changes
@@ -1959,29 +1963,38 @@ export default {
         if (response.status === 200 && response.data.bulk_operations) {
           const ops = response.data.bulk_operations;
           this.bulkOperations = cloneBulkOperations(ops);
-          // Store the raw ops (before normalization) as original state
-          // This preserves which keys were explicitly set vs not set
-          this.originalBulkOperations = ops && typeof ops === 'object' ? { ...ops } : {};
+          // Store the raw ops (before normalization) for comparison and saving
+          const rawOps = ops && typeof ops === 'object' ? { ...ops } : {};
+          this.originalBulkOperations = rawOps;
+          this.loadedBulkOperations = rawOps;
         } else {
           // No bulk operations found, use empty object (not DEFAULT_BULK_OPERATIONS)
           // This allows us to detect when keys are added (e.g., pointIcon: null for default icon)
           this.bulkOperations = cloneBulkOperations({});
-          // Store empty object as original (no keys set)
-          this.originalBulkOperations = {};
+          // Store empty object for comparison and saving
+          const emptyOps = {};
+          this.originalBulkOperations = emptyOps;
+          this.loadedBulkOperations = emptyOps;
         }
       } catch (error) {
         // Log error and use empty object (not DEFAULT_BULK_OPERATIONS)
         // This allows us to detect when keys are added (e.g., pointIcon: null for default icon)
         console.error('Error loading bulk operations:', error);
         this.bulkOperations = cloneBulkOperations({});
-        // Store empty object as original (no keys set)
-        this.originalBulkOperations = {};
+        // Store empty object for comparison and saving
+        const emptyOps = {};
+        this.originalBulkOperations = emptyOps;
+        this.loadedBulkOperations = emptyOps;
       }
     },
     updateBulkOperations(bulkData) {
       // Update local state only (don't save to database yet)
       // Saving will happen when user clicks "Save Changes"
+      // Use the raw bulkData as-is to preserve which keys are present vs not present
+      // Only normalize for display purposes (bulkOperations is used for display)
       this.bulkOperations = cloneBulkOperations(bulkData);
+      // Store raw object to preserve key presence for comparison
+      this.originalBulkOperations = bulkData && typeof bulkData === 'object' ? { ...bulkData } : {};
     },
     async saveBulkOperations(bulkData) {
       if (!this.currentId) return;
@@ -1999,8 +2012,10 @@ export default {
         if (response.status === 200) {
           // Update local state with the data we sent (request data)
           this.bulkOperations = cloneBulkOperations(bulkData);
-          // Update original state to reflect saved state (store raw object to preserve key presence)
-          this.originalBulkOperations = bulkData && typeof bulkData === 'object' ? { ...bulkData } : {};
+          // Update both current and loaded state to reflect saved state
+          const rawOps = bulkData && typeof bulkData === 'object' ? { ...bulkData } : {};
+          this.originalBulkOperations = rawOps;
+          this.loadedBulkOperations = rawOps;
         }
       } catch (error) {
         this.msg = 'Error saving bulk operations: ' + (error.response?.data?.error || error.response?.data?.msg || error.message);

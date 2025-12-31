@@ -254,6 +254,10 @@ export default {
         polyColor: null
       })
     },
+    originalBulkOps: {
+      type: Object,
+      default: () => ({})
+    },
     // When true, show loading state on OK button and disable it
     saving: {
       type: Boolean,
@@ -318,6 +322,14 @@ export default {
       },
       deep: true
     },
+    originalBulkOps: {
+      handler() {
+        if (this.isOpen) {
+          this.initializeForm()
+        }
+      },
+      deep: true
+    },
     $route() {
       // Close modal when route changes
       if (this.isOpen) {
@@ -345,7 +357,7 @@ export default {
       this.useDefaultIcon = false
     },
     initializeForm() {
-      // Initialize with current bulk operations or defaults
+      // Initialize with current bulk operations (normalized) for values
       const ops = this.currentBulkOps || {}
       this.bulkData = {
         tags: ops.tags || [],
@@ -354,15 +366,14 @@ export default {
         lineColor: ops.lineColor || null,
         polyColor: ops.polyColor || null
       }
-      // Set enabled state based on whether values are set
-      // For pointIcon, check if it's explicitly in the ops dict (even if null)
-      // This distinguishes between "not set" and "explicitly set to null (default icon)"
-      const pointIconExplicitlySet = 'pointIcon' in ops
+      // Use originalBulkOps (raw) to determine which toggles should be enabled
+      // This distinguishes between "key not set" (disabled) and "key set to null" (enabled)
+      const rawOps = this.originalBulkOps || {}
       this.enabled = {
-        pointColor: ops.pointColor !== null && ops.pointColor !== undefined,
-        pointIcon: pointIconExplicitlySet,
-        lineColor: ops.lineColor !== null && ops.lineColor !== undefined,
-        polyColor: ops.polyColor !== null && ops.polyColor !== undefined
+        pointColor: rawOps.pointColor !== null && rawOps.pointColor !== undefined && 'pointColor' in rawOps,
+        pointIcon: 'pointIcon' in rawOps,
+        lineColor: rawOps.lineColor !== null && rawOps.lineColor !== undefined && 'lineColor' in rawOps,
+        polyColor: rawOps.polyColor !== null && rawOps.polyColor !== undefined && 'polyColor' in rawOps
       }
       // Set useDefaultIcon to true if pointIcon is enabled but the value is null (meaning default icon)
       this.useDefaultIcon = this.enabled.pointIcon && !this.bulkData.pointIcon
@@ -456,20 +467,29 @@ export default {
       }
     },
     handleApply() {
-      // Emit the bulk data to parent, ensuring null values for disabled options
-      // If useDefaultIcon is enabled, set pointIcon to null (removes custom icons)
+      // Emit the bulk data to parent, only including keys for enabled toggles
+      // This ensures we don't send keys that weren't explicitly configured
       const dataToEmit = {
-        tags: this.bulkData.tags,
-        pointColor: this.enabled.pointColor ? this.bulkData.pointColor : null,
-        lineColor: this.enabled.lineColor ? this.bulkData.lineColor : null,
-        polyColor: this.enabled.polyColor ? this.bulkData.polyColor : null
+        tags: this.bulkData.tags || []
       }
       
-      // Only include pointIcon if the toggle is enabled
-      // If useDefaultIcon is enabled, set to null to remove custom icons
-      // Otherwise, include the selected icon (or null if none selected)
+      // Only include keys when their toggles are enabled
+      if (this.enabled.pointColor) {
+        dataToEmit.pointColor = this.bulkData.pointColor
+      }
+      
       if (this.enabled.pointIcon) {
+        // If useDefaultIcon is enabled, set to null to remove custom icons
+        // Otherwise, include the selected icon (or null if none selected)
         dataToEmit.pointIcon = this.useDefaultIcon ? null : (this.bulkData.pointIcon || null)
+      }
+      
+      if (this.enabled.lineColor) {
+        dataToEmit.lineColor = this.bulkData.lineColor
+      }
+      
+      if (this.enabled.polyColor) {
+        dataToEmit.polyColor = this.bulkData.polyColor
       }
       
       this.$emit('apply', dataToEmit)
