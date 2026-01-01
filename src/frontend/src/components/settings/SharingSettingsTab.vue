@@ -76,7 +76,7 @@
               <label class="block text-xs font-medium text-gray-700 mb-1">Share Link</label>
               <div class="flex items-center space-x-2">
                 <input
-                  :value="share.url"
+                  :value="getFullUrl(share.url)"
                   readonly
                   class="flex-1 px-3 py-2 text-sm border border-gray-300 rounded-md bg-gray-50 text-gray-700 font-mono"
                 />
@@ -217,10 +217,13 @@ export default {
         this.deletingShareId = null;
       }
     },
+    getFullUrl(path) {
+      return `${window.location.origin}${path || ''}`
+    },
     async copyToClipboard(text) {
       try {
         // Construct full URL from path
-        const urlToCopy = `${window.location.origin}${text}`
+        const urlToCopy = this.getFullUrl(text)
         
         await navigator.clipboard.writeText(urlToCopy);
         // Find the share by URL to set copiedShareId
@@ -236,7 +239,7 @@ export default {
         // Fallback for older browsers
         const textArea = document.createElement('textarea');
         // Construct full URL from path
-        const urlToCopy = `${window.location.origin}${text}`
+        const urlToCopy = this.getFullUrl(text)
         textArea.value = urlToCopy;
         textArea.style.position = 'fixed';
         textArea.style.opacity = '0';

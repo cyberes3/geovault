@@ -141,7 +141,7 @@
                           <div class="flex items-center space-x-2">
                             <div class="relative flex-1">
                               <input
-                                :value="shareData.url"
+                                :value="getFullUrl(shareData.url)"
                                 readonly
                                 @click="copyToClipboard(shareData.url, shareData.share_id)"
                                 class="w-full px-3 py-2 text-sm border border-gray-300 rounded-md bg-gray-50 text-gray-700 font-mono overflow-hidden cursor-pointer select-none focus:outline-none focus:ring-2 focus:ring-blue-500"
@@ -235,7 +235,7 @@
                           <div class="flex items-center space-x-2">
                             <div class="relative flex-1 min-w-0">
                               <input
-                                :value="share.url"
+                                :value="getFullUrl(share.url)"
                                 readonly
                                 @click="copyToClipboard(share.url, share.share_id)"
                                 class="w-full px-3 py-2 text-sm border border-gray-300 rounded-md bg-gray-50 text-gray-700 font-mono overflow-hidden cursor-pointer select-none focus:outline-none focus:ring-2 focus:ring-blue-500"
@@ -675,10 +675,13 @@ export default {
         this.updatingAllowDownloads = false
       }
     },
+    getFullUrl(path) {
+      return `${window.location.origin}${path || ''}`
+    },
     async copyToClipboard(text, shareId) {
       try {
         // Construct full URL from path
-        const urlToCopy = `${window.location.origin}${text}`
+        const urlToCopy = this.getFullUrl(text)
         
         await navigator.clipboard.writeText(urlToCopy)
         if (shareId) {
