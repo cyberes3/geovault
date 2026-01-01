@@ -9,7 +9,9 @@ from django.contrib.auth import get_user_model
 from django.contrib.gis.geos import Point
 
 from api.models import CalTopoUser, FeatureStore, ImportQueue
+from api.utils.caltopo_helpers import handle_caltopo_call
 from geo_lib.feature_id import generate_geojson_hash
+from geo_lib.services.caltopo_service import CalTopoTimeoutError
 
 User = get_user_model()
 
@@ -1024,4 +1026,147 @@ class TestCalTopoViews(TestCase):
         data = response.json()
         self.assertEqual(data['job_id'], job_id)
         self.assertEqual(data['import_queue_id'], 456)
+    
+    @patch('api.views.caltopo.maps.list_maps')
+    def test_list_maps_handles_timeout(self, mock_list_maps):
+        """Test GET /api/caltopo/maps/ handles CalTopo timeout (returns 504 with CALTOPO_TIMEOUT)."""
+        CalTopoUser.objects.create(
+            user=self.user,
+            account_id='abc123',
+            credential_id='123456789012',
+            credential_key='test-key'
+        )
+        
+        from geo_lib.services.caltopo_service import CalTopoTimeoutError
+        mock_list_maps.side_effect = CalTopoTimeoutError("CalTopo API request timed out")
+        
+        response = self.client.get('/api/caltopo/maps/')
+        self.assertEqual(response.status_code, 504)
+        data = response.json()
+        self.assertIn('CalTopo request timed out', data['error'])
+        self.assertEqual(data['details']['error_code'], 'CALTOPO_TIMEOUT')
+    
+    @patch('api.views.caltopo.maps.get_map_features')
+    def test_get_map_features_handles_timeout(self, mock_get_features):
+        """Test GET /api/caltopo/maps/<map_id>/features/ handles CalTopo timeout (returns 504 with CALTOPO_TIMEOUT)."""
+        CalTopoUser.objects.create(
+            user=self.user,
+            account_id='abc123',
+            credential_id='123456789012',
+            credential_key='test-key'
+        )
+        
+        from geo_lib.services.caltopo_service import CalTopoTimeoutError
+        mock_get_features.side_effect = CalTopoTimeoutError("CalTopo API request timed out")
+        
+        response = self.client.get('/api/caltopo/maps/map1/features/')
+        self.assertEqual(response.status_code, 504)
+        data = response.json()
+        self.assertIn('CalTopo request timed out', data['error'])
+        self.assertEqual(data['details']['error_code'], 'CALTOPO_TIMEOUT')
+    
+    @patch('api.views.caltopo.single_import.get_feature')
+    def test_import_feature_handles_timeout(self, mock_get_feature):
+        """Test POST /api/caltopo/import/feature/ handles CalTopo timeout (returns 504 with CALTOPO_TIMEOUT)."""
+        CalTopoUser.objects.create(
+            user=self.user,
+            account_id='abc123',
+            credential_id='123456789012',
+            credential_key='test-key'
+        )
+        
+        from geo_lib.services.caltopo_service import CalTopoTimeoutError
+        mock_get_feature.side_effect = CalTopoTimeoutError("CalTopo API request timed out")
+        
+        response = self.client.post('/api/caltopo/import/feature/', {
+            'map_id': 'map1',
+            'feature_id': 'feature1',
+            'feature_class': 'Marker'
+        }, content_type='application/json')
+        
+        self.assertEqual(response.status_code, 504)
+        data = response.json()
+        self.assertIn('CalTopo request timed out', data['error'])
+        self.assertEqual(data['details']['error_code'], 'CALTOPO_TIMEOUT')
+    
+    @patch('api.views.caltopo.map_import.get_map_features')
+    def test_import_map_handles_timeout(self, mock_get_features):
+        """Test POST /api/caltopo/import/map/ handles CalTopo timeout (returns 504 with CALTOPO_TIMEOUT)."""
+        CalTopoUser.objects.create(
+            user=self.user,
+            account_id='abc123',
+            credential_id='123456789012',
+            credential_key='test-key'
+        )
+        
+        from geo_lib.services.caltopo_service import CalTopoTimeoutError
+        mock_get_features.side_effect = CalTopoTimeoutError("CalTopo API request timed out")
+        
+        response = self.client.post('/api/caltopo/import/map/', {
+            'map_id': 'map1'
+        }, content_type='application/json')
+        
+        self.assertEqual(response.status_code, 504)
+        data = response.json()
+        self.assertIn('CalTopo request timed out', data['error'])
+        self.assertEqual(data['details']['error_code'], 'CALTOPO_TIMEOUT')
+    
+    @patch('geo_lib.services.caltopo_service.CaltopoSession')
+    def test_connect_handles_timeout(self, mock_session_class):
+        """Test POST /api/caltopo/connect/ handles CalTopo timeout (returns 504 with CALTOPO_TIMEOUT)."""
+        from requests.exceptions import ReadTimeout
+        from geo_lib.services.caltopo_service import get_caltopo_session
+        
+        mock_session = MagicMock()
+        mock_session.getAccountData.side_effect = ReadTimeout("Read timed out")
+        mock_session_class.return_value = mock_session
+        
+        response = self.client.post('/api/caltopo/connect/', {
+            'account_id': 'abc123',
+            'credential_id': '123456789012',
+            'credential_key': 'test-key-12345'
+        }, content_type='application/json')
+        
+        self.assertEqual(response.status_code, 504)
+        data = response.json()
+        self.assertIn('CalTopo request timed out', data['error'])
+        self.assertEqual(data['details']['error_code'], 'CALTOPO_TIMEOUT')
+        
+        # Verify CalTopoUser was deleted on timeout
+        self.assertFalse(CalTopoUser.objects.filter(user=self.user).exists())
+    
+    def test_handle_caltopo_call_returns_result_on_success(self):
+        """Test handle_caltopo_call() returns result and None error on success."""
+        def mock_func(arg1, arg2):
+            return arg1 + arg2
+        
+        result, error_resp = handle_caltopo_call(mock_func, 2, 3)
+        
+        self.assertEqual(result, 5)
+        self.assertIsNone(error_resp)
+    
+    def test_handle_caltopo_call_returns_error_on_timeout(self):
+        """Test handle_caltopo_call() returns None result and error response on timeout."""
+        def mock_func():
+            raise CalTopoTimeoutError("CalTopo API request timed out")
+        
+        result, error_resp = handle_caltopo_call(mock_func)
+        
+        self.assertIsNone(result)
+        self.assertIsNotNone(error_resp)
+        self.assertEqual(error_resp.status_code, 504)
+        
+        # Parse the JSON response
+        import json
+        error_data = json.loads(error_resp.content)
+        self.assertIn('CalTopo request timed out', error_data['error'])
+        self.assertEqual(error_data['details']['error_code'], 'CALTOPO_TIMEOUT')
+    
+    def test_handle_caltopo_call_re_raises_other_exceptions(self):
+        """Test handle_caltopo_call() re-raises exceptions that are not CalTopoTimeoutError."""
+        def mock_func():
+            raise ValueError("Some other error")
+        
+        with self.assertRaises(ValueError):
+            handle_caltopo_call(mock_func)
 

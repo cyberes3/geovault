@@ -395,16 +395,20 @@ class TestCalTopoIntegration(TestCase):
         self.assertEqual(response.status_code, 200)
         
         # The mapping will be updated by the hook after processing completes
-        # Since we're mocking the processing, we need to manually execute the hook
-        # to verify the mapping would be updated
-        from geo_lib.processing.hooks import execute_import_hooks
+        # Since we're mocking the processing, we need to manually create the ImportQueue
+        # and execute the hook to verify the mapping would be updated
         from api.models import FeatureStore
         from django.contrib.gis.geos import Point
+        from geo_lib.services.caltopo_service import _caltopo_import_hook
         
-        # Get the import queue item
-        import_queue = ImportQueue.objects.get(
+        # Create the import queue item that would normally be created by ProcessJob.enqueue_job
+        # Since we're mocking enqueue_job, we need to create it manually
+        import_queue = ImportQueue.objects.create(
             user=self.user,
-            original_filename='caltopo_map_map1.geojson'
+            original_filename='caltopo_map_map1.geojson',
+            imported=False,
+            unparsable=False,
+            geofeatures=[]
         )
         
         # Create mock features that would be created by processing
@@ -440,8 +444,8 @@ class TestCalTopoIntegration(TestCase):
             geojson_hash=generate_geojson_hash(feature2_data)
         )
         
-        # Execute the hook to update the mapping
-        execute_import_hooks(import_queue, self.user.id, [feature1, feature2])
+        # Execute the actual hook function directly (not through execute_import_hooks since it's mocked)
+        _caltopo_import_hook(import_queue, self.user.id, [feature1, feature2])
         
         # Verify the mapping was updated
         caltopo_user.refresh_from_db()

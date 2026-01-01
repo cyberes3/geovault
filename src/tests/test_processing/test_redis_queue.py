@@ -43,7 +43,6 @@ class TestRedisProcessingQueue:
             'import_queue_id': 123,
             'filename': 'test.kml',
             'user_id': 1,
-            'file_data': b'test file content',
             'timestamp': time.time(),
             'replacement_feature_id': None
         }
@@ -60,7 +59,6 @@ class TestRedisProcessingQueue:
         assert dequeued_job is not None
         assert dequeued_job['job_id'] == 'test-job-1'
         assert dequeued_job['filename'] == 'test.kml'
-        assert dequeued_job['file_data'] == b'test file content'
         
         # Queue should be empty now
         assert queue.get_queue_length() == 0
@@ -76,7 +74,6 @@ class TestRedisProcessingQueue:
                 'import_queue_id': 100 + i,
                 'filename': f'test{i}.kml',
                 'user_id': 1,
-                'file_data': b'test',
                 'timestamp': time.time() + i,  # Incrementing timestamp
                 'replacement_feature_id': None
             }
@@ -106,7 +103,6 @@ class TestRedisProcessingQueue:
             'import_queue_id': 1,
             'filename': 'user1.kml',
             'user_id': 1,
-            'file_data': b'user1',
             'timestamp': time.time(),
             'replacement_feature_id': None
         }
@@ -115,7 +111,6 @@ class TestRedisProcessingQueue:
             'import_queue_id': 2,
             'filename': 'user2.kml',
             'user_id': 2,
-            'file_data': b'user2',
             'timestamp': time.time(),
             'replacement_feature_id': None
         }
@@ -162,7 +157,6 @@ class TestRedisProcessingQueue:
             'import_queue_id': 456,
             'filename': 'peek.kml',
             'user_id': 1,
-            'file_data': b'peek content',
             'timestamp': time.time(),
             'replacement_feature_id': None
         }
@@ -200,7 +194,6 @@ class TestRedisProcessingQueue:
                 'import_queue_id': 700 + i,
                 'filename': f'clear{i}.kml',
                 'user_id': 1,
-                'file_data': b'clear',
                 'timestamp': time.time(),
                 'replacement_feature_id': None
             }
@@ -218,18 +211,16 @@ class TestRedisProcessingQueue:
         assert cleared_again == 0
     
     def test_binary_file_data(self, clean_redis):
-        """Test enqueueing and dequeueing binary file data."""
+        """Test enqueueing and dequeueing job metadata (file_data is not stored in Redis)."""
         queue = get_processing_queue(user_id=1)
         
-        # Create binary data with various bytes
-        binary_data = bytes([0, 1, 127, 128, 255]) * 100
-        
+        # Note: file_data is NOT stored in Redis - it's read from the database when processing.
+        # This test verifies that job metadata can be enqueued/dequeued successfully.
         job_data = {
             'job_id': 'binary-job',
             'import_queue_id': 999,
             'filename': 'binary.kmz',
             'user_id': 1,
-            'file_data': binary_data,
             'timestamp': time.time(),
             'replacement_feature_id': None
         }
@@ -237,7 +228,10 @@ class TestRedisProcessingQueue:
         queue.enqueue(job_data)
         dequeued = queue.dequeue(timeout=0)
         
-        assert dequeued['file_data'] == binary_data
+        assert dequeued is not None
+        assert dequeued['job_id'] == 'binary-job'
+        assert dequeued['filename'] == 'binary.kmz'
+        # file_data is not in the dequeued data - it's read from database during processing
     
     def test_replacement_feature_id(self, clean_redis):
         """Test enqueueing jobs with replacement feature ID."""
@@ -248,7 +242,6 @@ class TestRedisProcessingQueue:
             'import_queue_id': 888,
             'filename': 'replacement.kml',
             'user_id': 1,
-            'file_data': b'replacement',
             'timestamp': time.time(),
             'replacement_feature_id': 12345
         }

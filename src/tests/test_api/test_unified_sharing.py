@@ -625,3 +625,160 @@ class TestFeatureShareElevations(TestCase):
         data = json.loads(response.content)
         self.assertIn('error', data)
 
+
+class TestShareURLFormat(TestCase):
+    """Test that share URLs are returned in the correct path format."""
+
+    def setUp(self):
+        """Set up test fixtures."""
+        User = get_user_model()
+        self.user = User.objects.create_user(
+            email='test@example.com',
+            password='testpass123',
+            username='testuser'
+        )
+        self.client.force_login(self.user)
+
+        # Create test feature with tag
+        self.feature_data = {
+            'type': 'Feature',
+            'geometry': {
+                'type': 'Point',
+                'coordinates': [-122.4194, 37.7749, 0.0]
+            },
+            'properties': {
+                'name': 'Test Feature',
+                'tags': ['shared-tag']
+            }
+        }
+        self.feature = FeatureStore.objects.create(
+            user=self.user,
+            geojson=self.feature_data,
+            geometry=Point(-122.4194, 37.7749, 0.0),
+            geojson_hash=generate_geojson_hash(self.feature_data)
+        )
+
+        # Create test collection
+        self.collection = Collection.objects.create(
+            user=self.user,
+            name='Test Collection',
+            tags=['test'],
+            feature_ids=[self.feature.id]
+        )
+
+    def test_create_tag_share_url_format(self):
+        """Test that creating a tag share returns URL in path format."""
+        share_data = {
+            'share_type': 'tag',
+            'tag': 'shared-tag'
+        }
+        response = self.client.post(
+            '/api/sharing/create/',
+            data=json.dumps(share_data),
+            content_type='application/json'
+        )
+        self.assertEqual(response.status_code, 200)
+        data = json.loads(response.content)
+        self.assertIn('url', data)
+        self.assertTrue(data['url'].startswith('/#/mapshare?id='))
+        self.assertEqual(data['url'].split('id=')[1], data['share_id'])
+
+    def test_create_collection_share_url_format(self):
+        """Test that creating a collection share returns URL in path format."""
+        share_data = {
+            'share_type': 'collection',
+            'collection_id': str(self.collection.id)
+        }
+        response = self.client.post(
+            '/api/sharing/create/',
+            data=json.dumps(share_data),
+            content_type='application/json'
+        )
+        self.assertEqual(response.status_code, 200)
+        data = json.loads(response.content)
+        self.assertIn('url', data)
+        self.assertTrue(data['url'].startswith('/#/mapshare?id='))
+        self.assertEqual(data['url'].split('id=')[1], data['share_id'])
+
+    def test_create_feature_share_url_format(self):
+        """Test that creating a feature share returns URL in path format."""
+        share_data = {
+            'share_type': 'feature',
+            'feature_id': self.feature.id
+        }
+        response = self.client.post(
+            '/api/sharing/create/',
+            data=json.dumps(share_data),
+            content_type='application/json'
+        )
+        self.assertEqual(response.status_code, 200)
+        data = json.loads(response.content)
+        self.assertIn('url', data)
+        self.assertTrue(data['url'].startswith('/#/mapshare?id='))
+        self.assertEqual(data['url'].split('id=')[1], data['share_id'])
+
+    def test_list_shares_url_format(self):
+        """Test that listing shares returns URLs in path format."""
+        # Create shares
+        TagShare.objects.create(
+            share_id=str(uuid.uuid4()),
+            tag='shared-tag',
+            user=self.user
+        )
+        CollectionShare.objects.create(
+            share_id=str(uuid.uuid4()),
+            collection=self.collection,
+            user=self.user
+        )
+        FeatureShare.objects.create(
+            share_id=str(uuid.uuid4()),
+            feature=self.feature,
+            user=self.user
+        )
+
+        response = self.client.get('/api/sharing/list/')
+        self.assertEqual(response.status_code, 200)
+        data = json.loads(response.content)
+        self.assertIn('shares', data)
+        self.assertEqual(len(data['shares']), 3)
+
+        for share in data['shares']:
+            self.assertIn('url', share)
+            self.assertTrue(share['url'].startswith('/#/mapshare?id='))
+            self.assertEqual(share['url'].split('id=')[1], share['share_id'])
+
+    def test_get_feature_share_url_format(self):
+        """Test that getting feature share returns URL in path format."""
+        share = FeatureShare.objects.create(
+            share_id=str(uuid.uuid4()),
+            feature=self.feature,
+            user=self.user
+        )
+
+        response = self.client.get(f'/api/sharing/features/{self.feature.id}/')
+        self.assertEqual(response.status_code, 200)
+        data = json.loads(response.content)
+        self.assertIn('url', data)
+        self.assertTrue(data['url'].startswith('/#/mapshare?id='))
+        self.assertEqual(data['url'].split('id=')[1], share.share_id)
+
+    def test_update_feature_share_url_format(self):
+        """Test that updating feature share returns URL in path format."""
+        share = FeatureShare.objects.create(
+            share_id=str(uuid.uuid4()),
+            feature=self.feature,
+            user=self.user
+        )
+
+        update_data = {'allow_downloads': True}
+        response = self.client.patch(
+            f'/api/sharing/features/{self.feature.id}/update/',
+            data=json.dumps(update_data),
+            content_type='application/json'
+        )
+        self.assertEqual(response.status_code, 200)
+        data = json.loads(response.content)
+        self.assertIn('url', data)
+        self.assertTrue(data['url'].startswith('/#/mapshare?id='))
+        self.assertEqual(data['url'].split('id=')[1], share.share_id)
+

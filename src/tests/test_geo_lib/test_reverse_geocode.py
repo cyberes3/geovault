@@ -12,7 +12,7 @@ from geo_lib.geocoding.admin_boundaries import get_admin_hierarchy
 from geo_lib.geocoding.nearby_places import find_nearby_cities, search_nearby_lakes
 from geo_lib.geocoding.protected_areas import get_protected_areas
 from geo_lib.geocoding.location_tags import get_location_tags, batch_reverse_geocode_coordinates
-from geo_lib.geocoding.cache import _get_cache_key
+from geo_lib.geocoding.cache import _get_cache_key, _REVERSE_GEOCODING_CACHE
 from geo_lib.geocoding.ski_resorts import load_ski_resorts, search_nearby_ski_resorts
 from geo_lib.spatial.haversine import haversine_distance_miles
 from geo_lib.geocoding import overpass_api
@@ -266,7 +266,8 @@ class TestCaching(TestCase):
     
     def test_admin_hierarchy_caching(self):
         """Test that admin hierarchy results are cached."""
-        # Clear any existing calls
+        # Clear cache and reset mock
+        _REVERSE_GEOCODING_CACHE.clear()
         overpass_api.query_overpass.reset_mock()
         
         # First call - fixture in conftest.py
@@ -294,7 +295,8 @@ class TestCaching(TestCase):
     
     def test_protected_areas_caching(self):
         """Test that protected areas results are cached."""
-        # Clear any existing calls
+        # Clear cache and reset mock
+        _REVERSE_GEOCODING_CACHE.clear()
         overpass_api.query_overpass.reset_mock()
         
         # First call - Rocky Mountain National Park - fixture in conftest.py
@@ -313,7 +315,8 @@ class TestCaching(TestCase):
     
     def test_protected_areas_caching_with_rounded_coords(self):
         """Test that protected areas cache works with coordinate rounding."""
-        # Clear any existing calls
+        # Clear cache and reset mock
+        _REVERSE_GEOCODING_CACHE.clear()
         overpass_api.query_overpass.reset_mock()
         
         # First call
@@ -330,7 +333,8 @@ class TestCaching(TestCase):
     
     def test_nearby_cities_caching(self):
         """Test that nearby cities results are cached."""
-        # Clear any existing calls
+        # Clear cache and reset mock
+        _REVERSE_GEOCODING_CACHE.clear()
         overpass_api.query_overpass.reset_mock()
         
         # First call - Fairplay, CO area - fixture in conftest.py
@@ -364,7 +368,8 @@ class TestCaching(TestCase):
     
     def test_nearby_lakes_caching(self):
         """Test that nearby lakes results are cached."""
-        # Clear any existing calls
+        # Clear cache and reset mock
+        _REVERSE_GEOCODING_CACHE.clear()
         overpass_api.query_overpass.reset_mock()
         
         # First call - Grand Lake, CO area - fixture in conftest.py
@@ -398,7 +403,8 @@ class TestCaching(TestCase):
     
     def test_get_location_tags_uses_query_cache(self):
         """Test that get_location_tags benefits from query_overpass caching."""
-        # Clear any existing calls
+        # Clear cache and reset mock
+        _REVERSE_GEOCODING_CACHE.clear()
         overpass_api.query_overpass.reset_mock()
         
         # First call should fetch from API (query_overpass caches responses)
@@ -416,7 +422,8 @@ class TestCaching(TestCase):
     
     def test_get_location_tags_cache_with_rounded_coords(self):
         """Test that get_location_tags cache works with coordinate rounding."""
-        # Clear any existing calls
+        # Clear cache and reset mock
+        _REVERSE_GEOCODING_CACHE.clear()
         overpass_api.query_overpass.reset_mock()
         
         # First call
@@ -433,7 +440,8 @@ class TestCaching(TestCase):
     
     def test_query_cache_via_batch(self):
         """Test that query_overpass cache works via batch function."""
-        # Clear any existing calls
+        # Clear cache and reset mock
+        _REVERSE_GEOCODING_CACHE.clear()
         overpass_api.query_overpass.reset_mock()
         
         # First batch call should fetch from API and cache at query level
@@ -444,7 +452,7 @@ class TestCaching(TestCase):
         tags1 = results1[(39.0, -105.0)][0]
         log_messages1 = results1[(39.0, -105.0)][1]
         
-        # Reset mock to track new calls
+        # Reset mock to track new calls (cache should still be active)
         overpass_api.query_overpass.reset_mock()
         
         # Second batch call should use query_overpass cache (no API calls)
@@ -495,7 +503,8 @@ class TestCaching(TestCase):
     
     def test_batch_reverse_geocode_caching(self):
         """Test that batch_reverse_geocode_coordinates uses query_overpass cache on second call."""
-        # Clear any existing calls
+        # Clear cache and reset mock
+        _REVERSE_GEOCODING_CACHE.clear()
         overpass_api.query_overpass.reset_mock()
         
         coordinates = [
@@ -508,7 +517,7 @@ class TestCaching(TestCase):
         call_count_1 = overpass_api.query_overpass.call_count
         self.assertGreater(call_count_1, 0)
         
-        # Reset mock to track new calls
+        # Reset mock to track new calls (cache should still be active)
         overpass_api.query_overpass.reset_mock()
         
         # Second batch call with same coordinates

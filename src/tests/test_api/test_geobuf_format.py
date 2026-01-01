@@ -88,11 +88,20 @@ class TestGeobufFormat(TestCase):
         
         # Handle gzip compression if present
         content = response.content
-        if response.get('Content-Encoding') == 'gzip':
+        # Check both header and magic bytes (gzip files start with 0x1f 0x8b)
+        if response.get('Content-Encoding') == 'gzip' or (len(content) >= 2 and content[:2] == b'\x1f\x8b'):
             content = gzip.decompress(content)
         
         # Decode protobuf
+        # Note: geobuf.decode() returns None for empty FeatureCollections
         geojson_data = geobuf.decode(content)
+        if geojson_data is None:
+            # Handle empty FeatureCollection case (geobuf library returns None for empty collections)
+            feature_count = int(response.get('X-Feature-Count', 0))
+            if feature_count == 0:
+                geojson_data = {'type': 'FeatureCollection', 'features': []}
+            else:
+                self.fail(f"geobuf.decode() returned None but feature_count is {feature_count}")
         
         # Verify structure
         self.assertEqual(geojson_data['type'], 'FeatureCollection')
@@ -118,11 +127,20 @@ class TestGeobufFormat(TestCase):
         
         # Handle gzip compression if present
         content = response.content
-        if response.get('Content-Encoding') == 'gzip':
+        # Check both header and magic bytes (gzip files start with 0x1f 0x8b)
+        if response.get('Content-Encoding') == 'gzip' or (len(content) >= 2 and content[:2] == b'\x1f\x8b'):
             content = gzip.decompress(content)
         
         # Decode protobuf
+        # Note: geobuf.decode() returns None for empty FeatureCollections
         geojson_data = geobuf.decode(content)
+        if geojson_data is None:
+            # Handle empty FeatureCollection case (geobuf library returns None for empty collections)
+            feature_count = int(response.get('X-Feature-Count', 0))
+            if feature_count == 0:
+                geojson_data = {'type': 'FeatureCollection', 'features': []}
+            else:
+                self.fail(f"geobuf.decode() returned None but feature_count is {feature_count}")
         self.assertEqual(geojson_data['type'], 'FeatureCollection')
 
     def test_format_query_param_overrides_accept_header(self):
@@ -155,9 +173,19 @@ class TestGeobufFormat(TestCase):
         )
         # Handle gzip compression if present
         pbf_content = pbf_response.content
-        if pbf_response.get('Content-Encoding') == 'gzip':
+        # Check both header and magic bytes (gzip files start with 0x1f 0x8b)
+        if pbf_response.get('Content-Encoding') == 'gzip' or (len(pbf_content) >= 2 and pbf_content[:2] == b'\x1f\x8b'):
             pbf_content = gzip.decompress(pbf_content)
+        # Decode protobuf
+        # Note: geobuf.decode() returns None for empty FeatureCollections
         pbf_geojson = geobuf.decode(pbf_content)
+        if pbf_geojson is None:
+            # Handle empty FeatureCollection case (geobuf library returns None for empty collections)
+            feature_count = int(pbf_response.get('X-Feature-Count', 0))
+            if feature_count == 0:
+                pbf_geojson = {'type': 'FeatureCollection', 'features': []}
+            else:
+                self.fail(f"geobuf.decode() returned None but feature_count is {feature_count}")
         
         # Compare feature counts
         json_feature_count = len(json_data['data']['features'])
@@ -297,11 +325,20 @@ class TestGeobufPublicShare(TestCase):
         
         # Handle gzip compression if present
         content = response.content
-        if response.get('Content-Encoding') == 'gzip':
+        # Check both header and magic bytes (gzip files start with 0x1f 0x8b)
+        if response.get('Content-Encoding') == 'gzip' or (len(content) >= 2 and content[:2] == b'\x1f\x8b'):
             content = gzip.decompress(content)
         
         # Decode protobuf
+        # Note: geobuf.decode() returns None for empty FeatureCollections
         geojson_data = geobuf.decode(content)
+        if geojson_data is None:
+            # Handle empty FeatureCollection case (geobuf library returns None for empty collections)
+            feature_count = int(response.get('X-Feature-Count', 0))
+            if feature_count == 0:
+                geojson_data = {'type': 'FeatureCollection', 'features': []}
+            else:
+                self.fail(f"geobuf.decode() returned None but feature_count is {feature_count}")
         self.assertEqual(geojson_data['type'], 'FeatureCollection')
         
         # Check metadata headers
@@ -330,11 +367,24 @@ class TestGeobufPublicShare(TestCase):
         
         # Handle gzip compression if present
         content = response.content
-        if response.get('Content-Encoding') == 'gzip':
+        # Check both header and magic bytes (gzip files start with 0x1f 0x8b)
+        if response.get('Content-Encoding') == 'gzip' or (len(content) >= 2 and content[:2] == b'\x1f\x8b'):
             content = gzip.decompress(content)
         
+        # Verify content is not empty
+        self.assertGreater(len(content), 0, "Protobuf content should not be empty")
+        
         # Decode protobuf
+        # Note: geobuf.decode() returns None for empty FeatureCollections
         geojson_data = geobuf.decode(content)
+        if geojson_data is None:
+            # Handle empty FeatureCollection case (geobuf library returns None for empty collections)
+            feature_count = int(response.get('X-Feature-Count', 0))
+            if feature_count == 0:
+                geojson_data = {'type': 'FeatureCollection', 'features': []}
+            else:
+                self.fail(f"geobuf.decode() returned None but feature_count is {feature_count}")
+        
         self.assertEqual(geojson_data['type'], 'FeatureCollection')
         
         # Check for collection name in headers
@@ -427,11 +477,24 @@ class TestGeobufWithCollection(TestCase):
         
         # Handle gzip compression if present
         content = response.content
-        if response.get('Content-Encoding') == 'gzip':
+        # Check both header and magic bytes (gzip files start with 0x1f 0x8b)
+        if response.get('Content-Encoding') == 'gzip' or (len(content) >= 2 and content[:2] == b'\x1f\x8b'):
             content = gzip.decompress(content)
         
+        # Verify content is not empty
+        self.assertGreater(len(content), 0, "Protobuf content should not be empty")
+        
         # Decode protobuf
+        # Note: geobuf.decode() returns None for empty FeatureCollections
         geojson_data = geobuf.decode(content)
+        if geojson_data is None:
+            # Handle empty FeatureCollection case (geobuf library returns None for empty collections)
+            feature_count = int(response.get('X-Feature-Count', 0))
+            if feature_count == 0:
+                geojson_data = {'type': 'FeatureCollection', 'features': []}
+            else:
+                self.fail(f"geobuf.decode() returned None but feature_count is {feature_count}")
+        
         self.assertEqual(geojson_data['type'], 'FeatureCollection')
         
         # Should only have features in collection
@@ -462,7 +525,25 @@ class TestGeobufWithCollection(TestCase):
                 'format': 'protobuf'
             }
         )
-        pbf_geojson = geobuf.decode(pbf_response.content)
+        # Handle gzip compression if present
+        pbf_content = pbf_response.content
+        # Check both header and magic bytes (gzip files start with 0x1f 0x8b)
+        if pbf_response.get('Content-Encoding') == 'gzip' or (len(pbf_content) >= 2 and pbf_content[:2] == b'\x1f\x8b'):
+            pbf_content = gzip.decompress(pbf_content)
+        
+        # Verify content is not empty
+        self.assertGreater(len(pbf_content), 0, "Protobuf content should not be empty")
+        
+        # Decode protobuf
+        # Note: geobuf.decode() returns None for empty FeatureCollections
+        pbf_geojson = geobuf.decode(pbf_content)
+        if pbf_geojson is None:
+            # Handle empty FeatureCollection case (geobuf library returns None for empty collections)
+            feature_count = int(pbf_response.get('X-Feature-Count', 0))
+            if feature_count == 0:
+                pbf_geojson = {'type': 'FeatureCollection', 'features': []}
+            else:
+                self.fail(f"geobuf.decode() returned None but feature_count is {feature_count}")
         
         # Compare counts
         self.assertEqual(

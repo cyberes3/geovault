@@ -92,11 +92,16 @@ class TestPublicShareWorkflow(TestCase):
         """Test complete workflow: create collection → share → access."""
         self.client.force_login(self.user)
         
-        # Step 1: Create a collection
+        # Step 1: Create a collection and add features to it
+        # Get the feature IDs created in setUp
+        feature_ids = list(FeatureStore.objects.filter(user=self.user).values_list('id', flat=True))
+        self.assertGreater(len(feature_ids), 0, "Test setup should create features")
+        
         collection_data = {
             'name': 'Shared Collection',
             'description': 'A public collection',
-            'tags': ['public-tag']
+            'tags': ['public-tag'],
+            'feature_ids': feature_ids
         }
         response = self.client.post(
             '/api/collections/create/',
@@ -105,6 +110,13 @@ class TestPublicShareWorkflow(TestCase):
         )
         self.assertEqual(response.status_code, 201)
         collection_id = json.loads(response.content)['collection']['id']
+        
+        # Verify collection was created with features
+        from api.models import Collection
+        from api.views.collections.utils import get_collection_feature_ids
+        collection = Collection.objects.get(id=collection_id, user=self.user)
+        collection_feature_ids = get_collection_feature_ids(collection)
+        self.assertGreater(len(collection_feature_ids), 0, f"Collection should have features. Got: {collection_feature_ids}, collection.feature_ids: {collection.feature_ids}, collection.tags: {collection.tags}")
         
         # Step 2: Create a collection share
         share_data = {
@@ -125,6 +137,9 @@ class TestPublicShareWorkflow(TestCase):
         self.client.logout()
         
         # Step 4: Access public collection share
+        # Bbox format: min_lon,min_lat,max_lon,max_lat
+        # Features are at: (-122.4194, 37.7749), (-122.4094, 37.7849), (-122.3994, 37.7949)
+        # So bbox should include all of them: min_lon=-123, min_lat=37, max_lon=-122, max_lat=38
         response = self.client.get(
             f'/api/sharing/public/collection/{share_id}/?bbox=-123,37,-122,38'
         )

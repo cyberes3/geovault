@@ -354,10 +354,47 @@ def conditional_external_api_mocking():
     # Always mock geocoding services with realistic data from real Overpass API responses
     # We need to mock query_overpass in all modules that import it
     
-    # Mock implementation that returns fixture data based on query
-    def mock_query_overpass_func(query, max_retries=3, latitude=None, longitude=None):
-        """Mock implementation that returns fixture data based on query."""
-        return get_mock_overpass_response(query)
+    # Import cache here to avoid circular imports
+    from geo_lib.geocoding.cache import _REVERSE_GEOCODING_CACHE
+    from geo_lib.geocoding.constants import REVERSE_GEOCODING_CACHE_TTL
+    from geo_lib.geocoding.overpass_api import round_coordinate
+    import hashlib
+    
+    # Custom mock class that only increments call_count on cache misses
+    class CacheAwareMock:
+        """Mock that respects cache and only counts cache misses."""
+        def __init__(self):
+            self.call_count = 0
+        
+        def __call__(self, query, max_retries=3, latitude=None, longitude=None):
+            """Mock implementation that returns fixture data based on query, with cache support."""
+            # Generate cache key same way as real query_overpass function
+            query_hash = hashlib.sha256(query.encode('utf-8')).hexdigest()[:16]
+            if latitude is not None and longitude is not None:
+                lat_rounded, lon_rounded = round_coordinate(latitude, longitude)
+                cache_key = f"overpass:query:{query_hash}:{lat_rounded},{lon_rounded}"
+            else:
+                cache_key = f"overpass:query:{query_hash}"
+            
+            # Check cache first
+            cached_response = _REVERSE_GEOCODING_CACHE.get(cache_key)
+            if cached_response is not None:
+                return cached_response
+            
+            # Cache miss - increment call count and get mock response
+            self.call_count += 1
+            mock_response = get_mock_overpass_response(query)
+            
+            # Cache the response if it has elements (same logic as real function)
+            elements = mock_response.get('elements', [])
+            if elements:
+                _REVERSE_GEOCODING_CACHE.set(cache_key, mock_response, REVERSE_GEOCODING_CACHE_TTL)
+            
+            return mock_response
+        
+        def reset_mock(self):
+            """Reset call count (cache remains intact)."""
+            self.call_count = 0
     
     # Patch query_overpass in all modules that import it
     # We need to patch where it's used, not where it's defined
@@ -369,21 +406,12 @@ def conditional_external_api_mocking():
         'geo_lib.geocoding.protected_areas.query_overpass',  # Used in protected_areas
     ]
     
-    # Store the primary mock so all patches share the same call count
-    primary_mock = None
-    for i, module_path in enumerate(modules_to_patch):
-        if i == 0:
-            # Create the primary mock for the first patch
-            # Use MagicMock with side_effect so we can track call_count
-            primary_mock = MagicMock(side_effect=mock_query_overpass_func)
-            geocoding_patch = patch(module_path, primary_mock)
-            geocoding_patch.start()
-            patches.append(geocoding_patch)
-        else:
-            # All other patches should use the same mock object for consistent call counts
-            geocoding_patch = patch(module_path, new=primary_mock)
-            geocoding_patch.start()
-            patches.append(geocoding_patch)
+    # Create the cache-aware mock
+    primary_mock = CacheAwareMock()
+    for module_path in modules_to_patch:
+        geocoding_patch = patch(module_path, primary_mock)
+        geocoding_patch.start()
+        patches.append(geocoding_patch)
     
     # Mock IP geolocation service
     geocoding_patch2 = patch('geo_lib.ip_geolocation.get_geolocation_service')

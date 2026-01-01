@@ -1,6 +1,7 @@
 """
 Tests for custom Redis rate limiting decorator.
 """
+import json
 import time
 from unittest.mock import patch, MagicMock
 from django.test import TestCase, override_settings
@@ -47,7 +48,7 @@ class TestRateLimitDecorator(TestCase):
         
         response = test_view(request)
         self.assertEqual(response.status_code, 200)
-        data = response.json()
+        data = json.loads(response.content)
         self.assertEqual(data['message'], 'success')
     
     def test_rate_limit_blocks_second_request_within_same_second(self):
@@ -62,7 +63,7 @@ class TestRateLimitDecorator(TestCase):
         # Second request immediately after should be blocked
         response2 = test_view(request)
         self.assertEqual(response2.status_code, 429)
-        data = response2.json()
+        data = json.loads(response2.content)
         self.assertIn('Rate limit exceeded', data['error'])
     
     def test_rate_limit_allows_request_after_window_expires(self):
@@ -128,7 +129,7 @@ class TestRateLimitDecorator(TestCase):
         # Second request should return 429
         response = test_view(request)
         self.assertEqual(response.status_code, 429)
-        data = response.json()
+        data = json.loads(response.content)
         self.assertIn('Rate limit exceeded', data['error'])
         self.assertIn('seconds', data['error'])
     
@@ -176,7 +177,7 @@ class TestRateLimitDecorator(TestCase):
         
         response = test_view(request)
         self.assertEqual(response.status_code, 401)
-        data = response.json()
+        data = json.loads(response.content)
         self.assertIn('Authentication required', data['error'])
     
     def test_concurrent_requests_race_condition_handling(self):

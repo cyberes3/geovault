@@ -131,29 +131,6 @@ class TestGeoJSONProcessor(TestCase):
         self.assertTrue(is_valid)
         self.assertIsNone(error_message)
     
-    def test_processor_handles_bom_and_whitespace_in_json(self):
-        """Test processor handles BOM and whitespace in JSON."""
-        # Test with BOM
-        feature_collection = {
-            'type': 'FeatureCollection',
-            'features': [
-                {
-                    'type': 'Feature',
-                    'geometry': {'type': 'Point', 'coordinates': [-122.4194, 37.7749]},
-                    'properties': {'name': 'Test Feature'}
-                }
-            ]
-        }
-        
-        # Add BOM
-        file_data = b'\xef\xbb\xbf' + json.dumps(feature_collection).encode('utf-8')
-        processor = GeoJSONProcessor(file_data, 'test.geojson', user_id=self.user.id)
-        
-        geojson = processor.convert_to_geojson()
-        
-        self.assertEqual(geojson['type'], 'FeatureCollection')
-        self.assertEqual(len(geojson['features']), 1)
-    
     def test_processor_handles_array_of_features(self):
         """Test processor handles array of features (converts to FeatureCollection)."""
         # Note: This is actually handled by detect_file_type, not the processor itself

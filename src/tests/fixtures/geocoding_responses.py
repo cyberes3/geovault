@@ -1041,6 +1041,8 @@ OVERPASS_RESPONSES = {
     (39.2216, -105.9327, 'admin'): COLORADO_PARK_COUNTY_ADMIN_RESPONSE,
     (40.3428, -105.6836, 'protected'): COLORADO_RMNP_PROTECTED_RESPONSE,
     (40.3428, -105.6836, 'admin'): COLORADO_PARK_COUNTY_ADMIN_RESPONSE,
+    (40.3429, -105.6837, 'protected'): COLORADO_RMNP_PROTECTED_RESPONSE,  # Rounded coords for cache test
+    (40.3429, -105.6837, 'admin'): COLORADO_PARK_COUNTY_ADMIN_RESPONSE,  # Rounded coords for cache test
     (40.34, -105.68, 'protected'): COLORADO_RMNP_PROTECTED_RESPONSE,
     (40.34, -105.68, 'admin'): COLORADO_PARK_COUNTY_ADMIN_RESPONSE,  # RMNP admin (for get_location_tags)
     (40.34, -105.68, 'lakes'): COLORADO_RMNP_LAKES_RESPONSE,  # RMNP lakes - REAL response
