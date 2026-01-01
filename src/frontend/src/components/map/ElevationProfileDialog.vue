@@ -174,6 +174,14 @@ export default {
     feature: {
       type: Object,
       default: null
+    },
+    shareId: {
+      type: String,
+      default: null
+    },
+    isPublicShare: {
+      type: Boolean,
+      default: false
     }
   },
   emits: ['close', 'hover-point', 'hover-clear', 'click-point'],
@@ -518,9 +526,21 @@ export default {
      */
     async fetchElevationsFromAPI(featureId, source = 'external') {
       try {
-        const endpoint = source === 'external' 
-          ? `/api/feature/${featureId}/elevations/external/`
-          : `/api/feature/${featureId}/elevations/internal/`
+        let endpoint
+        if (this.isPublicShare && this.shareId) {
+          // For public shares, only use internal elevations (GPS data stored in feature)
+          // External elevation API requires authentication
+          if (source === 'external') {
+            // Public shares can't use external elevation API, return null
+            return null
+          }
+          endpoint = `/api/sharing/public/feature/${this.shareId}/elevations/internal/`
+        } else {
+          // Use authenticated endpoints for regular features
+          endpoint = source === 'external' 
+            ? `/api/feature/${featureId}/elevations/external/`
+            : `/api/feature/${featureId}/elevations/internal/`
+        }
           
         const response = await axios.get(endpoint, {
           headers: {

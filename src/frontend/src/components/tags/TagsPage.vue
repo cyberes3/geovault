@@ -345,9 +345,10 @@
     </div>
 
     <!-- Share Dialog -->
-    <TagShareDialog
-        :isOpen="shareDialogOpen"
-        :tag="selectedTagForShare"
+    <ShareDialog
+        :is-open="shareDialogOpen"
+        share-type="tag"
+        :item="{ tag: selectedTagForShare }"
         @close="shareDialogOpen = false"
     />
 
@@ -375,7 +376,7 @@
 </template>
 
 <script>
-import TagShareDialog from "./TagShareDialog.vue";
+import ShareDialog from "@/components/parts/ShareDialog.vue";
 import TagDeleteModal from "./TagDeleteModal.vue";
 import Loader from "../parts/Loader.vue";
 import BulkStylingModal from "@/components/import/parts/BulkStylingModal.vue";
@@ -387,7 +388,7 @@ import { deleteTag, removeTagFromAllFeatures, removeTagFromFeature as removeTagF
 export default {
   name: 'TagsPage',
   components: {
-    TagShareDialog,
+    ShareDialog,
     TagDeleteModal,
     Loader,
     MagnifyingGlassIcon,

@@ -5,7 +5,7 @@ from django.db.models import F, Q
 from django.http import JsonResponse
 from django.views.decorators.http import require_http_methods
 
-from api.models import TagShare, CollectionShare, FeatureStore
+from api.models import TagShare, CollectionShare, FeatureShare, FeatureStore
 from api.utils.format_encoding import create_bbox_response
 from api.utils.responses import error_response, not_found_response
 from api.validation.feature_updates import validate_payload, TagSharePayload
@@ -78,9 +78,9 @@ def create_share(request, validated_data):
 @require_http_methods(["GET"])
 def get_public_share_info(request, share_id):
     """
-    Public endpoint to get information about a shared tag.
+    Public endpoint to get information about any share (tag, collection, or feature).
     No authentication required.
-    Returns tag name for display purposes without revealing data.
+    Returns share type and basic info for display purposes without revealing data.
     Does not increment access_count.
     """
     # Validate share_id format (must be UUID4)
@@ -90,22 +90,44 @@ def get_public_share_info(request, share_id):
             'code': 404
         }, status=404)
 
-    # Get the share
-    share = TagShare.objects.filter(share_id=share_id).first()
-
-    if not share:
-        # Return same error message to prevent information disclosure
+    # Try to find the share in any of the three tables
+    tag_share = TagShare.objects.filter(share_id=share_id).first()
+    if tag_share:
         return JsonResponse({
-            'error': 'Invalid share link',
-            'code': 404
-        }, status=404)
+            'share_type': 'tag',
+            'tag': tag_share.tag,
+            'created_at': tag_share.created_at.isoformat(),
+            'allow_downloads': tag_share.allow_downloads
+        })
 
-    # Return basic share info
+    collection_share = CollectionShare.objects.filter(share_id=share_id).select_related('collection').first()
+    if collection_share:
+        return JsonResponse({
+            'share_type': 'collection',
+            'collection_name': collection_share.collection.name,
+            'collection_id': str(collection_share.collection.id),
+            'created_at': collection_share.created_at.isoformat(),
+            'include_tags': collection_share.include_tags,
+            'allow_downloads': collection_share.allow_downloads
+        })
+
+    feature_share = FeatureShare.objects.filter(share_id=share_id).select_related('feature').first()
+    if feature_share:
+        # Get feature name from geojson properties
+        feature_name = feature_share.feature.geojson.get('properties', {}).get('name', 'Unnamed Feature')
+        return JsonResponse({
+            'share_type': 'feature',
+            'feature_name': feature_name,
+            'feature_id': feature_share.feature.id,
+            'created_at': feature_share.created_at.isoformat(),
+            'allow_downloads': feature_share.allow_downloads
+        })
+
+    # Share not found - return same error message to prevent information disclosure
     return JsonResponse({
-        'tag': share.tag,
-        'created_at': share.created_at.isoformat(),
-        'allow_downloads': share.allow_downloads
-    })
+        'error': 'Invalid share link',
+        'code': 404
+    }, status=404)
 
 
 @require_http_methods(["GET"])

@@ -47,9 +47,15 @@ from api.views.imports.upload import upload_item
 from api.views.services.geocoding import geocoding_search
 from api.views.services.geolocation import get_user_location, get_location_by_ip
 from api.views.services.tiles import tile_proxy, get_tile_sources, style_proxy
-from api.views.sharing.collections import create_collection_share, get_public_collection_share
-from api.views.sharing.management import list_shares, delete_share
-from api.views.sharing.tags import create_share, get_public_share_info, get_public_share
+from api.views.sharing.collections import get_public_collection_share
+from api.views.sharing.features import (
+    get_feature_share,
+    update_feature_share,
+    get_public_feature_share,
+    get_public_feature_elevations_internal
+)
+from api.views.sharing.management import create_share, list_shares, delete_share
+from api.views.sharing.tags import get_public_share_info, get_public_share
 from api.views.user.settings import (
     get_user_settings,
     update_user_setting,
@@ -125,8 +131,11 @@ urlpatterns = [
     path('sharing/<str:share_id>/', delete_share),
     path('sharing/public/info/<str:share_id>/', get_public_share_info),
     path('sharing/public/<str:share_id>/', get_public_share),
-    path('sharing/collections/create/', create_collection_share),
     path('sharing/public/collection/<str:share_id>/', get_public_collection_share),
+    path('sharing/features/<int:feature_id>/', get_feature_share),
+    path('sharing/features/<int:feature_id>/update/', update_feature_share),
+    path('sharing/public/feature/<str:share_id>/', get_public_feature_share),
+    path('sharing/public/feature/<str:share_id>/elevations/internal/', get_public_feature_elevations_internal),
 
     # Collections API endpoints
     path('collections/', list_collections),

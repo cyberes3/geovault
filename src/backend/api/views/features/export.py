@@ -7,7 +7,7 @@ from django.http import HttpResponse, JsonResponse
 from django.utils.text import slugify
 from django.views.decorators.http import require_http_methods
 
-from api.models import FeatureStore, TagShare, CollectionShare, Collection
+from api.models import FeatureStore, TagShare, CollectionShare, FeatureShare, Collection
 from api.utils.authorization import get_object_or_404_for_user
 from api.views.features.bbox_utils import _build_base_query, _build_collection_query
 from api.views.sharing.utils import validate_share_id
@@ -43,6 +43,16 @@ def export_feature_kmz(request):
 
     # Check if this is a bulk share download (share parameter without feature)
     if share_id and not raw_id:
+        # Check if it's a feature share (single feature, not bulk)
+        tag_share, collection_share, feature_share, share, error_response = _lookup_and_validate_share(share_id)
+        if error_response:
+            return error_response
+        
+        # Feature shares are single feature downloads, not bulk
+        if feature_share:
+            return _handle_single_feature_download(request, feature_share.feature.id, share_id)
+        
+        # Tag and collection shares are bulk downloads
         return _handle_bulk_share_download(share_id)
 
     # Check for authenticated user bulk downloads (Tag or Collection or All)
@@ -68,8 +78,9 @@ def _lookup_and_validate_share(share_id: str):
         share_id: Share ID to look up
 
     Returns:
-        Tuple (tag_share, collection_share, share, error_response) where one of tag_share/collection_share
-        is None and share is the actual share object. error_response is None on success.
+        Tuple (tag_share, collection_share, feature_share, share, error_response) where one of 
+        tag_share/collection_share/feature_share is not None and share is the actual share object. 
+        error_response is None on success.
 
     Raises:
         JsonResponse with appropriate error if validation or lookup fails
@@ -77,7 +88,7 @@ def _lookup_and_validate_share(share_id: str):
     # Validate share_id format
     if not validate_share_id(share_id):
         # Security: Use generic error message to prevent information disclosure
-        return None, None, None, JsonResponse(
+        return None, None, None, None, JsonResponse(
             {"error": "Invalid request", "code": 400},
             status=400,
         )
@@ -85,25 +96,30 @@ def _lookup_and_validate_share(share_id: str):
     # Look up the share
     tag_share = TagShare.objects.filter(share_id=share_id).first()
     collection_share = None
+    feature_share = None
+    
     if not tag_share:
         collection_share = CollectionShare.objects.filter(share_id=share_id).select_related('collection').first()
+    
+    if not tag_share and not collection_share:
+        feature_share = FeatureShare.objects.filter(share_id=share_id).select_related('feature').first()
 
-    share = tag_share or collection_share
+    share = tag_share or collection_share or feature_share
     if not share:
         # Security: Use generic error message to prevent information disclosure about share existence
-        return None, None, None, JsonResponse(
+        return None, None, None, None, JsonResponse(
             {"error": "Invalid request", "code": 404},
             status=404,
         )
 
     # Check if downloads are allowed
     if not share.allow_downloads:
-        return None, None, None, JsonResponse(
+        return None, None, None, None, JsonResponse(
             {"error": "Access denied", "code": 403},
             status=403,
         )
 
-    return tag_share, collection_share, share, None
+    return tag_share, collection_share, feature_share, share, None
 
 
 def _sanitize_filename(filename: str, max_length: int = 255) -> str:
@@ -211,9 +227,16 @@ def _handle_bulk_share_download(share_id: str) -> Union[HttpResponse, JsonRespon
     Handle bulk download for a public share.
     """
     # Look up and validate the share
-    tag_share, collection_share, share, error_response = _lookup_and_validate_share(share_id)
+    tag_share, collection_share, feature_share, share, error_response = _lookup_and_validate_share(share_id)
     if error_response:
         return error_response
+
+    # Feature shares don't support bulk download (only single feature)
+    if feature_share:
+        return JsonResponse(
+            {"error": "Bulk download not supported for feature shares", "code": 400},
+            status=400,
+        )
 
     # Get share name
     if tag_share:
@@ -319,7 +342,7 @@ def _handle_single_feature_download(request, feature_id: int, share_id: Optional
     # Check if this is a public share request for a single feature
     if share_id:
         # Look up and validate the share
-        tag_share, collection_share, share, error_response = _lookup_and_validate_share(share_id)
+        tag_share, collection_share, feature_share, share, error_response = _lookup_and_validate_share(share_id)
         if error_response:
             return error_response
 
@@ -345,6 +368,13 @@ def _handle_single_feature_download(request, feature_id: int, share_id: Optional
             # For collection shares, use the same query builder to check if feature matches
             matching_features = _build_collection_query(share.user.id, collection_share.collection.id).filter(id=feature_id)
             if not matching_features.exists():
+                return JsonResponse(
+                    {"error": "Access denied", "code": 403},
+                    status=403,
+                )
+        elif feature_share:
+            # For feature shares, verify the feature ID matches the shared feature
+            if feature_share.feature.id != feature_id:
                 return JsonResponse(
                     {"error": "Access denied", "code": 403},
                     status=403,

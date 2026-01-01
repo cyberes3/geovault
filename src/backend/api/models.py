@@ -160,6 +160,22 @@ class CollectionShare(django_models.Model):
         ]
 
 
+class FeatureShare(django_models.Model):
+    share_id = django_models.CharField(max_length=255, unique=True, db_index=True, help_text="UUID4 share identifier")
+    feature = django_models.ForeignKey('FeatureStore', on_delete=django_models.CASCADE, help_text="The feature being shared")
+    user = django_models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=django_models.CASCADE)
+    created_at = django_models.DateTimeField(auto_now_add=True)
+    access_count = django_models.IntegerField(default=0, help_text="Number of times this share has been accessed")
+    allow_downloads = django_models.BooleanField(default=False, help_text="Whether viewers can download features as KMZ")
+
+    class Meta:
+        indexes = [
+            django_models.Index(fields=['user', 'created_at'], name='featshare_user_created'),
+            django_models.Index(fields=['share_id'], name='featshare_share_id'),
+            django_models.Index(fields=['feature', 'user'], name='featshare_feat_user'),
+        ]
+
+
 class Collection(django_models.Model):
     id = django_models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
     user = django_models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=django_models.CASCADE)

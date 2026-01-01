@@ -52,6 +52,7 @@ class TestPublicShareWorkflow(TestCase):
         
         # Step 1: Create a tag share
         share_data = {
+            'share_type': 'tag',
             'tag': 'public-tag',
             'allow_downloads': True
         }
@@ -107,12 +108,13 @@ class TestPublicShareWorkflow(TestCase):
         
         # Step 2: Create a collection share
         share_data = {
+            'share_type': 'collection',
             'collection_id': collection_id,
             'allow_downloads': True,
             'include_tags': False
         }
         response = self.client.post(
-            '/api/sharing/collections/create/',
+            '/api/sharing/create/',
             data=json.dumps(share_data),
             content_type='application/json'
         )

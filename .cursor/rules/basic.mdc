@@ -9,5 +9,7 @@ Run tests with src/tests/run-tests.sh
 
 Do not use __all__ instead do direct imports
 
-Please prioritize using the provided Heroicons components for icons on the frontend instead of creating custom ones.
+Prioritize using the provided Heroicons components for icons on the frontend instead of creating custom ones.
 For example `import { ChevronDownIcon, Bars3Icon, XMarkIcon } from '@heroicons/vue/24/{outline or solid}';`
+
+Make sure to explcitly define responses via pydantic for the backend and typescript for the frontend.

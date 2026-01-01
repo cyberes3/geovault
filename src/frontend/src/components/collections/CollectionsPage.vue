@@ -148,10 +148,11 @@
     />
 
     <!-- Collection Share Dialog -->
-    <CollectionShareDialog
+    <ShareDialog
         v-if="shareDialogOpen"
-        :isOpen="shareDialogOpen"
-        :collection="selectedCollectionForShare"
+        :is-open="shareDialogOpen"
+        share-type="collection"
+        :item="selectedCollectionForShare || {}"
         @close="closeShareDialog"
     />
 
@@ -170,7 +171,7 @@
 <script>
 import { getCookie } from "@/assets/js/auth.js";
 import CollectionDialog from "./CollectionDialog.vue";
-import CollectionShareDialog from "./CollectionShareDialog.vue";
+import ShareDialog from "@/components/parts/ShareDialog.vue";
 import Loader from "../parts/Loader.vue";
 import BulkStylingModal from "@/components/import/parts/BulkStylingModal.vue";
 import { createEmptyBulkOperations, cloneBulkOperations } from "@/utils/bulkOperations.js";
@@ -180,7 +181,7 @@ export default {
   name: 'CollectionsPage',
   components: {
     CollectionDialog,
-    CollectionShareDialog,
+    ShareDialog,
     Loader,
     PlusIcon,
     ExclamationCircleIcon,

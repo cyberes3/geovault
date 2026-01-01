@@ -96,6 +96,7 @@
             @edit="handleEditFeature"
             @zoom="zoomToFeature(selectedFeature)"
             @show-profile="showElevationProfile = true"
+            @share="handleShareFeature"
         />
         <FeatureInfoBox
             v-if="!isEditingFeature && isPublicShareMode && !showElevationProfile"
@@ -103,6 +104,7 @@
             :share-id="shareId"
             :show-download-button="publicShareInfo && publicShareInfo.allow_downloads"
             :show-edit-button="false"
+            :show-share-button="false"
             @close="selectedFeature = null"
             @download="handleDownloadFeatureKmz"
             @zoom="zoomToFeature(selectedFeature)"
@@ -125,10 +127,20 @@
         <ElevationProfileDialog
             v-if="showElevationProfile"
             :feature="selectedFeature"
+            :share-id="isPublicShareMode && publicShareInfo && publicShareInfo.share_type === 'feature' ? shareId : null"
+            :is-public-share="isPublicShareMode && publicShareInfo && publicShareInfo.share_type === 'feature'"
             @close="handleElevationProfileClose"
             @hover-point="handleHoverPoint"
             @hover-clear="handleHoverClear"
             @click-point="handleClickPoint"
+        />
+
+        <!-- Feature Share Dialog -->
+        <ShareDialog
+            :is-open="showFeatureShareDialog"
+            share-type="feature"
+            :item="featureToShare || {}"
+            @close="handleCloseFeatureShareDialog"
         />
 
         <!-- Feature Selection Popup (for overlapping features) -->
@@ -221,6 +233,7 @@ const FeatureEditBox = defineAsyncComponent(() => import('./FeatureEditBox.vue')
 const FeatureSelectionPopup = defineAsyncComponent(() => import('./FeatureSelectionPopup.vue'))
 const ElevationProfileDialog = defineAsyncComponent(() => import('./ElevationProfileDialog.vue'))
 const QuickPointDialog = defineAsyncComponent(() => import('./QuickPointDialog.vue'))
+const ShareDialog = defineAsyncComponent(() => import('@/components/parts/ShareDialog.vue'))
 
 import {HomeIcon, ExclamationCircleIcon, ShareIcon, FolderIcon, ListBulletIcon, Cog6ToothIcon} from '@heroicons/vue/24/outline'
 import {
@@ -266,6 +279,7 @@ export default {
     FeatureEditBox,
     FeatureSelectionPopup,
     ElevationProfileDialog,
+    ShareDialog,
     MapErrorOverlay,
     MapLoadingIndicator,
     QuickPointDialog,
@@ -321,6 +335,8 @@ export default {
           return { type: 'tag', name: this.publicShareTag, isPublicShare: true }
         } else if (this.publicShareCollectionName) {
           return { type: 'collection', name: this.publicShareCollectionName, isPublicShare: true }
+        } else if (this.publicShareInfo && this.publicShareInfo.share_type === 'feature') {
+          return { type: 'feature', name: this.publicShareInfo.feature_name || 'Shared Feature', isPublicShare: true }
         }
         return null
       }
@@ -424,6 +440,8 @@ export default {
       featureCountUpdatePending: false,
       isEditingFeature: false,
       showElevationProfile: false,
+      showFeatureShareDialog: false,
+      featureToShare: null,
       hoverMarker: null,
       publicShareError: null,
       loadError: null,
@@ -992,18 +1010,28 @@ export default {
             })
 
             if (!infoResponse.ok) {
-              const errorData = await infoResponse.json()
+              const errorData = await infoResponse.json().catch(() => ({ error: 'Invalid share link' }))
               this.handlePublicShareError(errorData.error || 'Invalid share link')
               return
             }
 
             const infoData = await infoResponse.json()
+            
+            // Validate share_type is present
+            if (!infoData || !infoData.share_type) {
+              console.error('Share info response missing share_type:', infoData)
+              this.handlePublicShareError('Invalid share link: missing share type')
+              return
+            }
+            
             this.publicShareInfo = {
               share_id: this.shareId,
               share_type: infoData.share_type,
               tag: infoData.tag || null,
               collection_name: infoData.collection_name || null,
               collection_id: infoData.collection_id || null,
+              feature_name: infoData.feature_name || null,
+              feature_id: infoData.feature_id || null,
               include_tags: infoData.include_tags || false,
               allow_downloads: infoData.allow_downloads || false
             }
@@ -1014,15 +1042,36 @@ export default {
             } else if (infoData.share_type === 'collection') {
               this.publicShareCollectionName = infoData.collection_name
               this.publicShareTag = null
+            } else if (infoData.share_type === 'feature') {
+              // For feature shares, we'll load the feature directly
+              this.publicShareTag = null
+              this.publicShareCollectionName = null
             }
+          }
+
+          // Double-check publicShareInfo is set before using it
+          if (!this.publicShareInfo || !this.publicShareInfo.share_type) {
+            console.error('publicShareInfo not properly initialized:', this.publicShareInfo)
+            this.handlePublicShareError('Invalid share link: share info not available')
+            return
           }
 
           if (this.publicShareInfo.share_type === 'tag') {
             url = `${this.SHARE_API_BASE_URL}${this.shareId}/?bbox=${bboxString}&zoom=${roundedZoom}&format=protobuf`
           } else if (this.publicShareInfo.share_type === 'collection') {
             url = `/api/sharing/public/collection/${this.shareId}/?bbox=${bboxString}&zoom=${roundedZoom}&format=protobuf`
+          } else if (this.publicShareInfo.share_type === 'feature') {
+            // Feature shares return a single feature as JSON (not bbox-based)
+            // Load it once on initial load, then skip subsequent bbox requests
+            if (this.isInitialLoad) {
+              url = `/api/sharing/public/feature/${this.shareId}/`
+            } else {
+              // Already loaded, skip
+              return
+            }
           } else {
-            this.publicShareError = 'Unknown share type'
+            console.error('Unknown share type:', this.publicShareInfo.share_type, this.publicShareInfo)
+            this.publicShareError = `Unknown share type: ${this.publicShareInfo.share_type || 'undefined'}`
             return
           }
 
@@ -1030,10 +1079,21 @@ export default {
             signal: this.currentAbortController.signal
           })
           
-          // Parse response (errors are always JSON, successful responses may be protobuf)
+          // Parse response
           if (!response.ok) {
             data = await response.json()
+          } else if (this.publicShareInfo.share_type === 'feature') {
+            // Feature shares return JSON directly
+            data = await response.json()
+            // Convert to the expected format
+            data = {
+              data: {
+                type: 'FeatureCollection',
+                features: data.features || []
+              }
+            }
           } else {
+            // Tag and collection shares may be protobuf
             data = await parseBboxResponse(response)
           }
         } else {
@@ -1065,12 +1125,24 @@ export default {
         }
 
         if (data.data && data.data.features) {
-          this.loadedBounds.add(bboxKey)
+          // For feature shares, ensure we don't add to loadedBounds (since it's not bbox-based)
+          if (this.publicShareInfo && this.publicShareInfo.share_type !== 'feature') {
+            this.loadedBounds.add(bboxKey)
+          }
           this.updateFeatureCount()
           // Use markRaw to prevent Vue from making features reactive
           // This is critical for performance with complex geometries
           const rawData = markRaw(data.data)
           await this.addFeaturesToMap(rawData)
+          
+          // For feature shares, zoom to the feature after loading
+          if (this.isPublicShareMode && this.publicShareInfo && this.publicShareInfo.share_type === 'feature' && data.data.features.length > 0) {
+            const feature = markRaw(convertMapLibreFeature(data.data.features[0]))
+            await this.$nextTick()
+            await this.zoomToFeature(feature)
+            // Select the feature so it shows in the info box
+            this.selectedFeature = feature
+          }
           
           // Update features in extent list after data is loaded
           this.debouncedUpdateFeaturesInExtent()
@@ -2895,6 +2967,15 @@ export default {
     handleElevationProfileClose() {
       this.showElevationProfile = false
       this.handleHoverClear() // Clear hover marker when dialog closes
+    },
+    handleShareFeature() {
+      if (!this.selectedFeature) return
+      this.featureToShare = this.selectedFeature
+      this.showFeatureShareDialog = true
+    },
+    handleCloseFeatureShareDialog() {
+      this.showFeatureShareDialog = false
+      this.featureToShare = null
     },
     handleHoverPoint(point) {
       if (!this.map || !point) return

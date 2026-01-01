@@ -131,6 +131,14 @@
         <ArrowDownTrayIcon class="w-6 h-6 md:w-5 md:h-5" />
       </button>
       <button
+        v-if="showShareButton"
+        @click="$emit('share')"
+        class="p-1.5 md:p-2 text-gray-500 bg-white border border-gray-300 rounded-md hover:bg-blue-50 hover:text-blue-600 hover:border-blue-300 transition-all duration-200 shadow-sm hover:shadow"
+        title="Share feature"
+      >
+        <ShareIcon class="w-6 h-6 md:w-5 md:h-5" />
+      </button>
+      <button
         @click="$emit('zoom')"
         class="p-1.5 md:p-2 text-gray-500 bg-white border border-gray-300 rounded-md hover:bg-blue-50 hover:text-blue-600 hover:border-blue-300 transition-all duration-200 shadow-sm hover:shadow"
         title="Zoom to feature"
@@ -144,7 +152,7 @@
 <script>
 import { marked } from 'marked'
 import * as turf from '@turf/turf'
-import { ChartBarIcon, ArrowDownTrayIcon, PencilSquareIcon, MapPinIcon, XMarkIcon, CalendarDaysIcon } from '@heroicons/vue/24/outline'
+import { ChartBarIcon, ArrowDownTrayIcon, PencilSquareIcon, MapPinIcon, XMarkIcon, CalendarDaysIcon, ShareIcon } from '@heroicons/vue/24/outline'
 import { formatElevation, formatDistance, formatArea } from '@/utils/units'
 import { formatDate } from '@/utils/dateUtils'
 import MeasurementIcon from '@/components/icons/MeasurementIcon.vue'
@@ -161,6 +169,7 @@ export default {
     MapPinIcon,
     XMarkIcon,
     CalendarDaysIcon,
+    ShareIcon,
     MeasurementIcon,
     AreaIcon
   },
@@ -177,12 +186,16 @@ export default {
       type: Boolean,
       default: true
     },
+    showShareButton: {
+      type: Boolean,
+      default: true
+    },
     shareId: {
       type: String,
       default: null
     }
   },
-  emits: ['close', 'edit', 'zoom', 'show-profile', 'download'],
+  emits: ['close', 'edit', 'zoom', 'show-profile', 'download', 'share'],
   data() {
     return {
       shouldScroll: false,

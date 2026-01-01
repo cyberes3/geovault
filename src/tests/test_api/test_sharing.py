@@ -47,6 +47,7 @@ class TestSharingAPI(TestCase):
     def test_create_tag_share(self):
         """Test creating a tag share."""
         share_data = {
+            'share_type': 'tag',
             'tag': 'shared-tag',
             'allow_downloads': False
         }
@@ -62,7 +63,9 @@ class TestSharingAPI(TestCase):
 
     def test_create_tag_share_no_tag(self):
         """Test creating a tag share without tag."""
-        share_data = {}
+        share_data = {
+            'share_type': 'tag'
+        }
         response = self.client.post(
             '/api/sharing/create/',
             data=json.dumps(share_data),
@@ -73,6 +76,7 @@ class TestSharingAPI(TestCase):
     def test_create_tag_share_tag_not_found(self):
         """Test creating a share for non-existent tag."""
         share_data = {
+            'share_type': 'tag',
             'tag': 'nonexistent-tag'
         }
         response = self.client.post(
@@ -94,6 +98,7 @@ class TestSharingAPI(TestCase):
     def test_create_tag_share_extra_fields(self):
         """Test creating a tag share with extra fields."""
         share_data = {
+            'share_type': 'tag',
             'tag': 'shared-tag',
             'extra_field': 'should be rejected'
         }
@@ -216,13 +221,14 @@ class TestSharingAPI(TestCase):
         )
 
         share_data = {
+            'share_type': 'collection',
             'collection_id': str(collection.id),
             'allow_downloads': False,
             'include_tags': True
         }
 
         response = self.client.post(
-            '/api/sharing/collections/create/',
+            '/api/sharing/create/',
             data=json.dumps(share_data),
             content_type='application/json'
         )
@@ -234,7 +240,7 @@ class TestSharingAPI(TestCase):
     def test_create_collection_share_invalid_json(self):
         """Test creating a collection share with invalid JSON."""
         response = self.client.post(
-            '/api/sharing/collections/create/',
+            '/api/sharing/create/',
             data='invalid json',
             content_type='application/json'
         )
@@ -249,12 +255,13 @@ class TestSharingAPI(TestCase):
         )
 
         share_data = {
+            'share_type': 'collection',
             'collection_id': str(collection.id),
             'extra_field': 'should be rejected'
         }
 
         response = self.client.post(
-            '/api/sharing/collections/create/',
+            '/api/sharing/create/',
             data=json.dumps(share_data),
             content_type='application/json'
         )
@@ -263,11 +270,12 @@ class TestSharingAPI(TestCase):
     def test_create_collection_share_invalid_uuid(self):
         """Test creating a collection share with invalid UUID."""
         share_data = {
+            'share_type': 'collection',
             'collection_id': 'not-a-valid-uuid'
         }
 
         response = self.client.post(
-            '/api/sharing/collections/create/',
+            '/api/sharing/create/',
             data=json.dumps(share_data),
             content_type='application/json'
         )
@@ -276,11 +284,12 @@ class TestSharingAPI(TestCase):
     def test_create_collection_share_missing_collection_id(self):
         """Test creating a collection share without collection_id."""
         share_data = {
+            'share_type': 'collection',
             'allow_downloads': False
         }
 
         response = self.client.post(
-            '/api/sharing/collections/create/',
+            '/api/sharing/create/',
             data=json.dumps(share_data),
             content_type='application/json'
         )
@@ -339,6 +348,7 @@ class TestSharingAPI(TestCase):
         """Test that unauthorized users cannot create shares."""
         self.client.logout()
         share_data = {
+            'share_type': 'tag',
             'tag': 'shared-tag'
         }
         response = self.client.post(
