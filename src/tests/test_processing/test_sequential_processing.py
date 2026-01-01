@@ -285,7 +285,7 @@ class TestSequentialProcessing(TransactionTestCase):
             assert active_count == 1, f"Expected 1 worker, found {active_count}"
     
     def test_job_status_progression(self):
-        """Test that job statuses progress correctly: QUEUED → WAITING → PROCESSING → COMPLETED."""
+        """Test that job statuses progress correctly: QUEUED → PROCESSING → COMPLETED."""
         
         # We need to allow the real _execute_job to run so status updates happen
         # But we'll make it fast by mocking the actual file processing
@@ -329,18 +329,18 @@ class TestSequentialProcessing(TransactionTestCase):
             job1 = status_tracker.get_job(job_ids[0])
             # Just verify it exists and is in a valid state
             assert job1 is not None, "Job 1 should exist"
-            assert job1.status in [ProcessingStatus.WAITING, ProcessingStatus.PROCESSING, ProcessingStatus.COMPLETED], \
+            assert job1.status in [ProcessingStatus.QUEUED, ProcessingStatus.PROCESSING, ProcessingStatus.COMPLETED], \
                 f"Job 1 should be in a valid state, got {job1.status.value}"
             
-            # Second and third jobs should definitely be WAITING
+            # Second and third jobs should definitely be QUEUED
             # (since first job takes 0.8s total)
             job2 = status_tracker.get_job(job_ids[1])
-            assert job2.status == ProcessingStatus.WAITING, \
-                f"Job 2 should be WAITING, got {job2.status.value}"
+            assert job2.status == ProcessingStatus.QUEUED, \
+                f"Job 2 should be QUEUED, got {job2.status.value}"
             
             job3 = status_tracker.get_job(job_ids[2])
-            assert job3.status == ProcessingStatus.WAITING, \
-                f"Job 3 should be WAITING, got {job3.status.value}"
+            assert job3.status == ProcessingStatus.QUEUED, \
+                f"Job 3 should be QUEUED, got {job3.status.value}"
             
             # This is the KEY test: verify only ONE job is processing at a time
             # Check that at most one job is in PROCESSING state
@@ -368,11 +368,11 @@ class TestSequentialProcessing(TransactionTestCase):
             assert terminal_or_processing >= 1, \
                 "At least one job should be processing or complete"
             
-            # Most importantly: verify third job is still waiting
+            # Most importantly: verify third job is still queued
             # (proves sequential processing - can't all run at once)
             job3 = status_tracker.get_job(job_ids[2])
-            assert job3.status == ProcessingStatus.WAITING, \
-                f"Job 3 should still be WAITING (proves sequential processing), got {job3.status.value}"
+            assert job3.status == ProcessingStatus.QUEUED, \
+                f"Job 3 should still be QUEUED (proves sequential processing), got {job3.status.value}"
             
             # Wait for all jobs to complete
             time.sleep(3.0)
@@ -392,7 +392,7 @@ class TestSequentialProcessing(TransactionTestCase):
             assert completed_count >= 1, "At least one job should have completed"
     
     def test_websocket_status_updates(self):
-        """Test that WebSocket status updates are sent correctly for waiting/processing jobs."""
+        """Test that WebSocket status updates are sent correctly for queued/processing jobs."""
         websocket_events = []
         
         # Mock the WebSocket broadcast method
@@ -422,14 +422,14 @@ class TestSequentialProcessing(TransactionTestCase):
         # Verify WebSocket events were sent
         assert len(websocket_events) >= 2, "Should have sent at least 2 status updates"
         
-        # Both jobs should have received 'waiting' status updates
-        waiting_events = [e for e in websocket_events if e['status'] == 'waiting']
-        assert len(waiting_events) >= 2, f"Should have 2 'waiting' events, got {len(waiting_events)}"
+        # Both jobs should have received 'queued' status updates
+        queued_events = [e for e in websocket_events if e['status'] == 'queued']
+        assert len(queued_events) >= 2, f"Should have 2 'queued' events, got {len(queued_events)}"
         
-        # Verify the waiting messages
-        for event in waiting_events:
+        # Verify the queued messages
+        for event in queued_events:
             assert 'waiting' in event['message'].lower() or 'queue' in event['message'].lower(), \
-                f"Waiting message should mention waiting/queue: {event['message']}"
+                f"Queued message should mention waiting/queue: {event['message']}"
     
     def test_multiple_files_status_display(self):
         """
@@ -477,17 +477,17 @@ class TestSequentialProcessing(TransactionTestCase):
             
             # At this point:
             # - First job should be PROCESSING (blocked on the event)
-            # - Other jobs should be WAITING
+            # - Other jobs should be QUEUED
             processing_count = sum(1 for j in jobs_status if j['status'] == 'processing')
-            waiting_count = sum(1 for j in jobs_status if j['status'] == 'waiting')
+            queued_count = sum(1 for j in jobs_status if j['status'] == 'queued')
             
             # Signal processing can complete
             processing_event.set()
             
             assert processing_count == 1, \
                 f"Expected exactly 1 job PROCESSING, found {processing_count}. Statuses: {jobs_status}"
-            assert waiting_count >= 2, \
-                f"Expected at least 2 jobs WAITING, found {waiting_count}. Statuses: {jobs_status}"
+            assert queued_count >= 2, \
+                f"Expected at least 2 jobs QUEUED, found {queued_count}. Statuses: {jobs_status}"
             
             # Wait for first job to complete
             time.sleep(0.6)

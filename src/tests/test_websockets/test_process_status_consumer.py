@@ -470,7 +470,7 @@ class TestProcessStatusConsumerEvents(TransactionTestCase):
         await communicator.disconnect()
 
     async def test_waiting_status_event(self):
-        """Test that WAITING status is broadcast when processing lock is held."""
+        """Test that QUEUED status is broadcast when processing lock is held."""
         user = await database_sync_to_async(User.objects.create_user)(
             email='test@example.com',
             password='testpass123',
@@ -494,20 +494,20 @@ class TestProcessStatusConsumerEvents(TransactionTestCase):
         connected, subprotocol = await communicator.connect()
         self.assertTrue(connected)
         
-        # Simulate WAITING status event (sent by RedisProcessingLock)
+        # Simulate QUEUED status event (sent by RedisProcessingLock)
         channel_layer = get_channel_layer()
         await channel_layer.group_send(
             f"process_status_{user.id}_{import_item.id}",
             {
                 'type': 'status_updated',
                 'data': {
-                    'status': 'waiting',
-                    'message': 'Waiting for earlier file to finish processing...'
+                    'status': 'queued',
+                    'message': 'Waiting in queue for processing...'
                 }
             }
         )
         
-        # Should receive WAITING status update
+        # Should receive QUEUED status update
         try:
             response = await communicator.receive_json_from(timeout=2)
             self.assertIsInstance(response, dict)
@@ -544,15 +544,15 @@ class TestProcessStatusConsumerEvents(TransactionTestCase):
         connected, subprotocol = await communicator.connect()
         self.assertTrue(connected)
         
-        # First: WAITING status
+        # First: QUEUED status
         channel_layer = get_channel_layer()
         await channel_layer.group_send(
             f"process_status_{user.id}_{import_item.id}",
             {
                 'type': 'status_updated',
                 'data': {
-                    'status': 'waiting',
-                    'message': 'Waiting for earlier file to finish processing...'
+                    'status': 'queued',
+                    'message': 'Waiting in queue for processing...'
                 }
             }
         )
