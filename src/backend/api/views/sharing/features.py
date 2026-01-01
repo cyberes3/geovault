@@ -9,6 +9,7 @@ from api.models import TagShare, CollectionShare, FeatureShare, FeatureStore
 from api.utils.authorization import get_object_or_404_for_user
 from api.utils.responses import error_response, success_response
 from api.validation.feature_updates import validate_payload, FeatureSharePayload
+from api.views.sharing.utils import build_share_url
 from api.views.features.retrieval import (
     _extract_coordinates_with_elevation_from_geojson
 )
@@ -39,8 +40,7 @@ def create_feature_share(request, validated_data):
     existing_share = FeatureShare.objects.filter(feature=feature, user=request.user).first()
     if existing_share:
         # Return the existing share
-        base_url = request.build_absolute_uri('/').rstrip('/')
-        share_url = f"{base_url}/#/mapshare?id={existing_share.share_id}"
+        share_url = build_share_url(request, existing_share.share_id)
         
         return JsonResponse({
             'share_id': existing_share.share_id,
@@ -68,9 +68,8 @@ def create_feature_share(request, validated_data):
         allow_downloads=allow_downloads
     )
 
-    # Build full URL
-    base_url = request.build_absolute_uri('/').rstrip('/')
-    share_url = f"{base_url}/#/mapshare?id={feature_share.share_id}"
+    # Build full URL using configured site domain
+    share_url = build_share_url(request, feature_share.share_id)
 
     return JsonResponse({
         'share_id': feature_share.share_id,
@@ -96,9 +95,8 @@ def get_feature_share(request, feature_id):
     if not share:
         return error_response('No share exists for this feature', code=404)
 
-    # Build full URL
-    base_url = request.build_absolute_uri('/').rstrip('/')
-    share_url = f"{base_url}/#/mapshare?id={share.share_id}"
+    # Build full URL using configured site domain
+    share_url = build_share_url(request, share.share_id)
 
     return JsonResponse({
         'share_id': share.share_id,
@@ -141,9 +139,8 @@ def update_feature_share(request, feature_id):
         share.allow_downloads = allow_downloads
         share.save()
         
-        # Build full URL
-        base_url = request.build_absolute_uri('/').rstrip('/')
-        share_url = f"{base_url}/#/mapshare?id={share.share_id}"
+        # Build full URL using configured site domain
+        share_url = build_share_url(request, share.share_id)
         
         return JsonResponse({
             'share_id': share.share_id,

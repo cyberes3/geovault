@@ -219,7 +219,10 @@ export default {
     },
     async copyToClipboard(text) {
       try {
-        await navigator.clipboard.writeText(text);
+        // Construct full URL from path
+        const urlToCopy = `${window.location.origin}${text}`
+        
+        await navigator.clipboard.writeText(urlToCopy);
         // Find the share by URL to set copiedShareId
         const share = this.shares.find(s => s.url === text);
         if (share) {
@@ -232,7 +235,9 @@ export default {
         console.error('Error copying to clipboard:', error);
         // Fallback for older browsers
         const textArea = document.createElement('textarea');
-        textArea.value = text;
+        // Construct full URL from path
+        const urlToCopy = `${window.location.origin}${text}`
+        textArea.value = urlToCopy;
         textArea.style.position = 'fixed';
         textArea.style.opacity = '0';
         document.body.appendChild(textArea);

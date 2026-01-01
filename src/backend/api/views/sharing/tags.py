@@ -10,7 +10,7 @@ from api.utils.format_encoding import create_bbox_response
 from api.utils.responses import error_response, not_found_response
 from api.validation.feature_updates import validate_payload, TagSharePayload
 from api.views.features.bbox_utils import _build_bbox_response, _validate_bbox_params, get_features_in_bbox
-from api.views.sharing.utils import validate_share_id
+from api.views.sharing.utils import validate_share_id, build_share_url
 from geo_lib.logging.console import get_tagged_logger
 from geo_lib.website.auth import api_or_login_required_401
 from website.settings_utils import get_required_setting
@@ -64,9 +64,8 @@ def create_share(request, validated_data):
         allow_downloads=allow_downloads
     )
 
-    # Build full URL
-    base_url = request.build_absolute_uri('/').rstrip('/')
-    share_url = f"{base_url}/#/mapshare?id={tag_share.share_id}"
+    # Build full URL using configured site domain
+    share_url = build_share_url(request, tag_share.share_id)
 
     return JsonResponse({
         'share_id': tag_share.share_id,

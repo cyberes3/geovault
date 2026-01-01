@@ -9,6 +9,7 @@ from api.models import TagShare, CollectionShare, FeatureShare, FeatureStore, Co
 from api.utils.authorization import get_object_or_404_for_user
 from api.utils.responses import error_response, success_response, not_found_response
 from api.validation.feature_updates import validate_payload, UnifiedSharePayload
+from api.views.sharing.utils import build_share_url
 from geo_lib.logging.console import get_tagged_logger
 from geo_lib.website.auth import api_or_login_required_401
 from website.settings_utils import get_required_setting
@@ -34,7 +35,6 @@ def create_share(request, validated_data):
     """
     share_type = validated_data['share_type']
     allow_downloads = validated_data.get('allow_downloads', False)
-    base_url = request.build_absolute_uri('/').rstrip('/')
     
     if share_type == 'tag':
         tag = validated_data.get('tag')
@@ -72,7 +72,7 @@ def create_share(request, validated_data):
             allow_downloads=allow_downloads
         )
         
-        share_url = f"{base_url}/#/mapshare?id={tag_share.share_id}"
+        share_url = build_share_url(request, tag_share.share_id)
         return JsonResponse({
             'share_id': tag_share.share_id,
             'url': share_url,
@@ -106,7 +106,7 @@ def create_share(request, validated_data):
             allow_downloads=allow_downloads
         )
         
-        share_url = f"{base_url}/#/mapshare?id={collection_share.share_id}"
+        share_url = build_share_url(request, collection_share.share_id)
         return JsonResponse({
             'share_id': collection_share.share_id,
             'url': share_url,
@@ -126,7 +126,7 @@ def create_share(request, validated_data):
         # Check if a share already exists for this feature
         existing_share = FeatureShare.objects.filter(feature=feature, user=request.user).first()
         if existing_share:
-            share_url = f"{base_url}/#/mapshare?id={existing_share.share_id}"
+            share_url = build_share_url(request, existing_share.share_id)
             return JsonResponse({
                 'share_id': existing_share.share_id,
                 'url': share_url,
@@ -149,7 +149,7 @@ def create_share(request, validated_data):
             allow_downloads=allow_downloads
         )
         
-        share_url = f"{base_url}/#/mapshare?id={feature_share.share_id}"
+        share_url = build_share_url(request, feature_share.share_id)
         return JsonResponse({
             'share_id': feature_share.share_id,
             'url': share_url,
@@ -169,13 +169,12 @@ def list_shares(request):
     Returns list of shares with share_id, share_type, tag/collection/feature info, created_at, access_count, url
     Sorted by created_at descending (newest first).
     """
-    base_url = request.build_absolute_uri('/').rstrip('/')
     shares_list = []
 
     # Get tag shares
     tag_shares = TagShare.objects.filter(user=request.user)
     for share in tag_shares:
-        share_url = f"{base_url}/#/mapshare?id={share.share_id}"
+        share_url = build_share_url(request, share.share_id)
         shares_list.append({
             'share_id': share.share_id,
             'share_type': 'tag',
@@ -189,7 +188,7 @@ def list_shares(request):
     # Get collection shares
     collection_shares = CollectionShare.objects.filter(user=request.user).select_related('collection')
     for share in collection_shares:
-        share_url = f"{base_url}/#/mapshare?id={share.share_id}"
+        share_url = build_share_url(request, share.share_id)
         shares_list.append({
             'share_id': share.share_id,
             'share_type': 'collection',
@@ -205,7 +204,7 @@ def list_shares(request):
     # Get feature shares
     feature_shares = FeatureShare.objects.filter(user=request.user).select_related('feature')
     for share in feature_shares:
-        share_url = f"{base_url}/#/mapshare?id={share.share_id}"
+        share_url = build_share_url(request, share.share_id)
         # Get feature name from geojson properties
         feature_name = share.feature.geojson.get('properties', {}).get('name', 'Unnamed Feature')
         shares_list.append({

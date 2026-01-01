@@ -677,7 +677,10 @@ export default {
     },
     async copyToClipboard(text, shareId) {
       try {
-        await navigator.clipboard.writeText(text)
+        // Construct full URL from path
+        const urlToCopy = `${window.location.origin}${text}`
+        
+        await navigator.clipboard.writeText(urlToCopy)
         if (shareId) {
           this.copiedShareId = shareId
           setTimeout(() => {
