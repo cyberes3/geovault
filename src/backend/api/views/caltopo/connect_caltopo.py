@@ -96,19 +96,46 @@ def connect_caltopo(request: HttpRequest, validated_data: Dict[str, Any]) -> Jso
 @require_http_methods(["GET"])
 def get_caltopo_status(request: HttpRequest) -> JsonResponse:
     """
-    Check if the current user has connected CalTopo.
+    Check if the current user has connected CalTopo and validate credentials.
     
     GET /api/caltopo/status/
     """
     try:
-        CalTopoUser.objects.get(user=request.user)
-        return success_response({
-            'connected': True
-        })
+        caltopo_user = CalTopoUser.objects.get(user=request.user)
     except CalTopoUser.DoesNotExist:
         return success_response({
             'connected': False
         })
+    
+    # Validate credentials by attempting to get account data
+    session = get_caltopo_session(request.user)
+    if not session:
+        # Credentials exist but session creation failed - mark as not connected
+        return success_response({
+            'connected': False
+        })
+    
+    # Verify credentials work - wrap getAccountData call to handle timeouts
+    def verify_account_data():
+        """Wrapper to convert ReadTimeout/Timeout to CalTopoTimeoutError."""
+        try:
+            return session.getAccountData()
+        except (ReadTimeout, Timeout) as e:
+            from geo_lib.services.caltopo_service import CalTopoTimeoutError
+            raise CalTopoTimeoutError("CalTopo API request timed out") from e
+    
+    account_data, error_resp = handle_caltopo_call(verify_account_data)
+    if error_resp:
+        # Credentials exist but validation failed (timeout or other error)
+        # Return connected: false since credentials are invalid
+        return success_response({
+            'connected': False
+        })
+    
+    # Credentials exist and are valid
+    return success_response({
+        'connected': True
+    })
 
 
 @api_or_login_required_401()

@@ -18,8 +18,8 @@
 
       <div class="space-y-6">
         <!-- Loading Spinner -->
-        <div v-if="connectionStatus.checking" class="p-8">
-          <Loader size="md" layout="centered" message="Checking CalTopo connection status..." />
+        <div v-if="connectionStatus.checking" class="p-4">
+          <Loader size="sm" layout="inline" message="Checking CalTopo connection status..." :showMessage="true" />
         </div>
 
         <!-- Connection Status -->
@@ -150,13 +150,13 @@
         </div>
 
         <!-- Maps and Features Section -->
-        <div v-if="connectionStatus.connected" class="border-t border-gray-200 pt-6">
+        <div v-if="connectionStatus.connected || connectionStatus.checking" class="border-t border-gray-200 pt-6">
           <h3 class="text-lg font-semibold text-gray-900 mb-4">Import from CalTopo</h3>
       
       <!-- Maps List -->
       <div class="mb-6">
         <label class="block text-sm font-medium text-gray-700 mb-2">Select a Map</label>
-        <div v-if="loadingMaps" class="py-8 border border-gray-200 rounded-md bg-gray-50">
+        <div v-if="loadingMaps && !connectionStatus.checking" class="py-8 border border-gray-200 rounded-md bg-gray-50">
           <Loader size="md" layout="centered" message="Loading maps..." />
         </div>
         <div v-else-if="loadingFeatures && selectedMapId" class="py-8 border border-gray-200 rounded-md">
@@ -166,9 +166,15 @@
           v-else
           v-model="selectedMapId"
           @change="handleMapSelect"
-          class="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500"
+          :disabled="connectionStatus.checking"
+          :class="[
+            'w-full px-3 py-2 border rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500',
+            connectionStatus.checking 
+              ? 'border-gray-200 bg-gray-100 text-gray-400 cursor-not-allowed' 
+              : 'border-gray-300'
+          ]"
         >
-          <option value="">-- Select a map --</option>
+          <option value="">{{ connectionStatus.checking ? 'Loading...' : '-- Select a map --' }}</option>
           <option v-for="map in maps" :key="map.id" :value="map.id">
             {{ map.title || map.id }}
           </option>
@@ -224,7 +230,18 @@
         </div>
       </div>
 
-      <div v-else-if="selectedMapId && !loadingFeatures && features.length === 0" class="text-sm text-gray-500">
+      <!-- Error Message -->
+      <div v-else-if="selectedMapId && featureLoadError" class="p-4 bg-red-50 border border-red-200 rounded-md">
+        <div class="flex items-center gap-2">
+          <svg class="h-5 w-5 text-red-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
+          </svg>
+          <span class="text-sm text-red-800">{{ featureLoadError }}</span>
+        </div>
+      </div>
+      
+      <!-- No Features Message -->
+      <div v-else-if="selectedMapId && !loadingFeatures && features.length === 0 && !featureLoadError" class="text-sm text-gray-500">
         No features found in this map.
       </div>
         </div>
@@ -289,10 +306,10 @@ export default {
       mapInQueue: false,
       apiStatus: {
         'Status Check': 'idle',
-        'List Maps': 'idle',
-        'Get Features': 'idle'
+        'List Maps': 'idle'
       },
-      apiErrors: {}
+      apiErrors: {},
+      featureLoadError: null
     }
   },
   async created() {
@@ -316,18 +333,21 @@ export default {
           const data = await response.json()
           this.connectionStatus.connected = data.connected || false
           this.apiStatus['Status Check'] = 'success'
+          // Set checking to false immediately so "Connected to CalTopo" box appears
+          this.connectionStatus.checking = false
+          // Load maps asynchronously without blocking
           if (this.connectionStatus.connected) {
-            await this.checkApiStatus()
+            this.checkApiStatus()
           }
         } else {
           this.apiStatus['Status Check'] = 'error'
           this.apiErrors['Status Check'] = `HTTP ${response.status}`
+          this.connectionStatus.checking = false
         }
       } catch (error) {
         console.error('Error checking CalTopo status:', error)
         this.apiStatus['Status Check'] = 'error'
         this.apiErrors['Status Check'] = error.message
-      } finally {
         this.connectionStatus.checking = false
       }
     },
@@ -453,6 +473,7 @@ export default {
       if (!this.selectedMapId) {
         this.features = []
         this.mapInQueue = false
+        this.featureLoadError = null
         return
       }
       
@@ -463,12 +484,10 @@ export default {
       await this.loadFeatures()
     },
     async loadFeatures() {
-      const endpointKey = 'Get Features'
-      this.apiStatus[endpointKey] = 'loading'
-      this.apiErrors[endpointKey] = null
       this.loadingFeatures = true
       this.features = []
       this.mapInQueue = false
+      this.featureLoadError = null
       
       try {
         const response = await fetch(`${APIHOST}/api/caltopo/maps/${this.selectedMapId}/features/`, {
@@ -483,22 +502,19 @@ export default {
           const data = await response.json()
           this.features = data.features || []
           this.mapInQueue = data.is_in_queue || false
-          this.apiStatus[endpointKey] = 'success'
         } else {
           const errorData = await response.json().catch(() => ({}))
-          this.apiStatus[endpointKey] = 'error'
           // Check for CalTopo timeout error
           if (errorData.details && errorData.details.error_code === 'CALTOPO_TIMEOUT') {
-            this.apiErrors[endpointKey] = 'CalTopo request timed out. Please reload the page and try again.'
+            this.featureLoadError = 'CalTopo request timed out. Please reload the page and try again.'
           } else {
-            this.apiErrors[endpointKey] = errorData.error || `HTTP ${response.status}`
+            this.featureLoadError = errorData.error || `HTTP ${response.status}`
           }
           this.mapInQueue = false
           console.error('Failed to load features:', errorData)
         }
       } catch (error) {
-        this.apiStatus[endpointKey] = 'error'
-        this.apiErrors[endpointKey] = error.message
+        this.featureLoadError = error.message
         this.mapInQueue = false
         console.error('Error loading features:', error)
       } finally {
