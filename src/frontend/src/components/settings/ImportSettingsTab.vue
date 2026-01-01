@@ -19,7 +19,10 @@
       <div class="space-y-6">
         <!-- Loading Spinner -->
         <div v-if="connectionStatus.checking" class="p-4">
-          <Loader size="sm" layout="inline" message="Checking CalTopo connection status..." :showMessage="true" />
+          <div class="flex items-center justify-between">
+            <Loader size="sm" layout="inline" message="Checking CalTopo connection status..." :showMessage="true" />
+            <div class="h-[2.25rem]"></div>
+          </div>
         </div>
 
         <!-- Connection Status: Connected -->
