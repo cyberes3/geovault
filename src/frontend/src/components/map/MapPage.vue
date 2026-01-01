@@ -15,7 +15,7 @@
         @feature-click="zoomToFeature"
         @feature-hide="handleHideFeature"
         @tag-filter-change="handleTagFilterChange"
-        @tag-filter-loading-change="isTagFilterLoading = $event"
+        @tag-filter-loading-change="isDataLoading = $event"
         @tag-filter-start="filterExistingFeaturesByTags"
         @geocoding-result-click="handleGeocodingResult"
         @geocoding-clear="clearGeocodingMarker"
@@ -83,7 +83,7 @@
 
         <!-- Loading Indicator -->
         <MapLoadingIndicator
-            :is-loading="isMapInitializing || isDataLoading || isRestoring || isTagFilterLoading"
+            :is-loading="isDataLoading"
             :is-public-share-mode="isPublicShareMode"
         />
 
@@ -456,8 +456,6 @@ export default {
       collectionName: null,
       isCollectionMode: false,
       availableTags: [],
-      isRestoring: false,
-      isTagFilterLoading: false,
       sidebarKey: 0,
       activeMobileSidebar: null,
       mapWasDestroyed: false,
@@ -991,7 +989,6 @@ export default {
 
       // Create new AbortController
       this.currentAbortController = new AbortController()
-      this.isDataLoading = true
       this.loadError = null
 
       try {
@@ -1004,6 +1001,8 @@ export default {
           if (!this.shareId) return
 
           if (!this.publicShareInfo || this.publicShareInfo.share_id !== this.shareId) {
+            // Set loading state before fetching share info
+            this.isDataLoading = true
             const infoUrl = `/api/sharing/public/info/${this.shareId}/`
             const infoResponse = await fetch(infoUrl, {
               signal: this.currentAbortController.signal
@@ -1075,6 +1074,8 @@ export default {
             return
           }
 
+          // Set loading state right before making the network call
+          this.isDataLoading = true
           response = await fetch(url, {
             signal: this.currentAbortController.signal
           })
@@ -1102,6 +1103,8 @@ export default {
             url += `&collection=${this.collectionId}`
           }
 
+          // Set loading state right before making the network call
+          this.isDataLoading = true
           response = await fetch(url, {
             signal: this.currentAbortController.signal
           })
@@ -3250,6 +3253,7 @@ export default {
         return
       }
 
+      this.isDataLoading = true
       try {
         const collectionResponse = await fetch(`${APIHOST}/api/collections/${collectionId}/`)
 
@@ -3287,6 +3291,8 @@ export default {
         this.loadedBounds.clear()
         this.featureTimestamps = {}
         await this.loadDataForCurrentView()
+      } finally {
+        this.isDataLoading = false
       }
     },
     async handleUrlFeatureId() {
@@ -3477,7 +3483,7 @@ export default {
       if (this.map) return
 
       this.isMapInitializing = true
-      this.isRestoring = true
+      this.isDataLoading = true
 
       // Ensure map container is available (with retry for hot reload scenarios)
       await this.$nextTick()
@@ -3488,7 +3494,7 @@ export default {
       } catch (error) {
         console.error('Map container not available for restore:', error.message)
         this.isMapInitializing = false
-        this.isRestoring = false
+        this.isDataLoading = false
         return
       }
 
@@ -3558,12 +3564,13 @@ export default {
         this.loadError = error.message || 'Failed to restore map'
       } finally {
         this.isMapInitializing = false
-        this.isRestoring = false
+        // isDataLoading will be cleared by loadDataForCurrentView or handleCollectionFilter
       }
     },
   },
   async mounted() {
     this.isMapInitializing = true
+    this.isDataLoading = true
 
     // Initialize featureTimestamps as empty object
     this.featureTimestamps = {}
@@ -3588,6 +3595,7 @@ export default {
     } catch (error) {
       console.error('Map container not available:', error.message)
       this.isMapInitializing = false
+      this.isDataLoading = false
       this.loadError = 'Map container failed to initialize. Please refresh the page.'
       return
     }
@@ -3617,6 +3625,7 @@ export default {
       console.error('Error initializing map:', error)
       this.loadError = error.message || 'Failed to initialize map. Please refresh the page.'
       this.isMapInitializing = false
+      this.isDataLoading = false
       return
     }
 
@@ -3692,6 +3701,9 @@ export default {
     this.logMapState()
   },
   activated() {
+    // Set loading state immediately when navigating back to the page
+    this.isDataLoading = true
+
     // Clear current features and feature-related state
     if (this.map && this.map.getSource('geojson-data')) {
       const source = this.map.getSource('geojson-data')
@@ -3707,7 +3719,6 @@ export default {
     // Clear any active tag filter state
     this.isTagFilterActive = false
     this.tagFilteredFeatures = []
-    this.isTagFilterLoading = false
 
     // Treat this as a fresh initial load
     this.isInitialLoad = true
@@ -3736,9 +3747,7 @@ export default {
         this.handleUrlFeatureId()
       } else if (!hasTagQuery) {
         // Normal view - reload bbox data
-        this.isMapInitializing = true
         this.loadDataForCurrentView().then(() => {
-          this.isMapInitializing = false
           this.updateFeaturesInExtent()
           // Resize map after data loads (wait for idle since data is loading)
           if (this.map) {
