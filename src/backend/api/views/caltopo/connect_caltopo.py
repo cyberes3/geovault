@@ -59,8 +59,9 @@ def connect_caltopo(request: HttpRequest, validated_data: Dict[str, Any]) -> Jso
     )
 
     # Test the connection by trying to get account data
-    session = get_caltopo_session(request.user)
-    if not session:
+    try:
+        session = get_caltopo_session(request.user)
+    except CalTopoUser.DoesNotExist:
         return error_response('Failed to create CalTopo session with provided credentials', code=400)
 
     # Verify credentials work - wrap getAccountData call to handle timeouts
@@ -116,12 +117,14 @@ def get_caltopo_status(request: HttpRequest) -> JsonResponse:
         })
 
     # Validate credentials by attempting to get account data
-    session = get_caltopo_session(request.user)
-    if not session:
-        # Credentials exist but session creation failed - invalid credentials
+    try:
+        session = get_caltopo_session(request.user)
+    except CalTopoUser.DoesNotExist:
+        # This shouldn't happen since we already checked for caltopo_user above
+        # But handle it gracefully just in case
         return success_response({
             'connected': False,
-            'status': 'invalid'
+            'status': 'not_connected'
         })
 
     # Verify credentials work - check for timeout separately

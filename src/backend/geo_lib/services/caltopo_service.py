@@ -23,7 +23,7 @@ class CalTopoTimeoutError(Exception):
     pass
 
 
-def get_caltopo_session(user) -> Optional[CaltopoSession]:
+def get_caltopo_session(user) -> CaltopoSession:
     """
     Get or create a CaltopoSession for a user.
     
@@ -31,12 +31,12 @@ def get_caltopo_session(user) -> Optional[CaltopoSession]:
         user: Django User object
         
     Returns:
-        CaltopoSession instance or None if credentials not configured
+        CaltopoSession instance
+        
+    Raises:
+        CalTopoUser.DoesNotExist: If credentials are not configured
     """
-    try:
-        caltopo_user = CalTopoUser.objects.get(user=user)
-    except CalTopoUser.DoesNotExist:
-        return None
+    caltopo_user = CalTopoUser.objects.get(user=user)
 
     return CaltopoSession(
         domainAndPort='caltopo.com',
@@ -59,9 +59,11 @@ def list_maps(user) -> List[Dict[str, Any]]:
         
     Raises:
         CalTopoTimeoutError: If the CalTopo API request times out
+        CalTopoUser.DoesNotExist: If credentials are not configured
     """
-    session = get_caltopo_session(user)
-    if not session:
+    try:
+        session = get_caltopo_session(user)
+    except CalTopoUser.DoesNotExist:
         return []
 
     try:
@@ -92,9 +94,11 @@ def get_map_features(user, map_id: str) -> Optional[List[Dict[str, Any]]]:
         
     Raises:
         CalTopoTimeoutError: If the CalTopo API request times out
+        CalTopoUser.DoesNotExist: If credentials are not configured
     """
-    session = get_caltopo_session(user)
-    if not session:
+    try:
+        session = get_caltopo_session(user)
+    except CalTopoUser.DoesNotExist:
         return None
 
     try:
@@ -129,9 +133,11 @@ def get_feature(user, map_id: str, feature_id: str, feature_class: str) -> Optio
         
     Raises:
         CalTopoTimeoutError: If the CalTopo API request times out
+        CalTopoUser.DoesNotExist: If credentials are not configured
     """
-    session = get_caltopo_session(user)
-    if not session:
+    try:
+        session = get_caltopo_session(user)
+    except CalTopoUser.DoesNotExist:
         return None
 
     try:

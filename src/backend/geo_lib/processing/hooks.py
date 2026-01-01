@@ -27,7 +27,7 @@ def register_import_hook(hook_id: str, callback: Callable) -> None:
                   callback(import_item: ImportQueue, user_id: int, created_features: List[FeatureStore]) -> None
     """
     if not callable(callback):
-        raise ValueError(f"Hook callback for '{hook_id}' must be callable")
+        raise TypeError(f"Hook callback for '{hook_id}' must be callable")
     
     # Check if hook_id already exists
     existing_ids = [hook_id for h_id, _ in _import_hooks]
