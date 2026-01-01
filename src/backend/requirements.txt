@@ -21,4 +21,5 @@ pytest==9.0.1
 pytest-django==4.11.1
 coordinate-parser==0.1.1
 geobuf==2.0.0
-django-cryptography==1.1
+cryptography==46.0.3
+caltopo_python==1.0.0

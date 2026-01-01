@@ -10,6 +10,7 @@ from geo_lib.processing.file_types import FileType
 from geo_lib.processing.file_types import detect_file_type
 from geo_lib.processing.jobs.helpers.status_tracker import ProcessingStatusTracker
 from .base_processor import BaseProcessor
+from .geojson_processor import GeoJSONProcessor
 from .gpx_processor import GPXProcessor
 from .kml_processor import KMLProcessor
 from .kmz_processor import KMZProcessor
@@ -42,9 +43,10 @@ def get_processor(file_data: Union[bytes, str], filename: str = "",
     file_type = detect_file_type(file_data, filename)
 
     # Check if file extension is supported (more reliable than content detection for unknown files)
+    # Note: GeoJSON processing is allowed, but .geojson uploads are blocked in basic_file_security_check
     if filename:
         _, ext = os.path.splitext(filename.lower())
-        supported_extensions = ['.kml', '.kmz', '.gpx']
+        supported_extensions = ['.kml', '.kmz', '.gpx', '.geojson', '.json']
         if ext and ext not in supported_extensions:
             raise ValueError(f"Unsupported file type: {ext}")
 
@@ -57,5 +59,8 @@ def get_processor(file_data: Union[bytes, str], filename: str = "",
     elif file_type == FileType.GPX:
         return GPXProcessor(file_data, filename, job_id=job_id, status_tracker=status_tracker,
                             minimal_processing=minimal_processing, user_id=user_id, import_queue_id=import_queue_id)
+    elif file_type == FileType.GEOJSON:
+        return GeoJSONProcessor(file_data, filename, job_id=job_id, status_tracker=status_tracker,
+                                minimal_processing=minimal_processing, user_id=user_id, import_queue_id=import_queue_id)
     else:
         raise ValueError(f"Unsupported file type: {file_type}")

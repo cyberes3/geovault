@@ -107,6 +107,8 @@ class BaseProcessor(ABC):
             file_type = self.detect_file_type()
             if file_type == FileType.KMZ:
                 content_type = 'application/zip'
+            elif file_type == FileType.GEOJSON:
+                content_type = 'application/json'
             else:
                 content_type = 'text/xml'
 

@@ -158,7 +158,7 @@ class ImportJob(BaseJob):
         )
 
         # Import to database using shared utility
-        successful_imports, duplicates_skipped = bulk_create_features_with_fallback(
+        successful_imports, duplicates_skipped, created_features = bulk_create_features_with_fallback(
             features_to_create, user_id
         )
 
@@ -180,8 +180,8 @@ class ImportJob(BaseJob):
 
         # Only mark as imported and proceed with cleanup if at least one feature was successfully created
         if successful_imports > 0:
-            # Finalize import using shared utility
-            finalize_import_item(import_item, user_id)
+            # Finalize import using shared utility (pass created_features for hooks)
+            finalize_import_item(import_item, user_id, created_features)
 
             # Mark job as completed
             self.status_tracker.update_job_status(

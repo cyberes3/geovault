@@ -16,6 +16,7 @@ class FileType(Enum):
     KML = "kml"
     KMZ = "kmz"
     GPX = "gpx"
+    GEOJSON = "geojson"
 
 
 @dataclass
@@ -104,6 +105,24 @@ FILE_TYPE_CONFIGS: Dict[FileType, FileTypeConfig] = {
         max_size=settings.FILE_UPLOAD_MAX_MEMORY_SIZE,
         xml_root_elements=['gpx'],
         allowed_elements=['trk', 'rte', 'wpt', 'name', 'desc', 'time', 'ele']
+    ),
+    
+    FileType.GEOJSON: FileTypeConfig(
+        file_type=FileType.GEOJSON,
+        extensions=['.geojson', '.json'],  # Note: .geojson uploads are blocked, but processing is allowed
+        signatures=[
+            b'{',  # JSON object start
+            b'[',  # JSON array start (for FeatureCollection)
+        ],
+        mime_types=[
+            'application/json',
+            'application/geo+json',
+            'application/vnd.geo+json',
+            'text/json'
+        ],
+        max_size=settings.FILE_UPLOAD_MAX_MEMORY_SIZE,
+        xml_root_elements=[],  # Not XML
+        allowed_elements=[]  # Not XML
     )
 }
 
@@ -144,12 +163,25 @@ def get_file_type_by_signature(file_data: bytes) -> FileType:
     # Check for more specific signatures first (root elements) before generic XML
     # This prevents GPX files from being misidentified as KML
     file_data_lower = file_data.lower()
+    
+    # Strip whitespace for JSON detection
+    file_data_stripped = file_data.lstrip()
 
     # Check for root elements first (most specific)
     if b'<gpx' in file_data_lower or b'<GPX' in file_data:
         return FileType.GPX
     if b'<kml' in file_data_lower or b'<KML' in file_data:
         return FileType.KML
+    
+    # Check for GeoJSON (JSON object or array)
+    if file_data_stripped.startswith(b'{') or file_data_stripped.startswith(b'['):
+        # Verify it's valid JSON by checking for GeoJSON keywords
+        try:
+            content = file_data.decode('utf-8').strip()
+            if '"type"' in content and ('"Feature"' in content or '"FeatureCollection"' in content):
+                return FileType.GEOJSON
+        except (UnicodeDecodeError, AttributeError):
+            pass  # Not valid UTF-8, continue to other checks
 
     # Then check other signatures
     for file_type, config in FILE_TYPE_CONFIGS.items():
@@ -282,6 +314,12 @@ def detect_file_type(file_data: Union[bytes, str], filename: str = "") -> FileTy
     elif content_lower.startswith('<?xml'):
         # Generic XML - default to KML
         return FileType.KML
+    
+    # Check for GeoJSON
+    content_stripped = content.strip()
+    if (content_stripped.startswith('{') or content_stripped.startswith('[')) and \
+       '"type"' in content_lower and ('"feature"' in content_lower or '"featurecollection"' in content_lower):
+        return FileType.GEOJSON
 
     # Default to KML if we can't determine
     return FileType.KML

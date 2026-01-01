@@ -133,7 +133,7 @@ def process_features_for_import(
 def bulk_create_features_with_fallback(
         features_to_create: List[FeatureStore],
         user_id: int
-) -> Tuple[int, int]:
+) -> Tuple[int, int, List[FeatureStore]]:
     """
     Attempt to bulk create features, falling back to individual saves on failure.
     Shared utility used by both single and bulk import jobs.
@@ -143,18 +143,22 @@ def bulk_create_features_with_fallback(
         user_id: User ID for logging purposes
         
     Returns:
-        Tuple of (successful_imports, duplicates_skipped)
+        Tuple of (successful_imports, duplicates_skipped, created_objects)
+        created_objects: List of FeatureStore objects that were successfully created
     """
     successful_imports = 0
     duplicates_skipped = 0
+    created_objects: List[FeatureStore] = []
 
     if not features_to_create:
-        return 0, 0
+        return 0, 0, []
 
     try:
         bulk_batch_size = get_required_setting('BULK_CREATE_BATCH_SIZE')
         FeatureStore.objects.bulk_create(features_to_create, batch_size=bulk_batch_size)
         successful_imports = len(features_to_create)
+        # After bulk_create, objects have their IDs assigned
+        created_objects = features_to_create
     except:
         _logger.warning(f"Bulk import failed for user {user_id}, falling back to individual imports: {traceback.format_exc()}")
 
@@ -163,6 +167,7 @@ def bulk_create_features_with_fallback(
             try:
                 feature.save()
                 successful_imports += 1
+                created_objects.append(feature)
             except IntegrityError as e:
                 # Hash collision - feature already exists for this user
                 if 'unique_user_geojson_hash' in str(e).lower():
@@ -174,10 +179,14 @@ def bulk_create_features_with_fallback(
             except:
                 _logger.error(f"Error creating individual feature for user {user_id}: {traceback.format_exc()}")
 
-    return successful_imports, duplicates_skipped
+    return successful_imports, duplicates_skipped, created_objects
 
 
-def finalize_import_item(import_item: ImportQueue, user_id: int) -> None:
+def finalize_import_item(
+    import_item: ImportQueue,
+    user_id: int,
+    created_features: Optional[List[FeatureStore]] = None
+) -> None:
     """
     Mark import item as imported and clean up temporary data.
     Shared utility used by both single and bulk import jobs.
@@ -185,6 +194,7 @@ def finalize_import_item(import_item: ImportQueue, user_id: int) -> None:
     Args:
         import_item: The ImportQueue item to finalize
         user_id: User ID for broadcasting
+        created_features: Optional list of FeatureStore objects that were created
     """
     import_item.imported = True
 
@@ -197,6 +207,12 @@ def finalize_import_item(import_item: ImportQueue, user_id: int) -> None:
     import_item.log_id = None
 
     import_item.save()
+
+    # Execute import hooks if any are registered
+    if created_features is None:
+        created_features = []
+    from geo_lib.processing.hooks import execute_import_hooks
+    execute_import_hooks(import_item, user_id, created_features)
 
     # Broadcast WebSocket event
     broadcast_item_imported(user_id, import_item.id)

@@ -153,10 +153,6 @@ def _build_bbox_response(features: List[Dict], total_count: int, zoom_level: int
     # Add any extra fields
     response_data.update(extra_fields)
 
-    # Add warning if features were limited by configuration
-    if 0 < max_features < total_count:
-        response_data['warning'] = f'Displaying {len(features)} of {total_count} features due to MAX_FEATURES_PER_REQUEST limit ({max_features})'
-
     return response_data
 
 
@@ -320,7 +316,7 @@ def _build_bbox_sql_query(
     params.insert(0, user_id)
 
     # AGGRESSIVE: Single simple query, no count, no CTE, no window functions
-    # We'll use len() for count - much faster than database COUNT
+    # We'll use len() for count - much faster than database COUNT query
     if max_features > 0:
         sql_query = f"""
             SELECT id, geojson, geojson_hash
@@ -469,6 +465,7 @@ def get_features_in_bbox(bbox: Tuple[float, float, float, float], user_id: int, 
         return BboxQueryResult(features=[], total_count=0, fallback_used=False)
 
     # Execute query and parse results
+    # When max_features > 0, the query includes COUNT(*) OVER() to get total in same query
     geojson_features, total_count = _execute_bbox_query_and_parse(
         sql_query, params, public_safe, include_tags, allow_downloads
     )

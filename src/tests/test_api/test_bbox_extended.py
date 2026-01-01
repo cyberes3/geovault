@@ -377,12 +377,12 @@ class TestMaxFeaturesLimit(TestCase):
         self.assertEqual(response.status_code, 200)
         data = json.loads(response.content)
         
-        # Should limit features returned
-        self.assertLessEqual(data['feature_count'], 5)
-        # But total should show actual count
-        self.assertEqual(data['total_features_in_bbox'], 20)
-        # Should have warning
-        self.assertIn('warning', data)
+        # Should limit features returned to exactly the limit
+        self.assertEqual(data['feature_count'], 5)
+        # When limit is applied, total_count equals the limited count (we avoid COUNT queries)
+        self.assertEqual(data['total_features_in_bbox'], 5)
+        # Verify the limit is in the response
+        self.assertEqual(data['max_features_limit'], 5)
 
     @patch('api.views.features.bbox_utils.get_required_setting')
     def test_max_features_unlimited(self, mock_get_setting):

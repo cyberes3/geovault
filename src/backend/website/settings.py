@@ -220,6 +220,19 @@ CACHES = {
         },
         'KEY_PREFIX': 'reverse_geocode',
         'TIMEOUT': 30 * 24 * 60 * 60,  # 30 days default timeout
+    },
+    # Redis cache for rate limiting (works across multiple processes)
+    # Uses a different Redis DB for rate limiting counters
+    'rate_limiting': {
+        'BACKEND': 'django_redis.cache.RedisCache',
+        'LOCATION': f"redis://{config.get_str('redis.host', '127.0.0.1')}:{config.get_int('redis.port', 6379)}/2",
+        'OPTIONS': {
+            'CLIENT_CLASS': 'django_redis.client.DefaultClient',
+            'SOCKET_CONNECT_TIMEOUT': 2,  # 2 second timeout for connection
+            'SOCKET_TIMEOUT': 2,  # 2 second timeout for operations
+        },
+        'KEY_PREFIX': 'ratelimit',
+        'TIMEOUT': 60,  # Rate limit counters expire after 60 seconds
     }
 }
 
@@ -480,12 +493,18 @@ LOGGING = {
             'datefmt': '%Y-%m-%d %H:%M:%S',
         },
     },
+    'filters': {
+        'suppress_caltopo': {
+            '()': 'website.logging_filters.SuppressCaltopoFilter',
+        },
+    },
     'handlers': {
         'console': {
             'level': 'DEBUG',
             'class': 'logging.StreamHandler',
             'formatter': 'console',
             'stream': 'ext://sys.stdout',
+            'filters': ['suppress_caltopo'],
         },
     },
     'loggers': {
@@ -574,6 +593,12 @@ LOGGING = {
             'propagate': False,
         },
         'twisted': {
+            'handlers': [],
+            'level': 'WARNING',
+            'propagate': False,
+        },
+        # Disable caltopo_python library logging
+        'caltopo_python': {
             'handlers': [],
             'level': 'WARNING',
             'propagate': False,

@@ -335,6 +335,10 @@ import json
 from functools import wraps
 from typing import Type
 
+from pydantic import BaseModel, ValidationError
+
+from api.utils.responses import error_response
+
 
 def validate_pydantic_model(model_class: Type[BaseModel], data: Dict[str, Any]) -> Dict[str, Any]:
     """
@@ -381,7 +385,6 @@ def validate_payload(model_class: Type[BaseModel], allow_empty: bool = False):
     def decorator(view_func):
         @wraps(view_func)
         def wrapper(request, *args, **kwargs):
-
             # Handle empty body - check for truly empty or just boundary markers
             # Django Test Client may send boundary markers even with no actual content
             body = request.body
@@ -413,8 +416,11 @@ def validate_payload(model_class: Type[BaseModel], allow_empty: bool = False):
                     validated_data = validate_pydantic_model(model_class, data)
                     kwargs['validated_data'] = validated_data
                     return view_func(request, *args, **kwargs)
-                except ValidationError:
-                    return error_response('Invalid request format', code=400)
+                except ValidationError as e:
+                    # Return more detailed error message
+                    error_messages = [f"{'.'.join(str(loc) for loc in err['loc'])}: {err['msg']}" for err in e.errors()]
+                    error_msg = 'Invalid request format' + (f' - {"; ".join(error_messages)}' if error_messages else '')
+                    return error_response(error_msg, code=400)
             else:
                 # No body at all
                 if allow_empty:

@@ -244,14 +244,14 @@ class BulkImportJob(BaseJob):
             geometry_duplicates_count = len(skipped_duplicates.geometry) if skipped_duplicates else 0
 
             # Import to database using shared utility
-            successful_imports, duplicates_skipped = bulk_create_features_with_fallback(
+            successful_imports, duplicates_skipped, created_features = bulk_create_features_with_fallback(
                 features_to_create, user_id
             )
 
             # Only mark as imported if at least one feature was successfully created
             if successful_imports > 0:
-                # Finalize import using shared utility
-                finalize_import_item(import_item, user_id)
+                # Finalize import using shared utility (pass created_features for hooks)
+                finalize_import_item(import_item, user_id, created_features)
 
                 _logger.info(f"Imported {successful_imports} features for user {user_id}")
 
