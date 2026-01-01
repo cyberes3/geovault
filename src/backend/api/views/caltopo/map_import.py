@@ -10,7 +10,7 @@ from pydantic import BaseModel, Field, ConfigDict
 from api.models import CalTopoUser, ImportQueue
 from api.utils.rate_limit import caltopo_rate_limit
 from api.utils.responses import error_response, success_response
-from api.utils.caltopo_helpers import require_caltopo_connection
+from api.utils.caltopo_helpers import require_caltopo_connection, handle_caltopo_call
 from api.validation.feature_updates import validate_payload
 from geo_lib.processing.jobs.helpers.status_tracker import status_tracker
 from geo_lib.processing.jobs.process_job import ProcessJob
@@ -48,7 +48,10 @@ def import_caltopo_map(request: HttpRequest, validated_data: Dict[str, Any]) -> 
         return error_resp
     
     # Get features from CalTopo map
-    caltopo_features = get_map_features(request.user, map_id)
+    caltopo_features, error_resp = handle_caltopo_call(get_map_features, request.user, map_id)
+    if error_resp:
+        return error_resp
+    
     if caltopo_features is None:
         return error_response(f'Map {map_id} not found or access denied', code=404)
     

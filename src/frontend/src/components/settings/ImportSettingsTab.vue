@@ -364,7 +364,12 @@ export default {
             credential_key: ''
           }
         } else {
-          this.connectMessage = data.error || 'Failed to connect to CalTopo'
+          // Check for CalTopo timeout error
+          if (data.details && data.details.error_code === 'CALTOPO_TIMEOUT') {
+            this.connectMessage = 'CalTopo request timed out. Please reload the page and try again.'
+          } else {
+            this.connectMessage = data.error || 'Failed to connect to CalTopo'
+          }
           this.connectMessageType = 'error'
         }
       } catch (error) {
@@ -428,7 +433,12 @@ export default {
         } else {
           const errorData = await response.json().catch(() => ({}))
           this.apiStatus['List Maps'] = 'error'
-          this.apiErrors['List Maps'] = errorData.error || `HTTP ${response.status}`
+          // Check for CalTopo timeout error
+          if (errorData.details && errorData.details.error_code === 'CALTOPO_TIMEOUT') {
+            this.apiErrors['List Maps'] = 'CalTopo request timed out. Please reload the page and try again.'
+          } else {
+            this.apiErrors['List Maps'] = errorData.error || `HTTP ${response.status}`
+          }
           console.error('Failed to load maps:', errorData)
         }
       } catch (error) {
@@ -477,7 +487,12 @@ export default {
         } else {
           const errorData = await response.json().catch(() => ({}))
           this.apiStatus[endpointKey] = 'error'
-          this.apiErrors[endpointKey] = errorData.error || `HTTP ${response.status}`
+          // Check for CalTopo timeout error
+          if (errorData.details && errorData.details.error_code === 'CALTOPO_TIMEOUT') {
+            this.apiErrors[endpointKey] = 'CalTopo request timed out. Please reload the page and try again.'
+          } else {
+            this.apiErrors[endpointKey] = errorData.error || `HTTP ${response.status}`
+          }
           this.mapInQueue = false
           console.error('Failed to load features:', errorData)
         }
@@ -533,7 +548,11 @@ export default {
             this.toastRef.show('Feature imported successfully', 'success')
           }
         } else {
-          const errorMsg = data.error || 'Failed to import feature'
+          // Check for CalTopo timeout error
+          let errorMsg = data.error || 'Failed to import feature'
+          if (data.details && data.details.error_code === 'CALTOPO_TIMEOUT') {
+            errorMsg = 'CalTopo request timed out. Please reload the page and try again.'
+          }
           if (this.toastRef) {
             this.toastRef.show(errorMsg, 'error')
           }
@@ -581,7 +600,11 @@ export default {
             this.toastRef.show(`Map import queued. Processing ${data.feature_count || 0} features.`, 'success')
           }
         } else {
-          const errorMsg = data.error || 'Failed to import map'
+          // Check for CalTopo timeout error
+          let errorMsg = data.error || 'Failed to import map'
+          if (data.details && data.details.error_code === 'CALTOPO_TIMEOUT') {
+            errorMsg = 'CalTopo request timed out. Please reload the page and try again.'
+          }
           if (this.toastRef) {
             this.toastRef.show(errorMsg, 'error')
           }

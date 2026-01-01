@@ -9,12 +9,18 @@ from typing import List, Dict, Any, Optional
 
 from caltopo_python import CaltopoSession
 from django.contrib.auth import get_user_model
+from requests.exceptions import ReadTimeout, Timeout
 
 from api.models import CalTopoUser
 from geo_lib.logging.console import get_tagged_logger
 from geo_lib.processing.hooks import register_import_hook
 
 _logger = get_tagged_logger('CalTopoService')
+
+
+class CalTopoTimeoutError(Exception):
+    """Raised when a CalTopo API request times out."""
+    pass
 
 
 def get_caltopo_session(user) -> Optional[CaltopoSession]:
@@ -50,20 +56,27 @@ def list_maps(user) -> List[Dict[str, Any]]:
         
     Returns:
         List of map dictionaries with id, title, updated, type, etc.
+        
+    Raises:
+        CalTopoTimeoutError: If the CalTopo API request times out
     """
     session = get_caltopo_session(user)
     if not session:
         return []
 
-    # Ensure account data is loaded before getting map list
-    account_data = session.getAccountData()
-    
-    # Check if accountData has 'rels' key before including bookmarks
-    # The library code assumes 'rels' exists when includeBookmarks=True
-    include_bookmarks = 'rels' in account_data if account_data else False
-    
-    maps = session.getMapList(includeBookmarks=include_bookmarks, refresh=True)
-    return maps if isinstance(maps, list) else []
+    try:
+        # Ensure account data is loaded before getting map list
+        account_data = session.getAccountData()
+        
+        # Check if accountData has 'rels' key before including bookmarks
+        # The library code assumes 'rels' exists when includeBookmarks=True
+        include_bookmarks = 'rels' in account_data if account_data else False
+        
+        maps = session.getMapList(includeBookmarks=include_bookmarks, refresh=True)
+        return maps if isinstance(maps, list) else []
+    except (ReadTimeout, Timeout) as e:
+        _logger.warning(f"CalTopo API timeout while listing maps for user {user.id}: {e}")
+        raise CalTopoTimeoutError("CalTopo API request timed out") from e
 
 
 def get_map_features(user, map_id: str) -> Optional[List[Dict[str, Any]]]:
@@ -76,22 +89,29 @@ def get_map_features(user, map_id: str) -> Optional[List[Dict[str, Any]]]:
         
     Returns:
         List of feature dictionaries from CalTopo, or None if map not found/access denied
+        
+    Raises:
+        CalTopoTimeoutError: If the CalTopo API request times out
     """
     session = get_caltopo_session(user)
     if not session:
         return None
 
-    if not session.openMap(mapID=map_id):
-        return None
+    try:
+        if not session.openMap(mapID=map_id):
+            return None
 
-    features = session.getFeatures(forceRefresh=True)
+        features = session.getFeatures(forceRefresh=True)
 
-    if isinstance(features, dict) and 'state' in features:
-        return features.get('state', {}).get('features', [])
-    elif isinstance(features, list):
-        return features
-    else:
-        return []
+        if isinstance(features, dict) and 'state' in features:
+            return features.get('state', {}).get('features', [])
+        elif isinstance(features, list):
+            return features
+        else:
+            return []
+    except (ReadTimeout, Timeout) as e:
+        _logger.warning(f"CalTopo API timeout while getting features for map {map_id} (user {user.id}): {e}")
+        raise CalTopoTimeoutError("CalTopo API request timed out") from e
 
 
 def get_feature(user, map_id: str, feature_id: str, feature_class: str) -> Optional[Dict[str, Any]]:
@@ -106,15 +126,22 @@ def get_feature(user, map_id: str, feature_id: str, feature_class: str) -> Optio
         
     Returns:
         Feature dictionary or None if not found
+        
+    Raises:
+        CalTopoTimeoutError: If the CalTopo API request times out
     """
     session = get_caltopo_session(user)
     if not session:
         return None
 
-    if not session.openMap(mapID=map_id):
-        return None
+    try:
+        if not session.openMap(mapID=map_id):
+            return None
 
-    return session.getFeature(id=feature_id, featureClass=feature_class, forceRefresh=True)
+        return session.getFeature(id=feature_id, featureClass=feature_class, forceRefresh=True)
+    except (ReadTimeout, Timeout) as e:
+        _logger.warning(f"CalTopo API timeout while getting feature {feature_id} from map {map_id} (user {user.id}): {e}")
+        raise CalTopoTimeoutError("CalTopo API request timed out") from e
 
 
 def convert_caltopo_to_geojson(caltopo_feature: Dict[str, Any], map_id: str = None) -> Dict[str, Any]:

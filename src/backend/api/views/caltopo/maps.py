@@ -8,7 +8,7 @@ from django.views.decorators.http import require_http_methods
 from api.models import CalTopoUser, ImportQueue, FeatureStore
 from api.utils.rate_limit import caltopo_rate_limit
 from api.utils.responses import error_response, success_response, not_found_response
-from api.utils.caltopo_helpers import require_caltopo_connection
+from api.utils.caltopo_helpers import require_caltopo_connection, handle_caltopo_call
 from geo_lib.services.caltopo_service import list_maps, get_map_features
 from geo_lib.website.auth import api_or_login_required_401
 
@@ -26,7 +26,9 @@ def list_caltopo_maps(request: HttpRequest) -> JsonResponse:
     if error_resp:
         return error_resp
     
-    maps = list_maps(request.user)
+    maps, error_resp = handle_caltopo_call(list_maps, request.user)
+    if error_resp:
+        return error_resp
     
     return success_response({
         'maps': maps,
@@ -47,7 +49,9 @@ def get_caltopo_map_features(request: HttpRequest, map_id: str) -> JsonResponse:
     if error_resp:
         return error_resp
     
-    features = get_map_features(request.user, map_id)
+    features, error_resp = handle_caltopo_call(get_map_features, request.user, map_id)
+    if error_resp:
+        return error_resp
     
     if features is None:
         return not_found_response(f'Map {map_id} not found or access denied')
@@ -129,7 +133,9 @@ def get_caltopo_map_details(request: HttpRequest, map_id: str) -> JsonResponse:
     if error_resp:
         return error_resp
     
-    maps = list_maps(request.user)
+    maps, error_resp = handle_caltopo_call(list_maps, request.user)
+    if error_resp:
+        return error_resp
     
     # Find the map
     map_details = None

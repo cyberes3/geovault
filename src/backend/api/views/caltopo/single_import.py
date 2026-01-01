@@ -12,7 +12,7 @@ from pydantic import BaseModel, Field, ConfigDict, field_validator
 from api.models import CalTopoUser, FeatureStore
 from api.utils.rate_limit import caltopo_rate_limit
 from api.utils.responses import error_response, success_response
-from api.utils.caltopo_helpers import require_caltopo_connection
+from api.utils.caltopo_helpers import require_caltopo_connection, handle_caltopo_call
 from api.validation.feature_updates import validate_payload
 from api.views.features.updates.geometry import _normalize_geometry_coordinates
 from geo_lib.feature_id import generate_geojson_hash
@@ -77,7 +77,12 @@ def import_caltopo_feature(request: HttpRequest, validated_data: Dict[str, Any])
         return error_resp
     
     # Get feature from CalTopo
-    caltopo_feature = get_feature(request.user, map_id, feature_id, feature_class)
+    caltopo_feature, error_resp = handle_caltopo_call(
+        get_feature, request.user, map_id, feature_id, feature_class
+    )
+    if error_resp:
+        return error_resp
+    
     if not caltopo_feature:
         return error_response(f'Feature {feature_id} not found in map {map_id}', code=404)
     
