@@ -224,7 +224,7 @@ def _convert_feature_to_geojson(feature: FeatureStore, public_safe: bool = False
     
     Args:
         feature: FeatureStore instance
-        public_safe: If True, excludes database_id from properties (for public shares)
+        public_safe: If True, excludes tags from properties unless include_tags is True (for public shares)
         include_tags: If True and public_safe=True, includes tags in properties (otherwise tags are excluded for public shares)
     
     Returns:
@@ -237,20 +237,14 @@ def _convert_feature_to_geojson(feature: FeatureStore, public_safe: bool = False
     # Create feature properties
     properties = geojson_data.get('properties', {}).copy()
 
+    # Always include database_id for frontend processing
+    properties['database_id'] = feature.id
+    
     if public_safe:
-        # Don't include database ID in public view
-        if 'database_id' in properties:
-            del properties['database_id']
-        # If downloads are allowed, include database_id so features can be exported
-        if allow_downloads:
-            properties['database_id'] = feature.id
         # Don't include tags in public view unless explicitly requested
         # (they can contain private information)
         if not include_tags and 'tags' in properties:
             del properties['tags']
-    else:
-        # Include database ID in properties for frontend editing
-        properties['database_id'] = feature.id
 
     return {
         "type": "Feature",
@@ -282,21 +276,6 @@ def _build_bbox_sql_query(
     min_lon, min_lat, max_lon, max_lat = bbox if bbox else (None, None, None, None)
     params = []
 
-    # Collection filter preprocessing (if provided)
-    collection_filter = ""
-    if collection_id is not None:
-        try:
-            collection = Collection.objects.get(id=collection_id, user_id=user_id)
-            feature_ids_set = get_collection_feature_ids(collection)
-            if feature_ids_set:
-                placeholders = ','.join(['%s'] * len(feature_ids_set))
-                collection_filter = f" AND id IN ({placeholders})"
-                params.extend(list(feature_ids_set))
-            else:
-                return ("SELECT 1 WHERE FALSE", [])
-        except Collection.DoesNotExist:
-            return ("SELECT 1 WHERE FALSE", [])
-
     # Build spatial filter - AGGRESSIVE: Use ONLY && operator (skip ST_Intersects)
     # The && operator uses GIST index and is 2-3x faster than ST_Intersects
     # Trade-off: May include features slightly outside bbox, acceptable for map display
@@ -312,6 +291,22 @@ def _build_bbox_sql_query(
         tag_filter = " AND (geojson->'properties'->'tags' @> %s::jsonb OR geojson->'properties'->'system_tags' @> %s::jsonb)"
         params.append(tag_array)
         params.append(tag_array)
+
+    # Collection filter preprocessing (if provided)
+    # NOTE: Must be added AFTER spatial and tag filters to match SQL parameter order
+    collection_filter = ""
+    if collection_id is not None:
+        try:
+            collection = Collection.objects.get(id=collection_id, user_id=user_id)
+            feature_ids_set = get_collection_feature_ids(collection)
+            if feature_ids_set:
+                placeholders = ','.join(['%s'] * len(feature_ids_set))
+                collection_filter = f" AND id IN ({placeholders})"
+                params.extend(list(feature_ids_set))
+            else:
+                return ("SELECT 1 WHERE FALSE", [])
+        except Collection.DoesNotExist:
+            return ("SELECT 1 WHERE FALSE", [])
 
     params.insert(0, user_id)
 
@@ -403,10 +398,9 @@ def _execute_bbox_query_and_parse(
             
             properties = geojson_data.get('properties', {}).copy()
             
-            if 'database_id' in properties:
-                del properties['database_id']
-            if allow_downloads:
-                properties['database_id'] = feature_id
+            # Always include database_id for frontend processing
+            properties['database_id'] = feature_id
+            
             if not include_tags and 'tags' in properties:
                 del properties['tags']
             

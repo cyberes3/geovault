@@ -314,7 +314,7 @@ export default {
       }))
     },
     isPublicShareMode() {
-      return this.$route.path === '/mapshare' && this.$route.query.id
+      return this.$route.path === '/mapshare' && !!this.$route.query.id
     },
     shareId() {
       return this.$route.query.id || null
@@ -958,6 +958,249 @@ export default {
         }
       }, 1000) // Wait 1 second after zoom ends
     },
+    /**
+     * Determines the current load context for unified data loading.
+     * Returns an object describing what type of data should be loaded.
+     * @returns {Object} Load context with type, share info, and other metadata
+     */
+    getLoadContext() {
+      // Public share modes
+      if (this.isPublicShareMode && this.shareId) {
+        // If share info is already loaded, use it
+        if (this.publicShareInfo && this.publicShareInfo.share_id === this.shareId) {
+          return {
+            type: `share_${this.publicShareInfo.share_type}`, // share_tag, share_collection, share_feature
+            isPublicShare: true,
+            shareId: this.shareId,
+            shareInfo: this.publicShareInfo,
+            isBboxBased: this.publicShareInfo.share_type !== 'feature',
+            requiresInitialLoadOnly: this.publicShareInfo.share_type === 'feature'
+          }
+        }
+        // Share info not loaded yet - return placeholder context
+        // This will be refreshed after ensurePublicShareInfo() is called
+        return {
+          type: 'share_unknown',
+          isPublicShare: true,
+          shareId: this.shareId,
+          shareInfo: null,
+          isBboxBased: true, // Default assumption, will be updated
+          requiresInitialLoadOnly: false // Default assumption, will be updated
+        }
+      }
+
+      // Regular collection mode
+      if (this.isCollectionMode && this.collectionId) {
+        return {
+          type: 'collection',
+          isPublicShare: false,
+          collectionId: this.collectionId,
+          isBboxBased: true,
+          requiresInitialLoadOnly: false
+        }
+      }
+
+      // Default mode (all features)
+      return {
+        type: 'default',
+        isPublicShare: false,
+        isBboxBased: true,
+        requiresInitialLoadOnly: false
+      }
+    },
+    /**
+     * Ensures public share info is loaded and cached.
+     * This is called before building URLs for public shares.
+     * Note: Does not manage isDataLoading state - caller should handle that.
+     */
+    async ensurePublicShareInfo() {
+      if (!this.isPublicShareMode || !this.shareId) {
+        return false
+      }
+
+      // If we already have the correct share info, return true
+      if (this.publicShareInfo && this.publicShareInfo.share_id === this.shareId) {
+        return true
+      }
+
+      // Fetch share info
+      try {
+        const infoUrl = `/api/sharing/public/info/${this.shareId}/`
+        const infoResponse = await fetch(infoUrl, {
+          signal: this.currentAbortController?.signal
+        })
+
+        if (!infoResponse.ok) {
+          const errorData = await infoResponse.json().catch(() => ({ error: 'Invalid share link' }))
+          this.handlePublicShareError(errorData.error || 'Invalid share link')
+          return false
+        }
+
+        const infoData = await infoResponse.json()
+        
+        // Validate share_type is present
+        if (!infoData || !infoData.share_type) {
+          console.error('Share info response missing share_type:', infoData)
+          this.handlePublicShareError('Invalid share link: missing share type')
+          return false
+        }
+        
+        // Store share info
+        this.publicShareInfo = {
+          share_id: this.shareId,
+          share_type: infoData.share_type,
+          tag: infoData.tag || null,
+          collection_name: infoData.collection_name || null,
+          collection_id: infoData.collection_id || null,
+          feature_name: infoData.feature_name || null,
+          feature_id: infoData.feature_id || null,
+          include_tags: infoData.include_tags || false,
+          allow_downloads: infoData.allow_downloads || false
+        }
+
+        // Update display properties based on share type
+        if (infoData.share_type === 'tag') {
+          this.publicShareTag = infoData.tag
+          this.publicShareCollectionName = null
+        } else if (infoData.share_type === 'collection') {
+          this.publicShareCollectionName = infoData.collection_name
+          this.publicShareTag = null
+        } else if (infoData.share_type === 'feature') {
+          this.publicShareTag = null
+          this.publicShareCollectionName = null
+        }
+
+        return true
+      } catch (error) {
+        if (error.name === 'AbortError') return false
+        console.error('Error fetching share info:', error)
+        this.handlePublicShareError('Failed to load share information')
+        return false
+      }
+    },
+    /**
+     * Builds the API URL based on the load context.
+     * @param {Object} context - Load context from getLoadContext()
+     * @param {string} bboxString - Bounding box string (for bbox-based requests)
+     * @param {number} zoom - Map zoom level (for bbox-based requests)
+     * @returns {string|null} API URL or null if request should be skipped
+     */
+    buildLoadUrl(context, bboxString, zoom) {
+      const roundedZoom = Math.round(zoom)
+
+      switch (context.type) {
+        case 'share_tag':
+          return `${this.SHARE_API_BASE_URL}${context.shareId}/?bbox=${bboxString}&zoom=${roundedZoom}&format=protobuf`
+
+        case 'share_collection':
+          return `/api/sharing/public/collection/${context.shareId}/?bbox=${bboxString}&zoom=${roundedZoom}&format=protobuf`
+
+        case 'share_feature':
+          // Feature shares are loaded once on initial load only
+          if (this.isInitialLoad) {
+            return `/api/sharing/public/feature/${context.shareId}/`
+          }
+          // Skip subsequent requests for feature shares
+          return null
+
+        case 'share_unknown':
+          // Share info not loaded yet - this should not happen if ensurePublicShareInfo is called first
+          console.warn('Attempting to build URL for unknown share type. Share info should be loaded first.')
+          return null
+
+        case 'collection':
+          return `${this.API_BASE_URL}?bbox=${bboxString}&zoom=${roundedZoom}&format=protobuf&collection=${context.collectionId}`
+
+        case 'default':
+          return `${this.API_BASE_URL}?bbox=${bboxString}&zoom=${roundedZoom}&format=protobuf`
+
+        default:
+          console.error('Unknown load context type:', context.type)
+          return null
+      }
+    },
+    /**
+     * Parses the API response based on the load context.
+     * Handles both protobuf and JSON responses consistently.
+     * @param {Response} response - Fetch response object
+     * @param {Object} context - Load context from getLoadContext()
+     * @returns {Promise<Object>} Parsed data in unified format
+     */
+    async parseLoadResponse(response, context) {
+      // Error responses are always JSON
+      if (!response.ok) {
+        return await response.json()
+      }
+
+      // Feature shares return JSON directly
+      if (context.type === 'share_feature') {
+        const jsonData = await response.json()
+        // Convert to unified format
+        return {
+          data: {
+            type: 'FeatureCollection',
+            features: jsonData.features || []
+          }
+        }
+      }
+
+      // All other types (tag share, collection share, collection, default) may be protobuf
+      return await parseBboxResponse(response)
+    },
+    /**
+     * Handles errors from data loading in a unified way.
+     * @param {Object} errorData - Error data from API response
+     * @param {Object} context - Load context from getLoadContext()
+     */
+    handleLoadError(errorData, context) {
+      const errorMessage = errorData.error || 'Failed to load map data.'
+      
+      if (context.isPublicShare) {
+        this.handlePublicShareError(errorMessage)
+      } else {
+        this.loadError = errorMessage
+      }
+    },
+    /**
+     * Handles successful data loading in a unified way.
+     * @param {Object} data - Parsed response data
+     * @param {Object} context - Load context from getLoadContext()
+     * @param {string} bboxKey - Bounding box cache key (for bbox-based loads)
+     */
+    async handleLoadSuccess(data, context, bboxKey) {
+      if (!data.data || !data.data.features) {
+        return
+      }
+
+      // For bbox-based loads, add to loaded bounds cache
+      // Feature shares are not bbox-based, so skip caching
+      if (context.isBboxBased && bboxKey) {
+        this.loadedBounds.add(bboxKey)
+      }
+
+      this.updateFeatureCount()
+      
+      // Use markRaw to prevent Vue from making features reactive
+      // This is critical for performance with complex geometries
+      const rawData = markRaw(data.data)
+      await this.addFeaturesToMap(rawData)
+      
+      // For feature shares, zoom to the feature after loading
+      if (context.type === 'share_feature' && data.data.features.length > 0) {
+        const feature = markRaw(convertMapLibreFeature(data.data.features[0]))
+        await this.$nextTick()
+        await this.zoomToFeature(feature)
+        // Select the feature so it shows in the info box
+        this.selectedFeature = feature
+      }
+      
+      // Update features in extent list after data is loaded
+      this.debouncedUpdateFeaturesInExtent()
+    },
+    /**
+     * Unified method to load map data for the current view.
+     * Handles all modes: default, collection, tag share, collection share, feature share.
+     */
     async loadDataForCurrentView() {
       if (!this.map) return
       if (this.isTagFilterActive) return
@@ -980,180 +1223,90 @@ export default {
 
       const zoom = this.map.getZoom()
       const bbox = [bounds.getWest(), bounds.getSouth(), bounds.getEast(), bounds.getNorth()]
-      const bboxKey = this.getBoundingBoxKey(bbox, zoom)
-
-      // Check if already loaded
-      if (this.loadedBounds.has(bboxKey)) {
-        return
-      }
 
       // Create new AbortController
       this.currentAbortController = new AbortController()
       this.loadError = null
 
       try {
-        const bboxString = this.getBoundingBoxString(bbox)
-        const roundedZoom = Math.round(zoom)
+        // Get unified load context
+        let context = this.getLoadContext()
 
-        let url, response, data
-
-        if (this.isPublicShareMode) {
-          if (!this.shareId) return
-
-          if (!this.publicShareInfo || this.publicShareInfo.share_id !== this.shareId) {
-            // Set loading state before fetching share info
-            this.isDataLoading = true
-            const infoUrl = `/api/sharing/public/info/${this.shareId}/`
-            const infoResponse = await fetch(infoUrl, {
-              signal: this.currentAbortController.signal
+        // For public shares, ensure share info is loaded first
+        // This must happen before we can build the URL or check cache
+        if (context.isPublicShare) {
+          // Set loading state for share info fetch
+          this.isDataLoading = true
+          const shareInfoLoaded = await this.ensurePublicShareInfo()
+          if (!shareInfoLoaded) {
+            return
+          }
+          // Get fresh context after loading share info (this will now have the correct share type)
+          context = this.getLoadContext()
+          
+          // Double-check that we have valid share info
+          if (!context.shareInfo || context.type === 'share_unknown') {
+            console.error('Share info not properly loaded after ensurePublicShareInfo', {
+              shareInfo: this.publicShareInfo,
+              context,
+              shareId: this.shareId
             })
-
-            if (!infoResponse.ok) {
-              const errorData = await infoResponse.json().catch(() => ({ error: 'Invalid share link' }))
-              this.handlePublicShareError(errorData.error || 'Invalid share link')
-              return
-            }
-
-            const infoData = await infoResponse.json()
-            
-            // Validate share_type is present
-            if (!infoData || !infoData.share_type) {
-              console.error('Share info response missing share_type:', infoData)
-              this.handlePublicShareError('Invalid share link: missing share type')
-              return
-            }
-            
-            this.publicShareInfo = {
-              share_id: this.shareId,
-              share_type: infoData.share_type,
-              tag: infoData.tag || null,
-              collection_name: infoData.collection_name || null,
-              collection_id: infoData.collection_id || null,
-              feature_name: infoData.feature_name || null,
-              feature_id: infoData.feature_id || null,
-              include_tags: infoData.include_tags || false,
-              allow_downloads: infoData.allow_downloads || false
-            }
-
-            if (infoData.share_type === 'tag') {
-              this.publicShareTag = infoData.tag
-              this.publicShareCollectionName = null
-            } else if (infoData.share_type === 'collection') {
-              this.publicShareCollectionName = infoData.collection_name
-              this.publicShareTag = null
-            } else if (infoData.share_type === 'feature') {
-              // For feature shares, we'll load the feature directly
-              this.publicShareTag = null
-              this.publicShareCollectionName = null
-            }
-          }
-
-          // Double-check publicShareInfo is set before using it
-          if (!this.publicShareInfo || !this.publicShareInfo.share_type) {
-            console.error('publicShareInfo not properly initialized:', this.publicShareInfo)
-            this.handlePublicShareError('Invalid share link: share info not available')
+            this.handlePublicShareError('Failed to load share information')
             return
-          }
-
-          if (this.publicShareInfo.share_type === 'tag') {
-            url = `${this.SHARE_API_BASE_URL}${this.shareId}/?bbox=${bboxString}&zoom=${roundedZoom}&format=protobuf`
-          } else if (this.publicShareInfo.share_type === 'collection') {
-            url = `/api/sharing/public/collection/${this.shareId}/?bbox=${bboxString}&zoom=${roundedZoom}&format=protobuf`
-          } else if (this.publicShareInfo.share_type === 'feature') {
-            // Feature shares return a single feature as JSON (not bbox-based)
-            // Load it once on initial load, then skip subsequent bbox requests
-            if (this.isInitialLoad) {
-              url = `/api/sharing/public/feature/${this.shareId}/`
-            } else {
-              // Already loaded, skip
-              return
-            }
-          } else {
-            console.error('Unknown share type:', this.publicShareInfo.share_type, this.publicShareInfo)
-            this.publicShareError = `Unknown share type: ${this.publicShareInfo.share_type || 'undefined'}`
-            return
-          }
-
-          // Set loading state right before making the network call
-          this.isDataLoading = true
-          response = await fetch(url, {
-            signal: this.currentAbortController.signal
-          })
-          
-          // Parse response
-          if (!response.ok) {
-            data = await response.json()
-          } else if (this.publicShareInfo.share_type === 'feature') {
-            // Feature shares return JSON directly
-            data = await response.json()
-            // Convert to the expected format
-            data = {
-              data: {
-                type: 'FeatureCollection',
-                features: data.features || []
-              }
-            }
-          } else {
-            // Tag and collection shares may be protobuf
-            data = await parseBboxResponse(response)
-          }
-        } else {
-          url = `${this.API_BASE_URL}?bbox=${bboxString}&zoom=${roundedZoom}&format=protobuf`
-          if (this.isCollectionMode && this.collectionId) {
-            url += `&collection=${this.collectionId}`
-          }
-
-          // Set loading state right before making the network call
-          this.isDataLoading = true
-          response = await fetch(url, {
-            signal: this.currentAbortController.signal
-          })
-          
-          // Parse response (errors are always JSON, successful responses may be protobuf)
-          if (!response.ok) {
-            data = await response.json()
-          } else {
-            data = await parseBboxResponse(response)
           }
         }
 
-        // Handle error responses
-        if (!response.ok) {
-          if (this.isPublicShareMode) {
-            this.handlePublicShareError(data.error || 'Failed to load shared features.')
-          } else {
-            this.loadError = data.error || 'Failed to load map data.'
-          }
+        // Build bbox key with context to ensure different shares don't share cache
+        // Include share ID in key for shares, collection ID for collections
+        let bboxKey = this.getBoundingBoxKey(bbox, zoom)
+        if (context.isPublicShare && context.shareId) {
+          bboxKey = `${bboxKey}_share_${context.shareId}`
+        } else if (context.type === 'collection' && context.collectionId) {
+          bboxKey = `${bboxKey}_collection_${context.collectionId}`
+        }
+
+        // Check if already loaded (only for bbox-based loads)
+        if (context.isBboxBased && this.loadedBounds.has(bboxKey)) {
           return
         }
 
-        if (data.data && data.data.features) {
-          // For feature shares, ensure we don't add to loadedBounds (since it's not bbox-based)
-          if (this.publicShareInfo && this.publicShareInfo.share_type !== 'feature') {
-            this.loadedBounds.add(bboxKey)
-          }
-          this.updateFeatureCount()
-          // Use markRaw to prevent Vue from making features reactive
-          // This is critical for performance with complex geometries
-          const rawData = markRaw(data.data)
-          await this.addFeaturesToMap(rawData)
-          
-          // For feature shares, zoom to the feature after loading
-          if (this.isPublicShareMode && this.publicShareInfo && this.publicShareInfo.share_type === 'feature' && data.data.features.length > 0) {
-            const feature = markRaw(convertMapLibreFeature(data.data.features[0]))
-            await this.$nextTick()
-            await this.zoomToFeature(feature)
-            // Select the feature so it shows in the info box
-            this.selectedFeature = feature
-          }
-          
-          // Update features in extent list after data is loaded
-          this.debouncedUpdateFeaturesInExtent()
+        // Build URL based on context
+        const bboxString = this.getBoundingBoxString(bbox)
+        const url = this.buildLoadUrl(context, bboxString, zoom)
+
+        // If URL is null, request should be skipped (e.g., feature share after initial load)
+        if (url === null) {
+          return
         }
+
+        // Set loading state right before making the network call
+        this.isDataLoading = true
+        
+        // Ensure AbortController is still valid (should always be, but defensive check)
+        if (!this.currentAbortController) {
+          this.currentAbortController = new AbortController()
+        }
+        
+        const response = await fetch(url, {
+          signal: this.currentAbortController.signal
+        })
+        
+        // Parse response using unified parser
+        const data = await this.parseLoadResponse(response, context)
+
+        // Handle error responses
+        if (!response.ok) {
+          this.handleLoadError(data, context)
+          return
+        }
+
+        // Handle successful response
+        await this.handleLoadSuccess(data, context, bboxKey)
       } catch (error) {
         if (error.name === 'AbortError') return
         console.error('Error loading data:', error)
-        this.loadError = error.message || 'Failed to load map data.'
+        const context = this.getLoadContext()
+        this.handleLoadError({ error: error.message || 'Failed to load map data.' }, context)
       } finally {
         this.isDataLoading = false
         this.currentAbortController = null
@@ -1163,6 +1316,15 @@ export default {
       }
     },
     async addFeaturesToMap(geojsonData) {
+      if (!this.map) {
+        return
+      }
+      
+      const source = this.map.getSource('geojson-data')
+      if (!source) {
+        return
+      }
+      
       const zoom = this.map ? this.map.getZoom() : null
       const userSettings = this.$store.state.userSettings || {}
       const replaceIconsLowZoom = userSettings.map?.replace_icons_low_zoom !== undefined 

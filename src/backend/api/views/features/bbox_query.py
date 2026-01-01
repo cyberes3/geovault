@@ -226,7 +226,7 @@ def _convert_feature_to_geojson(feature: FeatureStore, public_safe: bool = False
     
     Args:
         feature: FeatureStore instance
-        public_safe: If True, excludes database_id from properties (for public shares)
+        public_safe: If True, excludes tags from properties unless include_tags is True (for public shares)
         include_tags: If True and public_safe=True, includes tags in properties (otherwise tags are excluded for public shares)
     
     Returns:
@@ -239,20 +239,14 @@ def _convert_feature_to_geojson(feature: FeatureStore, public_safe: bool = False
     # Create feature properties
     properties = geojson_data.get('properties', {}).copy()
 
+    # Always include database_id for frontend processing
+    properties['database_id'] = feature.id
+    
     if public_safe:
-        # Don't include database ID in public view
-        if 'database_id' in properties:
-            del properties['database_id']
-        # If downloads are allowed, include database_id so features can be exported
-        if allow_downloads:
-            properties['database_id'] = feature.id
         # Don't include tags in public view unless explicitly requested
         # (they can contain private information)
         if not include_tags and 'tags' in properties:
             del properties['tags']
-    else:
-        # Include database ID in properties for frontend editing
-        properties['database_id'] = feature.id
 
     return {
         "type": "Feature",

@@ -743,10 +743,6 @@ export default {
         // Prepare bulk update payload
         const updates = [];
         for (const feature of features) {
-          if (!feature.properties.database_id) {
-            continue;
-          }
-
           // Get current tags
           const currentTags = Array.isArray(feature.properties.tags)
               ? [...feature.properties.tags]
@@ -911,10 +907,6 @@ export default {
       }
     },
     async removeTagFromFeature(tag, feature) {
-      if (!feature.properties.database_id) {
-        return;
-      }
-
       // Prevent removing system tags
       if (this.isSystemTag(tag)) {
         alert('System tags cannot be removed from features');

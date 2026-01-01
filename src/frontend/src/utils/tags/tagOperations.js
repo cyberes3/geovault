@@ -40,8 +40,6 @@ export async function removeTagFromAllFeatures(tag, features, csrfToken) {
   const updates = [];
   
   for (const feature of features) {
-    if (!feature.properties.database_id) continue;
-    
     const currentTags = Array.isArray(feature.properties.tags)
       ? [...feature.properties.tags]
       : [];
@@ -81,10 +79,6 @@ export async function removeTagFromAllFeatures(tag, features, csrfToken) {
  * @returns {Promise<Object>} API response
  */
 export async function removeTagFromFeature(tag, feature, csrfToken) {
-  if (!feature.properties.database_id) {
-    throw new Error('Feature has no database ID');
-  }
-  
   const currentTags = Array.isArray(feature.properties.tags)
     ? [...feature.properties.tags]
     : [];
