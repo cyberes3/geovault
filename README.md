@@ -32,6 +32,7 @@ to [GitHub](https://github.com/Cyberes/geovault).
 - Heavy data processing behind the scenes
 - API key authentication for programmatic access
 - Android app for quick file uploads via share intent
+- CalTopo account linking to quickly import data directly
 
 **This platform does not support editing.** Use your own preferred tool and then upload your data to the server.
 
