@@ -573,11 +573,9 @@ export async function addFeaturesToMap(map, geojsonData, showAllLabels = true, z
         // Skip replacement points - they will be regenerated if needed
         return
       } else {
-        // Regular features, indexed by database_id
-        const id = f.properties?.database_id
-        if (id) {
-          existingFeatures.set(String(id), f)
-        }
+        // Regular features, indexed by database_id (always present)
+        const id = f.properties.database_id
+        existingFeatures.set(String(id), f)
       }
     })
   }
@@ -586,14 +584,15 @@ export async function addFeaturesToMap(map, geojsonData, showAllLabels = true, z
   const newFeatures = geojsonData.features || []
   const newFeatureIds = new Set()
   newFeatures.forEach(f => {
-    const id = f.properties?.database_id
-    if (id) {
-      newFeatureIds.add(String(id))
-      if (!existingFeatures.has(String(id))) {
-        // Preserve elevation in properties before adding to MapLibre
-        preserveElevationInProperties(f)
-        existingFeatures.set(String(id), f)
-      }
+    // Preserve elevation in properties before processing
+    preserveElevationInProperties(f)
+    
+    // Use database_id for deduplication (always present)
+    const id = f.properties.database_id
+    const idStr = String(id)
+    newFeatureIds.add(idStr)
+    if (!existingFeatures.has(idStr)) {
+      existingFeatures.set(idStr, f)
     }
   })
 

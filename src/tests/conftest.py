@@ -368,8 +368,12 @@ def conditional_external_api_mocking():
         
         def __call__(self, query, max_retries=3, latitude=None, longitude=None):
             """Mock implementation that returns fixture data based on query, with cache support."""
+            # Normalize query string for cache key generation (same as real function)
+            from geo_lib.geocoding.overpass_api import _normalize_query_for_cache
+            normalized_query = _normalize_query_for_cache(query, latitude, longitude)
+            
             # Generate cache key same way as real query_overpass function
-            query_hash = hashlib.sha256(query.encode('utf-8')).hexdigest()[:16]
+            query_hash = hashlib.sha256(normalized_query.encode('utf-8')).hexdigest()[:16]
             if latitude is not None and longitude is not None:
                 lat_rounded, lon_rounded = round_coordinate(latitude, longitude)
                 cache_key = f"overpass:query:{query_hash}:{lat_rounded},{lon_rounded}"

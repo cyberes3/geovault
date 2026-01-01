@@ -21,6 +21,44 @@ from geo_lib.spatial.coordinates import round_coordinate
 _logger = get_tagged_logger()
 
 
+def _normalize_query_for_cache(query: str, latitude: Optional[float] = None, longitude: Optional[float] = None) -> str:
+    """
+    Normalize query string for cache key generation by rounding coordinates.
+    
+    Replaces coordinate values in the query string with their rounded equivalents
+    so that queries with slightly different coordinates that round to the same value
+    will have the same cache key.
+    
+    Args:
+        query: Original Overpass QL query string
+        latitude: Optional latitude coordinate (if provided, used to normalize)
+        longitude: Optional longitude coordinate (if provided, used to normalize)
+    
+    Returns:
+        Normalized query string with rounded coordinates
+    """
+    if latitude is None or longitude is None:
+        return query
+    
+    # Round coordinates to cache precision
+    lat_rounded, lon_rounded = round_coordinate(latitude, longitude)
+    
+    # Replace coordinates in the query string
+    # Since queries are constructed with f-strings using the exact coordinates,
+    # we can do simple string replacement. We replace both with and without spaces
+    # to handle different formatting.
+    lat_str = str(latitude)
+    lon_str = str(longitude)
+    lat_rounded_str = str(lat_rounded)
+    lon_rounded_str = str(lon_rounded)
+    
+    # Replace coordinates (handle both with and without spaces around comma)
+    query = query.replace(f'{lat_str},{lon_str}', f'{lat_rounded_str},{lon_rounded_str}')
+    query = query.replace(f'{lat_str}, {lon_str}', f'{lat_rounded_str}, {lon_rounded_str}')
+    
+    return query
+
+
 def _log_overpass_failure(
         response: requests.Response,
         error_type: str,
@@ -113,8 +151,11 @@ def query_overpass(
     Returns:
         JSON response dict or None on failure
     """
-    # Generate cache key from query hash and coordinates (if provided)
-    query_hash = hashlib.sha256(query.encode('utf-8')).hexdigest()[:16]
+    # Normalize query string for cache key generation (rounds coordinates in query)
+    normalized_query = _normalize_query_for_cache(query, latitude, longitude)
+    
+    # Generate cache key from normalized query hash and coordinates (if provided)
+    query_hash = hashlib.sha256(normalized_query.encode('utf-8')).hexdigest()[:16]
     if latitude is not None and longitude is not None:
         # Use rounded coordinates for cache key to deduplicate nearby queries
         lat_rounded, lon_rounded = round_coordinate(latitude, longitude)

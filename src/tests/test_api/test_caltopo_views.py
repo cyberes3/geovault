@@ -152,7 +152,8 @@ class TestCalTopoViews(TestCase):
         # Verify CalTopoUser was deleted
         self.assertFalse(CalTopoUser.objects.filter(user=self.user).exists())
     
-    def test_get_status_returns_connected_true_when_connected(self):
+    @patch('api.views.caltopo.connect_caltopo.get_caltopo_session')
+    def test_get_status_returns_connected_true_when_connected(self, mock_get_session):
         """Test GET /api/caltopo/status/ returns connected: true when connected."""
         CalTopoUser.objects.create(
             user=self.user,
@@ -160,6 +161,11 @@ class TestCalTopoViews(TestCase):
             credential_id='123456789012',
             credential_key='test-key'
         )
+        
+        # Mock the session to return successful account data
+        mock_session = MagicMock()
+        mock_session.getAccountData.return_value = None
+        mock_get_session.return_value = mock_session
         
         response = self.client.get('/api/caltopo/status/')
         self.assertEqual(response.status_code, 200)
@@ -173,7 +179,8 @@ class TestCalTopoViews(TestCase):
         data = response.json()
         self.assertFalse(data['connected'])
     
-    def test_get_status_does_not_expose_account_id(self):
+    @patch('api.views.caltopo.connect_caltopo.get_caltopo_session')
+    def test_get_status_does_not_expose_account_id(self, mock_get_session):
         """Test GET /api/caltopo/status/ does NOT expose account_id."""
         CalTopoUser.objects.create(
             user=self.user,
@@ -181,6 +188,11 @@ class TestCalTopoViews(TestCase):
             credential_id='123456789012',
             credential_key='test-key'
         )
+        
+        # Mock the session to return successful account data
+        mock_session = MagicMock()
+        mock_session.getAccountData.return_value = None
+        mock_get_session.return_value = mock_session
         
         response = self.client.get('/api/caltopo/status/')
         self.assertEqual(response.status_code, 200)

@@ -507,9 +507,11 @@ class TestCaching(TestCase):
         _REVERSE_GEOCODING_CACHE.clear()
         overpass_api.query_overpass.reset_mock()
         
+        # Use coordinates that have fixtures for all query types (admin, protected, lakes, cities)
+        # Use (39.0, -105.0) which has all fixtures (no empty responses)
         coordinates = [
-            (40.0, -105.0),
-            (40.1, -105.1),
+            (39.0, -105.0),  # Has fixtures for all query types
+            (39.0001, -105.0001),  # Rounds to (39.0, -105.0), should use cache
         ]
         
         # First batch call

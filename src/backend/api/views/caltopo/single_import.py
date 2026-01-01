@@ -41,6 +41,28 @@ class CalTopoSingleImportPayload(BaseModel):
     feature_id: str = Field(description="CalTopo feature ID")
     feature_class: str = Field(description="CalTopo feature class (e.g., 'Marker', 'Shape')")
 
+    @field_validator('map_id')
+    @classmethod
+    def validate_map_id(cls, v: str) -> str:
+        """Validate that map_id is a valid CalTopo map ID (3-7 characters, alphanumeric)."""
+        if not v:
+            raise ValueError("map_id cannot be empty")
+        if len(v) < 3 or len(v) > 7:
+            raise ValueError(f"map_id must be 3-7 characters long, got {len(v)} characters")
+        if not v.isalnum():
+            raise ValueError("map_id must contain only alphanumeric characters")
+        return v
+
+    @field_validator('feature_id')
+    @classmethod
+    def validate_feature_id(cls, v: str) -> str:
+        """Validate that feature_id is a valid CalTopo feature ID."""
+        if not v:
+            raise ValueError("feature_id cannot be empty")
+        if len(v) > 100:
+            raise ValueError(f"feature_id must be 100 characters or less, got {len(v)} characters")
+        return v
+
     @field_validator('feature_class')
     @classmethod
     def validate_feature_class(cls, v: str) -> str:

@@ -1,6 +1,7 @@
 """
 Security tests for CalTopo integration.
 """
+from unittest.mock import patch, MagicMock
 from django.test import TestCase
 from django.contrib.auth import get_user_model
 
@@ -44,7 +45,7 @@ class TestCalTopoSecurity(TestCase):
         # Test invalid feature_id (too long)
         response = self.client.post('/api/caltopo/import/feature/', {
             'map_id': 'map1',
-            'feature_id': 'a' * 200,  # Too long
+            'feature_id': 'a' * 101,  # Too long (limit is 100)
             'feature_class': 'Marker'
         }, content_type='application/json')
         
@@ -99,16 +100,17 @@ class TestCalTopoSecurity(TestCase):
         data = response.json()
         self.assertIn('Invalid feature_class', data['error'])
         
-        # Test valid feature_class
-        response = self.client.post('/api/caltopo/import/feature/', {
-            'map_id': 'map1',
-            'feature_id': 'feature1',
-            'feature_class': 'Marker'
-        }, content_type='application/json')
-        
-        # Should not fail on validation (may fail on other things like missing feature)
-        # But validation should pass
-        self.assertNotEqual(response.status_code, 400)  # Should not be validation error
+        # Test valid feature_class - mock the CalTopo API calls
+        with patch('api.views.caltopo.single_import.get_feature', return_value=None):
+            response = self.client.post('/api/caltopo/import/feature/', {
+                'map_id': 'map1',
+                'feature_id': 'feature1',
+                'feature_class': 'Marker'
+            }, content_type='application/json')
+            
+            # Should not fail on validation (may fail on other things like missing feature)
+            # But validation should pass
+            self.assertNotEqual(response.status_code, 400)  # Should not be validation error
     
     def test_credential_fields_are_validated_length(self):
         """Test credential fields are validated (length, format)."""
@@ -150,7 +152,9 @@ class TestCalTopoSecurity(TestCase):
         
         self.assertEqual(response.status_code, 400)
     
-    def test_rate_limiting_prevents_abuse(self):
+    @patch('api.views.caltopo.maps.list_maps')
+    @patch('api.utils.rate_limit.time.time')
+    def test_rate_limiting_prevents_abuse(self, mock_time, mock_list_maps):
         """Test rate limiting prevents abuse (multiple rapid requests)."""
         from django.core.cache import caches
         
@@ -165,19 +169,27 @@ class TestCalTopoSecurity(TestCase):
         cache = caches['rate_limiting']
         cache.clear()
         
+        # Configure mock to return empty list
+        mock_list_maps.return_value = []
+        
+        # Mock time to ensure both requests are in the same second window
+        # Use a fixed timestamp so both requests share the same window
+        mock_time.return_value = 1000.0
+        
         # Make first request (should succeed)
-        with patch('geo_lib.services.caltopo_service.list_maps', return_value=[]):
-            response = self.client.get('/api/caltopo/maps/')
-            self.assertEqual(response.status_code, 200)
+        response = self.client.get('/api/caltopo/maps/')
+        self.assertEqual(response.status_code, 200)
         
         # Make second request immediately (should be rate limited)
-        with patch('geo_lib.services.caltopo_service.list_maps', return_value=[]):
-            response = self.client.get('/api/caltopo/maps/')
-            self.assertEqual(response.status_code, 429)
-            data = response.json()
-            self.assertIn('Rate limit exceeded', data['error'])
+        # Keep same timestamp to ensure same window
+        mock_time.return_value = 1000.5  # Same second, different fraction
+        response = self.client.get('/api/caltopo/maps/')
+        self.assertEqual(response.status_code, 429)
+        data = response.json()
+        self.assertIn('Rate limit exceeded', data['error'])
     
-    def test_account_id_is_not_exposed_in_status_endpoint(self):
+    @patch('api.views.caltopo.connect_caltopo.get_caltopo_session')
+    def test_account_id_is_not_exposed_in_status_endpoint(self, mock_get_session):
         """Test account_id is NOT exposed in status endpoint."""
         CalTopoUser.objects.create(
             user=self.user,
@@ -185,6 +197,11 @@ class TestCalTopoSecurity(TestCase):
             credential_id='123456789012',
             credential_key='test-key'
         )
+        
+        # Mock the session to return successful account data
+        mock_session = MagicMock()
+        mock_session.getAccountData.return_value = None
+        mock_get_session.return_value = mock_session
         
         response = self.client.get('/api/caltopo/status/')
         self.assertEqual(response.status_code, 200)
