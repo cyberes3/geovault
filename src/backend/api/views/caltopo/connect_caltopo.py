@@ -22,7 +22,7 @@ class CalTopoConnectPayload(BaseModel):
     model_config = ConfigDict(extra='forbid')
 
     account_id: str = Field(min_length=6, max_length=6, description="6-character CalTopo account ID")
-    credential_id: str = Field(min_length=12, max_length=12, description="12-character CalTopo credential ID")
+    credential_id: str = Field(min_length=12, max_length=12, description="12-character CalTopo credential code")
     credential_key: str = Field(description="CalTopo credential key")
 
 
@@ -68,7 +68,7 @@ def connect_caltopo(request: HttpRequest, validated_data: Dict[str, Any]) -> Jso
         # Log detailed error internally
         _logger.warning(f'Failed to connect to Caltopo: {traceback.format_exc()}')
         # Return generic error message to user (don't expose API internals)
-        return error_response('Invalid CalTopo credentials. Please verify your account ID, credential ID, and credential key are correct.', code=400)
+        return error_response('Invalid CalTopo credentials. Please verify your account ID, credential code, and credential key are correct.', code=400)
 
     return success_response({
         'msg': 'CalTopo credentials saved and verified successfully',

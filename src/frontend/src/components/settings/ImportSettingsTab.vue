@@ -61,7 +61,7 @@
             />
           </div>
           <div>
-            <label class="block text-sm font-medium text-gray-700 mb-1">Credential ID (12 characters)</label>
+            <label class="block text-sm font-medium text-gray-700 mb-1">Credential Code (12 characters)</label>
             <input
               v-model="connectForm.credential_id"
               type="text"

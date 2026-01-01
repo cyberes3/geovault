@@ -220,7 +220,7 @@ class CalTopoUser(django_models.Model):
     )
     credential_id = django_models.CharField(
         max_length=12,
-        help_text="12-character CalTopo credential ID"
+        help_text="12-character CalTopo credential code"
     )
     credential_key = EncryptedTextField(
         help_text="CalTopo credential key (encrypted at rest)"

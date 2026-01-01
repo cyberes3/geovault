@@ -37,7 +37,7 @@
                 <p>To connect GeoVault to your CalTopo account, you'll need to obtain three pieces of information from CalTopo:</p>
                 <ul class="list-disc list-inside space-y-1 ml-4">
                   <li><strong>Account ID</strong> - A 6-character identifier for your CalTopo account</li>
-                  <li><strong>Credential ID</strong> - A 12-character identifier for the API credential</li>
+                  <li><strong>Credential Code</strong> - A 12-character identifier for the API credential</li>
                   <li><strong>Credential Key</strong> - A 44-character public key for API authentication</li>
                 </ul>
                 <div class="mt-3 px-3 py-2 bg-blue-50 border border-blue-200 rounded-md">
@@ -119,7 +119,7 @@
                       <strong>Account ID:</strong> The 6-character value from <code class="px-1 py-0.5 bg-gray-200 rounded text-xs">account.id</code> (e.g., "ABC123")
                     </li>
                     <li>
-                      <strong>Credential ID:</strong> The 12-character value from <code class="px-1 py-0.5 bg-gray-200 rounded text-xs">code</code> (e.g., "XXXXXXXXXXXX")
+                      <strong>Credential Code:</strong> The 12-character value from <code class="px-1 py-0.5 bg-gray-200 rounded text-xs">code</code> (e.g., "XXXXXXXXXXXX")
                     </li>
                     <li>
                       <strong>Credential Key:</strong> The 44-character value from <code class="px-1 py-0.5 bg-gray-200 rounded text-xs">key</code> (e.g., "xXXXXxXXXXXXXXXxxxXXXXxXxXXXXXXXXXXXX=")
@@ -144,7 +144,7 @@
                 </div>
                 <div>
                   <h5 class="text-base font-semibold text-gray-900 mb-1">The activation API returns an error?</h5>
-                  <p class="text-sm">Make sure you're using the 8-character code from the finish-activate request, not the credential ID. The code expires quickly, so use it immediately after copying.</p>
+                  <p class="text-sm">Make sure you're using the 8-character code from the finish-activate request, not the credential code. The code expires quickly, so use it immediately after copying.</p>
                 </div>
                 <div>
                   <h5 class="text-base font-semibold text-gray-900 mb-1">Connection fails after entering credentials?</h5>
