@@ -67,11 +67,11 @@ def list_maps(user) -> List[Dict[str, Any]]:
     try:
         # Ensure account data is loaded before getting map list
         account_data = session.getAccountData()
-        
+
         # Check if accountData has 'rels' key before including bookmarks
         # The library code assumes 'rels' exists when includeBookmarks=True
         include_bookmarks = 'rels' in account_data if account_data else False
-        
+
         maps = session.getMapList(includeBookmarks=include_bookmarks, refresh=True)
         return maps if isinstance(maps, list) else []
     except (ReadTimeout, Timeout) as e:

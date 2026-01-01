@@ -2,6 +2,7 @@
 Utility functions for CalTopo integration.
 """
 from typing import Optional, Tuple, Callable, Any
+
 from django.http import HttpRequest, JsonResponse
 
 from api.models import CalTopoUser
@@ -32,9 +33,9 @@ def require_caltopo_connection(request: HttpRequest) -> Tuple[Optional[CalTopoUs
 
 
 def handle_caltopo_call(
-    caltopo_func: Callable,
-    *args,
-    **kwargs
+        caltopo_func: Callable,
+        *args,
+        **kwargs
 ) -> Tuple[Optional[Any], Optional[JsonResponse]]:
     """
     Execute a CalTopo service function and handle timeout errors.
@@ -64,8 +65,7 @@ def handle_caltopo_call(
         return result, None
     except CalTopoTimeoutError:
         return None, error_response(
-            "CalTopo request timed out. Please reload the page and try again.",
+            "CalTopo request timed out.",
             code=504,
             details={"error_code": "CALTOPO_TIMEOUT"}
         )
-

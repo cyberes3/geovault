@@ -22,8 +22,8 @@
           <Loader size="sm" layout="inline" message="Checking CalTopo connection status..." :showMessage="true" />
         </div>
 
-        <!-- Connection Status -->
-        <div v-else-if="connectionStatus.connected" class="p-4 bg-green-50 border border-green-200 rounded-md">
+        <!-- Connection Status: Connected -->
+        <div v-else-if="connectionStatus.status === 'connected'" class="p-4 bg-green-50 border border-green-200 rounded-md">
           <div class="flex items-center justify-between">
             <div class="flex items-center gap-2">
               <svg class="w-5 h-5 text-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -33,15 +33,55 @@
             </div>
             <button
               @click="disconnectCaltopo"
-              class="text-sm text-red-600 hover:text-red-800"
+              class="inline-flex items-center px-3 py-1.5 border border-red-300 text-sm font-medium rounded-md text-red-700 bg-white hover:bg-red-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-red-500"
             >
               Disconnect
             </button>
           </div>
         </div>
 
-        <!-- Connection Form -->
-        <form v-else-if="!connectionStatus.connected" @submit.prevent="handleConnect" class="space-y-4" autocomplete="off">
+        <!-- Connection Status: Invalid Credentials -->
+        <div v-else-if="connectionStatus.status === 'invalid'" class="p-4 bg-yellow-50 border border-yellow-200 rounded-md">
+          <div class="flex items-center justify-between">
+            <div class="flex items-center gap-2">
+              <svg class="w-5 h-5 text-yellow-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+              </svg>
+              <span class="text-sm font-medium text-yellow-800">Invalid CalTopo credentials</span>
+            </div>
+            <button
+              @click="disconnectCaltopo"
+              class="inline-flex items-center px-3 py-1.5 border border-red-300 text-sm font-medium rounded-md text-red-700 bg-white hover:bg-red-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-red-500"
+            >
+              Disconnect
+            </button>
+          </div>
+          <p class="text-xs text-yellow-700 mt-2">Your stored credentials are no longer valid. Please reconnect with new credentials.</p>
+        </div>
+
+        <!-- Connection Status: Timeout -->
+        <div v-else-if="connectionStatus.status === 'timeout'" class="p-4 bg-yellow-50 border border-yellow-200 rounded-md">
+          <div class="flex items-center justify-between">
+            <div class="flex items-center gap-2">
+              <svg class="w-5 h-5 text-yellow-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+              </svg>
+              <span class="text-sm font-medium text-yellow-800">CalTopo request timed out</span>
+            </div>
+            <button
+              @click="checkConnectionStatus"
+              :disabled="connectionStatus.checking"
+              class="inline-flex items-center px-3 py-1.5 border border-yellow-300 text-sm font-medium rounded-md text-yellow-700 bg-white hover:bg-yellow-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-yellow-500 disabled:opacity-50 disabled:cursor-not-allowed"
+            >
+              <span v-if="connectionStatus.checking">Retrying...</span>
+              <span v-else>Retry</span>
+            </button>
+          </div>
+          <p class="text-xs text-yellow-700 mt-2">Unable to verify credentials. Please try again.</p>
+        </div>
+
+        <!-- Connection Form: Not Connected or Invalid/Timeout -->
+        <form v-else-if="connectionStatus.status === 'not_connected' || connectionStatus.status === 'invalid' || connectionStatus.status === 'timeout'" @submit.prevent="handleConnect" class="space-y-4" autocomplete="off">
         <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
           <div>
             <label class="block text-sm font-medium text-gray-700 mb-1">Account ID (6 characters)</label>
@@ -99,7 +139,7 @@
         </form>
 
         <!-- API Status Box -->
-        <div v-if="connectionStatus.connected || connectionStatus.checking" class="border-t border-gray-200 pt-6">
+        <div v-if="connectionStatus.status === 'connected' || connectionStatus.checking" class="border-t border-gray-200 pt-6">
           <h3 class="text-lg font-semibold text-gray-900 mb-4">API Status</h3>
           <div class="space-y-3">
             <div
@@ -150,31 +190,28 @@
         </div>
 
         <!-- Maps and Features Section -->
-        <div v-if="connectionStatus.connected || connectionStatus.checking" class="border-t border-gray-200 pt-6">
+        <div v-if="connectionStatus.status === 'connected' || connectionStatus.checking" class="border-t border-gray-200 pt-6">
           <h3 class="text-lg font-semibold text-gray-900 mb-4">Import from CalTopo</h3>
       
       <!-- Maps List -->
       <div class="mb-6">
         <label class="block text-sm font-medium text-gray-700 mb-2">Select a Map</label>
-        <div v-if="loadingMaps && !connectionStatus.checking" class="py-8 border border-gray-200 rounded-md bg-gray-50">
-          <Loader size="md" layout="centered" message="Loading maps..." />
-        </div>
-        <div v-else-if="loadingFeatures && selectedMapId" class="py-8 border border-gray-200 rounded-md">
+        <div v-if="loadingFeatures && selectedMapId" class="py-8 border border-gray-200 rounded-md">
           <Loader size="md" layout="centered" message="Loading features..." />
         </div>
         <select
           v-else
           v-model="selectedMapId"
           @change="handleMapSelect"
-          :disabled="connectionStatus.checking"
+          :disabled="connectionStatus.checking || apiStatus['List Maps'] === 'loading'"
           :class="[
             'w-full px-3 py-2 border rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500',
-            connectionStatus.checking 
+            (connectionStatus.checking || apiStatus['List Maps'] === 'loading')
               ? 'border-gray-200 bg-gray-100 text-gray-400 cursor-not-allowed' 
               : 'border-gray-300'
           ]"
         >
-          <option value="">{{ connectionStatus.checking ? 'Loading...' : '-- Select a map --' }}</option>
+          <option value="">{{ (connectionStatus.checking || apiStatus['List Maps'] === 'loading') ? 'Loading...' : '-- Select a map --' }}</option>
           <option v-for="map in maps" :key="map.id" :value="map.id">
             {{ map.title || map.id }}
           </option>
@@ -283,7 +320,8 @@ export default {
     return {
       connectionStatus: {
         connected: false,
-        checking: false
+        checking: false,
+        status: null // 'not_connected', 'invalid', 'timeout', or 'connected'
       },
       connectForm: {
         account_id: '',
@@ -332,11 +370,12 @@ export default {
         if (response.ok) {
           const data = await response.json()
           this.connectionStatus.connected = data.connected || false
+          this.connectionStatus.status = data.status || (data.connected ? 'connected' : 'not_connected')
           this.apiStatus['Status Check'] = 'success'
-          // Set checking to false immediately so "Connected to CalTopo" box appears
+          // Set checking to false immediately so status box appears
           this.connectionStatus.checking = false
-          // Load maps asynchronously without blocking
-          if (this.connectionStatus.connected) {
+          // Load maps asynchronously without blocking if connected
+          if (this.connectionStatus.status === 'connected') {
             this.checkApiStatus()
           }
         } else {
@@ -376,6 +415,7 @@ export default {
           this.connectMessage = 'Successfully connected to CalTopo!'
           this.connectMessageType = 'success'
           this.connectionStatus.connected = true
+          this.connectionStatus.status = 'connected'
           await this.checkApiStatus()
           // Clear form
           this.connectForm = {
@@ -386,7 +426,7 @@ export default {
         } else {
           // Check for CalTopo timeout error
           if (data.details && data.details.error_code === 'CALTOPO_TIMEOUT') {
-            this.connectMessage = 'CalTopo request timed out. Please reload the page and try again.'
+            this.connectMessage = 'CalTopo request timed out.'
           } else {
             this.connectMessage = data.error || 'Failed to connect to CalTopo'
           }
@@ -418,6 +458,7 @@ export default {
         
         if (response.ok) {
           this.connectionStatus.connected = false
+          this.connectionStatus.status = 'not_connected'
           this.selectedMapId = ''
           this.features = []
           this.maps = []
@@ -455,7 +496,7 @@ export default {
           this.apiStatus['List Maps'] = 'error'
           // Check for CalTopo timeout error
           if (errorData.details && errorData.details.error_code === 'CALTOPO_TIMEOUT') {
-            this.apiErrors['List Maps'] = 'CalTopo request timed out. Please reload the page and try again.'
+            this.apiErrors['List Maps'] = 'CalTopo request timed out.'
           } else {
             this.apiErrors['List Maps'] = errorData.error || `HTTP ${response.status}`
           }
@@ -506,7 +547,7 @@ export default {
           const errorData = await response.json().catch(() => ({}))
           // Check for CalTopo timeout error
           if (errorData.details && errorData.details.error_code === 'CALTOPO_TIMEOUT') {
-            this.featureLoadError = 'CalTopo request timed out. Please reload the page and try again.'
+            this.featureLoadError = 'CalTopo request timed out.'
           } else {
             this.featureLoadError = errorData.error || `HTTP ${response.status}`
           }
@@ -567,7 +608,7 @@ export default {
           // Check for CalTopo timeout error
           let errorMsg = data.error || 'Failed to import feature'
           if (data.details && data.details.error_code === 'CALTOPO_TIMEOUT') {
-            errorMsg = 'CalTopo request timed out. Please reload the page and try again.'
+            errorMsg = 'CalTopo request timed out.'
           }
           if (this.toastRef) {
             this.toastRef.show(errorMsg, 'error')
@@ -619,7 +660,7 @@ export default {
           // Check for CalTopo timeout error
           let errorMsg = data.error || 'Failed to import map'
           if (data.details && data.details.error_code === 'CALTOPO_TIMEOUT') {
-            errorMsg = 'CalTopo request timed out. Please reload the page and try again.'
+            errorMsg = 'CalTopo request timed out.'
           }
           if (this.toastRef) {
             this.toastRef.show(errorMsg, 'error')

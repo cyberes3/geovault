@@ -1,20 +1,22 @@
 """
 CalTopo authentication endpoints.
 """
+import json
 import traceback
 from typing import Dict, Any
+
 from django.http import HttpRequest, JsonResponse
 from django.views.decorators.http import require_http_methods
 from pydantic import BaseModel, Field, ConfigDict
+from requests.exceptions import ReadTimeout, Timeout
 
 from api.models import CalTopoUser
-from api.utils.responses import error_response, success_response
 from api.utils.caltopo_helpers import handle_caltopo_call
+from api.utils.responses import error_response, success_response
 from api.validation.feature_updates import validate_payload
 from geo_lib.logging.console import get_tagged_logger
-from geo_lib.services.caltopo_service import get_caltopo_session
+from geo_lib.services.caltopo_service import get_caltopo_session, CalTopoTimeoutError
 from geo_lib.website.auth import api_or_login_required_401
-from requests.exceptions import ReadTimeout, Timeout
 
 _logger = get_tagged_logger('CalTopoAuth')
 
@@ -67,23 +69,22 @@ def connect_caltopo(request: HttpRequest, validated_data: Dict[str, Any]) -> Jso
         try:
             return session.getAccountData()
         except (ReadTimeout, Timeout) as e:
-            from geo_lib.services.caltopo_service import CalTopoTimeoutError
             raise CalTopoTimeoutError("CalTopo API request timed out") from e
-    
+
     try:
         account_data, error_resp = handle_caltopo_call(verify_account_data)
         if error_resp:
             # Delete credentials if verification fails
             caltopo_user.delete()
             return error_resp
-    except Exception as e:
+    except:
         # Delete credentials if verification fails (non-timeout exceptions)
         caltopo_user.delete()
         # Log detailed error internally
         _logger.warning(f'Failed to connect to Caltopo: {traceback.format_exc()}')
         # Return generic error message to user (don't expose API internals)
         return error_response('Invalid CalTopo credentials. Please verify your account ID, credential code, and credential key are correct.', code=400)
-    
+
     # If we get here, verification succeeded (account_data may be None, but that's OK)
 
     return success_response({
@@ -99,42 +100,75 @@ def get_caltopo_status(request: HttpRequest) -> JsonResponse:
     Check if the current user has connected CalTopo and validate credentials.
     
     GET /api/caltopo/status/
+    
+    Returns:
+        - status: 'not_connected' (no credentials stored)
+        - status: 'invalid' (credentials exist but are invalid)
+        - status: 'timeout' (credentials exist but CalTopo API timed out)
+        - status: 'connected' (credentials exist and are valid)
     """
     try:
         caltopo_user = CalTopoUser.objects.get(user=request.user)
     except CalTopoUser.DoesNotExist:
         return success_response({
-            'connected': False
+            'connected': False,
+            'status': 'not_connected'
         })
-    
+
     # Validate credentials by attempting to get account data
     session = get_caltopo_session(request.user)
     if not session:
-        # Credentials exist but session creation failed - mark as not connected
+        # Credentials exist but session creation failed - invalid credentials
         return success_response({
-            'connected': False
+            'connected': False,
+            'status': 'invalid'
         })
-    
-    # Verify credentials work - wrap getAccountData call to handle timeouts
-    def verify_account_data():
-        """Wrapper to convert ReadTimeout/Timeout to CalTopoTimeoutError."""
-        try:
-            return session.getAccountData()
-        except (ReadTimeout, Timeout) as e:
-            from geo_lib.services.caltopo_service import CalTopoTimeoutError
-            raise CalTopoTimeoutError("CalTopo API request timed out") from e
-    
-    account_data, error_resp = handle_caltopo_call(verify_account_data)
-    if error_resp:
-        # Credentials exist but validation failed (timeout or other error)
-        # Return connected: false since credentials are invalid
+
+    # Verify credentials work - check for timeout separately
+    try:
+        def verify_account_data():
+            """Wrapper to convert ReadTimeout/Timeout to CalTopoTimeoutError."""
+            try:
+                return session.getAccountData()
+            except (ReadTimeout, Timeout) as e:
+                raise CalTopoTimeoutError("CalTopo API request timed out") from e
+
+        account_data, error_resp = handle_caltopo_call(verify_account_data)
+        if error_resp:
+            # Check if it's a timeout error by examining the error response
+            try:
+                error_data = json.loads(error_resp.content)
+                if error_data.get('details', {}).get('error_code') == 'CALTOPO_TIMEOUT':
+                    return success_response({
+                        'connected': False,
+                        'status': 'timeout'
+                    })
+            except (json.JSONDecodeError, AttributeError, TypeError):
+                pass
+
+            # Credentials exist but validation failed - invalid credentials
+            return success_response({
+                'connected': False,
+                'status': 'invalid'
+            })
+    except CalTopoTimeoutError:
+        # Direct timeout exception (shouldn't happen with handle_caltopo_call, but just in case)
         return success_response({
-            'connected': False
+            'connected': False,
+            'status': 'timeout'
         })
-    
+    except:
+        # Other exceptions - invalid credentials
+        _logger.warning(f'Error validating CalTopo credentials: {traceback.format_exc()}')
+        return success_response({
+            'connected': False,
+            'status': 'invalid'
+        })
+
     # Credentials exist and are valid
     return success_response({
-        'connected': True
+        'connected': True,
+        'status': 'connected'
     })
 
 
