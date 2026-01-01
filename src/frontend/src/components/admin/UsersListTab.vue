@@ -29,11 +29,8 @@
       <h2 class="text-lg font-semibold text-gray-900 mb-4">Users</h2>
       
       <!-- Loading State -->
-      <div v-if="loading" class="flex items-center justify-center py-12">
-        <div class="text-center">
-          <div class="inline-block animate-spin rounded-full h-8 w-8 border-b-2 border-blue-500"></div>
-          <p class="mt-2 text-sm text-gray-800">Loading users...</p>
-        </div>
+      <div v-if="loading" class="py-12">
+        <Loader size="md" layout="centered" message="Loading users..." />
       </div>
 
       <!-- Error State -->
@@ -102,13 +99,15 @@
 
 <script>
 import { UserIcon, ArrowTopRightOnSquareIcon, ExclamationCircleIcon } from '@heroicons/vue/24/outline';
+import Loader from '@/components/parts/Loader.vue';
 
 export default {
   name: 'UsersListTab',
   components: {
     UserIcon,
     ArrowTopRightOnSquareIcon,
-    ExclamationCircleIcon
+    ExclamationCircleIcon,
+    Loader
   },
   data() {
     return {

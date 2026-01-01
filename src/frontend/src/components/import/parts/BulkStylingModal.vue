@@ -187,20 +187,13 @@
               :disabled="saving"
               class="w-full sm:w-auto inline-flex items-center justify-center px-4 py-2 border border-transparent shadow-sm text-sm font-medium rounded-md text-white bg-blue-500 hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 disabled:opacity-70 disabled:cursor-not-allowed"
             >
-              <svg
+              <Loader
                 v-if="saving"
-                class="animate-spin -ml-1 mr-2 h-4 w-4 text-white"
-                xmlns="http://www.w3.org/2000/svg"
-                fill="none"
-                viewBox="0 0 24 24"
-              >
-                <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
-                <path
-                  class="opacity-75"
-                  fill="currentColor"
-                  d="M4 12a8 8 0 018-8v4a4 4 0 00-4 4H4z"
-                ></path>
-              </svg>
+                size="sm"
+                layout="inline"
+                :showMessage="false"
+                color="#ffffff"
+              />
               <span>{{ saving ? 'Saving…' : 'OK' }}</span>
             </button>
           </div>
@@ -223,6 +216,7 @@ import TagPicker from '@/components/parts/TagPicker.vue'
 import IconPickerDialog from '@/components/map/IconPickerDialog.vue'
 import ToggleButton from '@/components/parts/ToggleButton.vue'
 import ColorPickerElement from '@/components/parts/ColorPickerElement.vue'
+import Loader from '@/components/parts/Loader.vue'
 import { APIHOST } from '@/config.js'
 
 export default {
@@ -233,7 +227,8 @@ export default {
     TagPicker,
     IconPickerDialog,
     ToggleButton,
-    ColorPicker: ColorPickerElement
+    ColorPicker: ColorPickerElement,
+    Loader
   },
   props: {
     isOpen: {

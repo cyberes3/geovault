@@ -1,20 +1,8 @@
 <template>
   <div :class="containerClasses">
-    <svg
-      :class="spinnerClasses"
-      :style="spinnerStyle"
-      xmlns="http://www.w3.org/2000/svg"
-      fill="none"
-      viewBox="0 0 24 24"
-      :aria-label="message || 'Loading'"
-    >
-      <circle :class="circleClasses" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
-      <path
-        :class="pathClasses"
-        fill="currentColor"
-        d="M4 12a8 8 0 018-8v4a4 4 0 00-4 4H4z"
-      ></path>
-    </svg>
+    <div :class="spinnerClasses" :aria-label="message || 'Loading'">
+      <div :class="borderSpinnerClasses" :style="spinnerStyle"></div>
+    </div>
     
     <!-- Message -->
     <p v-if="shouldShowMessage" :class="messageClasses">{{ message }}</p>
@@ -88,34 +76,24 @@ const containerClasses = computed(() => {
   return 'flex flex-col items-center justify-center py-12'
 })
 
-// Spinner SVG classes
+// Spinner wrapper classes
 const spinnerClasses = computed(() => {
-  const sizeMap = {
-    sm: 'h-4 w-4',
-    md: 'h-8 w-8',
-    lg: 'h-12 w-12'
-  }
-  const base = `animate-spin ${sizeMap[props.size]}`
+  const base = 'relative'
   if (props.layout === 'inline') {
     return `${base} -ml-1 mr-2`
   }
   return base
 })
 
-// Circle classes for opacity
-const circleClasses = computed(() => {
-  return 'opacity-25'
+// Border spinner classes
+const borderSpinnerClasses = computed(() => {
+  return `${sizeClasses.value.border} border-transparent rounded-full animate-spin`
 })
 
-// Path classes for opacity
-const pathClasses = computed(() => {
-  return 'opacity-75'
-})
-
-// Spinner style - set color via CSS so currentColor works
+// Border spinner style
 const spinnerStyle = computed(() => {
   return {
-    color: props.color
+    'border-bottom-color': props.color
   }
 })
 
