@@ -321,26 +321,33 @@ class TestSequentialProcessing(TransactionTestCase):
                 )
                 assert result is not False
             
-            # Give a moment for the queue to be populated and first job to start
-            time.sleep(0.2)
+            # Wait for first job to start processing (worker needs time to start and dequeue)
+            # Poll until job 1 is in PROCESSING state, with timeout
+            max_wait = 2.0
+            start_time = time.time()
+            job1_processing = False
+            while time.time() - start_time < max_wait:
+                job1 = status_tracker.get_job(job_ids[0])
+                if job1 and job1.status == ProcessingStatus.PROCESSING:
+                    job1_processing = True
+                    break
+                time.sleep(0.05)
             
-            # Check statuses shortly after all are enqueued
-            # First job might be in any state (worker is VERY fast!)
+            # Verify job 1 is processing (must be PROCESSING, not COMPLETED, since mock takes 0.8s)
             job1 = status_tracker.get_job(job_ids[0])
-            # Just verify it exists and is in a valid state
             assert job1 is not None, "Job 1 should exist"
-            assert job1.status in [ProcessingStatus.QUEUED, ProcessingStatus.PROCESSING, ProcessingStatus.COMPLETED], \
-                f"Job 1 should be in a valid state, got {job1.status.value}"
+            assert job1.status == ProcessingStatus.PROCESSING, \
+                f"Job 1 should be PROCESSING (mock takes 0.8s), got {job1.status.value}"
             
             # Second and third jobs should definitely be QUEUED
-            # (since first job takes 0.8s total)
+            # (since first job takes 0.8s total and is currently processing)
             job2 = status_tracker.get_job(job_ids[1])
             assert job2.status == ProcessingStatus.QUEUED, \
-                f"Job 2 should be QUEUED, got {job2.status.value}"
+                f"Job 2 should be QUEUED while job 1 is processing, got {job2.status.value}"
             
             job3 = status_tracker.get_job(job_ids[2])
             assert job3.status == ProcessingStatus.QUEUED, \
-                f"Job 3 should be QUEUED, got {job3.status.value}"
+                f"Job 3 should be QUEUED while job 1 is processing, got {job3.status.value}"
             
             # This is the KEY test: verify only ONE job is processing at a time
             # Check that at most one job is in PROCESSING state
@@ -373,6 +380,54 @@ class TestSequentialProcessing(TransactionTestCase):
             job3 = status_tracker.get_job(job_ids[2])
             assert job3.status == ProcessingStatus.QUEUED, \
                 f"Job 3 should still be QUEUED (proves sequential processing), got {job3.status.value}"
+            
+            # Wait for job 1 to complete (mock takes 0.8s, so wait a bit longer)
+            max_wait = 2.0
+            start_time = time.time()
+            job1_completed = False
+            while time.time() - start_time < max_wait:
+                job1 = status_tracker.get_job(job_ids[0])
+                if job1 and job1.status == ProcessingStatus.COMPLETED:
+                    job1_completed = True
+                    break
+                time.sleep(0.05)
+            
+            # Verify job 1 completed
+            job1 = status_tracker.get_job(job_ids[0])
+            assert job1 is not None, "Job 1 should exist"
+            assert job1.status == ProcessingStatus.COMPLETED, \
+                f"Job 1 should be COMPLETED after processing, got {job1.status.value}"
+            
+            # Verify job 2 has started processing (sequential processing)
+            max_wait = 1.0
+            start_time = time.time()
+            job2_processing = False
+            while time.time() - start_time < max_wait:
+                job2 = status_tracker.get_job(job_ids[1])
+                if job2 and job2.status == ProcessingStatus.PROCESSING:
+                    job2_processing = True
+                    break
+                time.sleep(0.05)
+            
+            job2 = status_tracker.get_job(job_ids[1])
+            assert job2 is not None, "Job 2 should exist"
+            assert job2.status == ProcessingStatus.PROCESSING, \
+                f"Job 2 should be PROCESSING after job 1 completed (sequential processing), got {job2.status.value}"
+            
+            # Verify job 3 is still QUEUED (only one job processes at a time)
+            job3 = status_tracker.get_job(job_ids[2])
+            assert job3 is not None, "Job 3 should exist"
+            assert job3.status == ProcessingStatus.QUEUED, \
+                f"Job 3 should still be QUEUED while job 2 is processing, got {job3.status.value}"
+            
+            # Verify only one job is processing at a time
+            statuses = [
+                status_tracker.get_job(jid).status for jid in job_ids 
+                if status_tracker.get_job(jid)
+            ]
+            processing_count = sum(1 for s in statuses if s == ProcessingStatus.PROCESSING)
+            assert processing_count == 1, \
+                f"Should have exactly 1 job PROCESSING at a time, found {processing_count}"
             
             # Wait for all jobs to complete
             time.sleep(3.0)

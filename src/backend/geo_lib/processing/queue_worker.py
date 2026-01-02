@@ -170,9 +170,11 @@ class WorkerRegistry:
                 if existing_worker.is_alive():
                     # Check if worker is actually running (not just alive)
                     if not existing_worker.running:
-                        # Worker is exiting, start a new one
-                        _logger.debug(f"Worker for user {user_id} is alive but not running, starting new worker")
-                        # Don't delete - let it unregister itself, just start new worker
+                        # Worker is exiting, wait for it to finish before starting a new one
+                        # This prevents multiple workers from processing jobs in parallel
+                        _logger.debug(f"Worker for user {user_id} is alive but not running, waiting for it to exit")
+                        # Don't start a new worker - let the existing one finish and unregister itself
+                        return True
                     else:
                         _logger.debug(f"Worker for user {user_id} already running")
                         return True
