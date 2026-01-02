@@ -10,7 +10,7 @@ from django.test import TransactionTestCase
 from django.contrib.auth import get_user_model
 
 from geo_lib.processing.jobs.process_job import ProcessJob
-from geo_lib.processing.queue_worker import QueueWorker, WorkerRegistry
+from geo_lib.processing.queue_worker import QueueWorker, WorkerRegistry, WorkerState
 from geo_lib.processing.redis_queue import get_processing_queue
 from geo_lib.processing.jobs.helpers.status_tracker import ProcessingStatus, status_tracker
 from geo_lib.utils.redis_connection import get_redis_connection
@@ -278,7 +278,8 @@ class TestSequentialProcessing(TransactionTestCase):
             # Should only have 1 worker for this user
             worker = WorkerRegistry.get_worker_for_user(self.user.id)
             assert worker is not None, "Worker should exist for user"
-            assert worker.is_alive(), "Worker should be alive"
+            assert worker.get_state() in (WorkerState.STARTING, WorkerState.RUNNING), \
+                f"Worker should be active, got state: {worker.get_state().value}"
             
             # Total active workers should be 1
             active_count = WorkerRegistry.get_active_worker_count()

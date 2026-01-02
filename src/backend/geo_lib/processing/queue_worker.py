@@ -6,7 +6,8 @@ Single worker thread per user ensures FIFO processing order.
 import threading
 import time
 import traceback
-from typing import Dict, Optional
+from enum import Enum
+from typing import Any, Dict, Optional
 
 from geo_lib.logging.console import get_tagged_logger
 from geo_lib.processing.jobs.helpers.redis_job_storage import store_job_started
@@ -14,6 +15,15 @@ from geo_lib.processing.jobs.helpers.status_tracker import ProcessingStatus
 from geo_lib.processing.redis_queue import get_processing_queue
 
 _logger = get_tagged_logger()
+
+
+class WorkerState(Enum):
+    """Worker lifecycle states."""
+    STARTING = "starting"  # Worker created, thread not yet started
+    RUNNING = "running"  # Worker thread is processing jobs
+    STOPPING = "stopping"  # Stop signal received, finishing current job
+    STOPPED = "stopped"  # Thread has exited cleanly
+    FAILED = "failed"  # Thread crashed or failed to start
 
 
 class QueueWorker:
@@ -36,110 +46,134 @@ class QueueWorker:
         self.process_job = process_job_instance
         self.queue = get_processing_queue(user_id)
         self.thread = None
-        self.running = False
-        self.should_stop = False
+        self._state = WorkerState.STARTING
+        self._state_lock = threading.Lock()
+
+    def get_state(self) -> WorkerState:
+        """Get current worker state (thread-safe)."""
+        with self._state_lock:
+            return self._state
+
+    def _transition_state(self, new_state: WorkerState):
+        """Transition to new state (thread-safe)."""
+        with self._state_lock:
+            old_state = self._state
+            self._state = new_state
+            _logger.debug(f"Worker {self.user_id} state: {old_state.value} -> {new_state.value}")
 
     def start(self):
         """Start the worker thread."""
-        if self.thread is not None and self.thread.is_alive():
-            _logger.warning(f"Worker for user {self.user_id} is already running")
+        current_state = self.get_state()
+        if current_state not in (WorkerState.STARTING, WorkerState.STOPPED, WorkerState.FAILED):
+            _logger.warning(f"Worker for user {self.user_id} is already in state {current_state.value}")
             return
 
-        self.running = True
-        self.should_stop = False
-        self.thread = threading.Thread(
-            target=self._worker_loop,
-            daemon=True,
-            name=f"QueueWorker-User{self.user_id}"
-        )
-        self.thread.start()
-        _logger.debug(f"Started queue worker for user {self.user_id}")
+        try:
+            self.thread = threading.Thread(
+                target=self._worker_loop,
+                daemon=True,
+                name=f"QueueWorker-User{self.user_id}"
+            )
+            self.thread.start()
+            _logger.debug(f"Started queue worker for user {self.user_id}")
+        except Exception as e:
+            _logger.error(f"Failed to start worker thread for user {self.user_id}: {e}")
+            self._transition_state(WorkerState.FAILED)
+            raise
 
     def stop(self):
         """Signal the worker to stop gracefully."""
-        self.should_stop = True
-
-    def is_alive(self) -> bool:
-        """Check if worker thread is running."""
-        return self.thread is not None and self.thread.is_alive()
+        current_state = self.get_state()
+        if current_state == WorkerState.RUNNING:
+            self._transition_state(WorkerState.STOPPING)
 
     def _worker_loop(self):
         """Main worker loop - processes jobs until idle timeout or stop signal."""
         try:
+            # Transition to RUNNING state when thread starts
+            self._transition_state(WorkerState.RUNNING)
             _logger.debug(f"Queue worker for user {self.user_id} started processing")
 
-            while not self.should_stop:
-                try:
-                    # Use shorter timeout so we can check should_stop more frequently
-                    # Dequeue with 1 second timeout instead of full IDLE_TIMEOUT
-                    job_data = self.queue.dequeue(timeout=1)
+            idle_start = None
 
-                    if job_data is None:
-                        # Check if we should stop
-                        if self.should_stop:
-                            break
+            while self.get_state() == WorkerState.RUNNING:
+                # Dequeue with 1 second timeout so we can check state frequently
+                job_data = self.queue.dequeue(timeout=1)
 
-                        # Track idle time manually
-                        if not hasattr(self, '_idle_start'):
-                            self._idle_start = time.time()
-                        elif time.time() - self._idle_start >= self.IDLE_TIMEOUT:
-                            # Idle timeout - exit worker
-                            _logger.debug(f"Queue worker for user {self.user_id} idle timeout, exiting")
-                            break
-                        # Continue loop to check for jobs again
-                        continue
-
-                    # Reset idle timer when we get a job
-                    if hasattr(self, '_idle_start'):
-                        delattr(self, '_idle_start')
-
-                    if self.should_stop:
-                        # Stop signal received, re-enqueue job and exit
-                        _logger.debug(f"Queue worker for user {self.user_id} stopping, re-enqueueing job {job_data['job_id']}")
-                        self.queue.enqueue(job_data)
+                if job_data is None:
+                    # No job available - check for idle timeout
+                    if self.get_state() != WorkerState.RUNNING:
                         break
 
-                    # Process the job
-                    try:
-                        job_id = job_data['job_id']
-                        _logger.debug(f"Queue worker for user {self.user_id} processing job {job_id}")
+                    if idle_start is None:
+                        idle_start = time.time()
+                    elif time.time() - idle_start >= self.IDLE_TIMEOUT:
+                        _logger.debug(f"Queue worker for user {self.user_id} idle timeout, exiting")
+                        self._transition_state(WorkerState.STOPPING)
+                        break
+                    continue
 
-                        # Set status to PROCESSING immediately when job is dequeued
-                        # This ensures only one job shows as processing at a time
-                        self.process_job.status_tracker.update_job_status(
-                            job_id,
-                            ProcessingStatus.PROCESSING,
-                            "Processing...",
-                            0.0
-                        )
+                # Got a job - reset idle timer
+                idle_start = None
 
-                        # Store job in Redis when it starts processing
-                        job = self.process_job.status_tracker.get_job(job_id)
-                        store_job_started(
-                            job_id=job_id,
-                            user_id=job.user_id,
-                            job_type=self.process_job.get_job_type(),
-                            filename=job.filename,
-                            created_at=job.created_at,
-                            import_queue_id=getattr(job, 'import_queue_id', None)
-                        )
+                # Check if we should stop before processing
+                if self.get_state() != WorkerState.RUNNING:
+                    _logger.debug(f"Queue worker for user {self.user_id} stopping, re-enqueueing job {job_data['job_id']}")
+                    self.queue.enqueue(job_data)
+                    break
 
-                        # Call _execute_job directly (NOT _job_worker) to process synchronously
-                        # The queue worker thread already provides sequential execution,
-                        # so we don't need _job_worker to spawn another thread
-                        self.process_job._execute_job(job_id, job_data)
-                    except:
-                        _logger.error(f"Error processing job {job_data['job_id']} for user {self.user_id}: {traceback.format_exc()}", exc_info=True)
-                        # Continue processing next job even if this one failed
-
-                except:
-                    _logger.error(f"Error in worker loop for user {self.user_id}: {traceback.format_exc()}", exc_info=True)
-                    # Small delay before retrying to avoid tight error loop
-                    time.sleep(1)
+                # Process the job - catch errors to continue with next job
+                try:
+                    self._process_single_job(job_data)
+                except Exception as e:
+                    _logger.error(f"Error processing job {job_data['job_id']} for user {self.user_id}: {e}", exc_info=True)
+                    # Continue processing next job even if this one failed
+        except Exception as e:
+            # Catastrophic failure in worker loop itself (not in job processing)
+            _logger.error(f"Catastrophic error in worker loop for user {self.user_id}: {e}", exc_info=True)
+            self._transition_state(WorkerState.FAILED)
         finally:
-            self.running = False
+            # Ensure we transition to a terminal state
+            current_state = self.get_state()
+            if current_state not in (WorkerState.STOPPED, WorkerState.FAILED):
+                self._transition_state(WorkerState.STOPPED)
             # Unregister this worker
             WorkerRegistry.unregister_worker(self.user_id)
+
+    def _process_single_job(self, job_data: Dict[str, Any]):
+        """
+        Process a single job from the queue.
+        
+        Args:
+            job_data: Job metadata from Redis queue
+        """
+        job_id = job_data['job_id']
+        _logger.debug(f"Queue worker for user {self.user_id} processing job {job_id}")
+
+        # Set status to PROCESSING immediately when job is dequeued
+        # This ensures only one job shows as processing at a time
+        self.process_job.status_tracker.update_job_status(
+            job_id,
+            ProcessingStatus.PROCESSING,
+            "Processing...",
+            0.0
+        )
+
+        # Store job in Redis when it starts processing
+        job = self.process_job.status_tracker.get_job(job_id)
+        store_job_started(
+            job_id=job_id,
+            user_id=job.user_id,
+            job_type=self.process_job.get_job_type(),
+            filename=job.filename,
+            created_at=job.created_at,
+            import_queue_id=getattr(job, 'import_queue_id', None)
+        )
+
+        # Call _execute_job directly (NOT _job_worker) to process synchronously
+        # The queue worker thread already provides sequential execution,
+        # so we don't need _job_worker to spawn another thread
+        self.process_job._execute_job(job_id, job_data)
 
 
 class WorkerRegistry:
@@ -164,33 +198,39 @@ class WorkerRegistry:
             True if worker was started or already running, False on error
         """
         with cls._lock:
-            # Check if worker already exists and is alive
             existing_worker = cls._workers.get(user_id)
             if existing_worker is not None:
-                if existing_worker.is_alive():
-                    # Check if worker is actually running (not just alive)
-                    if not existing_worker.running:
-                        # Worker is exiting, wait for it to finish before starting a new one
-                        # This prevents multiple workers from processing jobs in parallel
-                        _logger.debug(f"Worker for user {user_id} is alive but not running, waiting for it to exit")
-                        # Don't start a new worker - let the existing one finish and unregister itself
-                        return True
-                    else:
-                        _logger.debug(f"Worker for user {user_id} already running")
-                        return True
-                else:
-                    # Worker thread died, remove it
-                    _logger.debug(f"Removing dead worker for user {user_id}")
-                    del cls._workers[user_id]
+                state = existing_worker.get_state()
+
+                # If worker is active (starting or running), don't create another
+                if state in (WorkerState.STARTING, WorkerState.RUNNING):
+                    _logger.debug(f"Worker for user {user_id} already active (state: {state.value})")
+                    return True
+
+                # If worker is stopping, wait for it to finish
+                if state == WorkerState.STOPPING:
+                    _logger.debug(f"Worker for user {user_id} is stopping, waiting for it to exit")
+                    return True
+
+                # Worker is STOPPED or FAILED - remove it and create new one
+                _logger.info(f"Removing {state.value} worker for user {user_id}")
+                del cls._workers[user_id]
 
             # Create and start new worker
             try:
                 worker = QueueWorker(user_id, process_job_instance)
-                worker.start()
+                # Add to registry BEFORE starting to ensure it's visible immediately
+                # This prevents race condition where another thread tries to start
+                # a worker before this one is registered
                 cls._workers[user_id] = worker
+                # Now start the worker (transitions to RUNNING when thread starts)
+                worker.start()
                 return True
             except:
                 _logger.error(f"Failed to start worker for user {user_id}: {traceback.format_exc()}")
+                # If worker was added to registry but failed to start, remove it
+                if user_id in cls._workers:
+                    del cls._workers[user_id]
                 return False
 
     @classmethod
@@ -218,14 +258,14 @@ class WorkerRegistry:
 
     @classmethod
     def get_active_worker_count(cls) -> int:
-        """Get the number of active workers."""
+        """Get the number of active workers (STARTING or RUNNING only)."""
         with cls._lock:
-            # Clean up dead workers
-            dead_workers = [
+            # Clean up stopped/failed/stopping workers
+            inactive_workers = [
                 user_id for user_id, worker in cls._workers.items()
-                if not worker.is_alive()
+                if worker.get_state() in (WorkerState.STOPPED, WorkerState.FAILED, WorkerState.STOPPING)
             ]
-            for user_id in dead_workers:
+            for user_id in inactive_workers:
                 del cls._workers[user_id]
 
             return len(cls._workers)
@@ -243,8 +283,8 @@ class WorkerRegistry:
         """
         with cls._lock:
             worker = cls._workers.get(user_id)
-            if worker is not None and not worker.is_alive():
-                # Worker died, remove it
+            if worker is not None and worker.get_state() in (WorkerState.STOPPED, WorkerState.FAILED):
+                # Worker is stopped or failed, remove it
                 del cls._workers[user_id]
                 return None
             return worker
