@@ -59,24 +59,42 @@ class AdvisoryLock:
         self.file_hash = file_hash
         self.lock_id = hash_to_lock_id(file_hash)
         self.acquired = False
+        self._connection = None
 
     def __enter__(self):
         """Acquire the advisory lock."""
-        with connection.cursor() as cursor:
+        # Use the thread-local connection (lazy proxy)
+        # Django's connection is thread-local, so each thread gets its own connection
+        # Using 'connection' instead of 'connections["default"]' to avoid potential locking
+        self._connection = connection
+        
+        # The connection will be automatically opened when we use it
+        cursor = self._connection.cursor()
+        try:
             # pg_advisory_lock blocks until the lock is available
             cursor.execute("SELECT pg_advisory_lock(%s)", [self.lock_id])
             self.acquired = True
+        finally:
+            cursor.close()
         return self
 
     def __exit__(self, exc_type, exc_val, exc_tb):
         """Release the advisory lock."""
         if self.acquired:
-            with connection.cursor() as cursor:
+            # Use the same connection that acquired the lock
+            # Advisory locks are session-level, so we need to use the same connection
+            if self._connection is None:
+                self._connection = connection
+            
+            cursor = self._connection.cursor()
+            try:
                 # pg_advisory_unlock returns true if the lock was held and released
                 cursor.execute("SELECT pg_advisory_unlock(%s)", [self.lock_id])
                 result = cursor.fetchone()
                 if not (result and result[0]):
                     logger.error('Advisory lock was not held when trying to release')
+            finally:
+                cursor.close()
         return False  # Don't suppress exceptions
 
 

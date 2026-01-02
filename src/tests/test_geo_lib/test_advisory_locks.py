@@ -7,7 +7,7 @@ import time
 
 import pytest
 from django.contrib.auth import get_user_model
-from django.db import connections
+from django.db import connections, close_old_connections
 from unittest.mock import MagicMock, Mock, patch
 
 from api.models import ImportQueue
@@ -140,14 +140,19 @@ class TestAdvisoryLock:
         """Test that two threads with different hashes execute in parallel."""
         
         execution_log = []
+        timing_log = []
         start_time = time.time()
         
         def worker(hash_suffix, delay):
-            # Ensure this thread has its own database connection
-            # Close any existing connections to force new connection per thread
-            connections.close_all()
+            thread_start = time.time()
+            timing_log.append((f"{hash_suffix}_thread_start", thread_start - start_time))
             
+            # Django's connection is thread-local, so each thread automatically gets its own connection
+            lock_acquire_start = time.time()
             with advisory_lock(f"test_hash_{hash_suffix}"):
+                lock_acquired = time.time()
+                timing_log.append((f"{hash_suffix}_lock_acquired", lock_acquired - start_time))
+                timing_log.append((f"{hash_suffix}_connection_time", lock_acquired - lock_acquire_start))
                 execution_log.append(f"worker_{hash_suffix}_start")
                 time.sleep(delay)
                 execution_log.append(f"worker_{hash_suffix}_end")
@@ -168,10 +173,22 @@ class TestAdvisoryLock:
         assert "worker_A_start" in execution_log
         assert "worker_B_start" in execution_log
         
-        # If they ran in parallel, total time should be ~0.2s, not ~0.4s
-        # Allow more margin for thread overhead and connection establishment
-        # Connection establishment can add 50-100ms per thread
-        assert elapsed_time < 0.4, f"Expected parallel execution (~0.2s), got {elapsed_time:.2f}s. Execution log: {execution_log}"
+        # Verify parallel execution: both threads should start before either finishes
+        # This confirms that different hashes don't block each other at the advisory lock level
+        start_indices = [i for i, log in enumerate(execution_log) if "_start" in log]
+        end_indices = [i for i, log in enumerate(execution_log) if "_end" in log]
+        assert max(start_indices) < min(end_indices), "Threads did not run in parallel - one finished before both started"
+        
+        # Connection establishment can be slow, especially with remote/test databases
+        # If connections are established in parallel, total time should be ~max(connection_time) + sleep_time
+        # If serialized, it would be ~sum(connection_time) + sleep_time
+        # We allow up to 2.0s to account for slow DB connections in test environments
+        # The critical test is the parallel execution check above, not the absolute timing
+        timing_msg = "; ".join([f"{event}: {t:.3f}s" for event, t in sorted(timing_log, key=lambda x: x[1])])
+        assert elapsed_time < 2.0, (
+            f"Expected parallel execution (~0.2s + connection overhead), got {elapsed_time:.2f}s. "
+            f"Execution log: {execution_log}. Timing: {timing_msg}"
+        )
 
 
 @pytest.mark.django_db
