@@ -2,11 +2,11 @@
   <div class="space-y-6">
     <!-- CalTopo Integration Section -->
     <div class="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
-      <div class="flex items-center justify-between mb-6">
+      <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between mb-6 gap-4">
         <h2 class="text-xl font-semibold text-gray-900">CalTopo Integration</h2>
         <button
           @click="showSetupModal = true"
-          class="inline-flex items-center px-3 py-1.5 border border-gray-300 shadow-sm text-sm font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500"
+          class="w-full sm:w-auto inline-flex items-center justify-center px-3 py-1.5 border border-transparent shadow-sm text-sm font-medium rounded-md text-white bg-blue-600 hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500"
           title="How to set up CalTopo integration"
         >
           <svg class="w-4 h-4 mr-1.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -223,16 +223,16 @@
 
       <!-- Features List -->
       <div v-if="selectedMapId && features.length > 0" class="space-y-4">
-        <div class="flex items-center justify-between">
+        <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
           <h3 class="text-md font-medium text-gray-900">
             Features in {{ selectedMapTitle }} ({{ features.length }})
           </h3>
-          <div class="relative">
+          <div class="relative w-full sm:w-auto">
             <button
               @click="handleImportMap"
               :disabled="importingMap || mapInQueue"
               :title="mapInQueue ? 'This map is already in the import queue. Please complete the import.' : ''"
-              class="inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md text-white bg-blue-600 hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 disabled:opacity-50 disabled:cursor-not-allowed"
+              class="w-full sm:w-auto inline-flex items-center justify-center px-4 py-2 border border-transparent text-sm font-medium rounded-md text-white bg-blue-600 hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 disabled:opacity-50 disabled:cursor-not-allowed"
             >
               <span v-if="importingMap">Importing...</span>
               <span v-else-if="mapInQueue">Already in Queue</span>
