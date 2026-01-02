@@ -21,18 +21,24 @@
                 <action android:name="android.intent.action.MAIN" />
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
-            <!-- Handle single file shares -->
+        </activity>
+        <activity
+            android:name=".SettingsActivity"
+            android:exported="false"
+            android:theme="@style/Theme.GeoVaultUploader"
+            android:parentActivityName=".MainActivity" />
+        <!-- Handle both single and multiple file shares -->
+        <activity
+            android:name=".MultiUploadActivity"
+            android:exported="true"
+            android:theme="@style/Theme.GeoVaultUploader">
+            <!-- Handle single file shares - Accept all files, validation happens in code -->
             <intent-filter>
                 <action android:name="android.intent.action.SEND" />
                 <category android:name="android.intent.category.DEFAULT" />
                 <data android:mimeType="*/*" />
             </intent-filter>
-        </activity>
-        <!-- Handle multiple file shares -->
-        <activity
-            android:name=".MultiUploadActivity"
-            android:exported="true"
-            android:theme="@style/Theme.GeoVaultUploader">
+            <!-- Handle multiple file shares - Accept all files, validation happens in code -->
             <intent-filter>
                 <action android:name="android.intent.action.SEND_MULTIPLE" />
                 <category android:name="android.intent.category.DEFAULT" />

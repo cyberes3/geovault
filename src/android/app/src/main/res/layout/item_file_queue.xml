@@ -1,87 +1,99 @@
 <?xml version="1.0" encoding="utf-8"?>
-<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+<androidx.cardview.widget.CardView xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
     android:layout_width="match_parent"
     android:layout_height="wrap_content"
-    android:orientation="vertical"
-    android:padding="12dp"
-    android:background="@color/white"
-    android:layout_marginBottom="8dp">
+    android:layout_margin="8dp"
+    app:cardCornerRadius="12dp"
+    app:cardElevation="2dp"
+    app:cardBackgroundColor="@color/white">
 
     <LinearLayout
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:orientation="horizontal"
-        android:gravity="center_vertical">
-
-        <TextView
-            android:id="@+id/fileStatusIcon"
-            android:layout_width="24dp"
-            android:layout_height="24dp"
-            android:text="•"
-            android:textSize="20sp"
-            android:textColor="@color/text_secondary"
-            android:gravity="center"
-            android:layout_marginEnd="12dp" />
+        android:orientation="vertical"
+        android:padding="16dp">
 
         <LinearLayout
-            android:layout_width="0dp"
+            android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:layout_weight="1"
-            android:orientation="vertical">
+            android:orientation="horizontal"
+            android:gravity="center_vertical"
+            android:layout_marginBottom="8dp">
+
+            <ImageView
+                android:id="@+id/fileStatusIcon"
+                android:layout_width="32dp"
+                android:layout_height="32dp"
+                android:scaleType="centerInside"
+                android:layout_marginEnd="16dp"
+                android:contentDescription="File status" />
 
             <LinearLayout
-                android:layout_width="match_parent"
+                android:layout_width="0dp"
                 android:layout_height="wrap_content"
-                android:orientation="horizontal"
-                android:gravity="center_vertical"
-                android:background="@android:drawable/edit_text"
-                android:paddingStart="8dp"
-                android:paddingEnd="8dp"
-                android:paddingTop="8dp"
-                android:paddingBottom="8dp">
+                android:layout_weight="1"
+                android:orientation="vertical">
 
-                <EditText
-                    android:id="@+id/filenameEditText"
-                    android:layout_width="0dp"
+                <LinearLayout
+                    android:layout_width="match_parent"
                     android:layout_height="wrap_content"
-                    android:layout_weight="1"
-                    android:textSize="16sp"
-                    android:textColor="@color/text_primary"
-                    android:background="@android:color/transparent"
-                    android:hint="Tap to rename"
-                    android:textColorHint="@color/text_secondary"
-                    android:singleLine="true"
-                    android:imeOptions="actionNext"
-                    android:inputType="text" />
+                    android:orientation="horizontal"
+                    android:gravity="center_vertical"
+                    android:background="@drawable/edit_text_background"
+                    android:paddingStart="12dp"
+                    android:paddingEnd="12dp"
+                    android:paddingTop="10dp"
+                    android:paddingBottom="10dp"
+                    android:minHeight="48dp">
+
+                    <EditText
+                        android:id="@+id/filenameEditText"
+                        android:layout_width="0dp"
+                        android:layout_height="wrap_content"
+                        android:layout_weight="1"
+                        android:textSize="16sp"
+                        android:textColor="@color/text_primary"
+                        android:background="@android:color/transparent"
+                        android:hint="Tap to rename"
+                        android:textColorHint="@color/text_secondary"
+                        android:singleLine="true"
+                        android:imeOptions="actionNext"
+                        android:inputType="text"
+                        android:padding="0dp" />
+
+                    <TextView
+                        android:id="@+id/fileExtensionText"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:textSize="16sp"
+                        android:textColor="@color/text_secondary"
+                        android:text=".ext"
+                        android:layout_marginStart="4dp" />
+                </LinearLayout>
 
                 <TextView
-                    android:id="@+id/fileExtensionText"
+                    android:id="@+id/fileSizeText"
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
-                    android:textSize="16sp"
+                    android:textSize="13sp"
                     android:textColor="@color/text_secondary"
-                    android:text=".ext"
-                    android:layout_marginStart="2dp" />
+                    android:layout_marginTop="6dp"
+                    android:layout_marginStart="12dp" />
             </LinearLayout>
-
-            <TextView
-                android:id="@+id/fileSizeText"
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:textSize="12sp"
-                android:textColor="@color/text_secondary"
-                android:layout_marginTop="4dp" />
         </LinearLayout>
+
+        <TextView
+            android:id="@+id/fileErrorText"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:textSize="13sp"
+            android:textColor="@color/error_red"
+            android:background="@drawable/error_background"
+            android:padding="10dp"
+            android:visibility="gone" />
+
     </LinearLayout>
 
-    <TextView
-        android:id="@+id/fileErrorText"
-        android:layout_width="match_parent"
-        android:layout_height="wrap_content"
-        android:textSize="12sp"
-        android:textColor="@color/error_red"
-        android:layout_marginTop="8dp"
-        android:visibility="gone" />
-
-</LinearLayout>
+</androidx.cardview.widget.CardView>
 

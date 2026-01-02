@@ -11,8 +11,11 @@ import android.widget.EditText
 import android.widget.ProgressBar
 import android.widget.TextView
 import android.widget.Toast
-import androidx.appcompat.app.AlertDialog
 import androidx.appcompat.app.AppCompatActivity
+import androidx.core.view.ViewCompat
+import androidx.core.view.WindowInsetsCompat
+import androidx.core.view.updatePadding
+import androidx.activity.result.contract.ActivityResultContracts
 import okhttp3.Call
 import okhttp3.Callback
 import okhttp3.MediaType.Companion.toMediaType
@@ -35,8 +38,8 @@ class MainActivity : AppCompatActivity() {
     private lateinit var progressBar: ProgressBar
     private lateinit var statusText: TextView
     
-    private lateinit var validationLayout: android.view.ViewGroup
-    private lateinit var uploaderLayout: android.view.ViewGroup
+    private lateinit var validationLayout: androidx.core.widget.NestedScrollView
+    private lateinit var uploaderLayout: androidx.core.widget.NestedScrollView
     private lateinit var validationProgressBar: ProgressBar
     private lateinit var validationStatusText: TextView
     private lateinit var validationTitleText: TextView
@@ -47,6 +50,15 @@ class MainActivity : AppCompatActivity() {
     
     private val prefs: SharedPreferences by lazy {
         getSharedPreferences("geovault_prefs", Context.MODE_PRIVATE)
+    }
+    
+    private val settingsLauncher = registerForActivityResult(ActivityResultContracts.StartActivityForResult()) { result ->
+        if (result.resultCode == RESULT_OK) {
+            // Settings were saved, refresh validation
+            if (fileUri == null) {
+                showValidationScreen()
+            }
+        }
     }
     
     companion object {
@@ -68,6 +80,17 @@ class MainActivity : AppCompatActivity() {
         super.onCreate(savedInstanceState)
         setContentView(R.layout.activity_main)
         
+        // Handle window insets for status bar and navigation bar
+        val rootView = findViewById<View>(R.id.rootLayout)
+        val headerView = findViewById<View>(R.id.headerLayout)
+        
+        ViewCompat.setOnApplyWindowInsetsListener(rootView) { view, windowInsets ->
+            val insets = windowInsets.getInsets(WindowInsetsCompat.Type.systemBars())
+            // Apply top padding to header
+            headerView.updatePadding(top = insets.top + 20)
+            WindowInsetsCompat.CONSUMED
+        }
+        
         filenameEdit = findViewById(R.id.filenameEdit)
         suffixText = findViewById(R.id.suffixText)
         uploadButton = findViewById(R.id.uploadButton)
@@ -84,7 +107,7 @@ class MainActivity : AppCompatActivity() {
         
         // Set up settings button click listener
         settingsButton.setOnClickListener {
-            showSettingsDialog()
+            openSettings()
         }
         
         // Check if we have settings configured
@@ -92,7 +115,7 @@ class MainActivity : AppCompatActivity() {
         val apiKey = prefs.getString(PREF_API_KEY, "") ?: ""
         
         if (serverUrl.isEmpty() || apiKey.isEmpty()) {
-            showSettingsDialog()
+            openSettings()
             return
         }
         
@@ -218,7 +241,7 @@ class MainActivity : AppCompatActivity() {
         val apiKey = prefs.getString(PREF_API_KEY, "") ?: ""
         
         if (serverUrl.isEmpty() || apiKey.isEmpty()) {
-            showSettingsDialog()
+            openSettings()
             return
         }
         
@@ -521,58 +544,9 @@ class MainActivity : AppCompatActivity() {
         })
     }
     
-    private fun showSettingsDialog() {
-        val view = layoutInflater.inflate(R.layout.dialog_settings, null)
-        val serverUrlEdit = view.findViewById<EditText>(R.id.serverUrlEdit)
-        val apiKeyEdit = view.findViewById<EditText>(R.id.apiKeyEdit)
-        val addSuffixCheckbox = view.findViewById<android.widget.CheckBox>(R.id.addSuffixCheckbox)
-        
-        serverUrlEdit.setText(prefs.getString(PREF_SERVER_URL, DEFAULT_SERVER_URL) ?: DEFAULT_SERVER_URL)
-        apiKeyEdit.setText(prefs.getString(PREF_API_KEY, "") ?: "")
-        addSuffixCheckbox.isChecked = prefs.getBoolean(PREF_ADD_SUFFIX, true)
-        
-        AlertDialog.Builder(this)
-            .setTitle(R.string.settings_title)
-            .setView(view)
-            .setPositiveButton(R.string.save_settings) { _, _ ->
-                var serverUrl = normalizeServerUrl(serverUrlEdit.text.toString())
-                val apiKey = apiKeyEdit.text.toString().trim()
-                val addSuffix = addSuffixCheckbox.isChecked
-                
-                if (serverUrl.isEmpty() || apiKey.isEmpty()) {
-                    Toast.makeText(this, getString(R.string.settings_required), Toast.LENGTH_LONG).show()
-                    showSettingsDialog() // Show again
-                } else {
-                    prefs.edit()
-                        .putString(PREF_SERVER_URL, serverUrl)
-                        .putString(PREF_API_KEY, apiKey)
-                        .putBoolean(PREF_ADD_SUFFIX, addSuffix)
-                        .apply()
-                    
-                    Toast.makeText(this, getString(R.string.settings_saved), Toast.LENGTH_SHORT).show()
-                    
-                    // Validate the API key instead of closing
-                    if (fileUri != null) {
-                        // We have a file, show uploader
-                        showUploaderScreen()
-                        handleIntent(intent)
-                    } else {
-                        // No file, show validation screen
-                        showValidationScreen()
-                    }
-                }
-            }
-            .setNegativeButton(android.R.string.cancel) { dialog, _ ->
-                dialog.dismiss()
-                // If we have settings, show validation screen; otherwise stay on settings
-                val serverUrl = prefs.getString(PREF_SERVER_URL, DEFAULT_SERVER_URL) ?: DEFAULT_SERVER_URL
-                val apiKey = prefs.getString(PREF_API_KEY, "") ?: ""
-                if (serverUrl.isNotEmpty() && apiKey.isNotEmpty()) {
-                    showValidationScreen()
-                }
-            }
-            .setCancelable(false)
-            .show()
+    private fun openSettings() {
+        val intent = Intent(this, SettingsActivity::class.java)
+        settingsLauncher.launch(intent)
     }
 }
 

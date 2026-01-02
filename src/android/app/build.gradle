@@ -88,15 +88,15 @@ def getVersionCode() {
 }
 
 android {
-    namespace 'com.geovault.uploader'
-    compileSdk 34
+    namespace = 'com.geovault.uploader'
+    compileSdk = 36
 
     defaultConfig {
-        applicationId "com.geovault.uploader"
-        minSdk 24
-        targetSdk 34
-        versionCode getVersionCode()
-        versionName "${getGitCommitDate()}-${getGitCommitHash()}"
+        applicationId = "com.geovault.uploader"
+        minSdk = 24
+        targetSdk = 36
+        versionCode = getVersionCode()
+        versionName = "${getGitCommitDate()}-${getGitCommitHash()}"
     }
 
     signingConfigs {
@@ -104,8 +104,8 @@ android {
             def storeFileProp = project.findProperty('RELEASE_STORE_FILE') ?: 'keystore.jks'
             def keyAliasProp = project.findProperty('RELEASE_KEY_ALIAS') ?: 'upload'
             
-            storeFile file(storeFileProp)
-            keyAlias keyAliasProp
+            storeFile = file(storeFileProp)
+            keyAlias = keyAliasProp
             
             // Read passwords from properties (passed from build script or environment)
             // If not provided, build will fail with a clear error
@@ -124,30 +124,30 @@ android {
             
             // Only set passwords if provided (for debug builds, this won't error)
             if (storePwd) {
-                storePassword storePwd
+                storePassword = storePwd
             }
             if (keyPwd) {
-                keyPassword keyPwd
+                keyPassword = keyPwd
             }
         }
     }
 
     buildTypes {
         release {
-            minifyEnabled false
-            proguardFiles getDefaultProguardFile('proguard-android-optimize.txt'), 'proguard-rules.pro'
-            signingConfig signingConfigs.release
+            minifyEnabled = false
+            proguardFiles(getDefaultProguardFile('proguard-android-optimize.txt'), 'proguard-rules.pro')
+            signingConfig = signingConfigs.release
             
             // Strip debug information and ensure no paths are embedded
-            debuggable false
+            debuggable = false
             // Don't include source file paths in the APK
             // (Kotlin compiler options are set below)
         }
     }
     
     compileOptions {
-        sourceCompatibility JavaVersion.VERSION_11
-        targetCompatibility JavaVersion.VERSION_11
+        sourceCompatibility = JavaVersion.VERSION_11
+        targetCompatibility = JavaVersion.VERSION_11
     }
     
     kotlinOptions {
@@ -165,11 +165,13 @@ android {
 
 
 dependencies {
-    implementation 'androidx.core:core-ktx:1.12.0'
-    implementation 'androidx.appcompat:appcompat:1.6.1'
-    implementation 'com.google.android.material:material:1.11.0'
-    implementation 'androidx.constraintlayout:constraintlayout:2.1.4'
+    implementation libs.core.ktx
+    implementation libs.appcompat
+    implementation libs.material
+    implementation 'androidx.constraintlayout:constraintlayout:2.2.0'
     implementation 'androidx.recyclerview:recyclerview:1.3.2'
+    implementation 'androidx.cardview:cardview:1.0.0'
+    implementation 'androidx.coordinatorlayout:coordinatorlayout:1.2.0'
     
     // HTTP client
     implementation 'com.squareup.okhttp3:okhttp:4.12.0'

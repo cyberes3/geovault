@@ -6,6 +6,7 @@ import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
 import android.widget.EditText
+import android.widget.ImageView
 import android.widget.TextView
 import androidx.recyclerview.widget.RecyclerView
 
@@ -29,7 +30,7 @@ class FileQueueAdapter(
 ) : RecyclerView.Adapter<FileQueueAdapter.FileViewHolder>() {
 
     class FileViewHolder(itemView: View) : RecyclerView.ViewHolder(itemView) {
-        val statusIcon: TextView = itemView.findViewById(R.id.fileStatusIcon)
+        val statusIcon: ImageView = itemView.findViewById(R.id.fileStatusIcon)
         val filenameEdit: EditText = itemView.findViewById(R.id.filenameEditText)
         val fileExtensionText: TextView = itemView.findViewById(R.id.fileExtensionText)
         val fileSizeText: TextView = itemView.findViewById(R.id.fileSizeText)
@@ -48,33 +49,38 @@ class FileQueueAdapter(
         // Set status icon and color
         when (file.status) {
             FileStatus.PENDING -> {
-                // Keep space reserved but hide icon
-                holder.statusIcon.visibility = View.INVISIBLE
+                // Show file icon for pending files
+                holder.statusIcon.visibility = View.VISIBLE
+                holder.statusIcon.setImageResource(R.drawable.ic_file)
+                holder.statusIcon.setColorFilter(holder.itemView.context.getColor(R.color.text_secondary))
             }
             FileStatus.UPLOADING -> {
                 holder.statusIcon.visibility = View.VISIBLE
-                holder.statusIcon.text = "↑"
-                holder.statusIcon.setTextColor(holder.itemView.context.getColor(R.color.primary_blue))
+                holder.statusIcon.setImageResource(R.drawable.ic_upload)
+                holder.statusIcon.setColorFilter(holder.itemView.context.getColor(R.color.primary_blue))
             }
             FileStatus.SUCCESS -> {
                 holder.statusIcon.visibility = View.VISIBLE
-                holder.statusIcon.text = "✓"
-                holder.statusIcon.setTextColor(holder.itemView.context.getColor(R.color.success_green))
+                holder.statusIcon.setImageResource(R.drawable.ic_check)
+                holder.statusIcon.setColorFilter(holder.itemView.context.getColor(R.color.success_green))
             }
             FileStatus.ERROR -> {
                 holder.statusIcon.visibility = View.VISIBLE
-                holder.statusIcon.text = "✗"
-                holder.statusIcon.setTextColor(holder.itemView.context.getColor(R.color.error_red))
+                holder.statusIcon.setImageResource(R.drawable.ic_error)
+                holder.statusIcon.setColorFilter(holder.itemView.context.getColor(R.color.error_red))
             }
         }
         
         // Split filename into base name and extension
         val (baseName, extension) = splitFilename(file.filename)
         
-        // Set filename (editable only if pending) - only the base name
+        // Set filename (editable only if pending and not invalid) - only the base name
         holder.filenameEdit.setText(baseName)
         holder.fileExtensionText.text = if (extension.isNotEmpty()) ".$extension" else ""
-        holder.filenameEdit.isEnabled = file.status == FileStatus.PENDING
+        // Disable editing if not pending, or if it's an invalid file type error
+        val isInvalidFileType = file.status == FileStatus.ERROR && 
+            file.errorMessage?.contains("Invalid file type", ignoreCase = true) == true
+        holder.filenameEdit.isEnabled = file.status == FileStatus.PENDING && !isInvalidFileType
         
         // Update filename when edited - reconstruct with extension
         holder.filenameEdit.removeTextChangedListener(holder.filenameEdit.tag as? TextWatcher)

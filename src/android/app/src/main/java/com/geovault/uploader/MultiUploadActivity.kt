@@ -5,11 +5,18 @@ import android.content.Intent
 import android.content.SharedPreferences
 import android.net.Uri
 import android.os.Bundle
+import android.view.MenuItem
 import android.view.View
 import android.widget.Button
+import android.widget.ImageButton
+import android.widget.PopupMenu
 import android.widget.ProgressBar
 import android.widget.TextView
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.appcompat.app.AppCompatActivity
+import androidx.core.view.ViewCompat
+import androidx.core.view.WindowInsetsCompat
+import androidx.core.view.updatePadding
 import androidx.recyclerview.widget.LinearLayoutManager
 import androidx.recyclerview.widget.RecyclerView
 import okhttp3.Call
@@ -32,15 +39,23 @@ class MultiUploadActivity : AppCompatActivity() {
     private lateinit var statusText: TextView
     private lateinit var uploadAllButton: Button
     private lateinit var cancelButton: Button
+    private lateinit var menuButton: ImageButton
     
     private lateinit var adapter: FileQueueAdapter
     private val files = mutableListOf<FileItem>()
     
     private var isUploading = false
     private var currentUploadIndex = 0
+    private var currentCall: okhttp3.Call? = null
+    private var isCancelled = false
     
     private val prefs: SharedPreferences by lazy {
         getSharedPreferences("geovault_prefs", Context.MODE_PRIVATE)
+    }
+    
+    private val settingsLauncher = registerForActivityResult(ActivityResultContracts.StartActivityForResult()) { result ->
+        // Settings were saved, but we don't need to do anything special here
+        // The upload will use the new settings automatically
     }
     
     companion object {
@@ -63,22 +78,46 @@ class MultiUploadActivity : AppCompatActivity() {
         
         filesRecyclerView = findViewById(R.id.filesRecyclerView)
         fileCountText = findViewById(R.id.fileCountText)
+        
+        // Handle window insets for status bar and navigation bar
+        val rootView = findViewById<View>(R.id.rootLayout)
+        val headerView = findViewById<View>(R.id.headerLayout)
+        val bottomView = findViewById<View>(R.id.bottomLayout)
+        
+        ViewCompat.setOnApplyWindowInsetsListener(rootView) { view, windowInsets ->
+            val insets = windowInsets.getInsets(WindowInsetsCompat.Type.systemBars())
+            // Apply top padding to header
+            headerView.updatePadding(top = insets.top + 20)
+            // Apply bottom padding to bottom action area
+            bottomView.updatePadding(bottom = insets.bottom + 20)
+            WindowInsetsCompat.CONSUMED
+        }
         uploadProgressBar = findViewById(R.id.uploadProgressBar)
         statusText = findViewById(R.id.statusText)
         uploadAllButton = findViewById(R.id.uploadAllButton)
         cancelButton = findViewById(R.id.cancelButton)
+        menuButton = findViewById(R.id.menuButton)
         
         // Setup RecyclerView
         adapter = FileQueueAdapter(files)
         filesRecyclerView.layoutManager = LinearLayoutManager(this)
         filesRecyclerView.adapter = adapter
         
+        // Setup menu button
+        menuButton.setOnClickListener {
+            showMenu(it)
+        }
+        
         uploadAllButton.setOnClickListener {
             startUploadQueue()
         }
         
         cancelButton.setOnClickListener {
-            if (!isUploading) {
+            if (isUploading) {
+                // Cancel the upload process
+                cancelUpload()
+            } else {
+                // Close the app if not uploading
                 finish()
             }
         }
@@ -87,23 +126,105 @@ class MultiUploadActivity : AppCompatActivity() {
         handleIntent(intent)
     }
     
+    private fun showMenu(anchor: View) {
+        val popup = PopupMenu(this, anchor)
+        popup.menuInflater.inflate(R.menu.upload_menu, popup.menu)
+        
+        popup.setOnMenuItemClickListener { item: MenuItem ->
+            when (item.itemId) {
+                R.id.menu_settings -> {
+                    openSettings()
+                    true
+                }
+                else -> false
+            }
+        }
+        
+        popup.show()
+    }
+    
+    private fun openSettings() {
+        val intent = Intent(this, SettingsActivity::class.java)
+        settingsLauncher.launch(intent)
+    }
+    
     private fun handleIntent(intent: Intent?) {
-        if (intent?.action == Intent.ACTION_SEND_MULTIPLE) {
-            val uris = if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.TIRAMISU) {
-                intent.getParcelableArrayListExtra(Intent.EXTRA_STREAM, Uri::class.java)
-            } else {
-                @Suppress("DEPRECATION")
-                intent.getParcelableArrayListExtra<Uri>(Intent.EXTRA_STREAM)
+        when (intent?.action) {
+            Intent.ACTION_SEND_MULTIPLE -> {
+                val uris = if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.TIRAMISU) {
+                    intent.getParcelableArrayListExtra(Intent.EXTRA_STREAM, Uri::class.java)
+                } else {
+                    @Suppress("DEPRECATION")
+                    intent.getParcelableArrayListExtra<Uri>(Intent.EXTRA_STREAM)
+                }
+                
+                uris?.forEach { uri ->
+                    val filename = getFilenameFromUri(uri)
+                    val size = getFileSizeFromUri(uri)
+                    
+                    if (isValidFileType(filename)) {
+                        files.add(FileItem(uri, filename, size))
+                    } else {
+                        // Add invalid file to list with error status
+                        val invalidFile = FileItem(
+                            uri = uri,
+                            filename = filename,
+                            size = size,
+                            status = FileStatus.ERROR,
+                            errorMessage = "Invalid file type. Only KMZ, KML, and GPX files are allowed."
+                        )
+                        files.add(invalidFile)
+                    }
+                }
+                
+                updateFileCount()
+                adapter.notifyDataSetChanged()
             }
-            
-            uris?.forEach { uri ->
-                val filename = getFilenameFromUri(uri)
-                val size = getFileSizeFromUri(uri)
-                files.add(FileItem(uri, filename, size))
+            Intent.ACTION_SEND -> {
+                // Handle single file share - add it to the list just like multiple files
+                val uri = if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.TIRAMISU) {
+                    intent.getParcelableExtra(Intent.EXTRA_STREAM, Uri::class.java)
+                } else {
+                    @Suppress("DEPRECATION")
+                    intent.getParcelableExtra<Uri>(Intent.EXTRA_STREAM)
+                }
+                
+                uri?.let {
+                    val filename = getFilenameFromUri(it)
+                    val size = getFileSizeFromUri(it)
+                    
+                    if (isValidFileType(filename)) {
+                        files.add(FileItem(it, filename, size))
+                    } else {
+                        // Add invalid file to list with error status
+                        val invalidFile = FileItem(
+                            uri = it,
+                            filename = filename,
+                            size = size,
+                            status = FileStatus.ERROR,
+                            errorMessage = "Invalid file type. Only KMZ, KML, and GPX files are allowed."
+                        )
+                        files.add(invalidFile)
+                    }
+                    
+                    updateFileCount()
+                    adapter.notifyDataSetChanged()
+                }
             }
-            
-            updateFileCount()
-            adapter.notifyDataSetChanged()
+        }
+    }
+    
+    private fun isValidFileType(filename: String): Boolean {
+        val extension = getFileExtension(filename).lowercase()
+        return extension in listOf("kmz", "kml", "gpx")
+    }
+    
+    private fun getFileExtension(filename: String): String {
+        val lastDotIndex = filename.lastIndexOf('.')
+        return if (lastDotIndex > 0 && lastDotIndex < filename.length - 1) {
+            filename.substring(lastDotIndex + 1)
+        } else {
+            ""
         }
     }
     
@@ -148,7 +269,15 @@ class MultiUploadActivity : AppCompatActivity() {
     }
     
     private fun updateFileCount() {
+        val validFilesCount = files.count { 
+            it.status != FileStatus.ERROR || 
+            it.errorMessage?.contains("Invalid file type", ignoreCase = true) != true 
+        }
+        
         fileCountText.text = "${files.size} file${if (files.size != 1) "s" else ""}"
+        
+        // Show/hide upload button based on whether there are valid files
+        uploadAllButton.visibility = if (validFilesCount == 0) View.GONE else View.VISIBLE
     }
     
     private fun startUploadQueue() {
@@ -163,31 +292,111 @@ class MultiUploadActivity : AppCompatActivity() {
             return
         }
         
+        // Count only valid files (exclude invalid file types)
+        val validFilesCount = files.count { 
+            it.status != FileStatus.ERROR || 
+            it.errorMessage?.contains("Invalid file type", ignoreCase = true) != true 
+        }
+        
+        if (validFilesCount == 0) {
+            statusText.text = "No valid files to upload"
+            statusText.visibility = View.VISIBLE
+            return
+        }
+        
         isUploading = true
+        isCancelled = false
         currentUploadIndex = 0
-        uploadAllButton.isEnabled = false
-        cancelButton.text = "Close"
-        uploadProgressBar.visibility = View.VISIBLE
-        uploadProgressBar.max = files.size
-        uploadProgressBar.progress = 0
+        uploadAllButton.visibility = View.GONE
+        cancelButton.text = getString(R.string.cancel_button)
+        
+        // Only show progress bar if there are 2+ valid files
+        if (validFilesCount > 1) {
+            uploadProgressBar.visibility = View.VISIBLE
+            uploadProgressBar.max = validFilesCount
+            uploadProgressBar.progress = 0
+        } else {
+            uploadProgressBar.visibility = View.GONE
+        }
         
         uploadNextFile()
     }
     
     private fun uploadNextFile() {
-        if (currentUploadIndex >= files.size) {
-            // All done
+        if (isCancelled) {
+            // Upload was cancelled, stop processing
             finishUpload()
             return
         }
         
-        val file = files[currentUploadIndex]
-        adapter.updateFileStatus(currentUploadIndex, FileStatus.UPLOADING)
+        // Skip invalid files and find next valid file to upload
+        while (currentUploadIndex < files.size) {
+            val file = files[currentUploadIndex]
+            
+            // Skip files with invalid file type errors
+            val isInvalidFileType = file.status == FileStatus.ERROR && 
+                (file.errorMessage?.contains("Invalid file type", ignoreCase = true) == true)
+            
+            if (isInvalidFileType) {
+                currentUploadIndex++
+                continue
+            }
+            
+            // Found a valid file, upload it
+            adapter.updateFileStatus(currentUploadIndex, FileStatus.UPLOADING)
+            
+            // Count valid files (exclude invalid file types)
+            val validFileCount = files.count { 
+                it.status != FileStatus.ERROR || 
+                it.errorMessage?.contains("Invalid file type", ignoreCase = true) != true 
+            }
+            
+            // Count files that have been processed (uploaded successfully or failed upload, but not invalid file types)
+            val uploadedCount = files.take(currentUploadIndex).count { 
+                val isInvalidType = it.status == FileStatus.ERROR && 
+                    (it.errorMessage?.contains("Invalid file type", ignoreCase = true) == true)
+                !isInvalidType && (it.status == FileStatus.SUCCESS || it.status == FileStatus.ERROR)
+            }
+            
+            statusText.text = "Uploading ${uploadedCount + 1}/$validFileCount..."
+            statusText.visibility = View.VISIBLE
+            
+            uploadFile(file, currentUploadIndex)
+            return
+        }
         
-        statusText.text = "Uploading ${currentUploadIndex + 1}/${files.size}..."
+        // All valid files done
+        finishUpload()
+    }
+    
+    private fun cancelUpload() {
+        isCancelled = true
+        isUploading = false
+        
+        // Cancel the current HTTP call if it exists
+        currentCall?.cancel()
+        currentCall = null
+        
+        // Mark current file as cancelled if it's uploading
+        if (currentUploadIndex < files.size) {
+            val currentFile = files[currentUploadIndex]
+            if (currentFile.status == FileStatus.UPLOADING) {
+                adapter.updateFileStatus(currentUploadIndex, FileStatus.PENDING)
+            }
+        }
+        
+        // Mark all pending files as cancelled
+        for (i in currentUploadIndex until files.size) {
+            if (files[i].status == FileStatus.PENDING) {
+                adapter.updateFileStatus(i, FileStatus.PENDING)
+            }
+        }
+        
+        statusText.text = "Upload cancelled"
         statusText.visibility = View.VISIBLE
-        
-        uploadFile(file, currentUploadIndex)
+        uploadProgressBar.visibility = View.GONE
+        uploadAllButton.visibility = View.VISIBLE
+        cancelButton.text = getString(R.string.cancel_button)
     }
     
     private fun uploadFile(fileItem: FileItem, index: Int) {
@@ -247,13 +456,19 @@ class MultiUploadActivity : AppCompatActivity() {
                 .post(requestBody)
                 .build()
             
-            client.newCall(request).enqueue(object : Callback {
+            val call = client.newCall(request)
+            currentCall = call
+            call.enqueue(object : Callback {
                 override fun onFailure(call: Call, e: java.io.IOException) {
                     runOnUiThread {
-                        adapter.updateFileStatus(index, FileStatus.ERROR, "Connection failed")
-                        uploadProgressBar.progress = index + 1
-                        currentUploadIndex++
-                        uploadNextFile()
+                        if (isCancelled) {
+                            adapter.updateFileStatus(index, FileStatus.PENDING)
+                        } else {
+                            adapter.updateFileStatus(index, FileStatus.ERROR, "Connection failed")
+                            uploadProgressBar.progress = index + 1
+                            currentUploadIndex++
+                            uploadNextFile()
+                        }
                     }
                     tempFile.delete()
                 }
@@ -275,14 +490,18 @@ class MultiUploadActivity : AppCompatActivity() {
                     } else null
                     
                     runOnUiThread {
-                        if (success) {
-                            adapter.updateFileStatus(index, FileStatus.SUCCESS)
+                        if (isCancelled) {
+                            adapter.updateFileStatus(index, FileStatus.PENDING)
                         } else {
-                            adapter.updateFileStatus(index, FileStatus.ERROR, errorMsg)
+                            if (success) {
+                                adapter.updateFileStatus(index, FileStatus.SUCCESS)
+                            } else {
+                                adapter.updateFileStatus(index, FileStatus.ERROR, errorMsg)
+                            }
+                            uploadProgressBar.progress = index + 1
+                            currentUploadIndex++
+                            uploadNextFile()
                         }
-                        uploadProgressBar.progress = index + 1
-                        currentUploadIndex++
-                        uploadNextFile()
                     }
                     
                     tempFile.delete()
@@ -290,9 +509,15 @@ class MultiUploadActivity : AppCompatActivity() {
                 }
             })
         } catch (e: Exception) {
-            adapter.updateFileStatus(index, FileStatus.ERROR, "Error: ${e.message}")
-            currentUploadIndex++
-            uploadNextFile()
+            runOnUiThread {
+                if (isCancelled) {
+                    adapter.updateFileStatus(index, FileStatus.PENDING)
+                } else {
+                    adapter.updateFileStatus(index, FileStatus.ERROR, "Error: ${e.message}")
+                    currentUploadIndex++
+                    uploadNextFile()
+                }
+            }
         }
     }
     
@@ -307,24 +532,31 @@ class MultiUploadActivity : AppCompatActivity() {
     
     private fun finishUpload() {
         isUploading = false
+        currentCall = null
         
         val successCount = files.count { it.status == FileStatus.SUCCESS }
-        val errorCount = files.count { it.status == FileStatus.ERROR }
+        // Count only upload errors, not invalid file type errors
+        val errorCount = files.count { 
+            it.status == FileStatus.ERROR && 
+            it.errorMessage?.contains("Invalid file type", ignoreCase = true) != true 
+        }
         
-        statusText.text = when {
-            errorCount == 0 -> "✓ All $successCount files uploaded successfully!"
-            successCount == 0 -> "✗ All $errorCount files failed to upload"
-            else -> "Upload complete: $successCount succeeded, $errorCount failed"
+        if (isCancelled) {
+            statusText.text = "Upload cancelled"
+        } else {
+            statusText.text = when {
+                errorCount == 0 -> "✓ All $successCount files uploaded successfully!"
+                successCount == 0 -> "✗ All $errorCount files failed to upload"
+                else -> "Upload complete: $successCount succeeded, $errorCount failed"
+            }
         }
         
         uploadAllButton.visibility = View.GONE
+        uploadProgressBar.visibility = View.GONE
         
-        // Auto-close if all succeeded
-        if (errorCount == 0) {
-            android.os.Handler(android.os.Looper.getMainLooper()).postDelayed({
-                finish()
-            }, 2500)
-        }
+        // Change cancel button to Close after upload completes
+        cancelButton.isEnabled = true
+        cancelButton.text = "Close"
     }
 }
 

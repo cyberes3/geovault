@@ -26,6 +26,6 @@
     <string name="api_key_valid">API Key Valid</string>
     <string name="api_key_valid_msg">✓ API key \'%1$s\' is valid!\n\nShare a file to upload it.</string>
     <string name="add_suffix_label">Add \'_android_upload\' suffix to filenames</string>
-    <string name="settings_help_text">Get your API key from Settings → API Keys in the web interface</string>
+    <string name="settings_help_text">Get your API key from Settings → API Keys in the web interface.</string>
 </resources>
 
