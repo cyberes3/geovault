@@ -138,17 +138,12 @@ import axios from "axios";
 import { getCookie } from "@/assets/js/auth.js";
 import Loader from "@/components/parts/Loader.vue";
 import { formatDate } from "@/utils/dateUtils.js";
+import { toast } from '@/utils/toast'
 
 export default {
   name: 'SharingSettingsTab',
   components: {
     Loader
-  },
-  props: {
-    toastRef: {
-      type: Object,
-      default: null
-    }
   },
   data() {
     return {
@@ -210,9 +205,7 @@ export default {
       } catch (error) {
         console.error('Error deleting share:', error);
         this.sharesError = error.response?.data?.error || error.message || 'Failed to delete share. Please try again.';
-        if (this.toastRef) {
-          this.toastRef.error(this.sharesError);
-        }
+        toast.error(this.sharesError);
       } finally {
         this.deletingShareId = null;
       }

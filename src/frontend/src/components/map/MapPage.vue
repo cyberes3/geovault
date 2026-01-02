@@ -202,8 +202,6 @@
         @quick-point="showQuickPointDialog = true"
     />
 
-    <!-- Toast Notifications -->
-    <Toast ref="toast" />
   </div>
 </template>
 
@@ -226,7 +224,7 @@ import FeatureInfoBox from './FeatureInfoBox.vue'
 import MapErrorOverlay from './MapErrorOverlay.vue'
 import MapLoadingIndicator from './MapLoadingIndicator.vue'
 import MobileControlsBar from './MobileControlsBar.vue'
-import Toast from '@/components/parts/Toast.vue'
+import { toast } from '@/utils/toast'
 
 // Lazy-loaded components - only loaded when needed
 const FeatureEditBox = defineAsyncComponent(() => import('./FeatureEditBox.vue'))
@@ -284,7 +282,6 @@ export default {
     MapLoadingIndicator,
     QuickPointDialog,
     MobileControlsBar,
-    Toast,
     HomeIcon,
     ExclamationCircleIcon,
     ShareIcon,
@@ -766,16 +763,11 @@ export default {
         // Copy to clipboard
         navigator.clipboard.writeText(coordinateString).then(() => {
           // Show success message with CalTopo link
-          if (this.$refs.toast) {
-            const html = `Coordinates copied! <a href="${caltopoUrl}" target="_blank" rel="noopener noreferrer">Open in CalTopo</a>`
-            this.$refs.toast.success('', { html, timeout: 5000 })
-          }
+          const html = `Coordinates copied! <a href="${caltopoUrl}" target="_blank" rel="noopener noreferrer">Open in CalTopo</a>`
+          toast.success('Coordinates copied!', { html, duration: 5000 })
         }).catch((err) => {
           console.error('Failed to copy coordinates:', err)
-          // Show error message
-          if (this.$refs.toast) {
-            this.$refs.toast.error('Failed to copy coordinates')
-          }
+          toast.error('Failed to copy coordinates')
         })
       })
     },

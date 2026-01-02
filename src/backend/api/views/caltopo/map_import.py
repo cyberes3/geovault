@@ -8,6 +8,7 @@ from django.views.decorators.http import require_http_methods
 from pydantic import BaseModel, Field, ConfigDict
 
 from api.models import CalTopoUser, ImportQueue
+from api.utils.caltopo_constants import is_valid_caltopo_feature_class
 from api.utils.rate_limit import caltopo_rate_limit
 from api.utils.responses import error_response, success_response
 from api.utils.caltopo_helpers import require_caltopo_connection, handle_caltopo_call
@@ -92,12 +93,27 @@ def import_caltopo_map(request: HttpRequest, validated_data: Dict[str, Any]) -> 
         caltopo_user.imported_features[map_id] = {}
         caltopo_user.save()
     
-    # Convert all features to GeoJSON
-    geojson_features = [
-        convert_caltopo_to_geojson(feature, map_id=map_id)
-        for feature in caltopo_features
-        if convert_caltopo_to_geojson(feature, map_id=map_id)
-    ]
+    # Convert all features to GeoJSON, filtering out invalid feature classes
+    from geo_lib.logging.console import get_tagged_logger
+    _logger = get_tagged_logger('CalTopoMapImport')
+    
+    geojson_features = []
+    invalid_count = 0
+    for feature in caltopo_features:
+        # Check if feature class is valid before attempting conversion
+        feature_class = feature.get('properties', {}).get('class', '')
+        if feature_class and not is_valid_caltopo_feature_class(feature_class):
+            invalid_count += 1
+            _logger.debug(f"Skipping feature {feature.get('id', 'unknown')} with invalid class '{feature_class}'")
+            continue
+        
+        # Convert to GeoJSON
+        geojson_feature = convert_caltopo_to_geojson(feature, map_id=map_id)
+        if geojson_feature:
+            geojson_features.append(geojson_feature)
+    
+    if invalid_count > 0:
+        _logger.info(f"Filtered out {invalid_count} feature(s) with unsupported feature classes from map {map_id}")
     
     if not geojson_features:
         # Log detailed error internally

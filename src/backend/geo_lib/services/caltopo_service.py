@@ -170,6 +170,10 @@ def convert_caltopo_to_geojson(caltopo_feature: Dict[str, Any], map_id: str = No
         _logger.warning(f"CalTopo feature has no geometry: {caltopo_feature.get('id')}")
         return None
 
+    # Normalize coordinates to ensure compatibility with PointFeature validation
+    # CalTopo may provide 4 coordinates (lon, lat, elevation, time) but we only need 2-3
+    geometry = _normalize_caltopo_geometry(geometry)
+
     # Extract properties
     caltopo_props = caltopo_feature.get('properties', {})
 
@@ -207,6 +211,101 @@ def convert_caltopo_to_geojson(caltopo_feature: Dict[str, Any], map_id: str = No
     }
 
     return geojson_feature
+
+
+def _normalize_caltopo_geometry(geometry: Dict[str, Any]) -> Dict[str, Any]:
+    """
+    Normalize CalTopo geometry coordinates to ensure compatibility with PointFeature validation.
+    
+    CalTopo may provide coordinates with 4 elements (lon, lat, elevation, time),
+    but PointFeature only accepts 2 or 3 coordinates (lon, lat, elevation).
+    
+    Args:
+        geometry: Geometry dictionary with 'type' and 'coordinates'
+        
+    Returns:
+        Normalized geometry dictionary
+    """
+    if not geometry or 'coordinates' not in geometry:
+        return geometry
+    
+    geom_type = geometry.get('type', '')
+    coords = geometry['coordinates']
+    
+    # Create a copy to avoid modifying the original
+    normalized_geometry = geometry.copy()
+    
+    if geom_type == 'Point':
+        # Point: take only first 2-3 coordinates (lon, lat, [elevation])
+        # Drop any 4th coordinate (like time) that CalTopo may include
+        if len(coords) >= 2:
+            if len(coords) >= 4:
+                # 4+ coordinates: keep only first 3 (lon, lat, elevation)
+                normalized_geometry['coordinates'] = [coords[0], coords[1], coords[2]]
+            elif len(coords) == 3:
+                # 3 coordinates: keep all (lon, lat, elevation)
+                normalized_geometry['coordinates'] = [coords[0], coords[1], coords[2]]
+            else:
+                # 2 coordinates: keep as is (lon, lat)
+                normalized_geometry['coordinates'] = [coords[0], coords[1]]
+    
+    elif geom_type in ['LineString', 'MultiPoint']:
+        # LineString/MultiPoint: normalize each point (take only first 3 coordinates)
+        normalized_geometry['coordinates'] = [
+            (
+                [coord[0], coord[1], coord[2]] if len(coord) >= 3
+                else [coord[0], coord[1], 0.0] if len(coord) >= 2
+                else coord
+            )
+            for coord in coords
+        ]
+    
+    elif geom_type == 'MultiLineString':
+        # MultiLineString: normalize each point in each line (take only first 3 coordinates)
+        normalized_geometry['coordinates'] = [
+            [
+                (
+                    [coord[0], coord[1], coord[2]] if len(coord) >= 3
+                    else [coord[0], coord[1], 0.0] if len(coord) >= 2
+                    else coord
+                )
+                for coord in line
+            ]
+            for line in coords
+        ]
+    
+    elif geom_type == 'Polygon':
+        # Polygon: normalize each point in each ring (take only first 3 coordinates)
+        normalized_geometry['coordinates'] = [
+            [
+                (
+                    [coord[0], coord[1], coord[2]] if len(coord) >= 3
+                    else [coord[0], coord[1], 0.0] if len(coord) >= 2
+                    else coord
+                )
+                for coord in ring
+            ]
+            for ring in coords
+        ]
+    
+    elif geom_type == 'MultiPolygon':
+        # MultiPolygon: normalize each point in each ring in each polygon (take only first 3 coordinates)
+        normalized_geometry['coordinates'] = [
+            [
+                [
+                    (
+                        [coord[0], coord[1], coord[2]] if len(coord) >= 3
+                        else [coord[0], coord[1], 0.0] if len(coord) >= 2
+                        else coord
+                    )
+                    for coord in ring
+                ]
+                for ring in polygon
+            ]
+            for polygon in coords
+        ]
+    
+    return normalized_geometry
 
 
 def _caltopo_import_hook(import_item, user_id, created_features):

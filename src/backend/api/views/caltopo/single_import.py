@@ -10,6 +10,7 @@ from django.views.decorators.http import require_http_methods
 from pydantic import BaseModel, Field, ConfigDict, field_validator
 
 from api.models import CalTopoUser, FeatureStore
+from api.utils.caltopo_constants import VALID_CALTOPO_FEATURE_CLASSES
 from api.utils.rate_limit import caltopo_rate_limit
 from api.utils.responses import error_response, success_response
 from api.utils.caltopo_helpers import require_caltopo_connection, handle_caltopo_call
@@ -30,12 +31,8 @@ class CalTopoSingleImportPayload(BaseModel):
     """Pydantic model for single feature import request."""
     model_config = ConfigDict(extra='forbid')
 
-    # Valid CalTopo feature classes as per caltopo_python documentation
-    VALID_FEATURE_CLASSES: ClassVar[set[str]] = {
-        'Shape', 'Marker', 'AppTrack', 'LiveTrack', 'Folder', 
-        'MapMediaObject', 'OperationalPeriod', 'Assignment', 
-        'Clue', 'Resource', 'SmsLocationRequest'
-    }
+    # Valid CalTopo feature classes (shared constant)
+    VALID_FEATURE_CLASSES: ClassVar[set[str]] = VALID_CALTOPO_FEATURE_CLASSES
 
     map_id: str = Field(description="CalTopo map ID")
     feature_id: str = Field(description="CalTopo feature ID")

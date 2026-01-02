@@ -66,6 +66,7 @@ import SettingsMixin from "./mixins/SettingsMixin.js";
 import SettingsInput from "./components/SettingsInput.vue";
 import HiddenFeaturesWidget from "@/components/map/HiddenFeaturesWidget.vue";
 import { clearHiddenFeatures } from "@/utils/userSettingsService.js";
+import { toast } from '@/utils/toast'
 
 export default {
   name: 'MapSettingsTab',
@@ -74,12 +75,6 @@ export default {
     HiddenFeaturesWidget,
   },
   mixins: [SettingsMixin],
-  props: {
-    toastRef: {
-      type: Object,
-      default: null
-    }
-  },
   data() {
     return {
       // Settings configuration - loaded from external JSON file
@@ -220,9 +215,7 @@ export default {
         this.$store.commit("setHiddenFeatures", []);
       } catch (error) {
         console.error("Error clearing hidden features from settings:", error);
-        if (this.toastRef) {
-          this.toastRef.error(error.message || "Failed to clear hidden features.");
-        }
+        toast.error(error.message || "Failed to clear hidden features.");
       }
     },
   },

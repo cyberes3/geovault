@@ -234,6 +234,9 @@
         </keep-alive>
       </router-view>
     </main>
+    
+    <!-- Universal Toast Container -->
+    <ToastContainer />
   </div>
 </template>
 
@@ -243,12 +246,14 @@ import {realtimeSocket} from "@/assets/js/websocket/realtimeSocket.js";
 import {getCookie} from "@/assets/js/auth.js";
 import axios from "axios";
 import Loader from "@/components/parts/Loader.vue";
+import ToastContainer from "@/components/parts/ToastContainer.vue";
 import { ChevronDownIcon, Bars3Icon, XMarkIcon } from '@heroicons/vue/24/outline';
 
 export default {
   name: 'App',
   components: {
     Loader,
+    ToastContainer,
     ChevronDownIcon,
     Bars3Icon,
     XMarkIcon

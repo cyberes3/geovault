@@ -308,10 +308,6 @@ export default {
   },
   mixins: [SettingsMixin],
   props: {
-    toastRef: {
-      type: Object,
-      default: null
-    }
   },
   data() {
     return {

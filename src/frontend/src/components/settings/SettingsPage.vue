@@ -85,18 +85,14 @@
       <!-- Tab Content -->
       <div class="flex-1">
         <keep-alive>
-          <component :is="currentTabComponent" :toast-ref="toastRef" />
+          <component :is="currentTabComponent" />
         </keep-alive>
       </div>
     </div>
-
-    <!-- Toast Notifications -->
-    <Toast ref="toast" />
   </div>
 </template>
 
 <script>
-import Toast from "@/components/parts/Toast.vue";
 import AccountSettingsTab from "./AccountSettingsTab.vue";
 import MapSettingsTab from "./MapSettingsTab.vue";
 import SharingSettingsTab from "./SharingSettingsTab.vue";
@@ -105,7 +101,6 @@ import ImportSettingsTab from "./ImportSettingsTab.vue";
 export default {
   name: 'Settings',
   components: {
-    Toast,
     AccountSettingsTab,
     MapSettingsTab,
     SharingSettingsTab,
@@ -118,9 +113,6 @@ export default {
     }
   },
   computed: {
-    toastRef() {
-      return this.$refs.toast;
-    },
     currentTabComponent() {
       const components = {
         'account': 'AccountSettingsTab',

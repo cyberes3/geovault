@@ -6,9 +6,11 @@ from django.http import HttpRequest, JsonResponse
 from django.views.decorators.http import require_http_methods
 
 from api.models import CalTopoUser, ImportQueue, FeatureStore
+from api.utils.caltopo_constants import is_valid_caltopo_feature_class
 from api.utils.rate_limit import caltopo_rate_limit
 from api.utils.responses import error_response, success_response, not_found_response
 from api.utils.caltopo_helpers import require_caltopo_connection, handle_caltopo_call
+from geo_lib.processing.jobs.helpers.status_tracker import status_tracker, ProcessingStatus
 from geo_lib.services.caltopo_service import list_maps, get_map_features
 from geo_lib.website.auth import api_or_login_required_401
 
@@ -56,14 +58,59 @@ def get_caltopo_map_features(request: HttpRequest, map_id: str) -> JsonResponse:
     if features is None:
         return not_found_response(f'Map {map_id} not found or access denied')
     
-    # Check if this map is already in the import queue
+    # Check if this map is already in the import queue with various statuses
     filename = f'caltopo_map_{map_id}.geojson'
-    is_in_queue = ImportQueue.objects.filter(
+    
+    # Check for items in different states: done (imported=True), failed (unparsable=True), 
+    # queued/processing/failed (in status_tracker)
+    queue_item_done = ImportQueue.objects.filter(
+        user=request.user,
+        original_filename=filename,
+        imported=True
+    ).first()
+    
+    queue_item_failed = ImportQueue.objects.filter(
+        user=request.user,
+        original_filename=filename,
+        unparsable=True
+    ).first()
+    
+    queue_item_active = ImportQueue.objects.filter(
         user=request.user,
         original_filename=filename,
         imported=False,
         unparsable=False
-    ).exists()
+    ).first()
+    
+    # Check status_tracker for queued, processing, or failed jobs
+    queue_status = None
+    import_queue_id = None
+    
+    if queue_item_done:
+        queue_status = 'done'
+        import_queue_id = queue_item_done.id
+    elif queue_item_failed:
+        queue_status = 'failed'
+        import_queue_id = queue_item_failed.id
+    elif queue_item_active:
+        import_queue_id = queue_item_active.id
+        # Check status_tracker for this import_queue_id
+        user_jobs = status_tracker.get_user_jobs(request.user.id)
+        for job in user_jobs:
+            if job.import_queue_id == import_queue_id:
+                if job.status == ProcessingStatus.QUEUED:
+                    queue_status = 'queued'
+                elif job.status == ProcessingStatus.PROCESSING:
+                    queue_status = 'processing'
+                elif job.status == ProcessingStatus.FAILED:
+                    queue_status = 'failed'
+                break
+        
+        # If no job found in tracker, item is in queue but not yet processed
+        if queue_status is None:
+            queue_status = 'queued'
+    
+    is_in_queue = queue_status is not None
     
     # Check which features have already been imported
     # We need to verify that the feature actually exists in FeatureStore,
@@ -84,15 +131,17 @@ def get_caltopo_map_features(request: HttpRequest, map_id: str) -> JsonResponse:
             ).values_list('id', flat=True)
         )
     
-    # Build a set of CalTopo feature IDs that are actually imported (exist in FeatureStore)
+    # Build a map of CalTopo feature IDs to database IDs for imported features
     # Also clean up stale mappings for features that no longer exist
     imported_caltopo_feature_ids = set()
+    caltopo_to_database_id = {}
     needs_cleanup = False
     cleaned_mapping = mapped_feature_ids.copy()
     
     for caltopo_feature_id, feature_store_id in mapped_feature_ids.items():
         if feature_store_id in existing_feature_store_ids:
             imported_caltopo_feature_ids.add(caltopo_feature_id)
+            caltopo_to_database_id[caltopo_feature_id] = feature_store_id
         else:
             # Feature was deleted, remove from mapping
             cleaned_mapping.pop(caltopo_feature_id, None)
@@ -103,20 +152,29 @@ def get_caltopo_map_features(request: HttpRequest, map_id: str) -> JsonResponse:
         caltopo_user.imported_features[map_id] = cleaned_mapping
         caltopo_user.save(update_fields=['imported_features'])
     
-    # Add import status to each feature
+    # Add import status, database_id, and validity to each feature
     features_with_status = []
     for feature in features:
         feature_id = feature.get('id', '')
         is_imported = feature_id in imported_caltopo_feature_ids
+        feature_class = feature.get('properties', {}).get('class', '')
+        is_valid = is_valid_caltopo_feature_class(feature_class) if feature_class else True
+        
         feature_with_status = feature.copy()
         feature_with_status['is_imported'] = is_imported
+        feature_with_status['is_valid'] = is_valid
+        # Include database_id if feature is imported (for navigation)
+        if is_imported and feature_id in caltopo_to_database_id:
+            feature_with_status['database_id'] = caltopo_to_database_id[feature_id]
         features_with_status.append(feature_with_status)
     
     return success_response({
         'map_id': map_id,
         'features': features_with_status,
         'count': len(features_with_status),
-        'is_in_queue': is_in_queue
+        'is_in_queue': is_in_queue,
+        'import_queue_id': import_queue_id,
+        'queue_status': queue_status
     })
 
 

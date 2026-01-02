@@ -227,17 +227,23 @@
           <h3 class="text-md font-medium text-gray-900">
             Features in {{ selectedMapTitle }} ({{ features.length }})
           </h3>
-          <div class="relative w-full sm:w-auto">
+          <div class="relative w-full sm:w-auto flex flex-col sm:flex-row gap-2">
             <button
+              v-if="!mapInQueue"
               @click="handleImportMap"
-              :disabled="importingMap || mapInQueue"
-              :title="mapInQueue ? 'This map is already in the import queue. Please complete the import.' : ''"
+              :disabled="importingMap"
               class="w-full sm:w-auto inline-flex items-center justify-center px-4 py-2 border border-transparent text-sm font-medium rounded-md text-white bg-blue-600 hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 disabled:opacity-50 disabled:cursor-not-allowed"
             >
               <span v-if="importingMap">Importing...</span>
-              <span v-else-if="mapInQueue">Already in Queue</span>
               <span v-else>Import Entire Map</span>
             </button>
+            <router-link
+              v-if="mapInQueue && importQueueId"
+              :to="`/import/process/${importQueueId}`"
+              class="w-full sm:w-auto inline-flex items-center justify-center px-4 py-2 border border-transparent text-sm font-medium rounded-md text-white bg-blue-600 hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500"
+            >
+              View in Queue
+            </router-link>
           </div>
         </div>
 
@@ -256,15 +262,22 @@
               </div>
             </div>
             <button
+              v-if="!feature.is_imported"
               @click="handleImportFeature(feature)"
-              :disabled="importingFeatures[feature.id] || mapInQueue"
-              :title="mapInQueue ? 'This map is already in the import queue. Please complete the import.' : ''"
+              :disabled="importingFeatures[feature.id] || mapInQueue || importingMap || !feature.is_valid"
+              :title="getFeatureButtonTooltip(feature)"
               class="ml-4 inline-flex items-center px-3 py-1.5 border border-transparent text-xs font-medium rounded-md text-white bg-blue-500 hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 disabled:opacity-50 disabled:cursor-not-allowed"
             >
               <span v-if="importingFeatures[feature.id]">Importing...</span>
-              <span v-else-if="mapInQueue">Disabled</span>
-              <span v-else-if="feature.is_imported">Re-import</span>
+              <span v-else-if="!feature.is_valid">Unsupported</span>
               <span v-else>Import</span>
+            </button>
+            <button
+              v-else
+              @click="handleViewInMap(feature)"
+              class="ml-4 inline-flex items-center px-3 py-1.5 border border-transparent text-xs font-medium rounded-md text-white bg-blue-500 hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500"
+            >
+              View in Map
             </button>
           </div>
         </div>
@@ -309,6 +322,7 @@ import { getCookie } from '@/assets/js/auth.js'
 import { ChevronDownIcon, Bars3Icon, XMarkIcon } from '@heroicons/vue/24/outline'
 import CaltopoSetupModal from './CaltopoSetupModal.vue'
 import Loader from '@/components/parts/Loader.vue'
+import { toast } from '@/utils/toast'
 
 export default {
   name: 'ImportSettingsTab',
@@ -345,6 +359,7 @@ export default {
       importWarnings: [],
       showSetupModal: false,
       mapInQueue: false,
+      importQueueId: null,
       apiStatus: {
         'Status Check': 'idle',
         'List Maps': 'idle'
@@ -517,6 +532,7 @@ export default {
       if (!this.selectedMapId) {
         this.features = []
         this.mapInQueue = false
+        this.importQueueId = null
         this.featureLoadError = null
         return
       }
@@ -531,6 +547,7 @@ export default {
       this.loadingFeatures = true
       this.features = []
       this.mapInQueue = false
+      this.importQueueId = null
       this.featureLoadError = null
       
       try {
@@ -545,7 +562,14 @@ export default {
         if (response.ok) {
           const data = await response.json()
           this.features = data.features || []
+          // Ensure is_valid defaults to true for backwards compatibility
+          this.features.forEach(feature => {
+            if (feature.is_valid === undefined) {
+              feature.is_valid = true
+            }
+          })
           this.mapInQueue = data.is_in_queue || false
+          this.importQueueId = data.import_queue_id || null
         } else {
           const errorData = await response.json().catch(() => ({}))
           // Check for CalTopo timeout error
@@ -555,17 +579,26 @@ export default {
             this.featureLoadError = errorData.error || `HTTP ${response.status}`
           }
           this.mapInQueue = false
+          this.importQueueId = null
           console.error('Failed to load features:', errorData)
         }
       } catch (error) {
         this.featureLoadError = error.message
         this.mapInQueue = false
+        this.importQueueId = null
         console.error('Error loading features:', error)
       } finally {
         this.loadingFeatures = false
       }
     },
     async handleImportFeature(feature) {
+      // Block invalid features from being imported
+      if (feature.is_valid === false) {
+        const featureClass = feature.properties?.class || 'Unknown'
+        toast.error(`Feature type '${featureClass}' is not supported for import`)
+        return
+      }
+      
       this.importingFeatures[feature.id] = true
       this.importWarnings = []
       
@@ -587,10 +620,14 @@ export default {
         const data = await response.json()
         
         if (response.ok) {
-          // Update feature import status
+          // Update feature import status and store database_id
           const featureIndex = this.features.findIndex(f => f.id === feature.id)
           if (featureIndex !== -1) {
             this.features[featureIndex].is_imported = true
+            // Store database_id for navigation
+            if (data.feature && data.feature.properties && data.feature.properties.database_id) {
+              this.features[featureIndex].database_id = data.feature.properties.database_id
+            }
           }
           
           if (data.warnings && data.warnings.length > 0) {
@@ -604,27 +641,50 @@ export default {
             })
           }
           
-          if (this.toastRef) {
-            this.toastRef.show('Feature imported successfully', 'success')
-          }
+          toast.success('Feature imported successfully')
         } else {
-          // Check for CalTopo timeout error
-          let errorMsg = data.error || 'Failed to import feature'
-          if (data.details && data.details.error_code === 'CALTOPO_TIMEOUT') {
+          // Handle error response
+          let errorMsg = 'Failed to import feature'
+          if (data && data.error) {
+            errorMsg = data.error
+          } else if (data && data.details && data.details.error_code === 'CALTOPO_TIMEOUT') {
             errorMsg = 'CalTopo request timed out.'
+          } else if (response.statusText) {
+            errorMsg = `Failed to import feature: ${response.statusText}`
           }
-          if (this.toastRef) {
-            this.toastRef.show(errorMsg, 'error')
-          }
+          
+          toast.error(errorMsg)
         }
       } catch (error) {
         console.error('Error importing feature:', error)
-        if (this.toastRef) {
-          this.toastRef.show(`Error: ${error.message}`, 'error')
-        }
+        const errorMsg = error.message || 'An unexpected error occurred while importing the feature'
+        toast.error(errorMsg)
       } finally {
         this.importingFeatures[feature.id] = false
       }
+    },
+    handleViewInMap(feature) {
+      // Navigate to map with featureId query parameter to zoom to the feature
+      const featureId = feature.database_id
+      if (featureId) {
+        this.$router.push({
+          path: '/map',
+          query: { featureId: featureId }
+        })
+      } else {
+        console.error('Feature missing database_id:', feature)
+        toast.error('Unable to view feature: missing ID')
+      }
+    },
+    getFeatureButtonTooltip(feature) {
+      if (feature.is_valid === false) {
+        const featureClass = feature.properties?.class || 'Unknown'
+        return `Feature type '${featureClass}' is not supported for import`
+      }
+      if (this.mapInQueue || this.importingMap) {
+        return 'This map is being imported. Please wait for the import to complete.'
+      }
+      return ''
     },
     async handleImportMap() {
       if (this.mapInQueue) {
@@ -637,6 +697,12 @@ export default {
       
       this.importingMap = true
       this.importWarnings = []
+      
+      // Reset all feature import statuses immediately (existing features will be deleted by backend)
+      this.features.forEach(feature => {
+        feature.is_imported = false
+        delete feature.database_id
+      })
       
       try {
         const response = await fetch(`${APIHOST}/api/caltopo/import/map/`, {
@@ -656,34 +722,30 @@ export default {
         if (response.ok) {
           // Update queue status after successful import
           this.mapInQueue = true
-          if (this.toastRef) {
-            this.toastRef.show(`Map import queued. Processing ${data.feature_count || 0} features.`, 'success')
-          }
+          this.importQueueId = data.import_queue_id || null
+          
+          toast.success(`Map import queued. Processing ${data.feature_count || 0} features.`)
         } else {
-          // Check for CalTopo timeout error
-          let errorMsg = data.error || 'Failed to import map'
-          if (data.details && data.details.error_code === 'CALTOPO_TIMEOUT') {
+          // Handle error response
+          let errorMsg = 'Failed to import map'
+          if (data && data.error) {
+            errorMsg = data.error
+          } else if (data && data.details && data.details.error_code === 'CALTOPO_TIMEOUT') {
             errorMsg = 'CalTopo request timed out.'
+          } else if (response.statusText) {
+            errorMsg = `Failed to import map: ${response.statusText}`
           }
-          if (this.toastRef) {
-            this.toastRef.show(errorMsg, 'error')
-          }
+          
+          toast.error(errorMsg)
         }
       } catch (error) {
         console.error('Error importing map:', error)
-        if (this.toastRef) {
-          this.toastRef.show(`Error: ${error.message}`, 'error')
-        }
+        const errorMsg = error.message || 'An unexpected error occurred while importing the map'
+        toast.error(errorMsg)
       } finally {
         this.importingMap = false
       }
     }
   },
-  props: {
-    toastRef: {
-      type: Object,
-      default: null
-    }
-  }
 }
 </script>

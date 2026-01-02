@@ -1,4 +1,5 @@
 import { updateUserSetting } from "@/utils/userSettingsService.js";
+import { toast } from '@/utils/toast';
 
 /**
  * Mixin for settings tabs that manage user settings with debounced saves
@@ -11,7 +12,6 @@ import { updateUserSetting } from "@/utils/userSettingsService.js";
  * 
  * Requires component to have:
  * - settingsConfig: Array of setting configuration objects
- * - toastRef: Toast component reference (optional, via props)
  * - $store: Vuex store instance
  */
 export default {
@@ -184,11 +184,8 @@ export default {
           this.loadSettingsFromStore();
         }
         
-        // Show error toast if available
-        const toastRef = this.toastRef || this.$refs?.toast;
-        if (toastRef) {
-          toastRef.error(errorMessage);
-        }
+        // Show error toast
+        toast.error(errorMessage);
       }
     },
 
