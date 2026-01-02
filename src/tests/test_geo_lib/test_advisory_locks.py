@@ -68,44 +68,46 @@ class TestAdvisoryLock:
         
         assert lock_released is True
     
-    @patch('geo_lib.utils.advisory_locks.connection')
-    def test_lock_acquire_called(self, mock_connection):
+    def test_lock_acquire_called(self):
         """Test that pg_advisory_lock is called with correct lock ID."""
-        mock_cursor = MagicMock()
-        mock_connection.cursor.return_value.__enter__.return_value = mock_cursor
-        
         test_hash = "test_hash_acquire"
         expected_lock_id = hash_to_lock_id(test_hash)
         
-        with advisory_lock(test_hash):
-            pass
-        
-        # Check that pg_advisory_lock was called
-        calls = mock_cursor.execute.call_args_list
-        lock_calls = [call for call in calls if 'pg_advisory_lock' in str(call)]
-        assert len(lock_calls) > 0
-        
-        # Verify lock ID was passed
-        lock_call = lock_calls[0]
-        # The lock_id is passed as a parameter in the call
-        assert str(expected_lock_id) in str(lock_call) or expected_lock_id in lock_call.args[1]
+        # Patch connection where it's used in the advisory_locks module
+        with patch('geo_lib.utils.advisory_locks.connection') as mock_connection:
+            mock_cursor = MagicMock()
+            mock_connection.cursor.return_value = mock_cursor
+            
+            with advisory_lock(test_hash):
+                pass
+            
+            # Check that pg_advisory_lock was called
+            calls = mock_cursor.execute.call_args_list
+            lock_calls = [call for call in calls if 'pg_advisory_lock' in str(call)]
+            assert len(lock_calls) > 0
+            
+            # Verify lock ID was passed
+            lock_call = lock_calls[0]
+            # The lock_id is passed as a parameter in the call
+            assert str(expected_lock_id) in str(lock_call) or expected_lock_id in lock_call.args[1]
     
-    @patch('geo_lib.utils.advisory_locks.connection')
-    def test_lock_release_called(self, mock_connection):
+    def test_lock_release_called(self):
         """Test that pg_advisory_unlock is called."""
-        mock_cursor = MagicMock()
-        mock_cursor.fetchone.return_value = (True,)  # Simulate successful unlock
-        mock_connection.cursor.return_value.__enter__.return_value = mock_cursor
-        
         test_hash = "test_hash_release"
         
-        with advisory_lock(test_hash):
-            pass
-        
-        # Check that pg_advisory_unlock was called
-        calls = mock_cursor.execute.call_args_list
-        unlock_calls = [call for call in calls if 'pg_advisory_unlock' in str(call)]
-        assert len(unlock_calls) > 0
+        # Patch connection where it's used in the advisory_locks module
+        with patch('geo_lib.utils.advisory_locks.connection') as mock_connection:
+            mock_cursor = MagicMock()
+            mock_cursor.fetchone.return_value = (True,)  # Simulate successful unlock
+            mock_connection.cursor.return_value = mock_cursor
+            
+            with advisory_lock(test_hash):
+                pass
+            
+            # Check that pg_advisory_unlock was called
+            calls = mock_cursor.execute.call_args_list
+            unlock_calls = [call for call in calls if 'pg_advisory_unlock' in str(call)]
+            assert len(unlock_calls) > 0
     
     def test_concurrent_same_hash_serialized(self):
         """Test that two threads with same hash are serialized."""

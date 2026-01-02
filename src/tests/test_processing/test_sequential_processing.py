@@ -288,16 +288,20 @@ class TestSequentialProcessing(TransactionTestCase):
     def test_job_status_progression(self):
         """Test that job statuses progress correctly: QUEUED → PROCESSING → COMPLETED."""
         
-        # We need to allow the real _execute_job to run so status updates happen
-        # But we'll make it fast by mocking the actual file processing
+        # Use an event to control when jobs complete
+        job_events = {}
+        
         def mock_execute(job_id, kwargs):
+            # Create an event for this job
+            job_events[job_id] = threading.Event()
+            
             # Update status to PROCESSING (simulating what _execute_job does)
             status_tracker.update_job_status(
                 job_id, ProcessingStatus.PROCESSING,
                 "Processing...", 50.0
             )
-            # Simulate longer processing time so we can observe states
-            time.sleep(0.8)
+            # Wait for the test to signal completion (or timeout)
+            job_events[job_id].wait(timeout=5.0)
             # Update to COMPLETED (simulating success)
             status_tracker.update_job_status(
                 job_id, ProcessingStatus.COMPLETED,
@@ -334,14 +338,14 @@ class TestSequentialProcessing(TransactionTestCase):
                     break
                 time.sleep(0.05)
             
-            # Verify job 1 is processing (must be PROCESSING, not COMPLETED, since mock takes 0.8s)
+            # Verify job 1 is processing (must be PROCESSING, not COMPLETED, since we haven't signaled completion)
             job1 = status_tracker.get_job(job_ids[0])
             assert job1 is not None, "Job 1 should exist"
             assert job1.status == ProcessingStatus.PROCESSING, \
-                f"Job 1 should be PROCESSING (mock takes 0.8s), got {job1.status.value}"
+                f"Job 1 should be PROCESSING (waiting on event), got {job1.status.value}"
             
             # Second and third jobs should definitely be QUEUED
-            # (since first job takes 0.8s total and is currently processing)
+            # (since first job is blocked waiting on event)
             job2 = status_tracker.get_job(job_ids[1])
             assert job2.status == ProcessingStatus.QUEUED, \
                 f"Job 2 should be QUEUED while job 1 is processing, got {job2.status.value}"
@@ -351,45 +355,25 @@ class TestSequentialProcessing(TransactionTestCase):
                 f"Job 3 should be QUEUED while job 1 is processing, got {job3.status.value}"
             
             # This is the KEY test: verify only ONE job is processing at a time
-            # Check that at most one job is in PROCESSING state
+            # Check that exactly one job is in PROCESSING state
             statuses = [
                 status_tracker.get_job(jid).status for jid in job_ids 
                 if status_tracker.get_job(jid)
             ]
             processing_count = sum(1 for s in statuses if s == ProcessingStatus.PROCESSING)
-            assert processing_count <= 1, \
-                f"Should have at most 1 job PROCESSING at a time, found {processing_count}"
+            assert processing_count == 1, \
+                f"Should have exactly 1 job PROCESSING at a time, found {processing_count}"
             
-            # Wait longer for jobs to progress
-            time.sleep(0.5)
+            # Signal job 1 to complete
+            if job_ids[0] in job_events:
+                job_events[job_ids[0]].set()
             
-            # Check that jobs are progressing sequentially
-            # At least one should be in a terminal or processing state
-            statuses = [
-                status_tracker.get_job(jid).status for jid in job_ids 
-                if status_tracker.get_job(jid)
-            ]
-            terminal_or_processing = sum(
-                1 for s in statuses 
-                if s in [ProcessingStatus.PROCESSING, ProcessingStatus.COMPLETED, ProcessingStatus.FAILED]
-            )
-            assert terminal_or_processing >= 1, \
-                "At least one job should be processing or complete"
-            
-            # Most importantly: verify third job is still queued
-            # (proves sequential processing - can't all run at once)
-            job3 = status_tracker.get_job(job_ids[2])
-            assert job3.status == ProcessingStatus.QUEUED, \
-                f"Job 3 should still be QUEUED (proves sequential processing), got {job3.status.value}"
-            
-            # Wait for job 1 to complete (mock takes 0.8s, so wait a bit longer)
+            # Wait for job 1 to complete
             max_wait = 2.0
             start_time = time.time()
-            job1_completed = False
             while time.time() - start_time < max_wait:
                 job1 = status_tracker.get_job(job_ids[0])
                 if job1 and job1.status == ProcessingStatus.COMPLETED:
-                    job1_completed = True
                     break
                 time.sleep(0.05)
             
@@ -397,16 +381,14 @@ class TestSequentialProcessing(TransactionTestCase):
             job1 = status_tracker.get_job(job_ids[0])
             assert job1 is not None, "Job 1 should exist"
             assert job1.status == ProcessingStatus.COMPLETED, \
-                f"Job 1 should be COMPLETED after processing, got {job1.status.value}"
+                f"Job 1 should be COMPLETED after signaling, got {job1.status.value}"
             
-            # Verify job 2 has started processing (sequential processing)
+            # Wait for job 2 to start processing (sequential processing)
             max_wait = 1.0
             start_time = time.time()
-            job2_processing = False
             while time.time() - start_time < max_wait:
                 job2 = status_tracker.get_job(job_ids[1])
                 if job2 and job2.status == ProcessingStatus.PROCESSING:
-                    job2_processing = True
                     break
                 time.sleep(0.05)
             
@@ -430,8 +412,20 @@ class TestSequentialProcessing(TransactionTestCase):
             assert processing_count == 1, \
                 f"Should have exactly 1 job PROCESSING at a time, found {processing_count}"
             
+            # Signal remaining jobs to complete as they start
+            # We need to wait for each job to create its event before signaling
+            for job_id in job_ids[1:]:
+                # Wait for the job's event to be created (max 2 seconds)
+                max_wait = 2.0
+                start_time = time.time()
+                while time.time() - start_time < max_wait:
+                    if job_id in job_events:
+                        job_events[job_id].set()
+                        break
+                    time.sleep(0.05)
+            
             # Wait for all jobs to complete
-            time.sleep(3.0)
+            time.sleep(1.0)
             
             # Verify all jobs eventually completed
             completed_count = 0

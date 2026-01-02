@@ -239,8 +239,11 @@ class TestAdvisoryLockFailureRecovery:
         test_hash = "lock_failure_test_hash"
         
         # Mock the cursor.execute to simulate lock failure
-        with patch('geo_lib.utils.advisory_locks.connection.cursor') as mock_cursor:
-            mock_cursor.return_value.__enter__.return_value.execute.side_effect = DatabaseError("Lock acquisition failed")
+        # Patch connection where it's used in the advisory_locks module
+        with patch('geo_lib.utils.advisory_locks.connection') as mock_connection:
+            mock_cursor = MagicMock()
+            mock_cursor.execute.side_effect = DatabaseError("Lock acquisition failed")
+            mock_connection.cursor.return_value = mock_cursor
             
             # Verify that lock acquisition failure raises an exception
             with pytest.raises(DatabaseError):

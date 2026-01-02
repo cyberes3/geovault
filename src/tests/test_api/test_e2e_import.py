@@ -164,9 +164,15 @@ class TestE2EImport(TransactionTestCase):
         
         return zip_buffer.getvalue()
 
-    def _upload_file(self, file_content: bytes, filename: str, replacement_id=None):
+    def _upload_file(self, file_content: bytes, filename: str, replacement_id=None, timeout: float = 30.0):
         """
         Upload a file and wait for processing.
+        
+        Args:
+            file_content: File content as bytes
+            filename: Original filename
+            replacement_id: Optional ID of feature being replaced
+            timeout: Maximum time to wait for processing completion (default: 30.0 seconds)
         
         Returns:
             tuple: (job_id, item_id, job_status)
@@ -183,7 +189,7 @@ class TestE2EImport(TransactionTestCase):
         job_id = data['job_id']
         
         # Wait for processing to complete
-        job_status = self._wait_for_job_completion(job_id)
+        job_status = self._wait_for_job_completion(job_id, timeout=timeout)
         
         # Get the import queue item ID
         job = status_tracker.get_job(job_id)
@@ -413,8 +419,8 @@ class TestE2EImport(TransactionTestCase):
         # Load test GPX file
         gpx_content = self._load_test_file('blue_hills.gpx')
         
-        # Upload and process
-        process_job_id, item_id, process_status = self._upload_file(gpx_content, 'blue_hills.gpx')
+        # Upload and process (GPX files may take longer due to track processing, elevation, geocoding)
+        process_job_id, item_id, process_status = self._upload_file(gpx_content, 'blue_hills.gpx', timeout=60.0)
         
         # Verify processing succeeded
         self.assertEqual(process_status['status'], ProcessingStatus.COMPLETED.value,
