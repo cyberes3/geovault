@@ -8,3 +8,5 @@ Linking your account is a little obtuse since it's an unofficial API but it isn'
 on your `Settings` > `Import` page.
 
 Your CalTopo authentication details are encrypted on the server.
+
+Linking your account will give GeoVault full write access to your Caltopo account!
