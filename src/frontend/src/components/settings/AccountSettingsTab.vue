@@ -52,7 +52,7 @@
       </form>
     </div>
 
-    <!-- Email Change Section -->
+    <!-- Email Address Section -->
     <div class="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
       <h2 class="text-lg font-semibold text-gray-900 mb-4">Email Address</h2>
 
@@ -113,42 +113,6 @@
           <strong>Email Verification Required:</strong> Your email address is not yet verified. Please check your inbox and click the verification link to complete the process.
         </p>
       </div>
-
-      <!-- Change Email Form -->
-      <!-- Disabled - functionality removed -->
-      <!--
-      <div class="border-t border-gray-200 pt-6">
-        <h3 class="text-md font-medium text-gray-900 mb-4">Change Email Address</h3>
-        <form @submit.prevent="handleEmailChange" class="space-y-4">
-          <div>
-            <label class="block text-sm font-medium text-gray-700 mb-1">New Email Address</label>
-            <input
-              v-model="emailForm.email"
-              type="email"
-              required
-              :disabled="emailLoading"
-              class="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500 disabled:bg-gray-100 disabled:cursor-not-allowed"
-            />
-            <p class="mt-1 text-sm text-gray-500">Your current email will be replaced. A verification email will be sent to the new address.</p>
-          </div>
-          <div v-if="emailMessage" :class="[
-            'p-3 rounded-md text-sm',
-            emailMessageType === 'success' ? 'bg-green-50 text-green-800' : 'bg-red-50 text-red-800'
-          ]">
-            {{ emailMessage }}
-          </div>
-          <button
-            type="submit"
-            :disabled="emailLoading"
-            class="inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md text-white bg-blue-500 hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 disabled:opacity-50 disabled:cursor-not-allowed"
-            title="Change email address"
-          >
-            <span v-if="emailLoading">Changing...</span>
-            <span v-else>Change Email</span>
-          </button>
-        </form>
-      </div>
-      -->
     </div>
 
     <!-- Data Export Section -->
@@ -340,19 +304,13 @@ export default {
         newPassword: '',
         confirmPassword: ''
       },
-      emailForm: {
-        email: ''
-      },
       passwordLoading: false,
-      emailLoading: false,
       resendLoading: false,
       downloadLoading: false,
       resendCooldown: 0,
       cooldownInterval: null,
       passwordMessage: '',
       passwordMessageType: '',
-      emailMessage: '',
-      emailMessageType: '',
       resendMessage: '',
       resendMessageType: '',
       downloadMessage: '',
@@ -455,54 +413,6 @@ export default {
         this.passwordMessageType = 'error';
       } finally {
         this.passwordLoading = false;
-      }
-    },
-    async handleEmailChange() {
-      this.emailLoading = true;
-      this.emailMessage = '';
-      this.emailMessageType = '';
-
-      try {
-        // Allauth AddEmailForm expects: email
-        const response = await axios.post('/api/user/email/change/', {
-          email: this.emailForm.email
-        }, {
-          headers: {
-            'X-CSRFToken': getCookie('csrftoken'),
-            'Content-Type': 'application/json'
-          }
-        });
-
-        if (response.status === 200) {
-          this.emailMessage = response.data.message || 'Email address changed. Please check your email to verify it.';
-          this.emailMessageType = 'success';
-          // Clear form
-          this.emailForm = {
-            email: ''
-          };
-          // Reload email status to show updated email and verification status
-          await this.loadCurrentEmail();
-        } else {
-          this.emailMessage = response.data.error || 'Failed to change email address.';
-          this.emailMessageType = 'error';
-        }
-      } catch (error) {
-        if (error.response && error.response.data) {
-          if (error.response.data.error) {
-            this.emailMessage = error.response.data.error;
-          } else if (error.response.data.errors) {
-            // Handle multiple field errors
-            const firstError = Object.values(error.response.data.errors)[0];
-            this.emailMessage = Array.isArray(firstError) ? firstError[0] : firstError;
-          } else {
-            this.emailMessage = 'An error occurred while changing your email address.';
-          }
-        } else {
-          this.emailMessage = 'An error occurred while changing your email address.';
-        }
-        this.emailMessageType = 'error';
-      } finally {
-        this.emailLoading = false;
       }
     },
     async handleResendVerification() {

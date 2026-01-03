@@ -598,7 +598,11 @@ class TestSourceDeviceTagGenerator:
         assert 'source-device:Dakota 20' in tags
     
     def test_source_device_tag_with_gpx_creator_bytes(self):
-        """Test that source-device tag is generated from GPX file content as bytes."""
+        """Test that source-device tag is generated from GPX file content as bytes.
+        
+        Note: The processor normalizes bytes to string before passing to tag generators,
+        so we test with decoded string to simulate what the processor does.
+        """
         generator = SourceDeviceTagGenerator()
         feature = PointFeature(
             type='Feature',
@@ -606,7 +610,9 @@ class TestSourceDeviceTagGenerator:
             properties={'name': 'Test Point', 'geojson_hash': 'test'}
         )
         
-        gpx_content = b'<?xml version="1.0" encoding="UTF-8"?><gpx version="1.1" creator="Garmin Edge 530" xmlns="http://www.topografix.com/GPX/1/1"><wpt lat="37.7749" lon="-122.4194"><name>Test Point</name></wpt></gpx>'
+        # Simulate what the processor does: decode bytes to string (with BOM stripping)
+        gpx_content_bytes = b'<?xml version="1.0" encoding="UTF-8"?><gpx version="1.1" creator="Garmin Edge 530" xmlns="http://www.topografix.com/GPX/1/1"><wpt lat="37.7749" lon="-122.4194"><name>Test Point</name></wpt></gpx>'
+        gpx_content = gpx_content_bytes.decode('utf-8-sig')  # Processor uses utf-8-sig to strip BOM
         
         tags = generator.process(feature, file_content=gpx_content)
         

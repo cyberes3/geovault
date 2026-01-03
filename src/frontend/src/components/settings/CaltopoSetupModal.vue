@@ -57,7 +57,7 @@
                 <p class="text-sm text-red-900">
                   <strong>Linking your account here will give GeoVault full write access to your Caltopo
                     account!</strong>
-                  GeoVault uses an unofficial, unsupported method to access your CalTopo account.
+                  GeoVault uses an unofficial, unsupported method to access CalTopo.
                 </p>
               </div>
             </section>
