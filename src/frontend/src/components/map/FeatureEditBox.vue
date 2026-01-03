@@ -890,7 +890,7 @@ export default {
 
       // Show confirmation dialog
       const featureName = originalProperties.name || 'this feature'
-      const confirmed = window.confirm(`Are you sure you want to delete "${featureName}"? This action cannot be undone.`)
+      const confirmed = window.confirm(`Are you sure you want to delete "${featureName}"? This feature will be permanently removed from your library.`)
 
       if (!confirmed) {
         return

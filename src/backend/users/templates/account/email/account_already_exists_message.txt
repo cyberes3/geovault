@@ -1,13 +1,10 @@
 {% extends "account/email/base_message.txt" %}
 {% load i18n %}
 
-{% block content %}{% autoescape off %}{% blocktranslate with site_domain=current_site.domain %}You are receiving this email from {{ site_domain }} because you or someone else tried to signup for an
-account using email address:
+{% block content %}{% autoescape off %}{% blocktranslate with site_domain=current_site.domain %}Someone tried to sign up for an account on {{ site_domain }} using email address:
 
 {{ email }}
 
-However, an account using that email address already exists.  In case you have
-forgotten about this, please use the password forgotten procedure to recover
-your account:{% endblocktranslate %}
+However, an account with that email address already exists. If you've forgotten your password, you can reset it using the link below:{% endblocktranslate %}
 
-{{ password_reset_url }}{% endblocktrans %}{% endautoescape %}{% endblock content %}
+{{ password_reset_url }}{% endautoescape %}{% endblock content %}

@@ -111,7 +111,7 @@ export async function removeTagFromFeature(tag, feature, csrfToken) {
  */
 export function buildDeleteTagMessage(tag, featureCount, isSystemTag = false) {
   const tagType = isSystemTag ? 'system tag' : 'tag';
-  return `Are you sure you want to delete the ${tagType} "${tag}"?\n\n⚠️ WARNING: This will PERMANENTLY DELETE ${featureCount} ${featureCount === 1 ? 'feature' : 'features'} from your library.\n\nThis action cannot be undone!`;
+  return `Are you sure you want to delete the ${tagType} "${tag}"?\n\nThis will delete ${featureCount} ${featureCount === 1 ? 'feature' : 'features'} from your library. Deleted features cannot be recovered.`;
 }
 
 /**

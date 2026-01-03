@@ -1,7 +1,4 @@
 {% load i18n %}{% autoescape off %}
 
 {% block content %}{% endblock content %}
-
---
-{% blocktranslate with site_domain=current_site.domain %}This email was sent from {{ site_domain }}{% endblocktranslate %}
 {% endautoescape %}

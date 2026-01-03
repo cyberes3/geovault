@@ -197,7 +197,7 @@
     <div class="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
       <h2 class="text-lg font-semibold text-gray-900 mb-4">API Keys</h2>
       <p class="text-sm text-gray-600 mb-4">
-        Create API keys to allow programmatic access to your account. Keys can be used to upload files and access your data via the API.
+        Create API keys to connect apps and services to your account. Keys can be used to upload files and access your data.
       </p>
       <p class="text-sm text-gray-600 mb-4">
         API keys can also be used with the
@@ -241,7 +241,7 @@
         <!-- Display raw key after creation (shown only once) -->
         <div v-if="newKeyRawValue" class="mt-4 p-4 bg-gray-50 border border-gray-200 rounded-md shadow-sm">
           <p class="text-sm font-medium text-gray-900 mb-2">
-            ⚠️ Important: Copy this key now. It will not be shown again.
+            Please copy this key now - you'll need it to use the API. For your security, we only show it once.
           </p>
           <div class="flex items-center gap-2">
             <input
@@ -703,7 +703,7 @@ export default {
       }
     },
     async handleDeleteApiKey(keyId) {
-      if (!confirm('Are you sure you want to delete this API key? This action cannot be undone.')) {
+      if (!confirm('Are you sure you want to delete this API key? You can always create a new one if needed.')) {
         return;
       }
 

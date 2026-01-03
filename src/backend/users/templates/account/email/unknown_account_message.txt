@@ -1,7 +1,7 @@
 {% extends "account/email/base_message.txt" %}
 {% load i18n %}
 
-{% block content %}{% autoescape off %}{% blocktranslate with site_domain=current_site.domain %}You are receiving this email from {{ site_domain }} because you, or someone else, tried to access an account with email {{ email }}. However, we do not have any record of such an account in our database.{% endblocktranslate %}
+{% block content %}{% autoescape off %}{% blocktranslate with site_domain=current_site.domain %}Someone tried to access an account with email {{ email }} on {{ site_domain }}, but we don't have an account with that email address.{% endblocktranslate %}
 
 {% blocktranslate %}This mail can be safely ignored if you did not initiate this action.{% endblocktranslate %}
 

@@ -62,7 +62,7 @@
                 <div class="ml-4 flex-1">
                   <h4 class="text-base font-semibold text-gray-900 mb-2">Delete All Features</h4>
                   <p class="text-sm text-gray-700 mb-4">
-                    ⚠️ <strong>WARNING:</strong> This will PERMANENTLY DELETE {{ featureCount }} {{ featureCount === 1 ? 'feature' : 'features' }} from your library. This action cannot be undone!
+                    This will delete {{ featureCount }} {{ featureCount === 1 ? 'feature' : 'features' }} from your library. Deleted features cannot be recovered.
                   </p>
                   <button
                     @click="handleDeleteAllFeatures"

@@ -745,7 +745,7 @@ export default {
       }
 
       const selectedCount = this.selectedItems.size;
-      const confirmMessage = `Are you sure you want to delete ${selectedCount} item${selectedCount === 1 ? '' : 's'}? This action cannot be undone.`;
+      const confirmMessage = `Are you sure you want to delete ${selectedCount} item${selectedCount === 1 ? '' : 's'}? Deleted items cannot be recovered.`;
 
       if (!window.confirm(confirmMessage)) {
         return;
