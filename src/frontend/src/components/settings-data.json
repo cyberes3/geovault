@@ -62,7 +62,7 @@
   {
     "key": "import.overwrite_single_track_name_with_filename",
     "title": "Overwrite Single Track Name with Filename",
-    "type": "checkbox",
+    "type": "toggle",
     "section": "import",
     "defaultValue": false,
     "description": "When a file contains a single track feature, overwrite the track name with the filename."
@@ -70,7 +70,7 @@
   {
     "key": "import.show_debug_logs",
     "title": "Show Debug Logs",
-    "type": "checkbox",
+    "type": "toggle",
     "section": "import",
     "defaultValue": false,
     "description": "Show DEBUG level logs in the import process page"
