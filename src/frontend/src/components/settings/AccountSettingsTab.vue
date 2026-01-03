@@ -61,17 +61,22 @@
         <div class="flex items-center justify-between">
           <div>
             <p class="text-sm font-medium text-gray-700">Current Email</p>
-            <p class="text-sm text-gray-900 mt-1">{{ currentEmail || 'Not set' }}</p>
-            <div v-if="emailStatus" class="mt-2 flex items-center gap-2">
-              <span v-if="emailStatus.verified" class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-800">
-                Verified
-              </span>
-              <span v-else class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-yellow-100 text-yellow-800">
-                Unverified
-              </span>
+            <div v-if="emailStatusLoading" class="mt-1 flex items-center gap-2 min-h-[1.5rem]">
+              <Loader size="sm" layout="inline" message="Loading email status..." :showMessage="true" />
             </div>
+            <template v-else>
+              <div class="mt-1 flex items-center gap-2 min-h-[1.5rem]">
+                <p class="text-sm text-gray-900">{{ currentEmail || 'Not set' }}</p>
+                <span v-if="emailStatus && emailStatus.verified" class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-800">
+                  Verified
+                </span>
+                <span v-else-if="emailStatus && !emailStatus.verified" class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-yellow-100 text-yellow-800">
+                  Unverified
+                </span>
+              </div>
+            </template>
           </div>
-          <div class="relative" v-if="emailStatus && !emailStatus.verified">
+          <div class="relative group" v-if="!emailStatusLoading && emailStatus && !emailStatus.verified">
             <button
               @click="handleResendVerification"
               :disabled="resendLoading || resendCooldown > 0"
@@ -84,7 +89,7 @@
             </button>
             <div
               v-if="resendCooldown > 0"
-              class="absolute z-10 px-2 py-1 text-xs text-white bg-gray-900 rounded shadow-lg bottom-full mb-2 left-1/2 transform -translate-x-1/2 whitespace-nowrap pointer-events-none"
+              class="absolute z-10 px-2 py-1 text-xs text-white bg-gray-900 rounded shadow-lg bottom-full mb-2 left-1/2 transform -translate-x-1/2 whitespace-nowrap pointer-events-none opacity-0 group-hover:opacity-100 transition-opacity duration-200"
             >
               Please wait {{ resendCooldown }} second{{ resendCooldown !== 1 ? 's' : '' }} before resending
               <div class="absolute top-full left-1/2 transform -translate-x-1/2 -mt-1">
@@ -95,14 +100,23 @@
         </div>
       </div>
 
-      <!-- Unverified Email Notice -->
-      <div v-if="emailStatus && !emailStatus.verified" class="mb-4 p-4 bg-yellow-50 border border-yellow-200 rounded-md">
-        <p class="text-sm text-yellow-800">
+      <!-- Unverified Email Notice or Resend Success Message -->
+      <div v-if="emailStatus && !emailStatus.verified" class="mb-4 p-4 rounded-md" :class="[
+        resendMessageType === 'success' 
+          ? 'bg-green-50 border border-green-200' 
+          : 'bg-yellow-50 border border-yellow-200'
+      ]">
+        <p v-if="resendMessageType === 'success'" class="text-sm text-green-800">
+          {{ resendMessage }}
+        </p>
+        <p v-else class="text-sm text-yellow-800">
           <strong>Email Verification Required:</strong> Your email address is not yet verified. Please check your inbox and click the verification link to complete the process.
         </p>
       </div>
 
       <!-- Change Email Form -->
+      <!-- Disabled - functionality removed -->
+      <!--
       <div class="border-t border-gray-200 pt-6">
         <h3 class="text-md font-medium text-gray-900 mb-4">Change Email Address</h3>
         <form @submit.prevent="handleEmailChange" class="space-y-4">
@@ -134,6 +148,7 @@
           </button>
         </form>
       </div>
+      -->
     </div>
 
     <!-- Data Export Section -->
@@ -299,12 +314,14 @@ import { getCookie } from "@/assets/js/auth.js";
 import settingsConfig from "@/components/settings-data.json";
 import SettingsMixin from "./mixins/SettingsMixin.js";
 import SettingsInput from "./components/SettingsInput.vue";
+import Loader from "@/components/parts/Loader.vue";
 import { formatDate } from "@/utils/dateUtils.js";
 
 export default {
   name: 'AccountSettingsTab',
   components: {
-    SettingsInput
+    SettingsInput,
+    Loader
   },
   mixins: [SettingsMixin],
   props: {
@@ -316,6 +333,7 @@ export default {
       dataLoaded: false,
       currentEmail: '',
       emailStatus: null,
+      emailStatusLoading: false,
       pendingEmails: [],
       passwordForm: {
         currentPassword: '',
@@ -335,6 +353,8 @@ export default {
       passwordMessageType: '',
       emailMessage: '',
       emailMessageType: '',
+      resendMessage: '',
+      resendMessageType: '',
       downloadMessage: '',
       downloadMessageType: '',
       // API Keys state
@@ -350,6 +370,7 @@ export default {
   },
   methods: {
     async loadCurrentEmail() {
+      this.emailStatusLoading = true;
       try {
         const response = await axios.get('/api/user/email/status/', {
           headers: {
@@ -382,6 +403,8 @@ export default {
       } catch (error) {
         console.error('Error loading email status:', error);
         this.currentEmail = 'Error loading email';
+      } finally {
+        this.emailStatusLoading = false;
       }
     },
     async handlePasswordChange() {
@@ -488,8 +511,8 @@ export default {
       }
 
       this.resendLoading = true;
-      this.emailMessage = '';
-      this.emailMessageType = '';
+      this.resendMessage = '';
+      this.resendMessageType = '';
 
       try {
         const response = await axios.post('/api/user/email/resend-verification/', {
@@ -502,8 +525,8 @@ export default {
         });
 
         if (response.status === 200) {
-          this.emailMessage = response.data.message || 'Verification email sent. Please check your inbox.';
-          this.emailMessageType = 'success';
+          this.resendMessage = response.data.message || 'Verification email sent. Please check your inbox.';
+          this.resendMessageType = 'success';
 
           // Start cooldown timer
           if (response.data.cooldown_remaining) {
@@ -511,8 +534,8 @@ export default {
             this.startCooldownTimer();
           }
         } else {
-          this.emailMessage = response.data.error || 'Failed to send verification email.';
-          this.emailMessageType = 'error';
+          this.resendMessage = response.data.error || 'Failed to send verification email.';
+          this.resendMessageType = 'error';
         }
       } catch (error) {
         if (error.response && error.response.data) {
@@ -520,16 +543,16 @@ export default {
           if (error.response.status === 429 && error.response.data.on_cooldown) {
             this.resendCooldown = error.response.data.cooldown_remaining || 60;
             this.startCooldownTimer();
-            this.emailMessage = error.response.data.error || 'Please wait before requesting another verification email.';
+            this.resendMessage = error.response.data.error || 'Please wait before requesting another verification email.';
           } else if (error.response.data.error) {
-            this.emailMessage = error.response.data.error;
+            this.resendMessage = error.response.data.error;
           } else {
-            this.emailMessage = 'An error occurred while sending the verification email.';
+            this.resendMessage = 'An error occurred while sending the verification email.';
           }
         } else {
-          this.emailMessage = 'An error occurred while sending the verification email.';
+          this.resendMessage = 'An error occurred while sending the verification email.';
         }
-        this.emailMessageType = 'error';
+        this.resendMessageType = 'error';
       } finally {
         this.resendLoading = false;
       }

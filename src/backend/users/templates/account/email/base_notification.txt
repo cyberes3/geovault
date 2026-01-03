@@ -2,9 +2,9 @@
 {% load account %}
 {% load i18n %}
 
-{% block content %}{% autoescape off %}{% blocktrans %}You are receiving this mail because the following change was made to your account:{% endblocktrans %}
+{% block content %}{% autoescape off %}{% blocktranslate with site_domain=current_site.domain %}You are receiving this mail from {{ site_domain }} because the following change was made to your account:{% endblocktranslate %}
 
 {% block notification_message %}
 {% endblock notification_message%}
 
-{% blocktrans %}If you do not recognize this change then please take proper security precautions immediately.{% endblocktrans %}{% endautoescape %}{% endblock %}
+{% blocktranslate %}If you do not recognize this change then please take proper security precautions immediately.{% endblocktranslate %}{% endautoescape %}{% endblock %}

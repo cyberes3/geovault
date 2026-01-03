@@ -50,65 +50,71 @@ def change_password_api(request):
 @require_http_methods(["POST"])
 def email_management_api(request):
     """API endpoint for changing email address. Replaces existing email with new one."""
-    try:
-        data = json.loads(request.body)
-        new_email = data.get('email', '').strip()
-        
-        if not new_email:
-            return JsonResponse({
-                'error': 'Email address is required'
-            }, status=400)
-        
-        # Check if the new email is the same as current primary email
-        existing_primary = EmailAddress.objects.filter(user=request.user, primary=True).first()
-        if existing_primary and existing_primary.email.lower() == new_email.lower():
-            return JsonResponse({
-                'error': 'This is already your current email address'
-            }, status=400)
-        
-        # Validate the email using AddEmailForm
-        form = AddEmailForm(user=request.user, data={'email': new_email})
-        
-        if form.is_valid():
-            # Delete all existing email addresses for this user
-            EmailAddress.objects.filter(user=request.user).delete()
-            
-            # Add the new email address as primary
-            email_address = form.save(request)
-            email_address.primary = True
-            email_address.save()
-            
-            # Update user's email field if it exists
-            if hasattr(request.user, 'email'):
-                request.user.email = new_email
-                request.user.save()
-            
-            # Allauth automatically sends verification email when ACCOUNT_EMAIL_VERIFICATION is mandatory
-            return JsonResponse({
-                'message': 'Email address changed. Please check your email to verify it.',
-                'email': email_address.email,
-                'verified': email_address.verified,
-                'pending_verification': not email_address.verified
-            })
-        else:
-            # Extract form errors
-            errors = {}
-            for field, field_errors in form.errors.items():
-                errors[field] = field_errors[0] if field_errors else 'Invalid value'
-            
-            first_error = list(errors.values())[0] if errors else 'Invalid form data'
-            return JsonResponse({
-                'error': first_error,
-                'errors': errors
-            }, status=400)
-    except json.JSONDecodeError:
-        return JsonResponse({
-            'error': 'Invalid JSON data'
-        }, status=400)
-    except Exception as e:
-        return JsonResponse({
-            'error': f'An error occurred: {str(e)}'
-        }, status=500)
+    # Disabled - return 403 Forbidden
+    return JsonResponse({
+        'error': 'Email change functionality is currently disabled'
+    }, status=403)
+    
+    # Original implementation commented out:
+    # try:
+    #     data = json.loads(request.body)
+    #     new_email = data.get('email', '').strip()
+    #     
+    #     if not new_email:
+    #         return JsonResponse({
+    #             'error': 'Email address is required'
+    #         }, status=400)
+    #     
+    #     # Check if the new email is the same as current primary email
+    #     existing_primary = EmailAddress.objects.filter(user=request.user, primary=True).first()
+    #     if existing_primary and existing_primary.email.lower() == new_email.lower():
+    #         return JsonResponse({
+    #             'error': 'This is already your current email address'
+    #         }, status=400)
+    #     
+    #     # Validate the email using AddEmailForm
+    #     form = AddEmailForm(user=request.user, data={'email': new_email})
+    #     
+    #     if form.is_valid():
+    #         # Delete all existing email addresses for this user
+    #         EmailAddress.objects.filter(user=request.user).delete()
+    #         
+    #         # Add the new email address as primary
+    #         email_address = form.save(request)
+    #         email_address.primary = True
+    #         email_address.save()
+    #         
+    #         # Update user's email field if it exists
+    #         if hasattr(request.user, 'email'):
+    #             request.user.email = new_email
+    #             request.user.save()
+    #         
+    #         # Allauth automatically sends verification email when ACCOUNT_EMAIL_VERIFICATION is mandatory
+    #         return JsonResponse({
+    #             'message': 'Email address changed. Please check your email to verify it.',
+    #             'email': email_address.email,
+    #             'verified': email_address.verified,
+    #             'pending_verification': not email_address.verified
+    #         })
+    #     else:
+    #         # Extract form errors
+    #         errors = {}
+    #         for field, field_errors in form.errors.items():
+    #             errors[field] = field_errors[0] if field_errors else 'Invalid value'
+    #         
+    #         first_error = list(errors.values())[0] if errors else 'Invalid form data'
+    #         return JsonResponse({
+    #             'error': first_error,
+    #             'errors': errors
+    #         }, status=400)
+    # except json.JSONDecodeError:
+    #     return JsonResponse({
+    #         'error': 'Invalid JSON data'
+    #     }, status=400)
+    # except Exception as e:
+    #     return JsonResponse({
+    #         'error': f'An error occurred: {str(e)}'
+    #     }, status=500)
 
 
 @api_or_login_required_401(allow_api_keys=False)  # Email status should only be via session

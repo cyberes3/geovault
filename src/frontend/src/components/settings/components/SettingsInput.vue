@@ -114,13 +114,19 @@
     <div v-else-if="setting.type === 'select'" class="space-y-2">
       <select
         :id="setting.key"
-        :value="modelValue"
+        :value="isLoading ? '' : modelValue"
         @change="$emit('update:modelValue', $event.target.value)"
-        class="select-custom w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500"
+        :disabled="isLoading"
+        class="select-custom w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500 disabled:bg-gray-100 disabled:cursor-not-allowed"
       >
-        <option v-for="option in setting.options" :key="option.value" :value="option.value">
-          {{ option.label }}
+        <option v-if="isLoading" value="" selected>
+          Loading...
         </option>
+        <template v-else>
+          <option v-for="option in setting.options" :key="option.value" :value="option.value">
+            {{ option.label }}
+          </option>
+        </template>
       </select>
       <p v-if="setting.description" class="text-sm text-gray-500">
         {{ setting.description }}
@@ -209,7 +215,22 @@ export default {
       default: false
     }
   },
-  emits: ['update:modelValue']
+  emits: ['update:modelValue'],
+  computed: {
+    isLoading() {
+      // Check if settings are still loading from the store
+      // If userSettings is null, settings are still being fetched
+      const userSettings = this.$store?.state?.userSettings;
+      const settingsLoading = userSettings === null;
+      
+      // For select dropdowns, also check if options are empty (e.g., default_basemap)
+      // Options might be populated asynchronously after component creation
+      const optionsEmpty = this.setting.type === 'select' && 
+        (!this.setting.options || this.setting.options.length === 0);
+      
+      return settingsLoading || optionsEmpty;
+    }
+  }
 }
 </script>
 

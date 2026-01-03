@@ -75,6 +75,7 @@ INSTALLED_APPS = [
 MIDDLEWARE = [
     'django.middleware.security.SecurityMiddleware',
     'website.middleware.LoggingMiddleware',  # Log BEFORE WhiteNoise to catch static file requests
+    'website.middleware.FixRequestHostMiddleware',  # Fix request host for email URL generation (before allauth)
     'whitenoise.middleware.WhiteNoiseMiddleware',  # Serve static files in production
     'website.middleware.CustomSessionMiddleware',  # Custom SessionMiddleware that prevents cookies for tile requests
     'django.middleware.common.CommonMiddleware',

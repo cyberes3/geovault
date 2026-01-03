@@ -2,5 +2,6 @@
 
 {% block content %}{% endblock content %}
 
-{{ site_domain }}
+--
+{% blocktranslate with site_domain=current_site.domain %}This email was sent from {{ site_domain }}{% endblocktranslate %}
 {% endautoescape %}
