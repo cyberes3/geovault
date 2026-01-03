@@ -1,21 +1,26 @@
 #!/bin/bash
 # Script to reset git files whose change is only a single new line
 
-# Get list of modified files
-modified_files=$(git status --porcelain | grep '^ M' | awk '{print $2}')
-
-if [ -z "$modified_files" ]; then
-    echo "No modified files found."
-    exit 0
-fi
-
+# Get list of modified files using null-separated output to handle spaces in filenames
 reset_count=0
 skipped_count=0
 
 echo "Checking modified files for single-line changes..."
 echo ""
 
-for file in $modified_files; do
+# Use null-separated output to properly handle filenames with spaces
+# Parse git status porcelain output: format is "XY filename" where X is index status, Y is working tree status
+# We want files with " M" (modified in working tree, not staged)
+while IFS= read -r -d '' status_line; do
+    # Skip if line is empty
+    [ -z "$status_line" ] && continue
+    
+    # Extract filename: skip first 3 characters (status code + space)
+    file="${status_line:3}"
+    
+    # Skip if file is empty
+    [ -z "$file" ] && continue
+    
     # Get diff stats (format: additions deletions filename)
     diff_stats=$(git diff --numstat "$file")
     
@@ -41,7 +46,11 @@ for file in $modified_files; do
         skipped_count=$((skipped_count + 1))
         echo "Skipping $file ($additions additions, $deletions deletions)"
     fi
-done
+done < <(git status --porcelain -z | grep -z '^ M')
+
+if [ $reset_count -eq 0 ] && [ $skipped_count -eq 0 ]; then
+    echo "No modified files found."
+fi
 
 echo ""
 echo "Summary:"
