@@ -115,5 +115,68 @@ class TestProcessors:
             job_id='test-job-id'
         )
         assert processor.job_id == 'test-job-id'
+    
+    def test_processor_bom_normalization_bytes(self):
+        """Test that processor normalizes BOM from bytes file_data.
+        
+        This ensures that GPX files with UTF-8 BOM are correctly handled
+        and device tags can be extracted.
+        """
+        # Create GPX content with UTF-8 BOM
+        gpx_content = '<?xml version="1.0" encoding="utf-8"?><gpx creator="Garmin Desktop App" version="1.1" xmlns="http://www.topografix.com/GPX/1/1"><trk><name>Track</name><trkseg><trkpt lat="37.772061517462134" lon="-115.98608398810029"><ele>1696.96</ele><time>2025-05-20T18:51:08Z</time></trkpt></trkseg></trk></gpx>'
+        # Add UTF-8 BOM (ef bb bf)
+        gpx_content_with_bom = b'\xef\xbb\xbf' + gpx_content.encode('utf-8')
+        
+        processor = get_processor(gpx_content_with_bom, 'test.gpx')
+        
+        # Test _normalize_file_data_for_tagging strips BOM
+        normalized = processor._normalize_file_data_for_tagging()
+        assert isinstance(normalized, str)
+        assert normalized.startswith('<?xml')
+        assert not normalized.startswith('\ufeff')
+        assert 'Garmin Desktop App' in normalized
+    
+    def test_processor_bom_normalization_string(self):
+        """Test that processor normalizes BOM from string file_data."""
+        # Create GPX content with BOM in string
+        gpx_content = '<?xml version="1.0" encoding="utf-8"?><gpx creator="Garmin Desktop App" version="1.1" xmlns="http://www.topografix.com/GPX/1/1"><trk><name>Track</name><trkseg><trkpt lat="37.772061517462134" lon="-115.98608398810029"><ele>1696.96</ele><time>2025-05-20T18:51:08Z</time></trkpt></trkseg></trk></gpx>'
+        gpx_content_with_bom = '\ufeff' + gpx_content
+        
+        processor = get_processor(gpx_content_with_bom, 'test.gpx')
+        
+        # Test _normalize_file_data_for_tagging strips BOM
+        normalized = processor._normalize_file_data_for_tagging()
+        assert isinstance(normalized, str)
+        assert normalized.startswith('<?xml')
+        assert not normalized.startswith('\ufeff')
+        assert 'Garmin Desktop App' in normalized
+    
+    def test_processor_bom_handling_end_to_end(self):
+        """Test that processor normalizes BOM in both normalization methods.
+        
+        This test verifies that both _normalize_file_data_for_tagging() and
+        _decode_content() correctly strip BOM from GPX files with UTF-8 BOM.
+        """
+        # Create GPX content with UTF-8 BOM
+        gpx_content = '<?xml version="1.0" encoding="utf-8"?><gpx creator="Garmin Desktop App" version="1.1" xmlns="http://www.topografix.com/GPX/1/1"><trk><name>Track</name><trkseg><trkpt lat="37.772061517462134" lon="-115.98608398810029"><ele>1696.96</ele><time>2025-05-20T18:51:08Z</time></trkpt></trkseg></trk></gpx>'
+        gpx_content_with_bom = b'\xef\xbb\xbf' + gpx_content.encode('utf-8')
+        
+        processor = get_processor(gpx_content_with_bom, 'test.gpx')
+        
+        # The normalization tests above already verify BOM handling works
+        # This test verifies both normalization methods work correctly
+        # Verify _normalize_file_data_for_tagging strips BOM
+        normalized = processor._normalize_file_data_for_tagging()
+        assert isinstance(normalized, str)
+        assert not normalized.startswith('\ufeff'), "BOM should have been stripped by _normalize_file_data_for_tagging"
+        assert normalized.startswith('<?xml'), "Content should start with XML declaration after BOM removal"
+        assert 'Garmin Desktop App' in normalized, "Normalized content should contain device name"
+        
+        # Verify _decode_content also strips BOM (used for conversion)
+        decoded = processor._decode_content()
+        assert isinstance(decoded, str)
+        assert not decoded.startswith('\ufeff'), "BOM should have been stripped by _decode_content"
+        assert decoded.startswith('<?xml'), "Content should start with XML declaration after BOM removal"
+        assert 'Garmin Desktop App' in decoded, "Decoded content should contain device name"
 
 

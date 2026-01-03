@@ -396,12 +396,14 @@ class BaseProcessor(ABC):
 
             # Batch generate all tags for all features at once (including reverse geocoding)
             from geo_lib.processing.tagging.generate import generate_auto_tags_batch
+            # Normalize file_data for tag generators (strip BOM if present)
+            normalized_file_data = self._normalize_file_data_for_tagging()
             all_feature_tags = generate_auto_tags_batch(
                 [f for f in feature_instances if f is not None],
                 import_log=feature_log,
                 filename=self.filename,
                 skip_reverse_geocoding=False,  # Include reverse geocoding
-                file_content=self.file_data
+                file_content=normalized_file_data
             )
 
             # Check for cancellation after tag generation
@@ -494,6 +496,10 @@ class BaseProcessor(ABC):
                         if is_track_geometry and is_track_tagged:
                             # Extract filename without extension
                             filename_without_ext = os.path.splitext(self.filename)[0]
+                            # Store original name before overwriting
+                            original_name = properties.get('name', '')
+                            if original_name:
+                                properties['original_name'] = original_name
                             # Overwrite the name property
                             properties['name'] = filename_without_ext
                             feature['properties'] = properties
@@ -814,14 +820,40 @@ class BaseProcessor(ABC):
         """
         Decode file data to string if needed.
         Common helper for processors that need string content.
+        Automatically strips UTF-8 BOM if present.
         
         Returns:
-            File content as string
+            File content as string (BOM stripped)
         """
         if isinstance(self.file_data, str):
+            # Strip BOM if present in string
+            if self.file_data.startswith('\ufeff'):
+                return self.file_data[1:]
             return self.file_data
         else:
-            return self.file_data.decode('utf-8')
+            # Use utf-8-sig which automatically strips BOM
+            return self.file_data.decode('utf-8-sig')
+
+    def _normalize_file_data_for_tagging(self) -> Union[str, bytes]:
+        """
+        Normalize file_data for tag generators by stripping BOM if present.
+        Returns file_data as string (BOM stripped) for consistent handling.
+        
+        Returns:
+            File content as string (BOM stripped), or original if decoding fails
+        """
+        if isinstance(self.file_data, bytes):
+            # Use utf-8-sig which automatically strips BOM
+            try:
+                return self.file_data.decode('utf-8-sig')
+            except UnicodeDecodeError:
+                # If decoding fails, return original bytes
+                return self.file_data
+        else:
+            # Strip BOM from string if present
+            if self.file_data.startswith('\ufeff'):
+                return self.file_data[1:]
+            return self.file_data
 
     def _convert_to_geojson(self, content: Union[str, bytes], suffix: str, file_type_name: str, is_text: bool = True) -> Dict[str, Any]:
         """

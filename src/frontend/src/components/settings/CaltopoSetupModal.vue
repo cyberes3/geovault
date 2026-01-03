@@ -43,10 +43,11 @@
                   <li><strong>Credential Key</strong> - A 44-character public key for API authentication</li>
                 </ul>
                 <div class="mt-3 px-3 py-2 bg-blue-50 border border-blue-200 rounded-md">
-                  <p class="text-sm text-blue-900"><strong>Note:</strong> These credentials are specific to CalTopo's
-                    API and are different from your CalTopo login credentials. You don't need to share your CalTopo
-                    password. These credentials are also different from any external account provider credentials
-                    (Google, Yahoo, MSN, Apple, etc.).</p>
+                  <p>
+                    These credentials are specific to CalTopo's API and are different from your CalTopo login
+                    credentials. You don't need to share your CalTopo password. These credentials are also different
+                    from any external account provider credentials (Google, Yahoo, MSN, Apple, etc.).
+                  </p>
                 </div>
               </div>
             </section>
@@ -54,7 +55,9 @@
             <section>
               <div class="px-3 py-2 bg-red-50 border border-red-200 rounded-md">
                 <p class="text-sm text-red-900">
-                  <strong>Linking your account here will give GeoVault full write access to your Caltopo account!</strong>
+                  <strong>Linking your account here will give GeoVault full write access to your Caltopo
+                    account!</strong>
+                  GeoVault uses an unofficial, unsupported method to access your CalTopo account.
                 </p>
               </div>
             </section>

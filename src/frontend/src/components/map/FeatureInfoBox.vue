@@ -89,7 +89,7 @@
       <div v-if="getFeatureTags(feature).systemTags.length > 0" class="mb-2 md:mb-3">
 <!--        <div class="text-[10px] md:text-xs text-gray-500 mb-1">System Tags</div>-->
         <div class="border border-gray-200 rounded-md bg-gray-50 overflow-hidden">
-          <div class="h-20 md:h-24 overflow-y-auto p-2">
+          <div class="max-h-48 md:max-h-56 overflow-y-auto p-2">
             <div class="flex flex-wrap gap-1.5 md:gap-2">
               <span
                 v-for="tag in getFeatureTags(feature).systemTags"

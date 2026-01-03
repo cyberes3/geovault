@@ -2,11 +2,15 @@
 Source device tag generator.
 Generates source-device:* tags from GPX file creator attribute.
 """
+import traceback
 import xml.etree.ElementTree as ET
 from typing import List, Optional, Union
 
+from geo_lib.logging.console import get_tagged_logger
 from geo_lib.processing.tagging.base import TagGenerator
 from geo_lib.types.feature import GeoFeatureSupported
+
+_logger = get_tagged_logger('SOURCEDEVICE')
 
 
 class SourceDeviceTagGenerator(TagGenerator):
@@ -41,12 +45,8 @@ class SourceDeviceTagGenerator(TagGenerator):
         if not file_content:
             return tags
 
-        # Convert bytes to string if needed
-        if isinstance(file_content, bytes):
-            try:
-                file_content = file_content.decode('utf-8')
-            except UnicodeDecodeError:
-                return tags
+        # Processor should normalize file_content and strip BOM
+        assert isinstance(file_content, str)
 
         # Check if this looks like a GPX file
         if not (file_content.strip().startswith('<?xml') and '<gpx' in file_content.lower()):
@@ -55,23 +55,25 @@ class SourceDeviceTagGenerator(TagGenerator):
         try:
             # Parse the XML
             root = ET.fromstring(file_content)
-            
+
             # Check if root element is gpx (handle namespaces - tag might be '{namespace}gpx')
             tag_name = root.tag
             if tag_name.startswith('{'):
                 # Has namespace, extract local name (everything after the closing brace)
                 tag_name = tag_name.split('}')[-1] if '}' in tag_name else tag_name
-            
+
             if tag_name.lower() != 'gpx':
                 return tags
-            
+
             # Extract creator attribute
             creator = root.get('creator')
             if creator and creator.strip():
                 tags.append(f'source-device:{creator.strip()}')
-        except (ET.ParseError, AttributeError, ValueError):
-            # Invalid XML or missing attribute, return empty list
+        except ET.ParseError:
+            # Invalid XML, silently return empty list
             pass
+        except:
+            # General error, log and ignore
+            _logger.warning(f"Error extracting device from GPX: {traceback.format_exc()}")
 
         return tags
-

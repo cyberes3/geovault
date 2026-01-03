@@ -337,6 +337,9 @@
                 <ArrowPathIcon class="w-4 h-4" />
               </button>
             </div>
+            <p v-if="entry.item.properties.original_name" class="mt-1 text-xs text-gray-500">
+              Original name: <span class="italic">{{ entry.item.properties.original_name }}</span>
+            </p>
           </div>
 
           <!-- Description Field -->
@@ -453,17 +456,6 @@
               :system-tags="getSystemTags(entry.item)"
               :disabled="isItemDisabled(entry.item, entry.originalIndex)"
             />
-            <div class="flex items-center space-x-2 mt-3">
-              <button
-                  :disabled="!isItemEditable(entry.item, entry.originalIndex) || isItemSkipped(entry.item, entry.originalIndex)"
-                  class="inline-flex items-center px-3 py-2 border border-gray-300 shadow-sm text-sm font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:bg-white"
-                  @click="resetTags(entry.originalIndex)"
-                  title="Reset all tags to original"
-              >
-                <ArrowPathIcon class="w-4 h-4 mr-1" />
-                Reset Tags
-              </button>
-            </div>
           </div>
         </div>
         </div>

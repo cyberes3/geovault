@@ -6,7 +6,7 @@
     <div v-if="systemTags.length > 0" class="mb-3">
       <div class="text-xs text-gray-500 mb-1.5">System Tags (read-only)</div>
       <div class="relative border border-gray-200 rounded-md bg-gray-50 overflow-hidden">
-        <div class="max-h-20 overflow-y-auto p-2 pb-10" ref="systemTagsContainer">
+        <div :class="['max-h-48 overflow-y-auto p-2', hasSystemTagsOverflow ? 'pb-10' : '']" ref="systemTagsContainer">
           <div class="flex flex-wrap gap-2">
             <span
               v-for="tag in sortedSystemTags"
@@ -26,8 +26,10 @@
     </div>
 
     <!-- Selected Tags Display -->
-    <div class="relative mb-2 border border-gray-200 rounded-md bg-gray-50 overflow-hidden min-h-[2.5rem]">
-      <div class="max-h-24 overflow-y-auto p-2 pb-10" ref="tagsContainer">
+    <div class="mb-2">
+      <div class="text-xs text-gray-500 mb-1.5">User Tags</div>
+      <div class="relative border border-gray-200 rounded-md bg-gray-50 overflow-hidden min-h-[2.5rem]">
+      <div :class="['max-h-48 overflow-y-auto p-2', hasTagsOverflow ? 'pb-10' : '']" ref="tagsContainer">
         <div class="flex flex-wrap gap-2">
           <span
             v-for="(tag, index) in localTags"
@@ -52,6 +54,7 @@
         v-if="hasTagsOverflow"
         class="absolute bottom-0 left-0 right-0 h-8 bg-gradient-to-t from-gray-50 to-transparent pointer-events-none"
       ></div>
+      </div>
     </div>
 
     <!-- Tag Input with Autocomplete -->
