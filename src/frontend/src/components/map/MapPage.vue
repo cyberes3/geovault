@@ -61,7 +61,7 @@
               v-if="showTerrainTooltip"
               class="maplibregl-ctrl-terrain-tooltip maplibregl-ctrl-terrain-tooltip-visible"
           >
-            {{ isMobile ? 'Use gestures to tilt and rotate.' : 'Use the left mouse button to tilt and rotate.' }}
+            {{ isMobile ? 'Use gestures to tilt and rotate.' : 'Use the right mouse button to tilt and rotate.' }}
           </div>
         </div>
 
