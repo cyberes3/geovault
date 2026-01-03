@@ -35,6 +35,13 @@ security:
   #   - https://mobile.example.com
 
 
+logging:
+  # Log level for application logging
+  # Valid values: critical, error, warning, info, debug
+  # Default: info
+  log_level: info
+
+
 database:
   name: geovault
   user: geovault

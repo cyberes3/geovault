@@ -125,12 +125,12 @@ class QueueWorker:
                 # Process the job - catch errors to continue with next job
                 try:
                     self._process_single_job(job_data)
-                except Exception as e:
-                    _logger.error(f"Error processing job {job_data['job_id']} for user {self.user_id}: {e}", exc_info=True)
+                except:
+                    _logger.error(f"Error processing job {job_data['job_id']} for user {self.user_id}: {traceback.format_exc()}", exc_info=True)
                     # Continue processing next job even if this one failed
-        except Exception as e:
+        except:
             # Catastrophic failure in worker loop itself (not in job processing)
-            _logger.error(f"Catastrophic error in worker loop for user {self.user_id}: {e}", exc_info=True)
+            _logger.error(f"Catastrophic error in worker loop for user {self.user_id}: {traceback.format_exc()}", exc_info=True)
             self._transition_state(WorkerState.FAILED)
         finally:
             # Ensure we transition to a terminal state

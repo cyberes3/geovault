@@ -482,6 +482,14 @@ BBOX_LARGE_EXTENT_LON_THRESHOLD = 200
 BBOX_LARGE_EXTENT_LAT_THRESHOLD = 150
 BBOX_SUSPICIOUS_RESULT_MIN_COUNT = 10
 
+# Get log level from config (default: info)
+_log_level_str = config.get_str('logging.log_level', 'info').lower()
+_valid_log_levels = {'critical', 'error', 'warning', 'info', 'debug'}
+if _log_level_str not in _valid_log_levels:
+    logging.warning(f"Invalid log level '{_log_level_str}', defaulting to 'info'. Valid values: {', '.join(_valid_log_levels)}")
+    _log_level_str = 'info'
+LOG_LEVEL = _log_level_str.upper()  # Python logging uses uppercase
+
 # Logging configuration with activity tags
 LOGGING = {
     'version': 1,
@@ -500,7 +508,7 @@ LOGGING = {
     },
     'handlers': {
         'console': {
-            'level': 'DEBUG',
+            'level': LOG_LEVEL,
             'class': 'logging.StreamHandler',
             'formatter': 'console',
             'stream': 'ext://sys.stdout',
@@ -511,44 +519,44 @@ LOGGING = {
         # Root logger - handles all our custom loggers
         '': {
             'handlers': ['console'],
-            'level': 'INFO',
+            'level': LOG_LEVEL,
             'propagate': False,
         },
         # Explicitly enable our custom tagged loggers (they use lowercase names)
         'processjob': {
             'handlers': ['console'],
-            'level': 'INFO',
+            'level': LOG_LEVEL,
             'propagate': False,
         },
         'replacementcleanupservice': {
             'handlers': ['console'],
-            'level': 'INFO',
+            'level': LOG_LEVEL,
             'propagate': False,
         },
         'startup': {
             'handlers': ['console'],
-            'level': 'INFO',
+            'level': LOG_LEVEL,
             'propagate': False,
         },
         'website.middleware': {
             'handlers': ['console'],
-            'level': 'INFO',
+            'level': LOG_LEVEL,
             'propagate': False,
         },
         # Enable all loggers under our application namespaces
         'geo_lib': {
             'handlers': ['console'],
-            'level': 'INFO',
+            'level': LOG_LEVEL,
             'propagate': False,
         },
         'api': {
             'handlers': ['console'],
-            'level': 'INFO',
+            'level': LOG_LEVEL,
             'propagate': False,
         },
         'website': {
             'handlers': ['console'],
-            'level': 'INFO',
+            'level': LOG_LEVEL,
             'propagate': False,
         },
         # Explicitly disable system loggers we don't want
