@@ -1,33 +1,13 @@
 <template>
-  <div
-    v-if="isOpen"
-    class="fixed inset-0 z-50"
-    role="dialog"
-    aria-modal="true"
+  <BaseModal
+    :is-open="isOpen"
+    title="Add Quick Point"
+    max-width="2xl"
+    @close="handleClose"
   >
-    <!-- Backdrop -->
-    <div class="absolute inset-0 bg-black/50" @click="handleClose"></div>
-
-    <!-- Modal panel -->
-    <div class="absolute inset-0 flex items-stretch justify-stretch sm:items-center sm:justify-center">
-      <div
-        class="bg-white flex flex-col w-full h-full sm:h-[90vh] sm:max-w-2xl sm:rounded-lg shadow-xl overflow-hidden"
-        @click.stop
-      >
-        <div class="flex items-center justify-between px-4 py-4 border-b border-gray-200 bg-gray-50 sm:rounded-t-lg">
-          <h3 class="text-lg font-semibold text-gray-900">Add Quick Point</h3>
-          <button
-            @click="handleClose"
-            class="p-2 sm:p-1 min-w-[44px] min-h-[44px] sm:min-w-0 sm:min-h-0 text-gray-400 hover:text-gray-600 focus:outline-none focus:text-gray-600"
-            title="Close dialog"
-          >
-            <XMarkIcon class="w-5 h-5" />
-          </button>
-        </div>
-        <div class="flex-1 overflow-y-auto p-4 min-h-0">
-          <div class="space-y-4">
-          <!-- Name Field -->
-          <div>
+    <div class="p-4 space-y-4">
+      <!-- Name Field -->
+      <div>
             <label class="block text-xs font-bold text-gray-500 uppercase mb-1">
               Name <span class="text-red-500">*</span>
             </label>
@@ -102,43 +82,41 @@
             <p v-if="coordinateError" class="mt-1 text-xs text-red-600">{{ coordinateError }}</p>
           </div>
 
-          <!-- Error Message -->
-          <div v-if="errorMessage" class="p-3 bg-red-50 border border-red-200 rounded-md">
-            <p class="text-sm text-red-800">{{ errorMessage }}</p>
-          </div>
-          </div>
-        </div>
-        <div class="flex justify-end space-x-2 px-4 py-4 border-t border-gray-200 bg-gray-50 sm:rounded-b-lg">
-        <button
-          type="button"
-          @click="handleClose"
-          :disabled="isSaving"
-          class="px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-md hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 disabled:opacity-50 disabled:cursor-not-allowed"
-          title="Cancel"
-        >
-          Cancel
-        </button>
-        <button
-          type="button"
-          @click="handleSave"
-          :disabled="isSaving || !isValid"
-          class="px-4 py-2 text-sm font-medium text-white bg-blue-600 border border-transparent rounded-md hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 disabled:opacity-50 disabled:cursor-not-allowed"
-          title="Create point"
-        >
-          {{ isSaving ? 'Creating...' : 'Create Point' }}
-        </button>
-        </div>
+      <!-- Error Message -->
+      <div v-if="errorMessage" class="p-3 bg-red-50 border border-red-200 rounded-md">
+        <p class="text-sm text-red-800">{{ errorMessage }}</p>
       </div>
     </div>
-  </div>
+
+    <template #footer>
+      <button
+        type="button"
+        @click="handleClose"
+        :disabled="isSaving"
+        class="px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-md hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 disabled:opacity-50 disabled:cursor-not-allowed"
+        title="Cancel"
+      >
+        Cancel
+      </button>
+      <button
+        type="button"
+        @click="handleSave"
+        :disabled="isSaving || !isValid"
+        class="px-4 py-2 text-sm font-medium text-white bg-blue-600 border border-transparent rounded-md hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 disabled:opacity-50 disabled:cursor-not-allowed"
+        title="Create point"
+      >
+        {{ isSaving ? 'Creating...' : 'Create Point' }}
+      </button>
+    </template>
+  </BaseModal>
 </template>
 
 <script>
 import {APIHOST} from '@/config.js'
+import BaseModal from '@/components/parts/BaseModal.vue'
 import TagPicker from '@/components/parts/TagPicker.vue'
 import ColorPickerElement from '@/components/parts/ColorPickerElement.vue'
 import IconSelector from '@/components/parts/IconSelector.vue'
-import { XMarkIcon } from '@heroicons/vue/24/outline'
 import { parseCoordinates } from '@/utils/coordinateParser.js'
 
 // Helper functions for icon type checking
@@ -153,10 +131,10 @@ function isUserIcon(iconUrl) {
 export default {
   name: 'QuickPointDialog',
   components: {
+    BaseModal,
     TagPicker,
     ColorPicker: ColorPickerElement,
-    IconSelector,
-    XMarkIcon
+    IconSelector
   },
   props: {
     isOpen: {

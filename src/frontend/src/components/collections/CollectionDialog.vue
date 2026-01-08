@@ -1,39 +1,13 @@
 <template>
-  <div
-    class="fixed inset-0 z-50"
-    role="dialog"
-    aria-modal="true"
-    @mousedown="handleBackdropMouseDown"
+  <BaseModal
+    :is-open="isOpen"
+    :title="collection ? 'Edit Collection' : 'Create New Collection'"
+    max-width="6xl"
+    @close="closeDialog"
   >
-    <!-- Backdrop -->
-    <div class="absolute inset-0 bg-black/50"></div>
-
-    <!-- Modal panel -->
-    <div class="absolute inset-0 flex items-stretch justify-stretch sm:items-center sm:justify-center">
-      <div
-        class="bg-white flex flex-col w-full h-full sm:h-[90vh] sm:max-w-6xl sm:rounded-lg shadow-xl overflow-hidden"
-        @mousedown.stop
-        @click.stop
-      >
-        <!-- Header -->
-        <div class="flex items-center justify-between px-6 lg:px-8 py-4 border-b border-gray-200 bg-gray-50 sm:rounded-t-lg">
-          <h3 class="text-lg font-medium text-gray-900">
-            {{ collection ? 'Edit Collection' : 'Create New Collection' }}
-          </h3>
-          <button
-            @click="closeDialog"
-            class="p-2 sm:p-1 min-w-[44px] min-h-[44px] sm:min-w-0 sm:min-h-0 text-gray-400 hover:text-gray-600 focus:outline-none focus:text-gray-600 transition ease-in-out duration-150"
-            title="Close dialog"
-          >
-            <XMarkIcon class="h-6 w-6" />
-          </button>
-        </div>
-
-        <!-- Content -->
-        <div class="flex-1 bg-white min-h-0 flex flex-col overflow-hidden">
-          <form @submit.prevent="saveCollection" class="flex flex-col flex-1 min-h-0">
-            <!-- Scrollable Content -->
-            <div class="flex-1 overflow-y-auto p-6 lg:p-8 min-h-0">
+    <form @submit.prevent="saveCollection" class="flex flex-col flex-1 min-h-0">
+      <!-- Scrollable Content -->
+      <div class="flex-1 overflow-y-auto p-6 lg:p-8 min-h-0">
               <!-- Name Input -->
               <div class="mb-4">
                 <label class="block text-sm font-medium text-gray-700 mb-1">
@@ -185,49 +159,51 @@
               <div v-if="error" class="mb-4 p-3 bg-red-50 border border-red-200 rounded-md">
                 <p class="text-sm text-red-800">{{ error }}</p>
               </div>
-            </div>
-
-            <!-- Actions - Sticky Footer -->
-            <div class="flex justify-end space-x-3 px-6 lg:px-8 py-4 border-t border-gray-200 bg-white flex-shrink-0 sm:rounded-b-lg">
-              <button
-                type="button"
-                @click="closeDialog"
-                class="px-4 py-2 border border-gray-300 rounded-md shadow-sm text-sm font-medium text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500"
-                title="Cancel"
-              >
-                Cancel
-              </button>
-              <button
-                type="submit"
-                :disabled="saving || !formData.name.trim()"
-                class="px-4 py-2 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-blue-500 hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 disabled:opacity-50 disabled:cursor-not-allowed"
-                title="Save collection"
-              >
-                <span v-if="saving">Saving...</span>
-                <span v-else>Save Collection</span>
-              </button>
-            </div>
-          </form>
-        </div>
       </div>
-    </div>
-  </div>
+    </form>
+
+    <template #footer>
+      <button
+        type="button"
+        @click="closeDialog"
+        class="px-4 py-2 border border-gray-300 rounded-md shadow-sm text-sm font-medium text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500"
+        title="Cancel"
+      >
+        Cancel
+      </button>
+      <button
+        type="button"
+        @click="saveCollection"
+        :disabled="saving || !formData.name.trim()"
+        class="px-4 py-2 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-blue-500 hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 disabled:opacity-50 disabled:cursor-not-allowed"
+        title="Save collection"
+      >
+        <span v-if="saving">Saving...</span>
+        <span v-else>Save Collection</span>
+      </button>
+    </template>
+  </BaseModal>
 </template>
 
 <script>
 import { getCookie } from "@/assets/js/auth.js";
+import BaseModal from '@/components/parts/BaseModal.vue'
 import Loader from "@/components/parts/Loader.vue";
-import { XMarkIcon, MagnifyingGlassIcon } from '@heroicons/vue/24/outline';
+import { MagnifyingGlassIcon } from '@heroicons/vue/24/outline';
 import { sortTagsByPriority, sortUserTagsAlphabetically, isSystemTag } from "@/utils/tagUtils.js";
 
 export default {
   name: 'CollectionDialog',
   components: {
+    BaseModal,
     Loader,
-    XMarkIcon,
     MagnifyingGlassIcon
   },
   props: {
+    isOpen: {
+      type: Boolean,
+      default: true
+    },
     collection: {
       type: Object,
       default: null
@@ -280,14 +256,6 @@ export default {
         const description = (f.properties.description || '').toLowerCase();
         return name.includes(query) || description.includes(query);
       });
-    }
-  },
-  watch: {
-    $route() {
-      // Close dialog when route changes
-      if (this.$el) {
-        this.closeDialog()
-      }
     }
   },
   methods: {
@@ -430,17 +398,6 @@ export default {
     // Fetch available tags and features
     this.fetchTags();
     this.fetchFeatures();
-
-    // Prevent background scroll and move modal to body to avoid layout offsets
-    document.body.classList.add('overflow-hidden');
-    this.$nextTick(() => {
-      if (this.$el && this.$el.parentNode !== document.body) {
-        document.body.appendChild(this.$el);
-      }
-    });
-  },
-  beforeUnmount() {
-    document.body.classList.remove('overflow-hidden');
   }
 };
 </script>

@@ -1,30 +1,13 @@
 <template>
-  <!-- Modal Backdrop -->
-  <div v-if="isOpen" class="fixed inset-0 z-50 overflow-y-auto" @mousedown="handleBackdropMouseDown">
-    <div class="flex items-center justify-center min-h-screen pt-4 px-4 pb-20 text-center sm:block sm:p-0">
-      <!-- Background overlay -->
-      <div class="fixed inset-0 bg-gray-500 bg-opacity-75 transition-opacity"></div>
-
-      <!-- Modal panel -->
-      <div class="inline-block align-bottom bg-white rounded-lg text-left overflow-hidden shadow-xl transform transition-all sm:my-8 sm:align-middle sm:max-w-4xl sm:w-full" @click.stop @mousedown.stop>
-        <!-- Header -->
-        <div class="bg-white px-6 py-4 border-b border-gray-200 rounded-t-lg">
-          <div class="flex items-center justify-between">
-            <h3 class="text-lg font-medium text-gray-900">Choose an Icon Style</h3>
-            <button
-              @click="closeDialog"
-              class="p-2 sm:p-1 min-w-[44px] min-h-[44px] sm:min-w-0 sm:min-h-0 text-gray-400 hover:text-gray-600 focus:outline-none focus:text-gray-600 transition ease-in-out duration-150"
-              title="Close icon picker"
-            >
-              <XMarkIcon class="h-6 w-6" />
-            </button>
-          </div>
-        </div>
-
-        <!-- Content -->
-        <div class="bg-white p-6 max-h-[80vh] overflow-y-auto">
-          <!-- Points Section -->
-          <div v-if="pointsIcons.length > 0" class="mb-4">
+  <BaseModal
+    :is-open="isOpen"
+    title="Choose an Icon Style"
+    max-width="4xl"
+    @close="closeDialog"
+  >
+    <div class="p-6">
+      <!-- Points Section -->
+      <div v-if="pointsIcons.length > 0" class="mb-4">
             <h4 class="text-sm font-semibold text-gray-900 mb-2">Points</h4>
             <div class="flex flex-wrap gap-0.5">
               <button
@@ -147,38 +130,33 @@
               </div>
             </div>
           </div>
-        </div>
-
-        <!-- Footer -->
-        <div class="bg-gray-50 px-6 py-3 border-t border-gray-200 rounded-b-lg">
-          <div class="flex justify-end">
-            <button
-              type="button"
-              @click.stop="closeDialog"
-              class="mr-3 inline-flex items-center px-4 py-2 border border-gray-300 shadow-sm text-sm font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500"
-              title="Cancel icon selection"
-            >
-              Cancel
-            </button>
-            <button
-              type="button"
-              @click.stop="handleOk"
-              :disabled="!selectedIconUrl && !customIconFile"
-              class="inline-flex items-center px-4 py-2 border border-transparent shadow-sm text-sm font-medium rounded-md text-white bg-blue-500 hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 disabled:opacity-50 disabled:cursor-not-allowed"
-              title="Confirm icon selection"
-            >
-              OK
-            </button>
-          </div>
-        </div>
-      </div>
     </div>
-  </div>
+
+    <template #footer>
+      <button
+        type="button"
+        @click="closeDialog"
+        class="mr-3 inline-flex items-center px-4 py-2 border border-gray-300 shadow-sm text-sm font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500"
+        title="Cancel icon selection"
+      >
+        Cancel
+      </button>
+      <button
+        type="button"
+        @click="handleOk"
+        :disabled="!selectedIconUrl && !customIconFile"
+        class="inline-flex items-center px-4 py-2 border border-transparent shadow-sm text-sm font-medium rounded-md text-white bg-blue-500 hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 disabled:opacity-50 disabled:cursor-not-allowed"
+        title="Confirm icon selection"
+      >
+        OK
+      </button>
+    </template>
+  </BaseModal>
 </template>
 
 <script>
 import {APIHOST} from '@/config.js'
-import { XMarkIcon } from '@heroicons/vue/24/outline'
+import BaseModal from '@/components/parts/BaseModal.vue'
 
 export default {
   name: 'IconPickerDialog',
@@ -190,7 +168,7 @@ export default {
   },
   emits: ['close', 'icon-selected'],
   components: {
-    XMarkIcon
+    BaseModal
   },
   data() {
     return {
@@ -226,18 +204,8 @@ export default {
     isOpen(newVal) {
       if (newVal) {
         this.loadIconRegistry()
-        // Add escape key listener when dialog opens
-        document.addEventListener('keydown', this.handleEscapeKey)
       } else {
-        // Remove escape key listener when dialog closes
-        document.removeEventListener('keydown', this.handleEscapeKey)
         this.resetDialog()
-      }
-    },
-    $route() {
-      // Close dialog when route changes
-      if (this.isOpen) {
-        this.closeDialog()
       }
     }
   },
@@ -360,16 +328,6 @@ export default {
     },
     closeDialog() {
       this.$emit('close')
-    },
-    handleBackdropMouseDown(event) {
-      if (event.target === event.currentTarget) {
-        this.closeDialog()
-      }
-    },
-    handleEscapeKey(event) {
-      if (event.key === 'Escape' && this.isOpen) {
-        this.closeDialog()
-      }
     },
     handleIconError(event) {
       // Hide broken image

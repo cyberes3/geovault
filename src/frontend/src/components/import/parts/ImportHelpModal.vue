@@ -1,36 +1,12 @@
 <template>
-  <div
-      v-if="show"
-      class="fixed inset-0 z-50"
-      aria-labelledby="modal-title"
-      role="dialog"
-      aria-modal="true"
-      @click="close"
+  <BaseModal
+    :is-open="show"
+    title="Import Process Guide"
+    max-width="3xl"
+    @close="close"
   >
-    <!-- Backdrop -->
-    <div class="absolute inset-0 bg-black/50"></div>
-
-    <!-- Modal Container -->
-    <div class="absolute inset-0 flex items-stretch justify-stretch sm:items-center sm:justify-center">
-      <div
-          class="bg-white flex flex-col w-full h-full sm:h-[90vh] sm:max-w-3xl sm:rounded-lg shadow-xl overflow-hidden"
-          @click.stop
-      >
-        <!-- Modal Header (sticky) -->
-        <div class="sticky top-0 z-10 flex items-center justify-between px-6 py-4 border-b border-gray-200 bg-gray-50 sm:rounded-t-lg">
-          <h3 class="text-xl font-semibold text-gray-900" id="modal-title">Import Process Guide</h3>
-          <button
-              @click="close"
-              class="text-gray-400 hover:text-gray-500 focus:outline-none focus:ring-2 focus:ring-blue-500 rounded-md p-1"
-              aria-label="Close modal"
-          >
-            <XMarkIcon class="w-6 h-6" />
-          </button>
-        </div>
-
-        <!-- Modal Content -->
-        <div class="flex-1 overflow-y-auto px-6 py-4">
-          <div class="prose prose-sm max-w-none space-y-6">
+    <div class="px-6 py-4">
+      <div class="prose prose-sm max-w-none space-y-6">
             <!-- Upload Process Section -->
             <section>
               <h4 class="text-lg font-semibold text-gray-900 mb-3">Upload Process</h4>
@@ -228,20 +204,18 @@
                 </ul>
               </div>
             </section>
-          </div>
-        </div>
       </div>
     </div>
-  </div>
+  </BaseModal>
 </template>
 
 <script>
-import { XMarkIcon } from '@heroicons/vue/24/outline';
+import BaseModal from '@/components/parts/BaseModal.vue'
 
 export default {
   name: 'ImportHelpModal',
   components: {
-    XMarkIcon
+    BaseModal
   },
   props: {
     show: {
@@ -253,41 +227,6 @@ export default {
   methods: {
     close() {
       this.$emit('close')
-    },
-    handleEscapeKey(event) {
-      if (event.key === 'Escape' && this.show) {
-        this.close()
-      }
-    }
-  },
-  mounted() {
-    // Add keyboard event listener for Escape key to close modal
-    document.addEventListener('keydown', this.handleEscapeKey)
-  },
-  beforeUnmount() {
-    // Remove keyboard event listener
-    document.removeEventListener('keydown', this.handleEscapeKey)
-  },
-  watch: {
-    show(newVal) {
-      // Prevent body scroll when modal is open
-      if (newVal) {
-        document.body.style.overflow = 'hidden'
-        // Move modal to body to avoid parent container offsets
-        this.$nextTick(() => {
-          if (this.$el && this.$el.parentNode !== document.body) {
-            document.body.appendChild(this.$el)
-          }
-        })
-      } else {
-        document.body.style.overflow = ''
-      }
-    },
-    $route() {
-      // Close modal when route changes
-      if (this.show) {
-        this.close()
-      }
     }
   }
 }

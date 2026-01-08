@@ -1,38 +1,11 @@
 <template>
-  <div
-    v-if="isOpen"
-    class="fixed inset-0 z-50"
-    role="dialog"
-    aria-modal="true"
-    @mousedown="handleBackdropMouseDown"
+  <BaseModal
+    :is-open="isOpen"
+    title="Delete Tag Options"
+    max-width="2xl"
+    @close="closeDialog"
   >
-    <!-- Backdrop -->
-    <div class="absolute inset-0 bg-black/50"></div>
-
-    <!-- Modal panel -->
-    <div class="absolute inset-0 flex items-stretch justify-stretch sm:items-center sm:justify-center">
-      <div
-        class="bg-white flex flex-col w-full h-full sm:h-auto sm:max-w-2xl sm:rounded-lg shadow-xl overflow-hidden"
-        @mousedown.stop
-        @click.stop
-      >
-        <!-- Header (sticky) -->
-        <header class="sticky top-0 z-10 flex items-center justify-between px-6 py-4 border-b border-gray-200 bg-gray-50 sm:rounded-t-lg">
-          <h3 class="text-lg sm:text-xl font-semibold text-gray-900">
-            Delete Tag Options
-          </h3>
-          <button
-            @click="closeDialog"
-            class="p-2 sm:p-1 min-w-[44px] min-h-[44px] sm:min-w-0 sm:min-h-0 text-gray-400 hover:text-gray-600 focus:outline-none focus:text-gray-600 transition ease-in-out duration-150"
-            title="Close dialog"
-          >
-            <XMarkIcon class="h-6 w-6" />
-          </button>
-        </header>
-
-        <!-- Content -->
-        <main class="flex-1 overflow-y-auto bg-white min-h-0">
-          <div class="p-6 space-y-6">
+    <div class="p-6 space-y-6">
             <!-- Tag Info -->
             <div class="mb-4">
               <div class="flex items-center space-x-3">
@@ -117,22 +90,20 @@
               </div>
             </section>
 
-            <!-- Error Message -->
-            <div v-if="error" class="p-4 bg-red-50 border border-red-200 rounded-md">
-              <div class="flex items-center">
-                <ExclamationCircleIcon class="h-5 w-5 text-red-600 mr-2" />
-                <p class="text-sm text-red-800">{{ error }}</p>
-              </div>
-            </div>
-          </div>
-        </main>
+      <!-- Error Message -->
+      <div v-if="error" class="p-4 bg-red-50 border border-red-200 rounded-md">
+        <div class="flex items-center">
+          <ExclamationCircleIcon class="h-5 w-5 text-red-600 mr-2" />
+          <p class="text-sm text-red-800">{{ error }}</p>
+        </div>
       </div>
     </div>
-  </div>
+  </BaseModal>
 </template>
 
 <script>
-import { XMarkIcon, TrashIcon, TagIcon, ExclamationCircleIcon } from '@heroicons/vue/24/outline';
+import BaseModal from '@/components/parts/BaseModal.vue'
+import { TrashIcon, TagIcon, ExclamationCircleIcon } from '@heroicons/vue/24/outline';
 
 export default {
   name: 'TagDeleteModal',
@@ -156,7 +127,7 @@ export default {
   },
   emits: ['close', 'delete-all-features', 'remove-tag-only'],
   components: {
-    XMarkIcon,
+    BaseModal,
     TrashIcon,
     TagIcon,
     ExclamationCircleIcon
@@ -171,40 +142,11 @@ export default {
   watch: {
     isOpen(newVal) {
       if (newVal) {
-        document.body.classList.add('overflow-hidden');
         this.resetState();
-        // Add escape key listener when dialog opens
-        document.addEventListener('keydown', this.handleEscapeKey);
-        // Move modal to body to avoid parent container offsets
-        this.$nextTick(() => {
-          if (this.$el && this.$el.parentNode !== document.body) {
-            document.body.appendChild(this.$el);
-          }
-        });
-      } else {
-        document.body.classList.remove('overflow-hidden');
-        // Remove escape key listener when dialog closes
-        document.removeEventListener('keydown', this.handleEscapeKey);
-      }
-    },
-    $route() {
-      // Close dialog when route changes
-      if (this.isOpen) {
-        this.closeDialog();
       }
     }
   },
   methods: {
-    handleBackdropMouseDown(event) {
-      if (event.target === event.currentTarget) {
-        this.closeDialog();
-      }
-    },
-    handleEscapeKey(event) {
-      if (event.key === 'Escape' && this.isOpen) {
-        this.closeDialog();
-      }
-    },
     closeDialog() {
       if (!this.deleting && !this.removing) {
         this.$emit('close');
@@ -243,10 +185,5 @@ export default {
       // Note: removing flag is reset by parent when operation completes
     }
   },
-  beforeUnmount() {
-    // Clean up event listener when component is destroyed
-    document.removeEventListener('keydown', this.handleEscapeKey);
-    document.body.classList.remove('overflow-hidden');
-  }
 }
 </script>

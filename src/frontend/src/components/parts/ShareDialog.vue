@@ -1,46 +1,13 @@
 <template>
-  <div
-    v-if="isOpen"
-    ref="dialogBackdrop"
-    class="fixed inset-0 z-50"
-    role="dialog"
-    aria-modal="true"
-    @mousedown="handleBackdropMouseDown"
-    @keydown.esc="closeDialog"
-    tabindex="-1"
+  <BaseModal
+    :is-open="isOpen"
+    :title="dialogTitle"
+    :max-width="computedMaxWidth"
+    :full-screen-mobile="shareType !== 'feature'"
+    @close="closeDialog"
   >
-    <!-- Background overlay -->
-    <div class="absolute inset-0 bg-black/50 transition-opacity"></div>
-
-    <!-- Modal panel -->
-    <div class="absolute inset-0 flex items-stretch justify-stretch sm:items-center sm:justify-center">
-      <div
-        :class="[
-          'bg-white flex flex-col w-full shadow-xl overflow-hidden',
-          shareType === 'feature' ? 'h-auto sm:h-auto max-w-lg' : 'h-full sm:h-[80vh] sm:max-w-2xl',
-          'sm:rounded-lg'
-        ]"
-        @click.stop
-        @mousedown.stop
-      >
-        <!-- Header -->
-        <div class="flex items-center justify-between px-6 py-4 border-b border-gray-200 bg-gray-50 sm:rounded-t-lg flex-shrink-0">
-          <h3 class="text-lg font-medium text-gray-900">
-            {{ dialogTitle }}
-          </h3>
-          <button
-            @click="closeDialog"
-            class="p-2 sm:p-1 min-w-[44px] min-h-[44px] sm:min-w-0 sm:min-h-0 text-gray-400 hover:text-gray-600 focus:outline-none transition-colors"
-            title="Close dialog (ESC)"
-          >
-            <XMarkIcon class="h-6 w-6" />
-          </button>
-        </div>
-
-        <!-- Content -->
-        <div class="flex-1 overflow-y-auto bg-white min-h-0">
-          <!-- All Share Types - Consistent Layout -->
-          <div class="p-6 flex flex-col h-full">
+    <!-- All Share Types - Consistent Layout -->
+    <div class="p-6 flex flex-col h-full">
             <!-- Display Name -->
             <div class="mb-4">
               <h4 class="text-xl font-bold text-gray-900">{{ displayName }}</h4>
@@ -296,17 +263,15 @@
                 </div>
               </div>
             </section>
-          </div>
-        </div>
-      </div>
     </div>
-  </div>
+  </BaseModal>
 </template>
 
 <script>
+import BaseModal from './BaseModal.vue'
 import Loader from './Loader.vue'
 import ToggleButton from './ToggleButton.vue'
-import { XMarkIcon, ClipboardDocumentIcon, CheckIcon, TrashIcon } from '@heroicons/vue/24/outline'
+import { ClipboardDocumentIcon, CheckIcon, TrashIcon } from '@heroicons/vue/24/outline'
 import { formatDate } from '@/utils/dateUtils'
 
 function getCookie(name) {
@@ -327,9 +292,9 @@ function getCookie(name) {
 export default {
   name: 'ShareDialog',
   components: {
+    BaseModal,
     Loader,
     ToggleButton,
-    XMarkIcon,
     ClipboardDocumentIcon,
     CheckIcon,
     TrashIcon
@@ -377,6 +342,9 @@ export default {
         feature: 'Share Feature'
       }[this.shareType]
     },
+    computedMaxWidth() {
+      return this.shareType === 'feature' ? 'lg' : '2xl'
+    },
     displayName() {
       if (this.shareType === 'tag') {
         return this.item.tag || 'Unknown Tag'
@@ -405,33 +373,17 @@ export default {
   watch: {
     isOpen(newVal) {
       if (newVal) {
-        document.body.classList.add('overflow-hidden')
         if (this.shareType === 'feature') {
           this.loadOrCreateFeatureShare()
         } else {
           this.loadShares()
           this.resetForm()
         }
-        this.$nextTick(() => {
-          if (this.$refs.dialogBackdrop) {
-            this.$refs.dialogBackdrop.focus()
-          }
-        })
-      } else {
-        document.body.classList.remove('overflow-hidden')
       }
     }
   },
-  beforeUnmount() {
-    document.body.classList.remove('overflow-hidden')
-  },
   methods: {
     formatDate,
-    handleBackdropMouseDown(event) {
-      if (event.target === event.currentTarget) {
-        this.closeDialog()
-      }
-    },
     closeDialog() {
       this.$emit('close')
       this.resetState()

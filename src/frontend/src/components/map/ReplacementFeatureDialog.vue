@@ -1,49 +1,21 @@
 <template>
-  <div
-    v-if="isOpen"
-    class="fixed inset-0 z-50"
-    role="dialog"
-    aria-modal="true"
-    @mousedown="handleBackdropMouseDown"
+  <BaseModal
+    :is-open="isOpen"
+    title="Update Spatial Data"
+    max-width="4xl"
+    @close="handleCancel"
   >
-    <!-- Backdrop -->
-    <div class="absolute inset-0 bg-black/50"></div>
-
-    <!-- Modal panel -->
-    <div class="absolute inset-0 flex items-stretch justify-stretch sm:items-center sm:justify-center">
-      <div
-        class="bg-white flex flex-col w-full h-full sm:h-[90vh] sm:max-w-4xl sm:rounded-lg shadow-xl overflow-hidden"
-        @mousedown.stop
-        @click.stop
-      >
-        <!-- Header -->
-        <div class="bg-white px-6 py-4 border-b border-gray-200 sm:rounded-t-lg">
-          <div class="flex items-center justify-between">
-            <h3 class="text-lg font-medium text-gray-900">Update Spatial Data</h3>
-            <button
-              @click="handleCancel"
-              class="text-gray-400 hover:text-gray-600 focus:outline-none focus:text-gray-600 transition ease-in-out duration-150"
-              title="Close dialog"
-            >
-              <XMarkIcon class="h-6 w-6" />
-            </button>
-          </div>
-        </div>
-
-        <!-- Content -->
-        <div class="bg-white px-6 py-4 flex-1 overflow-y-auto min-h-0">
-          <!-- File Selection Section (shown before upload starts) -->
+    <div class="px-6 py-4">
+      <!-- File Selection Section (shown before upload starts) -->
           <div v-if="!importQueueId && !processing" class="space-y-4">
             <!-- Help Text -->
             <div class="p-4 bg-blue-50 border border-blue-200 rounded-lg">
-              <div class="flex">
-                <InformationCircleIcon class="h-5 w-5 text-blue-400 mr-3 flex-shrink-0 mt-0.5" />
-                <div class="flex-1">
-                  <p class="text-xs text-blue-800">
-                    Upload a KMZ, KML, or GPX file to replace the spatial geometry of this feature.
-                    Only features with matching geometry types (Point, LineString, or Polygon) will be available for selection.
-                    The feature's name, description, and other properties will remain unchanged.
-                  </p>
+              <div class="flex items-start">
+                <InformationCircleIcon class="h-5 w-5 text-blue-500 mr-3 flex-shrink-0 mt-0.5" />
+                <div class="flex-1 space-y-2 text-sm text-blue-800">
+                  <p>Upload a <strong>KMZ, KML, or GPX</strong> file to replace this feature's spatial geometry.</p>
+                  <p>Only features with <strong>matching geometry types</strong> (Point, LineString, or Polygon) will be available for selection.</p>
+                  <p>The feature's <strong>name, description, and other properties will remain unchanged</strong>.</p>
                 </div>
               </div>
             </div>
@@ -103,10 +75,10 @@
             </div>
 
             <!-- Error Message -->
-            <div v-if="errorMessage" class="p-3 bg-red-50 border border-red-200 rounded-md">
-              <div class="flex">
-                <ExclamationCircleIcon class="h-5 w-5 text-red-400 mr-2" />
-                <p class="text-sm text-red-800">{{ errorMessage }}</p>
+            <div v-if="errorMessage" class="p-4 bg-red-50 border-2 border-red-300 rounded-md">
+              <div class="flex items-start">
+                <ExclamationCircleIcon class="h-6 w-6 text-red-500 mr-3 flex-shrink-0 mt-0.5" />
+                <p class="text-base font-medium text-red-900 leading-relaxed">{{ errorMessage }}</p>
               </div>
             </div>
           </div>
@@ -140,7 +112,7 @@
                   <p class="text-xs text-yellow-700 mt-1">
                     The uploaded file contains {{ features.length }} feature{{ features.length !== 1 ? 's' : '' }},
                     but none match the geometry type of the existing feature ({{ existingFeatureGeometryType }}).
-                    Only features with the same geometry type (Point/LineString/Polygon) can be used for replacement.
+                    Only features with the same geometry type can be used for replacement.
                   </p>
                 </div>
               </div>
@@ -148,19 +120,30 @@
 
             <!-- Features list -->
             <div v-else>
-              <div class="flex items-center justify-between mb-3">
-                <h4 class="text-sm font-medium text-gray-900">
-                  Select a feature to apply its spatial data:
-                  <span v-if="features.length !== sortedFeatures.length" class="text-xs font-normal text-gray-500 ml-2">
-                    ({{ sortedFeatures.length }} of {{ features.length }} matching geometry type)
-                  </span>
-                </h4>
-                <div class="flex items-center">
-                  <ToggleButton
-                    v-model="regenerateTags"
-                    label="Regenerate tags when applying spatial data"
-                    size="md"
-                  />
+              <div class="mb-3">
+                <div class="flex items-center justify-between mb-2">
+                  <h4 class="text-sm font-medium text-gray-900">
+                    Select a feature to apply its spatial data:
+                    <span v-if="features.length !== sortedFeatures.length" class="text-xs font-normal text-gray-500 ml-2">
+                      ({{ sortedFeatures.length }} of {{ features.length }} matching geometry type)
+                    </span>
+                  </h4>
+                </div>
+                <div class="flex items-center gap-3 p-3 bg-gray-50 border border-gray-200 rounded-md">
+                  <div class="flex-1">
+                    <label class="block text-sm font-medium text-gray-700 mb-1">
+                      Regenerate automatic tags
+                    </label>
+                    <p class="text-xs text-gray-600">
+                      When enabled, location and geometry-based tags will be automatically updated based on the new spatial data. Your custom tags will be preserved.
+                    </p>
+                  </div>
+                  <div class="flex-shrink-0">
+                    <ToggleButton
+                      v-model="regenerateTags"
+                      size="md"
+                    />
+                  </div>
                 </div>
               </div>
               <div class="space-y-2 max-h-96 overflow-y-auto">
@@ -216,8 +199,11 @@
             </div>
 
             <!-- Error Message -->
-            <div v-if="errorMessage" class="p-3 bg-red-50 border border-red-200 rounded-md">
-              <p class="text-sm text-red-800">{{ errorMessage }}</p>
+            <div v-if="errorMessage" class="p-4 bg-red-50 border-2 border-red-300 rounded-md">
+              <div class="flex items-start">
+                <ExclamationCircleIcon class="h-6 w-6 text-red-500 mr-3 flex-shrink-0 mt-0.5" />
+                <p class="text-base font-medium text-red-900 leading-relaxed">{{ errorMessage }}</p>
+              </div>
             </div>
 
             <!-- Success Message -->
@@ -230,83 +216,70 @@
           </div>
         </div>
 
-        <!-- Footer -->
-        <div class="bg-gray-50 px-6 py-4 border-t border-gray-200 sm:rounded-b-lg flex justify-end space-x-3">
-          <!-- Upload Button (shown when file is selected but not yet uploaded) -->
-          <button
-            v-if="selectedFile && !importQueueId && !processing"
-            @click="handleUpload"
-            class="px-4 py-2 text-sm font-medium text-white bg-blue-500 border border-transparent rounded-md hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 flex items-center"
-            title="Upload and process file"
-          >
-            <ArrowUpTrayIcon class="h-4 w-4 mr-2" />
-            Upload & Process
-          </button>
+    <template #footer>
+      <!-- Upload Button (shown when file is selected but not yet uploaded) -->
+      <button
+        v-if="selectedFile && !importQueueId && !processing"
+        @click="handleUpload"
+        class="px-4 py-2 text-sm font-medium text-white bg-blue-500 border border-transparent rounded-md hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 flex items-center"
+        title="Upload and process file"
+      >
+        <ArrowUpTrayIcon class="h-4 w-4 mr-2" />
+        Upload & Process
+      </button>
 
-          <!-- Cancel Button -->
-          <button
-            v-if="!importQueueId || (!processing && features.length === 0)"
-            @click="handleCancel"
-            class="px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-md hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500"
-            title="Cancel"
-          >
-            Cancel
-          </button>
+      <!-- Cancel Button -->
+      <button
+        v-if="!importQueueId || (!processing && features.length === 0)"
+        @click="handleCancel"
+        class="px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-md hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500"
+        title="Cancel"
+      >
+        Cancel
+      </button>
 
-          <!-- Apply Button (always shown when features are available, disabled when not ready) -->
-          <button
-            v-if="sortedFeatures.length > 0 && !applied"
-            @click="handleApply"
-            :disabled="applying || selectedFeatureIndex === null"
-            class="px-4 py-2 text-sm font-medium text-white bg-blue-500 border border-transparent rounded-md hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 disabled:opacity-50 disabled:cursor-not-allowed disabled:bg-gray-400 disabled:hover:bg-gray-400 flex items-center"
-            title="Apply selected feature's spatial data"
-          >
-            <CheckIcon v-if="!applying" class="h-4 w-4 mr-2" />
-            <Loader v-if="applying" size="sm" layout="inline" :showMessage="false" color="white" />
-            {{ applying ? 'Applying...' : 'Apply Spatial Data' }}
-          </button>
+      <!-- Apply Button (always shown when features are available, disabled when not ready) -->
+      <button
+        v-if="sortedFeatures.length > 0 && !applied"
+        @click="handleApply"
+        :disabled="applying || selectedFeatureIndex === null"
+        class="px-4 py-2 text-sm font-medium text-white bg-blue-500 border border-transparent rounded-md hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 disabled:opacity-50 disabled:cursor-not-allowed disabled:bg-gray-400 disabled:hover:bg-gray-400 flex items-center"
+        title="Apply selected feature's spatial data"
+      >
+        <CheckIcon v-if="!applying" class="h-4 w-4 mr-2" />
+        <Loader v-if="applying" size="sm" layout="inline" :showMessage="false" color="white" />
+        {{ applying ? 'Applying...' : 'Apply Spatial Data' }}
+      </button>
 
-          <!-- Close Button -->
-          <button
-            v-if="applied"
-            @click="handleClose"
-            class="px-4 py-2 text-sm font-medium text-white bg-blue-500 border border-transparent rounded-md hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500"
-            title="Close dialog"
-          >
-            Close
-          </button>
-        </div>
-      </div>
+      <!-- Close Button -->
+      <button
+        v-if="applied"
+        @click="handleClose"
+        class="px-4 py-2 text-sm font-medium text-white bg-blue-500 border border-transparent rounded-md hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500"
+        title="Close dialog"
+      >
+        Close
+      </button>
+    </template>
+  </BaseModal>
+
+  <!-- Expanded Map Modal -->
+  <BaseModal
+    :is-open="expandedMapIndex !== null"
+    :title="expandedMapIndex !== null ? (sortedFeatures[expandedMapIndex]?.properties?.name || `Feature ${expandedMapIndex + 1}`) + ' - Map Preview' : ''"
+    max-width="6xl"
+    :on-top="true"
+    :full-screen-mobile="true"
+    @close="closeExpandedMap"
+  >
+    <div class="flex-1 min-h-0 flex flex-col p-6 h-full">
+      <div
+        :ref="el => setExpandedMapRef(el)"
+        id="expanded-feature-map"
+        class="flex-1 min-h-0 w-full border border-gray-300 rounded-md overflow-hidden"
+      ></div>
     </div>
-
-    <!-- Expanded Map Modal -->
-    <div v-if="expandedMapIndex !== null" class="fixed inset-0 z-50 bg-black bg-opacity-75 flex items-center justify-center" @click="closeExpandedMap">
-      <div class="bg-white rounded-lg shadow-xl w-full h-full md:w-4/5 md:h-4/5 m-4 relative overflow-hidden" @click.stop>
-        <!-- Header -->
-        <div class="bg-white px-6 py-4 border-b border-gray-200 rounded-t-lg flex items-center justify-between">
-          <h3 class="text-lg font-medium text-gray-900">
-            {{ sortedFeatures[expandedMapIndex]?.properties?.name || `Feature ${expandedMapIndex + 1}` }} - Map Preview
-          </h3>
-          <button
-            @click="closeExpandedMap"
-            class="text-gray-400 hover:text-gray-600 focus:outline-none focus:text-gray-600 transition ease-in-out duration-150"
-            title="Close expanded map"
-          >
-            <XMarkIcon class="h-6 w-6" />
-          </button>
-        </div>
-
-        <!-- Expanded Map Container -->
-        <div class="p-6 h-[calc(100%-73px)]">
-          <div
-            :ref="el => setExpandedMapRef(el)"
-            id="expanded-feature-map"
-            class="w-full h-full border border-gray-300 rounded-md overflow-hidden"
-          ></div>
-        </div>
-      </div>
-    </div>
-  </div>
+  </BaseModal>
 </template>
 
 <script>
@@ -322,9 +295,10 @@ import {fromLonLat} from 'ol/proj'
 import {getCenter} from 'ol/extent'
 import {DragPan, MouseWheelZoom} from 'ol/interaction'
 import {markRaw} from 'vue'
+import BaseModal from '@/components/parts/BaseModal.vue'
 import Loader from '@/components/parts/Loader.vue'
 import ToggleButton from '@/components/parts/ToggleButton.vue'
-import { XMarkIcon, InformationCircleIcon, DocumentIcon, ExclamationCircleIcon, ExclamationTriangleIcon, CheckIcon, ArrowUpTrayIcon, ArrowsPointingOutIcon } from '@heroicons/vue/24/outline'
+import { InformationCircleIcon, DocumentIcon, ExclamationCircleIcon, ExclamationTriangleIcon, CheckIcon, ArrowUpTrayIcon, ArrowsPointingOutIcon, XMarkIcon } from '@heroicons/vue/24/outline'
 
 export default {
   name: 'ReplacementFeatureDialog',
@@ -340,6 +314,7 @@ export default {
   },
   emits: ['close', 'applied'],
   components: {
+    BaseModal,
     Loader,
     ToggleButton,
     XMarkIcon,
@@ -406,20 +381,33 @@ export default {
   watch: {
     isOpen(newVal) {
       if (newVal) {
-        // Prevent background scroll
-        document.body.classList.add('overflow-hidden')
-        // Move modal to body to avoid layout offsets
         this.$nextTick(() => {
-          if (this.$el && this.$el.parentNode !== document.body) {
-            document.body.appendChild(this.$el)
-          }
           this.resetDialog()
           this.fetchExistingFeatureGeometryType()
         })
       } else {
-        // Restore background scroll
-        document.body.classList.remove('overflow-hidden')
         this.cleanup()
+      }
+    },
+    expandedMapIndex(newVal) {
+      if (newVal !== null) {
+        // Wait for BaseModal to fully render before initializing map
+        this.$nextTick(() => {
+          // Additional delay to ensure BaseModal content is visible
+          setTimeout(() => {
+            this.initializeExpandedMap()
+          }, 100)
+        })
+      } else {
+        // Clean up map when modal closes
+        if (this.expandedMap) {
+          this.expandedMap.map.setTarget(null)
+          this.expandedMap.map = null
+          if (this.expandedMap.vectorSource) {
+            this.expandedMap.vectorSource.clear()
+          }
+          this.expandedMap = null
+        }
       }
     },
     sortedFeatures: {
@@ -657,9 +645,7 @@ export default {
     },
     expandMap(index) {
       this.expandedMapIndex = index
-      this.$nextTick(() => {
-        this.initializeExpandedMap()
-      })
+      // Map initialization will be handled by the watcher
     },
     closeExpandedMap() {
       if (this.expandedMap) {
@@ -673,11 +659,8 @@ export default {
       this.expandedMapIndex = null
     },
     setExpandedMapRef(el) {
-      if (el && this.expandedMapIndex !== null && !this.expandedMap) {
-        this.$nextTick(() => {
-          this.initializeExpandedMap()
-        })
-      }
+      // Ref callback - map initialization is handled by watcher
+      // This is kept for potential future use
     },
     initializeExpandedMap() {
       if (this.expandedMapIndex === null || this.expandedMap) return
@@ -1090,11 +1073,6 @@ export default {
       this.cleanup()
       this.$emit('close')
     },
-    handleBackdropMouseDown(event) {
-      if (event.target === event.currentTarget) {
-        this.handleCancel()
-      }
-    },
     getCsrfToken() {
       const name = 'csrftoken'
       let cookieValue = null
@@ -1119,8 +1097,6 @@ export default {
     }
   },
   beforeUnmount() {
-    // Restore background scroll
-    document.body.classList.remove('overflow-hidden')
     this.cleanup()
   }
 }

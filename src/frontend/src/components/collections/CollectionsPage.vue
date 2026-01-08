@@ -141,7 +141,7 @@
 
     <!-- Collection Dialog -->
     <CollectionDialog
-        v-if="dialogOpen"
+        :is-open="dialogOpen"
         :collection="editingCollection"
         @close="closeDialog"
         @saved="handleCollectionSaved"

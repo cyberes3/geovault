@@ -1,37 +1,11 @@
 <template>
-  <div
-    v-if="isOpen"
-    class="fixed inset-0 z-50"
-    role="dialog"
-    aria-modal="true"
-    @mousedown="handleBackdropMouseDown"
+  <BaseModal
+    :is-open="isOpen"
+    title="Bulk Operations"
+    max-width="2xl"
+    @close="closeModal"
   >
-    <!-- Backdrop -->
-    <div class="absolute inset-0 bg-black/50"></div>
-
-    <!-- Modal panel -->
-    <div class="absolute inset-0 flex items-stretch justify-stretch sm:items-center sm:justify-center">
-      <div
-        class="bg-white flex flex-col w-full h-full sm:h-[90vh] sm:max-w-2xl sm:rounded-lg shadow-xl overflow-hidden"
-        @mousedown.stop
-        @click.stop
-      >
-        <!-- Header -->
-        <div class="bg-white px-4 sm:px-6 py-4 border-b border-gray-200 sm:rounded-t-lg">
-          <div class="flex items-center justify-between">
-            <h3 class="text-lg font-medium text-gray-900">Bulk Operations</h3>
-            <button
-              @click="closeModal"
-              class="p-2 sm:p-1 min-w-[44px] min-h-[44px] sm:min-w-0 sm:min-h-0 text-gray-400 hover:text-gray-600 focus:outline-none focus:text-gray-600 transition ease-in-out duration-150"
-              title="Close modal"
-            >
-              <XMarkIcon class="h-6 w-6" />
-            </button>
-          </div>
-        </div>
-
-        <!-- Content -->
-        <div class="bg-white p-4 sm:p-6 flex-1 overflow-y-auto min-h-0">
+    <div class="p-4 sm:p-6">
           <!-- Tags Section -->
           <div class="mb-6">
             <TagPicker
@@ -173,45 +147,41 @@
           </div>
         </div>
 
-        <!-- Footer -->
-        <div class="bg-gray-50 px-4 sm:px-6 py-3 border-t border-gray-200 sm:rounded-b-lg">
-          <div class="flex flex-col sm:flex-row justify-end space-y-2 sm:space-y-0 sm:space-x-3">
-            <button
-              @click="closeModal"
-              class="w-full sm:w-auto inline-flex items-center justify-center px-4 py-2 border border-gray-300 shadow-sm text-sm font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500"
-            >
-              Cancel
-            </button>
-            <button
-              @click="handleApply"
-              :disabled="saving"
-              class="w-full sm:w-auto inline-flex items-center justify-center px-4 py-2 border border-transparent shadow-sm text-sm font-medium rounded-md text-white bg-blue-500 hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 disabled:opacity-70 disabled:cursor-not-allowed"
-            >
-              <Loader
-                v-if="saving"
-                size="sm"
-                layout="inline"
-                :showMessage="false"
-                color="#ffffff"
-              />
-              <span>{{ saving ? 'Saving…' : 'OK' }}</span>
-            </button>
-          </div>
-        </div>
-      </div>
-    </div>
+    <template #footer>
+      <button
+        @click="closeModal"
+        class="inline-flex items-center justify-center px-4 py-2 border border-gray-300 shadow-sm text-sm font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500"
+      >
+        Cancel
+      </button>
+      <button
+        @click="handleApply"
+        :disabled="saving"
+        class="inline-flex items-center justify-center px-4 py-2 border border-transparent shadow-sm text-sm font-medium rounded-md text-white bg-blue-500 hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 disabled:opacity-70 disabled:cursor-not-allowed"
+      >
+        <Loader
+          v-if="saving"
+          size="sm"
+          layout="inline"
+          :showMessage="false"
+          color="#ffffff"
+        />
+        {{ saving ? 'Applying...' : 'Apply' }}
+      </button>
+    </template>
+  </BaseModal>
 
-    <!-- Icon Picker Dialog -->
-    <IconPickerDialog
-      :is-open="showIconPicker"
-      @close="showIconPicker = false"
-      @icon-selected="handleIconSelected"
-    />
-  </div>
+  <!-- Icon Picker Dialog -->
+  <IconPickerDialog
+    :is-open="showIconPicker"
+    @close="showIconPicker = false"
+    @icon-selected="handleIconSelected"
+  />
 </template>
 
 <script>
-import { XMarkIcon, PhotoIcon } from '@heroicons/vue/24/outline'
+import { PhotoIcon } from '@heroicons/vue/24/outline'
+import BaseModal from '@/components/parts/BaseModal.vue'
 import TagPicker from '@/components/parts/TagPicker.vue'
 import IconPickerDialog from '@/components/map/IconPickerDialog.vue'
 import ToggleButton from '@/components/parts/ToggleButton.vue'
@@ -222,7 +192,7 @@ import { APIHOST } from '@/config.js'
 export default {
   name: 'BulkStylingModal',
   components: {
-    XMarkIcon,
+    BaseModal,
     PhotoIcon,
     TagPicker,
     IconPickerDialog,
@@ -288,23 +258,11 @@ export default {
   watch: {
     isOpen(newVal) {
       if (newVal) {
-        // Prevent background scroll
-        document.body.classList.add('overflow-hidden')
-        // Move modal to body to avoid layout offsets
+        // Initialize form with current bulk operations when modal opens
         this.$nextTick(() => {
-          if (this.$el && this.$el.parentNode !== document.body) {
-            document.body.appendChild(this.$el)
-          }
-          // Initialize form with current bulk operations when modal opens
           this.initializeForm()
         })
-        // Add escape key listener
-        document.addEventListener('keydown', this.handleEscapeKey)
       } else {
-        // Restore background scroll
-        document.body.classList.remove('overflow-hidden')
-        // Remove escape key listener
-        document.removeEventListener('keydown', this.handleEscapeKey)
         // Reset modal state when it closes
         this.resetModal()
       }
@@ -377,16 +335,6 @@ export default {
     },
     closeModal() {
       this.$emit('close')
-    },
-    handleBackdropMouseDown(event) {
-      if (event.target === event.currentTarget) {
-        this.closeModal()
-      }
-    },
-    handleEscapeKey(event) {
-      if (event.key === 'Escape' && this.isOpen) {
-        this.closeModal()
-      }
     },
     handleIconSelected(iconUrl) {
       this.bulkData.pointIcon = iconUrl
@@ -493,12 +441,6 @@ export default {
       }
     }
   },
-  beforeUnmount() {
-    // Restore background scroll
-    document.body.classList.remove('overflow-hidden')
-    // Remove escape key listener if component is unmounted while modal is open
-    document.removeEventListener('keydown', this.handleEscapeKey)
-  }
 }
 </script>
 

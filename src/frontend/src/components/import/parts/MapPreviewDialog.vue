@@ -1,54 +1,29 @@
 <template>
-  <div
-    v-if="isOpen"
-    class="fixed inset-0 z-50"
-    role="dialog"
-    aria-modal="true"
-    @mousedown="handleBackdropMouseDown"
+  <BaseModal
+    :is-open="isOpen"
+    title="Map Preview"
+    max-width="6xl"
+    @close="closeDialog"
   >
-    <!-- Backdrop -->
-    <div class="absolute inset-0 bg-black/50"></div>
+    <!-- Map Container -->
+    <div class="flex-1 bg-white min-h-0 flex flex-col overflow-hidden relative">
+      <!-- Map -->
+      <div ref="mapContainer" class="flex-1 w-full border-0"></div>
 
-    <!-- Modal panel -->
-    <div class="absolute inset-0 flex items-stretch justify-stretch sm:items-center sm:justify-center">
-      <div
-        class="bg-white flex flex-col w-full h-full sm:h-[90vh] sm:max-w-6xl sm:rounded-lg shadow-xl overflow-hidden"
-        @mousedown.stop
-        @click.stop
-      >
-        <!-- Header -->
-        <div class="flex items-center justify-between px-6 lg:px-8 py-4 border-b border-gray-200 bg-gray-50 sm:rounded-t-lg">
-          <h3 class="text-lg font-medium text-gray-900">Map Preview</h3>
-          <button
-            @click="closeDialog"
-            class="text-gray-400 hover:text-gray-600 focus:outline-none focus:text-gray-600 transition ease-in-out duration-150"
-            title="Close dialog"
-          >
-            <XMarkIcon class="h-6 w-6" />
-          </button>
-        </div>
+      <!-- Loading Indicator -->
+      <div v-show="isLoading" class="absolute top-4 right-4 bg-white bg-opacity-90 px-4 py-2 rounded-lg shadow-md z-10">
+        <Loader size="sm" layout="inline" message="Loading preview..." />
+      </div>
 
-        <!-- Map Container -->
-        <div class="flex-1 bg-white min-h-0 flex flex-col overflow-hidden relative">
-          <!-- Map -->
-          <div ref="mapContainer" class="flex-1 w-full border-0"></div>
-
-          <!-- Loading Indicator -->
-          <div v-show="isLoading" class="absolute top-4 right-4 bg-white bg-opacity-90 px-4 py-2 rounded-lg shadow-md z-10">
-            <Loader size="sm" layout="inline" message="Loading preview..." />
-          </div>
-
-          <!-- Feature Info -->
-          <div class="absolute bottom-4 left-4 bg-white bg-opacity-90 px-4 py-2 rounded-lg shadow-md z-10 text-xs">
-            <div class="space-y-1">
-              <div>Features: <span class="font-medium">{{ featureCount }}</span></div>
-              <div v-if="filename">File: <span class="font-medium">{{ filename }}</span></div>
-            </div>
-          </div>
+      <!-- Feature Info -->
+      <div class="absolute bottom-4 left-4 bg-white bg-opacity-90 px-4 py-2 rounded-lg shadow-md z-10 text-xs">
+        <div class="space-y-1">
+          <div>Features: <span class="font-medium">{{ featureCount }}</span></div>
+          <div v-if="filename">File: <span class="font-medium">{{ filename }}</span></div>
         </div>
       </div>
     </div>
-  </div>
+  </BaseModal>
 </template>
 
 <script>
@@ -59,14 +34,14 @@ import {Vector as VectorSource} from 'ol/source'
 import {Style, Fill, Stroke, Circle, Text} from 'ol/style'
 import {GeoJSON} from 'ol/format'
 import {fromLonLat} from 'ol/proj'
+import BaseModal from '@/components/parts/BaseModal.vue'
 import Loader from '@/components/parts/Loader.vue'
-import { XMarkIcon } from '@heroicons/vue/24/outline'
 
 export default {
   name: 'MapPreviewDialog',
   components: {
-    Loader,
-    XMarkIcon
+    BaseModal,
+    Loader
   },
   props: {
     isOpen: {
@@ -95,24 +70,12 @@ export default {
   watch: {
     isOpen(newVal) {
       if (newVal) {
-        // Prevent background scroll
-        document.body.classList.add('overflow-hidden')
-        // Move modal to body to avoid layout offsets
         this.$nextTick(() => {
-          if (this.$el && this.$el.parentNode !== document.body) {
-            document.body.appendChild(this.$el)
-          }
           this.initializeMap()
           this.loadFeatures()
         })
-        // Add escape key listener when dialog opens
-        document.addEventListener('keydown', this.handleEscapeKey)
       } else {
-        // Restore background scroll
-        document.body.classList.remove('overflow-hidden')
         this.cleanup()
-        // Remove escape key listener when dialog closes
-        document.removeEventListener('keydown', this.handleEscapeKey)
       }
     },
     features: {
@@ -376,17 +339,6 @@ export default {
     },
 
 
-    handleBackdropMouseDown(event) {
-      // Only close if the mousedown is on the backdrop itself, not on children
-      if (event.target === event.currentTarget) {
-        this.closeDialog()
-      }
-    },
-    handleEscapeKey(event) {
-      if (event.key === 'Escape') {
-        this.closeDialog()
-      }
-    },
     closeDialog() {
       this.$emit('close')
     },
@@ -403,11 +355,7 @@ export default {
   },
 
   beforeUnmount() {
-    // Restore background scroll
-    document.body.classList.remove('overflow-hidden')
     this.cleanup()
-    // Remove escape key listener if component is unmounted while dialog is open
-    document.removeEventListener('keydown', this.handleEscapeKey)
   }
 }
 </script>
