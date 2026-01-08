@@ -217,6 +217,26 @@
         </div>
 
     <template #footer>
+      <!-- Cancel Button (shown when not processing or when no features available) -->
+      <button
+        v-if="!importQueueId || (!processing && features.length === 0)"
+        @click="handleCancel"
+        class="px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-md hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500"
+        title="Cancel"
+      >
+        Cancel
+      </button>
+
+      <!-- Close Button (shown after applied) -->
+      <button
+        v-if="applied"
+        @click="handleClose"
+        class="px-4 py-2 text-sm font-medium text-white bg-blue-500 border border-transparent rounded-md hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500"
+        title="Close dialog"
+      >
+        Close
+      </button>
+
       <!-- Upload Button (shown when file is selected but not yet uploaded) -->
       <button
         v-if="selectedFile && !importQueueId && !processing"
@@ -226,16 +246,6 @@
       >
         <ArrowUpTrayIcon class="h-4 w-4 mr-2" />
         Upload & Process
-      </button>
-
-      <!-- Cancel Button -->
-      <button
-        v-if="!importQueueId || (!processing && features.length === 0)"
-        @click="handleCancel"
-        class="px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-md hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500"
-        title="Cancel"
-      >
-        Cancel
       </button>
 
       <!-- Apply Button (always shown when features are available, disabled when not ready) -->
@@ -249,16 +259,6 @@
         <CheckIcon v-if="!applying" class="h-4 w-4 mr-2" />
         <Loader v-if="applying" size="sm" layout="inline" :showMessage="false" color="white" />
         {{ applying ? 'Applying...' : 'Apply Spatial Data' }}
-      </button>
-
-      <!-- Close Button -->
-      <button
-        v-if="applied"
-        @click="handleClose"
-        class="px-4 py-2 text-sm font-medium text-white bg-blue-500 border border-transparent rounded-md hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500"
-        title="Close dialog"
-      >
-        Close
       </button>
     </template>
   </BaseModal>
