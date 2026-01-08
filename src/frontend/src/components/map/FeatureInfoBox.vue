@@ -75,7 +75,7 @@
       </div>
 
       <!-- User Tags -->
-      <div v-if="getFeatureTags(feature).userTags.length > 0" class="mb-2 md:mb-3 flex flex-wrap gap-1.5 md:gap-2">
+      <div v-if="getFeatureTags(feature).userTags.length > 0" class="mb-1 md:mb-1.5 flex flex-wrap gap-1.5 md:gap-2">
         <span
           v-for="tag in getFeatureTags(feature).userTags"
           :key="`user-${tag}`"
@@ -86,10 +86,10 @@
       </div>
 
       <!-- System Tags (Fixed Size Box) -->
-      <div v-if="getFeatureTags(feature).systemTags.length > 0" class="mb-2 md:mb-3">
+      <div v-if="getFeatureTags(feature).systemTags.length > 0" class="mb-1 md:mb-1.5">
 <!--        <div class="text-[10px] md:text-xs text-gray-500 mb-1">System Tags</div>-->
         <div class="border border-gray-200 rounded-md bg-gray-50 overflow-hidden">
-          <div class="max-h-48 md:max-h-56 overflow-y-auto p-2">
+          <div class="max-h-24 md:max-h-28 overflow-y-auto p-1">
             <div class="flex flex-wrap gap-1.5 md:gap-2">
               <span
                 v-for="tag in getFeatureTags(feature).systemTags"
