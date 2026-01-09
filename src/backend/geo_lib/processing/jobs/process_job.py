@@ -383,8 +383,8 @@ class ProcessJob(BaseJob):
                 return
 
             # Calculate progress percentages for remaining steps
-            # For normal path: 48 (conv) -> 60 (split) -> 72 (elev) -> 80 (tags) -> 88 (geocode) -> 96 (db)
-            # For replacement: 60 (conv) -> 100 (db) [skip split, elev, tags, geocode]
+            # For normal path: 48 (conv) -> 60 (split) -> 72 (elev) -> 80 (tags) -> 88 (reverse geocode) -> 96 (db)
+            # For replacement: 60 (conv) -> 100 (db) [skip split, elev, tags, reverse geocode]
             if is_replacement:
                 db_update_progress = 100.0
             else:
@@ -453,7 +453,7 @@ class ProcessJob(BaseJob):
                 realtime_log.extend(tagging_log)
                 realtime_log.add_timing("Tagging and Reverse Geocoding", tagging_duration, "ProcessJob")
 
-                # Check for cancellation after tagging and geocoding
+                # Check for cancellation after tagging and reverse geocoding
                 if self._check_cancellation(job_id, realtime_log, "after tagging and reverse geocoding"):
                     return
 

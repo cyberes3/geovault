@@ -274,7 +274,7 @@
       </div>
     </div>
 
-    <!-- Geocoding Tab Content -->
+    <!-- Forward Geocoding Tab Content (place search) -->
     <div v-if="activeTab === 'geocoding'" class="flex flex-col flex-1 min-h-0">
       <!-- Search Input -->
       <div class="mb-2 px-1 lg:px-0.5 xl:px-1">
@@ -424,7 +424,7 @@ export default {
       tagFilteredFeatures: [],
       isFiltering: false,
       filterTimeout: null,
-      // Geocoding state
+      // Forward geocoding state (place search)
       geocodingQuery: '',
       geocodingResults: [],
       isGeocodingSearching: false,
@@ -494,7 +494,7 @@ export default {
       }))
     },
     geocodingResultsWithKeys() {
-      // Convert geocoding results to objects with keys for RecycleScroller
+      // Convert forward geocoding results to objects with keys for RecycleScroller
       return this.geocodingResults.map((result, index) => ({
         ...result,
         id: result.id || `geocoding-${index}-${result.place_name || ''}`
@@ -760,7 +760,7 @@ export default {
         this.$emit('tag-filter-loading-change', false)
       }
     },
-    // Geocoding methods
+    // Forward geocoding methods (place search)
     handleGeocodingInput() {
       // Clear existing timeout
       if (this.geocodingTimeout) {
@@ -821,7 +821,7 @@ export default {
         return
       }
 
-      // Not coordinates, proceed with regular geocoding search
+      // Not coordinates, proceed with forward geocoding search
       try {
         const url = `${APIHOST}/api/geocoding/search/?q=${encodeURIComponent(query)}`
         const response = await fetch(url)
@@ -836,7 +836,7 @@ export default {
         if (response.ok && data.data && data.data.features) {
           this.geocodingResults = data.data.features
         } else {
-          console.error('Geocoding search failed:', data.error || 'Unknown error')
+          console.error('Forward geocoding search failed:', data.error || 'Unknown error')
           // Only clear results if this is still the current query
           if (this.currentSearchQuery === query) {
             this.geocodingResults = []

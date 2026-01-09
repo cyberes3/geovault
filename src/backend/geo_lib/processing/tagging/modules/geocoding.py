@@ -89,7 +89,7 @@ class ReverseGeocodingTagGenerator(TagGenerator):
         This is the preferred method for processing multiple features efficiently.
         
         Args:
-            features: List of features to geocode
+            features: List of features to reverse geocode
             import_log: Optional ImportLog for database logging
             
         Returns:
@@ -144,7 +144,7 @@ class ReverseGeocodingTagGenerator(TagGenerator):
             
             feature_tags[i] = sorted(all_location_tags)
         
-        # Return empty list for features that weren't geocoded
+        # Return empty list for features that weren't reverse geocoded
         return {i: feature_tags.get(i, []) for i in range(len(features))}
     
     def process(

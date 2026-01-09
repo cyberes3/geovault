@@ -307,7 +307,7 @@
               View on Map
             </button>
             <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-blue-100 text-blue-700">
-              {{ entry.item.geometry.type }}
+              {{ formatGeometryTypeForDisplay(entry.item.geometry.type) }}
             </span>
           </div>
         </div>
@@ -545,6 +545,7 @@ import {mapState} from "vuex";
 import axios from "axios";
 import { formatDate } from "@/utils/dateUtils.js";
 import {capitalizeFirstLetter} from "@/assets/js/string.js";
+import { formatGeometryTypeForDisplay } from "@/utils/geometryTypeFormatter.js";
 import {PROCESSING_MESSAGES} from "@/assets/js/constants/processing-messages.js";
 import ImportTable from "@/components/import/parts/ImportTable.vue";
 import {GeoFeatureTypeStrings} from "@/assets/js/types/geofeature-strings";
@@ -936,6 +937,10 @@ export default {
 
     onWebSocketError(error) {
       console.error('WebSocket error:', error);
+    },
+
+    formatGeometryTypeForDisplay(geometryType) {
+      return formatGeometryTypeForDisplay(geometryType);
     },
 
     handleInitialState(data) {

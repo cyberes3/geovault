@@ -1,6 +1,6 @@
 """
-Geocoding API view for MapTiler geocoding service.
-Provides place search functionality with server-side caching.
+Forward geocoding API view for MapTiler geocoding service.
+Provides place search functionality (forward geocoding) with server-side caching.
 """
 import hashlib
 from urllib.parse import quote
@@ -24,7 +24,7 @@ GEOCODING_CACHE_TTL = 604800
 @api_or_login_required_401()
 def geocoding_search(request):
     """
-    Search for places using MapTiler Geocoding API.
+    Search for places using MapTiler Forward Geocoding API.
 
     Query parameters:
         q: Search query string (required)
@@ -46,7 +46,7 @@ def geocoding_search(request):
 
     if not api_key:
         return error_response(
-            "Geocoding service is not available. MapTiler API key is not configured.",
+            "Forward geocoding service is not available. MapTiler API key is not configured.",
             code=503
         )
 
@@ -61,7 +61,7 @@ def geocoding_search(request):
         response['Cache-Control'] = 'public, max-age=604800'  # 7 days
         return response
 
-    # Make request to MapTiler Geocoding API
+    # Make request to MapTiler Forward Geocoding API
     # API endpoint: https://api.maptiler.com/geocoding/{query}.json?key={api_key}
     # By not specifying 'types' parameter, we get ALL feature types:
     # countries, regions, counties, municipalities, places, addresses, POIs,
@@ -108,7 +108,7 @@ def geocoding_search(request):
             admin_data = admin_response.json()
             admin_features = admin_data.get('features', [])
         else:
-            _logger.error(f"Geocoding API error response: status={admin_response.status_code}, body={admin_response.text}")
+            _logger.error(f"Forward geocoding API error response: status={admin_response.status_code}, body={admin_response.text}")
 
         # Make geographic features request
         geo_response = requests.get(api_url, params=params_geographic, headers=headers, timeout=10)
@@ -116,7 +116,7 @@ def geocoding_search(request):
             geo_data = geo_response.json()
             geographic_features = geo_data.get('features', [])
         else:
-            _logger.error(f"Geocoding API error response: status={geo_response.status_code}, body={geo_response.text}")
+            _logger.error(f"Forward geocoding API error response: status={geo_response.status_code}, body={geo_response.text}")
 
         # Make all types request
         api_response = requests.get(api_url, params=params_all, headers=headers, timeout=10)
@@ -124,14 +124,14 @@ def geocoding_search(request):
             api_data = api_response.json()
             all_features = api_data.get('features', [])
         else:
-            _logger.error(f"Geocoding API error response: status={api_response.status_code}, body={api_response.text}")
+            _logger.error(f"Forward geocoding API error response: status={api_response.status_code}, body={api_response.text}")
     except requests.exceptions.Timeout:
-        return error_response("Geocoding API request timed out", code=504)
+        return error_response("Forward geocoding API request timed out", code=504)
 
     # If all requests failed, return error
     if not admin_features and not geographic_features and not all_features:
         return error_response(
-            "Geocoding API error: all requests failed",
+            "Forward geocoding API error: all requests failed",
             code=400
         )
 
@@ -193,7 +193,7 @@ def geocoding_search(request):
 
 def _get_cache_key(query: str) -> str:
     """
-    Generate cache key for geocoding query.
+    Generate cache key for forward geocoding query.
 
     Uses a hash to ensure cache keys are safe for memcached (no spaces or special chars).
 
@@ -211,7 +211,7 @@ def _get_cache_key(query: str) -> str:
 
 def _clean_feature(feature: dict) -> dict:
     """
-    Remove unnecessary fields from geocoding feature to reduce payload size.
+    Remove unnecessary fields from forward geocoding feature to reduce payload size.
     Keeps only essential fields needed by the frontend.
     Transforms GeoJSON geometry into a simple coordinates array.
     

@@ -29,6 +29,7 @@
 
 <script>
 import { getGeometryTypeColor } from '@/utils/geometryColors.js'
+import { formatGeometryTypeForDisplay } from '@/utils/geometryTypeFormatter.js'
 
 export default {
   name: 'FeatureSelectionPopup',
@@ -261,12 +262,8 @@ export default {
         geomType = geometry.type
       }
       
-      // Return user-friendly names
-      if (geomType === 'LineString' || geomType === 'MultiLineString') {
-        return 'Line'
-      }
-      
-      return geomType
+      // Use shared formatter utility for user-friendly names
+      return formatGeometryTypeForDisplay(geomType)
     },
     getGeometryTypeColor(feature) {
       // Support both OpenLayers Features and plain GeoJSON

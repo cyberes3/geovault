@@ -43,7 +43,7 @@
 
                   <div>
                     <h5 class="text-base font-semibold text-gray-900 mb-2">3. Elevation Data Filling</h5>
-                    <p class="text-sm">For lines and tracks (LineString and MultiLineString features), the system automatically fills in missing elevation data:</p>
+                    <p class="text-sm">For lines and tracks (Line features), the system automatically fills in missing elevation data:</p>
                     <ul class="list-disc list-inside ml-4 mt-1 text-sm">
                       <li><strong>Automatic detection:</strong> The system identifies points in lines and tracks that are missing elevation information</li>
                       <li><strong>Preservation:</strong> Existing elevation data is never overwritten - only missing values are filled</li>
@@ -65,7 +65,7 @@
                       <li><strong>Type tags:</strong> Based on geometry type (point, line, polygon, etc.)</li>
                       <li><strong>Import date tags:</strong> Year and month of import (e.g., "import-2024", "import-january")</li>
                       <li><strong>Source file tag:</strong> The original filename is added as a tag</li>
-                      <li><strong>Geocoding tags:</strong> Location-based tags (see Geocoding section below)</li>
+                      <li><strong>Reverse geocoding tags:</strong> Location-based tags (see Reverse Geocoding section below)</li>
                     </ul>
                   </div>
 
@@ -95,35 +95,35 @@
               </div>
             </section>
 
-            <!-- Geocoding Section -->
+            <!-- Reverse Geocoding Section -->
             <section>
-              <h4 class="text-lg font-semibold text-gray-900 mb-3">Geocoding</h4>
+              <h4 class="text-lg font-semibold text-gray-900 mb-3">Reverse Geocoding</h4>
               <div class="space-y-4 text-gray-700">
                 <div class="px-2 py-1 bg-yellow-50 border border-yellow-200 rounded-md">
-                  <p class="text-sm text-yellow-900"><strong>⚠️ Administrator Configuration Required:</strong> Geocoding must be enabled by your system administrator. If not enabled, location-based tags will not be generated.</p>
+                  <p class="text-sm text-yellow-900"><strong>Administrator Configuration Required:</strong> Reverse geocoding must be enabled by your system administrator. If not enabled, location-based tags will not be generated.</p>
                 </div>
 
-                <p>When enabled, geocoding automatically adds location-based tags to your features:</p>
+                <p>When enabled, reverse geocoding automatically adds location-based tags to your features:</p>
 
                 <div class="space-y-4">
                   <div>
-                    <h5 class="text-base font-semibold text-gray-900 mb-2">What Gets Geocoded?</h5>
-                    <p class="text-sm">Geocoding is performed for:</p>
+                    <h5 class="text-base font-semibold text-gray-900 mb-2">What Gets Reverse Geocoded?</h5>
+                    <p class="text-sm">Reverse geocoding is performed for:</p>
                     <ul class="list-disc list-inside ml-4 mt-1 text-sm">
-                      <li><strong>Points:</strong> All point features are geocoded</li>
-                      <li><strong>Lines:</strong> LineString and MultiLineString features are geocoded</li>
-                      <li><strong>Polygons:</strong> Polygon features are <strong>not</strong> geocoded</li>
+                      <li><strong>Points:</strong> All point features are reverse geocoded</li>
+                      <li><strong>Lines:</strong> The middle of a line feature is reverse geocoded</li>
+                      <li><strong>Polygons:</strong> Polygon features are <strong>not</strong> reverse geocoded</li>
                     </ul>
                   </div>
 
                   <div>
-                    <h5 class="text-base font-semibold text-gray-900 mb-2">How Geocoding Works</h5>
+                    <h5 class="text-base font-semibold text-gray-900 mb-2">How Reverse Geocoding Works</h5>
                     <p class="text-sm">The system uses external location services to determine location information based on the coordinates of your features.</p>
                   </div>
 
                   <div>
                     <h5 class="text-base font-semibold text-gray-900 mb-2">Generated Tags</h5>
-                    <p class="text-sm">Geocoding automatically generates tags such as:</p>
+                    <p class="text-sm">Reverse geocoding automatically generates tags such as:</p>
                     <ul class="list-disc list-inside ml-4 mt-1 text-sm">
                       <li>City or town names</li>
                       <li>State or province names</li>

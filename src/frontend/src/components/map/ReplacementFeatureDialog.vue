@@ -14,7 +14,7 @@
                 <InformationCircleIcon class="h-5 w-5 text-blue-500 mr-3 flex-shrink-0 mt-0.5" />
                 <div class="flex-1 space-y-2 text-sm text-blue-800">
                   <p>Upload a <strong>KMZ, KML, or GPX</strong> file to replace this feature's spatial geometry.</p>
-                  <p>Only features with <strong>matching geometry types</strong> (Point, LineString, or Polygon) will be available for selection.</p>
+                  <p>Only features with <strong>matching geometry types</strong> will be available for selection.</p>
                   <p>The feature's <strong>name, description, and other properties will remain unchanged</strong>.</p>
                 </div>
               </div>
