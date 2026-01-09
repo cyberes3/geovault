@@ -11,15 +11,16 @@
           <label class="block text-sm font-medium text-gray-700">
             Coordinates (JSON array)
           </label>
-          <button
+          <BaseButton
             type="button"
             @click="formatJson"
             :disabled="!canFormat"
-            class="px-3 py-1 text-xs font-medium text-gray-700 bg-white border border-gray-300 rounded-md hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 disabled:opacity-50 disabled:cursor-not-allowed"
+            variant="white"
+            size="xs"
             :title="canFormat ? 'Format JSON' : 'Cannot format: Invalid JSON'"
           >
             Format JSON
-          </button>
+          </BaseButton>
         </div>
         <div class="p-2 bg-blue-50 border border-blue-200 rounded-md">
           <p class="text-xs text-blue-800">
@@ -54,30 +55,34 @@
       <p v-else-if="isValid && geometryType" class="text-sm text-green-600">✓ Coordinates are valid</p>
     </template>
     <template #footer>
-      <button
+      <BaseButton
         type="button"
         @click="handleClose"
         :disabled="disabled"
-        class="px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-md hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 disabled:opacity-50 disabled:cursor-not-allowed"
+        variant="white"
+        size="sm"
         title="Close"
       >
         Close
-      </button>
-      <button
+      </BaseButton>
+      <BaseButton
         type="button"
         @click="handleSave"
         :disabled="!canSave"
-        class="px-4 py-2 text-sm font-medium text-white bg-blue-600 border border-transparent rounded-md hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 disabled:opacity-50 disabled:cursor-not-allowed"
+        variant="primary"
+        color="blue"
+        size="sm"
         :title="canSave ? 'Save coordinates' : (validationError || 'Invalid coordinates')"
       >
         Save
-      </button>
+      </BaseButton>
     </template>
   </BaseModal>
 </template>
 
 <script>
 import BaseModal from '@/components/parts/BaseModal.vue'
+import BaseButton from '@/components/parts/BaseButton.vue'
 import { restoreElevationInGeometry } from '@/utils/elevationUtils.js'
 import { validateCoordinates } from '@/utils/coordinateValidation.js'
 import CodeEditor from 'simple-code-editor'
@@ -86,6 +91,7 @@ export default {
   name: 'CoordinatesDialog',
   components: {
     BaseModal,
+    BaseButton,
     CodeEditor
   },
   props: {

@@ -105,15 +105,16 @@
               Hide duplicates
             </label>
           </div>
-          <button
+          <BaseButton
               :disabled="!hasPreviousPage || isLoadingPage || totalPages <= 1"
-              class="inline-flex items-center px-3 py-2 border border-gray-300 shadow-sm text-sm font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 disabled:opacity-50 disabled:cursor-not-allowed"
+              variant="white"
+              size="sm"
               @click="$emit('previous-page')"
               title="Go to previous page"
           >
             <ChevronLeftIcon class="w-4 h-4 mr-1" />
             Previous
-          </button>
+          </BaseButton>
           <span class="text-sm text-gray-700">Page {{ currentPage }} of {{ totalPages }}</span>
           <button
               :disabled="!hasNextPage || isLoadingPage || totalPages <= 1"
@@ -145,15 +146,17 @@
               Go
             </button>
           </div>
-          <button
+          <BaseButton
               :disabled="isLoadingPage || !hasFeatures"
-              class="inline-flex items-center justify-center px-3 py-2 border border-blue-200 text-sm font-medium rounded-md text-blue-700 bg-blue-50 hover:bg-blue-100 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-300 disabled:bg-gray-100 disabled:hover:bg-gray-100 disabled:cursor-not-allowed w-full md:w-auto md:ml-4 md:pl-4 md:border-l"
+              variant="white"
+              size="sm"
+              class="w-full md:w-auto md:ml-4 md:pl-4 md:border-l"
               @click="$emit('show-map-preview')"
               title="Preview all features on current page"
           >
             <MapIcon class="w-4 h-4 mr-2" />
             Map Preview (Current Page)
-          </button>
+          </BaseButton>
         </div>
       </div>
     </div>
@@ -176,20 +179,21 @@
           <ArrowDownTrayIcon v-else class="w-4 h-4 mr-2" />
           {{ isSaving ? 'Saving...' : (saveStatus === 'success' ? 'Saved!' : (saveStatus === 'error' ? 'Failed' : 'Save Changes')) }}
         </button>
-        <button
+        <BaseButton
             :disabled="lockButtons || isImporting || importableCount === 0"
-            class="w-full sm:w-[220px] inline-flex items-center justify-center px-4 py-2 border border-transparent text-sm font-medium rounded-md text-white bg-blue-500 hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 disabled:bg-gray-400 disabled:cursor-not-allowed transition-colors duration-200"
+            variant="primary"
+            color="blue"
+            size="md"
+            class="w-full sm:w-[220px]"
             @click="$emit('perform-import')"
             title="Import selected features"
         >
-          <span class="inline-flex items-center justify-center w-full">
-            <Loader v-if="isImporting" size="sm" layout="inline" :showMessage="false" color="white" />
-            <ArrowUpTrayIcon v-else class="w-4 h-4 mr-2" />
-            <span class="inline-block" style="min-width: 140px; text-align: center;">
-              {{ isImporting ? `Importing ${importableCount} Feature${importableCount === 1 ? '' : 's'}...` : `Import ${importableCount} Feature${importableCount === 1 ? '' : 's'}` }}
-            </span>
+          <Loader v-if="isImporting" size="sm" layout="inline" :showMessage="false" color="white" />
+          <ArrowUpTrayIcon v-else class="w-4 h-4 mr-2" />
+          <span class="inline-block" style="min-width: 140px; text-align: center;">
+            {{ isImporting ? `Importing ${importableCount} Feature${importableCount === 1 ? '' : 's'}...` : `Import ${importableCount} Feature${importableCount === 1 ? '' : 's'}` }}
           </span>
-        </button>
+        </BaseButton>
       </div>
     </div>
   </div>
@@ -197,6 +201,7 @@
 
 <script>
 import Loader from "@/components/parts/Loader.vue";
+import BaseButton from "@/components/parts/BaseButton.vue";
 import ToggleButton from "@/components/parts/ToggleButton.vue";
 import {PROCESSING_MESSAGES} from "@/assets/js/constants/processing-messages.js";
 import { ExclamationTriangleIcon, ClipboardDocumentIcon, ExclamationCircleIcon, DocumentIcon, ChevronLeftIcon, ChevronRightIcon, MapIcon, ArrowDownTrayIcon, ArrowUpTrayIcon, CheckIcon, XMarkIcon } from '@heroicons/vue/24/outline';
@@ -205,6 +210,7 @@ export default {
   name: 'ImportControls',
   components: {
     Loader,
+    BaseButton,
     ToggleButton,
     ExclamationTriangleIcon,
     ClipboardDocumentIcon,

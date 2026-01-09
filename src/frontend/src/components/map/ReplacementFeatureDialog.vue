@@ -218,48 +218,55 @@
 
     <template #footer>
       <!-- Cancel Button (shown when not processing or when no features available) -->
-      <button
+      <BaseButton
         v-if="!importQueueId || (!processing && features.length === 0)"
         @click="handleCancel"
-        class="px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-md hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500"
+        variant="white"
+        size="sm"
         title="Cancel"
       >
         Cancel
-      </button>
+      </BaseButton>
 
       <!-- Close Button (shown after applied) -->
-      <button
+      <BaseButton
         v-if="applied"
         @click="handleClose"
-        class="px-4 py-2 text-sm font-medium text-white bg-blue-500 border border-transparent rounded-md hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500"
+        variant="primary"
+        color="blue"
+        size="sm"
         title="Close dialog"
       >
         Close
-      </button>
+      </BaseButton>
 
       <!-- Upload Button (shown when file is selected but not yet uploaded) -->
-      <button
+      <BaseButton
         v-if="selectedFile && !importQueueId && !processing"
         @click="handleUpload"
-        class="px-4 py-2 text-sm font-medium text-white bg-blue-500 border border-transparent rounded-md hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 flex items-center"
+        variant="primary"
+        color="blue"
+        size="sm"
         title="Upload and process file"
       >
         <ArrowUpTrayIcon class="h-4 w-4 mr-2" />
         Upload & Process
-      </button>
+      </BaseButton>
 
       <!-- Apply Button (always shown when features are available, disabled when not ready) -->
-      <button
+      <BaseButton
         v-if="sortedFeatures.length > 0 && !applied"
         @click="handleApply"
         :disabled="applying || selectedFeatureIndex === null"
-        class="px-4 py-2 text-sm font-medium text-white bg-blue-500 border border-transparent rounded-md hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 disabled:opacity-50 disabled:cursor-not-allowed disabled:bg-gray-400 disabled:hover:bg-gray-400 flex items-center"
+        variant="primary"
+        color="blue"
+        size="sm"
         title="Apply selected feature's spatial data"
       >
         <CheckIcon v-if="!applying" class="h-4 w-4 mr-2" />
         <Loader v-if="applying" size="sm" layout="inline" :showMessage="false" color="white" />
         {{ applying ? 'Applying...' : 'Apply Spatial Data' }}
-      </button>
+      </BaseButton>
     </template>
   </BaseModal>
 
@@ -296,6 +303,7 @@ import {getCenter} from 'ol/extent'
 import {DragPan, MouseWheelZoom} from 'ol/interaction'
 import {markRaw} from 'vue'
 import BaseModal from '@/components/parts/BaseModal.vue'
+import BaseButton from '@/components/parts/BaseButton.vue'
 import Loader from '@/components/parts/Loader.vue'
 import ToggleButton from '@/components/parts/ToggleButton.vue'
 import { InformationCircleIcon, DocumentIcon, ExclamationCircleIcon, ExclamationTriangleIcon, CheckIcon, ArrowUpTrayIcon, ArrowsPointingOutIcon, XMarkIcon } from '@heroicons/vue/24/outline'
@@ -315,6 +323,7 @@ export default {
   emits: ['close', 'applied'],
   components: {
     BaseModal,
+    BaseButton,
     Loader,
     ToggleButton,
     XMarkIcon,

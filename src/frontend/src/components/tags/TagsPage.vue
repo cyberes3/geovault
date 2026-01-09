@@ -24,7 +24,7 @@
           You can create custom tags, edit or delete them, share them with others, and each feature can have multiple tags for flexible categorization.
         </p>
         <p class="text-sm text-gray-700 mt-2">
-          <strong>Note:</strong> When deleting a tag, you can choose to either delete all features with that tag or just remove the tag from those features. 
+          When deleting a tag, you can choose to either delete all features with that tag or just remove the tag from those features.
           To remove a tag from a single feature without deleting it, use the × button next to the feature.
         </p>
       </div>
@@ -115,19 +115,22 @@
                   @focus.stop
                   @click.stop
               />
-              <button
+              <BaseButton
                   v-if="editingTag === tag"
-                  class="ml-2 p-2 sm:p-1.5 min-w-[44px] min-h-[44px] sm:min-w-0 sm:min-h-0 bg-blue-500 text-white hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-1 rounded"
+                  class="ml-2 p-2 sm:p-1.5 min-w-[44px] min-h-[44px] sm:min-w-0 sm:min-h-0"
+                  variant="primary"
+                  color="blue"
+                  size="xs"
                   title="Save tag name"
                   @click.stop="saveTagEdit(tag)"
               >
                 <CheckIcon class="w-4 h-4" />
-              </button>
+              </BaseButton>
             </div>
             <!-- Control Buttons Row -->
             <div v-if="editingTag !== tag" class="flex items-center space-x-1 flex-wrap">
               <button
-                  class="p-2 sm:p-1.5 min-w-[44px] min-h-[44px] sm:min-w-0 sm:min-h-0 text-gray-400 hover:text-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-1 rounded"
+                  class="p-2 sm:p-1.5 min-w-[44px] min-h-[44px] sm:min-w-0 sm:min-h-0 text-blue-600 hover:text-blue-500 hover:bg-blue-50 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-1 rounded transition-colors"
                   title="View on Map"
                   type="button"
                   @click.stop.prevent="viewTagOnMap(tag)"
@@ -136,7 +139,7 @@
                 <MapIcon class="w-4 h-4" />
               </button>
               <button
-                  class="p-2 sm:p-1.5 min-w-[44px] min-h-[44px] sm:min-w-0 sm:min-h-0 text-gray-400 hover:text-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-1 rounded"
+                  class="p-2 sm:p-1.5 min-w-[44px] min-h-[44px] sm:min-w-0 sm:min-h-0 text-blue-600 hover:text-blue-500 hover:bg-blue-50 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-1 rounded transition-colors"
                   title="Share tag"
                   type="button"
                   @click.stop.prevent="openShareDialog(tag)"
@@ -145,7 +148,7 @@
                 <ShareIcon class="w-4 h-4" />
               </button>
               <button
-                  class="p-2 sm:p-1.5 min-w-[44px] min-h-[44px] sm:min-w-0 sm:min-h-0 text-gray-400 hover:text-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-1 rounded"
+                  class="p-2 sm:p-1.5 min-w-[44px] min-h-[44px] sm:min-w-0 sm:min-h-0 text-blue-600 hover:text-blue-500 hover:bg-blue-50 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-1 rounded transition-colors"
                   title="Download Tag KMZ"
                   type="button"
                   @click.stop.prevent="downloadTagKmz(tag)"
@@ -155,7 +158,7 @@
               </button>
               <button
                   v-if="!isSystemTag(tag)"
-                  class="p-2 sm:p-1.5 min-w-[44px] min-h-[44px] sm:min-w-0 sm:min-h-0 text-gray-400 hover:text-gray-600 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-1 rounded"
+                  class="p-2 sm:p-1.5 min-w-[44px] min-h-[44px] sm:min-w-0 sm:min-h-0 text-blue-600 hover:text-blue-500 hover:bg-blue-50 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-1 rounded transition-colors"
                   title="Edit tag name"
                   type="button"
                   @click.stop.prevent="startTagEdit(tag)"
@@ -164,7 +167,7 @@
                 <PencilIcon class="w-4 h-4" />
               </button>
               <button
-                  class="p-2 sm:p-1.5 min-w-[44px] min-h-[44px] sm:min-w-0 sm:min-h-0 text-gray-400 hover:text-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-1 rounded"
+                  class="p-2 sm:p-1.5 min-w-[44px] min-h-[44px] sm:min-w-0 sm:min-h-0 text-blue-600 hover:text-blue-500 hover:bg-blue-50 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-1 rounded transition-colors"
                   title="Bulk style features in this tag"
                   type="button"
                   @click.stop.prevent="openBulkOperationsModal(tag)"
@@ -173,7 +176,7 @@
                 <RectangleStackIcon class="w-4 h-4" />
               </button>
               <button
-                  class="p-2 sm:p-1.5 min-w-[44px] min-h-[44px] sm:min-w-0 sm:min-h-0 text-gray-400 hover:text-red-600 focus:outline-none focus:ring-2 focus:ring-red-500 focus:ring-offset-1 rounded"
+                  class="p-2 sm:p-1.5 min-w-[44px] min-h-[44px] sm:min-w-0 sm:min-h-0 text-blue-600 hover:text-blue-500 hover:bg-blue-50 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-1 rounded transition-colors"
                   :title="isSystemTag(tag) ? 'Delete system tag and all its features' : 'Delete tag'"
                   type="button"
                   @click.stop.prevent="openDeleteModal(tag)"
@@ -240,15 +243,19 @@
                 >
                   <XMarkIcon class="w-4 h-4" />
                 </button>
-                <router-link
+                <BaseButton
                     v-if="feature.properties.database_id"
+                    tag="router-link"
                     :to="{ path: '/map', query: { featureId: feature.properties.database_id } }"
-                    class="inline-flex items-center px-3 py-1.5 border border-gray-300 rounded-md text-xs font-medium text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 cursor-pointer"
+                    class="p-2 sm:p-1.5 min-w-[44px] min-h-[44px] sm:min-w-0 sm:min-h-0"
+                    variant="primary"
+                    color="blue"
+                    size="xs"
+                    title="View on Map"
                     @click.stop
                 >
-                  View on Map
-                  <MapIcon class="w-3 h-3 ml-1" />
-                </router-link>
+                  <MapIcon class="w-4 h-4" />
+                </BaseButton>
               </div>
             </div>
           </div>
@@ -269,25 +276,29 @@
               Showing features {{ (getTagCurrentPage(tag) - 1) * tagFeaturePageSize + 1 }} - {{ Math.min(getTagCurrentPage(tag) * tagFeaturePageSize, getTagFilteredFeatureCount(tag)) }} of {{ getTagFilteredFeatureCount(tag) }}
             </div>
             <div class="flex items-center space-x-2">
-              <button
+              <BaseButton
                   :disabled="!getTagHasPreviousPage(tag)"
-                  class="inline-flex items-center px-3 py-2 sm:px-2 sm:py-1 min-h-[44px] sm:min-h-0 border border-gray-300 shadow-sm text-xs font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-1 focus:ring-blue-500 disabled:opacity-50 disabled:cursor-not-allowed"
+                  class="min-h-[44px] sm:min-h-0"
+                  variant="white"
+                  size="xs"
                   @click="tagPreviousPage(tag)"
                   title="Previous page"
               >
                 <ArrowLeftIcon class="w-3 h-3 mr-1" />
                 Prev
-              </button>
+              </BaseButton>
               <span class="text-xs text-gray-700">Page {{ getTagCurrentPage(tag) }} of {{ getTagTotalPages(tag) }}</span>
-              <button
+              <BaseButton
                   :disabled="!getTagHasNextPage(tag)"
-                  class="inline-flex items-center px-3 py-2 sm:px-2 sm:py-1 min-h-[44px] sm:min-h-0 border border-gray-300 shadow-sm text-xs font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-1 focus:ring-blue-500 disabled:opacity-50 disabled:cursor-not-allowed"
+                  class="min-h-[44px] sm:min-h-0"
+                  variant="white"
+                  size="xs"
                   @click="tagNextPage(tag)"
                   title="Next page"
               >
                 Next
                 <ArrowRightIcon class="w-3 h-3 ml-1" />
-              </button>
+              </BaseButton>
             </div>
           </div>
         </div>
@@ -301,25 +312,27 @@
           Showing tags {{ (currentPage - 1) * pageSize + 1 }} - {{ Math.min(currentPage * pageSize, totalTags) }} of {{ totalTags }}
         </div>
         <div class="flex items-center space-x-2">
-          <button
+          <BaseButton
               :disabled="!hasPreviousPage || totalPages <= 1"
-              class="inline-flex items-center px-3 py-2 border border-gray-300 shadow-sm text-sm font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 disabled:opacity-50 disabled:cursor-not-allowed"
+              variant="white"
+              size="sm"
               @click="previousPage"
               title="Go to previous page"
           >
             <ArrowLeftIcon class="w-4 h-4 mr-1" />
             Previous
-          </button>
+          </BaseButton>
           <span class="text-sm text-gray-700">Page {{ currentPage }} of {{ totalPages }}</span>
-          <button
+          <BaseButton
               :disabled="!hasNextPage || totalPages <= 1"
-              class="inline-flex items-center px-3 py-2 border border-gray-300 shadow-sm text-sm font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 disabled:opacity-50 disabled:cursor-not-allowed"
+              variant="white"
+              size="sm"
               @click="nextPage"
               title="Go to next page"
           >
             Next
             <ArrowRightIcon class="w-4 h-4 ml-1" />
-          </button>
+          </BaseButton>
           <div class="flex items-center space-x-2 ml-4 pl-4 border-l border-gray-300">
             <label class="text-sm text-gray-700" for="goto-page">Go to:</label>
             <input
@@ -331,14 +344,15 @@
                 type="number"
                 @keyup.enter="jumpToPage"
             />
-            <button
+            <BaseButton
                 :disabled="!isValidPageNumber || totalPages <= 1"
-                class="inline-flex items-center px-3 py-2 border border-gray-300 shadow-sm text-sm font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 disabled:opacity-50 disabled:cursor-not-allowed"
+                variant="white"
+                size="sm"
                 @click="jumpToPage"
                 title="Jump to page"
             >
               Go
-            </button>
+            </BaseButton>
           </div>
         </div>
       </div>
@@ -379,6 +393,7 @@
 import ShareDialog from "@/components/parts/ShareDialog.vue";
 import TagDeleteModal from "./TagDeleteModal.vue";
 import Loader from "../parts/Loader.vue";
+import BaseButton from "../parts/BaseButton.vue";
 import BulkStylingModal from "@/components/import/parts/BulkStylingModal.vue";
 import { createEmptyBulkOperations, cloneBulkOperations } from "@/utils/bulkOperations.js";
 import { sortTagsByPriority, sortUserTagsAlphabetically, isSystemTag } from "@/utils/tagUtils.js";
@@ -391,6 +406,7 @@ export default {
     ShareDialog,
     TagDeleteModal,
     Loader,
+    BaseButton,
     MagnifyingGlassIcon,
     ExclamationCircleIcon,
     TagIcon,

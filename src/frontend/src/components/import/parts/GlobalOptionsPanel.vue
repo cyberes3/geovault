@@ -22,25 +22,31 @@
       <!-- Buttons Section -->
       <div class="flex items-center gap-2 sm:ml-auto">
         <!-- Recheck Duplicates Button -->
-        <button
+        <BaseButton
           :disabled="isDisabled || isRecheckingDuplicates"
-          class="inline-flex items-center justify-center px-4 py-2 border border-blue-200 text-sm font-medium rounded-md text-blue-700 bg-blue-50 hover:bg-blue-100 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-300 disabled:bg-gray-100 disabled:hover:bg-gray-100 disabled:cursor-not-allowed transition-colors duration-200 whitespace-nowrap"
+          variant="secondary"
+          color="blue"
+          size="md"
+          no-wrap
           @click="$emit('recheck-duplicates')"
           title="Recheck for duplicate features"
         >
           <Loader v-if="isRecheckingDuplicates" size="sm" layout="inline" :showMessage="false" color="#1d4ed8" />
           {{ isRecheckingDuplicates ? 'Rechecking...' : 'Recheck Duplicates' }}
-        </button>
+        </BaseButton>
 
         <!-- Bulk Operations Button -->
-        <button
+        <BaseButton
           :disabled="isDisabled"
-          class="inline-flex items-center justify-center px-4 py-2 border border-blue-200 text-sm font-medium rounded-md text-blue-700 bg-blue-50 hover:bg-blue-100 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-300 disabled:bg-gray-100 disabled:hover:bg-gray-100 disabled:cursor-not-allowed transition-colors duration-200 whitespace-nowrap"
+          variant="secondary"
+          color="blue"
+          size="md"
+          no-wrap
           @click="$emit('open-bulk-operations')"
           title="Bulk Operations"
         >
           Bulk Operations
-        </button>
+        </BaseButton>
         <RectangleStackIcon v-if="hasBulkOperationsConfigured" class="w-5 h-5 text-blue-500 flex-shrink-0" />
       </div>
     </div>
@@ -49,6 +55,7 @@
 
 <script>
 import ToggleButton from '@/components/parts/ToggleButton.vue';
+import BaseButton from '@/components/parts/BaseButton.vue';
 import Loader from '@/components/parts/Loader.vue';
 import { RectangleStackIcon } from '@heroicons/vue/24/outline';
 
@@ -56,6 +63,7 @@ export default {
   name: 'GlobalOptionsPanel',
   components: {
     ToggleButton,
+    BaseButton,
     Loader,
     RectangleStackIcon
   },

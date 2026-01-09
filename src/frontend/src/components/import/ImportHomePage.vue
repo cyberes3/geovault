@@ -14,13 +14,17 @@
           <p class="text-gray-600">Manage your geospatial data imports and view processing history.</p>
         </div>
         <div class="flex flex-col sm:flex-row space-y-2 sm:space-y-0 sm:space-x-3 mt-4 sm:mt-0">
-          <router-link
+          <BaseButton
+            tag="router-link"
             to="/import/upload"
-            class="w-full sm:w-auto inline-flex items-center justify-center px-4 py-2 border border-transparent text-sm font-medium rounded-md text-white bg-blue-500 hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 transition-colors duration-200"
+            class="w-full sm:w-auto"
+            variant="primary"
+            color="blue"
+            size="md"
           >
             <ArrowUpTrayIcon class="w-4 h-4 mr-2" />
             Upload Files
-          </router-link>
+          </BaseButton>
         </div>
       </div>
     </div>
@@ -87,25 +91,27 @@
             of {{ importHistoryPagination.totalItems }}
           </div>
           <div class="flex items-center space-x-2">
-            <button
+            <BaseButton
               :disabled="!importHistoryPagination.hasPrevious || isLoadingHistoryPage || importHistoryPagination.totalPages <= 1"
-              class="inline-flex items-center px-3 py-2 border border-gray-300 shadow-sm text-sm font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 disabled:opacity-50 disabled:cursor-not-allowed"
+              variant="white"
+              size="sm"
               @click="previousPage"
               title="Go to previous page"
             >
               <ArrowLeftIcon class="w-4 h-4 mr-1" />
               Previous
-            </button>
+            </BaseButton>
             <span class="text-sm text-gray-700">Page {{ importHistoryPagination.page }} of {{ importHistoryPagination.totalPages }}</span>
-            <button
+            <BaseButton
               :disabled="!importHistoryPagination.hasNext || isLoadingHistoryPage || importHistoryPagination.totalPages <= 1"
-              class="inline-flex items-center px-3 py-2 border border-gray-300 shadow-sm text-sm font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 disabled:opacity-50 disabled:cursor-not-allowed"
+              variant="white"
+              size="sm"
               @click="nextPage"
               title="Go to next page"
             >
               Next
               <ArrowRightIcon class="w-4 h-4 ml-1" />
-            </button>
+            </BaseButton>
           </div>
         </div>
       </div>
@@ -118,6 +124,7 @@ import {mapState} from "vuex"
 import {IMPORT_HISTORY_URL} from "@/assets/js/import/url.js";
 import ImportTable from "@/components/import/parts/ImportTable.vue";
 import Loader from "@/components/parts/Loader.vue";
+import BaseButton from "@/components/parts/BaseButton.vue";
 import { ArrowUpTrayIcon, ArrowLeftIcon, ArrowRightIcon } from '@heroicons/vue/24/outline';
 import { formatDate } from "@/utils/dateUtils.js";
 
@@ -125,6 +132,7 @@ export default {
   components: {
     ImportTable: ImportTable,
     Loader,
+    BaseButton,
     ArrowUpTrayIcon,
     ArrowLeftIcon,
     ArrowRightIcon

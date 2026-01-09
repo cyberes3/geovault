@@ -80,9 +80,10 @@
                   readonly
                   class="flex-1 px-3 py-2 text-sm border border-gray-300 rounded-md bg-gray-50 text-gray-700 font-mono"
                 />
-                <button
+                <BaseButton
                   @click="copyToClipboard(share.url)"
-                  class="inline-flex items-center px-3 py-2 border border-gray-300 rounded-md text-sm font-medium text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500"
+                  variant="white"
+                  size="sm"
                   :title="copiedShareId === share.share_id ? 'Copied!' : 'Copy link'"
                 >
                   <svg v-if="copiedShareId !== share.share_id" class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -91,7 +92,7 @@
                   <svg v-else class="w-4 h-4 text-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"></path>
                   </svg>
-                </button>
+                </BaseButton>
               </div>
             </div>
 
@@ -137,13 +138,15 @@
 import axios from "axios";
 import { getCookie } from "@/assets/js/auth.js";
 import Loader from "@/components/parts/Loader.vue";
+import BaseButton from "@/components/parts/BaseButton.vue";
 import { formatDate } from "@/utils/dateUtils.js";
 import { toast } from '@/utils/toast'
 
 export default {
   name: 'SharingSettingsTab',
   components: {
-    Loader
+    Loader,
+    BaseButton
   },
   data() {
     return {

@@ -307,14 +307,16 @@
       <div v-else class="flex flex-col flex-1 min-h-0">
         <!-- Clear Results Button -->
         <div v-if="geocodingResults.length > 0" class="mb-2 px-1">
-          <button
+          <BaseButton
             @click="clearGeocodingSearch"
-            class="w-full px-2 py-1.5 text-xs text-blue-500 hover:text-blue-700 hover:bg-blue-50 rounded border border-blue-200 transition-colors"
+            class="w-full"
+            variant="white"
+            size="xs"
             type="button"
             title="Clear results and remove marker"
           >
             Clear Results
-          </button>
+          </BaseButton>
         </div>
         
         <div class="flex-1 select-none min-h-0">
@@ -354,6 +356,7 @@
 import {APIHOST} from '@/config.js'
 import { FunnelIcon, XMarkIcon, EyeSlashIcon } from '@heroicons/vue/24/outline'
 import Loader from '@/components/parts/Loader.vue'
+import BaseButton from '@/components/parts/BaseButton.vue'
 import { getGeometryTypeColor } from '@/utils/geometryColors.js'
 import { sortTagsByPriority, sortUserTagsAlphabetically, isSystemTag } from '@/utils/tagUtils.js'
 import { getIconUrl, resolveIconUrl, isSystemIcon } from '@/utils/map/iconUtils.ts'
@@ -365,6 +368,7 @@ export default {
   name: 'FeatureListSidebar',
   components: {
     Loader,
+    BaseButton,
     FunnelIcon,
     XMarkIcon,
     EyeSlashIcon,

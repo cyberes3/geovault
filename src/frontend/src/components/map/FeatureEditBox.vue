@@ -178,34 +178,41 @@
 
     <!-- Footer with Action Buttons (Sticky) -->
     <div class="sticky bottom-0 z-10 flex-none flex justify-between px-6 py-4 gap-3 border-t border-gray-200 bg-gray-50 sm:rounded-b-lg">
-      <button
+      <BaseButton
         type="button"
         @click="handleDelete"
         :disabled="isSaving"
-        class="px-3 py-2 text-sm font-medium text-white bg-red-600 border border-transparent rounded-md hover:bg-red-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-red-500 disabled:opacity-50 disabled:cursor-not-allowed"
+        variant="primary"
+        color="red"
+        size="sm"
         title="Delete feature"
       >
         Delete
-      </button>
+      </BaseButton>
       <div class="flex space-x-2 flex-1 md:flex-none justify-end">
-        <button
+        <BaseButton
           type="button"
           @click="$emit('cancel')"
           :disabled="isSaving"
-          class="px-3 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-md hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 disabled:opacity-50 disabled:cursor-not-allowed flex-1 md:flex-none"
+          variant="white"
+          size="sm"
+          class="flex-1 md:flex-none"
           title="Cancel editing"
         >
           Cancel
-        </button>
-        <button
+        </BaseButton>
+        <BaseButton
           type="button"
           @click="handleSubmit"
           :disabled="isSaving"
-          class="px-3 py-2 text-sm font-medium text-white bg-blue-600 border border-transparent rounded-md hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 disabled:opacity-50 disabled:cursor-not-allowed flex-1 md:flex-none"
+          variant="primary"
+          color="blue"
+          size="sm"
+          class="flex-1 md:flex-none"
           title="Save changes"
         >
           {{ isSaving ? 'Saving...' : 'Save' }}
-        </button>
+        </BaseButton>
       </div>
     </div>
 
@@ -234,6 +241,7 @@
 import {APIHOST} from '@/config.js'
 import ReplacementFeatureDialog from './ReplacementFeatureDialog.vue'
 import CoordinatesDialog from './CoordinatesDialog.vue'
+import BaseButton from '@/components/parts/BaseButton.vue'
 import TagPicker from '@/components/parts/TagPicker.vue'
 import ColorPickerElement from '@/components/parts/ColorPickerElement.vue'
 import IconSelector from '@/components/parts/IconSelector.vue'
@@ -257,6 +265,7 @@ export default {
   components: {
     ReplacementFeatureDialog,
     CoordinatesDialog,
+    BaseButton,
     TagPicker,
     ColorPicker: ColorPickerElement,
     IconSelector,

@@ -6,7 +6,7 @@
     @close="closeDialog"
   >
     <!-- Map Container -->
-    <div class="flex-1 bg-white min-h-0 flex flex-col overflow-hidden relative">
+    <div class="flex-1 bg-white min-h-0 flex flex-col overflow-hidden relative h-full">
       <!-- Map -->
       <div ref="mapContainer" class="flex-1 w-full border-0"></div>
 

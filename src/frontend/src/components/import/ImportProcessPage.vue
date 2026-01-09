@@ -43,14 +43,16 @@
             />
             <MagnifyingGlassIcon class="absolute left-3 top-1/2 transform -translate-y-1/2 h-5 w-5 text-gray-400" />
           </div>
-          <button
+          <BaseButton
               v-if="searchQuery"
               @click="clearSearch"
-              class="inline-flex items-center px-3 py-2 border border-gray-300 shadow-sm text-sm font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500"
+              variant="primary"
+              color="blue"
+              size="sm"
               title="Clear search"
           >
             <XMarkIcon class="w-4 h-4" />
-          </button>
+          </BaseButton>
         </div>
 
         <!-- Search Results -->
@@ -80,13 +82,16 @@
                       Page {{ result.page }}, Feature {{ result.feature_index + 1 }}
                     </div>
                   </div>
-                  <button
+                  <BaseButton
                       @click="goToSearchResult(result)"
-                      class="inline-flex items-center px-3 py-1.5 border border-gray-300 shadow-sm text-xs font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 whitespace-nowrap"
+                      variant="primary"
+                      color="blue"
+                      size="xs"
+                      no-wrap
                       title="Jump to Feature"
                   >
                     Jump to Feature
-                  </button>
+                  </BaseButton>
                 </div>
               </div>
             </div>
@@ -548,6 +553,7 @@ import {getCookie} from "@/assets/js/auth.js";
 import {APIHOST} from "@/config.js";
 // Removed flatpickr dependency - using native HTML5 date input
 import Loader from "@/components/parts/Loader.vue";
+import BaseButton from "@/components/parts/BaseButton.vue";
 import { sortUserTagsAlphabetically } from "@/utils/tagUtils.js";
 import ToggleButton from "@/components/parts/ToggleButton.vue";
 import MapPreviewDialog from "@/components/import/parts/MapPreviewDialog.vue";
@@ -674,6 +680,7 @@ export default {
   },
   components: {
     Loader,
+    BaseButton,
     ToggleButton,
     ImportTable: ImportTable,
     MapPreviewDialog,

@@ -9,26 +9,32 @@
     <!-- Bulk Import Controls -->
     <div v-if="filteredImportTable.length > 0 && !combinedLoading" class="mb-4">
       <div class="flex flex-col sm:flex-row sm:items-center space-y-2 sm:space-y-0 sm:space-x-3">
-        <button
+        <BaseButton
           @click="bulkImport"
           :disabled="validImportableCount === 0 || isBulkImporting || isBulkDeleting"
-          class="w-full sm:w-auto inline-flex items-center justify-center px-4 py-2 border border-transparent text-sm font-medium rounded-md text-white bg-green-600 hover:bg-green-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-green-500 transition-colors duration-200 disabled:opacity-50 disabled:cursor-not-allowed"
+          class="w-full sm:w-auto"
+          variant="primary"
+          color="green"
+          size="md"
           title="Import all selected items"
         >
           <Loader v-if="isBulkImporting" size="sm" layout="inline" :showMessage="false" />
           <ArrowUpTrayIcon v-else class="w-4 h-4 mr-2" />
           {{ isBulkImporting ? 'Importing...' : `Import ${validImportableCount} Item${validImportableCount === 1 ? '' : 's'}` }}
-        </button>
-        <button
+        </BaseButton>
+        <BaseButton
           @click="bulkDelete"
           :disabled="selectedItems.size === 0 || isBulkDeleting || isBulkImporting"
-          class="w-full sm:w-auto inline-flex items-center justify-center px-4 py-2 border border-transparent text-sm font-medium rounded-md text-white bg-red-600 hover:bg-red-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-red-500 transition-colors duration-200 disabled:opacity-50 disabled:cursor-not-allowed"
+          class="w-full sm:w-auto"
+          variant="primary"
+          color="red"
+          size="md"
           title="Delete all selected items"
         >
           <Loader v-if="isBulkDeleting" size="sm" layout="inline" :showMessage="false" color="white" />
           <TrashIcon v-else class="w-4 h-4 mr-2" />
           {{ isBulkDeleting ? 'Deleting...' : `Delete ${selectedItems.size} Item${selectedItems.size === 1 ? '' : 's'}` }}
-        </button>
+        </BaseButton>
       </div>
     </div>
 
@@ -190,24 +196,30 @@
           <!-- Actions -->
           <div class="flex-1 mb-2 md:mb-0 md:text-center md:min-w-0">
             <div class="flex flex-col sm:flex-row md:flex-row items-stretch sm:items-center md:items-center justify-start sm:justify-center md:justify-center space-y-2 sm:space-y-0 md:space-y-0 sm:space-x-2 md:space-x-2">
-              <button
+              <BaseButton
                 :disabled="item.imported || item.processing_failed || (item.processing === true || (item.processing === false && item.feature_count === -1)) || item.file_duplicate?.status === 'duplicate_in_queue' || item.deleting || item.importing"
-                class="w-full sm:w-auto md:w-auto inline-flex items-center justify-center px-3 py-1.5 border border-green-200 text-sm font-medium rounded-md text-green-700 bg-green-50 hover:bg-green-100 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-green-300 transition-colors duration-200 disabled:opacity-50 disabled:cursor-not-allowed disabled:bg-gray-100 disabled:hover:bg-gray-100"
+                class="w-full sm:w-auto md:w-auto"
+                variant="secondary"
+                color="green"
+                size="sm"
                 @click="importItem(item, index)"
                 title="Import this item"
               >
                 <ArrowUpTrayIcon class="w-4 h-4 mr-2" />
                 Import
-              </button>
-              <button
+              </BaseButton>
+              <BaseButton
                 :disabled="item.deleting || item.importing"
-                class="w-full sm:w-auto md:w-auto inline-flex items-center justify-center px-3 py-1.5 border border-red-200 text-sm font-medium rounded-md text-red-700 bg-red-50 hover:bg-red-100 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-red-300 transition-colors duration-200 disabled:opacity-50 disabled:cursor-not-allowed disabled:bg-gray-100 disabled:hover:bg-gray-100"
+                class="w-full sm:w-auto md:w-auto"
+                variant="secondary"
+                color="red"
+                size="sm"
                 @click="deleteItem(item, index)"
                 title="Delete this item"
               >
                 <TrashIcon class="w-4 h-4 mr-2" />
                 Delete
-              </button>
+              </BaseButton>
             </div>
           </div>
         </div>
@@ -224,6 +236,7 @@ import {getCookie} from "@/assets/js/auth.js";
 import {realtimeSocket} from "@/assets/js/websocket/realtimeSocket.js";
 import { toggleSetItem } from "@/assets/js/toggle-utils.js";
 import Loader from "@/components/parts/Loader.vue";
+import BaseButton from "@/components/parts/BaseButton.vue";
 import StatusBadge from "@/components/import/parts/StatusBadge.vue";
 import { ArrowUpTrayIcon, TrashIcon, XMarkIcon } from '@heroicons/vue/24/outline';
 
@@ -274,6 +287,7 @@ export default {
   },
   components: {
     Loader,
+    BaseButton,
     StatusBadge,
     ArrowUpTrayIcon,
     TrashIcon

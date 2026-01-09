@@ -40,15 +40,17 @@
         ]">
           {{ passwordMessage }}
         </div>
-        <button
+        <BaseButton
           type="submit"
           :disabled="passwordLoading"
-          class="inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md text-white bg-blue-500 hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 disabled:opacity-50 disabled:cursor-not-allowed"
+          variant="primary"
+          color="blue"
+          size="sm"
           title="Change password"
         >
           <span v-if="passwordLoading">Changing...</span>
           <span v-else>Change Password</span>
-        </button>
+        </BaseButton>
       </form>
     </div>
 
@@ -77,16 +79,17 @@
             </template>
           </div>
           <div class="relative group" v-if="!emailStatusLoading && emailStatus && !emailStatus.verified">
-            <button
+            <BaseButton
               @click="handleResendVerification"
               :disabled="resendLoading || resendCooldown > 0"
               :title="resendCooldown > 0 ? `Please wait ${resendCooldown} second${resendCooldown !== 1 ? 's' : ''} before resending` : 'Resend verification email'"
-              class="inline-flex items-center px-3 py-1.5 border border-gray-300 shadow-sm text-sm font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 disabled:opacity-50 disabled:cursor-not-allowed relative"
+              variant="white"
+              size="sm"
             >
               <span v-if="resendLoading">Sending...</span>
               <span v-else-if="resendCooldown > 0">Resend ({{ resendCooldown }}s)</span>
               <span v-else>Resend Verification</span>
-            </button>
+            </BaseButton>
             <div
               v-if="resendCooldown > 0"
               class="absolute z-10 px-2 py-1 text-xs text-white bg-gray-900 rounded shadow-lg bottom-full mb-2 left-1/2 transform -translate-x-1/2 whitespace-nowrap pointer-events-none opacity-0 group-hover:opacity-100 transition-opacity duration-200"
@@ -129,15 +132,17 @@
         {{ downloadMessage }}
       </div>
 
-      <button
+      <BaseButton
         @click="handleDownloadFeatures"
         :disabled="downloadLoading"
-        class="inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md text-white bg-blue-500 hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 disabled:opacity-50 disabled:cursor-not-allowed"
+        variant="primary"
+        color="blue"
+        size="sm"
         title="Download all features as KMZ"
       >
         <span v-if="downloadLoading">Preparing Download...</span>
         <span v-else>Download All Features (KMZ)</span>
-      </button>
+      </BaseButton>
     </div>
 
     <!-- Account Settings Section -->
@@ -191,15 +196,17 @@
           ]">
             {{ apiKeyMessage }}
           </div>
-          <button
+          <BaseButton
             type="submit"
             :disabled="createKeyLoading"
-            class="inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md text-white bg-blue-500 hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 disabled:opacity-50 disabled:cursor-not-allowed"
+            variant="primary"
+            color="blue"
+            size="sm"
             title="Create new API key"
           >
             <span v-if="createKeyLoading">Creating...</span>
             <span v-else>Create API Key</span>
-          </button>
+          </BaseButton>
         </form>
 
         <!-- Display raw key after creation (shown only once) -->
@@ -216,12 +223,14 @@
               ref="newKeyInput"
               @focus="$event.target.select()"
             />
-            <button
+            <BaseButton
               @click="copyApiKey"
-              class="px-3 py-2 text-sm font-medium text-white bg-blue-500 hover:bg-blue-700 rounded-md border border-transparent focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500"
+              variant="primary"
+              color="blue"
+              size="sm"
             >
               Copy
-            </button>
+            </BaseButton>
           </div>
         </div>
       </div>
@@ -255,15 +264,17 @@
                   <div v-else class="text-gray-400">Never used</div>
                 </div>
               </div>
-              <button
+              <BaseButton
                 @click="handleDeleteApiKey(key.id)"
                 :disabled="deleteKeyLoading === key.id"
-                class="px-3 py-1.5 text-sm font-medium text-red-700 bg-red-50 hover:bg-red-100 rounded-md border border-red-200 disabled:opacity-50 disabled:cursor-not-allowed"
+                variant="secondary"
+                color="red"
+                size="sm"
                 title="Delete this API key"
               >
                 <span v-if="deleteKeyLoading === key.id">Deleting...</span>
                 <span v-else>Delete</span>
-              </button>
+              </BaseButton>
             </div>
           </div>
         </div>
@@ -279,13 +290,15 @@ import settingsConfig from "@/components/settings-data.json";
 import SettingsMixin from "./mixins/SettingsMixin.js";
 import SettingsInput from "./components/SettingsInput.vue";
 import Loader from "@/components/parts/Loader.vue";
+import BaseButton from "@/components/parts/BaseButton.vue";
 import { formatDate } from "@/utils/dateUtils.js";
 
 export default {
   name: 'AccountSettingsTab',
   components: {
     SettingsInput,
-    Loader
+    Loader,
+    BaseButton
   },
   mixins: [SettingsMixin],
   props: {

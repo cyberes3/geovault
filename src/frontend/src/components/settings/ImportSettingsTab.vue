@@ -21,16 +21,19 @@
     <div class="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
       <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between mb-6 gap-4">
         <h2 class="text-xl font-semibold text-gray-900">CalTopo Integration</h2>
-        <button
+        <BaseButton
           @click="showSetupModal = true"
-          class="w-full sm:w-auto inline-flex items-center justify-center px-3 py-1.5 border border-transparent shadow-sm text-sm font-medium rounded-md text-white bg-blue-600 hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500"
+          class="w-full sm:w-auto"
+          variant="primary"
+          color="blue"
+          size="sm"
           title="How to set up CalTopo integration"
         >
           <svg class="w-4 h-4 mr-1.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
           </svg>
           Setup Instructions
-        </button>
+        </BaseButton>
       </div>
 
       <div class="space-y-6">
@@ -51,12 +54,14 @@
               </svg>
               <span class="text-sm font-medium text-green-800">Connected to CalTopo</span>
             </div>
-            <button
+            <BaseButton
               @click="disconnectCaltopo"
-              class="inline-flex items-center px-3 py-1.5 border border-red-300 text-sm font-medium rounded-md text-red-700 bg-white hover:bg-red-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-red-500"
+              variant="white"
+              size="sm"
+              class="border-red-300 text-red-700 hover:bg-red-50 focus:ring-red-500"
             >
               Disconnect
-            </button>
+            </BaseButton>
           </div>
         </div>
 
@@ -69,12 +74,14 @@
               </svg>
               <span class="text-sm font-medium text-yellow-800">Invalid CalTopo credentials</span>
             </div>
-            <button
+            <BaseButton
               @click="disconnectCaltopo"
-              class="inline-flex items-center px-3 py-1.5 border border-red-300 text-sm font-medium rounded-md text-red-700 bg-white hover:bg-red-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-red-500"
+              variant="white"
+              size="sm"
+              class="border-red-300 text-red-700 hover:bg-red-50 focus:ring-red-500"
             >
               Disconnect
-            </button>
+            </BaseButton>
           </div>
           <p class="text-xs text-yellow-700 mt-2">Your stored credentials are no longer valid. Please reconnect with new credentials.</p>
         </div>
@@ -88,14 +95,16 @@
               </svg>
               <span class="text-sm font-medium text-yellow-800">CalTopo request timed out</span>
             </div>
-            <button
+            <BaseButton
               @click="checkConnectionStatus"
               :disabled="connectionStatus.checking"
-              class="inline-flex items-center px-3 py-1.5 border border-yellow-300 text-sm font-medium rounded-md text-yellow-700 bg-white hover:bg-yellow-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-yellow-500 disabled:opacity-50 disabled:cursor-not-allowed"
+              variant="white"
+              size="sm"
+              class="border-yellow-300 text-yellow-700 hover:bg-yellow-50 focus:ring-yellow-500"
             >
               <span v-if="connectionStatus.checking">Retrying...</span>
               <span v-else>Retry</span>
-            </button>
+            </BaseButton>
           </div>
           <p class="text-xs text-yellow-700 mt-2">Unable to verify credentials. Please try again.</p>
         </div>
@@ -148,14 +157,16 @@
         ]">
           {{ connectMessage }}
         </div>
-        <button
+        <BaseButton
           type="submit"
           :disabled="connecting"
-          class="inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md text-white bg-blue-500 hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 disabled:opacity-50"
+          variant="primary"
+          color="blue"
+          size="sm"
         >
           <span v-if="connecting">Connecting...</span>
           <span v-else>Connect to CalTopo</span>
-        </button>
+        </BaseButton>
         </form>
 
         <!-- API Status Box -->
@@ -245,22 +256,29 @@
             Features in {{ selectedMapTitle }} ({{ features.length }})
           </h3>
           <div class="relative w-full sm:w-auto flex flex-col sm:flex-row gap-2">
-            <button
+            <BaseButton
               v-if="!mapInQueue"
               @click="handleImportMap"
               :disabled="importingMap"
-              class="w-full sm:w-auto inline-flex items-center justify-center px-4 py-2 border border-transparent text-sm font-medium rounded-md text-white bg-blue-600 hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 disabled:opacity-50 disabled:cursor-not-allowed"
+              class="w-full sm:w-auto"
+              variant="primary"
+              color="blue"
+              size="md"
             >
               <span v-if="importingMap">Importing...</span>
               <span v-else>Import Entire Map</span>
-            </button>
-            <router-link
+            </BaseButton>
+            <BaseButton
               v-if="mapInQueue && importQueueId"
+              tag="router-link"
               :to="`/import/process/${importQueueId}`"
-              class="w-full sm:w-auto inline-flex items-center justify-center px-4 py-2 border border-transparent text-sm font-medium rounded-md text-white bg-blue-600 hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500"
+              class="w-full sm:w-auto"
+              variant="primary"
+              color="blue"
+              size="md"
             >
               View in Queue
-            </router-link>
+            </BaseButton>
           </div>
         </div>
 
@@ -278,24 +296,30 @@
                 {{ feature.properties?.class || 'Unknown' }} • ID: {{ feature.id }}
               </div>
             </div>
-            <button
+            <BaseButton
               v-if="!feature.is_imported"
               @click="handleImportFeature(feature)"
               :disabled="importingFeatures[feature.id] || mapInQueue || importingMap || !feature.is_valid"
               :title="getFeatureButtonTooltip(feature)"
-              class="ml-4 inline-flex items-center px-3 py-1.5 border border-transparent text-xs font-medium rounded-md text-white bg-blue-500 hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 disabled:opacity-50 disabled:cursor-not-allowed"
+              class="ml-4"
+              variant="primary"
+              color="blue"
+              size="xs"
             >
               <span v-if="importingFeatures[feature.id]">Importing...</span>
               <span v-else-if="!feature.is_valid">Unsupported</span>
               <span v-else>Import</span>
-            </button>
-            <button
+            </BaseButton>
+            <BaseButton
               v-else
               @click="handleViewInMap(feature)"
-              class="ml-4 inline-flex items-center px-3 py-1.5 border border-transparent text-xs font-medium rounded-md text-white bg-blue-500 hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500"
+              class="ml-4"
+              variant="primary"
+              color="blue"
+              size="xs"
             >
               View in Map
-            </button>
+            </BaseButton>
           </div>
         </div>
       </div>
@@ -338,6 +362,7 @@ import { APIHOST } from '@/config.js'
 import { getCookie } from '@/assets/js/auth.js'
 import { ChevronDownIcon, Bars3Icon, XMarkIcon } from '@heroicons/vue/24/outline'
 import CaltopoSetupModal from './CaltopoSetupModal.vue'
+import BaseButton from '@/components/parts/BaseButton.vue'
 import Loader from '@/components/parts/Loader.vue'
 import { toast } from '@/utils/toast'
 import settingsConfig from '@/components/settings-data.json'
@@ -351,6 +376,7 @@ export default {
     Bars3Icon,
     XMarkIcon,
     CaltopoSetupModal,
+    BaseButton,
     Loader,
     SettingsInput
   },

@@ -6,14 +6,17 @@
         <div>
           <h1 class="text-xl sm:text-2xl font-bold text-gray-900 mb-1 sm:mb-2">Collections</h1>
         </div>
-        <button
+        <BaseButton
             @click="openCreateDialog"
-            class="w-full sm:w-auto inline-flex items-center justify-center px-4 py-2 border border-transparent text-sm font-medium rounded-md shadow-sm text-white bg-blue-600 hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500"
+            class="w-full sm:w-auto"
+            variant="primary"
+            color="blue"
+            size="md"
             title="Create a new collection"
         >
           <PlusIcon class="w-5 h-5 mr-2" />
           Create New Collection
-        </button>
+        </BaseButton>
       </div>
 
       <!-- Explanatory Text -->
@@ -45,12 +48,14 @@
         <h3 class="mt-2 text-sm font-medium text-gray-900">No collections found</h3>
         <p class="mt-1 text-sm text-gray-500">Create your first collection to organize your features.</p>
         <div class="mt-6">
-          <button
+          <BaseButton
               @click="openCreateDialog"
-              class="inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md shadow-sm text-white bg-blue-500 hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500"
+              variant="primary"
+              color="blue"
+              size="md"
           >
             Create New Collection
-          </button>
+          </BaseButton>
         </div>
       </div>
     </div>
@@ -67,7 +72,7 @@
             <h3 class="text-base sm:text-lg font-semibold text-gray-900 truncate flex-1">{{ collection.name }}</h3>
             <div class="flex items-center space-x-1 ml-2">
               <button
-                  class="p-2 sm:p-1.5 min-w-[44px] min-h-[44px] sm:min-w-0 sm:min-h-0 text-gray-400 hover:text-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-1 rounded"
+                  class="p-2 sm:p-1.5 min-w-[44px] min-h-[44px] sm:min-w-0 sm:min-h-0 text-blue-600 hover:text-blue-500 hover:bg-blue-50 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-1 rounded transition-colors"
                   title="Share collection"
                   type="button"
                   @click.stop.prevent="openShareDialog(collection)"
@@ -76,7 +81,7 @@
                 <ShareIcon class="w-4 h-4" />
               </button>
               <button
-                  class="p-2 sm:p-1.5 min-w-[44px] min-h-[44px] sm:min-w-0 sm:min-h-0 text-gray-400 hover:text-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-1 rounded"
+                  class="p-2 sm:p-1.5 min-w-[44px] min-h-[44px] sm:min-w-0 sm:min-h-0 text-blue-600 hover:text-blue-500 hover:bg-blue-50 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-1 rounded transition-colors"
                   title="Download Collection KMZ"
                   type="button"
                   @click.stop.prevent="downloadCollectionKmz(collection)"
@@ -85,7 +90,7 @@
                 <ArrowDownTrayIcon class="w-4 h-4" />
               </button>
               <button
-                  class="p-2 sm:p-1.5 min-w-[44px] min-h-[44px] sm:min-w-0 sm:min-h-0 text-gray-400 hover:text-gray-600 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-1 rounded"
+                  class="p-2 sm:p-1.5 min-w-[44px] min-h-[44px] sm:min-w-0 sm:min-h-0 text-blue-600 hover:text-blue-500 hover:bg-blue-50 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-1 rounded transition-colors"
                   title="Edit collection"
                   type="button"
                   @click.stop.prevent="openEditDialog(collection)"
@@ -94,7 +99,7 @@
                 <PencilIcon class="w-4 h-4" />
               </button>
               <button
-                  class="p-2 sm:p-1.5 min-w-[44px] min-h-[44px] sm:min-w-0 sm:min-h-0 text-gray-400 hover:text-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-1 rounded"
+                  class="p-2 sm:p-1.5 min-w-[44px] min-h-[44px] sm:min-w-0 sm:min-h-0 text-blue-600 hover:text-blue-500 hover:bg-blue-50 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-1 rounded transition-colors"
                   title="Bulk style features in this collection"
                   type="button"
                   @click.stop.prevent="openBulkOperationsModal(collection)"
@@ -103,7 +108,7 @@
                 <RectangleStackIcon class="w-4 h-4" />
               </button>
               <button
-                  class="p-2 sm:p-1.5 min-w-[44px] min-h-[44px] sm:min-w-0 sm:min-h-0 text-gray-400 hover:text-red-600 focus:outline-none focus:ring-2 focus:ring-red-500 focus:ring-offset-1 rounded"
+                  class="p-2 sm:p-1.5 min-w-[44px] min-h-[44px] sm:min-w-0 sm:min-h-0 text-blue-600 hover:text-blue-500 hover:bg-blue-50 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-1 rounded transition-colors"
                   title="Delete collection"
                   type="button"
                   @click.stop.prevent="deleteCollection(collection)"
@@ -126,14 +131,17 @@
           </div>
 
           <div class="mt-auto flex flex-col sm:flex-row gap-2">
-            <button
+            <BaseButton
                 @click="viewOnMap(collection.id)"
-                class="flex-1 inline-flex items-center justify-center px-3 py-2 border border-gray-300 shadow-sm text-sm font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500"
+                class="flex-1"
+                variant="primary"
+                color="blue"
+                size="sm"
                 title="View collection on map"
             >
               <MapIcon class="w-4 h-4 mr-2" />
               View on Map
-            </button>
+            </BaseButton>
           </div>
         </div>
       </div>
@@ -173,6 +181,7 @@ import { getCookie } from "@/assets/js/auth.js";
 import CollectionDialog from "./CollectionDialog.vue";
 import ShareDialog from "@/components/parts/ShareDialog.vue";
 import Loader from "../parts/Loader.vue";
+import BaseButton from "../parts/BaseButton.vue";
 import BulkStylingModal from "@/components/import/parts/BulkStylingModal.vue";
 import { createEmptyBulkOperations, cloneBulkOperations } from "@/utils/bulkOperations.js";
 import { PlusIcon, ExclamationCircleIcon, FolderIcon, ShareIcon, ArrowDownTrayIcon, PencilIcon, TrashIcon, TagIcon, MapIcon, RectangleStackIcon } from '@heroicons/vue/24/outline';
@@ -183,6 +192,7 @@ export default {
     CollectionDialog,
     ShareDialog,
     Loader,
+    BaseButton,
     PlusIcon,
     ExclamationCircleIcon,
     FolderIcon,
