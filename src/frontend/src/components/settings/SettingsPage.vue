@@ -78,14 +78,33 @@
                 Import
               </div>
             </button>
+            <button
+                v-for="tab in extensionRegistry.settingsTabs"
+                :key="tab.id"
+                @click="activeTab = tab.id"
+                :class="[
+                'w-full text-left px-4 py-3 rounded-md text-sm font-medium transition-colors duration-200',
+                activeTab === tab.id
+                  ? 'bg-blue-50 text-blue-700 border-l-4 border-blue-500'
+                  : 'text-gray-700 hover:bg-gray-50'
+              ]"
+                :title="tab.label"
+            >
+              <div class="flex items-center text-sm font-medium">
+                <component v-if="tab.icon" :is="tab.icon" class="w-5 h-5 mr-3 transition-colors duration-200" />
+                <svg v-else class="w-5 h-5 mr-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6V4m0 2a2 2 0 100 4m0-4a2 2 0 110 4m-6 8a2 2 0 100-4m0 4a2 2 0 110-4m0 4v2m0-6V4m6 6v10m6-2a2 2 0 100-4m0 4a2 2 0 110-4m0 4v2m0-6V4"></path>
+                </svg>
+                {{ tab.label }}
+              </div>
+            </button>
           </nav>
         </div>
       </div>
-
       <!-- Tab Content -->
       <div class="flex-1">
         <keep-alive>
-          <component :is="currentTabComponent" />
+          <component :is="resolvedComponent" />
         </keep-alive>
       </div>
     </div>
@@ -97,6 +116,8 @@ import AccountSettingsTab from "./AccountSettingsTab.vue";
 import MapSettingsTab from "./MapSettingsTab.vue";
 import SharingSettingsTab from "./SharingSettingsTab.vue";
 import ImportSettingsTab from "./ImportSettingsTab.vue";
+import { extensionRegistry } from "@/utils/extensionRegistry.js";
+import { markRaw } from 'vue';
 
 export default {
   name: 'Settings',
@@ -109,28 +130,35 @@ export default {
   data() {
     return {
       activeTab: 'account',
-      isInitializing: true
+      isInitializing: true,
+      extensionRegistry
     }
   },
   computed: {
-    currentTabComponent() {
-      const components = {
+    resolvedComponent() {
+      const nativeComponents = {
         'account': 'AccountSettingsTab',
         'map': 'MapSettingsTab',
         'sharing': 'SharingSettingsTab',
         'import': 'ImportSettingsTab'
       };
-      return components[this.activeTab] || 'AccountSettingsTab';
+      
+      if (nativeComponents[this.activeTab]) {
+        return nativeComponents[this.activeTab];
+      }
+      
+      const extTab = this.extensionRegistry.settingsTabs.find(t => t.id === this.activeTab);
+      return extTab ? markRaw(extTab.component) : 'AccountSettingsTab';
+    },
+    allTabIds() {
+      const nativeIds = ['account', 'map', 'sharing', 'import'];
+      const extIds = this.extensionRegistry.settingsTabs.map(t => t.id);
+      return [...nativeIds, ...extIds];
     }
   },
   watch: {
     activeTab(newTab) {
-      // Update URL query parameter when tab changes (but not during initialization)
-      // Only update if we're on the /settings route
       if (!this.isInitializing && this.$route.path === '/settings' && this.$route.query.tab !== newTab) {
-        // Use push instead of replace so tab changes create history entries
-        // This allows back button to navigate through tabs
-        // Only include the tab param, don't spread other query params
         this.$router.push({
           path: '/settings',
           query: { tab: newTab }
@@ -138,17 +166,12 @@ export default {
       }
     },
     '$route.query.tab'(newTab) {
-      // Only process tab changes when on /settings route
-      if (this.$route.path !== '/settings') {
-        return;
-      }
-      // Update activeTab when route query parameter changes
-      if (newTab && ['account', 'map', 'sharing', 'import'].includes(newTab)) {
+      if (this.$route.path !== '/settings') return;
+      if (newTab && this.allTabIds.includes(newTab)) {
         if (this.activeTab !== newTab) {
           this.activeTab = newTab;
         }
       } else if (!newTab && this.activeTab !== 'account') {
-        // Default to 'account' if no tab query parameter
         this.activeTab = 'account';
       }
     }

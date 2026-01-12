@@ -153,6 +153,28 @@ class ExtensionRegistry:
             # Attach it to the module
             setattr(module, class_name, dynamic_app_config)
             
+            # Store metadata for API
+            frontend_entry = None
+            # Standard Vite build entry point: src/frontend/dist/assets/index-xxxxxxxx.js 
+            # or we might expect a consistent name like index.js if using a specific build config
+            # Let's check for dist/assets/index.js (or similar)
+            dist_path = extension_path / 'src' / 'frontend' / 'dist'
+            if dist_path.exists():
+                # Locate the entry point in assets/
+                assets_dir = dist_path / 'assets'
+                if assets_dir.exists():
+                    # Find first .js file that looks like an entry point
+                    js_files = list(assets_dir.glob('index*.js'))
+                    if js_files:
+                        frontend_entry = f"/extensions/static/{extension_path.name}/src/frontend/dist/assets/{js_files[0].name}"
+
+            self.loaded_extensions[ext_name] = {
+                'name': ext_name,
+                'version': manifest.version,
+                'description': getattr(manifest, 'description', ''),
+                'frontend_entry': frontend_entry
+            }
+
             full_class_path = f"{module_name}.{class_name}"
             logger.debug(f"Created dynamic AppConfig: {full_class_path}")
             
@@ -162,6 +184,10 @@ class ExtensionRegistry:
             logger.error(f"Failed to create dynamic AppConfig for {ext_name}: {e}")
             # Fallback to just the module name, but this might lead to table name issues
             return module_name
+
+    def get_active_extensions(self) -> List[Dict[str, Any]]:
+        """Returns metadata for all loaded and enabled extensions."""
+        return list(self.loaded_extensions.values())
 
 
 _registry: Optional[ExtensionRegistry] = None

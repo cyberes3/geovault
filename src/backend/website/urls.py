@@ -25,6 +25,9 @@ from website.views import index
 # Set custom exception handler
 handler500 = custom_exception_handler
 
+from django.views.static import serve
+from website.settings import EXTENSIONS_DIR
+
 urlpatterns = [
     path('', index, name='index'),  # Root route
     # Block access to /accounts/email/ and redirect to frontend settings
@@ -33,8 +36,9 @@ urlpatterns = [
     path('admin/', admin.site.urls),
     path('', include("users.urls")),
     path('api/', include("api.urls")),
+    re_path(r'^extensions/static/(?P<path>.*)$', serve, {'document_root': EXTENSIONS_DIR}),
     # Catch-all route for Vue.js router (must be last)
     # Serves index.html for any route that doesn't match above patterns
     # Vue router uses hash-based routing, so this handles direct navigation to non-API routes
-    re_path(r'^(?!api/|admin/|accounts/|static/).+$', index),
+    re_path(r'^(?!api/|admin/|accounts/|static/|extensions/static/).+$', index),
 ]

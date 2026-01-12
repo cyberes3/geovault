@@ -173,4 +173,5 @@ urlpatterns = [
     path('caltopo/maps/<str:map_id>/features/', get_caltopo_map_features),
     path('caltopo/import/feature/', import_caltopo_feature),
     path('caltopo/import/map/', import_caltopo_map),
+    path('extensions/', list_extensions),
 ]
