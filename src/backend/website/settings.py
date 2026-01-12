@@ -53,6 +53,17 @@ ADDITIONAL_CORS_ORIGINS = config.get_list('security.additional_cors_origins', []
 
 # Application definition
 
+# Extension Loader
+from website.extension_loader import discover_extensions
+# Extensions directory: src/backend/extensions
+EXTENSIONS_DIR = BASE_DIR / 'extensions'
+# Add to sys.path
+if str(EXTENSIONS_DIR) not in sys.path:
+    sys.path.insert(0, str(EXTENSIONS_DIR))
+
+# Discover extensions
+_extension_apps = discover_extensions(EXTENSIONS_DIR)
+
 INSTALLED_APPS = [
     'daphne',
     'channels',
@@ -70,7 +81,7 @@ INSTALLED_APPS = [
     'allauth',
     'allauth.account',
     'allauth.socialaccount',
-]
+] + _extension_apps
 
 MIDDLEWARE = [
     'django.middleware.security.SecurityMiddleware',
