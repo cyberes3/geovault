@@ -163,15 +163,14 @@
 
       </div>
 
-      <!-- Center to User Location Button -->
-      <button
-          v-if="userLocation && !isPublicShareMode"
-          class="absolute z-10 bottom-4 left-4 p-2 bg-white border border-gray-200 rounded shadow-md hover:bg-gray-50 text-gray-700 transition-colors"
-          title="Center map to your location"
-          @click="centerToUserLocation"
-      >
-        <HomeIcon class="w-5 h-5"/>
-      </button>
+      <!-- Location and Home Controls -->
+      <LocationControl
+          v-if="!isPublicShareMode"
+          class="absolute z-10 bottom-4 left-4"
+          :tracking-state="trackingState"
+          @toggle-location="toggleLocationTracking"
+          @go-home="centerToHomeExtent"
+      />
     </div>
 
       <!-- Right Sidebar - Map Controls -->
@@ -224,6 +223,7 @@ import FeatureInfoBox from './FeatureInfoBox.vue'
 import MapErrorOverlay from './MapErrorOverlay.vue'
 import MapLoadingIndicator from './MapLoadingIndicator.vue'
 import MobileControlsBar from './MobileControlsBar.vue'
+import LocationControl from './LocationControl.vue'
 import { toast } from '@/utils/toast'
 
 // Lazy-loaded components - only loaded when needed
@@ -233,7 +233,7 @@ const ElevationProfileDialog = defineAsyncComponent(() => import('./ElevationPro
 const QuickPointDialog = defineAsyncComponent(() => import('./QuickPointDialog.vue'))
 const ShareDialog = defineAsyncComponent(() => import('@/components/parts/ShareDialog.vue'))
 
-import {HomeIcon, ExclamationCircleIcon, ShareIcon, FolderIcon, ListBulletIcon, Cog6ToothIcon} from '@heroicons/vue/24/outline'
+import {ExclamationCircleIcon, ShareIcon, FolderIcon, ListBulletIcon, Cog6ToothIcon} from '@heroicons/vue/24/outline'
 import {
   getBoundingBoxKey,
   getBoundingBoxString,
@@ -246,8 +246,12 @@ import {
   addFeaturesToMap,
   updateMapLayerSource,
   filterPointsOnBorders,
-  updateSmallFeatureFlags
+  updateSmallFeatureFlags,
+  createUserLocationMarker,
+  updateUserLocationMarker,
+  removeUserLocationMarker
 } from '@/utils/map/maplibre'
+import { geolocationManager } from '@/utils/map/geolocationManager'
 import {
   restoreGeoJsonFeatures,
   restoreMapView,
@@ -282,7 +286,7 @@ export default {
     MapLoadingIndicator,
     QuickPointDialog,
     MobileControlsBar,
-    HomeIcon,
+    LocationControl,
     ExclamationCircleIcon,
     ShareIcon,
     FolderIcon,
@@ -469,6 +473,10 @@ export default {
       savedMapPitch: null,
       savedMapBearing: null,
       geocodingMarker: null, // Marker for forward geocoding search results
+      trackingState: 'disabled', // 'disabled', 'tracking', 'locked'
+      locationMarker: null,
+      isAutoMoving: false,
+      hasInitialZoomed: false, // Track if we've done the initial zoom
     }
   },
   methods: {
@@ -552,6 +560,12 @@ export default {
       this.map.on('move', () => {
         this.cancelPendingBboxQuery()
         this.isMapMoving = true
+
+        // If map is locked to user location and user manually moves the map, unlock it
+        if (this.trackingState === 'locked' && !this.isAutoMoving) {
+          this.trackingState = 'tracking'
+        }
+
         if (this.movementTimeout) clearTimeout(this.movementTimeout)
         this.movementTimeout = setTimeout(() => {
           this.isMapMoving = false
@@ -2426,7 +2440,7 @@ export default {
         this.map.once('moveend', onMoveEnd)
       })
     },
-    centerToUserLocation() {
+    centerToHomeExtent() {
       if (!this.map) return
 
       // State level zoom (shows entire state)
@@ -2460,6 +2474,93 @@ export default {
           duration: 500
         })
       })
+    },
+    async toggleLocationTracking() {
+      if (this.trackingState === 'locked') {
+        return
+      }
+
+      if (this.trackingState === 'disabled') {
+        // Start tracking
+        const permission = await geolocationManager.checkPermission()
+        if (permission === 'denied') {
+          toast.error('Location permission denied. Please enable it in your browser settings.')
+          return
+        }
+
+        this.trackingState = 'locked'
+        this.hasInitialZoomed = false // Reset flag for initial zoom
+        geolocationManager.startTracking(
+          (coords) => this.handleLocationUpdate(coords),
+          (error) => this.handleLocationError(error)
+        )
+      } else {
+        // If already tracking, just snap and lock (pan only, no zoom)
+        this.trackingState = 'locked'
+        if (this.userLocation) {
+          this.centerToUserLocation(false) // false = pan only, no zoom
+        }
+      }
+    },
+    handleLocationUpdate(coords) {
+      this.userLocation = coords
+
+      if (!this.locationMarker && this.map) {
+        this.locationMarker = createUserLocationMarker(this.map, coords)
+      } else if (this.locationMarker) {
+        updateUserLocationMarker(this.locationMarker, coords)
+      }
+
+      if (this.trackingState === 'locked') {
+        // On initial activation, zoom to 10. After that, only pan.
+        const shouldZoom = !this.hasInitialZoomed
+        this.centerToUserLocation(shouldZoom)
+        if (shouldZoom) {
+          this.hasInitialZoomed = true
+        }
+      }
+    },
+    handleLocationError(error) {
+      console.error('Geolocation error:', error)
+      this.trackingState = 'disabled'
+      this.hasInitialZoomed = false // Reset flag when tracking stops
+      if (this.locationMarker) {
+        removeUserLocationMarker(this.locationMarker)
+        this.locationMarker = null
+      }
+
+      if (error.code === 1) { // PERMISSION_DENIED
+        toast.error('Location permission denied.')
+      } else {
+        toast.error('Failed to get your location.')
+      }
+    },
+    centerToUserLocation(shouldZoom = true) {
+      if (!this.map || !this.userLocation) return
+
+      const { latitude, longitude } = this.userLocation
+      if (latitude == null || longitude == null) return
+
+      this.isAutoMoving = true
+      
+      if (shouldZoom) {
+        // Initial activation: zoom to 10
+        this.map.flyTo({
+          center: [longitude, latitude],
+          zoom: 10,
+          duration: 500
+        })
+      } else {
+        // Subsequent updates: pan only (keep current zoom)
+        this.map.panTo([longitude, latitude], {
+          duration: 500
+        })
+      }
+
+      // Reset auto-moving flag after animation
+      setTimeout(() => {
+        this.isAutoMoving = false
+      }, 600)
     },
     zoomToFeature(feature) {
       if (!this.map || !feature) {
@@ -3952,6 +4053,15 @@ export default {
       this.labelMarkerManager.clear()
       this.labelMarkerManager = null
     }
+
+    // Stop location tracking
+    geolocationManager.stopTracking()
+    this.hasInitialZoomed = false // Reset flag
+    if (this.locationMarker) {
+      removeUserLocationMarker(this.locationMarker)
+      this.locationMarker = null
+    }
+
     if (this.map) {
       this.map.remove()
       this.map = null
