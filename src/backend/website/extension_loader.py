@@ -24,6 +24,9 @@ class ExtensionRegistry:
         """
         Scans the extensions directory and returns a list of Django app configs
         or module paths to be added to INSTALLED_APPS.
+        
+        Raises:
+            SystemExit: If duplicate extension names are detected
         """
         if not self.extensions_dir.exists():
             logger.warning(f"Extensions directory not found: {self.extensions_dir}")
@@ -36,9 +39,51 @@ class ExtensionRegistry:
         config_loader = get_config_loader()
         installed_apps_additions: List[str] = []
         loaded_names: List[str] = []
+        
+        # Track extension names to detect duplicates before loading
+        extension_names = {}  # name -> list of folder names
 
         logger.info(f"Scanning for extensions in {self.extensions_dir}")
 
+        # First pass: scan all manifests to detect duplicates
+        for item in self.extensions_dir.iterdir():
+            if item.is_dir():
+                manifest_path = item / 'manifest.py'
+                if manifest_path.exists():
+                    try:
+                        spec = importlib.util.spec_from_file_location("manifest", manifest_path)
+                        if spec is None or spec.loader is None:
+                            continue
+                        
+                        manifest = importlib.util.module_from_spec(spec)
+                        sys.modules[f"extensions.{item.name}.manifest"] = manifest
+                        spec.loader.exec_module(manifest)
+                        
+                        if hasattr(manifest, 'name'):
+                            ext_name = manifest.name
+                            if ext_name not in extension_names:
+                                extension_names[ext_name] = []
+                            extension_names[ext_name].append(item.name)
+                    except Exception as e:
+                        logger.warning(f"Could not read manifest for {item.name}: {e}")
+        
+        # Check for duplicates
+        duplicates = {name: folders for name, folders in extension_names.items() if len(folders) > 1}
+        if duplicates:
+            logger.error("=" * 60)
+            logger.error("DUPLICATE EXTENSION NAMES DETECTED!")
+            logger.error("=" * 60)
+            logger.error("Multiple extensions have the same 'name' in their manifest.py:")
+            for dup_name, folders in duplicates.items():
+                logger.error(f"  - Extension name '{dup_name}' is used by multiple extensions")
+                logger.error(f"    Found in folders: {', '.join(folders)}")
+            logger.error("")
+            logger.error("Each extension must have a unique 'name' in manifest.py.")
+            logger.error("Please rename one of the conflicting extensions.")
+            logger.error("=" * 60)
+            sys.exit(1)
+
+        # Second pass: load extensions (now we know there are no duplicates)
         for item in self.extensions_dir.iterdir():
             if item.is_dir():
                 manifest_path = item / 'manifest.py'

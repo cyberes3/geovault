@@ -1,9 +1,9 @@
 # GeoVault Extension Developer Guide
 
-Welcome to the GeoVault extension ecosystem! This guide (and the accompanying `example_extension`) provides everything
-you need to build your own features into the GeoVault platform.
+This guide and the accompanying `example_extension` example code provides everything you need to build your own features
+into the GeoVault platform.
 
-## 🏗Architecture Overview
+## Architecture Overview
 
 GeoVault extensions contain both backend (Django) and frontend (Vue.js) code.
 
@@ -99,11 +99,14 @@ Never bundle redundant libraries. Use the `window.GeoVault` bridge:
 - **`GeoVault.utils.updateUserSetting`**: Save settings to the cloud.
 - **`GeoVault.utils.keyValueToNested`**: Format settings for the API.
 
-### 3. Global Components
+---
 
-These are available everywhere in your extension without importing:
+## Import Process
 
-- `<BaseButton>`: Standard themed buttons.
-- `<SettingsInput>`: Managed form fields with success feedback.
-- `<Loader>`: Brand-compatible progress indicators.
-- `<ToggleButton>`: Sleek switches for settings.
+Extensions are allowed to hook into the import process flow.
+
+- Final processing step before database insertion
+- Custom taggers
+- Background process and cronjobs (for importing data from external sources)
+
+**todo**

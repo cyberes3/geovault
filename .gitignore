@@ -3,6 +3,7 @@
 *.har
 failures.txt
 .cursor/plans
+.vscide
 
 # ---> Python
 # Byte-compiled / optimized / DLL files

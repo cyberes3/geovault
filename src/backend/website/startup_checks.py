@@ -24,6 +24,7 @@ Warning checks (don't fail startup):
 """
 
 import grp
+import importlib.util
 import os
 import pwd
 import sys
@@ -826,12 +827,57 @@ def recover_interrupted_jobs():
 
 def check_extensions():
     """
-    Check for loaded extensions and log them.
+    Check for loaded extensions, detect duplicates, and log them.
     
     Returns:
-        bool: Always True as extensions are optional
+        bool: False if duplicate extension names are detected, True otherwise
     """
     try:
+        from website.settings import EXTENSIONS_DIR
+        
+        # Scan extensions directory directly to detect duplicates
+        # (registry overwrites duplicates, so we need to check before loading)
+        extension_names = {}  # name -> list of folder names
+        
+        if EXTENSIONS_DIR.exists():
+            for item in EXTENSIONS_DIR.iterdir():
+                if item.is_dir():
+                    manifest_path = item / 'manifest.py'
+                    if manifest_path.exists():
+                        try:
+                            spec = importlib.util.spec_from_file_location("manifest", manifest_path)
+                            if spec and spec.loader:
+                                manifest = importlib.util.module_from_spec(spec)
+                                spec.loader.exec_module(manifest)
+                                if hasattr(manifest, 'name'):
+                                    ext_name = manifest.name
+                                    if ext_name not in extension_names:
+                                        extension_names[ext_name] = []
+                                    extension_names[ext_name].append(item.name)
+                        except Exception:
+                            # Skip invalid manifests - they'll be caught by extension loader
+                            pass
+        
+        # Check for duplicates
+        duplicates = {name: folders for name, folders in extension_names.items() if len(folders) > 1}
+        
+        if duplicates:
+            _logger.error("=" * 60)
+            _logger.error("DUPLICATE EXTENSION NAMES DETECTED!")
+            _logger.error("=" * 60)
+            _logger.error("Multiple extensions have the same 'name' in their manifest.py:")
+            
+            for dup_name, folders in duplicates.items():
+                _logger.error(f"  - Extension name '{dup_name}' is used by multiple extensions")
+                _logger.error(f"    Found in folders: {', '.join(folders)}")
+            
+            _logger.error("")
+            _logger.error("Each extension must have a unique 'name' in manifest.py.")
+            _logger.error("Please rename one of the conflicting extensions.")
+            _logger.error("=" * 60)
+            return False
+        
+        # Now log loaded extensions
         registry = get_extension_registry()
         active_exts = registry.get_active_extensions()
         
@@ -845,8 +891,9 @@ def check_extensions():
             _logger.info("  No extensions loaded or enabled")
         return True
     except Exception as e:
-        _logger.warning(f"⚠ Extension check failed: {e}")
-        return True
+        _logger.error(f"⚠ Extension check failed: {e}")
+        _logger.error(traceback.format_exc())
+        return False
 
 
 def run_startup_checks():
@@ -869,6 +916,7 @@ def run_startup_checks():
     13. Clear Redis cache (ensures fresh data on startup)
     14. Preload ski resorts database (for reverse geocoding)
     15. Recover interrupted jobs (re-enqueue jobs that were processing when server stopped)
+    16. Check for duplicate extension names
     
     Warning checks (don't fail startup):
     - Configuration file
@@ -895,6 +943,7 @@ def run_startup_checks():
         ("togeojson Installation", check_togeojson_installation),
         ("File Type Max Size", check_file_type_max_size),
         ("Site Configuration", check_site_configuration),
+        ("Extensions", check_extensions),
     ]
 
     failed_checks = []
@@ -926,10 +975,6 @@ def run_startup_checks():
     # Recover interrupted jobs (non-critical, re-enqueues jobs that were processing when server stopped)
     _logger.info("Recovering interrupted jobs...")
     recover_interrupted_jobs()
-
-    # Log loaded extensions
-    _logger.info("Checking for extensions...")
-    check_extensions()
 
     if failed_checks:
         _logger.error("=" * 60)
