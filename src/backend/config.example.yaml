@@ -220,9 +220,15 @@ extensions:
   # Configure individual extensions here.
   # The key must match the extension 'name' defined in its manifest.py.
   # By default, discovered extensions are enabled.
-  
+
   # Example:
   # my_awesome_extension:
   #   enabled: true
   #   custom_setting_1: "foo"
   #   custom_setting_2: 123
+
+  example_extension:
+    enabled: false
+    setting_one: "demo_value"
+    setting_two: 42
+    api_endpoint: "https://api.example.com"

@@ -16,6 +16,7 @@
 <script>
 export default {
   name: 'BaseButton',
+  emits: ['click'],
   props: {
     variant: {
       type: String,

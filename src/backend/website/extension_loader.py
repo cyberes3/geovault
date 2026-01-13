@@ -83,8 +83,9 @@ class ExtensionRegistry:
         
         # Check if enabled in config
         # config key: extensions.<name>.enabled
-        # Default to True if not specified
-        enabled = config_loader.get_bool(f'extensions.{ext_name}.enabled', True)
+        # Default to manifest.enabled_by_default (True if not specified)
+        default_enabled = getattr(manifest, 'enabled_by_default', True)
+        enabled = config_loader.get_bool(f'extensions.{ext_name}.enabled', default_enabled)
         
         if not enabled:
             logger.info(f"Extension '{ext_name}' is disabled in configuration.")
@@ -105,32 +106,76 @@ class ExtensionRegistry:
         module_name = f"{extension_path.name}.src.backend"
         
         # Determine the AppConfig to use
+        app_config_path = module_name
         if apps_py_path.exists():
-            # If user provided apps.py, check if we need to verify the label
-            # We trust the user's apps.py but we should warn if label doesn't match
-            # For simplicity, we just use the module path which Django will inspect
-            # BUT, to enforce label, we might need to import it.
-            # Let's try to import it to allow custom AppConfigs.
-             return f"{extension_path.name}.src.backend"
+             app_config_path = module_name
         else:
-            # Dynamic AppConfig generation
-            # This ensures the app label matches the extension name
-            # resulting in tables like 'extensionname_modelname'
-            return self._create_dynamic_app_config(ext_name, module_name)
+            app_config_path = self._create_dynamic_app_config(ext_name, module_name)
+
+        # Extract frontend metadata
+        frontend_entry = None
+        frontend_css = None
+        dist_path = extension_path / 'src' / 'frontend' / 'dist'
+        
+        if dist_path.exists():
+            # Use kebab-case for the URL path
+            kebab_name = extension_path.name.replace('_', '-')
+            
+            # 1. Discover JS entry point
+            js_files = list(dist_path.glob('index*.*js'))
+            if js_files:
+                def js_sort_key(f):
+                    name = f.name
+                    if name == 'index.js': return 0
+                    if '.umd.' in name: return 1
+                    if '.iife.' in name: return 2
+                    return 3
+                js_files.sort(key=js_sort_key)
+                frontend_entry = f"/extensions/static/{kebab_name}/src/frontend/dist/{js_files[0].name}"
+            else:
+                assets_dir = dist_path / 'assets'
+                assets_js = list(assets_dir.glob('index*.js')) if assets_dir.exists() else []
+                if assets_js:
+                    frontend_entry = f"/extensions/static/{kebab_name}/src/frontend/dist/assets/{assets_js[0].name}"
+
+            # 2. Discover CSS entry point
+            css_files = list(dist_path.glob('*.css'))
+            if css_files:
+                # Prefer index.css, then style.css, then anything else
+                def css_sort_key(f):
+                    name = f.name
+                    if name == 'index.css': return 0
+                    if name == 'style.css': return 1
+                    return 2
+                css_files.sort(key=css_sort_key)
+                frontend_css = f"/extensions/static/{kebab_name}/src/frontend/dist/{css_files[0].name}"
+            else:
+                assets_dir = dist_path / 'assets'
+                assets_css = list(assets_dir.glob('*.css')) if assets_dir.exists() else []
+                if assets_css:
+                    frontend_css = f"/extensions/static/{kebab_name}/src/frontend/dist/assets/{assets_css[0].name}"
+
+        # Check for urls.py
+        urls_module = None
+        if (backend_path / 'urls.py').exists():
+            urls_module = f"{module_name}.urls"
+
+        # Register in metadata registry for API
+        self.loaded_extensions[ext_name] = {
+            'name': ext_name,
+            'version': manifest.version,
+            'description': getattr(manifest, 'description', ''),
+            'frontend_entry': frontend_entry,
+            'frontend_css': frontend_css,
+            'urls_module': urls_module
+        }
+
+        return app_config_path
 
     def _create_dynamic_app_config(self, ext_name: str, module_name: str) -> str:
         """
         Creates a dynamic AppConfig class to ensure the label is set correctly.
-        Returns the fully qualified name of the class factory or similar?
-        
-        Django INSTALLED_APPS expects a dotted path to an AppConfig class OR a package.
-        If we want to generate a class, we need to attach it to a module.
         """
-        
-        # To make this robust, we can't easily pass a class object via INSTALLED_APPS list 
-        # in settings.py if it's not importable. 
-        # So we need to create the class and inject it into the extension's module space.
-        
         try:
             # Ensure the module is imported
             if module_name not in sys.modules:
@@ -153,28 +198,6 @@ class ExtensionRegistry:
             # Attach it to the module
             setattr(module, class_name, dynamic_app_config)
             
-            # Store metadata for API
-            frontend_entry = None
-            # Standard Vite build entry point: src/frontend/dist/assets/index-xxxxxxxx.js 
-            # or we might expect a consistent name like index.js if using a specific build config
-            # Let's check for dist/assets/index.js (or similar)
-            dist_path = extension_path / 'src' / 'frontend' / 'dist'
-            if dist_path.exists():
-                # Locate the entry point in assets/
-                assets_dir = dist_path / 'assets'
-                if assets_dir.exists():
-                    # Find first .js file that looks like an entry point
-                    js_files = list(assets_dir.glob('index*.js'))
-                    if js_files:
-                        frontend_entry = f"/extensions/static/{extension_path.name}/src/frontend/dist/assets/{js_files[0].name}"
-
-            self.loaded_extensions[ext_name] = {
-                'name': ext_name,
-                'version': manifest.version,
-                'description': getattr(manifest, 'description', ''),
-                'frontend_entry': frontend_entry
-            }
-
             full_class_path = f"{module_name}.{class_name}"
             logger.debug(f"Created dynamic AppConfig: {full_class_path}")
             
@@ -182,12 +205,33 @@ class ExtensionRegistry:
             
         except Exception as e:
             logger.error(f"Failed to create dynamic AppConfig for {ext_name}: {e}")
-            # Fallback to just the module name, but this might lead to table name issues
             return module_name
 
     def get_active_extensions(self) -> List[Dict[str, Any]]:
         """Returns metadata for all loaded and enabled extensions."""
         return list(self.loaded_extensions.values())
+
+    def get_extension_urls(self) -> List[Any]:
+        """
+        Generates Django URL patterns for all extensions that provide a urls.py.
+        Maps underscores in extension names to hyphens for the URL prefix.
+        """
+        from django.urls import path, include
+        patterns = []
+        for ext_name, meta in self.loaded_extensions.items():
+            if meta.get('urls_module'):
+                # Map underscores to hyphens for URL prefix
+                url_prefix = ext_name.replace('_', '-')
+                patterns.append(path(f"extensions/{url_prefix}/", include(meta['urls_module'])))
+        return patterns
+
+def get_extension_registry() -> ExtensionRegistry:
+    """Returns the global extension registry instance."""
+    global _registry
+    if _registry is None:
+        from website.settings import EXTENSIONS_DIR
+        _registry = ExtensionRegistry(EXTENSIONS_DIR)
+    return _registry
 
 
 _registry: Optional[ExtensionRegistry] = None

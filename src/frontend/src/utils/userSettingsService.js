@@ -1,5 +1,6 @@
 import axios from "axios";
 import { getCookie } from "@/assets/js/auth.js";
+import { getNestedValue } from "@/utils/settingsUtils.js";
 
 /**
  * Update user settings on the server with a partial nested JSON object
@@ -81,24 +82,6 @@ export function getSettingsForSection(config, section) {
 }
 
 /**
- * Get value from nested object using dot-notation key
- * @param {Object} obj - Nested object
- * @param {string} key - Dot notation key (e.g., "map.elevation_profile_source")
- * @returns {any} - Value or undefined
- */
-function getNestedValue(obj, key) {
-  const path = key.split('.');
-  let current = obj;
-  for (const segment of path) {
-    if (current === null || current === undefined) {
-      return undefined;
-    }
-    current = current[segment];
-  }
-  return current;
-}
-
-/**
  * Load settings from Vuex store with defaults from configuration
  * @param {Array} config - Settings configuration array
  * @param {Object} store - Vuex store instance (or store state)
@@ -117,11 +100,10 @@ export function loadSettingsFromStore(config, store) {
   // Load all settings from configuration, using store values or defaults
   config.forEach(setting => {
     const value = getNestedValue(settings, setting.key);
-    settingsValues[setting.key] = value !== undefined 
-      ? value 
+    settingsValues[setting.key] = value !== undefined
+      ? value
       : setting.defaultValue;
   });
 
   return settingsValues;
 }
-

@@ -1,0 +1,11 @@
+/* 
+   Extension custom CSS.
+   This file only contains truly unique styles that aren't available in Tailwind.
+*/
+
+@import "platform/assets/css/root.css";
+@import "platform/assets/css/colors.css";
+
+.example-custom-card {
+    border-left: 4px solid var(--main-blue);
+}

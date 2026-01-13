@@ -27,6 +27,27 @@ handler500 = custom_exception_handler
 
 from django.views.static import serve
 from website.settings import EXTENSIONS_DIR
+import os
+
+def serve_extension_static(request, path, **kwargs):
+    """
+    Custom static server that maps hyphenated URL segments to underscored directories.
+    Example: extensions/static/example-extension/ -> extensions/example_extension/
+    """
+    import logging
+    logger = logging.getLogger('django')
+    
+    parts = path.split('/', 1)
+    if parts:
+        ext_folder = parts[0].replace('-', '_')
+        if len(parts) > 1:
+            path = os.path.join(ext_folder, parts[1])
+        else:
+            path = ext_folder
+    
+    logger.debug(f"Extension static serving: {path} (root: {EXTENSIONS_DIR})")
+    kwargs['document_root'] = EXTENSIONS_DIR
+    return serve(request, path, **kwargs)
 
 urlpatterns = [
     path('', index, name='index'),  # Root route
@@ -36,7 +57,7 @@ urlpatterns = [
     path('admin/', admin.site.urls),
     path('', include("users.urls")),
     path('api/', include("api.urls")),
-    re_path(r'^extensions/static/(?P<path>.*)$', serve, {'document_root': EXTENSIONS_DIR}),
+    re_path(r'^extensions/static/(?P<path>.*)$', serve_extension_static),
     # Catch-all route for Vue.js router (must be last)
     # Serves index.html for any route that doesn't match above patterns
     # Vue router uses hash-based routing, so this handles direct navigation to non-API routes

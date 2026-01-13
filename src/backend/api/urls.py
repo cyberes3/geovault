@@ -66,6 +66,8 @@ from api.views.caltopo.connect_caltopo import connect_caltopo, get_caltopo_statu
 from api.views.caltopo.maps import list_caltopo_maps, get_caltopo_map_features, get_caltopo_map_details
 from api.views.caltopo.single_import import import_caltopo_feature
 from api.views.caltopo.map_import import import_caltopo_map
+from api.views.extensions.management import list_extensions
+from website.extension_loader import get_extension_registry
 
 urlpatterns = [
     # Import endpoints
@@ -175,3 +177,6 @@ urlpatterns = [
     path('caltopo/import/map/', import_caltopo_map),
     path('extensions/', list_extensions),
 ]
+
+# Dynamically include extension URLs
+urlpatterns += get_extension_registry().get_extension_urls()

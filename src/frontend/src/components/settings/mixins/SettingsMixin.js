@@ -1,5 +1,6 @@
 import { updateUserSetting } from "@/utils/userSettingsService.js";
 import { toast } from '@/utils/toast';
+import { keyValueToNested, getNestedValue } from '@/utils/settingsUtils.js';
 
 /**
  * Mixin for settings tabs that manage user settings with debounced saves
@@ -40,53 +41,6 @@ export default {
     },
 
     /**
-     * Convert dot-notation key to nested object path
-     * @param {string} key - Dot notation key (e.g., "map.elevation_profile_source")
-     * @returns {Array} - Array of path segments (e.g., ["map", "elevation_profile_source"])
-     */
-    keyToPath(key) {
-      return key.split('.');
-    },
-
-    /**
-     * Get value from nested object using dot-notation key
-     * @param {Object} obj - Nested object
-     * @param {string} key - Dot notation key (e.g., "map.elevation_profile_source")
-     * @returns {any} - Value or undefined
-     */
-    getNestedValue(obj, key) {
-      const path = this.keyToPath(key);
-      let current = obj;
-      for (const segment of path) {
-        if (current === null || current === undefined) {
-          return undefined;
-        }
-        current = current[segment];
-      }
-      return current;
-    },
-
-    /**
-     * Convert dot-notation key and value to nested object
-     * @param {string} key - Dot notation key (e.g., "map.elevation_profile_source")
-     * @param {any} value - Value to set
-     * @returns {Object} - Nested object (e.g., {"map": {"elevation_profile_source": value}})
-     */
-    keyValueToNested(key, value) {
-      const path = this.keyToPath(key);
-      const result = {};
-      let current = result;
-      
-      for (let i = 0; i < path.length - 1; i++) {
-        current[path[i]] = {};
-        current = current[path[i]];
-      }
-      
-      current[path[path.length - 1]] = value;
-      return result;
-    },
-
-    /**
      * Load settings from Vuex store with defaults from configuration
      * @param {Array} config - Settings configuration array (optional, uses this.settingsConfig if not provided)
      */
@@ -102,7 +56,7 @@ export default {
 
       // Load all settings from configuration, using store values or defaults
       settingsConfig.forEach(setting => {
-        const value = this.getNestedValue(settings, setting.key);
+        const value = getNestedValue(settings, setting.key);
         // Use store value if available, otherwise use default
         // Only update if the value has actually changed to avoid unnecessary reactivity triggers
         const newValue = value !== undefined ? value : setting.defaultValue;
@@ -149,27 +103,27 @@ export default {
     async saveSetting(settingKey, value) {
       try {
         // Convert dot-notation key to nested object
-        const nestedUpdate = this.keyValueToNested(settingKey, value);
+        const nestedUpdate = keyValueToNested(settingKey, value);
         const response = await updateUserSetting(nestedUpdate);
-        
+
         // Update local state immediately with the saved value from response
         if (response && response.settings) {
-          const savedValue = this.getNestedValue(response.settings, settingKey);
+          const savedValue = getNestedValue(response.settings, settingKey);
           if (savedValue !== undefined) {
             this.settingsValues[settingKey] = savedValue;
           }
         }
-        
+
         // Show success checkmark
         this.successCheckmarks[settingKey] = true;
-        
+
         // Update store directly with settings from response (no need to fetch again)
         if (this.$store && response && response.settings) {
           this.$store.commit('userSettings', response.settings);
           // Settings are already updated in settingsValues from response above
           // No need to reload from store as it's redundant
         }
-        
+
         // Hide checkmark after 3 seconds
         setTimeout(() => {
           this.successCheckmarks[settingKey] = false;
@@ -177,13 +131,13 @@ export default {
       } catch (error) {
         console.error(`Error saving setting ${settingKey}:`, error);
         const errorMessage = error.message || 'An error occurred while saving the setting.';
-        
+
         // Revert to previous value on error
         // Reload from store to get the last known good value
         if (this.$store) {
           this.loadSettingsFromStore();
         }
-        
+
         // Show error toast
         toast.error(errorMessage);
       }
@@ -230,4 +184,3 @@ export default {
     this.cleanupTimers();
   }
 }
-

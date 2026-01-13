@@ -97,18 +97,28 @@
               >
                 Collections
               </router-link>
-                Map
-              </router-link>
               <router-link
-                  v-for="link in extensionRegistry.navLinks"
-                  :key="link.path"
                   :class="[
-                    $route.path.startsWith(link.path)
+                    $route.path === '/map'
                       ? 'text-blue-600 border-blue-500 bg-blue-50 md:bg-transparent' 
                       : 'text-gray-500 border-transparent hover:text-gray-700 hover:border-gray-300 hover:bg-gray-50 md:hover:bg-transparent',
                     'block md:inline-flex md:items-center px-3 md:px-1 py-2 md:py-0 md:h-full text-base md:text-sm font-medium border-l-4 md:border-l-0 md:border-b-2 transition-colors duration-200 rounded-r-md md:rounded-none whitespace-nowrap'
                   ]"
-                  :to="link.path"
+                  to="/map"
+                  @click="closeMobileMenu"
+              >
+                Map
+              </router-link>
+              <router-link
+                  v-for="link in extensionRegistryState.navLinks"
+                  :key="link.path"
+                  :class="[
+                    $route.path.startsWith(link.fullPath)
+                      ? 'text-blue-600 border-blue-500 bg-blue-50 md:bg-transparent' 
+                      : 'text-gray-500 border-transparent hover:text-gray-700 hover:border-gray-300 hover:bg-gray-50 md:hover:bg-transparent',
+                    'block md:inline-flex md:items-center px-3 md:px-1 py-2 md:py-0 md:h-full text-base md:text-sm font-medium border-l-4 md:border-l-0 md:border-b-2 transition-colors duration-200 rounded-r-md md:rounded-none whitespace-nowrap'
+                  ]"
+                  :to="link.fullPath"
                   @click="closeMobileMenu"
               >
                 {{ link.label }}
@@ -271,11 +281,13 @@ export default {
       userInfoLoading: true,
       loadingError: false,
       errorMessage: '',
-      extensionRegistry
     }
   },
   computed: {
     ...mapState(["userInfo"]),
+    extensionRegistryState() {
+      return extensionRegistry;
+    },
     isMapRoute() {
       return this.$route.path === '/map' || this.$route.path === '/mapshare' || this.$route.path === '/maplibre'
     },

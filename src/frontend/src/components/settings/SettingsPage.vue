@@ -79,16 +79,16 @@
               </div>
             </button>
             <button
-                v-for="tab in extensionRegistry.settingsTabs"
-                :key="tab.id"
-                @click="activeTab = tab.id"
-                :class="[
+              v-for="tab in extensionRegistryState.settingsTabs"
+              :key="tab.id"
+              @click="activeTab = tab.id"
+              :class="[
                 'w-full text-left px-4 py-3 rounded-md text-sm font-medium transition-colors duration-200',
                 activeTab === tab.id
                   ? 'bg-blue-50 text-blue-700 border-l-4 border-blue-500'
                   : 'text-gray-700 hover:bg-gray-50'
               ]"
-                :title="tab.label"
+              :title="tab.label"
             >
               <div class="flex items-center text-sm font-medium">
                 <component v-if="tab.icon" :is="tab.icon" class="w-5 h-5 mr-3 transition-colors duration-200" />
@@ -131,10 +131,14 @@ export default {
     return {
       activeTab: 'account',
       isInitializing: true,
-      extensionRegistry
+      // No need to wrap extensionRegistry in data() as it's already a reactive object
     }
   },
   computed: {
+    // Access extensionRegistry directly from import
+    extensionRegistryState() {
+      return extensionRegistry;
+    },
     resolvedComponent() {
       const nativeComponents = {
         'account': 'AccountSettingsTab',
@@ -147,12 +151,12 @@ export default {
         return nativeComponents[this.activeTab];
       }
       
-      const extTab = this.extensionRegistry.settingsTabs.find(t => t.id === this.activeTab);
-      return extTab ? markRaw(extTab.component) : 'AccountSettingsTab';
+      const extTab = this.extensionRegistryState.settingsTabs.find(t => t.id === this.activeTab);
+      return extTab ? extTab.component : 'AccountSettingsTab';
     },
     allTabIds() {
       const nativeIds = ['account', 'map', 'sharing', 'import'];
-      const extIds = this.extensionRegistry.settingsTabs.map(t => t.id);
+      const extIds = this.extensionRegistryState.settingsTabs.map(t => t.id);
       return [...nativeIds, ...extIds];
     }
   },

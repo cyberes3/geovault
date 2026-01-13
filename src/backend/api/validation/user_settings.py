@@ -108,6 +108,11 @@ class AccountSettings(BaseModel):
     )
 
 
+class ExtensionsModel(BaseModel):
+    """Pydantic model for extension settings section. Allows arbitrary fields."""
+    model_config = ConfigDict(extra='allow')
+
+
 class UserSettingsModel(BaseModel):
     """Unified Pydantic model for all user settings."""
     model_config = ConfigDict(extra='forbid')
@@ -115,6 +120,7 @@ class UserSettingsModel(BaseModel):
     map: Optional[MapSettings] = Field(default_factory=MapSettings)
     import_: Optional[ImportSettings] = Field(default_factory=ImportSettings, alias='import')
     account: Optional[AccountSettings] = Field(default_factory=AccountSettings)
+    extensions: Optional[ExtensionsModel] = Field(default_factory=ExtensionsModel)
 
 
 @lru_cache(maxsize=1)

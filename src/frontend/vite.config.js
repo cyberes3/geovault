@@ -1,14 +1,14 @@
-import {fileURLToPath, URL} from 'node:url'
+import { fileURLToPath, URL } from 'node:url'
 import path from 'path'
 
-import {defineConfig} from 'vite'
+import { defineConfig } from 'vite'
 import vue from '@vitejs/plugin-vue'
 
 // Plugin to replace highlight.js with JSON-only build
 // This reduces bundle size from ~970KB to ~30KB
 const highlightJsOptimizer = () => {
     const wrapperPath = fileURLToPath(new URL('./src/utils/highlight-json-only.js', import.meta.url))
-    
+
     return {
         name: 'highlight-js-optimizer',
         enforce: 'pre', // Run before other plugins
@@ -58,8 +58,8 @@ export default defineConfig({
                         return 'turf'
                     }
                     // Split Vue and Vue ecosystem into vendor chunk
-                    if (id.includes('node_modules/vue') || 
-                        id.includes('node_modules/vue-router') || 
+                    if (id.includes('node_modules/vue') ||
+                        id.includes('node_modules/vue-router') ||
                         id.includes('node_modules/vuex')) {
                         return 'vue-vendor'
                     }
@@ -104,6 +104,9 @@ export default defineConfig({
         chunkSizeWarningLimit: 1050, // Increase limit to 1MB for map libraries
     },
     server: {
+        fs: {
+            allow: ['..', '../backend/extensions']
+        },
         watch: {
             // Ignore large directories to improve dev server performance
             // These patterns are relative to the project root (where start-dev.sh runs)
@@ -132,6 +135,11 @@ export default defineConfig({
                 secure: false,
             },
             '/static': {
+                target: 'http://127.0.0.1:8000',
+                changeOrigin: true,
+                secure: false,
+            },
+            '/extensions': {
                 target: 'http://127.0.0.1:8000',
                 changeOrigin: true,
                 secure: false,

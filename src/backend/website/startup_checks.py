@@ -44,6 +44,7 @@ from geo_lib.processing.job_recovery import recover_interrupted_jobs as do_job_r
 from geo_lib.utils.redis_connection import get_redis_connection
 from website.config_loader import get_config_loader
 from website.settings_utils import get_required_setting
+from website.extension_loader import get_extension_registry
 
 _logger = get_tagged_logger('startup')
 
@@ -823,6 +824,31 @@ def recover_interrupted_jobs():
         # This is not critical - server can still start
 
 
+def check_extensions():
+    """
+    Check for loaded extensions and log them.
+    
+    Returns:
+        bool: Always True as extensions are optional
+    """
+    try:
+        registry = get_extension_registry()
+        active_exts = registry.get_active_extensions()
+        
+        if active_exts:
+            ext_names = [ext['name'] for ext in active_exts]
+            _logger.info(f"✓ Successfully loaded {len(ext_names)} extensions: {', '.join(ext_names)}")
+            for ext in active_exts:
+                status = "Frontend module found" if ext.get('frontend_entry') else "No frontend module"
+                _logger.info(f"  - {ext['name']} v{ext['version']} ({status})")
+        else:
+            _logger.info("  No extensions loaded or enabled")
+        return True
+    except Exception as e:
+        _logger.warning(f"⚠ Extension check failed: {e}")
+        return True
+
+
 def run_startup_checks():
     """
     Run all startup checks and exit if any fail.
@@ -900,6 +926,10 @@ def run_startup_checks():
     # Recover interrupted jobs (non-critical, re-enqueues jobs that were processing when server stopped)
     _logger.info("Recovering interrupted jobs...")
     recover_interrupted_jobs()
+
+    # Log loaded extensions
+    _logger.info("Checking for extensions...")
+    check_extensions()
 
     if failed_checks:
         _logger.error("=" * 60)
