@@ -1667,3 +1667,434 @@ class CustomAppsExtConfig(ExtensionAppConfig):
                 # Should have found the CustomAppsExtConfig class
                 assert app_config_class is not None, f"Could not find AppConfig class in {apps_module_path}. Available: {[x for x in dir(apps_module) if not x.startswith('_')]}"
                 assert issubclass(app_config_class, ExtensionAppConfig)
+
+
+# ============================================================================
+# Example Extension Hook Callback Tests
+# ============================================================================
+
+@pytest.mark.django_db
+class TestExampleExtensionHookCallback(TestCase):
+    """Test that example extension's handle_import hook is called with real data."""
+    
+    def setUp(self):
+        """Set up test fixtures."""
+        from django.contrib.auth import get_user_model
+        from django.apps import apps
+        from django.contrib.gis.geos import Point
+        from api.models import ImportQueue, FeatureStore
+        from geo_lib.feature_id import generate_geojson_hash
+        from geo_lib.processing.hooks import execute_import_hooks
+        from website.extensions.extension_hooks import get_hooks
+        
+        User = get_user_model()
+        self.user = User.objects.create_user(
+            username='testuser',
+            email='test@example.com',
+            password='testpass123'
+        )
+        
+        # Store imports for use in test methods
+        self.ImportQueue = ImportQueue
+        self.FeatureStore = FeatureStore
+        self.Point = Point
+        self.generate_geojson_hash = generate_geojson_hash
+        self.execute_import_hooks = execute_import_hooks
+        self.get_hooks = get_hooks
+        self.apps = apps
+    
+    def _ensure_extension_loaded(self):
+        """Ensure the example extension is loaded and initialized."""
+        from website.settings import EXTENSIONS_DIR
+        from website.extensions.extension_loader import ExtensionRegistry
+        from website.extensions.extension_hooks import set_extension_context, clear_extension_context
+        import os
+        
+        # Check if extension is already loaded and hooks are registered
+        hooks = self.get_hooks('import')
+        hook_ids = [h[0] for h in hooks]
+        if 'example_extension.example_import_handler' in hook_ids:
+            # Extension is already initialized, get the app config
+            try:
+                app_config = self.apps.get_app_config('example_extension')
+                return app_config
+            except LookupError:
+                pass
+        
+        # Extension not loaded or not initialized, try to load and initialize it
+        registry = ExtensionRegistry(EXTENSIONS_DIR)
+        with patch('website.extension_loader.get_config_loader') as mock_loader_get:
+            mock_config = MagicMock()
+            # Enable the extension
+            mock_config.get_bool.return_value = True
+            mock_loader_get.return_value = mock_config
+            
+            # Discover extensions (this adds them to INSTALLED_APPS if enabled)
+            apps_list = registry.discover_extensions()
+            
+            # The extension should now be in loaded_extensions
+            if 'example_extension' not in registry.loaded_extensions:
+                pytest.skip("Example extension not found or not enabled")
+        
+        # Try to get the app config
+        try:
+            app_config = self.apps.get_app_config('example_extension')
+        except LookupError:
+            pytest.skip("Example extension AppConfig not found in Django apps")
+        
+        # Ensure ready() has been called to initialize the extension
+        # Check if hooks are registered
+        hooks = self.get_hooks('import')
+        hook_ids = [h[0] for h in hooks]
+        if 'example_extension.example_import_handler' not in hook_ids:
+            # Extension not initialized, manually call ready()
+            # Set environment to allow ready() to run
+            with patch.dict(os.environ, {'RUN_MAIN': 'true'}, clear=False):
+                # Set extension context before calling ready()
+                set_extension_context('example_extension')
+                try:
+                    app_config.ready()
+                finally:
+                    clear_extension_context()
+        
+        # Verify hooks are now registered
+        hooks = self.get_hooks('import')
+        hook_ids = [h[0] for h in hooks]
+        if 'example_extension.example_import_handler' not in hook_ids:
+            pytest.skip("Example extension hook not registered after initialization")
+        
+        return app_config
+    
+    def test_handle_import_called_with_real_import(self):
+        """Test that handle_import callback is called with real import data."""
+        from unittest.mock import patch
+        
+        # Ensure extension is loaded
+        app_config = self._ensure_extension_loaded()
+        
+        # Verify hook is registered
+        hooks = self.get_hooks('import')
+        hook_ids = [h[0] for h in hooks]
+        assert 'example_extension.example_import_handler' in hook_ids, "Hook should be registered"
+        
+        # Get the registered callback
+        hook_callback = None
+        for hook_id, callback in hooks:
+            if hook_id == 'example_extension.example_import_handler':
+                hook_callback = callback
+                break
+        
+        assert hook_callback is not None, "Hook callback should be found"
+        
+        # Spy on the callback function
+        call_tracker = {'called': False, 'args': None, 'kwargs': None}
+        
+        def spy_wrapper(*args, **kwargs):
+            call_tracker['called'] = True
+            call_tracker['args'] = args
+            call_tracker['kwargs'] = kwargs
+            return hook_callback(*args, **kwargs)
+        
+        # Replace the hook with our spy
+        from website.extensions.extension_hooks import unregister_hook, register_hook, set_extension_context, clear_extension_context
+        unregister_hook('import', 'example_extension.example_import_handler')
+        set_extension_context('example_extension')
+        register_hook('import', 'example_import_handler', spy_wrapper)
+        clear_extension_context()
+        
+        try:
+            # Create real ImportQueue
+            import_item = self.ImportQueue.objects.create(
+                user=self.user,
+                original_filename='test.kml',
+                raw_file='<kml></kml>',
+                imported=True
+            )
+            
+            # Create real FeatureStore
+            feature_data = {
+                'type': 'Feature',
+                'geometry': {
+                    'type': 'Point',
+                    'coordinates': [-122.4194, 37.7749, 0.0]
+                },
+                'properties': {
+                    'name': 'Test Feature',
+                    'description': 'A test feature created for hook testing'
+                }
+            }
+            feature = self.FeatureStore.objects.create(
+                user=self.user,
+                geojson=feature_data,
+                geometry=self.Point(-122.4194, 37.7749, 0.0),
+                geojson_hash=self.generate_geojson_hash(feature_data),
+                source=import_item
+            )
+            
+            # Execute import hooks
+            self.execute_import_hooks(import_item, self.user.id, [feature])
+            
+            # Verify handle_import was called
+            assert call_tracker['called'], "handle_import callback was not called"
+            
+            # Verify it was called with correct arguments
+            # execute_import_hooks passes: import_item, user_id, created_features=created_features
+            args = call_tracker['args']
+            kwargs = call_tracker['kwargs']
+            
+            assert len(args) >= 1, "handle_import should receive import_item as first argument"
+            assert args[0] == import_item, "First argument should be the ImportQueue instance"
+            
+            assert len(args) >= 2, "handle_import should receive user_id as second argument"
+            assert args[1] == self.user.id, f"Second argument should be user_id {self.user.id}, got {args[1]}"
+            
+            # Check created_features (execute_import_hooks passes it as keyword arg)
+            if 'created_features' in kwargs:
+                created_features = kwargs['created_features']
+            elif len(args) >= 3:
+                created_features = args[2]
+            else:
+                pytest.fail("handle_import should receive created_features")
+            
+            assert isinstance(created_features, list), "created_features should be a list"
+            assert len(created_features) == 1, f"Expected 1 feature, got {len(created_features)}"
+            assert created_features[0] == feature, "Feature in list should match created feature"
+        finally:
+            # Restore original hook
+            unregister_hook('import', 'example_extension.example_import_handler')
+            set_extension_context('example_extension')
+            register_hook('import', 'example_import_handler', hook_callback)
+            clear_extension_context()
+    
+    def test_handle_import_with_multiple_features(self):
+        """Test handle_import callback with multiple features."""
+        # Ensure extension is loaded
+        app_config = self._ensure_extension_loaded()
+        
+        # Verify hook is registered and get callback
+        hooks = self.get_hooks('import')
+        hook_callback = None
+        for hook_id, callback in hooks:
+            if hook_id == 'example_extension.example_import_handler':
+                hook_callback = callback
+                break
+        
+        assert hook_callback is not None, "Hook callback should be found"
+        
+        # Spy on the callback function
+        call_tracker = {'called': False, 'args': None, 'kwargs': None}
+        
+        def spy_wrapper(*args, **kwargs):
+            call_tracker['called'] = True
+            call_tracker['args'] = args
+            call_tracker['kwargs'] = kwargs
+            return hook_callback(*args, **kwargs)
+        
+        # Replace the hook with our spy
+        from website.extensions.extension_hooks import unregister_hook, register_hook, set_extension_context, clear_extension_context
+        unregister_hook('import', 'example_extension.example_import_handler')
+        set_extension_context('example_extension')
+        register_hook('import', 'example_import_handler', spy_wrapper)
+        clear_extension_context()
+        
+        try:
+            # Create real ImportQueue
+            import_item = self.ImportQueue.objects.create(
+                user=self.user,
+                original_filename='test.kml',
+                raw_file='<kml></kml>',
+                imported=True
+            )
+            
+            # Create multiple features
+            features = []
+            coordinates = [
+                [-122.4194, 37.7749, 0.0],
+                [-122.4094, 37.7849, 0.0],
+                [-122.3994, 37.7949, 0.0]
+            ]
+            
+            for i, coord in enumerate(coordinates):
+                feature_data = {
+                    'type': 'Feature',
+                    'geometry': {
+                        'type': 'Point',
+                        'coordinates': coord
+                    },
+                    'properties': {
+                        'name': f'Test Feature {i+1}',
+                        'description': f'Feature number {i+1}'
+                    }
+                }
+                feature = self.FeatureStore.objects.create(
+                    user=self.user,
+                    geojson=feature_data,
+                    geometry=self.Point(coord[0], coord[1], coord[2]),
+                    geojson_hash=self.generate_geojson_hash(feature_data),
+                    source=import_item
+                )
+                features.append(feature)
+            
+            # Execute import hooks
+            self.execute_import_hooks(import_item, self.user.id, features)
+            
+            # Verify handle_import was called
+            assert call_tracker['called'], "handle_import callback was not called"
+            
+            # Verify it received all features
+            args = call_tracker['args']
+            kwargs = call_tracker['kwargs']
+            
+            # Get created_features (execute_import_hooks passes it as keyword arg)
+            if 'created_features' in kwargs:
+                created_features = kwargs['created_features']
+            elif len(args) >= 3:
+                created_features = args[2]
+            else:
+                pytest.fail("handle_import should receive created_features")
+            
+            assert isinstance(created_features, list), "created_features should be a list"
+            assert len(created_features) == 3, f"Expected 3 features, got {len(created_features)}"
+            
+            # Verify all features are present
+            feature_ids = {f.id for f in created_features}
+            expected_ids = {f.id for f in features}
+            assert feature_ids == expected_ids, "Feature IDs don't match"
+        finally:
+            # Restore original hook
+            unregister_hook('import', 'example_extension.example_import_handler')
+            set_extension_context('example_extension')
+            register_hook('import', 'example_import_handler', hook_callback)
+            clear_extension_context()
+    
+    def test_handle_import_with_empty_features(self):
+        """Test handle_import callback with empty features list."""
+        # Ensure extension is loaded
+        app_config = self._ensure_extension_loaded()
+        
+        # Verify hook is registered and get callback
+        hooks = self.get_hooks('import')
+        hook_callback = None
+        for hook_id, callback in hooks:
+            if hook_id == 'example_extension.example_import_handler':
+                hook_callback = callback
+                break
+        
+        assert hook_callback is not None, "Hook callback should be found"
+        
+        # Spy on the callback function
+        call_tracker = {'called': False, 'args': None, 'kwargs': None}
+        
+        def spy_wrapper(*args, **kwargs):
+            call_tracker['called'] = True
+            call_tracker['args'] = args
+            call_tracker['kwargs'] = kwargs
+            return hook_callback(*args, **kwargs)
+        
+        # Replace the hook with our spy
+        from website.extensions.extension_hooks import unregister_hook, register_hook, set_extension_context, clear_extension_context
+        unregister_hook('import', 'example_extension.example_import_handler')
+        set_extension_context('example_extension')
+        register_hook('import', 'example_import_handler', spy_wrapper)
+        clear_extension_context()
+        
+        try:
+            # Create real ImportQueue (but no features created)
+            import_item = self.ImportQueue.objects.create(
+                user=self.user,
+                original_filename='empty.kml',
+                raw_file='<kml></kml>',
+                imported=True
+            )
+            
+            # Execute import hooks with empty features list
+            self.execute_import_hooks(import_item, self.user.id, [])
+            
+            # Verify handle_import was still called
+            assert call_tracker['called'], "handle_import callback should be called even with no features"
+            
+            # Verify it received empty list
+            args = call_tracker['args']
+            kwargs = call_tracker['kwargs']
+            
+            # Get created_features (execute_import_hooks passes it as keyword arg)
+            if 'created_features' in kwargs:
+                created_features = kwargs['created_features']
+            elif len(args) >= 3:
+                created_features = args[2]
+            else:
+                pytest.fail("handle_import should receive created_features")
+            
+            assert isinstance(created_features, list), "created_features should be a list"
+            assert len(created_features) == 0, f"Expected 0 features, got {len(created_features)}"
+        finally:
+            # Restore original hook
+            unregister_hook('import', 'example_extension.example_import_handler')
+            set_extension_context('example_extension')
+            register_hook('import', 'example_import_handler', hook_callback)
+            clear_extension_context()
+    
+    def test_handle_import_logging(self):
+        """Test that handle_import logs expected information."""
+        from unittest.mock import patch
+        import logging
+        
+        # Ensure extension is loaded
+        app_config = self._ensure_extension_loaded()
+        
+        # Capture log messages
+        with patch('example_extension.src.backend.apps.logger') as mock_logger:
+            # Create real ImportQueue
+            import_item = self.ImportQueue.objects.create(
+                user=self.user,
+                original_filename='test.kml',
+                raw_file='<kml></kml>',
+                imported=True
+            )
+            
+            # Create real FeatureStore
+            feature_data = {
+                'type': 'Feature',
+                'geometry': {
+                    'type': 'Point',
+                    'coordinates': [-122.4194, 37.7749, 0.0]
+                },
+                'properties': {
+                    'name': 'Test Feature'
+                }
+            }
+            feature = self.FeatureStore.objects.create(
+                user=self.user,
+                geojson=feature_data,
+                geometry=self.Point(-122.4194, 37.7749, 0.0),
+                geojson_hash=self.generate_geojson_hash(feature_data),
+                source=import_item
+            )
+            
+            # Execute import hooks
+            self.execute_import_hooks(import_item, self.user.id, [feature])
+            
+            # Verify logger.info was called
+            assert mock_logger.info.called, "Logger.info should be called by handle_import"
+            
+            # Check that the log message contains expected information
+            log_calls = mock_logger.info.call_args_list
+            assert len(log_calls) > 0, "At least one log message should be recorded"
+            
+            # Find the log call from handle_import
+            import_logged = False
+            for call in log_calls:
+                args, kwargs = call
+                if len(args) > 0:
+                    log_message = args[0]
+                    if 'Import hook triggered' in log_message:
+                        import_logged = True
+                        # Verify message contains import_item ID
+                        assert str(import_item.id) in log_message, f"Log message should contain import_item ID {import_item.id}"
+                        # Verify message contains user_id
+                        assert str(self.user.id) in log_message, f"Log message should contain user_id {self.user.id}"
+                        # Verify message contains feature count
+                        assert '1 features created' in log_message or '1 feature' in log_message, "Log message should contain feature count"
+                        break
+            
+            assert import_logged, "Expected log message 'Import hook triggered' was not found"
