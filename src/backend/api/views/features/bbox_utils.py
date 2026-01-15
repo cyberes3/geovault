@@ -239,7 +239,7 @@ def _convert_feature_to_geojson(feature: FeatureStore, public_safe: bool = False
 
     # Always include database_id for frontend processing
     properties['database_id'] = feature.id
-    
+
     if public_safe:
         # Don't include tags in public view unless explicitly requested
         # (they can contain private information)
@@ -254,11 +254,67 @@ def _convert_feature_to_geojson(feature: FeatureStore, public_safe: bool = False
     }
 
 
+def _build_tags_sql_filter(tags: List[str], match_mode: str = 'AND') -> Tuple[str, List[Any]]:
+    """
+    Build SQL filter clause for tags with support for exact and prefix matching.
+    
+    Args:
+        tags: List of tags to filter by
+        match_mode: 'AND' or 'OR' logic for combining tags
+        
+    Returns:
+        Tuple of (sql_clause, params_list)
+    """
+    if not tags:
+        return "", []
+
+    conditions = []
+    params = []
+
+    for tag in tags:
+        if tag.endswith(':'):
+            # Prefix matching: match any tag that starts with the prefix (without the trailing ':')
+            prefix = tag[:-1]  # Remove the trailing ':'
+
+            # Check if any element in the tags/system_tags arrays starts with the prefix
+            # Uses jsonb_array_elements_text to expand the array and LIKE for matching
+            # Optimized simple EXISTS subquery
+            sub_cond = """(
+                EXISTS (SELECT 1 FROM jsonb_array_elements_text(geojson->'properties'->'tags') t WHERE t LIKE %s)
+                OR 
+                EXISTS (SELECT 1 FROM jsonb_array_elements_text(geojson->'properties'->'system_tags') t WHERE t LIKE %s)
+            )"""
+            conditions.append(sub_cond)
+            # Add prefix param twice (once for tags, once for system_tags)
+            prefix_pattern = f"{prefix}%"
+            params.extend([prefix_pattern, prefix_pattern])
+        else:
+            # Exact matching: use optimized @> operator
+            # (tags @> [tag] OR system_tags @> [tag])
+            conditions.append("""(
+                geojson->'properties'->'tags' @> %s::jsonb 
+                OR 
+                geojson->'properties'->'system_tags' @> %s::jsonb
+            )""")
+            # Json dump the tag list for the operator
+            tag_json = json.dumps([tag])
+            params.extend([tag_json, tag_json])
+
+    if not conditions:
+        return "", []
+
+    join_op = " AND " if match_mode == 'AND' else " OR "
+    full_clause = f" AND ({join_op.join(conditions)})"
+
+    return full_clause, params
+
+
 def _build_bbox_sql_query(
         table_name: str,
         user_id: int,
         bbox: Tuple[float, float, float, float] | None,
-        tag: str | None = None,
+        tags: List[str] | None = None,
+        match_mode: str = 'AND',
         collection_id: uuid.UUID | None = None,
         max_features: int = 0
 ) -> tuple[str, list]:
@@ -285,16 +341,13 @@ def _build_bbox_sql_query(
         params.extend([min_lon, min_lat, max_lon, max_lat])
 
     # Build tag filter
-    tag_filter = ""
-    if tag:
-        tag_array = json.dumps([tag])
-        tag_filter = " AND (geojson->'properties'->'tags' @> %s::jsonb OR geojson->'properties'->'system_tags' @> %s::jsonb)"
-        params.append(tag_array)
-        params.append(tag_array)
+    tag_filter, tag_params = _build_tags_sql_filter(tags, match_mode)
+    params.extend(tag_params)
 
     # Collection filter preprocessing (if provided)
     # NOTE: Must be added AFTER spatial and tag filters to match SQL parameter order
     collection_filter = ""
+
     if collection_id is not None:
         try:
             collection = Collection.objects.get(id=collection_id, user_id=user_id)
@@ -327,7 +380,7 @@ def _build_bbox_sql_query(
             FROM {table_name}
             WHERE user_id = %s AND geometry IS NOT NULL{spatial_filter}{tag_filter}{collection_filter}
         """
-    
+
     return sql_query, params
 
 
@@ -362,25 +415,25 @@ def _execute_bbox_query_and_parse(
 
     # Use len() for count - much faster than database COUNT query
     total_count = len(results)
-    
+
     geojson_features = []
-    
+
     # AGGRESSIVE: Fast path for non-public queries (most common case)
     if not public_safe:
         for feature_id, geojson_data, geojson_hash in results:
             # Parse JSON if needed
             if isinstance(geojson_data, str):
                 geojson_data = json.loads(geojson_data)
-            
+
             if not geojson_data or 'geometry' not in geojson_data:
                 continue
-            
+
             # AGGRESSIVE: Modify properties dict in-place (avoid copy)
             properties = geojson_data.get('properties')
             if not properties or not isinstance(properties, dict):
                 properties = {}
             properties['database_id'] = feature_id
-            
+
             geojson_features.append({
                 "type": "Feature",
                 "geometry": geojson_data['geometry'],
@@ -392,18 +445,18 @@ def _execute_bbox_query_and_parse(
         for feature_id, geojson_data, geojson_hash in results:
             if isinstance(geojson_data, str):
                 geojson_data = json.loads(geojson_data)
-            
+
             if not geojson_data or 'geometry' not in geojson_data:
                 continue
-            
+
             properties = geojson_data.get('properties', {}).copy()
-            
+
             # Always include database_id for frontend processing
             properties['database_id'] = feature_id
-            
+
             if not include_tags and 'tags' in properties:
                 del properties['tags']
-            
+
             geojson_features.append({
                 "type": "Feature",
                 "geometry": geojson_data['geometry'],
@@ -414,7 +467,7 @@ def _execute_bbox_query_and_parse(
     return geojson_features, total_count
 
 
-def get_features_in_bbox(bbox: Tuple[float, float, float, float], user_id: int, tag: str | None = None, collection_id: uuid.UUID | None = None, public_safe: bool = False, include_tags: bool = False, allow_downloads: bool = False) -> BboxQueryResult:
+def get_features_in_bbox(bbox: Tuple[float, float, float, float], user_id: int, tags: List[str] | None = None, match_mode: str = 'AND', collection_id: uuid.UUID | None = None, public_safe: bool = False, include_tags: bool = False, allow_downloads: bool = False) -> BboxQueryResult:
     """
     Get features within bounding box from database using optimized raw SQL query.
     Returns both the features and the total count (using len() - no database COUNT query).
@@ -428,7 +481,8 @@ def get_features_in_bbox(bbox: Tuple[float, float, float, float], user_id: int, 
     Args:
         bbox: Bounding box tuple (min_lon, min_lat, max_lon, max_lat)
         user_id: User ID to filter features by
-        tag: Optional tag to filter features by
+        tags: Optional list of tags to filter features by
+        match_mode: 'AND' (default) or 'OR' for tag combining logic
         collection_id: Optional collection ID to filter features by
         public_safe: If True, excludes _id from properties (for public shares)
         include_tags: If True and public_safe=True, includes tags in properties (otherwise tags are excluded for public shares)
@@ -437,7 +491,10 @@ def get_features_in_bbox(bbox: Tuple[float, float, float, float], user_id: int, 
         BboxQueryResult with features, total_count, and fallback_used flag
     """
     # Detect world-wide extent
-    crosses_dateline, world_wide_extent, lon_span, lat_span = _detect_world_wide_extent(bbox)
+    if bbox:
+        crosses_dateline, world_wide_extent, lon_span, lat_span = _detect_world_wide_extent(bbox)
+    else:
+        crosses_dateline, world_wide_extent, lon_span, lat_span = False, False, 0.0, 0.0
 
     # Get the maximum features limit from settings
     max_features = get_required_setting('MAX_FEATURES_PER_REQUEST')
@@ -451,7 +508,7 @@ def get_features_in_bbox(bbox: Tuple[float, float, float, float], user_id: int, 
     # Build and execute initial query
     bbox_for_query = bbox if use_spatial_filter else None
     sql_query, params = _build_bbox_sql_query(
-        table_name, user_id, bbox_for_query, tag, collection_id, max_features
+        table_name, user_id, bbox_for_query, tags, match_mode, collection_id, max_features
     )
 
     # Check if query is empty (collection with no features)
@@ -481,10 +538,10 @@ def get_features_in_bbox(bbox: Tuple[float, float, float, float], user_id: int, 
                 f"but only {total_count} features found. Falling back to world-wide query."
             )
             fallback_used = True
-            
+
             # Rebuild query without spatial filter
             sql_query, params = _build_bbox_sql_query(
-                table_name, user_id, None, tag, collection_id, max_features
+                table_name, user_id, None, tags, match_mode, collection_id, max_features
             )
 
             # Check if query is empty

@@ -165,7 +165,7 @@ def get_public_share(request, share_id):
     bbox, zoom_level = validation_result
 
     # Fetch data from database
-    query_result = get_features_in_bbox(bbox, share.user.id, share.tag, public_safe=True, allow_downloads=share.allow_downloads)
+    query_result = get_features_in_bbox(bbox, share.user.id, tags=[share.tag], public_safe=True, allow_downloads=share.allow_downloads)
     features = query_result.features
     total_features_in_bbox = query_result.total_count
     fallback_used = query_result.fallback_used

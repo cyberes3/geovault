@@ -689,8 +689,8 @@ export default {
     clearTagFilters() {
       this.selectedTags = []
       this.tagFilteredFeatures = []
-      // Emit empty array to clear map filter and restore normal behavior
-      this.$emit('tag-filter-change', null)
+      // Emit empty tags to clear map filter and restore normal behavior
+      this.$emit('tag-filter-change', { tags: [], matchMode: 'AND' })
     },
     debouncedFilterByTags() {
       if (this.filterTimeout) {
@@ -699,8 +699,8 @@ export default {
 
       if (this.selectedTags.length === 0) {
         this.tagFilteredFeatures = []
-        // Emit null to clear map filter and restore normal behavior
-        this.$emit('tag-filter-change', null)
+        // Clear filter
+        this.$emit('tag-filter-change', { tags: [], matchMode: 'AND' })
         this.$emit('tag-filter-loading-change', false)
         return
       }
@@ -712,57 +712,22 @@ export default {
       }, 300)
     },
     async filterByTags() {
-      if (this.selectedTags.length === 0) {
-        this.tagFilteredFeatures = []
-        this.isFiltering = false
-        this.$emit('tag-filter-loading-change', false)
-        return
-      }
+      // Logic refactored to delegate to parent (MapPage) via event
+      // MapPage will use the bbox API to fetch filtered features
 
-      this.isFiltering = true
-      
-      // Emit tags for immediate filtering of existing features
-      this.$emit('tag-filter-start', this.selectedTags)
       this.$emit('tag-filter-loading-change', true)
 
-      try {
-        // Build URL with multiple tag parameters and match mode
-        const tagParams = this.selectedTags.map(tag => `tags=${encodeURIComponent(tag)}`).join('&')
-        const matchModeParam = `match_mode=${encodeURIComponent(this.tagMatchMode)}`
-        const url = `${APIHOST}/api/features/filter-by-tags/?${tagParams}&${matchModeParam}`
-        const response = await fetch(url)
-        const data = await response.json()
-
-        if (response.ok && data.data && data.data.features) {
-          // Use native GeoJSON features
-          const features = data.data.features
-
-          // Sort features alphabetically by name
-          features.sort((a, b) => {
-            const nameA = (a.properties?.name || 'Unnamed Feature').toLowerCase()
-            const nameB = (b.properties?.name || 'Unnamed Feature').toLowerCase()
-            return nameA.localeCompare(nameB)
-          })
-
-          this.tagFilteredFeatures = features
-
-          // Emit event to parent to update map with filtered features
-          this.$emit('tag-filter-change', features)
-        } else {
-          console.error('Tag filter failed:', data.error || 'Unknown error')
-          this.tagFilteredFeatures = []
-          // Emit empty array to clear map filter
-          this.$emit('tag-filter-change', [])
-        }
-      } catch (error) {
-        console.error('Error filtering features by tags:', error)
-        this.tagFilteredFeatures = []
-        // Emit empty array to clear map filter
-        this.$emit('tag-filter-change', [])
-      } finally {
-        this.isFiltering = false
-        this.$emit('tag-filter-loading-change', false)
-      }
+      // Emit tags and match mode for MapPage to handle
+      // This will trigger a data reload in MapPage with the tag parameters
+      this.$emit('tag-filter-change', {
+        tags: this.selectedTags,
+        matchMode: this.tagMatchMode
+      })
+      
+      // We don't fetch here anymore. MapPage will update the 'features' prop
+      // when data is loaded.
+      
+      this.$emit('tag-filter-loading-change', false)
     },
     // Forward geocoding methods (place search)
     handleGeocodingInput() {

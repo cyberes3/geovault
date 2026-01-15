@@ -296,71 +296,22 @@ def filter_features_by_tags(request):
             'code': 400
         }, status=400)
 
-    # Base query for user's features
-    base_query = FeatureStore.objects.filter(user=request.user).exclude(geometry__isnull=True)
-
-    # Build Q objects for each tag condition
-    tag_conditions = []
-
-    for tag in tags:
-        if tag.endswith(':'):
-            # Prefix matching: match any tag that starts with the prefix (without the trailing ':')
-            prefix = tag[:-1]  # Remove the trailing ':'
-
-            # We need to check if any element in the tags/system_tags arrays starts with the prefix
-            # PostgreSQL JSONB doesn't have a direct "array element starts with" operator,
-            # so we use a raw SQL condition for this
-            # This uses PostgreSQL's jsonb_array_elements_text to expand arrays and check each element
-            prefix_condition = Q(
-                id__in=RawSQL(
-                    """
-                    SELECT DISTINCT fs.id
-                    FROM api_featurestore fs
-                    WHERE fs.user_id = %s
-                      AND (
-                        EXISTS (SELECT 1
-                                FROM jsonb_array_elements_text(fs.geojson -> 'properties' -> 'tags') AS tag
-                                WHERE tag LIKE %s)
-                            OR EXISTS (SELECT 1
-                                       FROM jsonb_array_elements_text(fs.geojson -> 'properties' -> 'system_tags') AS tag
-                                       WHERE tag LIKE %s)
-                        )
-                    """,
-                    [request.user.id, f"{prefix}%", f"{prefix}%"]
-                )
-            )
-            tag_conditions.append(prefix_condition)
-        else:
-            # Exact matching: use containment operator (existing behavior)
-            exact_condition = Q(geojson__properties__tags__contains=[tag]) | Q(geojson__properties__system_tags__contains=[tag])
-            tag_conditions.append(exact_condition)
-
-    # Combine conditions based on match mode
-    if match_mode == 'AND':
-        # Features must match ALL conditions
-        features_query = base_query
-        for condition in tag_conditions:
-            features_query = features_query.filter(condition)
-    else:  # OR
-        # Features must match ANY condition
-        combined_condition = tag_conditions[0]
-        for condition in tag_conditions[1:]:
-            combined_condition |= condition
-        features_query = base_query.filter(combined_condition)
-
-    # Convert to GeoJSON format
-    geojson_features = []
-    for feature in features_query.order_by('id'):
-        geojson_data = feature.geojson
-        if geojson_data and 'geometry' in geojson_data:
-            properties = geojson_data.get('properties', {}).copy()
-            properties['database_id'] = feature.id
-            geojson_features.append({
-                "type": "Feature",
-                "geometry": geojson_data.get('geometry'),
-                "properties": properties,
-                "geojson_hash": feature.geojson_hash
-            })
+    # Use the optimized shared logic from bbox_utils
+    # Pass bbox=None to skip spatial filtering and search all features
+    from api.views.features.bbox_utils import get_features_in_bbox
+    
+    # We pass None for bbox to search everywhere
+    # The function respects MAX_FEATURES_PER_REQUEST, but for tag filtering 
+    # we ideally want all matches. If the limit hits, we might need adjustments
+    # but for now we follow the platform standard limit.
+    query_result = get_features_in_bbox(
+        bbox=None, 
+        user_id=request.user.id, 
+        tags=tags, 
+        match_mode=match_mode
+    )
+    
+    geojson_features = query_result.features
 
     # Create GeoJSON FeatureCollection
     geojson_data = {

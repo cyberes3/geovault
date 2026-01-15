@@ -43,8 +43,15 @@ def get_geojson_data(request):
                 'code': 400
             }, status=400)
 
+    # Get tags and match mode parameters
+    tags = request.GET.getlist('tags')
+    tags = [tag.strip() for tag in tags if tag.strip()] or None
+    match_mode = request.GET.get('match_mode', 'AND').upper()
+    if match_mode not in ['AND', 'OR']:
+        match_mode = 'AND'
+
     # Fetch data from database with optimized single query
-    query_result = get_features_in_bbox(bbox, request.user.id, collection_id=collection_id)
+    query_result = get_features_in_bbox(bbox, request.user.id, tags=tags, match_mode=match_mode, collection_id=collection_id)
     features = query_result.features
     total_features_in_bbox = query_result.total_count
     fallback_used = query_result.fallback_used

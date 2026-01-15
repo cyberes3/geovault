@@ -456,6 +456,8 @@ export default {
       showFeaturePopup: false,
       isTagFilterActive: false,
       tagFilteredFeatures: [],
+      currentTags: null,
+      currentTagMatchMode: 'AND',
       collectionName: null,
       isCollectionMode: false,
       availableTags: [],
@@ -1031,7 +1033,9 @@ export default {
         type: 'default',
         isPublicShare: false,
         isBboxBased: true,
-        requiresInitialLoadOnly: false
+        requiresInitialLoadOnly: false,
+        tags: this.currentTags,
+        matchMode: this.currentTagMatchMode
       }
     },
     /**
@@ -1135,10 +1139,20 @@ export default {
           return null
 
         case 'collection':
-          return `${this.API_BASE_URL}?bbox=${bboxString}&zoom=${roundedZoom}&format=protobuf&collection=${context.collectionId}`
+          let collectionUrl = `${this.API_BASE_URL}?bbox=${bboxString}&zoom=${roundedZoom}&format=protobuf&collection=${context.collectionId}`
+          if (context.tags && context.tags.length > 0) {
+            const tagParams = context.tags.map(tag => `tags=${encodeURIComponent(tag)}`).join('&')
+            collectionUrl += `&${tagParams}&match_mode=${context.matchMode}`
+          }
+          return collectionUrl
 
         case 'default':
-          return `${this.API_BASE_URL}?bbox=${bboxString}&zoom=${roundedZoom}&format=protobuf`
+          let defaultUrl = `${this.API_BASE_URL}?bbox=${bboxString}&zoom=${roundedZoom}&format=protobuf`
+          if (context.tags && context.tags.length > 0) {
+            const tagParams = context.tags.map(tag => `tags=${encodeURIComponent(tag)}`).join('&')
+            defaultUrl += `&${tagParams}&match_mode=${context.matchMode}`
+          }
+          return defaultUrl
 
         default:
           console.error('Unknown load context type:', context.type)
@@ -1229,7 +1243,7 @@ export default {
      */
     async loadDataForCurrentView() {
       if (!this.map) return
-      if (this.isTagFilterActive) return
+      // if (this.isTagFilterActive) return // REMOVED: Bbox API now handles tag filtering
 
       // For MapLibre, check if map is ready by checking if it has bounds
       // The loaded() check can be too strict - instead check if we can get bounds
@@ -3250,17 +3264,18 @@ export default {
         this.updateFeaturesInExtent()
       }
     },
-    handleTagFilterChange(filteredFeatures) {
+    handleTagFilterChange({ tags, matchMode }) {
       if (!this.map || !this.map.getSource('geojson-data')) {
         return
       }
 
-      if (filteredFeatures === null) {
+      if (!tags || tags.length === 0) {
         // Clear tag filter
         this.isTagFilterActive = false
-        this.tagFilteredFeatures = []
-        const source = this.map.getSource('geojson-data')
-        source.setData({ type: 'FeatureCollection', features: [] })
+        this.currentTags = null
+        this.currentTagMatchMode = 'AND'
+        
+        // Reset map to default state
         this.loadedBounds.clear()
         this.featureTimestamps = {}
         this.loadDataForCurrentView()
@@ -3269,37 +3284,15 @@ export default {
 
       // Apply tag filter
       this.isTagFilterActive = true
-      this.tagFilteredFeatures = filteredFeatures
+      this.currentTags = tags
+      this.currentTagMatchMode = matchMode || 'AND'
 
-      // Convert features to GeoJSON if needed (features are now native GeoJSON)
-      const geojsonFeatures = filteredFeatures.map(f => {
-        return markRaw({
-          type: 'Feature',
-          properties: f.properties || {},
-          geometry: f.geometry
-        })
-      })
-
-      // Filter out points on borders
-      const filteredGeojsonFeatures = filterPointsOnBorders(geojsonFeatures)
-
-      const source = this.map.getSource('geojson-data')
-      // Mark the entire data structure as raw to prevent Vue reactivity
-      source.setData(markRaw({
-        type: 'FeatureCollection',
-        features: filteredGeojsonFeatures.map(f => markRaw(f))
-      }))
-
-      this.updateFeatureCount()
-      this.updateFeaturesInExtent()
-
-      // If we have a tag query parameter and this is initial load, zoom to filtered features
-      if (this.$route.query.tag && this.isInitialLoad && filteredFeatures.length > 0) {
-        this.$nextTick(() => {
-          this.zoomToTaggedFeatures(filteredFeatures)
-        })
-      }
+      // Trigger reload with new tags
+      this.loadedBounds.clear()
+      this.featureTimestamps = {}
+      this.loadDataForCurrentView()
     },
+
     zoomToTaggedFeatures(features) {
       if (!this.map || !features || features.length === 0) {
         return
@@ -3833,9 +3826,20 @@ export default {
     },
     async handleUrlTag() {
       // This method is called when tag query is present
-      // The actual zoom will be triggered by handleTagFilterChange when features are loaded
-      // We just need to ensure the map is ready
       await this.waitForMap()
+
+      // Ensure currentTags are set from URL if present
+      if (this.initialSelectedTags && this.initialSelectedTags.length > 0) {
+        this.currentTags = this.initialSelectedTags
+        this.isTagFilterActive = true
+      } else if (this.$route.query.tag) {
+         // Fallback if initialSelectedTags not ready
+         this.currentTags = [this.$route.query.tag]
+         this.isTagFilterActive = true
+      }
+      
+      // Load data with the tag filter applied
+      await this.loadDataForCurrentView()
     },
     async waitForMap() {
       // Wait for map to be initialized (handles keep-alive restore scenarios)
@@ -4090,6 +4094,13 @@ export default {
       return
     }
 
+    // Initialize tags from URL query params explicitly
+    if (this.initialSelectedTags && this.initialSelectedTags.length > 0) {
+      this.currentTags = this.initialSelectedTags
+      this.isTagFilterActive = true
+    }
+
+    // Initial data load - critical for ensuring data appears on page load
     // Wait for map to load before proceeding
     await new Promise((resolve) => {
       if (this.map.loaded()) {
@@ -4145,7 +4156,7 @@ export default {
       // Then handleUrlTag will zoom to fit all filtered features
       await this.handleUrlTag()
     } else {
-      // Normal flow for non-featureId navigation
+      // Default behavior: just load data for current view
       await this.loadDataForCurrentView()
     }
 
