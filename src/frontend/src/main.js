@@ -57,6 +57,88 @@ app.component('Loader', Loader);
 app.component('SettingsInput', SettingsInput);
 
 /**
+ * Helper to find setup function from ES module or UMD bundle.
+ * 
+ * @param {any} module - The imported module
+ * @param {string} extensionName - Extension name in snake_case
+ * @returns {Function|null} The setup function or null if not found
+ */
+function findSetupFunction(module, extensionName) {
+    // Try ES module export first
+    if (module.setup && typeof module.setup === 'function') {
+        return module.setup;
+    }
+    
+    // Fallback to UMD global (if needed)
+    // Convert extension name to PascalCase for global variable name
+    const globalName = extensionName
+        .split('_')
+        .map(word => word.charAt(0).toUpperCase() + word.slice(1))
+        .join('');
+    
+    if (window[globalName] && window[globalName].setup) {
+        return window[globalName].setup;
+    }
+    
+    return null;
+}
+
+/**
+ * Helper to create a scoped router wrapper with navigation helpers.
+ * 
+ * @param {any} router - Vue Router instance
+ * @param {string} prefix - URL prefix for scoping (e.g., '/extensions/my-extension')
+ * @returns {Object} Scoped router object with navigation methods
+ */
+function createScopedRouter(router, prefix) {
+    return {
+        addRoute: (route) => {
+            const relPath = route.path.startsWith('/') ? route.path : `/${route.path}`;
+            route.path = `${prefix}${relPath}`;
+            router.addRoute(route);
+        },
+        navigate: (path) => {
+            const relPath = path.startsWith('/') ? path : `/${path}`;
+            return router.push(`${prefix}${relPath}`);
+        },
+        go: (n) => router.go(n),
+        back: () => router.back(),
+        forward: () => router.forward()
+    };
+}
+
+/**
+ * Helper to create a scoped registry wrapper.
+ * 
+ * @param {any} registry - Extension registry instance
+ * @param {string} prefix - URL prefix for scoping (e.g., '/extensions/my-extension')
+ * @returns {Object} Scoped registry object with registration methods
+ */
+function createScopedRegistry(registry, prefix) {
+    return {
+        registerNavLink: (link) => {
+            const relPath = link.path.startsWith('/') ? link.path : `/${link.path}`;
+            link.fullPath = `${prefix}${relPath}`;
+            registry.registerNavLink(link);
+        },
+        registerSettingsTab: (tab) => {
+            registry.registerSettingsTab(tab);
+        },
+        registerRoutes: (routes) => {
+            // Scope all route paths with extension prefix
+            const scopedRoutes = routes.map(route => {
+                const relPath = route.path.startsWith('/') ? route.path : `/${route.path}`;
+                return {
+                    ...route,
+                    path: `${prefix}${relPath}`
+                };
+            });
+            registry.registerRoutes(scopedRoutes);
+        }
+    };
+}
+
+/**
  * Dynamically load and setup extensions.
  * 
  * Each extension must export a setup() function as an ES module:
@@ -88,22 +170,7 @@ async function loadExtensions() {
                     const prefix = `/extensions/${kebabName}`;
 
                     // Find the exported setup function
-                    // For UMD bundles loaded via import(), the setup function may be on the global object
-                    // The UMD format sets window[globalName].setup (e.g., window.ExampleExtension.setup)
-                    let setup = module.setup;
-
-                    // If setup not found on module, try the global variable
-                    // Convert extension name to PascalCase for global variable name
-                    if (!setup) {
-                        const globalName = ext.name
-                            .split('_')
-                            .map(word => word.charAt(0).toUpperCase() + word.slice(1))
-                            .join('');
-
-                        if (window[globalName] && window[globalName].setup) {
-                            setup = window[globalName].setup;
-                        }
-                    }
+                    const setup = findSetupFunction(module, ext.name);
 
                     if (!setup || typeof setup !== 'function') {
                         console.error(
@@ -116,44 +183,9 @@ async function loadExtensions() {
                     // Create ExtensionApi instance with automatic CSRF handling
                     const api = new ExtensionApi(ext.name);
 
-                    // Enhanced scoped router with navigation helpers
-                    const scopedRouter = {
-                        addRoute: (route) => {
-                            const relPath = route.path.startsWith('/') ? route.path : `/${route.path}`;
-                            route.path = `${prefix}${relPath}`;
-                            router.addRoute(route);
-                        },
-                        navigate: (path) => {
-                            const relPath = path.startsWith('/') ? path : `/${path}`;
-                            return router.push(`${prefix}${relPath}`);
-                        },
-                        go: (n) => router.go(n),
-                        back: () => router.back(),
-                        forward: () => router.forward()
-                    };
-
-                    // Complete scoped registry with all methods
-                    const scopedRegistry = {
-                        registerNavLink: (link) => {
-                            const relPath = link.path.startsWith('/') ? link.path : `/${link.path}`;
-                            link.fullPath = `${prefix}${relPath}`;
-                            extensionRegistry.registerNavLink(link);
-                        },
-                        registerSettingsTab: (tab) => {
-                            extensionRegistry.registerSettingsTab(tab);
-                        },
-                        registerRoutes: (routes) => {
-                            // Scope all route paths with extension prefix
-                            const scopedRoutes = routes.map(route => {
-                                const relPath = route.path.startsWith('/') ? route.path : `/${route.path}`;
-                                return {
-                                    ...route,
-                                    path: `${prefix}${relPath}`
-                                };
-                            });
-                            extensionRegistry.registerRoutes(scopedRoutes);
-                        }
-                    };
+                    // Create scoped router and registry using helper functions
+                    const scopedRouter = createScopedRouter(router, prefix);
+                    const scopedRegistry = createScopedRegistry(extensionRegistry, prefix);
 
                     // Extension metadata
                     const metadata = {

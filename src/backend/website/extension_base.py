@@ -108,7 +108,7 @@ class ExtensionAppConfig(AppConfig):
             # Always clear extension context
             clear_extension_context()
     
-    def extension_ready(self):
+    def extension_ready(self) -> None:
         """
         Override this method in your extension to perform initialization.
         

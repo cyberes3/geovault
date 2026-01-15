@@ -42,7 +42,7 @@ class ExtensionRegistry:
         loaded_names: List[str] = []
         
         # Track extension names to detect duplicates before loading
-        extension_names = {}  # name -> list of folder names
+        extension_names: Dict[str, List[str]] = {}  # name -> list of folder names
 
         logger.info(f"Scanning for extensions in {self.extensions_dir}")
 

@@ -2,6 +2,7 @@
 import pytest
 import tempfile
 import shutil
+import importlib
 from unittest.mock import patch, MagicMock, mock_open
 from pathlib import Path
 from website.extension_loader import ExtensionRegistry, get_extension_registry, _registry
@@ -640,28 +641,43 @@ class TestFrontendAssetDiscovery:
 # ============================================================================
 
 class TestExtensionAPIEdgeCases(TestCase):
+    def setUp(self):
+        """Create a test user for authentication."""
+        from django.contrib.auth import get_user_model
+        User = get_user_model()
+        self.user = User.objects.create_user(
+            username='testuser',
+            email='test@example.com',
+            password='testpass123'
+        )
+    
     def test_list_extensions_empty_registry(self):
         """Test GET /api/extensions/ when no extensions are loaded."""
-        client = self.client
+        # Login required for this endpoint
+        self.client.force_login(self.user)
         
-        # Mock registry to return empty list - patch at the view level
+        # Mock registry to return empty list - patch get_extension_registry
         mock_registry_instance = MagicMock()
-        mock_registry_instance.get_active_extensions.return_value = []
+        mock_registry_instance.get_loaded_extensions.return_value = []
         
-        with patch('api.views.extensions.management._registry', mock_registry_instance):
-            response = client.get('/api/extensions/')
+        with patch('api.views.extensions.management.get_extension_registry', return_value=mock_registry_instance):
+            response = self.client.get('/api/extensions/')
             assert response.status_code == 200
             data = response.json()
             assert isinstance(data, list)
             assert len(data) == 0
 
     def test_list_extensions_registry_none(self):
-        """Test GET /api/extensions/ when _registry is None."""
-        client = self.client
+        """Test GET /api/extensions/ when registry returns empty list."""
+        # Login required for this endpoint
+        self.client.force_login(self.user)
         
-        # Mock _registry to be None
-        with patch('api.views.extensions.management._registry', None):
-            response = client.get('/api/extensions/')
+        # Mock registry to return empty list
+        mock_registry_instance = MagicMock()
+        mock_registry_instance.get_loaded_extensions.return_value = []
+        
+        with patch('api.views.extensions.management.get_extension_registry', return_value=mock_registry_instance):
+            response = self.client.get('/api/extensions/')
             assert response.status_code == 200
             data = response.json()
             assert isinstance(data, list)
@@ -679,17 +695,57 @@ class TestExtensionAPIEdgeCases(TestCase):
             
             registry.discover_extensions()
             
-            extensions = registry.get_active_extensions()
+            extensions = registry.get_loaded_extensions()
             
             if len(extensions) > 0:
                 ext = extensions[0]
-                # Verify all expected fields are present
+                # Verify all expected public fields are present
+                # (internal fields prefixed with _ are filtered out)
                 assert 'name' in ext
                 assert 'version' in ext
                 assert 'description' in ext
                 assert 'frontend_entry' in ext
                 assert 'frontend_css' in ext
-                assert 'urls_module' in ext
+                # urls_module is now internal (_urls_module) and should NOT be in public API
+                assert '_urls_module' not in ext
+
+    def test_internal_fields_filtered_from_api(self):
+        """Test that internal fields (prefixed with _) are not exposed via get_loaded_extensions()."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            ext_dir = Path(tmpdir)
+            ext_path = ext_dir / 'test_internal_ext'
+            ext_path.mkdir()
+            
+            manifest_path = ext_path / 'manifest.py'
+            manifest_path.write_text('name = "test_internal_ext"\nversion = "1.0.0"')
+            
+            # Create backend with urls.py to ensure _urls_module is set
+            backend_path = ext_path / 'src' / 'backend'
+            backend_path.mkdir(parents=True)
+            (backend_path / '__init__.py').write_text('')
+            (backend_path / 'urls.py').write_text('from django.urls import path\nurlpatterns = []')
+            
+            registry = ExtensionRegistry(ext_dir)
+            with patch('website.extension_loader.get_config_loader') as mock_loader_get:
+                mock_config = MagicMock()
+                mock_config.get_bool.return_value = True
+                mock_loader_get.return_value = mock_config
+                
+                registry.discover_extensions()
+                
+                # Check internal storage has _urls_module
+                internal_meta = registry.loaded_extensions['test_internal_ext']
+                assert '_urls_module' in internal_meta
+                assert internal_meta['_urls_module'] is not None
+                
+                # Check public API filters out _urls_module
+                extensions = registry.get_loaded_extensions()
+                public_ext = next((e for e in extensions if e['name'] == 'test_internal_ext'), None)
+                assert public_ext is not None
+                assert '_urls_module' not in public_ext
+                # But public fields should still be present
+                assert 'name' in public_ext
+                assert 'version' in public_ext
 
 
 # ============================================================================
@@ -846,7 +902,7 @@ class TestMultipleExtensions:
 @pytest.mark.django_db
 class TestRegistryStateManagement:
     def test_get_active_extensions_returns_metadata(self):
-        """Test that get_active_extensions() returns correct metadata."""
+        """Test that get_loaded_extensions() returns correct metadata."""
         from website.settings import EXTENSIONS_DIR
         registry = ExtensionRegistry(EXTENSIONS_DIR)
         
@@ -857,7 +913,7 @@ class TestRegistryStateManagement:
             
             registry.discover_extensions()
             
-            extensions = registry.get_active_extensions()
+            extensions = registry.get_loaded_extensions()
             
             assert isinstance(extensions, list)
             if len(extensions) > 0:
@@ -1198,8 +1254,27 @@ class CustomAppsExtConfig(ExtensionAppConfig):
                 
                 # Verify the AppConfig class exists and inherits correctly
                 app_config_path = apps[0]
-                module_path, class_name = app_config_path.rsplit('.', 1)
-                module = __import__(module_path, fromlist=[class_name])
-                app_config_class = getattr(module, class_name)
+                # When apps.py exists, extension loader returns just the module path
+                # The AppConfig class is in the apps module
+                apps_module_path = f"{app_config_path}.apps"
                 
+                # Ensure the extension directory is in sys.path (should already be from discover_extensions)
+                if str(ext_dir) not in sys.path:
+                    sys.path.insert(0, str(ext_dir))
+                
+                # Import the apps module where the AppConfig class is defined
+                apps_module = importlib.import_module(apps_module_path)
+                
+                # Find the AppConfig class in the apps module
+                app_config_class = None
+                for attr_name in dir(apps_module):
+                    attr = getattr(apps_module, attr_name)
+                    if (isinstance(attr, type) and 
+                        issubclass(attr, ExtensionAppConfig) and 
+                        attr is not ExtensionAppConfig):
+                        app_config_class = attr
+                        break
+                
+                # Should have found the CustomAppsExtConfig class
+                assert app_config_class is not None, f"Could not find AppConfig class in {apps_module_path}. Available: {[x for x in dir(apps_module) if not x.startswith('_')]}"
                 assert issubclass(app_config_class, ExtensionAppConfig)
