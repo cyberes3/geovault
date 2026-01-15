@@ -91,7 +91,7 @@ def reverse_migrate_caltopo_data(apps, schema_editor):
 class Migration(migrations.Migration):
 
     dependencies = [
-        ('caltopo_extension', '0001_initial'),
+        ('caltopo', '0001_initial'),
     ]
 
     operations = [

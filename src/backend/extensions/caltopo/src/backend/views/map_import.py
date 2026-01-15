@@ -38,7 +38,7 @@ def import_caltopo_map(request: HttpRequest, validated_data: Dict[str, Any]) -> 
     """
     Import all features from a CalTopo map.
     
-    POST /api/extensions/caltopo_extension/import/map/
+    POST /api/extensions/caltopo/import/map/
     Body: {
         "map_id": "abc12"
     }

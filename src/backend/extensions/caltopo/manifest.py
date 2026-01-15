@@ -5,7 +5,7 @@
 # Provides integration with CalTopo for importing maps and features
 
 # The unique internal name of the extension. Used for folder naming and URL scoping.
-name = "caltopo_extension"
+name = "caltopo"
 
 # Versioning follows Semantic Versioning (semver.org)
 version = "1.0.0"

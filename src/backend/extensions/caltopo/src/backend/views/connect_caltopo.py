@@ -37,7 +37,7 @@ def connect_caltopo(request: HttpRequest, validated_data: Dict[str, Any]) -> Jso
     """
     Save or update CalTopo credentials for the current user.
     
-    POST /api/extensions/caltopo_extension/connect/
+    POST /api/extensions/caltopo/connect/
     Body: {
         "account_id": "abc123",
         "credential_id": "123456789012",
@@ -100,7 +100,7 @@ def get_caltopo_status(request: HttpRequest) -> JsonResponse:
     """
     Check if the current user has connected CalTopo and validate credentials.
     
-    GET /api/extensions/caltopo_extension/status/
+    GET /api/extensions/caltopo/status/
     
     Returns:
         - status: 'not_connected' (no credentials stored)
@@ -181,7 +181,7 @@ def disconnect_caltopo(request: HttpRequest) -> JsonResponse:
     """
     Disconnect CalTopo by deleting the user's CalTopo credentials.
     
-    POST /api/extensions/caltopo_extension/disconnect/
+    POST /api/extensions/caltopo/disconnect/
     """
     try:
         caltopo_user = CalTopoUser.objects.get(user=request.user)

@@ -81,7 +81,7 @@ def import_caltopo_feature(request: HttpRequest, validated_data: Dict[str, Any])
     """
     Import a single feature from CalTopo.
     
-    POST /api/extensions/caltopo_extension/import/feature/
+    POST /api/extensions/caltopo/import/feature/
     Body: {
         "map_id": "abc12",
         "feature_id": "1234567890",

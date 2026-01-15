@@ -23,7 +23,7 @@ def list_caltopo_maps(request: HttpRequest) -> JsonResponse:
     """
     List all available CalTopo maps for the current user.
     
-    GET /api/extensions/caltopo_extension/maps/
+    GET /api/extensions/caltopo/maps/
     """
     caltopo_user, error_resp = require_caltopo_connection(request)
     if error_resp:
@@ -46,7 +46,7 @@ def get_caltopo_map_features(request: HttpRequest, map_id: str) -> JsonResponse:
     """
     Get all features from a specific CalTopo map.
     
-    GET /api/extensions/caltopo_extension/maps/{map_id}/features/
+    GET /api/extensions/caltopo/maps/{map_id}/features/
     """
     caltopo_user, error_resp = require_caltopo_connection(request)
     if error_resp:
@@ -186,7 +186,7 @@ def get_caltopo_map_details(request: HttpRequest, map_id: str) -> JsonResponse:
     """
     Get details about a specific CalTopo map.
     
-    GET /api/extensions/caltopo_extension/maps/{map_id}/
+    GET /api/extensions/caltopo/maps/{map_id}/
     """
     caltopo_user, error_resp = require_caltopo_connection(request)
     if error_resp:

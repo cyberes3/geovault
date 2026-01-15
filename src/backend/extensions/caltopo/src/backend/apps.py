@@ -10,7 +10,7 @@ from website.extensions.extension_hooks import register_hook
 from website.extensions.extension_logging import register_logging_filter
 from caltopo_extension.src.backend.logging_filters import SuppressCaltopoFilter
 
-logger = logging.getLogger('caltopo_extension.apps')
+logger = logging.getLogger('caltopo.apps')
 
 
 class CaltopoExtensionConfig(ExtensionAppConfig):
@@ -18,8 +18,8 @@ class CaltopoExtensionConfig(ExtensionAppConfig):
     AppConfig for the CalTopo extension.
     """
     default_auto_field = 'django.db.models.BigAutoField'
-    name = 'caltopo_extension.src.backend'
-    label = 'caltopo_extension'
+    name = 'caltopo.src.backend'
+    label = 'caltopo'
     verbose_name = 'CalTopo Extension'
     
     def extension_ready(self):
@@ -32,7 +32,7 @@ class CaltopoExtensionConfig(ExtensionAppConfig):
         
         # Register import hook to track imported features
         register_hook('import', 'caltopo_import', self.handle_import)
-        logger.info("Registered import hook: caltopo_extension.caltopo_import")
+        logger.info("Registered import hook: caltopo.caltopo_import")
         
         # Register logging filter to suppress caltopo_python library messages
         register_logging_filter(SuppressCaltopoFilter())
