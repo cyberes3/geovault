@@ -10,6 +10,7 @@ import {
   getPolygonLayerConfig,
   getPolygonOutlineLayerConfig
 } from './featureStyles.js'
+import { MAX_ZOOM_LEVEL } from './mapInitialization.js'
 
 /**
  * Ensure all required layers exist on the map with correct ordering:
@@ -370,6 +371,12 @@ export function updateMapLayerSource(map, layerId, tileSource) {
     attribution: attribution
   })
 
+  // Calculate maxzoom - ensure it's at least MAX_ZOOM_LEVEL + 1 so tiles render at max zoom
+  // Note: MapLibre's maxzoom is exclusive, so maxzoom: 17 means visible only at zoom < 17
+  // To render at zoom 17, we need maxzoom: 18
+  const sourceMaxZoom = tileSource.maxzoom || MAX_ZOOM_LEVEL
+  const layerMaxZoom = Math.max(sourceMaxZoom, MAX_ZOOM_LEVEL + 1)
+
   // Add or update layer
   if (!map.getLayer('tile-layer')) {
     map.addLayer({
@@ -377,8 +384,12 @@ export function updateMapLayerSource(map, layerId, tileSource) {
       type: 'raster',
       source: 'tile-source',
       minzoom: tileSource.minzoom || 0,
-      maxzoom: tileSource.maxzoom || 19
+      maxzoom: layerMaxZoom
     })
+  } else {
+    // Update existing layer's maxzoom to ensure it renders at max zoom
+    const currentMinZoom = map.getLayer('tile-layer').minzoom || 0
+    map.setLayerZoomRange('tile-layer', currentMinZoom, layerMaxZoom)
   }
 
   // Move tile layer to bottom (below all other layers)

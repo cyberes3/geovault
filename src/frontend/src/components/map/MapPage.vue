@@ -272,6 +272,8 @@ import { fetchUserLocation } from '@/utils/map/locationUtils.js'
 import { getCoordinatesFromGeometry, filterFeaturesByBounds, cleanupDistantFeatures as cleanupDistantFeaturesUtil } from '@/utils/map/featureExtent.js'
 import { parseBboxResponse } from '@/utils/format/geobuf.js'
 
+import { MAX_ZOOM_LEVEL } from '@/utils/map/maplibre/mapInitialization.js'
+
 export default {
   name: 'MapPage',
   components: {
@@ -572,6 +574,12 @@ export default {
         }, 150) // Map stopped moving
       })
       this.map.on('zoom', () => {
+        // Clamp zoom level to maximum
+        const currentZoom = this.map.getZoom()
+        if (currentZoom > MAX_ZOOM_LEVEL) {
+          this.map.setZoom(MAX_ZOOM_LEVEL)
+        }
+        
         this.cancelPendingBboxQuery()
         this.isMapMoving = true
         if (this.movementTimeout) clearTimeout(this.movementTimeout)
@@ -593,6 +601,18 @@ export default {
           this.debouncedUpdateFeaturesInExtent()
         },
         onZoomEnd: () => {
+          // Clamp zoom level to maximum
+          const currentZoom = this.map.getZoom()
+          if (currentZoom > MAX_ZOOM_LEVEL) {
+            this.map.setZoom(MAX_ZOOM_LEVEL)
+          }
+          
+          // Ensure all layers have correct maxzoom when at or near max zoom
+          // MapLibre's maxzoom is exclusive, so we need MAX_ZOOM_LEVEL + 1
+          if (currentZoom >= MAX_ZOOM_LEVEL - 0.5) {
+            this.updateLayerMaxZoom(MAX_ZOOM_LEVEL + 1)
+          }
+          
           // Clear movement flag immediately since zoomend only fires when zoom stops
           this.isMapMoving = false
           if (this.movementTimeout) {
@@ -1988,6 +2008,42 @@ export default {
     },
 
     /**
+     * Update all layers in the style to have a minimum maxzoom value
+     * This ensures layers render at the maximum zoom level
+     * Note: MapLibre's maxzoom is exclusive, so we need MAX_ZOOM_LEVEL + 1 to render at MAX_ZOOM_LEVEL
+     * @param {number} minMaxZoom - Minimum maxzoom value to set (should be MAX_ZOOM_LEVEL + 1)
+     */
+    updateLayerMaxZoom(minMaxZoom = MAX_ZOOM_LEVEL + 1) {
+      if (!this.map) return
+      
+      try {
+        const style = this.map.getStyle()
+        if (!style || !style.layers) return
+        
+        // Iterate through all layers and update maxzoom if it's less than minMaxZoom
+        style.layers.forEach(layer => {
+          try {
+            const currentMaxZoom = layer.maxzoom
+            const currentMinZoom = layer.minzoom || 0
+            
+            // If layer has maxzoom less than our minimum, update it
+            if (currentMaxZoom !== undefined && currentMaxZoom < minMaxZoom) {
+              // Use setLayerZoomRange to update both minzoom and maxzoom
+              this.map.setLayerZoomRange(layer.id, currentMinZoom, minMaxZoom)
+            } else if (currentMaxZoom === undefined) {
+              // If layer doesn't have maxzoom, set it to our minimum
+              this.map.setLayerZoomRange(layer.id, currentMinZoom, minMaxZoom)
+            }
+          } catch (error) {
+            // Some layers might not support zoom range updates, skip them
+            console.debug(`Could not update maxzoom for layer ${layer.id}:`, error)
+          }
+        })
+      } catch (error) {
+        console.warn('Error updating layer maxzoom:', error)
+      }
+    },
+    /**
      * Apply tile source to the map (style-based or raster)
      * @param {string} layerValue - Layer ID to apply
      * @returns {Promise} Resolves when tile source is applied
@@ -2010,6 +2066,11 @@ export default {
         this.map.setStyle(styleUrl)
         // Wait for styledata event to ensure style is loaded
         await this.waitForMapEvent('styledata')
+        // Ensure maxZoom is set to max allowed level after style change
+        this.map.setMaxZoom(MAX_ZOOM_LEVEL)
+        // Update all layers to have maxzoom of at least max allowed level + 1 so they render at max zoom
+        // Note: MapLibre's maxzoom is exclusive, so we need MAX_ZOOM_LEVEL + 1
+        this.updateLayerMaxZoom(MAX_ZOOM_LEVEL + 1)
       } else {
         // Raster-based source
         const url = clientConfig.url || `/api/tiles/${layerValue}/{z}/{x}/{y}`
@@ -2033,6 +2094,15 @@ export default {
 
         // Wait for styledata event
         await this.waitForMapEvent('styledata')
+        
+        // Ensure maxZoom is set to max allowed level after style change
+        this.map.setMaxZoom(MAX_ZOOM_LEVEL)
+
+        // Calculate maxzoom - ensure it's at least MAX_ZOOM_LEVEL + 1 so tiles render at max zoom
+        // Note: MapLibre's maxzoom is exclusive, so maxzoom: 17 means visible only at zoom < 17
+        // To render at zoom 17, we need maxzoom: 18
+        const sourceMaxZoom = clientConfig.maxzoom || MAX_ZOOM_LEVEL
+        const layerMaxZoom = Math.max(sourceMaxZoom, MAX_ZOOM_LEVEL + 1)
 
         // Add raster source and layer
         this.map.addSource('raster-source', {
@@ -2041,13 +2111,21 @@ export default {
           tileSize: clientConfig.tileSize || 256,
           attribution: clientConfig.attribution || ''
         })
-        this.map.addLayer({
-          id: 'raster-layer',
-          type: 'raster',
-          source: 'raster-source',
-          minzoom: clientConfig.minzoom || 0,
-          maxzoom: clientConfig.maxzoom || 22
-        })
+        
+        // Add or update layer
+        if (!this.map.getLayer('raster-layer')) {
+          this.map.addLayer({
+            id: 'raster-layer',
+            type: 'raster',
+            source: 'raster-source',
+            minzoom: clientConfig.minzoom || 0,
+            maxzoom: layerMaxZoom
+          })
+        } else {
+          // Update existing layer's maxzoom to ensure it renders at max zoom
+          const currentMinZoom = this.map.getLayer('raster-layer').minzoom || 0
+          this.map.setLayerZoomRange('raster-layer', currentMinZoom, layerMaxZoom)
+        }
       }
     },
 
@@ -2240,6 +2318,12 @@ export default {
         // Wait for style to be ready
         await this.waitForMapEvent('idle')
         
+        // Ensure maxZoom is set to max allowed level after style is fully loaded
+        this.map.setMaxZoom(MAX_ZOOM_LEVEL)
+        // Update all layers to have maxzoom of at least max allowed level + 1 so they render at max zoom
+        // Note: MapLibre's maxzoom is exclusive, so we need MAX_ZOOM_LEVEL + 1
+        this.updateLayerMaxZoom(MAX_ZOOM_LEVEL + 1)
+        
         // Restore features immediately (setStyle() destroys sources, but we restore them right away)
         await restoreGeoJsonFeatures(this.map, geojsonData, this.showAllLabels, this.labelMarkerManager)
         
@@ -2333,6 +2417,12 @@ export default {
         // 6. Restore map view immediately after style loads (before other operations)
         // This prevents the visible reset that happens when setStyle() resets pitch/bearing
         restoreMapView(this.map, mapState.center, mapState.zoom, mapState.pitch, mapState.bearing)
+        
+        // Ensure maxZoom is set to max allowed level after style change
+        this.map.setMaxZoom(MAX_ZOOM_LEVEL)
+        // Update all layers to have maxzoom of at least max allowed level + 1 so they render at max zoom
+        // Note: MapLibre's maxzoom is exclusive, so we need MAX_ZOOM_LEVEL + 1
+        this.updateLayerMaxZoom(MAX_ZOOM_LEVEL + 1)
 
         // 7. Wait for style to be ready (event-driven)
         await this.waitForMapEvent('idle')
@@ -2431,6 +2521,12 @@ export default {
       // Use a one-time listener for moveend to ensure data loads after animation
       return new Promise((resolve) => {
         const onMoveEnd = () => {
+          // Clamp zoom level to maximum after animation completes
+          const currentZoom = this.map.getZoom()
+          if (currentZoom > MAX_ZOOM_LEVEL) {
+            this.map.setZoom(MAX_ZOOM_LEVEL)
+          }
+          
           // Trigger immediate (non-debounced) data load
           this.loadDataForCurrentView()
           resolve()
@@ -2726,6 +2822,11 @@ export default {
       }
 
       // Fly to feature
+      // Ensure map maxZoom is set to max allowed level before fitting bounds
+      if (this.map.getMaxZoom() !== MAX_ZOOM_LEVEL) {
+        this.map.setMaxZoom(MAX_ZOOM_LEVEL)
+      }
+      
       return this.navigateAndRefresh(() => {
         try {
           // Create LngLatBounds: sw corner [minLon, minLat], ne corner [maxLon, maxLat]
@@ -2733,10 +2834,36 @@ export default {
             [minLon, minLat], // southwest corner
             [maxLon, maxLat]  // northeast corner
           )
+          
+          // Add aggressive zoom clamp during animation
+          let zoomClampHandler = null
+          zoomClampHandler = () => {
+            const currentZoom = this.map.getZoom()
+            if (currentZoom > MAX_ZOOM_LEVEL) {
+              // Immediately clamp zoom to max allowed level
+              this.map.setZoom(MAX_ZOOM_LEVEL)
+            }
+          }
+          this.map.on('zoom', zoomClampHandler)
+          
           // Use fitBounds which is more reliable for bounds
           this.map.fitBounds(bounds, {
             padding: padding,
-            duration: 500
+            duration: 500,
+            maxZoom: MAX_ZOOM_LEVEL
+          })
+          
+          // Remove the zoom clamp handler after animation completes
+          this.map.once('moveend', () => {
+            if (zoomClampHandler) {
+              this.map.off('zoom', zoomClampHandler)
+              zoomClampHandler = null
+            }
+            // Final clamp check
+            const finalZoom = this.map.getZoom()
+            if (finalZoom > MAX_ZOOM_LEVEL) {
+              this.map.setZoom(MAX_ZOOM_LEVEL)
+            }
           })
         } catch (error) {
           console.error('zoomToFeature: Error fitting bounds (fallback)', error, error.stack)
@@ -2746,7 +2873,8 @@ export default {
             this.map.flyTo({
               bounds: bounds,
               padding: typeof padding === 'object' ? padding.top : padding,
-              duration: 500
+              duration: 500,
+              maxZoom: MAX_ZOOM_LEVEL
             })
           } catch (error2) {
             console.error('zoomToFeature: Error with flyTo fallback (fallback)', error2)
@@ -3491,7 +3619,8 @@ export default {
           )
           this.map.fitBounds(bounds, {
             padding: { top: 50, bottom: 50, left: 50, right: 50 },
-            duration: 500
+            duration: 500,
+            maxZoom: MAX_ZOOM_LEVEL
           })
         })
       }

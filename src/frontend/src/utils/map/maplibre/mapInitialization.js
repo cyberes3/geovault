@@ -4,6 +4,9 @@
 
 import maplibregl from 'maplibre-gl'
 
+// Maximum allowed zoom level for the map
+export const MAX_ZOOM_LEVEL = 18
+
 /**
  * Initialize a MapLibre map instance
  * @param {HTMLElement} container - Map container element
@@ -33,7 +36,7 @@ export function initializeMap(container, config) {
     },
     center: center, // [lon, lat]
     zoom: zoom,
-    maxZoom: 20,
+    maxZoom: MAX_ZOOM_LEVEL,
     maxPitch: 85,
     attributionControl: false,
     antialias: antialias // Enable anti-aliasing based on user setting
