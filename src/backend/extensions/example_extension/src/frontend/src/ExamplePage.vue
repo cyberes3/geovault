@@ -64,14 +64,19 @@ import { ref, onMounted, inject } from 'vue';
 
 /*
   API INJECTION
-  The 'api' object is injected from main.js. It automatically prefixes
-  your requests with /api/extensions/<name>/ so you don't have to hardcode URLs.
+  The 'api' object is an ExtensionApi instance injected from main.js.
+  It provides convenience methods (get, post, put, delete) with automatic:
+  - CSRF token handling
+  - URL scoping (/api/extensions/<name>/)
+  - Error handling and toast notifications
 */
 const api = inject('exampleExtensionApi');
 
 /*
   TOAST UTILITY
   Access the platform's native notification system.
+  Use toast for success messages, error messages, and custom notifications.
+  ExtensionApi does NOT automatically show toasts - you handle errors explicitly.
 */
 const toast = window.GeoVault.toast;
 
@@ -83,17 +88,19 @@ const adding = ref(false);
 
 /**
  * Fetch items from the extension's backend.
+ * Uses ExtensionApi.get() which handles CSRF tokens automatically.
  */
 const fetchItems = async () => {
   loading.value = true;
   try {
-    // api.url('/items/') returns /api/extensions/example_extension/items/
-    const res = await fetch(api.url('/items/'));
-    if (!res.ok) throw new Error('Failed to fetch');
-    items.value = await res.json();
+    // api.get() automatically handles CSRF token
+    const response = await api.get('/items/');
+    items.value = response.data;
   } catch (e) {
+    // Handle errors explicitly
+    const errorInfo = api.handleError(e);
+    if (toast) toast.error(errorInfo.message);
     console.error('Failed to fetch items:', e);
-    if (toast) toast.error('Could not load items');
   } finally {
     loading.value = false;
   }
@@ -101,6 +108,7 @@ const fetchItems = async () => {
 
 /**
  * Create a new item.
+ * Uses ExtensionApi.post() which handles CSRF tokens automatically.
  */
 const addItem = async () => {
   const name = newItem.value.name.trim();
@@ -108,21 +116,16 @@ const addItem = async () => {
   
   adding.value = true;
   try {
-    const res = await fetch(api.url('/items/'), {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ name, description: '' })
-    });
-    
-    if (res.ok) {
-      newItem.value.name = ''; // Clear input
-      await fetchItems();      // Refresh list
-      if (toast) toast.success('Item added successfully');
-    } else {
-      throw new Error('Failed to add');
-    }
+    // api.post() automatically handles CSRF token and JSON serialization
+    await api.post('/items/', { name, description: '' });
+    newItem.value.name = ''; // Clear input
+    await fetchItems();      // Refresh list
+    if (toast) toast.success('Item added successfully');
   } catch (e) {
-    if (toast) toast.error('Failed to add item');
+    // Handle errors explicitly
+    const errorInfo = api.handleError(e);
+    if (toast) toast.error(errorInfo.message || 'Failed to add item');
+    console.error('Failed to add item:', e);
   } finally {
     adding.value = false;
   }
@@ -130,19 +133,20 @@ const addItem = async () => {
 
 /**
  * Delete an item by ID.
+ * Uses ExtensionApi.delete() which handles CSRF tokens automatically.
  */
 const deleteItem = async (id) => {
   if (confirm('Are you sure you want to delete this item?')) {
     try {
-      const res = await fetch(api.url(`/items/${id}/`), { method: 'DELETE' });
-      if (res.ok) {
-        await fetchItems();
-        if (toast) toast.success('Item deleted');
-      } else {
-        throw new Error('Delete failed');
-      }
+      // api.delete() automatically handles CSRF token
+      await api.delete(`/items/${id}/`);
+      await fetchItems(); // Refresh list
+      if (toast) toast.success('Item deleted');
     } catch (e) {
-      if (toast) toast.error('Failed to delete item');
+      // Handle errors explicitly
+      const errorInfo = api.handleError(e);
+      if (toast) toast.error(errorInfo.message || 'Failed to delete item');
+      console.error('Failed to delete item:', e);
     }
   }
 };

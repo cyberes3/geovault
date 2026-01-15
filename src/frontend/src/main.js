@@ -16,6 +16,7 @@ import axios from 'axios';
 import { toast } from '@/utils/toast';
 import { updateUserSetting, loadSettingsFromStore } from '@/utils/userSettingsService.js';
 import { keyValueToNested, getNestedValue } from '@/utils/settingsUtils.js';
+import { ExtensionApi } from './utils/extensionApi.js';
 
 // Inject utils into registry
 extensionRegistry.utils.updateUserSetting = updateUserSetting;
@@ -57,6 +58,11 @@ app.component('SettingsInput', SettingsInput);
 
 /**
  * Dynamically load and setup extensions.
+ * 
+ * Each extension must export a setup() function as an ES module:
+ *   export async function setup({ app, router, store, registry, api, utils, toast, metadata }) {
+ *     // Extension initialization
+ *   }
  */
 async function loadExtensions() {
     try {
@@ -81,59 +87,82 @@ async function loadExtensions() {
                     const kebabName = ext.name.replace(/_/g, '-');
                     const prefix = `/extensions/${kebabName}`;
 
-                    // Find the exported setup function
-                    let setup = module.setup;
-                    if (!setup) {
-                        const pascalName = ext.name.split(/[_-]/).map(part => part.charAt(0).toUpperCase() + part.slice(1)).join('');
-                        if (window[pascalName] && typeof window[pascalName].setup === 'function') {
-                            setup = window[pascalName].setup;
-                        } else if (window[ext.name] && typeof window[ext.name].setup === 'function') {
-                            setup = window[ext.name].setup;
-                        }
+                    // Find the exported setup function (ES module export only)
+                    const setup = module.setup;
+                    if (!setup || typeof setup !== 'function') {
+                        console.error(
+                            `Extension ${ext.name} has no valid setup function.\n` +
+                            `Expected: export async function setup({ app, router, store, registry, api, utils, toast, metadata }) { ... }`
+                        );
+                        continue;
                     }
 
+                    // Create ExtensionApi instance with automatic CSRF handling
+                    const api = new ExtensionApi(ext.name);
+
+                    // Enhanced scoped router with navigation helpers
                     const scopedRouter = {
                         addRoute: (route) => {
                             const relPath = route.path.startsWith('/') ? route.path : `/${route.path}`;
                             route.path = `${prefix}${relPath}`;
                             router.addRoute(route);
-                        }
+                        },
+                        navigate: (path) => {
+                            const relPath = path.startsWith('/') ? path : `/${path}`;
+                            return router.push(`${prefix}${relPath}`);
+                        },
+                        go: (n) => router.go(n),
+                        back: () => router.back(),
+                        forward: () => router.forward()
                     };
 
+                    // Complete scoped registry with all methods
                     const scopedRegistry = {
-                        ...extensionRegistry,
                         registerNavLink: (link) => {
                             const relPath = link.path.startsWith('/') ? link.path : `/${link.path}`;
                             link.fullPath = `${prefix}${relPath}`;
                             extensionRegistry.registerNavLink(link);
+                        },
+                        registerSettingsTab: (tab) => {
+                            extensionRegistry.registerSettingsTab(tab);
+                        },
+                        registerRoutes: (routes) => {
+                            // Scope all route paths with extension prefix
+                            const scopedRoutes = routes.map(route => {
+                                const relPath = route.path.startsWith('/') ? route.path : `/${route.path}`;
+                                return {
+                                    ...route,
+                                    path: `${prefix}${relPath}`
+                                };
+                            });
+                            extensionRegistry.registerRoutes(scopedRoutes);
                         }
                     };
 
-                    const api = {
-                        url: (path) => {
-                            const relPath = path.startsWith('/') ? path : `/${path}`;
-                            return `/api/extensions/${kebabName}${relPath}`;
-                        }
+                    // Extension metadata
+                    const metadata = {
+                        name: ext.name,
+                        version: ext.version || 'unknown',
+                        description: ext.description || '',
+                        kebabName: kebabName
                     };
 
-                    if (typeof setup === 'function') {
-                        await setup({
-                            app,
-                            router: scopedRouter,
-                            store,
-                            registry: scopedRegistry,
-                            api,
-                            utils: {
-                                updateUserSetting,
-                                loadSettingsFromStore,
-                                keyValueToNested,
-                                getNestedValue
-                            },
-                            toast
-                        });
-                    } else {
-                        console.error(`Extension ${ext.name} has no valid setup function.`);
-                    }
+                    // Call setup function with enhanced API
+                    await setup({
+                        app,
+                        router: scopedRouter,
+                        store,
+                        registry: scopedRegistry,
+                        api,
+                        utils: {
+                            updateUserSetting,
+                            loadSettingsFromStore,
+                            keyValueToNested,
+                            getNestedValue
+                        },
+                        toast,
+                        metadata
+                    });
                 } catch (err) {
                     console.error(`Failed to load extension module ${ext.name}:`, err);
                 }

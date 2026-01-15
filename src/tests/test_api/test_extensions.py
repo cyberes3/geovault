@@ -1111,3 +1111,95 @@ class TestDynamicAppConfig:
                 # Should load the extension
                 assert 'existing_apps_ext' in registry.loaded_extensions
                 assert len(apps) > 0
+
+
+# ============================================================================
+# Extension Hooks and AppConfig Tests
+# ============================================================================
+
+@pytest.mark.django_db
+class TestExtensionAppConfigIntegration:
+    """Test ExtensionAppConfig integration with extension loader."""
+    
+    def test_dynamic_app_config_inherits_extension_app_config(self):
+        """Test that dynamically created AppConfig inherits from ExtensionAppConfig."""
+        from website.extension_base import ExtensionAppConfig
+        
+        with tempfile.TemporaryDirectory() as tmpdir:
+            ext_dir = Path(tmpdir)
+            ext_path = ext_dir / 'test_ext'
+            ext_path.mkdir()
+            
+            manifest_path = ext_path / 'manifest.py'
+            manifest_path.write_text('name = "test_ext"\nversion = "1.0.0"')
+            
+            backend_path = ext_path / 'src' / 'backend'
+            backend_path.mkdir(parents=True)
+            (backend_path / '__init__.py').write_text('')
+            # Don't create apps.py - should use dynamic config
+            
+            registry = ExtensionRegistry(ext_dir)
+            with patch('website.extension_loader.get_config_loader') as mock_loader_get:
+                mock_config = MagicMock()
+                mock_config.get_bool.return_value = True
+                mock_loader_get.return_value = mock_config
+                
+                apps = registry.discover_extensions()
+                
+                # Should have created dynamic AppConfig
+                assert len(apps) == 1
+                app_config_path = apps[0]
+                
+                # Import and verify it inherits from ExtensionAppConfig
+                module_path, class_name = app_config_path.rsplit('.', 1)
+                module = __import__(module_path, fromlist=[class_name])
+                app_config_class = getattr(module, class_name)
+                
+                assert issubclass(app_config_class, ExtensionAppConfig)
+    
+    def test_extension_with_custom_apps_py_can_inherit_extension_app_config(self):
+        """Test that extensions with custom apps.py can inherit from ExtensionAppConfig."""
+        from website.extension_base import ExtensionAppConfig
+        
+        with tempfile.TemporaryDirectory() as tmpdir:
+            ext_dir = Path(tmpdir)
+            ext_path = ext_dir / 'custom_apps_ext'
+            ext_path.mkdir()
+            
+            manifest_path = ext_path / 'manifest.py'
+            manifest_path.write_text('name = "custom_apps_ext"\nversion = "1.0.0"')
+            
+            backend_path = ext_path / 'src' / 'backend'
+            backend_path.mkdir(parents=True)
+            (backend_path / '__init__.py').write_text('')
+            
+            # Create apps.py that inherits from ExtensionAppConfig
+            apps_py_content = '''from website.extension_base import ExtensionAppConfig
+
+class CustomAppsExtConfig(ExtensionAppConfig):
+    default_auto_field = 'django.db.models.BigAutoField'
+    name = 'custom_apps_ext.src.backend'
+    label = 'custom_apps_ext'
+    verbose_name = 'Custom Apps Extension'
+'''
+            (backend_path / 'apps.py').write_text(apps_py_content)
+            
+            registry = ExtensionRegistry(ext_dir)
+            with patch('website.extension_loader.get_config_loader') as mock_loader_get:
+                mock_config = MagicMock()
+                mock_config.get_bool.return_value = True
+                mock_loader_get.return_value = mock_config
+                
+                apps = registry.discover_extensions()
+                
+                # Should load the extension
+                assert 'custom_apps_ext' in registry.loaded_extensions
+                assert len(apps) > 0
+                
+                # Verify the AppConfig class exists and inherits correctly
+                app_config_path = apps[0]
+                module_path, class_name = app_config_path.rsplit('.', 1)
+                module = __import__(module_path, fromlist=[class_name])
+                app_config_class = getattr(module, class_name)
+                
+                assert issubclass(app_config_class, ExtensionAppConfig)

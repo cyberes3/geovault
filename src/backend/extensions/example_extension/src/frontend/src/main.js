@@ -7,19 +7,29 @@ import './assets/main.css';
  * Extension Frontend Setup
  * ==============================================================================
  * This 'setup' function is the main entry point for your frontend extension.
+ * 
+ * IMPORTANT: This function MUST be exported as an ES module:
+ *   export async function setup({ ... }) { ... }
+ * 
  * The platform calls this function and injects several core services:
  * 
- * @param {Object} app      - The main Vue 3 application instance.
- * @param {Object} router   - A scoped router for adding extension-specific paths.
- * @param {Object} store    - The global Vuex store instance.
- * @param {Object} registry - The UI registry for adding nav links and tabs.
- * @param {Object} api      - A helper for generating scoped API URLs.
+ * @param {Object} app      - The main Vue 3 application instance
+ * @param {Object} router   - Enhanced scoped router with navigation helpers
+ * @param {Object} store    - The global Vuex store instance
+ * @param {Object} registry - Complete UI registry (registerNavLink, registerSettingsTab, registerRoutes)
+ * @param {ExtensionApi} api - ExtensionApi instance with automatic CSRF handling and convenience methods
+ * @param {Object} utils    - Utility functions (updateUserSetting, loadSettingsFromStore, etc.)
+ * @param {Function} toast  - Toast notification function
+ * @param {Object} metadata  - Extension metadata (name, version, description, kebabName)
  */
-export async function setup({ app, router, store, registry, api }) {
+export async function setup({ app, router, store, registry, api, utils, toast, metadata }) {
+
+    // Log extension metadata (useful for debugging)
+    console.log(`[${metadata.name}] Initializing extension v${metadata.version}`);
 
     // 1. Provide Context
     // We use provide/inject so any sub-component in this extension 
-    // can easily generate API URLs without needing the 'api' object passed down as a prop.
+    // can easily access the API without needing it passed down as a prop.
     app.provide('exampleExtensionApi', api);
 
     // 2. Register Navigation Link
@@ -45,4 +55,17 @@ export async function setup({ app, router, store, registry, api }) {
         path: '/page',
         component: ExamplePage
     });
+
+    // Example: Using router navigation helpers
+    // router.navigate('/page') - Navigate to a scoped path
+    // router.back() - Go back in history
+    // router.forward() - Go forward in history
+
+    // Example: Using the enhanced API
+    // api.get('/items/') - GET request with automatic CSRF token
+    // api.post('/items/', { name: 'Test' }) - POST request
+    // api.put('/items/1/', { name: 'Updated' }) - PUT request
+    // api.delete('/items/1/') - DELETE request
+    // All methods automatically handle CSRF tokens, but you must handle errors explicitly
+    // Use api.handleError(error) to extract error info and show toasts as needed
 }

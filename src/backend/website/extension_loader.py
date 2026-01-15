@@ -9,6 +9,7 @@ from django.apps import AppConfig
 from django.conf import settings
 
 from website.config_loader import get_config_loader
+from website.extension_base import ExtensionAppConfig
 
 logger = logging.getLogger('website.extension_loader')
 
@@ -219,7 +220,15 @@ class ExtensionRegistry:
 
     def _create_dynamic_app_config(self, ext_name: str, module_name: str) -> str:
         """
-        Creates a dynamic AppConfig class to ensure the label is set correctly.
+        Creates a dynamic AppConfig class inheriting from ExtensionAppConfig.
+        
+        This ensures extensions get the ready() lifecycle and hook registration
+        capabilities even if they don't define their own apps.py.
+        
+        The dynamic AppConfig:
+        - Inherits from ExtensionAppConfig (provides ready() lifecycle)
+        - Sets proper name, label, and verbose_name
+        - Allows extensions to implement extension_ready() for initialization
         """
         try:
             # Ensure the module is imported
@@ -231,20 +240,22 @@ class ExtensionRegistry:
             # Define the class name
             class_name = f"{ext_name.capitalize()}Config"
             
-            # Create the class dynamically
+            # Create the class dynamically, inheriting from ExtensionAppConfig
             app_config_attrs = {
                 'name': module_name,
                 'label': ext_name,
-                'verbose_name': ext_name.replace('_', ' ').title()
+                'verbose_name': ext_name.replace('_', ' ').title(),
+                'default_auto_field': 'django.db.models.BigAutoField'
             }
             
-            dynamic_app_config = type(class_name, (AppConfig,), app_config_attrs)
+            # Inherit from ExtensionAppConfig instead of AppConfig
+            dynamic_app_config = type(class_name, (ExtensionAppConfig,), app_config_attrs)
             
             # Attach it to the module
             setattr(module, class_name, dynamic_app_config)
             
             full_class_path = f"{module_name}.{class_name}"
-            logger.debug(f"Created dynamic AppConfig: {full_class_path}")
+            logger.debug(f"Created dynamic AppConfig (inheriting from ExtensionAppConfig): {full_class_path}")
             
             return full_class_path
             
