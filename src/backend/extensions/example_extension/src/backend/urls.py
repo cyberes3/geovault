@@ -13,4 +13,9 @@ urlpatterns = [
     # Map raw paths to your view functions
     path('items/', views.item_list_create),
     path('items/<int:item_id>/', views.item_delete),
+    
+    # Geostore feature CRUD examples
+    path('features/create/', views.create_feature),
+    path('features/<int:feature_id>/modify/', views.modify_feature),
+    path('features/<int:feature_id>/delete/', views.delete_feature),
 ]

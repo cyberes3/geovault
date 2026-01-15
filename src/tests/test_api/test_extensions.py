@@ -1,4 +1,5 @@
 
+import json
 import pytest
 import tempfile
 import shutil
@@ -88,6 +89,17 @@ class TestExtensionConfiguration:
             assert 'example_extension' in registry.loaded_extensions
 
 class TestExtensionAPI(TestCase):
+    def setUp(self):
+        """Set up test fixtures."""
+        from django.contrib.auth import get_user_model
+        User = get_user_model()
+        self.user = User.objects.create_user(
+            username='testuser',
+            email='test@example.com',
+            password='testpass123'
+        )
+        self.client.force_login(self.user)
+    
     def test_api_endpoints_integration(self):
         """
         Test that the extension API endpoints are accessible.
@@ -143,6 +155,384 @@ class TestExtensionAPI(TestCase):
         assert 'text/css' in response['Content-Type']
         # FileResponse is streaming, so we don't check .content
         # Just status 200 verifies it was found and served.
+
+
+# ============================================================================
+# Feature CRUD Tests for Example Extension
+# ============================================================================
+
+class TestExtensionFeatureCRUD(TestCase):
+    """Test feature CRUD operations in the example extension."""
+    
+    def setUp(self):
+        """Set up test fixtures."""
+        from django.contrib.auth import get_user_model
+        from api.models import FeatureStore
+        from django.contrib.gis.geos import Point
+        from geo_lib.feature_id import generate_geojson_hash
+        
+        # Store imports for use in test methods
+        self.FeatureStore = FeatureStore
+        
+        User = get_user_model()
+        self.user = User.objects.create_user(
+            username='testuser',
+            email='test@example.com',
+            password='testpass123'
+        )
+        self.other_user = User.objects.create_user(
+            username='otheruser',
+            email='other@example.com',
+            password='testpass123'
+        )
+        self.client.force_login(self.user)
+        
+        # Create a test feature for the user
+        self.feature_data = {
+            'type': 'Feature',
+            'geometry': {
+                'type': 'Point',
+                'coordinates': [-122.4194, 37.7749, 0.0]
+            },
+            'properties': {
+                'name': 'Test Feature',
+                'description': 'A test feature',
+                'tags': ['test', 'point']
+            }
+        }
+        self.feature = FeatureStore.objects.create(
+            user=self.user,
+            geojson=self.feature_data,
+            geometry=Point(-122.4194, 37.7749, 0.0),
+            geojson_hash=generate_geojson_hash(self.feature_data)
+        )
+        
+        # Create a feature for another user
+        self.other_feature_data = {
+            'type': 'Feature',
+            'geometry': {
+                'type': 'Point',
+                'coordinates': [-122.0, 37.0, 0.0]
+            },
+            'properties': {
+                'name': 'Other User Feature',
+                'tags': ['other']
+            }
+        }
+        self.other_feature = FeatureStore.objects.create(
+            user=self.other_user,
+            geojson=self.other_feature_data,
+            geometry=Point(-122.0, 37.0, 0.0),
+            geojson_hash=generate_geojson_hash(self.other_feature_data)
+        )
+    
+    def test_create_feature_success(self):
+        """Test creating a new feature via extension endpoint."""
+        payload = {
+            'latitude': 40.7128,
+            'longitude': -74.0060,
+            'name': 'New York Point',
+            'description': 'A point in NYC',
+            'tags': ['my-tag', 'test']
+        }
+        
+        response = self.client.post(
+            '/api/extensions/example-extension/features/create/',
+            data=json.dumps(payload),
+            content_type='application/json'
+        )
+        
+        assert response.status_code == 201
+        data = response.json()
+        assert 'feature' in data
+        feature = data['feature']
+        assert feature['properties']['name'] == 'New York Point'
+        assert feature['properties']['description'] == 'A point in NYC'
+        assert 'database_id' in feature['properties']
+        assert feature['geometry']['type'] == 'Point'
+        assert feature['geometry']['coordinates'] == [-74.0060, 40.7128, 0.0]
+        
+        # Verify tags
+        tags = feature['properties']['tags']
+        assert 'my-tag' in tags or 'my_tag' in tags  # May be normalized
+        assert 'test' in tags
+        
+        # Verify system tags
+        assert 'system_tags' in feature['properties']
+        assert 'example-extension' in feature['properties']['system_tags']
+    
+    def test_create_feature_missing_required_fields(self):
+        """Test creating feature with missing required fields."""
+        # Missing latitude
+        payload = {
+            'longitude': -74.0060,
+            'name': 'Test'
+        }
+        response = self.client.post(
+            '/api/extensions/example-extension/features/create/',
+            data=json.dumps(payload),
+            content_type='application/json'
+        )
+        assert response.status_code == 400
+        
+        # Missing longitude
+        payload = {
+            'latitude': 40.7128,
+            'name': 'Test'
+        }
+        response = self.client.post(
+            '/api/extensions/example-extension/features/create/',
+            data=json.dumps(payload),
+            content_type='application/json'
+        )
+        assert response.status_code == 400
+        
+        # Missing name
+        payload = {
+            'latitude': 40.7128,
+            'longitude': -74.0060
+        }
+        response = self.client.post(
+            '/api/extensions/example-extension/features/create/',
+            data=json.dumps(payload),
+            content_type='application/json'
+        )
+        assert response.status_code == 400
+    
+    def test_create_feature_invalid_coordinates(self):
+        """Test creating feature with invalid coordinates."""
+        # Invalid latitude
+        payload = {
+            'latitude': 100,  # Out of range
+            'longitude': -74.0060,
+            'name': 'Test'
+        }
+        response = self.client.post(
+            '/api/extensions/example-extension/features/create/',
+            data=json.dumps(payload),
+            content_type='application/json'
+        )
+        assert response.status_code == 400
+        
+        # Invalid longitude
+        payload = {
+            'latitude': 40.7128,
+            'longitude': 200,  # Out of range
+            'name': 'Test'
+        }
+        response = self.client.post(
+            '/api/extensions/example-extension/features/create/',
+            data=json.dumps(payload),
+            content_type='application/json'
+        )
+        assert response.status_code == 400
+    
+    def test_create_feature_without_tags(self):
+        """Test creating feature without tags."""
+        payload = {
+            'latitude': 40.7128,
+            'longitude': -74.0060,
+            'name': 'Simple Point',
+            'description': 'No tags'
+        }
+        
+        response = self.client.post(
+            '/api/extensions/example-extension/features/create/',
+            data=json.dumps(payload),
+            content_type='application/json'
+        )
+        
+        assert response.status_code == 201
+        data = response.json()
+        feature = data['feature']
+        assert feature['properties']['tags'] == []
+    
+    def test_create_feature_unauthenticated(self):
+        """Test that unauthenticated users cannot create features."""
+        self.client.logout()
+        payload = {
+            'latitude': 40.7128,
+            'longitude': -74.0060,
+            'name': 'Test'
+        }
+        response = self.client.post(
+            '/api/extensions/example-extension/features/create/',
+            data=json.dumps(payload),
+            content_type='application/json'
+        )
+        assert response.status_code == 401
+    
+    def test_modify_feature_add_special_tag(self):
+        """Test modifying a feature to add the special tag."""
+        # Verify feature doesn't have the special tag initially
+        feature = self.FeatureStore.objects.get(id=self.feature.id)
+        tags = feature.geojson.get('properties', {}).get('tags', [])
+        assert 'example-extension:special' not in tags
+        
+        # Modify the feature
+        response = self.client.post(
+            f'/api/extensions/example-extension/features/{self.feature.id}/modify/',
+            content_type='application/json'
+        )
+        
+        assert response.status_code == 200
+        data = response.json()
+        assert 'feature' in data
+        feature_data = data['feature']
+        assert 'example-extension:special' in feature_data['properties']['tags']
+        
+        # Verify in database
+        feature.refresh_from_db()
+        tags = feature.geojson.get('properties', {}).get('tags', [])
+        assert 'example-extension:special' in tags
+    
+    def test_modify_feature_preserves_existing_tags(self):
+        """Test that modifying a feature preserves existing tags."""
+        # Add some tags to the feature
+        feature = self.FeatureStore.objects.get(id=self.feature.id)
+        feature.geojson['properties']['tags'] = ['existing', 'tags']
+        feature.save()
+        
+        # Modify the feature
+        response = self.client.post(
+            f'/api/extensions/example-extension/features/{self.feature.id}/modify/',
+            content_type='application/json'
+        )
+        
+        assert response.status_code == 200
+        data = response.json()
+        feature_data = data['feature']
+        tags = feature_data['properties']['tags']
+        
+        # Should have both existing tags and the special tag
+        assert 'existing' in tags
+        assert 'tags' in tags
+        assert 'example-extension:special' in tags
+    
+    def test_modify_feature_idempotent(self):
+        """Test that modifying a feature twice doesn't duplicate the tag."""
+        # Modify once
+        response = self.client.post(
+            f'/api/extensions/example-extension/features/{self.feature.id}/modify/',
+            content_type='application/json'
+        )
+        assert response.status_code == 200
+        
+        # Modify again
+        response = self.client.post(
+            f'/api/extensions/example-extension/features/{self.feature.id}/modify/',
+            content_type='application/json'
+        )
+        assert response.status_code == 200
+        
+        # Check tag count
+        feature = self.FeatureStore.objects.get(id=self.feature.id)
+        tags = feature.geojson.get('properties', {}).get('tags', [])
+        special_tag_count = tags.count('example-extension:special')
+        assert special_tag_count == 1  # Should only appear once
+    
+    def test_modify_feature_not_found(self):
+        """Test modifying a non-existent feature."""
+        response = self.client.post(
+            '/api/extensions/example-extension/features/99999/modify/',
+            content_type='application/json'
+        )
+        assert response.status_code == 404
+    
+    def test_modify_feature_other_user(self):
+        """Test that users cannot modify other users' features."""
+        response = self.client.post(
+            f'/api/extensions/example-extension/features/{self.other_feature.id}/modify/',
+            content_type='application/json'
+        )
+        assert response.status_code == 404  # Not found (not authorized)
+    
+    def test_modify_feature_unauthenticated(self):
+        """Test that unauthenticated users cannot modify features."""
+        self.client.logout()
+        response = self.client.post(
+            f'/api/extensions/example-extension/features/{self.feature.id}/modify/',
+            content_type='application/json'
+        )
+        assert response.status_code == 401
+    
+    def test_delete_feature_success(self):
+        """Test deleting a feature via extension endpoint."""
+        feature_id = self.feature.id
+        
+        response = self.client.delete(
+            f'/api/extensions/example-extension/features/{feature_id}/delete/'
+        )
+        
+        assert response.status_code == 200
+        data = response.json()
+        assert data['feature_id'] == feature_id
+        assert 'message' in data
+        
+        # Verify feature is deleted
+        assert not self.FeatureStore.objects.filter(id=feature_id).exists()
+    
+    def test_delete_feature_not_found(self):
+        """Test deleting a non-existent feature."""
+        response = self.client.delete(
+            '/api/extensions/example-extension/features/99999/delete/'
+        )
+        assert response.status_code == 404
+    
+    def test_delete_feature_other_user(self):
+        """Test that users cannot delete other users' features."""
+        other_feature_id = self.other_feature.id
+        
+        response = self.client.delete(
+            f'/api/extensions/example-extension/features/{other_feature_id}/delete/'
+        )
+        
+        assert response.status_code == 404  # Not found (not authorized)
+        
+        # Verify feature still exists
+        assert self.FeatureStore.objects.filter(id=other_feature_id).exists()
+    
+    def test_delete_feature_unauthenticated(self):
+        """Test that unauthenticated users cannot delete features."""
+        self.client.logout()
+        response = self.client.delete(
+            f'/api/extensions/example-extension/features/{self.feature.id}/delete/'
+        )
+        assert response.status_code == 401
+    
+    def test_create_feature_invalid_json(self):
+        """Test creating feature with invalid JSON."""
+        response = self.client.post(
+            '/api/extensions/example-extension/features/create/',
+            data='invalid json',
+            content_type='application/json'
+        )
+        assert response.status_code == 400
+    
+    def test_create_feature_system_tags_filtered(self):
+        """Test that system tags are filtered from user-provided tags."""
+        payload = {
+            'latitude': 40.7128,
+            'longitude': -74.0060,
+            'name': 'Test Feature',
+            'tags': ['user-tag', 'type:point', 'import-year:2024']  # type:point is a system tag
+        }
+        
+        response = self.client.post(
+            '/api/extensions/example-extension/features/create/',
+            data=json.dumps(payload),
+            content_type='application/json'
+        )
+        
+        assert response.status_code == 201
+        data = response.json()
+        feature = data['feature']
+        tags = feature['properties']['tags']
+        
+        # System tags should be filtered out
+        assert 'user-tag' in tags
+        assert 'type:point' not in tags
+        assert 'import-year:2024' not in tags
 
 
 # ============================================================================
