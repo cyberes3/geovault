@@ -13,14 +13,7 @@ import './assets/main.css';
  * 
  * The platform calls this function and injects several core services:
  * 
- * @param {Object} app      - The main Vue 3 application instance
- * @param {Object} router   - Enhanced scoped router with navigation helpers
- * @param {Object} store    - The global Vuex store instance
- * @param {Object} registry - Complete UI registry (registerNavLink, registerSettingsTab, registerRoutes)
- * @param {ExtensionApi} api - ExtensionApi instance with automatic CSRF handling and convenience methods
- * @param {Object} utils    - Utility functions (updateUserSetting, loadSettingsFromStore, etc.)
- * @param {Function} toast  - Toast notification function
- * @param {Object} metadata  - Extension metadata (name, version, description, kebabName)
+ * @type {import('platform/types/geovault').ExtensionSetup}
  */
 export async function setup({ app, router, store, registry, api, utils, toast, metadata }) {
 

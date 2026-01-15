@@ -879,7 +879,7 @@ def check_extensions():
         
         # Now log loaded extensions
         registry = get_extension_registry()
-        active_exts = registry.get_active_extensions()
+        active_exts = registry.get_loaded_extensions()
         
         if active_exts:
             ext_names = [ext['name'] for ext in active_exts]

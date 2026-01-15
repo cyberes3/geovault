@@ -1,14 +1,17 @@
 from django.http import JsonResponse
 from django.views.decorators.http import require_http_methods
+from geo_lib.website.auth import api_or_login_required_401
 from website.extension_loader import _registry
 
+@api_or_login_required_401()
 @require_http_methods(["GET"])
 def list_extensions(request):
     """
     Returns a list of all active extensions and their frontend entry points.
+    Requires authentication.
     """
     if _registry:
-        extensions = _registry.get_active_extensions()
+        extensions = _registry.get_loaded_extensions()
     else:
         extensions = []
         

@@ -206,14 +206,14 @@ class ExtensionRegistry:
         if (backend_path / 'urls.py').exists():
             urls_module = f"{module_name}.urls"
 
-        # Register in metadata registry for API
+        # Store extension metadata (internal use includes urls_module)
         self.loaded_extensions[ext_name] = {
             'name': ext_name,
             'version': manifest.version,
             'description': getattr(manifest, 'description', ''),
             'frontend_entry': frontend_entry,
             'frontend_css': frontend_css,
-            'urls_module': urls_module
+            '_urls_module': urls_module  # Internal only, prefixed with underscore
         }
 
         return app_config_path
@@ -263,9 +263,20 @@ class ExtensionRegistry:
             logger.error(f"Failed to create dynamic AppConfig for {ext_name}: {e}")
             return module_name
 
-    def get_active_extensions(self) -> List[Dict[str, Any]]:
-        """Returns metadata for all loaded and enabled extensions."""
-        return list(self.loaded_extensions.values())
+    def get_loaded_extensions(self) -> List[Dict[str, Any]]:
+        """
+        Returns metadata for all loaded extensions.
+        Used by the API to expose extension info to the frontend.
+        Only includes frontend-relevant fields.
+        
+        Returns:
+            List of extension metadata dicts (excludes internal fields prefixed with _)
+        """
+        # Filter out internal fields (prefixed with underscore) from API response
+        return [
+            {k: v for k, v in ext.items() if not k.startswith('_')}
+            for ext in self.loaded_extensions.values()
+        ]
 
     def get_extension_urls(self) -> List[Any]:
         """
@@ -275,10 +286,9 @@ class ExtensionRegistry:
         from django.urls import path, include
         patterns = []
         for ext_name, meta in self.loaded_extensions.items():
-            if meta.get('urls_module'):
-                # Map underscores to hyphens for URL prefix
+            if meta.get('_urls_module'):
                 url_prefix = ext_name.replace('_', '-')
-                patterns.append(path(f"extensions/{url_prefix}/", include(meta['urls_module'])))
+                patterns.append(path(f"extensions/{url_prefix}/", include(meta['_urls_module'])))
         return patterns
 
 def get_extension_registry() -> ExtensionRegistry:

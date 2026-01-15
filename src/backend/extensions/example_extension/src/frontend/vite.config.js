@@ -34,7 +34,7 @@ export default defineConfig({
       name: 'ExampleExtension', // Global variable name for the UMD bundle
       fileName: (format) => `index.${format}.js`,
       cssFileName: 'index',
-      formats: ['umd'] // UMD is required for runtime script loading compatibility
+      formats: ['umd'] // UMD works with dynamic import() and global externals
     },
     rollupOptions: {
       // CRITICAL: Externalize the Vue ecosystem!

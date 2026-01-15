@@ -87,8 +87,24 @@ async function loadExtensions() {
                     const kebabName = ext.name.replace(/_/g, '-');
                     const prefix = `/extensions/${kebabName}`;
 
-                    // Find the exported setup function (ES module export only)
-                    const setup = module.setup;
+                    // Find the exported setup function
+                    // For UMD bundles loaded via import(), the setup function may be on the global object
+                    // The UMD format sets window[globalName].setup (e.g., window.ExampleExtension.setup)
+                    let setup = module.setup;
+
+                    // If setup not found on module, try the global variable
+                    // Convert extension name to PascalCase for global variable name
+                    if (!setup) {
+                        const globalName = ext.name
+                            .split('_')
+                            .map(word => word.charAt(0).toUpperCase() + word.slice(1))
+                            .join('');
+
+                        if (window[globalName] && window[globalName].setup) {
+                            setup = window[globalName].setup;
+                        }
+                    }
+
                     if (!setup || typeof setup !== 'function') {
                         console.error(
                             `Extension ${ext.name} has no valid setup function.\n` +
