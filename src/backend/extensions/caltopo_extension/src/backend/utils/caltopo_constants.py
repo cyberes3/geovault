@@ -21,4 +21,3 @@ def is_valid_caltopo_feature_class(feature_class: str) -> bool:
         True if the feature class is valid, False otherwise
     """
     return feature_class in VALID_CALTOPO_FEATURE_CLASSES
-

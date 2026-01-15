@@ -10,12 +10,12 @@ from django.views.decorators.http import require_http_methods
 from pydantic import BaseModel, Field, ConfigDict
 from requests.exceptions import ReadTimeout, Timeout
 
-from api.models import CalTopoUser
-from api.utils.caltopo_helpers import handle_caltopo_call
+from caltopo_extension.src.backend.models import CalTopoUser
+from caltopo_extension.src.backend.utils.caltopo_helpers import handle_caltopo_call
 from api.utils.responses import error_response, success_response
 from api.validation.feature_updates import validate_payload
 from geo_lib.logging.console import get_tagged_logger
-from geo_lib.services.caltopo_service import get_caltopo_session, CalTopoTimeoutError
+from caltopo_extension.src.backend.services.caltopo_api import get_caltopo_session, CalTopoTimeoutError
 from geo_lib.website.auth import api_or_login_required_401
 
 _logger = get_tagged_logger('CalTopoAuth')
@@ -37,7 +37,7 @@ def connect_caltopo(request: HttpRequest, validated_data: Dict[str, Any]) -> Jso
     """
     Save or update CalTopo credentials for the current user.
     
-    POST /api/caltopo/connect/
+    POST /api/extensions/caltopo_extension/connect/
     Body: {
         "account_id": "abc123",
         "credential_id": "123456789012",
@@ -100,7 +100,7 @@ def get_caltopo_status(request: HttpRequest) -> JsonResponse:
     """
     Check if the current user has connected CalTopo and validate credentials.
     
-    GET /api/caltopo/status/
+    GET /api/extensions/caltopo_extension/status/
     
     Returns:
         - status: 'not_connected' (no credentials stored)
@@ -181,7 +181,7 @@ def disconnect_caltopo(request: HttpRequest) -> JsonResponse:
     """
     Disconnect CalTopo by deleting the user's CalTopo credentials.
     
-    POST /api/caltopo/disconnect/
+    POST /api/extensions/caltopo_extension/disconnect/
     """
     try:
         caltopo_user = CalTopoUser.objects.get(user=request.user)

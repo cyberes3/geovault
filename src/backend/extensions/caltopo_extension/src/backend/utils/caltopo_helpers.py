@@ -5,9 +5,9 @@ from typing import Optional, Tuple, Callable, Any
 
 from django.http import HttpRequest, JsonResponse
 
-from api.models import CalTopoUser
+from caltopo_extension.src.backend.models import CalTopoUser
 from api.utils.responses import error_response
-from geo_lib.services.caltopo_service import CalTopoTimeoutError
+from caltopo_extension.src.backend.services.caltopo_api import CalTopoTimeoutError
 
 
 def require_caltopo_connection(request: HttpRequest) -> Tuple[Optional[CalTopoUser], Optional[JsonResponse]]:
@@ -38,13 +38,13 @@ def handle_caltopo_call(
         **kwargs
 ) -> Tuple[Optional[Any], Optional[JsonResponse]]:
     """
-    Execute a CalTopo service function and handle timeout errors.
+    Execute a CalTopo API function and handle timeout errors.
     
     This wrapper catches CalTopoTimeoutError and returns a standardized error response,
     eliminating the need to repeat try/except blocks in every view.
     
     Args:
-        caltopo_func: CalTopo service function to call (e.g., list_maps, get_map_features)
+        caltopo_func: CalTopo API function to call (e.g., list_maps, get_map_features)
         *args: Positional arguments to pass to the function
         **kwargs: Keyword arguments to pass to the function
         

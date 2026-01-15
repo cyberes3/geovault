@@ -5,13 +5,14 @@ from typing import Dict, Any
 from django.http import HttpRequest, JsonResponse
 from django.views.decorators.http import require_http_methods
 
-from api.models import CalTopoUser, ImportQueue, FeatureStore
-from api.utils.caltopo_constants import is_valid_caltopo_feature_class
-from api.utils.rate_limit import caltopo_rate_limit
+from caltopo_extension.src.backend.models import CalTopoUser
+from api.models import ImportQueue, FeatureStore
+from caltopo_extension.src.backend.utils.caltopo_constants import is_valid_caltopo_feature_class
+from caltopo_extension.src.backend.utils.rate_limit import caltopo_rate_limit
 from api.utils.responses import error_response, success_response, not_found_response
-from api.utils.caltopo_helpers import require_caltopo_connection, handle_caltopo_call
+from caltopo_extension.src.backend.utils.caltopo_helpers import require_caltopo_connection, handle_caltopo_call
 from geo_lib.processing.jobs.helpers.status_tracker import status_tracker, ProcessingStatus
-from geo_lib.services.caltopo_service import list_maps, get_map_features
+from caltopo_extension.src.backend.services.caltopo_api import list_maps, get_map_features
 from geo_lib.website.auth import api_or_login_required_401
 
 
@@ -22,7 +23,7 @@ def list_caltopo_maps(request: HttpRequest) -> JsonResponse:
     """
     List all available CalTopo maps for the current user.
     
-    GET /api/caltopo/maps/
+    GET /api/extensions/caltopo_extension/maps/
     """
     caltopo_user, error_resp = require_caltopo_connection(request)
     if error_resp:
@@ -45,7 +46,7 @@ def get_caltopo_map_features(request: HttpRequest, map_id: str) -> JsonResponse:
     """
     Get all features from a specific CalTopo map.
     
-    GET /api/caltopo/maps/{map_id}/features/
+    GET /api/extensions/caltopo_extension/maps/{map_id}/features/
     """
     caltopo_user, error_resp = require_caltopo_connection(request)
     if error_resp:
@@ -185,7 +186,7 @@ def get_caltopo_map_details(request: HttpRequest, map_id: str) -> JsonResponse:
     """
     Get details about a specific CalTopo map.
     
-    GET /api/caltopo/maps/{map_id}/
+    GET /api/extensions/caltopo_extension/maps/{map_id}/
     """
     caltopo_user, error_resp = require_caltopo_connection(request)
     if error_resp:
@@ -208,4 +209,3 @@ def get_caltopo_map_details(request: HttpRequest, map_id: str) -> JsonResponse:
     return success_response({
         'map': map_details
     })
-

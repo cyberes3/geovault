@@ -2,12 +2,11 @@
 import json
 import pytest
 import tempfile
-import shutil
 import importlib
-from unittest.mock import patch, MagicMock, mock_open
+from unittest.mock import patch, MagicMock
 from pathlib import Path
-from website.extension_loader import ExtensionRegistry, get_extension_registry, _registry
-from django.test import modify_settings, TestCase
+from website.extensions.extension_loader import ExtensionRegistry, get_extension_registry
+from django.test import TestCase
 import sys
 
 # We use the django_db marker for tests that need database access
@@ -1315,8 +1314,8 @@ class TestRegistryStateManagement:
     def test_get_extension_registry_singleton(self):
         """Test that get_extension_registry() returns the same instance."""
         # Reset global registry
-        import website.extension_loader
-        website.extension_loader._registry = None
+        import website.extensions.extension_loader
+        website.extensions.extension_loader._registry = None
         
         registry1 = get_extension_registry()
         registry2 = get_extension_registry()
@@ -1569,7 +1568,7 @@ class TestExtensionAppConfigIntegration:
     
     def test_dynamic_app_config_inherits_extension_app_config(self):
         """Test that dynamically created AppConfig inherits from ExtensionAppConfig."""
-        from website.extension_base import ExtensionAppConfig
+        from website.extensions.extension_base import ExtensionAppConfig
         
         with tempfile.TemporaryDirectory() as tmpdir:
             ext_dir = Path(tmpdir)
@@ -1605,7 +1604,7 @@ class TestExtensionAppConfigIntegration:
     
     def test_extension_with_custom_apps_py_can_inherit_extension_app_config(self):
         """Test that extensions with custom apps.py can inherit from ExtensionAppConfig."""
-        from website.extension_base import ExtensionAppConfig
+        from website.extensions.extension_base import ExtensionAppConfig
         
         with tempfile.TemporaryDirectory() as tmpdir:
             ext_dir = Path(tmpdir)

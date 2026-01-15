@@ -62,12 +62,8 @@ from api.views.user.settings import (
     clear_hidden_features,
     bulk_update_hidden_features,
 )
-from api.views.caltopo.connect_caltopo import connect_caltopo, get_caltopo_status, disconnect_caltopo
-from api.views.caltopo.maps import list_caltopo_maps, get_caltopo_map_features, get_caltopo_map_details
-from api.views.caltopo.single_import import import_caltopo_feature
-from api.views.caltopo.map_import import import_caltopo_map
 from api.views.extensions.management import list_extensions
-from website.extension_loader import get_extension_registry
+from website.extensions.extension_loader import get_extension_registry
 
 urlpatterns = [
     # Import endpoints
@@ -166,15 +162,7 @@ urlpatterns = [
     # Geocoding API endpoints
     path('geocoding/search/', geocoding_search),
 
-    # CalTopo API endpoints
-    path('caltopo/connect/', connect_caltopo),
-    path('caltopo/status/', get_caltopo_status),
-    path('caltopo/disconnect/', disconnect_caltopo),
-    path('caltopo/maps/', list_caltopo_maps),
-    path('caltopo/maps/<str:map_id>/', get_caltopo_map_details),
-    path('caltopo/maps/<str:map_id>/features/', get_caltopo_map_features),
-    path('caltopo/import/feature/', import_caltopo_feature),
-    path('caltopo/import/map/', import_caltopo_map),
+    # Extensions API endpoints
     path('extensions/', list_extensions),
 ]
 

@@ -17,6 +17,8 @@ import { toast } from '@/utils/toast';
 import { updateUserSetting, loadSettingsFromStore } from '@/utils/userSettingsService.js';
 import { keyValueToNested, getNestedValue } from '@/utils/settingsUtils.js';
 import { ExtensionApi } from './utils/extensionApi.js';
+import * as HeroiconsOutline from '@heroicons/vue/24/outline';
+import * as HeroiconsSolid from '@heroicons/vue/24/solid';
 
 // Inject utils into registry
 extensionRegistry.utils.updateUserSetting = updateUserSetting;
@@ -42,6 +44,8 @@ window.Vue = VueState;
 window.VueRouter = VueRouterState;
 window.Vuex = VuexState;
 window.axios = axios;
+window.HeroiconsOutline = HeroiconsOutline;
+window.HeroiconsSolid = HeroiconsSolid;
 
 import BaseButton from '@/components/parts/BaseButton.vue';
 import ToggleButton from '@/components/parts/ToggleButton.vue';
@@ -198,7 +202,8 @@ async function loadExtensions() {
                     // Call setup function with enhanced API
                     await setup({
                         app,
-                        router: scopedRouter,
+                        router: scopedRouter,  // Scoped router for extension routes
+                        mainRouter: router,     // Main platform router for navigation
                         store,
                         registry: scopedRegistry,
                         api,

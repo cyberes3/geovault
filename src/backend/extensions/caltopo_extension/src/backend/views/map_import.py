@@ -7,15 +7,16 @@ from django.http import HttpRequest, JsonResponse
 from django.views.decorators.http import require_http_methods
 from pydantic import BaseModel, Field, ConfigDict
 
-from api.models import CalTopoUser, ImportQueue
-from api.utils.caltopo_constants import is_valid_caltopo_feature_class
-from api.utils.rate_limit import caltopo_rate_limit
+from caltopo_extension.src.backend.models import CalTopoUser
+from api.models import ImportQueue
+from caltopo_extension.src.backend.utils.caltopo_constants import is_valid_caltopo_feature_class
+from caltopo_extension.src.backend.utils.rate_limit import caltopo_rate_limit
 from api.utils.responses import error_response, success_response
-from api.utils.caltopo_helpers import require_caltopo_connection, handle_caltopo_call
+from caltopo_extension.src.backend.utils.caltopo_helpers import require_caltopo_connection, handle_caltopo_call
 from api.validation.feature_updates import validate_payload
 from geo_lib.processing.jobs.helpers.status_tracker import status_tracker
 from geo_lib.processing.jobs.process_job import ProcessJob
-from geo_lib.services.caltopo_service import get_map_features, convert_caltopo_to_geojson
+from caltopo_extension.src.backend.services.caltopo_api import get_map_features, convert_caltopo_to_geojson
 from geo_lib.website.auth import api_or_login_required_401
 
 # Create singleton instance
@@ -37,7 +38,7 @@ def import_caltopo_map(request: HttpRequest, validated_data: Dict[str, Any]) -> 
     """
     Import all features from a CalTopo map.
     
-    POST /api/caltopo/import/map/
+    POST /api/extensions/caltopo_extension/import/map/
     Body: {
         "map_id": "abc12"
     }
@@ -148,4 +149,3 @@ def import_caltopo_map(request: HttpRequest, validated_data: Dict[str, Any]) -> 
         'import_queue_id': import_queue_id,
         'feature_count': len(geojson_features)
     })
-

@@ -9,9 +9,8 @@ This demonstrates how to:
 """
 import logging
 
-from django.apps import AppConfig
-from website.extension_base import ExtensionAppConfig
-from website.extension_hooks import register_hook
+from website.extensions.extension_base import ExtensionAppConfig
+from website.extensions.extension_hooks import register_hook
 
 logger = logging.getLogger('example_extension.apps')
 

@@ -41,7 +41,7 @@ def register_import_hook(hook_id: str, callback: Callable) -> None:
     
     # Try to use the extension hooks system if available
     try:
-        from website.extension_hooks import register_hook, _current_extension_name
+        from website.extensions.extension_hooks import register_hook, _current_extension_name
         
         # If we're in an extension context, use the new system
         if _current_extension_name is not None:
@@ -86,7 +86,7 @@ def execute_import_hooks(
     
     # Execute hooks from extension hooks system
     try:
-        from website.extension_hooks import execute_hooks
+        from website.extensions.extension_hooks import execute_hooks
         execute_hooks('import', import_item, user_id, created_features=created_features)
     except ImportError:
         # Extension hooks system not available, skip
@@ -126,7 +126,7 @@ def get_registered_hooks() -> List[str]:
     
     # Also include extension hooks if available
     try:
-        from website.extension_hooks import get_hooks
+        from website.extensions.extension_hooks import get_hooks
         extension_hooks = get_hooks('import')
         hook_ids.extend([hook_id for hook_id, _ in extension_hooks])
     except ImportError:

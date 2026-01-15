@@ -523,6 +523,10 @@ export default {
         if (tagsArray.length > 0) {
           this.selectedTags = [...tagsArray]
           this.activeTab = 'tag-filter'
+          // Explicitly trigger filter immediately (don't wait for debounce)
+          this.$nextTick(() => {
+            this.filterByTags()
+          })
         }
       }
     }

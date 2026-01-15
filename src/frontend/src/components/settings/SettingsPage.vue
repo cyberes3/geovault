@@ -194,7 +194,8 @@ export default {
 
     // Initialize activeTab from query parameter
     const tabFromQuery = this.$route.query.tab;
-    if (tabFromQuery && ['account', 'map', 'sharing', 'import'].includes(tabFromQuery)) {
+    // Check if tab is valid (native or extension tab)
+    if (tabFromQuery && this.allTabIds.includes(tabFromQuery)) {
       this.activeTab = tabFromQuery;
       // Clean up any other query params that shouldn't be here
       const otherParams = Object.keys(this.$route.query).filter(key => key !== 'tab');

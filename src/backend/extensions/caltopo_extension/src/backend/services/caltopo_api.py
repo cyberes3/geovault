@@ -1,5 +1,5 @@
 """
-CalTopo service wrapper for integrating with CalTopo API.
+CalTopo API integration functions.
 
 This module provides a high-level interface to the CalTopo API using the
 caltopo_python library. It handles session management, feature conversion,
@@ -11,11 +11,10 @@ from caltopo_python import CaltopoSession
 from django.contrib.auth import get_user_model
 from requests.exceptions import ReadTimeout, Timeout
 
-from api.models import CalTopoUser
+from caltopo_extension.src.backend.models import CalTopoUser
 from geo_lib.logging.console import get_tagged_logger
-from geo_lib.processing.hooks import register_import_hook
 
-_logger = get_tagged_logger('CalTopoService')
+_logger = get_tagged_logger('CalTopoAPI')
 
 
 class CalTopoTimeoutError(Exception):
@@ -306,53 +305,3 @@ def _normalize_caltopo_geometry(geometry: Dict[str, Any]) -> Dict[str, Any]:
         ]
     
     return normalized_geometry
-
-
-def _caltopo_import_hook(import_item, user_id, created_features):
-    """Hook to update CalTopo imported_features mapping after import completes."""
-    if not created_features:
-        return
-
-    # Filter features with CalTopo metadata
-    caltopo_features = [
-        f for f in created_features
-        if f.geojson.get('properties', {}).get('caltopo_map_id')
-    ]
-
-    if not caltopo_features:
-        return
-
-    # Get or create CalTopoUser record
-    User = get_user_model()
-    try:
-        user = User.objects.get(id=user_id)
-        caltopo_user, _ = CalTopoUser.objects.get_or_create(user=user)
-    except User.DoesNotExist:
-        return
-
-    # Group features by map_id for efficient updates
-    features_by_map = {}
-    for feature in caltopo_features:
-        props = feature.geojson.get('properties', {})
-        map_id = props.get('caltopo_map_id')
-        feature_id = props.get('caltopo_feature_id')
-
-        if map_id and feature_id:
-            if map_id not in features_by_map:
-                features_by_map[map_id] = {}
-            features_by_map[map_id][feature_id] = feature.id
-
-    # Update imported_features mapping
-    if features_by_map:
-        if not caltopo_user.imported_features:
-            caltopo_user.imported_features = {}
-
-        for map_id, feature_mapping in features_by_map.items():
-            if map_id not in caltopo_user.imported_features:
-                caltopo_user.imported_features[map_id] = {}
-            caltopo_user.imported_features[map_id].update(feature_mapping)
-
-        caltopo_user.save()
-
-
-register_import_hook('caltopo', _caltopo_import_hook)

@@ -188,7 +188,6 @@ def process_geojson_icons(
     # Statistics tracking
     stats = {
         'successful': 0,
-        'caltopo_found': 0,
         'failed': 0
     }
 
@@ -274,8 +273,6 @@ def _process_single_icon_href(
 
     # Check if this is a CalTopo URL
     is_caltopo = _is_caltopo_url(href)
-    if is_caltopo:
-        stats['caltopo_found'] += 1
 
     # Extract color from CalTopo URL (works on both nested and fixed URLs)
     caltopo_color = _extract_color_from_caltopo_url(href)

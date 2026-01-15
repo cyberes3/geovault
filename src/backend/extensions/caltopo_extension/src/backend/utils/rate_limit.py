@@ -118,4 +118,3 @@ def caltopo_rate_limit(route_name: str = None):
         
         return _wrapped_view
     return decorator
-

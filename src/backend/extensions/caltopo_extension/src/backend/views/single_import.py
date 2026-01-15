@@ -9,18 +9,19 @@ from django.http import HttpRequest, JsonResponse
 from django.views.decorators.http import require_http_methods
 from pydantic import BaseModel, Field, ConfigDict, field_validator
 
-from api.models import CalTopoUser, FeatureStore
-from api.utils.caltopo_constants import VALID_CALTOPO_FEATURE_CLASSES
-from api.utils.rate_limit import caltopo_rate_limit
+from caltopo_extension.src.backend.models import CalTopoUser
+from api.models import FeatureStore
+from caltopo_extension.src.backend.utils.caltopo_constants import VALID_CALTOPO_FEATURE_CLASSES
+from caltopo_extension.src.backend.utils.rate_limit import caltopo_rate_limit
 from api.utils.responses import error_response, success_response
-from api.utils.caltopo_helpers import require_caltopo_connection, handle_caltopo_call
+from caltopo_extension.src.backend.utils.caltopo_helpers import require_caltopo_connection, handle_caltopo_call
 from api.validation.feature_updates import validate_payload
 from api.views.features.updates.geometry import _normalize_geometry_coordinates
 from geo_lib.feature_id import generate_geojson_hash
 from geo_lib.geocoding.background_geocoding import reverse_geocode_feature_async
 from geo_lib.processing.duplicate_detection.find import _find_hash_duplicates, _find_geometry_duplicates
 from geo_lib.processing.tagging.generate import generate_auto_tags
-from geo_lib.services.caltopo_service import get_feature, convert_caltopo_to_geojson
+from caltopo_extension.src.backend.services.caltopo_api import get_feature, convert_caltopo_to_geojson
 from geo_lib.types.validation import match_geometry_class
 from geo_lib.validation.geojson.geojson_whitelist import validate_and_normalize_geojson_feature
 from geo_lib.validation.geometry_validation import GeometryValidationError
@@ -80,7 +81,7 @@ def import_caltopo_feature(request: HttpRequest, validated_data: Dict[str, Any])
     """
     Import a single feature from CalTopo.
     
-    POST /api/caltopo/import/feature/
+    POST /api/extensions/caltopo_extension/import/feature/
     Body: {
         "map_id": "abc12",
         "feature_id": "1234567890",
@@ -229,4 +230,3 @@ def import_caltopo_feature(request: HttpRequest, validated_data: Dict[str, Any])
         response_data['warnings'] = warnings
     
     return success_response(response_data, status=201)
-

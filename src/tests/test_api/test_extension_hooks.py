@@ -8,8 +8,8 @@ Tests cover:
 - Integration with legacy import hooks
 """
 import pytest
-from unittest.mock import MagicMock, patch
-from website.extension_hooks import (
+from unittest.mock import patch
+from website.extensions.extension_hooks import (
     register_hook,
     get_hooks,
     execute_hooks,
@@ -18,9 +18,9 @@ from website.extension_hooks import (
     set_extension_context,
     clear_extension_context
 )
-import website.extension_hooks as extension_hooks_module
-from geo_lib.processing.hooks import register_import_hook, execute_import_hooks, get_registered_hooks as get_legacy_hooks
-from api.models import ImportQueue, FeatureStore
+import website.extensions.extension_hooks as extension_hooks_module
+from geo_lib.processing.hooks import register_import_hook, execute_import_hooks
+from api.models import ImportQueue
 from django.contrib.auth import get_user_model
 
 User = get_user_model()
@@ -372,7 +372,7 @@ class TestExtensionAppConfig:
     
     def test_extension_app_config_inheritance(self):
         """Test that ExtensionAppConfig can be inherited."""
-        from website.extension_base import ExtensionAppConfig
+        from website.extensions.extension_base import ExtensionAppConfig
         
         class TestExtensionConfig(ExtensionAppConfig):
             name = 'test_extension.src.backend'
@@ -386,7 +386,7 @@ class TestExtensionAppConfig:
     
     def test_extension_ready_method_called(self):
         """Test that extension_ready() is called during ready()."""
-        from website.extension_base import ExtensionAppConfig
+        from website.extensions.extension_base import ExtensionAppConfig
         import os
         from types import ModuleType
         
@@ -414,7 +414,7 @@ class TestExtensionAppConfig:
     
     def test_extension_ready_can_register_hooks(self):
         """Test that extension_ready() can register hooks."""
-        from website.extension_base import ExtensionAppConfig
+        from website.extensions.extension_base import ExtensionAppConfig
         import os
         from types import ModuleType
         
@@ -429,7 +429,7 @@ class TestExtensionAppConfig:
             label = 'test_extension'
             
             def extension_ready(self):
-                from website.extension_hooks import register_hook
+                from website.extensions.extension_hooks import register_hook
                 
                 def test_hook(*args, **kwargs):
                     hook_called['called'] = True
@@ -453,7 +453,7 @@ class TestExtensionAppConfig:
     
     def test_ready_skips_in_reloader_process(self):
         """Test that ready() skips execution in reloader process."""
-        from website.extension_base import ExtensionAppConfig
+        from website.extensions.extension_base import ExtensionAppConfig
         import os
         from types import ModuleType
         
@@ -481,7 +481,7 @@ class TestExtensionAppConfig:
     
     def test_ready_skips_during_migrations(self):
         """Test that ready() skips during migrations."""
-        from website.extension_base import ExtensionAppConfig
+        from website.extensions.extension_base import ExtensionAppConfig
         import os
         from types import ModuleType
         
@@ -516,8 +516,8 @@ class TestExtensionLoaderWithAppConfig:
         """Test that dynamically created AppConfig inherits from ExtensionAppConfig."""
         import tempfile
         from pathlib import Path
-        from website.extension_loader import ExtensionRegistry
-        from website.extension_base import ExtensionAppConfig
+        from website.extensions.extension_loader import ExtensionRegistry
+        from website.extensions.extension_base import ExtensionAppConfig
         from unittest.mock import patch, MagicMock
         
         with tempfile.TemporaryDirectory() as tmpdir:

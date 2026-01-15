@@ -45,7 +45,7 @@ from geo_lib.processing.job_recovery import recover_interrupted_jobs as do_job_r
 from geo_lib.utils.redis_connection import get_redis_connection
 from website.config_loader import get_config_loader
 from website.settings_utils import get_required_setting
-from website.extension_loader import get_extension_registry
+from website.extensions.extension_loader import get_extension_registry
 
 _logger = get_tagged_logger('startup')
 

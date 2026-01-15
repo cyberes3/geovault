@@ -3,20 +3,19 @@ import importlib.util
 import logging
 import sys
 from pathlib import Path
-from typing import List, Optional, Dict, Any, Type
-
-from django.apps import AppConfig
-from django.conf import settings
+from typing import List, Optional, Dict, Any
 
 from website.config_loader import get_config_loader
-from website.extension_base import ExtensionAppConfig
+from website.extensions.extension_base import ExtensionAppConfig
 
 logger = logging.getLogger('website.extension_loader')
+
 
 class ExtensionRegistry:
     """
     Registry for discovering and loading extensions.
     """
+
     def __init__(self, extensions_dir: Path):
         self.extensions_dir = extensions_dir
         self.loaded_extensions: Dict[str, Dict[str, Any]] = {}
@@ -40,7 +39,7 @@ class ExtensionRegistry:
         config_loader = get_config_loader()
         installed_apps_additions: List[str] = []
         loaded_names: List[str] = []
-        
+
         # Track extension names to detect duplicates before loading
         extension_names: Dict[str, List[str]] = {}  # name -> list of folder names
 
@@ -55,11 +54,11 @@ class ExtensionRegistry:
                         spec = importlib.util.spec_from_file_location("manifest", manifest_path)
                         if spec is None or spec.loader is None:
                             continue
-                        
+
                         manifest = importlib.util.module_from_spec(spec)
                         sys.modules[f"extensions.{item.name}.manifest"] = manifest
                         spec.loader.exec_module(manifest)
-                        
+
                         if hasattr(manifest, 'name'):
                             ext_name = manifest.name
                             if ext_name not in extension_names:
@@ -67,7 +66,7 @@ class ExtensionRegistry:
                             extension_names[ext_name].append(item.name)
                     except Exception as e:
                         logger.warning(f"Could not read manifest for {item.name}: {e}")
-        
+
         # Check for duplicates
         duplicates = {name: folders for name, folders in extension_names.items() if len(folders) > 1}
         if duplicates:
@@ -115,7 +114,7 @@ class ExtensionRegistry:
         if spec is None or spec.loader is None:
             logger.error(f"Could not load manifest for {extension_path.name}")
             return None
-        
+
         manifest = importlib.util.module_from_spec(spec)
         sys.modules[f"extensions.{extension_path.name}.manifest"] = manifest
         spec.loader.exec_module(manifest)
@@ -126,13 +125,13 @@ class ExtensionRegistry:
             return None
 
         ext_name = manifest.name
-        
+
         # Check if enabled in config
         # config key: extensions.<name>.enabled
         # Default to manifest.enabled_by_default (True if not specified)
         default_enabled = getattr(manifest, 'enabled_by_default', True)
         enabled = config_loader.get_bool(f'extensions.{ext_name}.enabled', default_enabled)
-        
+
         if not enabled:
             logger.info(f"Extension '{ext_name}' is disabled in configuration.")
             return None
@@ -142,7 +141,7 @@ class ExtensionRegistry:
         # Determine the Django app path
         # Assumption: Logic lives in src/backend relative to extension root
         backend_path = extension_path / 'src' / 'backend'
-        
+
         if not backend_path.exists():
             logger.warning(f"Extension {ext_name} has no 'src/backend' directory. Skipping Django app registration.")
             return None
@@ -150,11 +149,35 @@ class ExtensionRegistry:
         # Check for existing apps.py
         apps_py_path = backend_path / 'apps.py'
         module_name = f"{extension_path.name}.src.backend"
-        
+
         # Determine the AppConfig to use
-        app_config_path = module_name
         if apps_py_path.exists():
-             app_config_path = module_name
+            # When apps.py exists, we need to find the AppConfig class
+            # Import the apps module and find the AppConfig class
+            apps_module_name = f"{module_name}.apps"
+            try:
+                apps_module = importlib.import_module(apps_module_name)
+                # Find the AppConfig class (look for classes ending in "Config" that inherit from AppConfig)
+                from django.apps import AppConfig as DjangoAppConfig
+                app_config_class = None
+                for attr_name in dir(apps_module):
+                    if attr_name.endswith('Config'):
+                        attr = getattr(apps_module, attr_name)
+                        if (isinstance(attr, type) and 
+                            issubclass(attr, DjangoAppConfig) and 
+                            attr is not DjangoAppConfig):
+                            app_config_class = attr_name
+                            break
+                
+                if app_config_class:
+                    app_config_path = f"{apps_module_name}.{app_config_class}"
+                else:
+                    # Fallback: just use module name (Django will try to auto-discover)
+                    logger.warning(f"Could not find AppConfig class in {apps_module_name}, using module name")
+                    app_config_path = module_name
+            except Exception as e:
+                logger.warning(f"Failed to import {apps_module_name}: {e}, using module name")
+                app_config_path = module_name
         else:
             app_config_path = self._create_dynamic_app_config(ext_name, module_name)
 
@@ -162,11 +185,11 @@ class ExtensionRegistry:
         frontend_entry = None
         frontend_css = None
         dist_path = extension_path / 'src' / 'frontend' / 'dist'
-        
+
         if dist_path.exists():
             # Use kebab-case for the URL path
             kebab_name = extension_path.name.replace('_', '-')
-            
+
             # 1. Discover JS entry point
             js_files = list(dist_path.glob('index*.*js'))
             if js_files:
@@ -176,6 +199,7 @@ class ExtensionRegistry:
                     if '.umd.' in name: return 1
                     if '.iife.' in name: return 2
                     return 3
+
                 js_files.sort(key=js_sort_key)
                 frontend_entry = f"/extensions/static/{kebab_name}/src/frontend/dist/{js_files[0].name}"
             else:
@@ -193,6 +217,7 @@ class ExtensionRegistry:
                     if name == 'index.css': return 0
                     if name == 'style.css': return 1
                     return 2
+
                 css_files.sort(key=css_sort_key)
                 frontend_css = f"/extensions/static/{kebab_name}/src/frontend/dist/{css_files[0].name}"
             else:
@@ -234,12 +259,12 @@ class ExtensionRegistry:
             # Ensure the module is imported
             if module_name not in sys.modules:
                 importlib.import_module(module_name)
-            
+
             module = sys.modules[module_name]
-            
+
             # Define the class name
             class_name = f"{ext_name.capitalize()}Config"
-            
+
             # Create the class dynamically, inheriting from ExtensionAppConfig
             app_config_attrs = {
                 'name': module_name,
@@ -247,18 +272,18 @@ class ExtensionRegistry:
                 'verbose_name': ext_name.replace('_', ' ').title(),
                 'default_auto_field': 'django.db.models.BigAutoField'
             }
-            
+
             # Inherit from ExtensionAppConfig instead of AppConfig
             dynamic_app_config = type(class_name, (ExtensionAppConfig,), app_config_attrs)
-            
+
             # Attach it to the module
             setattr(module, class_name, dynamic_app_config)
-            
+
             full_class_path = f"{module_name}.{class_name}"
             logger.debug(f"Created dynamic AppConfig (inheriting from ExtensionAppConfig): {full_class_path}")
-            
+
             return full_class_path
-            
+
         except Exception as e:
             logger.error(f"Failed to create dynamic AppConfig for {ext_name}: {e}")
             return module_name
@@ -291,6 +316,7 @@ class ExtensionRegistry:
                 patterns.append(path(f"extensions/{url_prefix}/", include(meta['_urls_module'])))
         return patterns
 
+
 def get_extension_registry() -> ExtensionRegistry:
     """Returns the global extension registry instance."""
     global _registry
@@ -301,6 +327,7 @@ def get_extension_registry() -> ExtensionRegistry:
 
 
 _registry: Optional[ExtensionRegistry] = None
+
 
 def discover_extensions(extensions_dir: Path) -> List[str]:
     """

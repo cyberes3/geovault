@@ -9,7 +9,7 @@ os.environ.setdefault('DJANGO_SETTINGS_MODULE', 'website.settings')
 import django
 django.setup()
 
-from website.extension_loader import ExtensionRegistry
+from website.extensions.extension_loader import ExtensionRegistry
 from django.conf import settings
 
 def check_loader():

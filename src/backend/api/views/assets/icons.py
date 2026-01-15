@@ -89,7 +89,7 @@ def upload_icon(request):
     # Store icon using existing icon manager
     # Create empty ImportLog for non-import use case
     import_log = ImportLog()
-    icon_url = store_icon(icon_data, file_name, import_log, stats={'successful': 0, 'caltopo_found': 0, 'failed': 0})
+    icon_url = store_icon(icon_data, file_name, import_log, stats={'successful': 0, 'failed': 0})
 
     if not icon_url:
         return JsonResponse({

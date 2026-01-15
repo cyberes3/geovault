@@ -3292,6 +3292,77 @@ export default {
 
       this.updateFeatureCount()
       this.updateFeaturesInExtent()
+
+      // If we have a tag query parameter and this is initial load, zoom to filtered features
+      if (this.$route.query.tag && this.isInitialLoad && filteredFeatures.length > 0) {
+        this.$nextTick(() => {
+          this.zoomToTaggedFeatures(filteredFeatures)
+        })
+      }
+    },
+    zoomToTaggedFeatures(features) {
+      if (!this.map || !features || features.length === 0) {
+        return
+      }
+
+      // Calculate bounding box from all features
+      let minLon = Infinity, minLat = Infinity, maxLon = -Infinity, maxLat = -Infinity
+      
+      features.forEach(feature => {
+        if (!feature.geometry || !feature.geometry.coordinates) {
+          return
+        }
+        
+        const coords = this.getFeatureCoordinates(feature.geometry)
+        coords.forEach((coord) => {
+          const [lon, lat] = Array.isArray(coord) && coord.length >= 2 ? coord : [null, null]
+          if (lon != null && lat != null && isFinite(lon) && isFinite(lat)) {
+            if (lon >= -180 && lon <= 180 && lat >= -90 && lat <= 90) {
+              minLon = Math.min(minLon, lon)
+              minLat = Math.min(minLat, lat)
+              maxLon = Math.max(maxLon, lon)
+              maxLat = Math.max(maxLat, lat)
+            }
+          }
+        })
+      })
+
+      // Ensure we have valid bounds
+      if (!isFinite(minLon) || !isFinite(minLat) || !isFinite(maxLon) || !isFinite(maxLat)) {
+        return
+      }
+
+      // Clamp to valid ranges
+      minLon = Math.max(-180, Math.min(180, minLon))
+      minLat = Math.max(-90, Math.min(90, minLat))
+      maxLon = Math.max(-180, Math.min(180, maxLon))
+      maxLat = Math.max(-90, Math.min(90, maxLat))
+
+      // Handle degenerate bounds (same point)
+      if (minLon === maxLon && minLat === maxLat) {
+        return this.navigateAndRefresh(() => {
+          this.map.flyTo({
+            center: [minLon, minLat],
+            zoom: 10,
+            duration: 500,
+            padding: 50
+          })
+        })
+      }
+
+      // Fit bounds to all filtered features
+      const bounds = new maplibregl.LngLatBounds(
+        [minLon, minLat], // southwest corner
+        [maxLon, maxLat]  // northeast corner
+      )
+
+      return this.navigateAndRefresh(() => {
+        this.map.fitBounds(bounds, {
+          padding: 50,
+          duration: 500,
+          maxZoom: MAX_ZOOM_LEVEL
+        })
+      })
     },
     async handleHideFeature(feature) {
       if (!this.isMainMapRoute || this.isPublicShareMode || !this.$store.state.userInfo) {
@@ -3760,6 +3831,12 @@ export default {
         query: query
       })
     },
+    async handleUrlTag() {
+      // This method is called when tag query is present
+      // The actual zoom will be triggered by handleTagFilterChange when features are loaded
+      // We just need to ensure the map is ready
+      await this.waitForMap()
+    },
     async waitForMap() {
       // Wait for map to be initialized (handles keep-alive restore scenarios)
       const maxWait = 5000 // 5 seconds max wait
@@ -4060,6 +4137,13 @@ export default {
       // Note: zoomToFeature calls navigateAndRefresh which will load bbox data
       // after the zoom animation completes, so we don't need to call loadDataForCurrentView here
       await this.handleUrlFeatureId()
+    } else if (this.$route.query.tag) {
+      // Tag-first strategy: wait for tag filter to load, then zoom to filtered features
+      // Set tag filter active immediately to prevent bbox data loading
+      this.isTagFilterActive = true
+      // Don't load bbox data, sidebar will handle loading filtered features
+      // Then handleUrlTag will zoom to fit all filtered features
+      await this.handleUrlTag()
     } else {
       // Normal flow for non-featureId navigation
       await this.loadDataForCurrentView()
@@ -4100,9 +4184,11 @@ export default {
     this.isEditingFeature = false
     this.showElevationProfile = false
 
-    // Clear any active tag filter state
-    this.isTagFilterActive = false
-    this.tagFilteredFeatures = []
+    // Clear any active tag filter state (unless we have a tag query parameter)
+    if (!this.$route.query.tag) {
+      this.isTagFilterActive = false
+      this.tagFilteredFeatures = []
+    }
 
     // Treat this as a fresh initial load
     this.isInitialLoad = true
@@ -4129,7 +4215,11 @@ export default {
       } else if (hasFeatureId) {
         // Feature-first strategy: zoom to feature immediately
         this.handleUrlFeatureId()
-      } else if (!hasTagQuery) {
+      } else if (hasTagQuery) {
+        // Tag-first strategy: wait for tag filter to load, then zoom to filtered features
+        this.isTagFilterActive = true
+        this.handleUrlTag()
+      } else {
         // Normal view - reload bbox data
         this.loadDataForCurrentView().then(() => {
           this.updateFeaturesInExtent()
@@ -4156,9 +4246,6 @@ export default {
             }
           }
         })
-      } else {
-        // Tag filter mode - sidebar will handle loading
-        this.updateFeaturesInExtent()
       }
     }
   },

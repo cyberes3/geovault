@@ -171,7 +171,7 @@
 </template>
 
 <script>
-import BaseModal from '@/components/parts/BaseModal.vue'
+import BaseModal from 'platform/components/parts/BaseModal.vue'
 
 export default {
   name: 'CaltopoSetupModal',
@@ -198,4 +198,3 @@ kbd {
   font-family: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, "Liberation Mono", monospace;
 }
 </style>
-

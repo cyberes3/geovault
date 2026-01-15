@@ -65,18 +65,19 @@ urlpatterns = [
 Extensions should create an `apps.py` file that inherits from `ExtensionAppConfig`:
 
 ```python
-from website.extension_base import ExtensionAppConfig
+from website.extensions.extension_base import ExtensionAppConfig
+
 
 class MyExtensionConfig(ExtensionAppConfig):
-    default_auto_field = 'django.db.models.BigAutoField'
-    name = 'my_extension.src.backend'
-    label = 'my_extension'
-    verbose_name = 'My Extension'
-    
-    def extension_ready(self):
-        # Initialize your extension here
-        # Register hooks, validate config, etc.
-        pass
+  default_auto_field = 'django.db.models.BigAutoField'
+  name = 'my_extension.src.backend'
+  label = 'my_extension'
+  verbose_name = 'My Extension'
+
+  def extension_ready(self):
+    # Initialize your extension here
+    # Register hooks, validate config, etc.
+    pass
 ```
 
 The `extension_ready()` method is called after Django is fully initialized and is the recommended place to:
@@ -220,30 +221,31 @@ Extensions can register hooks to be called at specific points in the platform's 
 Hooks must be registered in your `extension_ready()` method:
 
 ```python
-from website.extension_base import ExtensionAppConfig
-from website.extension_hooks import register_hook
+from website.extensions.extension_base import ExtensionAppConfig
+from website.extensions.extension_hooks import register_hook
+
 
 class MyExtensionConfig(ExtensionAppConfig):
-    name = 'my_extension.src.backend'
-    label = 'my_extension'
+  name = 'my_extension.src.backend'
+  label = 'my_extension'
+
+  def extension_ready(self):
+    # Register an import hook
+    register_hook('import', 'my_import_handler', self.handle_import)
+
+  def handle_import(self, import_item, user_id, created_features):
+    """
+    Called after a successful import.
     
-    def extension_ready(self):
-        # Register an import hook
-        register_hook('import', 'my_import_handler', self.handle_import)
-    
-    def handle_import(self, import_item, user_id, created_features):
-        """
-        Called after a successful import.
-        
-        Args:
-            import_item: ImportQueue instance that was imported
-            user_id: Integer ID of the user who imported
-            created_features: List of FeatureStore instances that were created
-        """
-        # Process the imported features
-        for feature in created_features:
-            # Do something with each feature
-            pass
+    Args:
+        import_item: ImportQueue instance that was imported
+        user_id: Integer ID of the user who imported
+        created_features: List of FeatureStore instances that were created
+    """
+    # Process the imported features
+    for feature in created_features:
+      # Do something with each feature
+      pass
 ```
 
 **Important Notes:**

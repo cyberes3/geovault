@@ -55,7 +55,7 @@ ADDITIONAL_CORS_ORIGINS = config.get_list('security.additional_cors_origins', []
 # Application definition
 
 # Extension Loader
-from website.extension_loader import discover_extensions
+from website.extensions.extension_loader import discover_extensions
 # Extensions directory: src/backend/extensions
 EXTENSIONS_DIR = BASE_DIR / 'extensions'
 # Add to sys.path
@@ -515,9 +515,6 @@ LOGGING = {
         },
     },
     'filters': {
-        'suppress_caltopo': {
-            '()': 'website.logging_filters.SuppressCaltopoFilter',
-        },
     },
     'handlers': {
         'console': {
@@ -525,7 +522,6 @@ LOGGING = {
             'class': 'logging.StreamHandler',
             'formatter': 'console',
             'stream': 'ext://sys.stdout',
-            'filters': ['suppress_caltopo'],
         },
     },
     'loggers': {

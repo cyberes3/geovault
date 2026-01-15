@@ -1,7 +1,7 @@
 from django.http import JsonResponse
 from django.views.decorators.http import require_http_methods
 from geo_lib.website.auth import api_or_login_required_401
-from website.extension_loader import get_extension_registry
+from website.extensions.extension_loader import get_extension_registry
 
 @api_or_login_required_401()
 @require_http_methods(["GET"])
