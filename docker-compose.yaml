@@ -63,12 +63,13 @@ services:
       GEOVAULT_CONFIG_PATH: /srv/docker-data/geovault/src/backend/config.yaml
     volumes:
       - /srv/docker-data/geovault:/srv/docker-data/geovault
+      - /srv/docker-data/geovault/src/backend/data:/app/src/backend/data
     ports:
       - "8000:8000"
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:8000/api/health/"]
       interval: 30s
-      timeout: 10s
+      timeout: 60s
       start_period: 40s
       retries: 3
     restart: unless-stopped

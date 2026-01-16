@@ -26,7 +26,7 @@ CONFIG_EXAMPLE="/app/src/backend/config.example.yaml"
 # Create necessary directories
 mkdir -p "${BACKEND_DIR}"
 mkdir -p "${BACKEND_DIR}/data/icons"
-mkdir -p "${BACKEND_DIR}/data/tiles"
+mkdir -p "${BACKEND_DIR}/data/tile-cache"
 
 # Copy config.yaml if it doesn't exist
 if [ ! -f "${CONFIG_FILE}" ]; then
