@@ -8,7 +8,7 @@ from django.test import TestCase, override_settings, RequestFactory
 from django.contrib.auth import get_user_model
 from django.core.cache import caches
 
-from api.utils.rate_limit import caltopo_rate_limit
+from extensions.caltopo.src.backend.utils.rate_limit import caltopo_rate_limit
 from api.utils.responses import success_response
 
 User = get_user_model()

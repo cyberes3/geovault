@@ -6,8 +6,8 @@ from unittest.mock import patch, MagicMock
 from django.test import TestCase
 from django.contrib.auth import get_user_model
 
-from caltopo.src.backend.models import CalTopoUser
-from caltopo.src.backend.services.caltopo_service import (
+from extensions.caltopo.src.backend.models import CalTopoUser
+from extensions.caltopo.src.backend.services.caltopo_api import (
     get_caltopo_session,
     list_maps,
     get_map_features,
@@ -34,7 +34,7 @@ class TestCalTopoService(TestCase):
         with self.assertRaises(CalTopoUser.DoesNotExist):
             get_caltopo_session(self.user)
     
-    @patch('caltopo.src.backend.services.caltopo_service.CaltopoSession')
+    @patch('extensions.caltopo.src.backend.services.caltopo_api.CaltopoSession')
     def test_list_maps_handles_missing_rels_in_accountdata(self, mock_session_class):
         """Test list_maps() handles missing 'rels' in accountData gracefully."""
         CalTopoUser.objects.create(
@@ -142,7 +142,7 @@ class TestCalTopoService(TestCase):
         self.assertEqual(props['fill-opacity'], 0.5)
         self.assertEqual(props['icon'], 'test-icon')
     
-    @patch('caltopo.src.backend.services.caltopo_service.get_caltopo_session')
+    @patch('extensions.caltopo.src.backend.services.caltopo_api.get_caltopo_session')
     def test_hook_updates_imported_features_mapping_after_import(self, mock_get_session):
         """Test hook updates imported_features mapping after import."""
         from geo_lib.processing.hooks import execute_import_hooks
@@ -187,7 +187,7 @@ class TestCalTopoService(TestCase):
         self.assertIn('feature1', caltopo_user.imported_features['map1'])
         self.assertEqual(caltopo_user.imported_features['map1']['feature1'], feature.id)
     
-    @patch('caltopo.src.backend.services.caltopo_service.get_caltopo_session')
+    @patch('extensions.caltopo.src.backend.services.caltopo_api.get_caltopo_session')
     def test_hook_handles_empty_created_features_list(self, mock_get_session):
         """Test hook handles empty created_features list."""
         from geo_lib.processing.hooks import execute_import_hooks
@@ -211,7 +211,7 @@ class TestCalTopoService(TestCase):
         
         # Should complete without error
     
-    @patch('caltopo.src.backend.services.caltopo_service.get_caltopo_session')
+    @patch('extensions.caltopo.src.backend.services.caltopo_api.get_caltopo_session')
     def test_hook_handles_missing_caltopo_user_gracefully(self, mock_get_session):
         """Test hook handles missing CalTopoUser gracefully (logs warning)."""
         from geo_lib.processing.hooks import execute_import_hooks
@@ -245,7 +245,7 @@ class TestCalTopoService(TestCase):
         
         # Should complete without error
     
-    @patch('caltopo.src.backend.services.caltopo_service.get_caltopo_session')
+    @patch('extensions.caltopo.src.backend.services.caltopo_api.get_caltopo_session')
     def test_hook_only_updates_mapping_for_features_with_caltopo_metadata(self, mock_get_session):
         """Test hook only updates mapping for features with caltopo_map_id and caltopo_feature_id."""
         from geo_lib.processing.hooks import execute_import_hooks

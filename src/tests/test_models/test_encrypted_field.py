@@ -6,7 +6,7 @@ from django.db import models
 from django.contrib.auth import get_user_model
 
 from api.fields import EncryptedTextField
-from api.models import CalTopoUser
+from extensions.caltopo.src.backend.models import CalTopoUser
 
 User = get_user_model()
 
@@ -45,7 +45,7 @@ class TestEncryptedTextField(TestCase):
         from django.db import connection
         with connection.cursor() as cursor:
             cursor.execute(
-                "SELECT credential_key FROM api_caltopouser WHERE user_id = %s",
+                "SELECT credential_key FROM caltopo_extension_caltopouser WHERE user_id = %s",
                 [self.user.id]
             )
             raw_value = cursor.fetchone()[0]
@@ -111,7 +111,7 @@ class TestEncryptedTextField(TestCase):
         with connection.cursor() as cursor:
             cursor.execute(
                 """
-                INSERT INTO api_caltopouser 
+                INSERT INTO caltopo_extension_caltopouser 
                 (user_id, account_id, credential_id, credential_key, imported_features, created_at, updated_at)
                 VALUES (%s, %s, %s, %s, %s, NOW(), NOW())
                 """,
@@ -130,7 +130,7 @@ class TestEncryptedTextField(TestCase):
         with connection.cursor() as cursor:
             cursor.execute(
                 """
-                INSERT INTO api_caltopouser 
+                INSERT INTO caltopo_extension_caltopouser 
                 (user_id, account_id, credential_id, credential_key, imported_features, created_at, updated_at)
                 VALUES (%s, %s, %s, %s, %s, NOW(), NOW())
                 """,
@@ -156,7 +156,7 @@ class TestEncryptedTextField(TestCase):
         from django.db import connection
         with connection.cursor() as cursor:
             cursor.execute(
-                "SELECT credential_key FROM api_caltopouser WHERE user_id = %s",
+                "SELECT credential_key FROM caltopo_extension_caltopouser WHERE user_id = %s",
                 [self.user.id]
             )
             encrypted_value = cursor.fetchone()[0]
@@ -182,7 +182,7 @@ class TestEncryptedTextField(TestCase):
         from django.db import connection
         with connection.cursor() as cursor:
             cursor.execute(
-                "SELECT credential_key FROM api_caltopouser WHERE user_id = %s",
+                "SELECT credential_key FROM caltopo_extension_caltopouser WHERE user_id = %s",
                 [self.user.id]
             )
             encrypted_value_1 = cursor.fetchone()[0]

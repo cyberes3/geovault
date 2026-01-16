@@ -8,7 +8,7 @@ from django.contrib.auth import get_user_model
 from django.contrib.gis.geos import Point
 
 from api.models import FeatureStore, ImportQueue
-from caltopo.src.backend.models import CalTopoUser
+from extensions.caltopo.src.backend.models import CalTopoUser
 from geo_lib.feature_id import generate_geojson_hash
 
 User = get_user_model()
@@ -26,11 +26,11 @@ class TestCalTopoIntegration(TestCase):
         )
         self.client.force_login(self.user)
     
-    @patch('caltopo.src.backend.services.caltopo_service.CaltopoSession')
-    @patch('caltopo.src.backend.views.maps.list_maps')
-    @patch('caltopo.src.backend.views.maps.get_map_features')
-    @patch('caltopo.src.backend.views.single_import.get_feature')
-    @patch('caltopo.src.backend.views.single_import.convert_caltopo_to_geojson')
+    @patch('extensions.caltopo.src.backend.services.caltopo_api.CaltopoSession')
+    @patch('extensions.caltopo.src.backend.views.maps.list_maps')
+    @patch('extensions.caltopo.src.backend.views.maps.get_map_features')
+    @patch('extensions.caltopo.src.backend.views.single_import.get_feature')
+    @patch('extensions.caltopo.src.backend.views.single_import.convert_caltopo_to_geojson')
     def test_complete_flow_connect_list_get_import_feature(
         self, mock_convert, mock_get_feature, mock_get_features, mock_list_maps, mock_session_class
     ):
@@ -111,8 +111,8 @@ class TestCalTopoIntegration(TestCase):
         self.assertIn('map1', caltopo_user.imported_features)
         self.assertIn('feature1', caltopo_user.imported_features['map1'])
     
-    @patch('caltopo.src.backend.views.single_import.get_feature')
-    @patch('caltopo.src.backend.views.single_import.convert_caltopo_to_geojson')
+    @patch('extensions.caltopo.src.backend.views.single_import.get_feature')
+    @patch('extensions.caltopo.src.backend.views.single_import.convert_caltopo_to_geojson')
     def test_reimport_flow_import_delete_reimport_verify_new_feature(
         self, mock_convert, mock_get_feature
     ):
@@ -199,8 +199,8 @@ class TestCalTopoIntegration(TestCase):
         caltopo_user.refresh_from_db()
         self.assertEqual(caltopo_user.imported_features['map1']['feature1'], new_feature.id)
     
-    @patch('caltopo.src.backend.views.map_import.get_map_features')
-    @patch('caltopo.src.backend.views.map_import.convert_caltopo_to_geojson')
+    @patch('extensions.caltopo.src.backend.views.map_import.get_map_features')
+    @patch('extensions.caltopo.src.backend.views.map_import.convert_caltopo_to_geojson')
     @patch('geo_lib.processing.jobs.process_job.ProcessJob.enqueue_job')
     @patch('geo_lib.processing.jobs.helpers.status_tracker.status_tracker')
     def test_reimport_map_flow_import_delete_some_reimport_verify_cleanup(
@@ -323,8 +323,8 @@ class TestCalTopoIntegration(TestCase):
         caltopo_user.refresh_from_db()
         self.assertEqual(caltopo_user.imported_features.get('map1', {}), {})
     
-    @patch('caltopo.src.backend.views.map_import.get_map_features')
-    @patch('caltopo.src.backend.views.map_import.convert_caltopo_to_geojson')
+    @patch('extensions.caltopo.src.backend.views.map_import.get_map_features')
+    @patch('extensions.caltopo.src.backend.views.map_import.convert_caltopo_to_geojson')
     @patch('geo_lib.processing.jobs.process_job.ProcessJob.enqueue_job')
     @patch('geo_lib.processing.jobs.helpers.status_tracker.status_tracker')
     @patch('geo_lib.processing.hooks.execute_import_hooks')
@@ -400,7 +400,7 @@ class TestCalTopoIntegration(TestCase):
         # and execute the hook to verify the mapping would be updated
         from api.models import FeatureStore
         from django.contrib.gis.geos import Point
-        from caltopo.src.backend.apps import CaltopoExtensionConfig
+        from extensions.caltopo.src.backend.apps import CaltopoExtensionConfig
         
         # Create the import queue item that would normally be created by ProcessJob.enqueue_job
         # Since we're mocking enqueue_job, we need to create it manually
@@ -446,7 +446,7 @@ class TestCalTopoIntegration(TestCase):
         )
         
         # Execute the actual hook function directly (not through execute_import_hooks since it's mocked)
-        config = CaltopoExtensionConfig('caltopo.src.backend', None)
+        config = CaltopoExtensionConfig('extensions.caltopo.src.backend', None)
         config.handle_import(import_queue, self.user.id, [feature1, feature2])
         
         # Verify the mapping was updated
