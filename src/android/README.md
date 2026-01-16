@@ -24,8 +24,6 @@ A minimal Android app for quickly uploading KML/KMZ/GPX files to your GeoVault s
 3. Optionally rename the file (the app automatically appends `_android_upload_<timestamp>` to the filename)
 4. Tap "Upload" to send the file to your server
 
-The app shows upload progress and automatically closes on successful upload.
-
 ## Building the APK
 
 From the `src/android` directory:
@@ -56,7 +54,7 @@ To build a signed release APK, you need to set up a keystore file and configure 
    ```bash
    keytool -genkey -v -keystore app/keystore.jks -keyalg RSA -keysize 2048 -validity 10000 -alias upload
    ```
-   
+
    This will prompt you for:
    - A password for the keystore (remember this - you'll need it when building)
    - Your name, organizational unit, organization, city, state, and country code
@@ -68,9 +66,9 @@ To build a signed release APK, you need to set up a keystore file and configure 
    # or directly:
    ./gradlew assembleRelease
    ```
-   
+
    When building, you'll be prompted to enter:
    - Your keystore password
    - Your key password
-   
+
    The keystore path and alias are configured in `gradle.properties` (no passwords are stored there for security).
