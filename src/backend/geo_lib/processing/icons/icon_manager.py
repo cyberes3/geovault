@@ -188,7 +188,8 @@ def process_geojson_icons(
     # Statistics tracking
     stats = {
         'successful': 0,
-        'failed': 0
+        'failed': 0,
+        'icons_processed': 0  # Track if any icons were processed (even if they don't increment counters)
     }
 
     # Create mapping of original hrefs to new hrefs
@@ -230,9 +231,8 @@ def process_geojson_icons(
     # (Root-level properties are typically metadata, not feature icons)
     pass
 
-    # Log statistics
-    total_processed = stats['successful'] + stats['failed']
-    if total_processed > 0:
+    # Log statistics - log if any icons were processed (even if counters are 0, e.g., CalTopo point icons)
+    if stats['icons_processed'] > 0:
         import_log.add(
             f"Icon processing complete: {stats['successful']} successfully extracted, {stats['failed']} failed",
             "Icon Processing",
@@ -382,6 +382,10 @@ def _process_properties_icons(
         href = properties[prop_name]
         if not isinstance(href, str):
             continue
+
+        # Track that we're processing an icon
+        stats.setdefault('icons_processed', 0)
+        stats['icons_processed'] += 1
 
         # Check if this is a CalTopo URL before processing
         is_caltopo = _is_caltopo_url(href)
