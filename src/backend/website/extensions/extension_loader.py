@@ -236,6 +236,10 @@ class ExtensionRegistry:
             # Use full module path with extensions. prefix to match import paths
             urls_module = f"{full_module_name}.urls"
 
+        # Extract icon from manifest (optional)
+        # Icon can be: heroicon name (string), SVG path (string), or inline SVG (string)
+        icon = getattr(manifest, 'icon', None)
+
         # Store extension metadata (internal use includes urls_module)
         self.loaded_extensions[ext_name] = {
             'name': ext_name,
@@ -243,6 +247,7 @@ class ExtensionRegistry:
             'description': getattr(manifest, 'description', ''),
             'frontend_entry': frontend_entry,
             'frontend_css': frontend_css,
+            'icon': icon,  # Optional icon field
             '_urls_module': urls_module  # Internal only, prefixed with underscore
         }
 

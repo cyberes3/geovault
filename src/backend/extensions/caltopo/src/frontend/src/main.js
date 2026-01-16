@@ -9,7 +9,8 @@ async function setup({app, router, mainRouter, store, registry, api, utils, toas
     registry.registerSettingsTab({
         id: 'caltopo-extension',
         label: 'CalTopo Integration',
-        component: CaltopoSettings
+        component: CaltopoSettings,
+        icon: metadata.icon
     })
 }
 

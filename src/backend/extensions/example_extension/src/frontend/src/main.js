@@ -32,10 +32,12 @@ async function setup({ app, router, store, registry, api, utils, toast, metadata
 
     // 3. Register User Settings Tab
     // Adds a custom section to the 'User Settings' page.
+    // The icon is automatically resolved from metadata.icon if specified in manifest.py
     registry.registerSettingsTab({
         id: 'example-extension',
         label: 'Example Extension',
-        component: ExampleSettings
+        component: ExampleSettings,
+        icon: metadata.icon  // Icon from manifest (heroicon, SVG file, or inline SVG)
     });
 
     // 4. Register Routes
