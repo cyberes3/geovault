@@ -27,8 +27,8 @@ class ExtensionAppConfig(AppConfig):
     4. Implement extension_ready() method for initialization
     
     Example:
-        from website.extension_base import ExtensionAppConfig
-        from website.extension_hooks import register_hook
+        from website.extensions.extension_base import ExtensionAppConfig
+        from website.extensions.extension_hooks import register_hook
         
         class MyExtensionConfig(ExtensionAppConfig):
             default_auto_field = 'django.db.models.BigAutoField'

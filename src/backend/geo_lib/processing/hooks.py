@@ -7,7 +7,7 @@ to grow into a plugin system later (similar to TagGenerator pattern).
 
 Hooks receive the import_item, user_id, and list of created FeatureStore objects.
 
-This module now integrates with the extension hooks system (website.extension_hooks)
+This module now integrates with the extension hooks system (website.extensions.extension_hooks)
 for better organization and automatic extension name prefixing. The legacy
 register_import_hook() function is maintained for backward compatibility.
 """
@@ -28,7 +28,7 @@ def register_import_hook(hook_id: str, callback: Callable) -> None:
     This function is maintained for backward compatibility. For new extensions,
     use the extension hooks system instead:
     
-        from website.extension_hooks import register_hook
+        from website.extensions.extension_hooks import register_hook
         register_hook('import', 'my_hook_id', callback)
     
     Args:
@@ -73,7 +73,7 @@ def execute_import_hooks(
     Execute all registered import hooks.
     
     This function executes both:
-    1. Hooks registered via the extension hooks system (website.extension_hooks)
+    1. Hooks registered via the extension hooks system (website.extensions.extension_hooks)
     2. Legacy hooks registered via register_import_hook()
     
     Args:

@@ -259,7 +259,7 @@ class TestExtensionHooks:
             pass
         
         # Should not raise, but log warning
-        with patch('website.extension_hooks.logger') as mock_logger:
+        with patch('website.extensions.extension_hooks.logger') as mock_logger:
             register_hook('unknown_type', 'test_hook', callback)
             mock_logger.warning.assert_called_once()
         
@@ -534,7 +534,7 @@ class TestExtensionLoaderWithAppConfig:
             # Don't create apps.py - should use dynamic config
             
             registry = ExtensionRegistry(ext_dir)
-            with patch('website.extension_loader.get_config_loader') as mock_loader_get:
+            with patch('website.extensions.extension_loader.get_config_loader') as mock_loader_get:
                 mock_config = MagicMock()
                 mock_config.get_bool.return_value = True
                 mock_loader_get.return_value = mock_config

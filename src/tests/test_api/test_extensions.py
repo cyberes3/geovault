@@ -26,7 +26,7 @@ class TestExtensionConfiguration:
         # and populates self.loaded_extensions.
         
         # We'll mock the config loader to ensure it's enabled
-        with patch('website.extension_loader.get_config_loader') as mock_loader_get:
+        with patch('website.extensions.extension_loader.get_config_loader') as mock_loader_get:
             mock_config = MagicMock()
             # Default to True for all boolean checks
             mock_config.get_bool.return_value = True
@@ -47,7 +47,7 @@ class TestExtensionConfiguration:
         from website.settings import EXTENSIONS_DIR
         registry = ExtensionRegistry(EXTENSIONS_DIR)
         
-        with patch('website.extension_loader.get_config_loader') as mock_loader_get:
+        with patch('website.extensions.extension_loader.get_config_loader') as mock_loader_get:
             mock_config = MagicMock()
             
             # Define side effect for get_bool to return False for our specific extension
@@ -71,7 +71,7 @@ class TestExtensionConfiguration:
         from website.settings import EXTENSIONS_DIR
         registry = ExtensionRegistry(EXTENSIONS_DIR)
         
-        with patch('website.extension_loader.get_config_loader') as mock_loader_get:
+        with patch('website.extensions.extension_loader.get_config_loader') as mock_loader_get:
             mock_config = MagicMock()
             
             def get_bool_side_effect(key, default=False):
@@ -569,7 +569,7 @@ class TestExtensionErrorHandling:
             (ext_dir / 'no_manifest_ext').mkdir()
             
             registry = ExtensionRegistry(ext_dir)
-            with patch('website.extension_loader.get_config_loader') as mock_loader_get:
+            with patch('website.extensions.extension_loader.get_config_loader') as mock_loader_get:
                 mock_config = MagicMock()
                 mock_config.get_bool.return_value = True
                 mock_loader_get.return_value = mock_config
@@ -591,7 +591,7 @@ class TestExtensionErrorHandling:
             manifest_path.write_text('name = "test"\nversion = "1.0.0"\ninvalid syntax here!!!')
             
             registry = ExtensionRegistry(ext_dir)
-            with patch('website.extension_loader.get_config_loader') as mock_loader_get:
+            with patch('website.extensions.extension_loader.get_config_loader') as mock_loader_get:
                 mock_config = MagicMock()
                 mock_config.get_bool.return_value = True
                 mock_loader_get.return_value = mock_config
@@ -614,7 +614,7 @@ class TestExtensionErrorHandling:
             manifest_path.write_text('version = "1.0.0"\ndescription = "Test"')
             
             registry = ExtensionRegistry(ext_dir)
-            with patch('website.extension_loader.get_config_loader') as mock_loader_get:
+            with patch('website.extensions.extension_loader.get_config_loader') as mock_loader_get:
                 mock_config = MagicMock()
                 mock_config.get_bool.return_value = True
                 mock_loader_get.return_value = mock_config
@@ -636,7 +636,7 @@ class TestExtensionErrorHandling:
             manifest_path.write_text('name = "missing_version_ext"\ndescription = "Test"')
             
             registry = ExtensionRegistry(ext_dir)
-            with patch('website.extension_loader.get_config_loader') as mock_loader_get:
+            with patch('website.extensions.extension_loader.get_config_loader') as mock_loader_get:
                 mock_config = MagicMock()
                 mock_config.get_bool.return_value = True
                 mock_loader_get.return_value = mock_config
@@ -658,7 +658,7 @@ class TestExtensionErrorHandling:
             manifest_path.write_text('name = "no_backend_ext"\nversion = "1.0.0"')
             
             registry = ExtensionRegistry(ext_dir)
-            with patch('website.extension_loader.get_config_loader') as mock_loader_get:
+            with patch('website.extensions.extension_loader.get_config_loader') as mock_loader_get:
                 mock_config = MagicMock()
                 mock_config.get_bool.return_value = True
                 mock_loader_get.return_value = mock_config
@@ -686,7 +686,7 @@ class TestExtensionErrorHandling:
             (backend_path / '__init__.py').write_text('')
             
             registry = ExtensionRegistry(ext_dir)
-            with patch('website.extension_loader.get_config_loader') as mock_loader_get:
+            with patch('website.extensions.extension_loader.get_config_loader') as mock_loader_get:
                 mock_config = MagicMock()
                 mock_config.get_bool.return_value = True
                 mock_loader_get.return_value = mock_config
@@ -707,7 +707,7 @@ class TestExtensionErrorHandling:
             (ext_dir / 'not_a_directory.txt').write_text('some content')
             
             registry = ExtensionRegistry(ext_dir)
-            with patch('website.extension_loader.get_config_loader') as mock_loader_get:
+            with patch('website.extensions.extension_loader.get_config_loader') as mock_loader_get:
                 mock_config = MagicMock()
                 mock_config.get_bool.return_value = True
                 mock_loader_get.return_value = mock_config
@@ -729,7 +729,7 @@ class TestExtensionErrorHandling:
             manifest_path.write_text('raise RuntimeError("Test exception")\nname = "test"')
             
             registry = ExtensionRegistry(ext_dir)
-            with patch('website.extension_loader.get_config_loader') as mock_loader_get:
+            with patch('website.extensions.extension_loader.get_config_loader') as mock_loader_get:
                 mock_config = MagicMock()
                 mock_config.get_bool.return_value = True
                 mock_loader_get.return_value = mock_config
@@ -751,7 +751,7 @@ class TestExtensionURLRouting:
         from website.settings import EXTENSIONS_DIR
         registry = ExtensionRegistry(EXTENSIONS_DIR)
         
-        with patch('website.extension_loader.get_config_loader') as mock_loader_get:
+        with patch('website.extensions.extension_loader.get_config_loader') as mock_loader_get:
             mock_config = MagicMock()
             mock_config.get_bool.return_value = True
             mock_loader_get.return_value = mock_config
@@ -785,7 +785,7 @@ class TestExtensionURLRouting:
             (backend_path / '__init__.py').write_text('')
             
             registry = ExtensionRegistry(ext_dir)
-            with patch('website.extension_loader.get_config_loader') as mock_loader_get:
+            with patch('website.extensions.extension_loader.get_config_loader') as mock_loader_get:
                 mock_config = MagicMock()
                 mock_config.get_bool.return_value = True
                 mock_loader_get.return_value = mock_config
@@ -815,7 +815,7 @@ class TestExtensionURLRouting:
             (backend_path / 'urls.py').write_text('from django.urls import path\nurlpatterns = []')
             
             registry = ExtensionRegistry(ext_dir)
-            with patch('website.extension_loader.get_config_loader') as mock_loader_get:
+            with patch('website.extensions.extension_loader.get_config_loader') as mock_loader_get:
                 mock_config = MagicMock()
                 mock_config.get_bool.return_value = True
                 mock_loader_get.return_value = mock_config
@@ -859,7 +859,7 @@ class TestFrontendAssetDiscovery:
             (dist_path / 'index.iife.js').write_text('// iife')
             
             registry = ExtensionRegistry(ext_dir)
-            with patch('website.extension_loader.get_config_loader') as mock_loader_get:
+            with patch('website.extensions.extension_loader.get_config_loader') as mock_loader_get:
                 mock_config = MagicMock()
                 mock_config.get_bool.return_value = True
                 mock_loader_get.return_value = mock_config
@@ -889,7 +889,7 @@ class TestFrontendAssetDiscovery:
             (dist_path / 'index.iife.js').write_text('// iife')
             
             registry = ExtensionRegistry(ext_dir)
-            with patch('website.extension_loader.get_config_loader') as mock_loader_get:
+            with patch('website.extensions.extension_loader.get_config_loader') as mock_loader_get:
                 mock_config = MagicMock()
                 mock_config.get_bool.return_value = True
                 mock_loader_get.return_value = mock_config
@@ -921,7 +921,7 @@ class TestFrontendAssetDiscovery:
             (assets_path / 'index.js').write_text('// assets index')
             
             registry = ExtensionRegistry(ext_dir)
-            with patch('website.extension_loader.get_config_loader') as mock_loader_get:
+            with patch('website.extensions.extension_loader.get_config_loader') as mock_loader_get:
                 mock_config = MagicMock()
                 mock_config.get_bool.return_value = True
                 mock_loader_get.return_value = mock_config
@@ -952,7 +952,7 @@ class TestFrontendAssetDiscovery:
             (dist_path / 'other.css').write_text('/* other */')
             
             registry = ExtensionRegistry(ext_dir)
-            with patch('website.extension_loader.get_config_loader') as mock_loader_get:
+            with patch('website.extensions.extension_loader.get_config_loader') as mock_loader_get:
                 mock_config = MagicMock()
                 mock_config.get_bool.return_value = True
                 mock_loader_get.return_value = mock_config
@@ -982,7 +982,7 @@ class TestFrontendAssetDiscovery:
             (dist_path / 'other.css').write_text('/* other */')
             
             registry = ExtensionRegistry(ext_dir)
-            with patch('website.extension_loader.get_config_loader') as mock_loader_get:
+            with patch('website.extensions.extension_loader.get_config_loader') as mock_loader_get:
                 mock_config = MagicMock()
                 mock_config.get_bool.return_value = True
                 mock_loader_get.return_value = mock_config
@@ -1014,7 +1014,7 @@ class TestFrontendAssetDiscovery:
             (assets_path / 'style.css').write_text('/* assets style */')
             
             registry = ExtensionRegistry(ext_dir)
-            with patch('website.extension_loader.get_config_loader') as mock_loader_get:
+            with patch('website.extensions.extension_loader.get_config_loader') as mock_loader_get:
                 mock_config = MagicMock()
                 mock_config.get_bool.return_value = True
                 mock_loader_get.return_value = mock_config
@@ -1077,7 +1077,7 @@ class TestExtensionAPIEdgeCases(TestCase):
         from website.settings import EXTENSIONS_DIR
         registry = ExtensionRegistry(EXTENSIONS_DIR)
         
-        with patch('website.extension_loader.get_config_loader') as mock_loader_get:
+        with patch('website.extensions.extension_loader.get_config_loader') as mock_loader_get:
             mock_config = MagicMock()
             mock_config.get_bool.return_value = True
             mock_loader_get.return_value = mock_config
@@ -1115,7 +1115,7 @@ class TestExtensionAPIEdgeCases(TestCase):
             (backend_path / 'urls.py').write_text('from django.urls import path\nurlpatterns = []')
             
             registry = ExtensionRegistry(ext_dir)
-            with patch('website.extension_loader.get_config_loader') as mock_loader_get:
+            with patch('website.extensions.extension_loader.get_config_loader') as mock_loader_get:
                 mock_config = MagicMock()
                 mock_config.get_bool.return_value = True
                 mock_loader_get.return_value = mock_config
@@ -1208,7 +1208,7 @@ class TestMultipleExtensions:
             (backend2_path / '__init__.py').write_text('')
             
             registry = ExtensionRegistry(ext_dir)
-            with patch('website.extension_loader.get_config_loader') as mock_loader_get:
+            with patch('website.extensions.extension_loader.get_config_loader') as mock_loader_get:
                 mock_config = MagicMock()
                 
                 def get_bool_side_effect(key, default=False):
@@ -1243,7 +1243,7 @@ class TestMultipleExtensions:
             (backend_path / '__init__.py').write_text('')
             
             registry = ExtensionRegistry(ext_dir)
-            with patch('website.extension_loader.get_config_loader') as mock_loader_get:
+            with patch('website.extensions.extension_loader.get_config_loader') as mock_loader_get:
                 mock_config = MagicMock()
                 # Don't explicitly enable it
                 mock_config.get_bool.return_value = False
@@ -1270,7 +1270,7 @@ class TestMultipleExtensions:
             (backend_path / '__init__.py').write_text('')
             
             registry = ExtensionRegistry(ext_dir)
-            with patch('website.extension_loader.get_config_loader') as mock_loader_get:
+            with patch('website.extensions.extension_loader.get_config_loader') as mock_loader_get:
                 mock_config = MagicMock()
                 # Return default value (True) when key not found
                 def get_bool_side_effect(key, default=True):
@@ -1295,7 +1295,7 @@ class TestRegistryStateManagement:
         from website.settings import EXTENSIONS_DIR
         registry = ExtensionRegistry(EXTENSIONS_DIR)
         
-        with patch('website.extension_loader.get_config_loader') as mock_loader_get:
+        with patch('website.extensions.extension_loader.get_config_loader') as mock_loader_get:
             mock_config = MagicMock()
             mock_config.get_bool.return_value = True
             mock_loader_get.return_value = mock_config
@@ -1352,7 +1352,7 @@ class TestDuplicateExtensionNames:
             (backend2_path / '__init__.py').write_text('')
             
             registry = ExtensionRegistry(ext_dir)
-            with patch('website.extension_loader.get_config_loader') as mock_loader_get:
+            with patch('website.extensions.extension_loader.get_config_loader') as mock_loader_get:
                 mock_config = MagicMock()
                 mock_config.get_bool.return_value = True
                 mock_loader_get.return_value = mock_config
@@ -1421,7 +1421,7 @@ class TestDuplicateExtensionNames:
             
             # Create registry and load extensions
             registry = ExtensionRegistry(ext_dir)
-            with patch('website.extension_loader.get_config_loader') as mock_loader_get:
+            with patch('website.extensions.extension_loader.get_config_loader') as mock_loader_get:
                 mock_config = MagicMock()
                 mock_config.get_bool.return_value = True
                 mock_loader_get.return_value = mock_config
@@ -1450,7 +1450,7 @@ class TestDuplicateExtensionNames:
             (backend_path / '__init__.py').write_text('')
             
             registry = ExtensionRegistry(ext_dir)
-            with patch('website.extension_loader.get_config_loader') as mock_loader_get:
+            with patch('website.extensions.extension_loader.get_config_loader') as mock_loader_get:
                 mock_config = MagicMock()
                 mock_config.get_bool.return_value = True
                 mock_loader_get.return_value = mock_config
@@ -1479,7 +1479,7 @@ class TestDuplicateExtensionNames:
                 (backend_path / '__init__.py').write_text('')
             
             registry = ExtensionRegistry(ext_dir)
-            with patch('website.extension_loader.get_config_loader') as mock_loader_get:
+            with patch('website.extensions.extension_loader.get_config_loader') as mock_loader_get:
                 mock_config = MagicMock()
                 mock_config.get_bool.return_value = True
                 mock_loader_get.return_value = mock_config
@@ -1517,7 +1517,7 @@ class TestDynamicAppConfig:
             # Don't create apps.py - should use dynamic config
             
             registry = ExtensionRegistry(ext_dir)
-            with patch('website.extension_loader.get_config_loader') as mock_loader_get:
+            with patch('website.extensions.extension_loader.get_config_loader') as mock_loader_get:
                 mock_config = MagicMock()
                 mock_config.get_bool.return_value = True
                 mock_loader_get.return_value = mock_config
@@ -1546,7 +1546,7 @@ class TestDynamicAppConfig:
             (backend_path / 'apps.py').write_text('from django.apps import AppConfig\n\nclass ExistingAppsExtConfig(AppConfig):\n    name = "existing_apps_ext.src.backend"\n    label = "existing_apps_ext"')
             
             registry = ExtensionRegistry(ext_dir)
-            with patch('website.extension_loader.get_config_loader') as mock_loader_get:
+            with patch('website.extensions.extension_loader.get_config_loader') as mock_loader_get:
                 mock_config = MagicMock()
                 mock_config.get_bool.return_value = True
                 mock_loader_get.return_value = mock_config
@@ -1584,7 +1584,7 @@ class TestExtensionAppConfigIntegration:
             # Don't create apps.py - should use dynamic config
             
             registry = ExtensionRegistry(ext_dir)
-            with patch('website.extension_loader.get_config_loader') as mock_loader_get:
+            with patch('website.extensions.extension_loader.get_config_loader') as mock_loader_get:
                 mock_config = MagicMock()
                 mock_config.get_bool.return_value = True
                 mock_loader_get.return_value = mock_config
@@ -1619,18 +1619,18 @@ class TestExtensionAppConfigIntegration:
             (backend_path / '__init__.py').write_text('')
             
             # Create apps.py that inherits from ExtensionAppConfig
-            apps_py_content = '''from website.extension_base import ExtensionAppConfig
+            apps_py_content = '''from website.extensions.extension_base import ExtensionAppConfig
 
 class CustomAppsExtConfig(ExtensionAppConfig):
     default_auto_field = 'django.db.models.BigAutoField'
-    name = 'custom_apps_ext.src.backend'
+    name = 'extensions.custom_apps_ext.src.backend'
     label = 'custom_apps_ext'
     verbose_name = 'Custom Apps Extension'
 '''
             (backend_path / 'apps.py').write_text(apps_py_content)
             
             registry = ExtensionRegistry(ext_dir)
-            with patch('website.extension_loader.get_config_loader') as mock_loader_get:
+            with patch('website.extensions.extension_loader.get_config_loader') as mock_loader_get:
                 mock_config = MagicMock()
                 mock_config.get_bool.return_value = True
                 mock_loader_get.return_value = mock_config
@@ -1643,9 +1643,18 @@ class CustomAppsExtConfig(ExtensionAppConfig):
                 
                 # Verify the AppConfig class exists and inherits correctly
                 app_config_path = apps[0]
-                # When apps.py exists, extension loader returns just the module path
-                # The AppConfig class is in the apps module
-                apps_module_path = f"{app_config_path}.apps"
+                # When apps.py exists, extension loader returns the full class path
+                # e.g., "extensions.custom_apps_ext.src.backend.apps.CustomAppsExtConfig"
+                # We need to extract the module path and class name
+                if '.apps.' in app_config_path:
+                    # Extract module path (everything before the last dot)
+                    module_path, class_name = app_config_path.rsplit('.', 1)
+                    # The module path should end with .apps, so we can import it directly
+                    apps_module_path = module_path
+                else:
+                    # Fallback: assume it's just the module path
+                    apps_module_path = f"{app_config_path}.apps"
+                    class_name = None
                 
                 # Ensure the extension directory is in sys.path (should already be from discover_extensions)
                 if str(ext_dir) not in sys.path:
@@ -1655,17 +1664,24 @@ class CustomAppsExtConfig(ExtensionAppConfig):
                 apps_module = importlib.import_module(apps_module_path)
                 
                 # Find the AppConfig class in the apps module
-                app_config_class = None
-                for attr_name in dir(apps_module):
-                    attr = getattr(apps_module, attr_name)
-                    if (isinstance(attr, type) and 
-                        issubclass(attr, ExtensionAppConfig) and 
-                        attr is not ExtensionAppConfig):
-                        app_config_class = attr
-                        break
+                if class_name:
+                    # We know the class name, so get it directly
+                    app_config_class = getattr(apps_module, class_name)
+                    assert app_config_class is not None, f"Could not find AppConfig class {class_name} in {apps_module_path}"
+                else:
+                    # Search for the AppConfig class
+                    app_config_class = None
+                    for attr_name in dir(apps_module):
+                        attr = getattr(apps_module, attr_name)
+                        if (isinstance(attr, type) and 
+                            issubclass(attr, ExtensionAppConfig) and 
+                            attr is not ExtensionAppConfig):
+                            app_config_class = attr
+                            break
+                    
+                    # Should have found the CustomAppsExtConfig class
+                    assert app_config_class is not None, f"Could not find AppConfig class in {apps_module_path}. Available: {[x for x in dir(apps_module) if not x.startswith('_')]}"
                 
-                # Should have found the CustomAppsExtConfig class
-                assert app_config_class is not None, f"Could not find AppConfig class in {apps_module_path}. Available: {[x for x in dir(apps_module) if not x.startswith('_')]}"
                 assert issubclass(app_config_class, ExtensionAppConfig)
 
 
@@ -1723,7 +1739,7 @@ class TestExampleExtensionHookCallback(TestCase):
         
         # Extension not loaded or not initialized, try to load and initialize it
         registry = ExtensionRegistry(EXTENSIONS_DIR)
-        with patch('website.extension_loader.get_config_loader') as mock_loader_get:
+        with patch('website.extensions.extension_loader.get_config_loader') as mock_loader_get:
             mock_config = MagicMock()
             # Enable the extension
             mock_config.get_bool.return_value = True
@@ -2042,8 +2058,18 @@ class TestExampleExtensionHookCallback(TestCase):
         # Ensure extension is loaded
         app_config = self._ensure_extension_loaded()
         
-        # Capture log messages
-        with patch('example_extension.src.backend.apps.logger') as mock_logger:
+        # Import the apps module to get access to its logger
+        # Try both possible module paths since we register with extensions. prefix
+        try:
+            apps_module = importlib.import_module('extensions.example_extension.src.backend.apps')
+        except ImportError:
+            try:
+                apps_module = importlib.import_module('example_extension.src.backend.apps')
+            except ImportError:
+                pytest.skip("Could not import example extension apps module")
+        
+        # Patch the logger on the actual module object
+        with patch.object(apps_module, 'logger') as mock_logger:
             # Create real ImportQueue
             import_item = self.ImportQueue.objects.create(
                 user=self.user,

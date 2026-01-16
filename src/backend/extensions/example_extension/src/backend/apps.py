@@ -8,6 +8,7 @@ This demonstrates how to:
 4. Perform startup validation and checks
 """
 import logging
+from pathlib import Path
 
 from website.extensions.extension_base import ExtensionAppConfig
 from website.extensions.extension_hooks import register_hook
@@ -28,6 +29,7 @@ class ExampleExtensionConfig(ExtensionAppConfig):
     name = 'extensions.example_extension.src.backend'
     label = 'example_extension'
     verbose_name = 'Example Extension'
+    path = str(Path(__file__).parent.resolve())
     
     def extension_ready(self):
         """

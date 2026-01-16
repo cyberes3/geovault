@@ -11,6 +11,41 @@ from website.extensions.extension_base import ExtensionAppConfig
 logger = logging.getLogger('website.extension_loader')
 
 
+def _register_module_with_prefix(short_name: str, full_name: str, module: Any) -> None:
+    """
+    Register a module under both its short name and full name with extensions. prefix.
+    
+    Since extensions/ is in sys.path, modules import as 'extension_name.src.backend'.
+    But AppConfig.name uses 'extensions.extension_name.src.backend'. This function
+    makes the module importable under both names.
+    
+    IMPORTANT: Updates __module__ attributes to prevent Django from seeing duplicate models.
+    """
+    # Register module under full name
+    sys.modules[full_name] = module
+    
+    # Update module's __name__ so future imports use the full path
+    if hasattr(module, '__name__'):
+        module.__name__ = full_name
+    
+    # Update __module__ for classes already in this module to prevent duplicate model registration
+    if hasattr(module, '__dict__'):
+        for attr_value in module.__dict__.values():
+            if isinstance(attr_value, type) and hasattr(attr_value, '__module__'):
+                if attr_value.__module__.startswith(short_name):
+                    attr_value.__module__ = attr_value.__module__.replace(
+                        short_name, full_name, 1
+                    )
+    
+    # Create parent namespace modules if needed
+    parts = full_name.split('.')
+    for i in range(1, len(parts)):
+        parent = '.'.join(parts[:i])
+        if parent not in sys.modules:
+            from types import ModuleType
+            sys.modules[parent] = ModuleType(parent)
+
+
 class ExtensionRegistry:
     """
     Registry for discovering and loading extensions.
@@ -160,6 +195,17 @@ class ExtensionRegistry:
             apps_module_name = f"{module_name}.apps"
             try:
                 apps_module = importlib.import_module(apps_module_name)
+                
+                # Register modules with extensions. prefix so they're importable
+                # using the full path that matches AppConfig.name
+                if module_name not in sys.modules:
+                    importlib.import_module(module_name)
+                if module_name in sys.modules:
+                    _register_module_with_prefix(module_name, full_module_name, sys.modules[module_name])
+                
+                full_apps_module_name = f"{full_module_name}.apps"
+                _register_module_with_prefix(apps_module_name, full_apps_module_name, apps_module)
+                
                 # Find the AppConfig class (look for classes ending in "Config" that inherit from AppConfig)
                 from django.apps import AppConfig as DjangoAppConfig
                 app_config_class = None
@@ -183,7 +229,7 @@ class ExtensionRegistry:
                 logger.warning(f"Failed to import {apps_module_name}: {e}, using module name")
                 app_config_path = full_module_name
         else:
-            app_config_path = self._create_dynamic_app_config(ext_name, module_name, full_module_name)
+            app_config_path = self._create_dynamic_app_config(ext_name, module_name, full_module_name, backend_path)
 
         # Extract frontend metadata
         frontend_entry = None
@@ -253,7 +299,7 @@ class ExtensionRegistry:
 
         return app_config_path
 
-    def _create_dynamic_app_config(self, ext_name: str, module_name: str, full_module_name: str) -> str:
+    def _create_dynamic_app_config(self, ext_name: str, module_name: str, full_module_name: str, backend_path: Path) -> str:
         """
         Creates a dynamic AppConfig class inheriting from ExtensionAppConfig.
         
@@ -262,7 +308,7 @@ class ExtensionRegistry:
         
         The dynamic AppConfig:
         - Inherits from ExtensionAppConfig (provides ready() lifecycle)
-        - Sets proper name, label, and verbose_name
+        - Sets proper name, label, verbose_name, and path
         - Allows extensions to implement extension_ready() for initialization
         """
         try:
@@ -271,17 +317,23 @@ class ExtensionRegistry:
                 importlib.import_module(module_name)
 
             module = sys.modules[module_name]
+            
+            # Register module with extensions. prefix so it's importable using the full path
+            # that matches AppConfig.name
+            _register_module_with_prefix(module_name, full_module_name, module)
 
             # Define the class name
             class_name = f"{ext_name.capitalize()}Config"
 
             # Create the class dynamically, inheriting from ExtensionAppConfig
             # Use full_module_name for AppConfig.name to match import paths
+            # Set path to the backend directory so Django knows the filesystem location
             app_config_attrs = {
                 'name': full_module_name,
                 'label': ext_name,
                 'verbose_name': ext_name.replace('_', ' ').title(),
-                'default_auto_field': 'django.db.models.BigAutoField'
+                'default_auto_field': 'django.db.models.BigAutoField',
+                'path': str(backend_path.resolve())
             }
 
             # Inherit from ExtensionAppConfig instead of AppConfig

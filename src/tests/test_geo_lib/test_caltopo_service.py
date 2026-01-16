@@ -14,6 +14,7 @@ from extensions.caltopo.src.backend.services.caltopo_api import (
     get_feature,
     convert_caltopo_to_geojson
 )
+from website.extensions.extension_hooks import register_hook, set_extension_context, clear_extension_context
 
 User = get_user_model()
 
@@ -28,6 +29,23 @@ class TestCalTopoService(TestCase):
             password='testpass123',
             username='testuser'
         )
+        # Register CalTopo import hook for tests
+        # The extension's ready() method might not be called during individual test runs,
+        # so we manually register the hook here if it's not already registered
+        from website.extensions.extension_hooks import get_hooks
+        hooks = get_hooks('import')
+        hook_ids = [h[0] for h in hooks]
+        if 'caltopo.caltopo_import' not in hook_ids:
+            set_extension_context('caltopo')
+            from extensions.caltopo.src.backend.apps import CaltopoExtensionConfig
+            config = CaltopoExtensionConfig('caltopo', None)
+            register_hook('import', 'caltopo_import', config.handle_import)
+            clear_extension_context()
+    
+    def tearDown(self):
+        """Clean up after tests."""
+        # Clear extension context
+        clear_extension_context()
     
     def test_get_caltopo_session_raises_doesnotexist_if_credentials_not_configured(self):
         """Test get_caltopo_session() raises DoesNotExist if credentials not configured."""

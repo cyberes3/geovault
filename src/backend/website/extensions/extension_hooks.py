@@ -6,7 +6,7 @@ callbacks for various platform events. Hooks are automatically prefixed with the
 extension name to prevent collisions.
 
 Example usage:
-    from website.extension_hooks import register_hook
+    from website.extensions.extension_hooks import register_hook
     
     def my_import_callback(import_item, user_id, created_features):
         # Process imported features

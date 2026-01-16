@@ -336,9 +336,14 @@ class TestIconLoggingBehavior:
         with patch('geo_lib.processing.icons.icon_manager.settings') as mock_settings:
             mock_settings.ICON_PROCESSING_ENABLED = True
             
-            with patch('geo_lib.processing.icons.icon_manager.process_icon_href') as mock_fetch:
-                mock_fetch.return_value = '/api/icons/user/abc123.png'
-                
+            def mock_process_icon_href(href, file_type, import_log, stats, file_data=None):
+                """Mock that properly increments stats when returning a value."""
+                if 'example.com' in href:
+                    stats['successful'] += 1
+                    return '/api/icons/user/abc123.png'
+                return None
+            
+            with patch('geo_lib.processing.icons.icon_manager.process_icon_href', side_effect=mock_process_icon_href):
                 result = process_geojson_icons(geojson_data, 'kml', import_log)
         
         # Check that summary was logged

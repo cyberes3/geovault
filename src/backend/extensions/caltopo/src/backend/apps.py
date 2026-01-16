@@ -4,6 +4,7 @@ AppConfig for the CalTopo extension.
 This extension provides integration with CalTopo for importing maps and features.
 """
 import logging
+from pathlib import Path
 
 from website.extensions.extension_base import ExtensionAppConfig
 from website.extensions.extension_hooks import register_hook
@@ -20,6 +21,7 @@ class CaltopoExtensionConfig(ExtensionAppConfig):
     name = 'extensions.caltopo.src.backend'
     label = 'caltopo'
     verbose_name = 'CalTopo Extension'
+    path = str(Path(__file__).parent.resolve())
 
     def extension_ready(self):
         """
