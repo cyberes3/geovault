@@ -61,27 +61,28 @@ app.component('Loader', Loader);
 app.component('SettingsInput', SettingsInput);
 
 /**
- * Helper to find setup function from ES module or UMD bundle.
+ * Helper to find setup function from extension module.
  * 
- * @param {any} module - The imported module
+ * Extensions must export the setup function as default: `export default setup`
+ * UMD bundles create a global variable (e.g., window.ExampleExtension) that is the setup function.
+ * 
+ * @param {any} module - The imported module (unused, but kept for API consistency)
  * @param {string} extensionName - Extension name in snake_case
  * @returns {Function|null} The setup function or null if not found
  */
 function findSetupFunction(module, extensionName) {
-    // Try ES module export first
-    if (module.setup && typeof module.setup === 'function') {
-        return module.setup;
-    }
-    
-    // Fallback to UMD global (if needed)
-    // Convert extension name to PascalCase for global variable name
-    const globalName = extensionName
-        .split('_')
+    // UMD bundles create a global variable based on the 'name' in vite.config.js
+    // Pattern: capitalize each word, append 'Extension' (unless last word is already "extension")
+    const words = extensionName.split('_');
+    const lastWord = words[words.length - 1].toLowerCase();
+    const globalName = words
         .map(word => word.charAt(0).toUpperCase() + word.slice(1))
-        .join('');
+        .join('') + (lastWord === 'extension' ? '' : 'Extension');
     
-    if (window[globalName] && window[globalName].setup) {
-        return window[globalName].setup;
+    // UMD bundle sets the global to the setup function directly
+    const setup = window[globalName];
+    if (setup && typeof setup === 'function') {
+        return setup;
     }
     
     return null;
@@ -145,15 +146,17 @@ function createScopedRegistry(registry, prefix) {
 /**
  * Dynamically load and setup extensions.
  * 
- * Each extension must export a setup() function as an ES module:
- *   export async function setup({ app, router, store, registry, api, utils, toast, metadata }) {
+ * Each extension must export a setup() function as the default export:
+ *   async function setup({ app, router, store, registry, api, utils, toast, metadata }) {
  *     // Extension initialization
  *   }
+ *   export default setup
  */
 async function loadExtensions() {
     try {
         const response = await axios.get('/api/extensions/');
         const extensions = response.data;
+        const successfullyLoaded = [];
 
         for (const ext of extensions) {
             if (ext.frontend_entry) {
@@ -179,7 +182,7 @@ async function loadExtensions() {
                     if (!setup || typeof setup !== 'function') {
                         console.error(
                             `Extension ${ext.name} has no valid setup function.\n` +
-                            `Expected: export async function setup({ app, router, store, registry, api, utils, toast, metadata }) { ... }`
+                            `Expected: export default setup (where setup is an async function)`
                         );
                         continue;
                     }
@@ -216,15 +219,17 @@ async function loadExtensions() {
                         toast,
                         metadata
                     });
+
+                    // Only add to successfully loaded if setup completed without errors
+                    successfullyLoaded.push(ext.name);
                 } catch (err) {
                     console.error(`Failed to load extension module ${ext.name}:`, err);
                 }
             }
         }
 
-        const loadedNames = extensions.filter(ext => ext.frontend_entry).map(ext => ext.name);
-        if (loadedNames.length > 0) {
-            console.log(`[Extensions] Successfully loaded ${loadedNames.length} extensions: ${loadedNames.join(', ')}`);
+        if (successfullyLoaded.length > 0) {
+            console.log(`[Extensions] Successfully loaded ${successfullyLoaded.length} extensions: ${successfullyLoaded.join(', ')}`);
         } else {
             console.log('[Extensions] No extensions were enabled or loaded');
         }

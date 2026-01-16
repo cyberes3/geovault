@@ -8,18 +8,15 @@ import './assets/main.css';
  * ==============================================================================
  * This 'setup' function is the main entry point for your frontend extension.
  * 
- * IMPORTANT: This function MUST be exported as an ES module:
- *   export async function setup({ ... }) { ... }
+ * IMPORTANT: This function MUST be exported as the default export:
+ *   async function setup({ ... }) { ... }
+ *   export default setup
  * 
  * The platform calls this function and injects several core services:
  * 
  * @type {import('platform/types/geovault').ExtensionSetup}
  */
-export async function setup({ app, router, store, registry, api, utils, toast, metadata }) {
-
-    // Log extension metadata (useful for debugging)
-    console.log(`[${metadata.name}] Initializing extension v${metadata.version}`);
-
+async function setup({ app, router, store, registry, api, utils, toast, metadata }) {
     // 1. Provide Context
     // We use provide/inject so any sub-component in this extension 
     // can easily access the API without needing it passed down as a prop.
@@ -62,3 +59,5 @@ export async function setup({ app, router, store, registry, api, utils, toast, m
     // All methods automatically handle CSRF tokens, but you must handle errors explicitly
     // Use api.handleError(error) to extract error info and show toasts as needed
 }
+
+export default setup

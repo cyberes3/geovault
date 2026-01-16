@@ -100,20 +100,24 @@ You can store arbitrary data in the user's profile without writing Python code f
 
 ### 1. The Setup Function
 
-Your `main.js` **must** export an `async function setup()` as an ES module. This is the only supported method.
+Your `main.js` **must** export the setup function as the default export. This is the only supported method.
 
 ```javascript
-// ✅ CORRECT - ES module export
-export async function setup({ app, router, store, registry, api, utils, toast, metadata }) {
+// ✅ CORRECT - Default export
+async function setup({ app, router, store, registry, api, utils, toast, metadata }) {
     // Your extension initialization
 }
+export default setup;
+
+// ❌ INCORRECT - Named export (not supported)
+export async function setup() { ... }
 
 // ❌ INCORRECT - Window-based exports are not supported
 window.MyExtension = { setup: function() { ... } };
 ```
 
 **Required Export Format:**
-- Must use `export async function setup()`
+- Must use `export default setup` (the function must be exported as default)
 - Must be an ES module (not a script tag or IIFE)
 - The function receives an object with all platform services
 
@@ -349,7 +353,7 @@ After the backend is ready, the frontend:
 **Error:** `Extension <name> has no valid setup function`
 
 **Solution:**
-- Ensure you're using ES module export: `export async function setup() { ... }`
+- Ensure you're using default export: `export default setup` (where `setup` is your async function)
 - Check that your build outputs ES modules (not IIFE or UMD)
 - Verify the `frontend_entry` path in extension metadata is correct
 
