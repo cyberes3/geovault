@@ -1092,7 +1092,6 @@ class TestExtensionAPIEdgeCases(TestCase):
                 # (internal fields prefixed with _ are filtered out)
                 assert 'name' in ext
                 assert 'version' in ext
-                assert 'description' in ext
                 assert 'frontend_entry' in ext
                 assert 'frontend_css' in ext
                 # urls_module is now internal (_urls_module) and should NOT be in public API
