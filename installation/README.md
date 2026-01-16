@@ -80,15 +80,16 @@ NodeJS is required for the frontend GeoJSON converter. One-line installer:
 curl -fsSL https://deb.nodesource.com/setup_22.x | sudo -E bash - && sudo apt-get install -y nodejs
 ```
 
-
-Install the dependancies:
+Install the GeoJSON parser:
 
 ```shell
 cd src/backend/geo_lib/processing/togeojson/ && npm install
 ```
 
+Build the frontend:
+
 ```shell
-cd src/frontend && npm install && npm run build
+cd src/ && ./build-frontend.sh
 ```
 
 
