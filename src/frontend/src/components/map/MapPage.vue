@@ -3725,6 +3725,22 @@ export default {
 
           // Trigger bbox loading for current view
           await this.loadDataForCurrentView()
+          
+          // Wait for map to process the loaded data
+          await this.$nextTick()
+          await this.waitForMapEvent('idle')
+          
+          // Get all features from the source and zoom to them
+          if (this.map && this.map.getSource('geojson-data')) {
+            const source = this.map.getSource('geojson-data')
+            const serialized = source.serialize()
+            const data = serialized.data || { type: 'FeatureCollection', features: [] }
+            const features = (data.features || []).filter(f => !f.properties?._isLabelPoint && !f.properties?._isSmallFeatureReplacement)
+            
+            if (features.length > 0) {
+              this.zoomToTaggedFeatures(features)
+            }
+          }
         } else {
           throw new Error('Failed to load collection info')
         }
@@ -3840,6 +3856,22 @@ export default {
       
       // Load data with the tag filter applied
       await this.loadDataForCurrentView()
+      
+      // Wait for map to process the loaded data
+      await this.$nextTick()
+      await this.waitForMapEvent('idle')
+      
+      // Get all features from the source and zoom to them
+      if (this.map && this.map.getSource('geojson-data')) {
+        const source = this.map.getSource('geojson-data')
+        const serialized = source.serialize()
+        const data = serialized.data || { type: 'FeatureCollection', features: [] }
+        const features = (data.features || []).filter(f => !f.properties?._isLabelPoint && !f.properties?._isSmallFeatureReplacement)
+        
+        if (features.length > 0) {
+          this.zoomToTaggedFeatures(features)
+        }
+      }
     },
     async waitForMap() {
       // Wait for map to be initialized (handles keep-alive restore scenarios)
