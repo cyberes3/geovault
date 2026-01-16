@@ -162,6 +162,10 @@ export function getPointLayerConfig(overrides = {}) {
       ...defaultFeatureStyles.points.paint,
       // Zoom-based radius: 2px minimum, 4px at zoom 10+
       'circle-radius': createZoomBasedRadiusExpression(4, 2),
+      // Small black border for better visibility (for points that replace icons at low zoom)
+      'circle-stroke-width': 1,
+      'circle-stroke-color': '#000000',
+      'circle-stroke-opacity': 1,
       ...overrides.paint
     }
   }
@@ -183,9 +187,14 @@ export function getReplacementPointLayerConfig(overrides = {}) {
       ['has', '_isSmallFeatureReplacement'] // Only replacement points
     ],
     paint: {
-      ...defaultFeatureStyles.points.paint,
       // Zoom-based radius: 1.5px minimum, 3px at zoom 10+
       'circle-radius': createZoomBasedRadiusExpression(3, 1.5),
+      // Dynamic color from marker-color property
+      'circle-color': getPointColorExpression(),
+      // Small black border for better visibility
+      'circle-stroke-width': 1,
+      'circle-stroke-color': '#000000',
+      'circle-stroke-opacity': 1,
       ...overrides.paint
     }
   }
@@ -206,6 +215,7 @@ export function getPointIconLayerConfig(overrides = {}) {
       ['==', ['geometry-type'], 'Point'], 
       ['!', ['has', '_on_border']],
       ['!', ['has', '_isLabelPoint']], // Exclude label points
+      ['!', ['has', '_isSmallFeatureReplacement']], // Exclude replacement points (separate layer)
       ['has', '_icon-id'] // Only show features with icons
     ],
     layout: {

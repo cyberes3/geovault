@@ -3608,6 +3608,10 @@ export default {
       // Update points layer (circles without icons)
       if (this.map.getLayer('points')) {
         this.map.setPaintProperty('points', 'circle-radius', radiusExpression)
+        // Ensure border is preserved
+        this.map.setPaintProperty('points', 'circle-stroke-width', 1)
+        this.map.setPaintProperty('points', 'circle-stroke-color', '#000000')
+        this.map.setPaintProperty('points', 'circle-stroke-opacity', 1)
       }
       
       // Replacement points: 3px base, 1.5px min
@@ -3622,6 +3626,10 @@ export default {
       // Update replacement-points layer
       if (this.map.getLayer('replacement-points')) {
         this.map.setPaintProperty('replacement-points', 'circle-radius', replacementRadiusHighlight)
+        // Ensure border is preserved
+        this.map.setPaintProperty('replacement-points', 'circle-stroke-width', 1)
+        this.map.setPaintProperty('replacement-points', 'circle-stroke-color', '#000000')
+        this.map.setPaintProperty('replacement-points', 'circle-stroke-opacity', 1)
       }
       
       // Generate icon size expression with highlight for point icons

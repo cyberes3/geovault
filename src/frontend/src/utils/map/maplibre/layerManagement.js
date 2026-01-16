@@ -99,6 +99,10 @@ export function ensureLayersExist(map, showAllLabels = true) {
     } else {
       map.addLayer(pointConfig)
     }
+    // Ensure stroke properties are set immediately after layer creation
+    map.setPaintProperty('points', 'circle-stroke-width', 1)
+    map.setPaintProperty('points', 'circle-stroke-color', '#000000')
+    map.setPaintProperty('points', 'circle-stroke-opacity', 1)
   } else {
     const circleFilter = ['all', 
       ['==', ['geometry-type'], 'Point'], 
@@ -108,6 +112,10 @@ export function ensureLayersExist(map, showAllLabels = true) {
       ['!', ['has', '_icon-id']] // Only show features without icons
     ]
     map.setFilter('points', circleFilter)
+    // Update paint properties to ensure border is applied
+    map.setPaintProperty('points', 'circle-stroke-width', 1)
+    map.setPaintProperty('points', 'circle-stroke-color', '#000000')
+    map.setPaintProperty('points', 'circle-stroke-opacity', 1)
   }
 
   // 4c. Replacement points layer (for small polygons/lines) - add after regular points
@@ -121,9 +129,18 @@ export function ensureLayersExist(map, showAllLabels = true) {
     } else {
       map.addLayer(replacementPointConfig)
     }
+    // Ensure stroke properties are set immediately after layer creation
+    map.setPaintProperty('replacement-points', 'circle-stroke-width', 1)
+    map.setPaintProperty('replacement-points', 'circle-stroke-color', '#000000')
+    map.setPaintProperty('replacement-points', 'circle-stroke-opacity', 1)
   } else {
     // Filter is already correct in getReplacementPointLayerConfig
     map.setFilter('replacement-points', replacementPointConfig.filter)
+    // Update paint properties to ensure border is applied
+    // Only update stroke properties to avoid issues with expressions
+    map.setPaintProperty('replacement-points', 'circle-stroke-width', 1)
+    map.setPaintProperty('replacement-points', 'circle-stroke-color', '#000000')
+    map.setPaintProperty('replacement-points', 'circle-stroke-opacity', 1)
   }
 
   // 4a. Point icons layer (for features with icons) - add after replacement-points
