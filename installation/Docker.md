@@ -56,7 +56,7 @@ Important settings to configure:
 5. Restart the container if you made config changes:
 
 ```bash
-docker-compose restart geovault
+docker restart geovault
 ```
 
 ## Environment Variables
@@ -97,15 +97,15 @@ The first user to register will be automatically set as an admin.
 
 Stop all services:
 ```bash
-docker-compose down
+docker down
 ```
 
 Start services:
 ```bash
-docker-compose up -d
+docker up -d
 ```
 
 View logs:
 ```bash
-docker-compose logs -f geovault
+docker logs -f geovault
 ```
