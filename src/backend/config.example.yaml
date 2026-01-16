@@ -214,19 +214,10 @@ email:
   # Subject prefix for emails
   subject_prefix: "[GeoVault] "
 
+# Configure individual extensions.
+# The key must match the extension 'name' defined in its manifest.py
+# By default, discovered extensions are enabled.
 extensions:
-  # Extension Configuration
-  # -----------------------
-  # Configure individual extensions here.
-  # The key must match the extension 'name' defined in its manifest.py.
-  # By default, discovered extensions are enabled.
-
-  # Example:
-  # my_awesome_extension:
-  #   enabled: true
-  #   custom_setting_1: "foo"
-  #   custom_setting_2: 123
-
   example_extension:
     enabled: false
     setting_one: "demo_value"

@@ -393,6 +393,82 @@ export default {
         }
       },
       immediate: false  // Don't run on mount since mounted() already handles it
+    },
+    '$route.query.tag': {
+      handler(newTag, oldTag) {
+        // Handle tag query parameter changes for subsequent navigations
+        // This catches cases where the component is already mounted and user
+        // clicks another "View on Map" button from tags page
+        const newTagValue = Array.isArray(newTag) ? newTag[0] : newTag
+        const oldTagValue = Array.isArray(oldTag) ? oldTag[0] : oldTag
+        if (newTagValue && newTagValue !== oldTagValue) {
+          // Cancel any pending requests
+          if (this.currentAbortController) {
+            this.currentAbortController.abort()
+            this.currentAbortController = null
+          }
+          
+          // Clear collection mode if active (tags and collections are mutually exclusive)
+          this.isCollectionMode = false
+          this.collectionName = null
+          
+          // Set the new tag immediately to ensure it's available when handleUrlTag runs
+          this.currentTags = [newTagValue]
+          this.isTagFilterActive = true
+          
+          // Remount sidebar to clear internal state
+          this.sidebarKey += 1
+          
+          // Wait for next tick to ensure route is fully updated, then handle the new tag
+          // handleUrlTag() will handle all clearing and loading
+          this.$nextTick(async () => {
+            await this.handleUrlTag()
+          })
+        } else if (!newTagValue && oldTagValue) {
+          // Tag was removed - clear tag filter and reload
+          this.isTagFilterActive = false
+          this.currentTags = null
+          this.loadedBounds.clear()
+          this.featureTimestamps = {}
+          this.sidebarKey += 1
+          this.loadDataForCurrentView()
+        }
+      },
+      immediate: false  // Don't run on mount since mounted() already handles it
+    },
+    '$route.query.collection': {
+      handler(newCollectionId, oldCollectionId) {
+        // Handle collection query parameter changes for subsequent navigations
+        // This catches cases where the component is already mounted and user
+        // clicks another "View on Map" button from collections page
+        if (newCollectionId && newCollectionId !== oldCollectionId) {
+          // Cancel any pending requests
+          if (this.currentAbortController) {
+            this.currentAbortController.abort()
+            this.currentAbortController = null
+          }
+          
+          // Clear tag filter if active (collections and tags are mutually exclusive)
+          this.isTagFilterActive = false
+          this.currentTags = null
+          
+          // Remount sidebar to clear internal state
+          this.sidebarKey += 1
+          
+          // Handle the new collection
+          // handleCollectionFilter() will handle all clearing and loading
+          this.handleCollectionFilter(newCollectionId)
+        } else if (!newCollectionId && oldCollectionId) {
+          // Collection was removed - clear collection mode and reload
+          this.isCollectionMode = false
+          this.collectionName = null
+          this.loadedBounds.clear()
+          this.featureTimestamps = {}
+          this.sidebarKey += 1
+          this.loadDataForCurrentView()
+        }
+      },
+      immediate: false  // Don't run on mount since mounted() already handles it
     }
   },
   data() {
@@ -1297,12 +1373,18 @@ export default {
         }
 
         // Build bbox key with context to ensure different shares don't share cache
-        // Include share ID in key for shares, collection ID for collections
+        // Include share ID in key for shares, collection ID for collections, tags for tag filters
         let bboxKey = this.getBoundingBoxKey(bbox, zoom)
         if (context.isPublicShare && context.shareId) {
           bboxKey = `${bboxKey}_share_${context.shareId}`
         } else if (context.type === 'collection' && context.collectionId) {
           bboxKey = `${bboxKey}_collection_${context.collectionId}`
+        } else if (context.tags && context.tags.length > 0) {
+          // Include tags in bbox key when tag filter is active
+          // Sort tags for consistent key generation
+          const sortedTags = [...context.tags].sort()
+          const tagsKey = sortedTags.map(tag => encodeURIComponent(tag)).join('_')
+          bboxKey = `${bboxKey}_tags_${tagsKey}`
         }
 
         // Check if already loaded (only for bbox-based loads)
@@ -3697,12 +3779,16 @@ export default {
       }
     },
     async handleCollectionFilter(collectionId) {
-      if (!this.map || !collectionId) {
+      if (!collectionId) {
         return
       }
 
+      // Wait for map to be ready (handles keep-alive restore scenarios)
+      await this.waitForMap()
+
       this.isDataLoading = true
       try {
+        // Load collection info first
         const collectionResponse = await fetch(`${APIHOST}/api/collections/${collectionId}/`)
 
         if (!collectionResponse.ok) {
@@ -3711,20 +3797,83 @@ export default {
 
         const collectionData = await collectionResponse.json()
 
-        if (collectionResponse.ok && collectionData.collection) {
-          this.collectionName = collectionData.collection.name
-          this.isCollectionMode = true
+        if (!collectionData.collection) {
+          throw new Error('Failed to load collection info')
+        }
 
-          // Clear current features and loaded bounds
-          if (this.map.getSource('geojson-data')) {
-            const source = this.map.getSource('geojson-data')
-            source.setData({ type: 'FeatureCollection', features: [] })
+        this.collectionName = collectionData.collection.name
+        this.isCollectionMode = true
+
+        // Clear current features and all related state
+        if (this.map.getSource('geojson-data')) {
+          const source = this.map.getSource('geojson-data')
+          source.setData({ type: 'FeatureCollection', features: [] })
+        }
+        this.featuresInExtent = []
+        this.selectedFeature = null
+        this.featureCount = 0
+        this.featureTimestamps = {}
+        this.loadedBounds.clear()
+        
+        // Clear label markers
+        if (this.labelMarkerManager) {
+          this.labelMarkerManager.clearAllMarkers()
+        }
+        
+        // Invalidate all caches
+        this.invalidateSourceCache()
+        this.cachedGeoJsonData = null
+        
+        // Wait for map to process the clear before loading new data
+        await this.$nextTick()
+        await this.waitForMapEvent('idle')
+        
+        // Load ALL features in the collection (not just current viewport)
+        // This ensures we can zoom to all features regardless of current map position
+        const featuresResponse = await fetch(`${APIHOST}/api/collections/${collectionId}/features/`)
+        if (!featuresResponse.ok) {
+          throw new Error('Failed to load collection features')
+        }
+        
+        const featuresData = await featuresResponse.json()
+        
+        // Handle response structure: success_response returns { data: {...}, feature_count: ... }
+        // where data is the GeoJSON FeatureCollection
+        if (!featuresData.data) {
+          console.error('Collection features response missing data:', featuresData)
+          throw new Error('Invalid collection features response')
+        }
+        
+        const geojsonData = featuresData.data
+        if (geojsonData && geojsonData.features && Array.isArray(geojsonData.features)) {
+          // Ensure source is completely empty before adding new features
+          // addFeaturesToMap merges with existing, so we must ensure source is empty
+          const source = this.map.getSource('geojson-data')
+          if (source) {
+            // Retry mechanism to ensure source is empty
+            let attempts = 0
+            const maxAttempts = 3
+            while (attempts < maxAttempts) {
+              const serialized = source.serialize()
+              const currentData = serialized.data || { type: 'FeatureCollection', features: [] }
+              
+              if (!currentData.features || currentData.features.length === 0) {
+                break // Source is empty, proceed
+              }
+              
+              // Clear and wait
+              source.setData({ type: 'FeatureCollection', features: [] })
+              await this.$nextTick()
+              if (attempts < maxAttempts - 1) {
+                await this.waitForMapEvent('idle')
+              }
+              attempts++
+            }
           }
-          this.featureTimestamps = {}
-          this.loadedBounds.clear()
-
-          // Trigger bbox loading for current view
-          await this.loadDataForCurrentView()
+          
+          // Now add the new features (source should be empty, so it will replace, not merge)
+          const rawData = markRaw(geojsonData)
+          await this.addFeaturesToMap(rawData)
           
           // Wait for map to process the loaded data
           await this.$nextTick()
@@ -3734,15 +3883,17 @@ export default {
           if (this.map && this.map.getSource('geojson-data')) {
             const source = this.map.getSource('geojson-data')
             const serialized = source.serialize()
-            const data = serialized.data || { type: 'FeatureCollection', features: [] }
-            const features = (data.features || []).filter(f => !f.properties?._isLabelPoint && !f.properties?._isSmallFeatureReplacement)
+            const sourceData = serialized.data || { type: 'FeatureCollection', features: [] }
+            const features = (sourceData.features || []).filter(f => !f.properties?._isLabelPoint && !f.properties?._isSmallFeatureReplacement)
             
             if (features.length > 0) {
               this.zoomToTaggedFeatures(features)
+            } else {
+              console.warn('Collection loaded but no features found after processing')
             }
           }
         } else {
-          throw new Error('Failed to load collection info')
+          console.warn('Collection has no features or invalid feature data:', geojsonData)
         }
       } catch (error) {
         console.error('Error loading collection:', error)
@@ -3845,32 +3996,115 @@ export default {
       await this.waitForMap()
 
       // Ensure currentTags are set from URL if present
-      if (this.initialSelectedTags && this.initialSelectedTags.length > 0) {
-        this.currentTags = this.initialSelectedTags
+      // Only set if not already set (e.g., by watcher)
+      if (!this.currentTags || this.currentTags.length === 0) {
+        if (this.initialSelectedTags && this.initialSelectedTags.length > 0) {
+          this.currentTags = this.initialSelectedTags
+          this.isTagFilterActive = true
+        } else if (this.$route.query.tag) {
+           // Fallback if initialSelectedTags not ready
+           const tagValue = Array.isArray(this.$route.query.tag) ? this.$route.query.tag[0] : this.$route.query.tag
+           this.currentTags = [tagValue]
+           this.isTagFilterActive = true
+        }
+      } else {
+        // currentTags already set, just ensure isTagFilterActive is true
         this.isTagFilterActive = true
-      } else if (this.$route.query.tag) {
-         // Fallback if initialSelectedTags not ready
-         this.currentTags = [this.$route.query.tag]
-         this.isTagFilterActive = true
       }
       
-      // Load data with the tag filter applied
-      await this.loadDataForCurrentView()
+      if (!this.currentTags || this.currentTags.length === 0) {
+        return
+      }
       
-      // Wait for map to process the loaded data
-      await this.$nextTick()
-      await this.waitForMapEvent('idle')
-      
-      // Get all features from the source and zoom to them
-      if (this.map && this.map.getSource('geojson-data')) {
-        const source = this.map.getSource('geojson-data')
-        const serialized = source.serialize()
-        const data = serialized.data || { type: 'FeatureCollection', features: [] }
-        const features = (data.features || []).filter(f => !f.properties?._isLabelPoint && !f.properties?._isSmallFeatureReplacement)
-        
-        if (features.length > 0) {
-          this.zoomToTaggedFeatures(features)
+      this.isDataLoading = true
+      try {
+        // Clear current features and all related state
+        if (this.map.getSource('geojson-data')) {
+          const source = this.map.getSource('geojson-data')
+          source.setData({ type: 'FeatureCollection', features: [] })
         }
+        this.featuresInExtent = []
+        this.selectedFeature = null
+        this.featureCount = 0
+        this.featureTimestamps = {}
+        this.loadedBounds.clear()
+        
+        // Clear label markers
+        if (this.labelMarkerManager) {
+          this.labelMarkerManager.clearAllMarkers()
+        }
+        
+        // Invalidate all caches
+        this.invalidateSourceCache()
+        this.cachedGeoJsonData = null
+        
+        // Wait for map to process the clear before loading new data
+        await this.$nextTick()
+        await this.waitForMapEvent('idle')
+        
+        // Load ALL features with the tag (not just current viewport)
+        // This ensures we can zoom to all features regardless of current map position
+        const tagParams = this.currentTags.map(tag => `tags=${encodeURIComponent(tag)}`).join('&')
+        const matchMode = this.currentTagMatchMode || 'AND'
+        const filterUrl = `/api/features/filter-by-tags/?${tagParams}&match_mode=${matchMode}`
+        
+        const response = await fetch(filterUrl)
+        if (!response.ok) {
+          throw new Error('Failed to load tag-filtered features')
+        }
+        
+        const data = await response.json()
+        if (data.data && data.data.features) {
+          // Ensure source is completely empty before adding new features
+          // addFeaturesToMap merges with existing, so we must ensure source is empty
+          const source = this.map.getSource('geojson-data')
+          if (source) {
+            // Retry mechanism to ensure source is empty
+            let attempts = 0
+            const maxAttempts = 3
+            while (attempts < maxAttempts) {
+              const serialized = source.serialize()
+              const currentData = serialized.data || { type: 'FeatureCollection', features: [] }
+              
+              if (!currentData.features || currentData.features.length === 0) {
+                break // Source is empty, proceed
+              }
+              
+              // Clear and wait
+              source.setData({ type: 'FeatureCollection', features: [] })
+              await this.$nextTick()
+              if (attempts < maxAttempts - 1) {
+                await this.waitForMapEvent('idle')
+              }
+              attempts++
+            }
+          }
+          
+          // Now add the new features (source should be empty, so it will replace, not merge)
+          const rawData = markRaw(data.data)
+          await this.addFeaturesToMap(rawData)
+          
+          // Wait for map to process the loaded data
+          await this.$nextTick()
+          await this.waitForMapEvent('idle')
+          
+          // Get all features from the source and zoom to them
+          if (this.map && this.map.getSource('geojson-data')) {
+            const source = this.map.getSource('geojson-data')
+            const serialized = source.serialize()
+            const sourceData = serialized.data || { type: 'FeatureCollection', features: [] }
+            const features = (sourceData.features || []).filter(f => !f.properties?._isLabelPoint && !f.properties?._isSmallFeatureReplacement)
+            
+            if (features.length > 0) {
+              this.zoomToTaggedFeatures(features)
+            }
+          }
+        }
+      } catch (error) {
+        console.error('Error loading tag-filtered features:', error)
+        this.loadError = error.message || 'Failed to load tag-filtered features'
+      } finally {
+        this.isDataLoading = false
       }
     },
     async waitForMap() {
