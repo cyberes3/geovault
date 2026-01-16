@@ -290,7 +290,6 @@ class ExtensionRegistry:
         self.loaded_extensions[ext_name] = {
             'name': ext_name,
             'version': manifest.version,
-            'description': getattr(manifest, 'description', ''),
             'frontend_entry': frontend_entry,
             'frontend_css': frontend_css,
             'icon': icon,  # Optional icon field

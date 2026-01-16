@@ -493,7 +493,6 @@ async function loadExtensions() {
                     const metadata = {
                         name: ext.name,
                         version: ext.version || 'unknown',
-                        description: ext.description || '',
                         kebabName: kebabName,
                         icon: resolvedIcon
                     };

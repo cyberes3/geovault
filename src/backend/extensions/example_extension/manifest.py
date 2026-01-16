@@ -5,15 +5,14 @@
 # The platform discovers extensions by scanning the extensions directory and 
 # looking for files named 'manifest.py'.
 
+# This is a demonstration extension with CRUD, settings, and feature store operations.
+
 # The unique internal name of the extension. Used for folder naming and URL scoping.
 # Note: Use snake_case for maximum compatibility.
 name = "example_extension"
 
 # Versioning follows Semantic Versioning (semver.org)
 version = "1.0.0"
-
-# A brief description shown in the extension management interface.
-description = "A demonstration extension with CRUD and settings."
 
 # Icon for the extension
 # Example 1: Heroicon (active)

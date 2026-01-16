@@ -5,7 +5,6 @@
 export interface ExtensionMetadata {
     name: string;
     version: string;
-    description: string;
     kebabName: string;
     frontend_entry?: string;
     frontend_css?: string;
