@@ -9,23 +9,28 @@
       :key="toast.id"
       :class="[
         'pointer-events-auto rounded-lg shadow-lg px-4 py-3 flex items-center space-x-3 border max-w-md',
-        getToastClasses(toast.type)
+        getToastClasses(toast)
       ]"
     >
       <!-- Icon -->
       <div class="flex-shrink-0">
-        <CheckCircleIcon v-if="toast.type === 'success'" class="h-5 w-5 text-green-600" />
-        <XCircleIcon v-else-if="toast.type === 'error'" class="h-5 w-5 text-red-600" />
-        <ExclamationTriangleIcon v-else-if="toast.type === 'warning'" class="h-5 w-5 text-yellow-600" />
-        <InformationCircleIcon v-else class="h-5 w-5 text-blue-600" />
+        <component
+          v-if="toast.icon"
+          :is="toast.icon"
+          :class="getIconColor(toast)"
+        />
+        <CheckCircleIcon v-else-if="toast.type === 'success'" :class="getIconColor(toast)" />
+        <XCircleIcon v-else-if="toast.type === 'error'" :class="getIconColor(toast)" />
+        <ExclamationTriangleIcon v-else-if="toast.type === 'warning'" :class="getIconColor(toast)" />
+        <InformationCircleIcon v-else :class="getIconColor(toast)" />
       </div>
       
       <!-- Message -->
       <div class="flex-1 min-w-0">
-        <p v-if="!toast.html" class="text-sm font-medium" :class="getTextColor(toast.type)">
+        <p v-if="!toast.html" class="text-sm font-medium" :class="getTextColor(toast)">
           {{ toast.message }}
         </p>
-        <div v-else class="text-sm font-medium" :class="getTextColor(toast.type)" v-html="toast.html"></div>
+        <div v-else class="text-sm font-medium" :class="getTextColor(toast)" v-html="toast.html"></div>
       </div>
       
       <!-- Close Button -->
@@ -94,7 +99,12 @@ export default {
         this.toasts.splice(index, 1)
       }
     },
-    getToastClasses(type) {
+    getToastClasses(toast) {
+      // If plain option is set, use plain white styling
+      if (toast.plain) {
+        return 'bg-white border-gray-200'
+      }
+      
       const baseClasses = 'bg-white border-gray-200'
       const typeClasses = {
         success: 'bg-green-50 border-green-200',
@@ -102,16 +112,35 @@ export default {
         warning: 'bg-yellow-50 border-yellow-200',
         info: 'bg-blue-50 border-blue-200'
       }
-      return typeClasses[type] || baseClasses
+      return typeClasses[toast.type] || baseClasses
     },
-    getTextColor(type) {
+    getTextColor(toast) {
+      // If plain option is set, use gray text
+      if (toast.plain) {
+        return 'text-gray-800'
+      }
+      
       const colors = {
         success: 'text-green-800',
         error: 'text-red-800',
         warning: 'text-yellow-800',
         info: 'text-blue-800'
       }
-      return colors[type] || 'text-gray-800'
+      return colors[toast.type] || 'text-gray-800'
+    },
+    getIconColor(toast) {
+      // If plain option is set, use gray icon
+      if (toast.plain) {
+        return 'h-5 w-5 text-gray-600'
+      }
+      
+      const colors = {
+        success: 'h-5 w-5 text-green-600',
+        error: 'h-5 w-5 text-red-600',
+        warning: 'h-5 w-5 text-yellow-600',
+        info: 'h-5 w-5 text-blue-600'
+      }
+      return colors[toast.type] || 'h-5 w-5 text-blue-600'
     }
   }
 }

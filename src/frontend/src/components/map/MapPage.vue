@@ -233,7 +233,7 @@ const ElevationProfileDialog = defineAsyncComponent(() => import('./ElevationPro
 const QuickPointDialog = defineAsyncComponent(() => import('./QuickPointDialog.vue'))
 const ShareDialog = defineAsyncComponent(() => import('@/components/parts/ShareDialog.vue'))
 
-import {ExclamationCircleIcon, ShareIcon, FolderIcon, ListBulletIcon, Cog6ToothIcon} from '@heroicons/vue/24/outline'
+import {ExclamationCircleIcon, ShareIcon, FolderIcon, ListBulletIcon, Cog6ToothIcon, ClipboardDocumentIcon} from '@heroicons/vue/24/outline'
 import {
   getBoundingBoxKey,
   getBoundingBoxString,
@@ -876,7 +876,12 @@ export default {
         navigator.clipboard.writeText(coordinateString).then(() => {
           // Show success message with CalTopo link
           const html = `Coordinates copied! <a href="${caltopoUrl}" target="_blank" rel="noopener noreferrer">Open in CalTopo</a>`
-          toast.success('Coordinates copied!', { html, duration: 5000 })
+          toast.show('Coordinates copied!', 'info', { 
+            html, 
+            duration: 5000,
+            plain: true,
+            icon: ClipboardDocumentIcon
+          })
         }).catch((err) => {
           console.error('Failed to copy coordinates:', err)
           toast.error('Failed to copy coordinates')
