@@ -54,98 +54,143 @@
 </template>
 
 <script setup>
-import { onMounted, onBeforeUnmount, reactive } from 'vue';
+import { onMounted, onBeforeUnmount, reactive, watch } from 'vue';
 
-/*
-  SHARED UTILITIES
-  By using window.GeoVault, we ensure we use the exact same logic and reactive
-  state as the main platform.
-*/
+/**
+ * ==============================================================================
+ * Extension Settings Component
+ * ==============================================================================
+ * 
+ * This component demonstrates how to create a settings tab for your extension.
+ * It uses the platform's shared utilities to load and save settings.
+ * 
+ * Key concepts:
+ * - Settings are stored in the Vuex store (loaded from API on app boot)
+ * - Settings keys use dot notation: 'extensions.<your_ext_name>.<setting_key>'
+ * - Changes are debounced and saved to the API automatically
+ * - Visual feedback (checkmarks) confirm successful saves
+ */
+
+// Access shared utilities from the platform
+// These are injected via window.GeoVault by the extension loader
 const { updateUserSetting, loadSettingsFromStore, keyValueToNested } = window.GeoVault.utils;
 const toast = window.GeoVault.toast;
 
-/**
- * Access the main application store.
- */
+// Access the main Vuex store
 const getStore = () => {
     return window.store || (window.Vuex && window.Vuex.useStore ? window.Vuex.useStore() : null);
 };
-
 const store = getStore();
 
-// Reactive state for UI data binding
-const settingsValues = reactive({});
-const successCheckmarks = reactive({});
-const saveTimers = {};
-
-/**
- * Configuration for the settings we want to manage.
- * Keys MUST be prefixed with 'extensions.<your_ext_name>.' to save correctly.
- */
+// ==============================================================================
+// Settings Configuration
+// ==============================================================================
+// Define all settings your extension manages.
+// Keys MUST be prefixed with 'extensions.<your_ext_name>.' to save correctly.
 const config = [
   { key: 'extensions.example_extension.verbose_logs', defaultValue: false },
   { key: 'extensions.example_extension.sync_interval', defaultValue: '30s' }
 ];
 
+// ==============================================================================
+// Reactive State
+// ==============================================================================
+const settingsValues = reactive({});      // Current setting values (for v-model binding)
+const successCheckmarks = reactive({});   // Track which settings just saved successfully
+const saveTimers = {};                     // Debounce timers for each setting
+
+// ==============================================================================
+// Load Settings from Store
+// ==============================================================================
 /**
- * Load initial values from the store (which the platform loads from the DB on boot).
+ * Loads settings from the Vuex store into local reactive state.
+ * The store is populated by App.vue when it fetches settings from the API.
  */
 const load = () => {
   if (!store) {
     console.error('[Example Extension] Store not found');
     return;
   }
+  
+  // Check if settings are available in the store
+  const storeSettings = store.state?.userSettings;
+  if (!storeSettings) {
+    // Settings not loaded yet - will be reloaded by watcher when they arrive
+    return;
+  }
+  
+  // Use platform utility to extract settings with defaults
   const values = loadSettingsFromStore(config, store);
   Object.assign(settingsValues, values);
 };
 
+// ==============================================================================
+// Save Settings to API
+// ==============================================================================
 /**
- * Persist changes back to the database.
+ * Handles setting changes: updates UI immediately, then saves to API (debounced).
  * 
- * @param {string} key   - The setting key (dot notation).
- * @param {any}    value - The new value.
+ * @param {string} key   - Setting key in dot notation (e.g., 'extensions.example_extension.verbose_logs')
+ * @param {any}    value - New value for the setting
  */
 const handleSettingChange = (key, value) => {
-  // 1. Update local UI immediately for responsiveness
+  // 1. Update UI immediately for instant feedback
   settingsValues[key] = value;
   
-  // 2. Debounce the API call (prevents hammering the server if the user clicks quickly)
+  // 2. Debounce API call (500ms) to avoid hammering the server
   if (saveTimers[key]) clearTimeout(saveTimers[key]);
   
   saveTimers[key] = setTimeout(async () => {
     try {
-      // 3. Convert dot-notation to nested JSON object
-      // 'extensions.ext.key' -> { extensions: { ext: { key: value } } }
+      // 3. Convert dot notation to nested object for API
+      // 'extensions.example_extension.verbose_logs' -> 
+      //   { extensions: { example_extension: { verbose_logs: value } } }
       const update = keyValueToNested(key, value);
 
-      // 4. Save to the main platform settings API
+      // 4. Save to API
       const response = await updateUserSetting(update);
       
       if (response && response.success) {
-        // 5. Update the global store so other components see the change
+        // 5. Update store so other components see the change
         if (store) store.commit('userSettings', response.settings);
         
-        // 6. Provide visual feedback (the small green checkmark)
+        // 6. Show success checkmark for 3 seconds
         successCheckmarks[key] = true;
         setTimeout(() => {
           successCheckmarks[key] = false;
         }, 3000);
       }
     } catch (error) {
-      // 7. Error handling with the platform's toast system
+      // 7. Handle errors with toast notification
       if (toast) toast.error(error.message || 'Failed to save setting');
-      load(); // Revert local state on failure
+      // Revert to stored value on error
+      load();
     }
   }, 500);
 };
 
+// ==============================================================================
+// Lifecycle Hooks
+// ==============================================================================
 onMounted(() => {
+  // Try to load settings immediately
   load();
 });
 
+// Watch for store updates and reload settings when they change
+// This handles the case where settings arrive after component mount
+watch(
+  () => store?.state?.userSettings,
+  () => {
+    // Reload settings whenever the store updates
+    load();
+  },
+  { deep: true }
+);
+
 onBeforeUnmount(() => {
-  // Always cleanup timers to avoid memory leaks or unexpected behavior
-  Object.values(saveTimers).forEach(t => clearTimeout(t));
+  // Cleanup: cancel any pending save timers
+  Object.values(saveTimers).forEach(timer => clearTimeout(timer));
 });
 </script>
 
