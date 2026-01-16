@@ -25,7 +25,7 @@ class ExampleExtensionConfig(ExtensionAppConfig):
     - Implement extension_ready() for initialization tasks
     """
     default_auto_field = 'django.db.models.BigAutoField'
-    name = 'example_extension.src.backend'
+    name = 'extensions.example_extension.src.backend'
     label = 'example_extension'
     verbose_name = 'Example Extension'
     

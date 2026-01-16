@@ -8,7 +8,6 @@ import logging
 from website.extensions.extension_base import ExtensionAppConfig
 from website.extensions.extension_hooks import register_hook
 from website.extensions.extension_logging import register_logging_filter
-from caltopo_extension.src.backend.logging_filters import SuppressCaltopoFilter
 
 logger = logging.getLogger('caltopo.apps')
 
@@ -18,10 +17,10 @@ class CaltopoExtensionConfig(ExtensionAppConfig):
     AppConfig for the CalTopo extension.
     """
     default_auto_field = 'django.db.models.BigAutoField'
-    name = 'caltopo.src.backend'
+    name = 'extensions.caltopo.src.backend'
     label = 'caltopo'
     verbose_name = 'CalTopo Extension'
-    
+
     def extension_ready(self):
         """
         Called after Django is fully initialized.
@@ -29,16 +28,18 @@ class CaltopoExtensionConfig(ExtensionAppConfig):
         This is where we register hooks and configure logging for the extension.
         """
         logger.info("CalTopo extension initializing...")
-        
+
         # Register import hook to track imported features
         register_hook('import', 'caltopo_import', self.handle_import)
         logger.info("Registered import hook: caltopo.caltopo_import")
-        
+
         # Register logging filter to suppress caltopo_python library messages
+        # Import here to avoid importing at module level (which can trigger model imports)
+        from extensions.caltopo.src.backend.logging_filters import SuppressCaltopoFilter
         register_logging_filter(SuppressCaltopoFilter())
-        
+
         logger.info("CalTopo extension initialized successfully")
-    
+
     def handle_import(self, import_item, user_id, created_features):
         """
         Import hook callback to update CalTopo imported_features mapping after import completes.
@@ -70,7 +71,7 @@ class CaltopoExtensionConfig(ExtensionAppConfig):
         User = get_user_model()
         try:
             user = User.objects.get(id=user_id)
-            from caltopo_extension.src.backend.models import CalTopoUser
+            from extensions.caltopo.src.backend.models import CalTopoUser
             caltopo_user, _ = CalTopoUser.objects.get_or_create(user=user)
         except User.DoesNotExist:
             return

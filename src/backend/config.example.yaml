@@ -232,3 +232,6 @@ extensions:
     setting_one: "demo_value"
     setting_two: 42
     api_endpoint: "https://api.example.com"
+
+  caltopo:
+    enabled: true

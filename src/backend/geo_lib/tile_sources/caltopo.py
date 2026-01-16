@@ -3,7 +3,6 @@ CalTopo tile service headers.
 
 This module provides HTTP headers for accessing CalTopo's public tile service.
 These headers are used by general-purpose tile sources that happen to use CalTopo's tile infrastructure.
-This is NOT part of the CalTopo API integration - it's just for accessing public tile services.
 """
 CALTOPO_HEADERS = {
     'User-Agent': 'Mozilla/5.0 (X11; Linux x86_64; rv:145.0) Gecko/20100101 Firefox/145.0',

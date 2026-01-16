@@ -11,7 +11,7 @@ class SuppressCaltopoFilter(logging.Filter):
     The caltopo_python library uses logging.info() directly (root logger)
     instead of using a named logger, so we need to filter by message content.
     """
-    
+
     SUPPRESSED_PHRASES = [
         'Opening a CaltopoSession object',
         'CaltopoSession instance deleted',
@@ -22,7 +22,7 @@ class SuppressCaltopoFilter(logging.Filter):
         'Pausing sync',
         'Resuming sync',
     ]
-    
+
     def filter(self, record):
         """
         Return False to suppress the log record, True to allow it.
@@ -30,12 +30,12 @@ class SuppressCaltopoFilter(logging.Filter):
         # First check if it's coming from the caltopo_python module (most reliable)
         if hasattr(record, 'pathname') and 'caltopo_python' in record.pathname:
             return False
-        
+
         # Also check by message content (for cases where pathname might not be set)
         message = record.getMessage()
-        
+
         for phrase in self.SUPPRESSED_PHRASES:
             if phrase in message:
                 return False
-            
+
         return True

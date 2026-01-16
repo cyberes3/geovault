@@ -8,10 +8,9 @@ and import tracking.
 from typing import List, Dict, Any, Optional
 
 from caltopo_python import CaltopoSession
-from django.contrib.auth import get_user_model
 from requests.exceptions import ReadTimeout, Timeout
 
-from caltopo_extension.src.backend.models import CalTopoUser
+from extensions.caltopo.src.backend.models import CalTopoUser
 from geo_lib.logging.console import get_tagged_logger
 
 _logger = get_tagged_logger('CalTopoAPI')
@@ -227,13 +226,13 @@ def _normalize_caltopo_geometry(geometry: Dict[str, Any]) -> Dict[str, Any]:
     """
     if not geometry or 'coordinates' not in geometry:
         return geometry
-    
+
     geom_type = geometry.get('type', '')
     coords = geometry['coordinates']
-    
+
     # Create a copy to avoid modifying the original
     normalized_geometry = geometry.copy()
-    
+
     if geom_type == 'Point':
         # Point: take only first 2-3 coordinates (lon, lat, [elevation])
         # Drop any 4th coordinate (like time) that CalTopo may include
@@ -247,7 +246,7 @@ def _normalize_caltopo_geometry(geometry: Dict[str, Any]) -> Dict[str, Any]:
             else:
                 # 2 coordinates: keep as is (lon, lat)
                 normalized_geometry['coordinates'] = [coords[0], coords[1]]
-    
+
     elif geom_type in ['LineString', 'MultiPoint']:
         # LineString/MultiPoint: normalize each point (take only first 3 coordinates)
         normalized_geometry['coordinates'] = [
@@ -258,7 +257,7 @@ def _normalize_caltopo_geometry(geometry: Dict[str, Any]) -> Dict[str, Any]:
             )
             for coord in coords
         ]
-    
+
     elif geom_type == 'MultiLineString':
         # MultiLineString: normalize each point in each line (take only first 3 coordinates)
         normalized_geometry['coordinates'] = [
@@ -272,7 +271,7 @@ def _normalize_caltopo_geometry(geometry: Dict[str, Any]) -> Dict[str, Any]:
             ]
             for line in coords
         ]
-    
+
     elif geom_type == 'Polygon':
         # Polygon: normalize each point in each ring (take only first 3 coordinates)
         normalized_geometry['coordinates'] = [
@@ -286,7 +285,7 @@ def _normalize_caltopo_geometry(geometry: Dict[str, Any]) -> Dict[str, Any]:
             ]
             for ring in coords
         ]
-    
+
     elif geom_type == 'MultiPolygon':
         # MultiPolygon: normalize each point in each ring in each polygon (take only first 3 coordinates)
         normalized_geometry['coordinates'] = [
@@ -303,5 +302,5 @@ def _normalize_caltopo_geometry(geometry: Dict[str, Any]) -> Dict[str, Any]:
             ]
             for polygon in coords
         ]
-    
+
     return normalized_geometry

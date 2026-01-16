@@ -149,11 +149,14 @@ class ExtensionRegistry:
         # Check for existing apps.py
         apps_py_path = backend_path / 'apps.py'
         module_name = f"{extension_path.name}.src.backend"
+        # Use full module path with extensions. prefix to match import paths used in code
+        full_module_name = f"extensions.{module_name}"
 
         # Determine the AppConfig to use
         if apps_py_path.exists():
             # When apps.py exists, we need to find the AppConfig class
             # Import the apps module and find the AppConfig class
+            # Import using short name since extensions/ is in sys.path
             apps_module_name = f"{module_name}.apps"
             try:
                 apps_module = importlib.import_module(apps_module_name)
@@ -170,16 +173,17 @@ class ExtensionRegistry:
                             break
                 
                 if app_config_class:
-                    app_config_path = f"{apps_module_name}.{app_config_class}"
+                    # Return full path with extensions. prefix to match AppConfig.name
+                    app_config_path = f"{full_module_name}.apps.{app_config_class}"
                 else:
                     # Fallback: just use module name (Django will try to auto-discover)
                     logger.warning(f"Could not find AppConfig class in {apps_module_name}, using module name")
-                    app_config_path = module_name
+                    app_config_path = full_module_name
             except Exception as e:
                 logger.warning(f"Failed to import {apps_module_name}: {e}, using module name")
-                app_config_path = module_name
+                app_config_path = full_module_name
         else:
-            app_config_path = self._create_dynamic_app_config(ext_name, module_name)
+            app_config_path = self._create_dynamic_app_config(ext_name, module_name, full_module_name)
 
         # Extract frontend metadata
         frontend_entry = None
@@ -229,7 +233,8 @@ class ExtensionRegistry:
         # Check for urls.py
         urls_module = None
         if (backend_path / 'urls.py').exists():
-            urls_module = f"{module_name}.urls"
+            # Use full module path with extensions. prefix to match import paths
+            urls_module = f"{full_module_name}.urls"
 
         # Store extension metadata (internal use includes urls_module)
         self.loaded_extensions[ext_name] = {
@@ -243,7 +248,7 @@ class ExtensionRegistry:
 
         return app_config_path
 
-    def _create_dynamic_app_config(self, ext_name: str, module_name: str) -> str:
+    def _create_dynamic_app_config(self, ext_name: str, module_name: str, full_module_name: str) -> str:
         """
         Creates a dynamic AppConfig class inheriting from ExtensionAppConfig.
         
@@ -256,7 +261,7 @@ class ExtensionRegistry:
         - Allows extensions to implement extension_ready() for initialization
         """
         try:
-            # Ensure the module is imported
+            # Ensure the module is imported (using short name since extensions/ is in sys.path)
             if module_name not in sys.modules:
                 importlib.import_module(module_name)
 
@@ -266,8 +271,9 @@ class ExtensionRegistry:
             class_name = f"{ext_name.capitalize()}Config"
 
             # Create the class dynamically, inheriting from ExtensionAppConfig
+            # Use full_module_name for AppConfig.name to match import paths
             app_config_attrs = {
-                'name': module_name,
+                'name': full_module_name,
                 'label': ext_name,
                 'verbose_name': ext_name.replace('_', ' ').title(),
                 'default_auto_field': 'django.db.models.BigAutoField'
@@ -279,7 +285,8 @@ class ExtensionRegistry:
             # Attach it to the module
             setattr(module, class_name, dynamic_app_config)
 
-            full_class_path = f"{module_name}.{class_name}"
+            # Return full path with extensions. prefix to match AppConfig.name
+            full_class_path = f"{full_module_name}.{class_name}"
             logger.debug(f"Created dynamic AppConfig (inheriting from ExtensionAppConfig): {full_class_path}")
 
             return full_class_path

@@ -6,8 +6,8 @@ from unittest.mock import patch, MagicMock
 from django.test import TestCase
 from django.contrib.auth import get_user_model
 
-from caltopo_extension.src.backend.models import CalTopoUser
-from caltopo_extension.src.backend.services.caltopo_service import (
+from caltopo.src.backend.models import CalTopoUser
+from caltopo.src.backend.services.caltopo_service import (
     get_caltopo_session,
     list_maps,
     get_map_features,

@@ -7,16 +7,14 @@ from django.http import HttpRequest, JsonResponse
 from django.views.decorators.http import require_http_methods
 from pydantic import BaseModel, Field, ConfigDict
 
-from caltopo_extension.src.backend.models import CalTopoUser
 from api.models import ImportQueue
-from caltopo_extension.src.backend.utils.caltopo_constants import is_valid_caltopo_feature_class
-from caltopo_extension.src.backend.utils.rate_limit import caltopo_rate_limit
 from api.utils.responses import error_response, success_response
-from caltopo_extension.src.backend.utils.caltopo_helpers import require_caltopo_connection, handle_caltopo_call
 from api.validation.feature_updates import validate_payload
+from extensions.caltopo.src.backend.services.caltopo_api import get_map_features, convert_caltopo_to_geojson
+from extensions.caltopo.src.backend.utils.caltopo_helpers import require_caltopo_connection, perform_caltopo_call, is_valid_caltopo_feature_class
+from extensions.caltopo.src.backend.utils.rate_limit import caltopo_rate_limit
 from geo_lib.processing.jobs.helpers.status_tracker import status_tracker
 from geo_lib.processing.jobs.process_job import ProcessJob
-from caltopo_extension.src.backend.services.caltopo_api import get_map_features, convert_caltopo_to_geojson
 from geo_lib.website.auth import api_or_login_required_401
 
 # Create singleton instance
@@ -50,7 +48,7 @@ def import_caltopo_map(request: HttpRequest, validated_data: Dict[str, Any]) -> 
         return error_resp
     
     # Get features from CalTopo map
-    caltopo_features, error_resp = handle_caltopo_call(get_map_features, request.user, map_id)
+    caltopo_features, error_resp = perform_caltopo_call(get_map_features, request.user, map_id)
     if error_resp:
         return error_resp
     

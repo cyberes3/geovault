@@ -8,7 +8,7 @@ from django.contrib.auth import get_user_model
 from django.contrib.gis.geos import Point
 
 from api.models import FeatureStore, ImportQueue
-from caltopo_extension.src.backend.models import CalTopoUser
+from caltopo.src.backend.models import CalTopoUser
 from geo_lib.feature_id import generate_geojson_hash
 
 User = get_user_model()
@@ -400,7 +400,7 @@ class TestCalTopoIntegration(TestCase):
         # and execute the hook to verify the mapping would be updated
         from api.models import FeatureStore
         from django.contrib.gis.geos import Point
-        from caltopo_extension.src.backend.apps import CaltopoExtensionConfig
+        from caltopo.src.backend.apps import CaltopoExtensionConfig
         
         # Create the import queue item that would normally be created by ProcessJob.enqueue_job
         # Since we're mocking enqueue_job, we need to create it manually

@@ -157,7 +157,7 @@ class TestCalTopoIconProcessingIntegration:
         
         # Now test the actual processing function
         import_log = ImportLog()
-        stats = {'successful': 0, 'caltopo_found': 0, 'failed': 0}
+        stats = {'successful': 0, 'failed': 0}
         new_href, extracted_color = _process_single_icon_href(url, 'kml', import_log, stats)
         
         assert new_href is None, "Point icons should not be fetched"
@@ -176,7 +176,7 @@ class TestCalTopoIconProcessingIntegration:
         
         # Test the actual processing function
         import_log = ImportLog()
-        stats = {'successful': 0, 'caltopo_found': 0, 'failed': 0}
+        stats = {'successful': 0, 'failed': 0}
         new_href, extracted_color = _process_single_icon_href(url, 'kml', import_log, stats)
         
         assert new_href is None, "Point icons should not be fetched"
@@ -195,7 +195,7 @@ class TestCalTopoIconProcessingIntegration:
         
         # Mock the icon fetching to avoid actually downloading
         import_log = ImportLog()
-        stats = {'successful': 0, 'caltopo_found': 0, 'failed': 0}
+        stats = {'successful': 0, 'failed': 0}
         with patch('geo_lib.processing.icons.icon_manager.fetch_remote_icon') as mock_fetch:
             mock_fetch.return_value = b'fake_icon_data'
             with patch('geo_lib.processing.icons.icon_manager.store_icon') as mock_store:
@@ -222,7 +222,7 @@ class TestCalTopoIconProcessingIntegration:
         href_mapping = {original_url: mapped_url}
         
         import_log = ImportLog()
-        stats = {'successful': 0, 'caltopo_found': 0, 'failed': 0}
+        stats = {'successful': 0, 'failed': 0}
         new_href, extracted_color = _process_single_icon_href(
             original_url, 'kml', import_log, stats, href_mapping=href_mapping
         )
@@ -244,7 +244,7 @@ class TestCalTopoIconProcessingIntegration:
         href_mapping = {original_url: mapped_url}
         
         import_log = ImportLog()
-        stats = {'successful': 0, 'caltopo_found': 0, 'failed': 0}
+        stats = {'successful': 0, 'failed': 0}
         new_href, extracted_color = _process_single_icon_href(
             original_url, 'kml', import_log, stats, href_mapping=href_mapping
         )
@@ -267,7 +267,7 @@ class TestCalTopoIconProcessingIntegration:
         href_mapping = {original_url: mapped_url}
         
         import_log = ImportLog()
-        stats = {'successful': 0, 'caltopo_found': 0, 'failed': 0}
+        stats = {'successful': 0, 'failed': 0}
         new_href, extracted_color = _process_single_icon_href(
             original_url, 'kml', import_log, stats, href_mapping=href_mapping
         )
@@ -291,7 +291,7 @@ class TestCalTopoIconProcessingIntegration:
         href_mapping = {original_url: mapped_url}
         
         import_log = ImportLog()
-        stats = {'successful': 0, 'caltopo_found': 0, 'failed': 0}
+        stats = {'successful': 0, 'failed': 0}
         new_href, extracted_color = _process_single_icon_href(
             original_url, 'kml', import_log, stats, href_mapping=href_mapping
         )
@@ -316,7 +316,7 @@ class TestCalTopoIconProcessingIntegration:
         
         # Mock the icon fetching
         import_log = ImportLog()
-        stats = {'successful': 0, 'caltopo_found': 0, 'failed': 0}
+        stats = {'successful': 0, 'failed': 0}
         with patch('geo_lib.processing.icons.icon_manager.fetch_remote_icon') as mock_fetch:
             mock_fetch.return_value = b'fake_icon_data'
             with patch('geo_lib.processing.icons.icon_manager.store_icon') as mock_store:

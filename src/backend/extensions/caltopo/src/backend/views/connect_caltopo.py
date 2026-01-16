@@ -10,12 +10,12 @@ from django.views.decorators.http import require_http_methods
 from pydantic import BaseModel, Field, ConfigDict
 from requests.exceptions import ReadTimeout, Timeout
 
-from caltopo_extension.src.backend.models import CalTopoUser
-from caltopo_extension.src.backend.utils.caltopo_helpers import handle_caltopo_call
 from api.utils.responses import error_response, success_response
 from api.validation.feature_updates import validate_payload
+from extensions.caltopo.src.backend.models import CalTopoUser
+from extensions.caltopo.src.backend.services.caltopo_api import get_caltopo_session, CalTopoTimeoutError
+from extensions.caltopo.src.backend.utils.caltopo_helpers import perform_caltopo_call
 from geo_lib.logging.console import get_tagged_logger
-from caltopo_extension.src.backend.services.caltopo_api import get_caltopo_session, CalTopoTimeoutError
 from geo_lib.website.auth import api_or_login_required_401
 
 _logger = get_tagged_logger('CalTopoAuth')
@@ -73,7 +73,7 @@ def connect_caltopo(request: HttpRequest, validated_data: Dict[str, Any]) -> Jso
             raise CalTopoTimeoutError("CalTopo API request timed out") from e
 
     try:
-        account_data, error_resp = handle_caltopo_call(verify_account_data)
+        account_data, error_resp = perform_caltopo_call(verify_account_data)
         if error_resp:
             # Delete credentials if verification fails
             caltopo_user.delete()
@@ -136,7 +136,7 @@ def get_caltopo_status(request: HttpRequest) -> JsonResponse:
             except (ReadTimeout, Timeout) as e:
                 raise CalTopoTimeoutError("CalTopo API request timed out") from e
 
-        account_data, error_resp = handle_caltopo_call(verify_account_data)
+        account_data, error_resp = perform_caltopo_call(verify_account_data)
         if error_resp:
             # Check if it's a timeout error by examining the error response
             try:
@@ -155,7 +155,7 @@ def get_caltopo_status(request: HttpRequest) -> JsonResponse:
                 'status': 'invalid'
             })
     except CalTopoTimeoutError:
-        # Direct timeout exception (shouldn't happen with handle_caltopo_call, but just in case)
+        # Direct timeout exception (shouldn't happen with perform_caltopo_call, but just in case)
         return success_response({
             'connected': False,
             'status': 'timeout'

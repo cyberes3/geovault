@@ -231,10 +231,10 @@ def process_geojson_icons(
     pass
 
     # Log statistics
-    total_processed = stats['successful'] + stats['caltopo_found'] + stats['failed']
+    total_processed = stats['successful'] + stats['failed']
     if total_processed > 0:
         import_log.add(
-            f"Icon processing complete: {stats['successful']} successfully extracted, {stats['caltopo_found']} CalTopo icons found, {stats['failed']} failed",
+            f"Icon processing complete: {stats['successful']} successfully extracted, {stats['failed']} failed",
             "Icon Processing",
             DatabaseLogLevel.INFO
         )

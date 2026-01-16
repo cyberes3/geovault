@@ -23,7 +23,7 @@ class TestIconLoggingBehavior:
     def test_store_icon_size_limit_logs_warning(self):
         """Test that icon size limit exceeded is logged to import_log."""
         import_log = ImportLog()
-        stats = {'successful': 0, 'caltopo_found': 0, 'failed': 0}
+        stats = {'successful': 0, 'failed': 0}
         
         # Create icon data that exceeds size limit
         large_icon_data = b'x' * (10 * 1024 * 1024)  # 10MB
@@ -45,7 +45,7 @@ class TestIconLoggingBehavior:
     def test_store_icon_invalid_extension_logs_warning(self):
         """Test that invalid icon extension is logged to import_log."""
         import_log = ImportLog()
-        stats = {'successful': 0, 'caltopo_found': 0, 'failed': 0}
+        stats = {'successful': 0, 'failed': 0}
         
         icon_data = b'fake_image_data'
         
@@ -63,7 +63,7 @@ class TestIconLoggingBehavior:
     def test_store_icon_storage_failure_logs_error(self):
         """Test that storage failure is logged to import_log."""
         import_log = ImportLog()
-        stats = {'successful': 0, 'caltopo_found': 0, 'failed': 0}
+        stats = {'successful': 0, 'failed': 0}
         
         icon_data = b'\x89PNG\r\n\x1a\n' + b'x' * 100  # Minimal PNG header
         
@@ -89,7 +89,7 @@ class TestIconLoggingBehavior:
     def test_store_icon_success_increments_stats(self):
         """Test that successful icon storage increments successful count."""
         import_log = ImportLog()
-        stats = {'successful': 0, 'caltopo_found': 0, 'failed': 0}
+        stats = {'successful': 0, 'failed': 0}
         
         icon_data = b'\x89PNG\r\n\x1a\n' + b'x' * 100
         
@@ -219,10 +219,10 @@ class TestIconLoggingBehavior:
         assert any('timeout' in log.msg.lower() for log in logs)
         assert any(log.level == DatabaseLogLevel.WARNING for log in logs)
 
-    def test_process_single_icon_href_caltopo_logs_caltopo_found(self):
-        """Test that CalTopo icons are counted in stats."""
+    def test_process_single_icon_href_caltopo_extracts_color(self):
+        """Test that CalTopo icons extract color correctly."""
         import_log = ImportLog()
-        stats = {'successful': 0, 'caltopo_found': 0, 'failed': 0}
+        stats = {'successful': 0, 'failed': 0}
         
         # CalTopo point icon
         href = 'http://caltopo.com/icon.png?cfg=point%2CFF0000'
@@ -231,12 +231,11 @@ class TestIconLoggingBehavior:
         
         assert new_href is None  # Point icons not fetched
         assert color == '#FF0000'
-        assert stats['caltopo_found'] == 1
 
     def test_process_single_icon_href_caltopo_failure_logs_warning(self):
         """Test that CalTopo icon fetch failure logs warning."""
         import_log = ImportLog()
-        stats = {'successful': 0, 'caltopo_found': 0, 'failed': 0}
+        stats = {'successful': 0, 'failed': 0}
         
         # CalTopo non-point icon with color
         href = 'http://caltopo.com/icon.png?cfg=campfire%2CFF0000'
@@ -251,7 +250,6 @@ class TestIconLoggingBehavior:
         
         assert new_href is None
         assert color == '#FF0000'  # Still have color from URL
-        assert stats['caltopo_found'] == 1
         assert stats['failed'] == 1
         
         # Check that warning was logged
@@ -263,7 +261,7 @@ class TestIconLoggingBehavior:
     def test_process_single_icon_href_non_caltopo_failure_logs_warning(self):
         """Test that non-CalTopo icon failure logs warning."""
         import_log = ImportLog()
-        stats = {'successful': 0, 'caltopo_found': 0, 'failed': 0}
+        stats = {'successful': 0, 'failed': 0}
         
         href = 'http://example.com/icon.png'
         
@@ -286,7 +284,7 @@ class TestIconLoggingBehavior:
     def test_process_properties_icons_caltopo_extraction_failure_logs_warning(self):
         """Test that CalTopo extraction failure logs warning."""
         import_log = ImportLog()
-        stats = {'successful': 0, 'caltopo_found': 0, 'failed': 0}
+        stats = {'successful': 0, 'failed': 0}
         
         properties = {
             'icon': 'http://caltopo.com/icon.png?cfg=invalid'
@@ -347,12 +345,11 @@ class TestIconLoggingBehavior:
         logs = import_log.get()
         assert len(logs) > 0
         assert any('icon processing complete' in log.msg.lower() for log in logs)
-        # Should mention counts: CalTopo found, successful, failed
+        # Should mention counts: successful, failed
         summary_logs = [log for log in logs if 'icon processing complete' in log.msg.lower()]
         assert len(summary_logs) == 1
         summary_msg = summary_logs[0].msg.lower()
         assert 'successfully extracted' in summary_msg
-        assert 'caltopo icons found' in summary_msg
         assert 'failed' in summary_msg
 
     def test_process_geojson_icons_no_icons_no_log(self):
@@ -382,7 +379,7 @@ class TestIconLoggingBehavior:
     def test_all_error_sources_use_import_log(self):
         """Integration test: verify all error sources use import_log."""
         import_log = ImportLog()
-        stats = {'successful': 0, 'caltopo_found': 0, 'failed': 0}
+        stats = {'successful': 0, 'failed': 0}
         
         # Test various error scenarios
         scenarios = [
@@ -414,7 +411,7 @@ class TestIconStatisticsTracking:
     def test_stats_tracking_successful(self):
         """Test that successful icon storage increments correct counter."""
         import_log = ImportLog()
-        stats = {'successful': 0, 'caltopo_found': 0, 'failed': 0}
+        stats = {'successful': 0, 'failed': 0}
         
         icon_data = b'\x89PNG\r\n\x1a\n' + b'x' * 100
         
@@ -433,35 +430,36 @@ class TestIconStatisticsTracking:
         
         assert stats['successful'] == 1
         assert stats['failed'] == 0
-        assert stats['caltopo_found'] == 0
 
     def test_stats_tracking_failed(self):
         """Test that failed icon storage increments correct counter."""
         import_log = ImportLog()
-        stats = {'successful': 0, 'caltopo_found': 0, 'failed': 0}
+        stats = {'successful': 0, 'failed': 0}
         
         # Invalid extension
         store_icon(b'data', 'test.txt', import_log, stats)
         
         assert stats['successful'] == 0
         assert stats['failed'] == 1
-        assert stats['caltopo_found'] == 0
 
-    def test_stats_tracking_caltopo_found(self):
-        """Test that CalTopo icons increment correct counter."""
+    def test_stats_tracking_caltopo_point_icon(self):
+        """Test that CalTopo point icons don't increment counters (not fetched)."""
         import_log = ImportLog()
-        stats = {'successful': 0, 'caltopo_found': 0, 'failed': 0}
+        stats = {'successful': 0, 'failed': 0}
         
         href = 'http://caltopo.com/icon.png?cfg=point%2CFF0000'
         
-        _process_single_icon_href(href, 'kml', import_log, stats)
+        new_href, color = _process_single_icon_href(href, 'kml', import_log, stats)
         
-        assert stats['caltopo_found'] == 1
+        assert new_href is None  # Point icons not fetched
+        assert color == '#FF0000'
+        assert stats['successful'] == 0
+        assert stats['failed'] == 0
 
     def test_stats_no_double_counting(self):
         """Test that failures are not double-counted in the call chain."""
         import_log = ImportLog()
-        stats = {'successful': 0, 'caltopo_found': 0, 'failed': 0}
+        stats = {'successful': 0, 'failed': 0}
         
         # Non-CalTopo icon that fails
         href = 'http://example.com/icon.png'
@@ -478,12 +476,11 @@ class TestIconStatisticsTracking:
     def test_stats_multiple_icons_mixed_results(self):
         """Test stats tracking with multiple icons having different outcomes."""
         import_log = ImportLog()
-        stats = {'successful': 0, 'caltopo_found': 0, 'failed': 0}
+        stats = {'successful': 0, 'failed': 0}
         
         # Simulate different outcomes directly
-        # CalTopo point icon - increments caltopo_found only
+        # CalTopo point icon - doesn't increment any counter (not fetched)
         _process_single_icon_href('http://caltopo.com/icon.png?cfg=point%2CFF0000', 'kml', import_log, stats)
-        assert stats['caltopo_found'] == 1
         assert stats['successful'] == 0
         assert stats['failed'] == 0
         
@@ -513,7 +510,7 @@ class TestIconStatisticsTracking:
         assert stats['successful'] == 1
         assert stats['failed'] == 1
         
-        # CalTopo non-point that succeeds - increments both caltopo_found and successful
+        # CalTopo non-point that succeeds - increments successful
         with patch('geo_lib.processing.icons.icon_manager.fetch_remote_icon') as mock_fetch:
             mock_fetch.return_value = b'icon_data2'
             with patch('geo_lib.processing.icons.icon_manager._get_icon_extension') as mock_ext:
@@ -528,8 +525,7 @@ class TestIconStatisticsTracking:
                         mock_hashlib.sha256.return_value = mock_hash
                         _process_single_icon_href('http://caltopo.com/icon.png?cfg=campfire%2C00FF00', 'kmz', import_log, stats, file_data=b'fake')
         
-        # Final tally: 2 caltopo, 2 successful, 1 failed
-        assert stats['caltopo_found'] == 2
+        # Final tally: 2 successful, 1 failed
         assert stats['successful'] == 2
         assert stats['failed'] == 1
 
@@ -559,11 +555,10 @@ class TestIconStatisticsTracking:
         summary_logs = [log for log in logs if 'icon processing complete' in log.msg.lower()]
         assert len(summary_logs) == 1
         
-        # Verify format: "Icon processing complete: X successfully extracted, Y CalTopo icons found, Z failed"
+        # Verify format: "Icon processing complete: X successfully extracted, Z failed"
         summary = summary_logs[0].msg
         assert 'icon processing complete:' in summary.lower()
         assert 'successfully extracted' in summary.lower()
-        assert 'caltopo icons found' in summary.lower()
         assert 'failed' in summary.lower()
         
         # Verify it's an INFO level message
@@ -577,7 +572,7 @@ class TestFailureMessageContent:
     def test_size_limit_message_includes_size(self):
         """Test that size limit messages include the actual size."""
         import_log = ImportLog()
-        stats = {'successful': 0, 'caltopo_found': 0, 'failed': 0}
+        stats = {'successful': 0, 'failed': 0}
         
         large_data = b'x' * (5 * 1024 * 1024)  # 5MB
         
@@ -596,7 +591,7 @@ class TestFailureMessageContent:
     def test_invalid_extension_message_includes_filename(self):
         """Test that invalid extension messages include the filename."""
         import_log = ImportLog()
-        stats = {'successful': 0, 'caltopo_found': 0, 'failed': 0}
+        stats = {'successful': 0, 'failed': 0}
         
         store_icon(b'data', 'invalid_file.txt', import_log, stats)
         
@@ -667,7 +662,7 @@ class TestFailureMessageContent:
     def test_caltopo_failure_with_color_fallback_message(self):
         """Test that CalTopo failures mention color fallback."""
         import_log = ImportLog()
-        stats = {'successful': 0, 'caltopo_found': 0, 'failed': 0}
+        stats = {'successful': 0, 'failed': 0}
         
         href = 'http://caltopo.com/icon.png?cfg=campfire%2CFF0000'
         
@@ -686,7 +681,7 @@ class TestFailureMessageContent:
     def test_non_caltopo_failure_mentions_default(self):
         """Test that non-CalTopo failures mention default icon."""
         import_log = ImportLog()
-        stats = {'successful': 0, 'caltopo_found': 0, 'failed': 0}
+        stats = {'successful': 0, 'failed': 0}
         
         href = 'http://example.com/icon.png'
         
@@ -704,7 +699,7 @@ class TestFailureMessageContent:
     def test_all_log_messages_have_source(self):
         """Test that all log messages have 'Icon Processing' as source."""
         import_log = ImportLog()
-        stats = {'successful': 0, 'caltopo_found': 0, 'failed': 0}
+        stats = {'successful': 0, 'failed': 0}
         
         # Generate various errors
         store_icon(b'data', 'test.txt', import_log, stats)  # Invalid extension
@@ -723,7 +718,7 @@ class TestFailureMessageContent:
     def test_log_levels_are_appropriate(self):
         """Test that different errors use appropriate log levels."""
         import_log = ImportLog()
-        stats = {'successful': 0, 'caltopo_found': 0, 'failed': 0}
+        stats = {'successful': 0, 'failed': 0}
         
         # WARNING: Size limit
         with patch('geo_lib.processing.icons.icon_manager.settings') as mock_settings:

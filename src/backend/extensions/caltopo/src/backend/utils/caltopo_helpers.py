@@ -5,22 +5,14 @@ from typing import Optional, Tuple, Callable, Any
 
 from django.http import HttpRequest, JsonResponse
 
-from caltopo_extension.src.backend.models import CalTopoUser
 from api.utils.responses import error_response
-from caltopo_extension.src.backend.services.caltopo_api import CalTopoTimeoutError
+from extensions.caltopo.src.backend.models import CalTopoUser
+from extensions.caltopo.src.backend.services.caltopo_api import CalTopoTimeoutError
 
 
 def require_caltopo_connection(request: HttpRequest) -> Tuple[Optional[CalTopoUser], Optional[JsonResponse]]:
     """
     Check if the user has CalTopo connected.
-    
-    Args:
-        request: Django HttpRequest object
-        
-    Returns:
-        Tuple of (caltopo_user, error_response):
-        - If connected: (CalTopoUser instance, None)
-        - If not connected: (None, error JsonResponse)
     """
     try:
         caltopo_user = CalTopoUser.objects.get(user=request.user)
@@ -32,7 +24,7 @@ def require_caltopo_connection(request: HttpRequest) -> Tuple[Optional[CalTopoUs
         )
 
 
-def handle_caltopo_call(
+def perform_caltopo_call(
         caltopo_func: Callable,
         *args,
         **kwargs
@@ -42,23 +34,6 @@ def handle_caltopo_call(
     
     This wrapper catches CalTopoTimeoutError and returns a standardized error response,
     eliminating the need to repeat try/except blocks in every view.
-    
-    Args:
-        caltopo_func: CalTopo API function to call (e.g., list_maps, get_map_features)
-        *args: Positional arguments to pass to the function
-        **kwargs: Keyword arguments to pass to the function
-        
-    Returns:
-        Tuple of (result, error_response):
-        - If successful: (function result, None)
-        - If timeout: (None, error JsonResponse with CALTOPO_TIMEOUT code)
-        - If other exception: exception is re-raised (not caught)
-        
-    Example:
-        maps, error_resp = handle_caltopo_call(list_maps, request.user)
-        if error_resp:
-            return error_resp
-        return success_response({'maps': maps})
     """
     try:
         result = caltopo_func(*args, **kwargs)
@@ -69,3 +44,15 @@ def handle_caltopo_call(
             code=504,
             details={"error_code": "CALTOPO_TIMEOUT"}
         )
+
+VALID_CALTOPO_FEATURE_CLASSES = {
+        'Shape', 'Marker', 'AppTrack', 'LiveTrack', 'Folder',
+        'MapMediaObject', 'OperationalPeriod', 'Assignment',
+        'Clue', 'Resource', 'SmsLocationRequest'
+    }
+
+def is_valid_caltopo_feature_class(feature_class: str) -> bool:
+    """
+    Check if a feature class is valid for import.
+    """
+    return feature_class in VALID_CALTOPO_FEATURE_CLASSES

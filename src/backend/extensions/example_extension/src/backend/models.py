@@ -16,5 +16,8 @@ class ExampleItem(models.Model):
     description = models.TextField(blank=True)
     created_at = models.DateTimeField(auto_now_add=True)
 
+    class Meta:
+        app_label = 'example_extension'
+
     def __str__(self):
         return self.name

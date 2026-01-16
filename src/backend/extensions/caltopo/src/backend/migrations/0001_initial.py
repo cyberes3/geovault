@@ -28,6 +28,7 @@ class Migration(migrations.Migration):
                 ('updated_at', models.DateTimeField(auto_now=True)),
             ],
             options={
+                'app_label': 'caltopo',
                 'db_table': 'caltopo_extension_caltopouser',
                 'indexes': [models.Index(fields=['user'], name='caltopo_ext_user')],
             },

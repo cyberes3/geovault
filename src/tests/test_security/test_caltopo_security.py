@@ -5,7 +5,7 @@ from unittest.mock import patch, MagicMock
 from django.test import TestCase
 from django.contrib.auth import get_user_model
 
-from caltopo_extension.src.backend.models import CalTopoUser
+from caltopo.src.backend.models import CalTopoUser
 
 User = get_user_model()
 
