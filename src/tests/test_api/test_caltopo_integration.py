@@ -40,7 +40,7 @@ class TestCalTopoIntegration(TestCase):
         mock_session.getAccountData.return_value = None
         mock_session_class.return_value = mock_session
         
-        response = self.client.post('/api/extensions/caltopo-extension/connect/', {
+        response = self.client.post('/api/extensions/caltopo/connect/', {
             'account_id': 'abc123',
             'credential_id': '123456789012',
             'credential_key': 'test-key'
@@ -55,7 +55,7 @@ class TestCalTopoIntegration(TestCase):
             {'id': 'map2', 'title': 'Test Map 2'}
         ]
         
-        response = self.client.get('/api/extensions/caltopo-extension/maps/')
+        response = self.client.get('/api/extensions/caltopo/maps/')
         self.assertEqual(response.status_code, 200)
         data = response.json()
         self.assertEqual(len(data['maps']), 2)
@@ -69,7 +69,7 @@ class TestCalTopoIntegration(TestCase):
             }
         ]
         
-        response = self.client.get('/api/extensions/caltopo-extension/maps/map1/features/')
+        response = self.client.get('/api/extensions/caltopo/maps/map1/features/')
         self.assertEqual(response.status_code, 200)
         data = response.json()
         self.assertEqual(len(data['features']), 1)
@@ -94,7 +94,7 @@ class TestCalTopoIntegration(TestCase):
         }
         mock_convert.return_value = geojson_feature
         
-        response = self.client.post('/api/extensions/caltopo-extension/import/feature/', {
+        response = self.client.post('/api/extensions/caltopo/import/feature/', {
             'map_id': 'map1',
             'feature_id': 'feature1',
             'feature_class': 'Marker'
@@ -157,7 +157,7 @@ class TestCalTopoIntegration(TestCase):
         # Use side_effect to return different values on each call
         mock_convert.side_effect = [geojson_feature, geojson_feature_updated]
         
-        response = self.client.post('/api/extensions/caltopo-extension/import/feature/', {
+        response = self.client.post('/api/extensions/caltopo/import/feature/', {
             'map_id': 'map1',
             'feature_id': 'feature1',
             'feature_class': 'Marker'
@@ -182,7 +182,7 @@ class TestCalTopoIntegration(TestCase):
         
         # Step 3: Re-import (mock_convert will return the updated feature on second call)
         
-        response = self.client.post('/api/extensions/caltopo-extension/import/feature/', {
+        response = self.client.post('/api/extensions/caltopo/import/feature/', {
             'map_id': 'map1',
             'feature_id': 'feature1',
             'feature_class': 'Marker'
@@ -309,7 +309,7 @@ class TestCalTopoIntegration(TestCase):
         mock_status_tracker.create_job.return_value = job_id
         mock_status_tracker.get_job.return_value = mock_job
         
-        response = self.client.post('/api/extensions/caltopo-extension/import/map/', {
+        response = self.client.post('/api/extensions/caltopo/import/map/', {
             'map_id': 'map1'
         }, content_type='application/json')
         
@@ -389,7 +389,7 @@ class TestCalTopoIntegration(TestCase):
         mock_status_tracker.get_job.return_value = mock_job
         
         # Import map
-        response = self.client.post('/api/extensions/caltopo-extension/import/map/', {
+        response = self.client.post('/api/extensions/caltopo/import/map/', {
             'map_id': 'map1'
         }, content_type='application/json')
         

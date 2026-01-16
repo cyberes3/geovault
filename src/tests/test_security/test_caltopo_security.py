@@ -32,7 +32,7 @@ class TestCalTopoSecurity(TestCase):
         )
         
         # Test invalid map_id (contains invalid characters)
-        response = self.client.post('/api/extensions/caltopo-extension/import/feature/', {
+        response = self.client.post('/api/extensions/caltopo/import/feature/', {
             'map_id': 'map<script>alert(1)</script>',
             'feature_id': 'feature1',
             'feature_class': 'Marker'
@@ -43,7 +43,7 @@ class TestCalTopoSecurity(TestCase):
         self.assertIn('error', data)
         
         # Test invalid feature_id (too long)
-        response = self.client.post('/api/extensions/caltopo-extension/import/feature/', {
+        response = self.client.post('/api/extensions/caltopo/import/feature/', {
             'map_id': 'map1',
             'feature_id': 'a' * 101,  # Too long (limit is 100)
             'feature_class': 'Marker'
@@ -63,7 +63,7 @@ class TestCalTopoSecurity(TestCase):
         )
         
         # Test empty map_id
-        response = self.client.post('/api/extensions/caltopo-extension/import/feature/', {
+        response = self.client.post('/api/extensions/caltopo/import/feature/', {
             'map_id': '',
             'feature_id': 'feature1',
             'feature_class': 'Marker'
@@ -72,7 +72,7 @@ class TestCalTopoSecurity(TestCase):
         self.assertEqual(response.status_code, 400)
         
         # Test empty feature_id
-        response = self.client.post('/api/extensions/caltopo-extension/import/feature/', {
+        response = self.client.post('/api/extensions/caltopo/import/feature/', {
             'map_id': 'map1',
             'feature_id': '',
             'feature_class': 'Marker'
@@ -90,7 +90,7 @@ class TestCalTopoSecurity(TestCase):
         )
         
         # Test invalid feature_class
-        response = self.client.post('/api/extensions/caltopo-extension/import/feature/', {
+        response = self.client.post('/api/extensions/caltopo/import/feature/', {
             'map_id': 'map1',
             'feature_id': 'feature1',
             'feature_class': 'InvalidClass'
@@ -102,7 +102,7 @@ class TestCalTopoSecurity(TestCase):
         
         # Test valid feature_class - mock the CalTopo API calls
         with patch('extensions.caltopo.src.backend.views.single_import.get_feature', return_value=None):
-            response = self.client.post('/api/extensions/caltopo-extension/import/feature/', {
+            response = self.client.post('/api/extensions/caltopo/import/feature/', {
                 'map_id': 'map1',
                 'feature_id': 'feature1',
                 'feature_class': 'Marker'
@@ -115,7 +115,7 @@ class TestCalTopoSecurity(TestCase):
     def test_credential_fields_are_validated_length(self):
         """Test credential fields are validated (length, format)."""
         # Test account_id too short
-        response = self.client.post('/api/extensions/caltopo-extension/connect/', {
+        response = self.client.post('/api/extensions/caltopo/connect/', {
             'account_id': 'abc12',  # 5 characters, should be 6
             'credential_id': '123456789012',
             'credential_key': 'test-key'
@@ -126,7 +126,7 @@ class TestCalTopoSecurity(TestCase):
         self.assertIn('error', data)
         
         # Test account_id too long
-        response = self.client.post('/api/extensions/caltopo-extension/connect/', {
+        response = self.client.post('/api/extensions/caltopo/connect/', {
             'account_id': 'abc1234',  # 7 characters, should be 6
             'credential_id': '123456789012',
             'credential_key': 'test-key'
@@ -135,7 +135,7 @@ class TestCalTopoSecurity(TestCase):
         self.assertEqual(response.status_code, 400)
         
         # Test credential_id too short
-        response = self.client.post('/api/extensions/caltopo-extension/connect/', {
+        response = self.client.post('/api/extensions/caltopo/connect/', {
             'account_id': 'abc123',
             'credential_id': '12345678901',  # 11 characters, should be 12
             'credential_key': 'test-key'
@@ -144,7 +144,7 @@ class TestCalTopoSecurity(TestCase):
         self.assertEqual(response.status_code, 400)
         
         # Test credential_id too long
-        response = self.client.post('/api/extensions/caltopo-extension/connect/', {
+        response = self.client.post('/api/extensions/caltopo/connect/', {
             'account_id': 'abc123',
             'credential_id': '1234567890123',  # 13 characters, should be 12
             'credential_key': 'test-key'
@@ -177,13 +177,13 @@ class TestCalTopoSecurity(TestCase):
         mock_time.return_value = 1000.0
         
         # Make first request (should succeed)
-        response = self.client.get('/api/extensions/caltopo-extension/maps/')
+        response = self.client.get('/api/extensions/caltopo/maps/')
         self.assertEqual(response.status_code, 200)
         
         # Make second request immediately (should be rate limited)
         # Keep same timestamp to ensure same window
         mock_time.return_value = 1000.5  # Same second, different fraction
-        response = self.client.get('/api/extensions/caltopo-extension/maps/')
+        response = self.client.get('/api/extensions/caltopo/maps/')
         self.assertEqual(response.status_code, 429)
         data = response.json()
         self.assertIn('Rate limit exceeded', data['error'])
@@ -203,7 +203,7 @@ class TestCalTopoSecurity(TestCase):
         mock_session.getAccountData.return_value = None
         mock_get_session.return_value = mock_session
         
-        response = self.client.get('/api/extensions/caltopo-extension/status/')
+        response = self.client.get('/api/extensions/caltopo/status/')
         self.assertEqual(response.status_code, 200)
         data = response.json()
         

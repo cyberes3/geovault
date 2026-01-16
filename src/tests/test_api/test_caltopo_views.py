@@ -64,50 +64,50 @@ class TestCalTopoViews(TestCase):
         self.client.logout()
         
         # Test connect endpoint
-        response = self.client.post('/api/extensions/caltopo-extension/connect/', {})
+        response = self.client.post('/api/extensions/caltopo/connect/', {})
         self.assertEqual(response.status_code, 401)
         
         # Test status endpoint
-        response = self.client.get('/api/extensions/caltopo-extension/status/')
+        response = self.client.get('/api/extensions/caltopo/status/')
         self.assertEqual(response.status_code, 401)
         
         # Test disconnect endpoint
-        response = self.client.post('/api/extensions/caltopo-extension/disconnect/')
+        response = self.client.post('/api/extensions/caltopo/disconnect/')
         self.assertEqual(response.status_code, 401)
         
         # Test maps endpoint
-        response = self.client.get('/api/extensions/caltopo-extension/maps/')
+        response = self.client.get('/api/extensions/caltopo/maps/')
         self.assertEqual(response.status_code, 401)
         
         # Test features endpoint
-        response = self.client.get('/api/extensions/caltopo-extension/maps/map1/features/')
+        response = self.client.get('/api/extensions/caltopo/maps/map1/features/')
         self.assertEqual(response.status_code, 401)
         
         # Test single import endpoint
-        response = self.client.post('/api/extensions/caltopo-extension/import/feature/', {})
+        response = self.client.post('/api/extensions/caltopo/import/feature/', {})
         self.assertEqual(response.status_code, 401)
         
         # Test map import endpoint
-        response = self.client.post('/api/extensions/caltopo-extension/import/map/', {})
+        response = self.client.post('/api/extensions/caltopo/import/map/', {})
         self.assertEqual(response.status_code, 401)
     
     def test_all_endpoints_require_caltopo_connection(self):
         """Test that all endpoints require CalTopo connection (400 if not connected)."""
         # All endpoints except connect/status/disconnect should require connection
         with patch('extensions.caltopo.src.backend.services.caltopo_api.get_caltopo_session', return_value=None):
-            response = self.client.get('/api/extensions/caltopo-extension/maps/')
+            response = self.client.get('/api/extensions/caltopo/maps/')
             self.assertEqual(response.status_code, 400)
             data = response.json()
             self.assertIn('CalTopo not connected', data['error'])
     
     @patch('extensions.caltopo.src.backend.services.caltopo_api.CaltopoSession')
     def test_connect_with_valid_credentials(self, mock_session_class):
-        """Test POST /api/extensions/caltopo-extension/connect/ with valid credentials (creates CalTopoUser)."""
+        """Test POST /api/extensions/caltopo/connect/ with valid credentials (creates CalTopoUser)."""
         mock_session = MagicMock()
         mock_session.getAccountData.return_value = None
         mock_session_class.return_value = mock_session
         
-        response = self.client.post('/api/extensions/caltopo-extension/connect/', {
+        response = self.client.post('/api/extensions/caltopo/connect/', {
             'account_id': 'abc123',
             'credential_id': '123456789012',
             'credential_key': 'test-key-12345'
@@ -127,7 +127,7 @@ class TestCalTopoViews(TestCase):
     
     @patch('extensions.caltopo.src.backend.services.caltopo_api.CaltopoSession')
     def test_connect_with_invalid_credentials(self, mock_session_class):
-        """Test POST /api/extensions/caltopo-extension/connect/ with invalid credentials (deletes credentials, returns 400)."""
+        """Test POST /api/extensions/caltopo/connect/ with invalid credentials (deletes credentials, returns 400)."""
         mock_session = MagicMock()
         mock_session.getAccountData.side_effect = Exception("Invalid credentials")
         mock_session_class.return_value = mock_session
@@ -140,7 +140,7 @@ class TestCalTopoViews(TestCase):
             credential_key='old-key'
         )
         
-        response = self.client.post('/api/extensions/caltopo-extension/connect/', {
+        response = self.client.post('/api/extensions/caltopo/connect/', {
             'account_id': 'abc123',
             'credential_id': '123456789012',
             'credential_key': 'invalid-key'
@@ -155,7 +155,7 @@ class TestCalTopoViews(TestCase):
     
     @patch('extensions.caltopo.src.backend.views.connect_caltopo.get_caltopo_session')
     def test_get_status_returns_connected_true_when_connected(self, mock_get_session):
-        """Test GET /api/extensions/caltopo-extension/status/ returns connected: true when connected."""
+        """Test GET /api/extensions/caltopo/status/ returns connected: true when connected."""
         CalTopoUser.objects.create(
             user=self.user,
             account_id='abc123',
@@ -168,21 +168,21 @@ class TestCalTopoViews(TestCase):
         mock_session.getAccountData.return_value = None
         mock_get_session.return_value = mock_session
         
-        response = self.client.get('/api/extensions/caltopo-extension/status/')
+        response = self.client.get('/api/extensions/caltopo/status/')
         self.assertEqual(response.status_code, 200)
         data = response.json()
         self.assertTrue(data['connected'])
     
     def test_get_status_returns_connected_false_when_not_connected(self):
-        """Test GET /api/extensions/caltopo-extension/status/ returns connected: false when not connected."""
-        response = self.client.get('/api/extensions/caltopo-extension/status/')
+        """Test GET /api/extensions/caltopo/status/ returns connected: false when not connected."""
+        response = self.client.get('/api/extensions/caltopo/status/')
         self.assertEqual(response.status_code, 200)
         data = response.json()
         self.assertFalse(data['connected'])
     
     @patch('extensions.caltopo.src.backend.views.connect_caltopo.get_caltopo_session')
     def test_get_status_does_not_expose_account_id(self, mock_get_session):
-        """Test GET /api/extensions/caltopo-extension/status/ does NOT expose account_id."""
+        """Test GET /api/extensions/caltopo/status/ does NOT expose account_id."""
         CalTopoUser.objects.create(
             user=self.user,
             account_id='abc123',
@@ -195,14 +195,14 @@ class TestCalTopoViews(TestCase):
         mock_session.getAccountData.return_value = None
         mock_get_session.return_value = mock_session
         
-        response = self.client.get('/api/extensions/caltopo-extension/status/')
+        response = self.client.get('/api/extensions/caltopo/status/')
         self.assertEqual(response.status_code, 200)
         data = response.json()
         self.assertNotIn('account_id', data)
         self.assertTrue(data['connected'])
     
     def test_disconnect_deletes_caltopo_user_record(self):
-        """Test POST /api/extensions/caltopo-extension/disconnect/ deletes CalTopoUser record."""
+        """Test POST /api/extensions/caltopo/disconnect/ deletes CalTopoUser record."""
         CalTopoUser.objects.create(
             user=self.user,
             account_id='abc123',
@@ -210,7 +210,7 @@ class TestCalTopoViews(TestCase):
             credential_key='test-key'
         )
         
-        response = self.client.post('/api/extensions/caltopo-extension/disconnect/')
+        response = self.client.post('/api/extensions/caltopo/disconnect/')
         self.assertEqual(response.status_code, 200)
         data = response.json()
         self.assertFalse(data['connected'])
@@ -220,7 +220,7 @@ class TestCalTopoViews(TestCase):
     
     @patch('extensions.caltopo.src.backend.views.maps.list_maps')
     def test_list_maps_returns_list(self, mock_list_maps):
-        """Test GET /api/extensions/caltopo-extension/maps/ returns list of maps (mocked)."""
+        """Test GET /api/extensions/caltopo/maps/ returns list of maps (mocked)."""
         CalTopoUser.objects.create(
             user=self.user,
             account_id='abc123',
@@ -233,7 +233,7 @@ class TestCalTopoViews(TestCase):
             {'id': 'map2', 'title': 'Test Map 2'}
         ]
         
-        response = self.client.get('/api/extensions/caltopo-extension/maps/')
+        response = self.client.get('/api/extensions/caltopo/maps/')
         self.assertEqual(response.status_code, 200)
         data = response.json()
         self.assertEqual(len(data['maps']), 2)
@@ -241,7 +241,7 @@ class TestCalTopoViews(TestCase):
     
     @patch('extensions.caltopo.src.backend.views.maps.get_map_features')
     def test_get_map_features_returns_features_list(self, mock_get_features):
-        """Test GET /api/extensions/caltopo-extension/maps/<map_id>/features/ returns features list (mocked)."""
+        """Test GET /api/extensions/caltopo/maps/<map_id>/features/ returns features list (mocked)."""
         CalTopoUser.objects.create(
             user=self.user,
             account_id='abc123',
@@ -257,7 +257,7 @@ class TestCalTopoViews(TestCase):
             }
         ]
         
-        response = self.client.get('/api/extensions/caltopo-extension/maps/map1/features/')
+        response = self.client.get('/api/extensions/caltopo/maps/map1/features/')
         self.assertEqual(response.status_code, 200)
         data = response.json()
         self.assertEqual(len(data['features']), 1)
@@ -265,7 +265,7 @@ class TestCalTopoViews(TestCase):
     
     @patch('extensions.caltopo.src.backend.views.maps.get_map_features')
     def test_get_map_features_includes_is_imported_flag(self, mock_get_features):
-        """Test GET /api/extensions/caltopo-extension/maps/<map_id>/features/ includes is_imported flag for each feature."""
+        """Test GET /api/extensions/caltopo/maps/<map_id>/features/ includes is_imported flag for each feature."""
         caltopo_user = CalTopoUser.objects.create(
             user=self.user,
             account_id='abc123',
@@ -307,7 +307,7 @@ class TestCalTopoViews(TestCase):
             }
         ]
         
-        response = self.client.get('/api/extensions/caltopo-extension/maps/map1/features/')
+        response = self.client.get('/api/extensions/caltopo/maps/map1/features/')
         self.assertEqual(response.status_code, 200)
         data = response.json()
         
@@ -321,7 +321,7 @@ class TestCalTopoViews(TestCase):
     
     @patch('extensions.caltopo.src.backend.views.maps.get_map_features')
     def test_get_map_features_includes_is_in_queue_flag(self, mock_get_features):
-        """Test GET /api/extensions/caltopo-extension/maps/<map_id>/features/ includes is_in_queue flag."""
+        """Test GET /api/extensions/caltopo/maps/<map_id>/features/ includes is_in_queue flag."""
         CalTopoUser.objects.create(
             user=self.user,
             account_id='abc123',
@@ -345,14 +345,14 @@ class TestCalTopoViews(TestCase):
             }
         ]
         
-        response = self.client.get('/api/extensions/caltopo-extension/maps/map1/features/')
+        response = self.client.get('/api/extensions/caltopo/maps/map1/features/')
         self.assertEqual(response.status_code, 200)
         data = response.json()
         self.assertTrue(data['is_in_queue'])
     
     @patch('extensions.caltopo.src.backend.views.maps.get_map_features')
     def test_get_map_features_cleans_up_stale_mappings(self, mock_get_features):
-        """Test GET /api/extensions/caltopo-extension/maps/<map_id>/features/ cleans up stale mappings (deleted features)."""
+        """Test GET /api/extensions/caltopo/maps/<map_id>/features/ cleans up stale mappings (deleted features)."""
         caltopo_user = CalTopoUser.objects.create(
             user=self.user,
             account_id='abc123',
@@ -372,7 +372,7 @@ class TestCalTopoViews(TestCase):
             }
         ]
         
-        response = self.client.get('/api/extensions/caltopo-extension/maps/map1/features/')
+        response = self.client.get('/api/extensions/caltopo/maps/map1/features/')
         self.assertEqual(response.status_code, 200)
         
         # Refresh from database
@@ -382,7 +382,7 @@ class TestCalTopoViews(TestCase):
     
     @patch('extensions.caltopo.src.backend.views.maps.get_map_features')
     def test_get_map_features_detects_map_in_import_queue(self, mock_get_features):
-        """Test GET /api/extensions/caltopo-extension/maps/<map_id>/features/ detects map in import queue."""
+        """Test GET /api/extensions/caltopo/maps/<map_id>/features/ detects map in import queue."""
         CalTopoUser.objects.create(
             user=self.user,
             account_id='abc123',
@@ -400,7 +400,7 @@ class TestCalTopoViews(TestCase):
         
         mock_get_features.return_value = []
         
-        response = self.client.get('/api/extensions/caltopo-extension/maps/map1/features/')
+        response = self.client.get('/api/extensions/caltopo/maps/map1/features/')
         self.assertEqual(response.status_code, 200)
         data = response.json()
         self.assertTrue(data['is_in_queue'])
@@ -408,7 +408,7 @@ class TestCalTopoViews(TestCase):
     @patch('extensions.caltopo.src.backend.views.single_import.get_feature')
     @patch('extensions.caltopo.src.backend.views.single_import.convert_caltopo_to_geojson')
     def test_import_feature_successfully(self, mock_convert, mock_get_feature):
-        """Test POST /api/extensions/caltopo-extension/import/feature/ imports single feature successfully."""
+        """Test POST /api/extensions/caltopo/import/feature/ imports single feature successfully."""
         caltopo_user = CalTopoUser.objects.create(
             user=self.user,
             account_id='abc123',
@@ -435,7 +435,7 @@ class TestCalTopoViews(TestCase):
         }
         mock_convert.return_value = geojson_feature
         
-        response = self.client.post('/api/extensions/caltopo-extension/import/feature/', {
+        response = self.client.post('/api/extensions/caltopo/import/feature/', {
             'map_id': 'map1',
             'feature_id': 'feature1',
             'feature_class': 'Marker'
@@ -454,7 +454,7 @@ class TestCalTopoViews(TestCase):
         self.assertEqual(caltopo_user.imported_features['map1']['feature1'], feature.id)
     
     def test_import_feature_validates_feature_class(self):
-        """Test POST /api/extensions/caltopo-extension/import/feature/ validates feature_class (Pydantic validator)."""
+        """Test POST /api/extensions/caltopo/import/feature/ validates feature_class (Pydantic validator)."""
         CalTopoUser.objects.create(
             user=self.user,
             account_id='abc123',
@@ -462,7 +462,7 @@ class TestCalTopoViews(TestCase):
             credential_key='test-key'
         )
         
-        response = self.client.post('/api/extensions/caltopo-extension/import/feature/', {
+        response = self.client.post('/api/extensions/caltopo/import/feature/', {
             'map_id': 'map1',
             'feature_id': 'feature1',
             'feature_class': 'InvalidClass'
@@ -473,7 +473,7 @@ class TestCalTopoViews(TestCase):
         self.assertIn('Invalid feature_class', data['error'])
     
     def test_import_feature_rejects_invalid_feature_class(self):
-        """Test POST /api/extensions/caltopo-extension/import/feature/ rejects invalid feature_class."""
+        """Test POST /api/extensions/caltopo/import/feature/ rejects invalid feature_class."""
         CalTopoUser.objects.create(
             user=self.user,
             account_id='abc123',
@@ -481,7 +481,7 @@ class TestCalTopoViews(TestCase):
             credential_key='test-key'
         )
         
-        response = self.client.post('/api/extensions/caltopo-extension/import/feature/', {
+        response = self.client.post('/api/extensions/caltopo/import/feature/', {
             'map_id': 'map1',
             'feature_id': 'feature1',
             'feature_class': 'NotAValidClass'
@@ -494,7 +494,7 @@ class TestCalTopoViews(TestCase):
     @patch('extensions.caltopo.src.backend.views.single_import.get_feature')
     @patch('extensions.caltopo.src.backend.views.single_import.convert_caltopo_to_geojson')
     def test_import_feature_deletes_existing_on_reimport(self, mock_convert, mock_get_feature):
-        """Test POST /api/extensions/caltopo-extension/import/feature/ deletes existing feature on re-import."""
+        """Test POST /api/extensions/caltopo/import/feature/ deletes existing feature on re-import."""
         caltopo_user = CalTopoUser.objects.create(
             user=self.user,
             account_id='abc123',
@@ -538,7 +538,7 @@ class TestCalTopoViews(TestCase):
         }
         mock_convert.return_value = geojson_feature
         
-        response = self.client.post('/api/extensions/caltopo-extension/import/feature/', {
+        response = self.client.post('/api/extensions/caltopo/import/feature/', {
             'map_id': 'map1',
             'feature_id': 'feature1',
             'feature_class': 'Marker'
@@ -556,7 +556,7 @@ class TestCalTopoViews(TestCase):
     @patch('extensions.caltopo.src.backend.views.single_import.get_feature')
     @patch('extensions.caltopo.src.backend.views.single_import.convert_caltopo_to_geojson')
     def test_import_feature_updates_imported_features_mapping(self, mock_convert, mock_get_feature):
-        """Test POST /api/extensions/caltopo-extension/import/feature/ updates imported_features mapping."""
+        """Test POST /api/extensions/caltopo/import/feature/ updates imported_features mapping."""
         caltopo_user = CalTopoUser.objects.create(
             user=self.user,
             account_id='abc123',
@@ -582,7 +582,7 @@ class TestCalTopoViews(TestCase):
         }
         mock_convert.return_value = geojson_feature
         
-        response = self.client.post('/api/extensions/caltopo-extension/import/feature/', {
+        response = self.client.post('/api/extensions/caltopo/import/feature/', {
             'map_id': 'map1',
             'feature_id': 'feature1',
             'feature_class': 'Marker'
@@ -602,7 +602,7 @@ class TestCalTopoViews(TestCase):
     @patch('extensions.caltopo.src.backend.views.single_import.convert_caltopo_to_geojson')
     @patch('geo_lib.processing.duplicate_detection.find._find_hash_duplicates')
     def test_import_feature_includes_duplicate_warnings(self, mock_hash_dups, mock_convert, mock_get_feature):
-        """Test POST /api/extensions/caltopo-extension/import/feature/ includes duplicate warnings in response."""
+        """Test POST /api/extensions/caltopo/import/feature/ includes duplicate warnings in response."""
         CalTopoUser.objects.create(
             user=self.user,
             account_id='abc123',
@@ -646,7 +646,7 @@ class TestCalTopoViews(TestCase):
             'existing_features': [{'id': 1, 'geojson': {'properties': {'name': 'Existing Feature'}}}]
         }]
         
-        response = self.client.post('/api/extensions/caltopo-extension/import/feature/', {
+        response = self.client.post('/api/extensions/caltopo/import/feature/', {
             'map_id': 'map1',
             'feature_id': 'feature1',
             'feature_class': 'Marker'
@@ -660,7 +660,7 @@ class TestCalTopoViews(TestCase):
     @patch('extensions.caltopo.src.backend.views.single_import.get_feature')
     @patch('extensions.caltopo.src.backend.views.single_import.convert_caltopo_to_geojson')
     def test_import_feature_creates_featurestore_with_3d_geometry(self, mock_convert, mock_get_feature):
-        """Test POST /api/extensions/caltopo-extension/import/feature/ creates FeatureStore with correct geometry (3D)."""
+        """Test POST /api/extensions/caltopo/import/feature/ creates FeatureStore with correct geometry (3D)."""
         CalTopoUser.objects.create(
             user=self.user,
             account_id='abc123',
@@ -686,7 +686,7 @@ class TestCalTopoViews(TestCase):
         }
         mock_convert.return_value = geojson_feature
         
-        response = self.client.post('/api/extensions/caltopo-extension/import/feature/', {
+        response = self.client.post('/api/extensions/caltopo/import/feature/', {
             'map_id': 'map1',
             'feature_id': 'feature1',
             'feature_class': 'Marker'
@@ -703,7 +703,7 @@ class TestCalTopoViews(TestCase):
     @patch('extensions.caltopo.src.backend.views.single_import.get_feature')
     @patch('extensions.caltopo.src.backend.views.single_import.convert_caltopo_to_geojson')
     def test_import_feature_preserves_caltopo_metadata(self, mock_convert, mock_get_feature):
-        """Test POST /api/extensions/caltopo-extension/import/feature/ preserves CalTopo metadata in geojson properties."""
+        """Test POST /api/extensions/caltopo/import/feature/ preserves CalTopo metadata in geojson properties."""
         CalTopoUser.objects.create(
             user=self.user,
             account_id='abc123',
@@ -730,7 +730,7 @@ class TestCalTopoViews(TestCase):
         }
         mock_convert.return_value = geojson_feature
         
-        response = self.client.post('/api/extensions/caltopo-extension/import/feature/', {
+        response = self.client.post('/api/extensions/caltopo/import/feature/', {
             'map_id': 'map1',
             'feature_id': 'feature1',
             'feature_class': 'Marker'
@@ -750,7 +750,7 @@ class TestCalTopoViews(TestCase):
     @patch('geo_lib.processing.jobs.process_job.ProcessJob.enqueue_job')
     @patch('geo_lib.processing.jobs.helpers.status_tracker.status_tracker')
     def test_import_map_queues_successfully(self, mock_status_tracker, mock_enqueue, mock_convert, mock_get_features):
-        """Test POST /api/extensions/caltopo-extension/import/map/ queues map import successfully."""
+        """Test POST /api/extensions/caltopo/import/map/ queues map import successfully."""
         CalTopoUser.objects.create(
             user=self.user,
             account_id='abc123',
@@ -787,7 +787,7 @@ class TestCalTopoViews(TestCase):
         mock_status_tracker.create_job.return_value = job_id
         mock_status_tracker.get_job.return_value = mock_job
         
-        response = self.client.post('/api/extensions/caltopo-extension/import/map/', {
+        response = self.client.post('/api/extensions/caltopo/import/map/', {
             'map_id': 'map1'
         }, content_type='application/json')
         
@@ -800,9 +800,9 @@ class TestCalTopoViews(TestCase):
         # Verify enqueue was called
         mock_enqueue.assert_called_once()
     
-    @patch('api.views.caltopo.map_import.get_map_features')
+    @patch('extensions.caltopo.src.backend.views.map_import.get_map_features')
     def test_import_map_prevents_duplicate_queue_entries(self, mock_get_features):
-        """Test POST /api/extensions/caltopo-extension/import/map/ prevents duplicate queue entries (409 if already queued)."""
+        """Test POST /api/extensions/caltopo/import/map/ prevents duplicate queue entries (409 if already queued)."""
         CalTopoUser.objects.create(
             user=self.user,
             account_id='abc123',
@@ -826,7 +826,7 @@ class TestCalTopoViews(TestCase):
             }
         ]
         
-        response = self.client.post('/api/extensions/caltopo-extension/import/map/', {
+        response = self.client.post('/api/extensions/caltopo/import/map/', {
             'map_id': 'map1'
         }, content_type='application/json')
         
@@ -837,7 +837,7 @@ class TestCalTopoViews(TestCase):
     @patch('extensions.caltopo.src.backend.views.map_import.get_map_features')
     @patch('extensions.caltopo.src.backend.views.map_import.convert_caltopo_to_geojson')
     def test_import_map_deletes_existing_features_on_reimport(self, mock_convert, mock_get_features):
-        """Test POST /api/extensions/caltopo-extension/import/map/ deletes existing features for map on re-import."""
+        """Test POST /api/extensions/caltopo/import/map/ deletes existing features for map on re-import."""
         caltopo_user = CalTopoUser.objects.create(
             user=self.user,
             account_id='abc123',
@@ -891,7 +891,7 @@ class TestCalTopoViews(TestCase):
             mock_tracker.create_job.return_value = job_id
             mock_tracker.get_job.return_value = mock_job
             
-            response = self.client.post('/api/extensions/caltopo-extension/import/map/', {
+            response = self.client.post('/api/extensions/caltopo/import/map/', {
                 'map_id': 'map1'
             }, content_type='application/json')
         
@@ -907,7 +907,7 @@ class TestCalTopoViews(TestCase):
     @patch('extensions.caltopo.src.backend.views.map_import.get_map_features')
     @patch('extensions.caltopo.src.backend.views.map_import.convert_caltopo_to_geojson')
     def test_import_map_clears_imported_features_mapping(self, mock_convert, mock_get_features):
-        """Test POST /api/extensions/caltopo-extension/import/map/ clears imported_features mapping for map."""
+        """Test POST /api/extensions/caltopo/import/map/ clears imported_features mapping for map."""
         caltopo_user = CalTopoUser.objects.create(
             user=self.user,
             account_id='abc123',
@@ -948,7 +948,7 @@ class TestCalTopoViews(TestCase):
             mock_tracker.create_job.return_value = job_id
             mock_tracker.get_job.return_value = mock_job
             
-            response = self.client.post('/api/extensions/caltopo-extension/import/map/', {
+            response = self.client.post('/api/extensions/caltopo/import/map/', {
                 'map_id': 'map1'
             }, content_type='application/json')
         
@@ -961,7 +961,7 @@ class TestCalTopoViews(TestCase):
     @patch('extensions.caltopo.src.backend.views.map_import.get_map_features')
     @patch('extensions.caltopo.src.backend.views.map_import.convert_caltopo_to_geojson')
     def test_import_map_handles_no_valid_features(self, mock_convert, mock_get_features):
-        """Test POST /api/extensions/caltopo-extension/import/map/ handles maps with no valid features (returns 400)."""
+        """Test POST /api/extensions/caltopo/import/map/ handles maps with no valid features (returns 400)."""
         CalTopoUser.objects.create(
             user=self.user,
             account_id='abc123',
@@ -981,7 +981,7 @@ class TestCalTopoViews(TestCase):
         # So we need to return None for both calls
         mock_convert.side_effect = [None, None]  # First call returns None, second call (in if check) also returns None
         
-        response = self.client.post('/api/extensions/caltopo-extension/import/map/', {
+        response = self.client.post('/api/extensions/caltopo/import/map/', {
             'map_id': 'map1'
         }, content_type='application/json')
         
@@ -991,10 +991,10 @@ class TestCalTopoViews(TestCase):
     
     @patch('extensions.caltopo.src.backend.views.map_import.get_map_features')
     @patch('extensions.caltopo.src.backend.views.map_import.convert_caltopo_to_geojson')
-    @patch('api.views.caltopo.map_import.process_job')
-    @patch('api.views.caltopo.map_import.status_tracker')
+    @patch('extensions.caltopo.src.backend.views.map_import.process_job')
+    @patch('extensions.caltopo.src.backend.views.map_import.status_tracker')
     def test_import_map_returns_job_id_and_import_queue_id(self, mock_status_tracker, mock_process_job, mock_convert, mock_get_features):
-        """Test POST /api/extensions/caltopo-extension/import/map/ returns job_id and import_queue_id."""
+        """Test POST /api/extensions/caltopo/import/map/ returns job_id and import_queue_id."""
         CalTopoUser.objects.create(
             user=self.user,
             account_id='abc123',
@@ -1031,7 +1031,7 @@ class TestCalTopoViews(TestCase):
         mock_status_tracker.create_job.return_value = job_id
         mock_status_tracker.get_job.return_value = mock_job
         
-        response = self.client.post('/api/extensions/caltopo-extension/import/map/', {
+        response = self.client.post('/api/extensions/caltopo/import/map/', {
             'map_id': 'map1'
         }, content_type='application/json')
         
@@ -1042,7 +1042,7 @@ class TestCalTopoViews(TestCase):
     
     @patch('extensions.caltopo.src.backend.views.maps.list_maps')
     def test_list_maps_handles_timeout(self, mock_list_maps):
-        """Test GET /api/extensions/caltopo-extension/maps/ handles CalTopo timeout (returns 504 with CALTOPO_TIMEOUT)."""
+        """Test GET /api/extensions/caltopo/maps/ handles CalTopo timeout (returns 504 with CALTOPO_TIMEOUT)."""
         CalTopoUser.objects.create(
             user=self.user,
             account_id='abc123',
@@ -1053,7 +1053,7 @@ class TestCalTopoViews(TestCase):
         from extensions.caltopo.src.backend.services.caltopo_api import CalTopoTimeoutError
         mock_list_maps.side_effect = CalTopoTimeoutError("CalTopo API request timed out")
         
-        response = self.client.get('/api/extensions/caltopo-extension/maps/')
+        response = self.client.get('/api/extensions/caltopo/maps/')
         self.assertEqual(response.status_code, 504)
         data = response.json()
         self.assertIn('CalTopo request timed out', data['error'])
@@ -1061,7 +1061,7 @@ class TestCalTopoViews(TestCase):
     
     @patch('extensions.caltopo.src.backend.views.maps.get_map_features')
     def test_get_map_features_handles_timeout(self, mock_get_features):
-        """Test GET /api/extensions/caltopo-extension/maps/<map_id>/features/ handles CalTopo timeout (returns 504 with CALTOPO_TIMEOUT)."""
+        """Test GET /api/extensions/caltopo/maps/<map_id>/features/ handles CalTopo timeout (returns 504 with CALTOPO_TIMEOUT)."""
         CalTopoUser.objects.create(
             user=self.user,
             account_id='abc123',
@@ -1072,15 +1072,15 @@ class TestCalTopoViews(TestCase):
         from extensions.caltopo.src.backend.services.caltopo_api import CalTopoTimeoutError
         mock_get_features.side_effect = CalTopoTimeoutError("CalTopo API request timed out")
         
-        response = self.client.get('/api/extensions/caltopo-extension/maps/map1/features/')
+        response = self.client.get('/api/extensions/caltopo/maps/map1/features/')
         self.assertEqual(response.status_code, 504)
         data = response.json()
         self.assertIn('CalTopo request timed out', data['error'])
         self.assertEqual(data['details']['error_code'], 'CALTOPO_TIMEOUT')
     
-    @patch('api.views.caltopo.single_import.get_feature')
+    @patch('extensions.caltopo.src.backend.views.single_import.get_feature')
     def test_import_feature_handles_timeout(self, mock_get_feature):
-        """Test POST /api/extensions/caltopo-extension/import/feature/ handles CalTopo timeout (returns 504 with CALTOPO_TIMEOUT)."""
+        """Test POST /api/extensions/caltopo/import/feature/ handles CalTopo timeout (returns 504 with CALTOPO_TIMEOUT)."""
         CalTopoUser.objects.create(
             user=self.user,
             account_id='abc123',
@@ -1091,7 +1091,7 @@ class TestCalTopoViews(TestCase):
         from extensions.caltopo.src.backend.services.caltopo_api import CalTopoTimeoutError
         mock_get_feature.side_effect = CalTopoTimeoutError("CalTopo API request timed out")
         
-        response = self.client.post('/api/extensions/caltopo-extension/import/feature/', {
+        response = self.client.post('/api/extensions/caltopo/import/feature/', {
             'map_id': 'map1',
             'feature_id': 'feature1',
             'feature_class': 'Marker'
@@ -1102,9 +1102,9 @@ class TestCalTopoViews(TestCase):
         self.assertIn('CalTopo request timed out', data['error'])
         self.assertEqual(data['details']['error_code'], 'CALTOPO_TIMEOUT')
     
-    @patch('api.views.caltopo.map_import.get_map_features')
+    @patch('extensions.caltopo.src.backend.views.map_import.get_map_features')
     def test_import_map_handles_timeout(self, mock_get_features):
-        """Test POST /api/extensions/caltopo-extension/import/map/ handles CalTopo timeout (returns 504 with CALTOPO_TIMEOUT)."""
+        """Test POST /api/extensions/caltopo/import/map/ handles CalTopo timeout (returns 504 with CALTOPO_TIMEOUT)."""
         CalTopoUser.objects.create(
             user=self.user,
             account_id='abc123',
@@ -1115,7 +1115,7 @@ class TestCalTopoViews(TestCase):
         from extensions.caltopo.src.backend.services.caltopo_api import CalTopoTimeoutError
         mock_get_features.side_effect = CalTopoTimeoutError("CalTopo API request timed out")
         
-        response = self.client.post('/api/extensions/caltopo-extension/import/map/', {
+        response = self.client.post('/api/extensions/caltopo/import/map/', {
             'map_id': 'map1'
         }, content_type='application/json')
         
@@ -1126,7 +1126,7 @@ class TestCalTopoViews(TestCase):
     
     @patch('extensions.caltopo.src.backend.services.caltopo_api.CaltopoSession')
     def test_connect_handles_timeout(self, mock_session_class):
-        """Test POST /api/extensions/caltopo-extension/connect/ handles CalTopo timeout (returns 504 with CALTOPO_TIMEOUT)."""
+        """Test POST /api/extensions/caltopo/connect/ handles CalTopo timeout (returns 504 with CALTOPO_TIMEOUT)."""
         from requests.exceptions import ReadTimeout
         from extensions.caltopo.src.backend.services.caltopo_api import get_caltopo_session
         
@@ -1134,7 +1134,7 @@ class TestCalTopoViews(TestCase):
         mock_session.getAccountData.side_effect = ReadTimeout("Read timed out")
         mock_session_class.return_value = mock_session
         
-        response = self.client.post('/api/extensions/caltopo-extension/connect/', {
+        response = self.client.post('/api/extensions/caltopo/connect/', {
             'account_id': 'abc123',
             'credential_id': '123456789012',
             'credential_key': 'test-key-12345'
