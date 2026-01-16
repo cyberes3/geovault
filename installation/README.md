@@ -1,10 +1,9 @@
 # Installation
 
-Not too complicated but this guide should get you up and running as fast as possible. If you prefer to use Docker, see [Docker.md](https://git.evulid.cc/cyberes/geovault/src/branch/master/installation/Docker.md).
+Not too complicated but this guide should get you up and running as fast as possible. If you prefer to use Docker,
+see [Docker.md](https://git.evulid.cc/cyberes/geovault/src/branch/master/installation/Docker.md).
 
 We're going to install to `/srv/geovault` and run it as the `geovault` system user.
-
-
 
 ## PostGIS
 
@@ -24,8 +23,6 @@ sudo apt install postgresql-18-postgis-3
 systemctl enable --now postgresql
 ```
 
-
-
 ## Install Required Packages
 
 ```shell
@@ -38,16 +35,12 @@ If your system doesn't provide Python 3.12, add this repo:
 sudo add-apt-repository ppa:deadsnakes/ppa
 ```
 
-
-
 Redis is used for Channels/WebSockets, make sure it is installed and running:
 
 ```shell
 sudo apt install redis-server
 systemctl enable --now redis-server
 ```
-
-
 
 ## Setup
 
@@ -70,11 +63,9 @@ python3 -m venv venv
 ./generate-map-fonts.sh
 ```
 
-
-
 ## NodeJS
 
-NodeJS is required for the frontend GeoJSON converter. One-line installer:
+NodeJS is required for the frontend as well as the internal GeoJSON converter. One-line installer:
 
 ```shell
 curl -fsSL https://deb.nodesource.com/setup_22.x | sudo -E bash - && sudo apt-get install -y nodejs
@@ -92,13 +83,12 @@ Build the frontend:
 cd src/ && ./build-frontend.sh
 ```
 
-
-
 ## MaxMind
 
-MaxMind's GeoIP2 database is used to determine user location based on their IP address. This allows the map to automatically center on the their location instead of using a hardcoded default. Not required, but see [MaxMind.md](https://git.evulid.cc/cyberes/geovault/src/branch/master/installation/MaxMind.md) for instructions to set up.
-
-
+MaxMind's GeoIP2 database is used to determine user location based on their IP address. This allows the map to
+automatically center on the their location instead of using a hardcoded default. Not required, but
+see [MaxMind.md](https://git.evulid.cc/cyberes/geovault/src/branch/master/installation/MaxMind.md) for instructions to
+set up.
 
 ## Configuration
 
@@ -116,14 +106,12 @@ Then fill in your values in the config. Important values:
 - Database password
 - Email settings
 
-
-
 ## Database
 
 1. Generate a secure password via `pwgen 32 1`
 2. `sudo -u postgres psql`
 3. `CREATE DATABASE geovault WITH ENCODING 'UTF8' LC_COLLATE='C.utf8' LC_CTYPE='C.utf8' TEMPLATE=template0;`
-   - If you have locale issues, find the ones available on your system via: `locale -a`
+    - If you have locale issues, find the ones available on your system via: `locale -a`
 4. `CREATE USER geovault WITH PASSWORD 'your_password_here';`
 5. `GRANT ALL PRIVILEGES ON DATABASE geovault TO geovault;`
 6. `\c geovault;`
@@ -133,8 +121,6 @@ Then fill in your values in the config. Important values:
 10. `GRANT ALL PRIVILEGES ON ALL SEQUENCES IN SCHEMA public TO geovault;`
 
 To exit the SQL console, enter `\q`.
-
-
 
 ## Django
 
@@ -156,13 +142,9 @@ sudo chown geovault:nogroup /srv/geovault
 sudo chmod 600 /srv/geovault
 ```
 
-
-
 ## Nginx
 
 Example config file is located at `geovault.conf`.
-
-
 
 ## Systemd
 
@@ -173,17 +155,27 @@ systemctl enable --now geovault
 systemctl status geovault
 ```
 
-
-
 ## Reverse Geocoding
 
-If you want advanced tagging of your features you will have to set up two very heavy services. [Reverse Geocoding.md](https://git.evulid.cc/cyberes/geovault/src/branch/master/installation/Reverse Geocoding.md) will walk you through it.
+We use someone else's [Overpass API](https://wiki.openstreetmap.org/wiki/Overpass_API) to perform reverse geocoding but
+you could always try hosting it yourself,
+see [Reverse Geocoding.md](https://git.evulid.cc/cyberes/geovault/src/branch/master/installation/Reverse%20Geocoding.md)
 
+## MapTiler
 
+MapTiler API services are used in the platform for reverse geocoding, 3D height maps, and additional basemaps. The
+company has a pretty solid lineup of products with very generous free tier usage limits.
+
+Create an account on <https://www.maptiler.com> and then generate a new API key
+at <https://cloud.maptiler.com/account/keys/>.
+
+DO NOT use the default API key that your account comes with! Instead, generate a new one and set the "Allowed HTTP
+Origins" to your domain or else someone can steal your key.
 
 ## Done!
 
-Everything should be running now and the server will be accessible on `0.0.0.0:8000`. Go ahead and register on the site, the first user will be automatically set as the admin and given the appropriate permissions.
+Everything should be running now and the server will be accessible on `0.0.0.0:8000`. Go ahead and register on the site,
+the first user will be automatically set as the admin and given the appropriate permissions.
 
 ## Android App
 
