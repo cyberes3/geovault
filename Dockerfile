@@ -45,9 +45,9 @@ COPY src/ /app/src/
 WORKDIR /app/src/backend
 RUN chmod +x generate-map-fonts.sh && ./generate-map-fonts.sh
 
-# Build frontend now that all source files are in place
-WORKDIR /app/src/frontend
-RUN npm run build
+# Build frontend and all extension frontends using the build script
+WORKDIR /app/src
+RUN chmod +x build-frontend.sh && ./build-frontend.sh
 
 # Copy entrypoint script
 COPY docker-entrypoint.sh /app/docker-entrypoint.sh
@@ -60,7 +60,7 @@ WORKDIR /app/src/backend
 EXPOSE 8000
 
 # Healthcheck
-HEALTHCHECK --interval=30s --timeout=10s --start-period=40s --retries=3 \
+HEALTHCHECK --interval=30s --timeout=60s --start-period=40s --retries=3 \
     CMD curl -f http://localhost:8000/api/health/ || exit 1
 
 # Use entrypoint script
