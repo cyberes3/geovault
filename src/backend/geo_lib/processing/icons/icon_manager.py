@@ -281,8 +281,6 @@ def _process_single_icon_href(
     if is_caltopo and _is_caltopo_point_icon(href):
         # Point icons use default marker, no need to fetch
         # CalTopo defaults to black (#000000) when no color is specified
-        # Count as successfully processed since we extracted the color
-        stats['successful'] += 1
         return None, caltopo_color if caltopo_color else '#000000'
 
     # Check href mapping if available
