@@ -36,7 +36,7 @@ class TestTilesAPI(TestCase):
 
     def test_google_maps_tile_source_registered(self):
         """Test that Google Maps tile source is registered correctly."""
-        google_maps_source = get_tile_source('google_maps')
+        google_maps_source = get_tile_source('google-maps')
         self.assertIsNotNone(google_maps_source)
         self.assertEqual(google_maps_source['name'], 'Google Maps')
         self.assertTrue(google_maps_source['requires_proxy'])
@@ -46,7 +46,7 @@ class TestTilesAPI(TestCase):
 
     def test_google_maps_url_template_contains_api_key(self):
         """Test that Google Maps URL template contains the API key."""
-        google_maps_source = get_tile_source('google_maps')
+        google_maps_source = get_tile_source('google-maps')
         self.assertIsNotNone(google_maps_source)
         url_template = google_maps_source['url_template']
         self.assertIn('key=', url_template)
@@ -55,7 +55,7 @@ class TestTilesAPI(TestCase):
 
     def test_google_terrain_tile_source_registered(self):
         """Test that Google Terrain tile source is registered correctly."""
-        google_terrain_source = get_tile_source('google_terrain')
+        google_terrain_source = get_tile_source('google-terrain')
         self.assertIsNotNone(google_terrain_source)
         self.assertEqual(google_terrain_source['name'], 'Google Terrain')
         self.assertTrue(google_terrain_source['requires_proxy'])
@@ -65,7 +65,7 @@ class TestTilesAPI(TestCase):
 
     def test_google_terrain_url_template_contains_api_key(self):
         """Test that Google Terrain URL template contains the API key."""
-        google_terrain_source = get_tile_source('google_terrain')
+        google_terrain_source = get_tile_source('google-terrain')
         self.assertIsNotNone(google_terrain_source)
         url_template = google_terrain_source['url_template']
         self.assertIn('key=', url_template)
@@ -81,7 +81,7 @@ class TestTilesAPI(TestCase):
         maptiler_sources = {
             source_id: config
             for source_id, config in all_sources.items()
-            if source_id.startswith('maptiler_') and source_id not in ['maptiler_hillshade', 'maptiler_terrain']
+            if source_id.startswith('maptiler-') and source_id not in ['maptiler-hillshade', 'maptiler-terrain']
         }
         # MapTiler sources are optional and depend on configuration
         # If they exist, verify they have the correct structure
@@ -170,10 +170,10 @@ class TestTilesAPI(TestCase):
         mock_response.headers = {'Content-Type': 'image/png'}
         mock_requests_get.return_value = mock_response
 
-        # Use mb_topo which requires proxy by default
-        mb_topo_source = get_tile_source('mb_topo')
+        # Use mb-topo which requires proxy by default
+        mb_topo_source = get_tile_source('mb-topo')
         if not mb_topo_source or not mb_topo_source.get('requires_proxy'):
-            self.skipTest("mb_topo tile source not available or doesn't require proxy")
+            self.skipTest("mb-topo tile source not available or doesn't require proxy")
 
         # Get the expected headers from proxy_config
         proxy_config = mb_topo_source.get('proxy_config', {})
@@ -185,7 +185,7 @@ class TestTilesAPI(TestCase):
         x = random.randint(0, 2**z - 1)
         y = random.randint(0, 2**z - 1)
         
-        response = self.client.get(f'/api/tiles/mb_topo/{z}/{x}/{y}')
+        response = self.client.get(f'/api/tiles/mb-topo/{z}/{x}/{y}')
 
         # Verify requests.get was called
         self.assertTrue(mock_requests_get.called, "requests.get should have been called")
@@ -213,8 +213,8 @@ class TestTilesAPI(TestCase):
         # Create a mock config loader
         mock_config_loader = MagicMock()
         # Include sources that don't normally require proxy (osm, opentopomap)
-        # and one that already requires proxy by default (mb_topo) to test edge case
-        mock_config_loader.get.return_value = ['osm', 'opentopomap', 'mb_topo']
+        # and one that already requires proxy by default (mb-topo) to test edge case
+        mock_config_loader.get.return_value = ['osm', 'opentopomap', 'mb-topo']
         mock_get_config_loader.return_value = mock_config_loader
         
         # Clear the registry to force re-initialization with the mock config
@@ -225,7 +225,7 @@ class TestTilesAPI(TestCase):
         # Get tile sources (will re-initialize with mock config)
         osm_source = get_tile_source('osm')
         opentopomap_source = get_tile_source('opentopomap')
-        mb_topo_source = get_tile_source('mb_topo')
+        mb_topo_source = get_tile_source('mb-topo')
         
         # Verify OSM and OpenTopoMap require proxy when in config
         self.assertIsNotNone(osm_source)
@@ -236,14 +236,14 @@ class TestTilesAPI(TestCase):
         self.assertTrue(opentopomap_source.get('requires_proxy'), "OpenTopoMap should require proxy when in proxy_sources config")
         self.assertEqual(opentopomap_source['client_config']['url'], '/api/tiles/opentopomap/{z}/{x}/{y}')
         
-        # Edge case: Verify mb_topo still works correctly when in proxy_sources config
+        # Edge case: Verify mb-topo still works correctly when in proxy_sources config
         # (it already requires proxy by default, so it should remain proxied)
         self.assertIsNotNone(mb_topo_source)
-        self.assertTrue(mb_topo_source.get('requires_proxy'), "mb_topo should still require proxy when in proxy_sources config")
-        # mb_topo already has proxy URL, so it should remain unchanged
-        self.assertEqual(mb_topo_source['client_config']['url'], '/api/tiles/mb_topo/{z}/{x}/{y}')
+        self.assertTrue(mb_topo_source.get('requires_proxy'), "mb-topo should still require proxy when in proxy_sources config")
+        # mb-topo already has proxy URL, so it should remain unchanged
+        self.assertEqual(mb_topo_source['client_config']['url'], '/api/tiles/mb-topo/{z}/{x}/{y}')
         # Verify it still has proxy_config
-        self.assertIsNotNone(mb_topo_source.get('proxy_config'), "mb_topo should still have proxy_config")
+        self.assertIsNotNone(mb_topo_source.get('proxy_config'), "mb-topo should still have proxy_config")
         
         # Reset the registry for other tests
         registry_module._tile_sources = {}
@@ -259,7 +259,7 @@ class TestTilesAPI(TestCase):
         # Create a mock config loader
         mock_config_loader = MagicMock()
         # Include MapTiler sources in proxy_sources - they should be ignored
-        mock_config_loader.get.return_value = ['osm', 'maptiler_terrain', 'maptiler_hillshade', 'maptiler_topo-v4']
+        mock_config_loader.get.return_value = ['osm', 'maptiler-terrain', 'maptiler-hillshade', 'maptiler-topo-v4']
         # Set maptiler.proxy_tiles to False for all MapTiler sources
         def get_bool_side_effect(key, default=False):
             if key == 'maptiler.proxy_tiles':
@@ -283,7 +283,7 @@ class TestTilesAPI(TestCase):
         
         # Get tile sources (will re-initialize with mock config)
         osm_source = get_tile_source('osm')
-        maptiler_terrain_source = get_tile_source('maptiler_terrain')
+        maptiler_terrain_source = get_tile_source('maptiler-terrain')
         
         # Verify OSM is proxied (it's not a MapTiler source)
         self.assertIsNotNone(osm_source)
@@ -313,10 +313,10 @@ class TestTilesAPI(TestCase):
         mock_response.headers = {'Content-Type': 'image/png'}
         mock_requests_get.return_value = mock_response
 
-        # Use mb_topo which requires proxy by default
-        mb_topo_source = get_tile_source('mb_topo')
+        # Use mb-topo which requires proxy by default
+        mb_topo_source = get_tile_source('mb-topo')
         if not mb_topo_source or not mb_topo_source.get('requires_proxy'):
-            self.skipTest("mb_topo tile source not available or doesn't require proxy")
+            self.skipTest("mb-topo tile source not available or doesn't require proxy")
 
         # Test with default cache_expiry_days (30 days)
         from django.conf import settings
@@ -329,7 +329,7 @@ class TestTilesAPI(TestCase):
         x = random.randint(0, 2**z - 1)
         y = random.randint(0, 2**z - 1)
         
-        response = self.client.get(f'/api/tiles/mb_topo/{z}/{x}/{y}')
+        response = self.client.get(f'/api/tiles/mb-topo/{z}/{x}/{y}')
         self.assertEqual(response.status_code, 200)
         
         # Verify Cache-Control header is present and uses correct max-age
@@ -349,10 +349,10 @@ class TestTilesAPI(TestCase):
         mock_response.headers = {'Content-Type': 'image/png'}
         mock_requests_get.return_value = mock_response
 
-        # Use mb_topo which requires proxy by default
-        mb_topo_source = get_tile_source('mb_topo')
+        # Use mb-topo which requires proxy by default
+        mb_topo_source = get_tile_source('mb-topo')
         if not mb_topo_source or not mb_topo_source.get('requires_proxy'):
-            self.skipTest("mb_topo tile source not available or doesn't require proxy")
+            self.skipTest("mb-topo tile source not available or doesn't require proxy")
 
         # Test with custom cache_expiry_days (7 days)
         custom_expiry_days = 7
@@ -364,7 +364,7 @@ class TestTilesAPI(TestCase):
         x = random.randint(0, 2**z - 1)
         y = random.randint(0, 2**z - 1)
         
-        response = self.client.get(f'/api/tiles/mb_topo/{z}/{x}/{y}')
+        response = self.client.get(f'/api/tiles/mb-topo/{z}/{x}/{y}')
         self.assertEqual(response.status_code, 200)
         
         # Verify Cache-Control header uses the custom max-age
@@ -386,10 +386,10 @@ class TestTilesAPI(TestCase):
         mock_response.headers = {'Content-Type': 'image/png'}
         mock_requests_get.return_value = mock_response
 
-        # Use mb_topo which requires proxy by default
-        mb_topo_source = get_tile_source('mb_topo')
+        # Use mb-topo which requires proxy by default
+        mb_topo_source = get_tile_source('mb-topo')
         if not mb_topo_source or not mb_topo_source.get('requires_proxy'):
-            self.skipTest("mb_topo tile source not available or doesn't require proxy")
+            self.skipTest("mb-topo tile source not available or doesn't require proxy")
 
         # Make a proxy request (user is logged in, so session middleware would normally set Set-Cookie)
         # Modify the session to ensure it would be saved (which triggers Set-Cookie)
@@ -402,7 +402,7 @@ class TestTilesAPI(TestCase):
         self.client.session['test_key'] = 'test_value'
         self.client.session.save()
         
-        response = self.client.get(f'/api/tiles/mb_topo/{z}/{x}/{y}')
+        response = self.client.get(f'/api/tiles/mb-topo/{z}/{x}/{y}')
         self.assertEqual(response.status_code, 200)
         
         # Verify Set-Cookie header is NOT present (Cloudflare won't cache if it is)
@@ -463,7 +463,7 @@ class TestTilesAPI(TestCase):
         registry_module._registered = False
         
         # Get tile sources (will re-initialize with mock config)
-        topo_source = get_tile_source('maptiler_topo-v4')
+        topo_source = get_tile_source('maptiler-topo-v4')
         
         if topo_source:
             client_config = topo_source.get('client_config', {})
@@ -497,7 +497,7 @@ class TestTilesAPI(TestCase):
         registry_module._registered = False
         
         # Get tile sources (will re-initialize with mock config)
-        topo_source = get_tile_source('maptiler_topo-v4')
+        topo_source = get_tile_source('maptiler-topo-v4')
         
         if topo_source:
             client_config = topo_source.get('client_config', {})
@@ -555,7 +555,7 @@ class TestTilesAPI(TestCase):
             mock_maptiler_config.return_value.get_bool.return_value = True  # proxy_tiles = True
             
             # Get the source to register it
-            topo_source = get_tile_source('maptiler_topo-v4')
+            topo_source = get_tile_source('maptiler-topo-v4')
             
             if topo_source and topo_source.get('requires_proxy'):
                 # Call style proxy endpoint
@@ -572,7 +572,7 @@ class TestTilesAPI(TestCase):
                 maptiler_source = data['sources']['maptiler']
                 self.assertIn('tiles', maptiler_source)
                 self.assertEqual(len(maptiler_source['tiles']), 1)
-                self.assertEqual(maptiler_source['tiles'][0], '/api/tiles/maptiler_topo-v4/{z}/{x}/{y}')
+                self.assertEqual(maptiler_source['tiles'][0], '/api/tiles/maptiler-topo-v4/{z}/{x}/{y}')
         
         # Reset the registry
         registry_module._tile_sources = {}
@@ -600,7 +600,7 @@ class TestTilesAPI(TestCase):
             mock_maptiler_config.return_value.get_str.return_value = 'example.com'
             mock_maptiler_config.return_value.get_bool.return_value = True  # proxy_tiles = True
             
-            topo_source = get_tile_source('maptiler_topo-v4')
+            topo_source = get_tile_source('maptiler-topo-v4')
             
             if topo_source and topo_source.get('requires_proxy'):
                 # Make a proxy request for a vector tile
@@ -608,7 +608,7 @@ class TestTilesAPI(TestCase):
                 x = 512
                 y = 512
                 
-                response = self.client.get(f'/api/tiles/maptiler_topo-v4/{z}/{x}/{y}')
+                response = self.client.get(f'/api/tiles/maptiler-topo-v4/{z}/{x}/{y}')
                 self.assertEqual(response.status_code, 200)
                 
                 # Verify Content-Type is correct for vector tiles
@@ -639,17 +639,17 @@ class TestTilesAPI(TestCase):
                                                                    mock_read_tile_from_cache,
                                                                    mock_is_tile_cached,
                                                                    mock_get_tile_cache_path):
-        """Test that raster tiles (like mb_topo with .png) only check for the correct extension, not .pbf."""
+        """Test that raster tiles (like mb-topo with .png) only check for the correct extension, not .pbf."""
         from pathlib import Path
         
-        # Use mb_topo which is a raster tile with .png extension
-        mb_topo_source = get_tile_source('mb_topo')
+        # Use mb-topo which is a raster tile with .png extension
+        mb_topo_source = get_tile_source('mb-topo')
         if not mb_topo_source or not mb_topo_source.get('requires_proxy'):
-            self.skipTest("mb_topo tile source not available or doesn't require proxy")
+            self.skipTest("mb-topo tile source not available or doesn't require proxy")
         
-        # Verify mb_topo uses .png in its URL template
+        # Verify mb-topo uses .png in its URL template
         url_template = mb_topo_source.get('url_template', '')
-        self.assertIn('.png', url_template, "mb_topo should use .png extension")
+        self.assertIn('.png', url_template, "mb-topo should use .png extension")
         
         # Mock cache functions
         mock_is_tile_cached.return_value = False  # Cache miss
@@ -667,7 +667,7 @@ class TestTilesAPI(TestCase):
         x = 512
         y = 512
         
-        response = self.client.get(f'/api/tiles/mb_topo/{z}/{x}/{y}')
+        response = self.client.get(f'/api/tiles/mb-topo/{z}/{x}/{y}')
         self.assertEqual(response.status_code, 200)
         
         # Verify get_tile_cache_path was called with 'png' extension (from URL template)
@@ -691,7 +691,7 @@ class TestTilesAPI(TestCase):
                 continue  # Skip if extension not found in this call
             
             self.assertEqual(extension, 'png', 
-                           f"Cache path should use 'png' extension for mb_topo, got '{extension}'")
+                           f"Cache path should use 'png' extension for mb-topo, got '{extension}'")
             self.assertNotEqual(extension, 'pbf',
                               "Cache path should NOT use 'pbf' extension for raster tiles")
         

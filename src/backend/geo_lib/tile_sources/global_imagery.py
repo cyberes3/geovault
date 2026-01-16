@@ -7,7 +7,7 @@ class GlobalImageryTileSource(TileSource):
     
     @property
     def id(self):
-        return 'global_imagery'
+        return 'global-imagery'
     
     @property
     def name(self):
@@ -35,7 +35,7 @@ class GlobalImageryTileSource(TileSource):
     def client_config(self):
         return {
             'type': 'xyz',
-            'url': '/api/tiles/global_imagery/{z}/{x}/{y}',
+            'url': '/api/tiles/global-imagery/{z}/{x}/{y}',
             'tileSize': 256,
             'attribution': '© CalTopo, © MapBox, © Maxar, USDA Farm Service Agency, © EOX IT, contains modified Copernicus data (2019)'
         }

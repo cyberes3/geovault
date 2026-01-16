@@ -21,7 +21,7 @@ class MapTilerTerrainTileSource(TileSource):
     
     @property
     def id(self):
-        return 'maptiler_terrain'
+        return 'maptiler-terrain'
     
     @property
     def name(self):
@@ -60,7 +60,7 @@ class MapTilerTerrainTileSource(TileSource):
         if self._use_proxy:
             return {
                 'type': 'raster-dem',
-                'tiles': ['/api/tiles/maptiler_terrain/{z}/{x}/{y}'],
+                'tiles': ['/api/tiles/maptiler-terrain/{z}/{x}/{y}'],
                 'tileSize': 512,
                 'maxzoom': 14,
                 'attribution': '© MapTiler © OpenStreetMap contributors'

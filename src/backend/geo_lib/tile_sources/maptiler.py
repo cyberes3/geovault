@@ -25,7 +25,7 @@ class MapTilerMapTileSource(TileSource):
 
     @property
     def id(self):
-        return f'maptiler_{self._map_id}'
+        return f'maptiler-{self._map_id}'
 
     @property
     def name(self):

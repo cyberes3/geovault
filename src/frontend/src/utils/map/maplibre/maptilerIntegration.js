@@ -54,10 +54,10 @@ export class MapTilerConfig {
       
       // Find terrain and hillshade sources
       for (const source of sources) {
-        if (source.id === 'maptiler_terrain') {
+        if (source.id === 'maptiler-terrain') {
           this.terrainSource = source.client_config
           this.terrainExaggeration = source.exaggeration || 1.5
-        } else if (source.id === 'maptiler_hillshade') {
+        } else if (source.id === 'maptiler-hillshade') {
           this.hillshadeSource = source.client_config
           this.hillshadeOpacity = source.opacity || 0.3
         }

@@ -7,7 +7,7 @@ class MapbuilderTopoTileSource(TileSource):
     
     @property
     def id(self):
-        return 'mb_topo'
+        return 'mb-topo'
     
     @property
     def name(self):
@@ -35,7 +35,7 @@ class MapbuilderTopoTileSource(TileSource):
     def client_config(self):
         return {
             'type': 'xyz',
-            'url': '/api/tiles/mb_topo/{z}/{x}/{y}',
+            'url': '/api/tiles/mb-topo/{z}/{x}/{y}',
             'tileSize': 256,
             'attribution': '© CalTopo, © OpenStreetMap contributors, Various DEM sources'
         }

@@ -21,7 +21,7 @@ class MapTilerHillshadeTileSource(TileSource):
     
     @property
     def id(self):
-        return 'maptiler_hillshade'
+        return 'maptiler-hillshade'
     
     @property
     def name(self):
@@ -60,7 +60,7 @@ class MapTilerHillshadeTileSource(TileSource):
         if self._use_proxy:
             return {
                 'type': 'raster',
-                'tiles': ['/api/tiles/maptiler_hillshade/{z}/{x}/{y}'],
+                'tiles': ['/api/tiles/maptiler-hillshade/{z}/{x}/{y}'],
                 'tileSize': 256,
                 'attribution': '© MapTiler © OpenStreetMap contributors'
             }

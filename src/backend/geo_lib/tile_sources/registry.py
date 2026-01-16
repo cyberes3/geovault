@@ -46,7 +46,7 @@ def _initialize_tile_sources():
         proxy_sources = []
     
     # Filter out MapTiler sources - maptiler.proxy_tiles controls MapTiler proxying
-    proxy_sources = [source_id for source_id in proxy_sources if not source_id.startswith('maptiler_')]
+    proxy_sources = [source_id for source_id in proxy_sources if not source_id.startswith('maptiler-')]
 
     for source in single_sources:
         config = source.to_dict()
@@ -55,7 +55,7 @@ def _initialize_tile_sources():
             
             # Override requires_proxy if this source is in the proxy_sources config list
             # But skip MapTiler sources - they're controlled by maptiler.proxy_tiles
-            if source_id in proxy_sources and not source_id.startswith('maptiler_'):
+            if source_id in proxy_sources and not source_id.startswith('maptiler-'):
                 config['requires_proxy'] = True
                 # Update client_config URL to use proxy endpoint if it's currently a direct URL
                 client_config = config.get('client_config', {})

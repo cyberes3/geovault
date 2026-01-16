@@ -22,7 +22,7 @@ def tile_proxy(request, service, z, x, y):
     Supports disk caching to avoid repeatedly fetching the same tiles.
 
     Args:
-        service: The tile service name (e.g., 'mb_topo')
+        service: The tile service name (e.g., 'mb-topo')
         z: Zoom level
         x: Tile X coordinate
         y: Tile Y coordinate
@@ -180,7 +180,7 @@ def style_proxy(request, map_id):
         map_id: The MapTiler map ID (e.g., 'topo-v4')
     """
     # Get the tile source
-    source_id = f'maptiler_{map_id}'
+    source_id = f'maptiler-{map_id}'
     tile_source = get_tile_source(source_id)
     
     if not tile_source:

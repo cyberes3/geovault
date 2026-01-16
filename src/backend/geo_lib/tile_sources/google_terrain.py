@@ -11,7 +11,7 @@ class GoogleTerrainTileSource(TileSource):
 
     @property
     def id(self):
-        return 'google_terrain'
+        return 'google-terrain'
 
     @property
     def name(self):
@@ -45,7 +45,7 @@ class GoogleTerrainTileSource(TileSource):
     def client_config(self):
         return {
             'type': 'xyz',
-            'url': '/api/tiles/google_terrain/{z}/{x}/{y}',
+            'url': '/api/tiles/google-terrain/{z}/{x}/{y}',
             'tileSize': 256,
             'attribution': '© Google'
         }
