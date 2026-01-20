@@ -2,6 +2,9 @@
 
 Official guide: <https://wiki.openstreetmap.org/wiki/Overpass_API/Installation>
 
+The Overpass API server is a beast and public instances tend to be slow and tend to time out. Setting up your own server
+is a complex and involved process but since it's yours you can avoid these issues.
+
 ## Paths
 
 `/srv/overpass/downloads`: where the planet databases are downloaded to

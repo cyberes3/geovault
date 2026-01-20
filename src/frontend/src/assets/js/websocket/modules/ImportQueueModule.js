@@ -3,7 +3,7 @@
  * Handles all import table related realtime events.
  */
 
-import {BaseModule} from './BaseModule.js';
+import { BaseModule } from './BaseModule.js';
 
 export class ImportTableModule extends BaseModule {
     constructor(store) {
@@ -19,7 +19,7 @@ export class ImportTableModule extends BaseModule {
 
         // Handle initial state
         this.subscribe('initial_state', (data) => {
-            this.store.dispatch('setRealtimeModuleData', {module: 'importTable', data});
+            this.store.dispatch('setRealtimeModuleData', { module: 'importTable', data });
             // Also update the importTable state
             this.store.commit('setImportTable', data);
         });
@@ -44,7 +44,7 @@ export class ImportTableModule extends BaseModule {
         this.subscribe('item_imported', (data) => {
             this.store.dispatch('updateImportTableItem', {
                 id: data.id,
-                updates: {imported: true}
+                updates: { imported: true }
             });
         });
 
@@ -57,6 +57,11 @@ export class ImportTableModule extends BaseModule {
 
             // Handle completed status - need to get the actual feature count from the server
             if (data.status === 'completed') {
+                // Ignore delete jobs as they are handled by item_deleted event
+                if (data.job_type === 'delete') {
+                    return;
+                }
+
                 updates.processing = false;
                 updates.processing_failed = false;
                 // Request a refresh of import table to get the updated item with correct feature count

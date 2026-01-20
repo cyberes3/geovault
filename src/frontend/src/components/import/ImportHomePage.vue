@@ -22,7 +22,7 @@
             color="blue"
             size="md"
           >
-            <ArrowUpTrayIcon class="w-4 h-4 mr-2" />
+            <CloudArrowUpIcon class="w-4 h-4 mr-2" />
             Upload Files
           </BaseButton>
         </div>
@@ -125,7 +125,7 @@ import {IMPORT_HISTORY_URL} from "@/assets/js/import/url.js";
 import ImportTable from "@/components/import/parts/ImportTable.vue";
 import Loader from "@/components/parts/Loader.vue";
 import BaseButton from "@/components/parts/BaseButton.vue";
-import { ArrowUpTrayIcon, ArrowLeftIcon, ArrowRightIcon } from '@heroicons/vue/24/outline';
+import { CloudArrowUpIcon, ArrowLeftIcon, ArrowRightIcon } from '@heroicons/vue/24/outline';
 import { formatDate } from "@/utils/dateUtils.js";
 
 export default {
@@ -133,7 +133,7 @@ export default {
     ImportTable: ImportTable,
     Loader,
     BaseButton,
-    ArrowUpTrayIcon,
+    CloudArrowUpIcon,
     ArrowLeftIcon,
     ArrowRightIcon
   },

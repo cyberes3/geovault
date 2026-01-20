@@ -181,29 +181,55 @@ def query_overpass(
             if response.status_code == 200:
                 # Check if response has content before trying to parse JSON
                 if not response.content or len(response.content) == 0:
-                    _log_overpass_failure(
-                        response,
-                        "Empty Response",
-                        query,
-                        "API returned 200 OK but with no content",
-                        latitude,
-                        longitude
-                    )
-                    return None
+                    retries_left = max_retries - (attempt + 1)
+                    if attempt < max_retries - 1:
+                        _log_overpass_failure(
+                            response,
+                            "Empty Response",
+                            query,
+                            f"Attempt {attempt + 1}/{max_retries}, waiting 10s, {retries_left} retries left",
+                            latitude,
+                            longitude
+                        )
+                        time.sleep(10)
+                        continue
+                    else:
+                        _log_overpass_failure(
+                            response,
+                            "Empty Response",
+                            query,
+                            f"Attempt {attempt + 1}/{max_retries}, no retries left",
+                            latitude,
+                            longitude
+                        )
+                        return None
 
                 # Check if response is HTML/XML instead of JSON
                 content_type = response.headers.get('content-type', '').lower()
                 if 'html' in content_type or 'xml' in content_type:
                     # Server returned an error page instead of JSON
-                    _log_overpass_failure(
-                        response,
-                        "HTML/XML Error Page",
-                        query,
-                        f"Expected JSON but got {content_type}",
-                        latitude,
-                        longitude
-                    )
-                    return None
+                    retries_left = max_retries - (attempt + 1)
+                    if attempt < max_retries - 1:
+                        _log_overpass_failure(
+                            response,
+                            "HTML/XML Error Page",
+                            query,
+                            f"Attempt {attempt + 1}/{max_retries}, waiting 10s, {retries_left} retries left",
+                            latitude,
+                            longitude
+                        )
+                        time.sleep(10)
+                        continue
+                    else:
+                        _log_overpass_failure(
+                            response,
+                            "HTML/XML Error Page",
+                            query,
+                            f"Attempt {attempt + 1}/{max_retries}, no retries left",
+                            latitude,
+                            longitude
+                        )
+                        return None
 
                 try:
                     json_response = response.json()
@@ -228,26 +254,28 @@ def query_overpass(
                     return None
 
             elif response.status_code == 429:  # Rate limited
+                retries_left = max_retries - (attempt + 1)
                 _log_overpass_failure(
                     response,
                     "Rate Limited",
                     query,
-                    f"Attempt {attempt + 1}/{max_retries}, waiting 60s",
+                    f"Attempt {attempt + 1}/{max_retries}, waiting 60s, {retries_left} retries left",
                     latitude,
                     longitude
                 )
                 time.sleep(60)  # Wait 1 minute
                 continue
             elif response.status_code == 504:  # Gateway timeout
+                retries_left = max_retries - (attempt + 1)
                 _log_overpass_failure(
                     response,
                     "Gateway Timeout",
                     query,
-                    f"Attempt {attempt + 1}/{max_retries}, waiting 5s",
+                    f"Attempt {attempt + 1}/{max_retries}, waiting 10s, {retries_left} retries left",
                     latitude,
                     longitude
                 )
-                time.sleep(5)
+                time.sleep(10)
                 continue
             else:
                 _log_overpass_failure(
@@ -268,12 +296,19 @@ def query_overpass(
             coord_info = ""
             if latitude is not None and longitude is not None:
                 coord_info = f" | Coordinates=({latitude},{longitude})"
-            _logger.warning(
-                f"Overpass request timeout, attempt {attempt + 1}/{max_retries} | "
-                f"Query=[{query_preview}]{coord_info}"
-            )
             if attempt < max_retries - 1:
-                time.sleep(2 ** attempt)  # Exponential backoff
+                wait_time = max(10, 2 ** attempt)
+                retries_left = max_retries - (attempt + 1)
+                _logger.warning(
+                    f"Overpass request timeout, attempt {attempt + 1}/{max_retries}, waiting {wait_time}s, {retries_left} retries left | "
+                    f"Query=[{query_preview}]{coord_info}"
+                )
+                time.sleep(wait_time)  # Exponential backoff with minimum 10 seconds
+            else:
+                _logger.warning(
+                    f"Overpass request timeout, attempt {attempt + 1}/{max_retries}, no retries left | "
+                    f"Query=[{query_preview}]{coord_info}"
+                )
         except json.JSONDecodeError:
             # Already handled above, but catch it here in case it happens elsewhere
             pass

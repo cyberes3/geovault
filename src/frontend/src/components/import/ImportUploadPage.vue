@@ -44,7 +44,7 @@
               @click="upload"
               title="Upload selected files"
           >
-            <ArrowUpTrayIcon class="w-4 h-4 mr-2" />
+            <CloudArrowUpIcon class="w-4 h-4 mr-2" />
             Upload {{ files.length > 0 ? `(${files.length} files)` : '' }}
           </button>
         </div>
@@ -80,7 +80,7 @@
             @dragenter.prevent="dragEnter"
         >
           <div v-if="files.length === 0" class="text-center" @dragleave="dragLeave" @dragenter.prevent="dragEnter">
-            <ArrowUpTrayIcon class="mx-auto h-12 w-12 text-gray-400" />
+            <CloudArrowUpIcon class="mx-auto h-12 w-12 text-gray-400" />
             <div class="mt-4">
               <p class="text-sm text-gray-600">
                 <span class="font-medium text-blue-500 hover:text-blue-500 cursor-pointer" @click="$refs.fileInput.click()">Click to upload</span>
@@ -224,7 +224,7 @@ import ImportTable from "@/components/import/parts/ImportTable.vue";
 import ImportHelpModal from "@/components/import/parts/ImportHelpModal.vue";
 import {getCookie} from "@/assets/js/auth.js";
 import {SECURITY_CONFIG} from "@/config.js";
-import { InformationCircleIcon, ArrowUpTrayIcon, XMarkIcon, DocumentIcon, CheckIcon } from '@heroicons/vue/24/outline';
+import { InformationCircleIcon, CloudArrowUpIcon, ArrowUpTrayIcon, XMarkIcon, DocumentIcon, CheckIcon } from '@heroicons/vue/24/outline';
 import {
   getFileTypeByExtension,
   validateFileExtension,
@@ -354,6 +354,7 @@ export default {
     ImportTable: ImportTable,
     ImportHelpModal,
     InformationCircleIcon,
+    CloudArrowUpIcon,
     ArrowUpTrayIcon,
     XMarkIcon,
     DocumentIcon,

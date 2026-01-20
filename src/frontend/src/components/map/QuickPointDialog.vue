@@ -406,4 +406,3 @@ export default {
   margin-right: 0 !important;
 }
 </style>
-

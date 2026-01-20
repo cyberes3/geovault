@@ -397,7 +397,20 @@ class BaseProcessor(ABC):
             # Batch generate all tags for all features at once (including reverse geocoding)
             from geo_lib.processing.tagging.generate import generate_auto_tags_batch
             # Normalize file_data for tag generators (strip BOM if present)
+            _logger.debug(
+                f"[TAGGING] About to normalize file_data for tagging. "
+                f"Filename: {self.filename}, "
+                f"file_data type: {type(self.file_data)}, "
+                f"file_data size: {len(self.file_data) if self.file_data else 'None'}, "
+                f"file_type: {self.file_type}"
+            )
             normalized_file_data = self._normalize_file_data_for_tagging()
+            _logger.debug(
+                f"[TAGGING] Normalized file_data result. "
+                f"Type: {type(normalized_file_data)}, "
+                f"Size: {len(normalized_file_data) if normalized_file_data else 'None'}, "
+                f"Preview: {normalized_file_data[:200] if normalized_file_data and len(normalized_file_data) > 0 else 'None'}"
+            )
             all_feature_tags = generate_auto_tags_batch(
                 [f for f in feature_instances if f is not None],
                 import_log=feature_log,
@@ -834,24 +847,61 @@ class BaseProcessor(ABC):
             # Use utf-8-sig which automatically strips BOM
             return self.file_data.decode('utf-8-sig')
 
-    def _normalize_file_data_for_tagging(self) -> Union[str, bytes]:
+    def _normalize_file_data_for_tagging(self) -> Optional[str]:
         """
         Normalize file_data for tag generators by stripping BOM if present.
         Returns file_data as string (BOM stripped) for consistent handling.
         
         Returns:
-            File content as string (BOM stripped), or original if decoding fails
+            File content as string (BOM stripped), or None if decoding fails or file_data is None
         """
+        if self.file_data is None:
+            _logger.debug(f"[TAGGING] file_data is None for filename: {self.filename}")
+            return None
+        
         if isinstance(self.file_data, bytes):
             # Use utf-8-sig which automatically strips BOM
             try:
-                return self.file_data.decode('utf-8-sig')
-            except UnicodeDecodeError:
-                # If decoding fails, return original bytes
-                return self.file_data
+                decoded = self.file_data.decode('utf-8-sig')
+                _logger.debug(f"[TAGGING] Successfully decoded {len(self.file_data)} bytes to {len(decoded)} chars for filename: {self.filename}")
+                return decoded
+            except UnicodeDecodeError as e:
+                # Check for binary file signatures
+                is_zip = len(self.file_data) >= 4 and self.file_data[:4] == b'PK\x03\x04'
+                is_binary = any(
+                    self.file_data.startswith(sig) 
+                    for sig in [b'\x1f\x8b', b'PK\x03\x04', b'\x50\x4b\x03\x04']  # gzip, zip
+                ) if len(self.file_data) >= 2 else False
+                
+                # If decoding fails, log details for debugging
+                _logger.warning(
+                    f"[TAGGING] Failed to decode file_data as UTF-8 for filename: {self.filename}. "
+                    f"Size: {len(self.file_data)} bytes, "
+                    f"Error: {str(e)}, "
+                    f"Error position: {e.start}-{e.end}, "
+                    f"Is ZIP/KMZ: {is_zip}, "
+                    f"Is binary: {is_binary}, "
+                    f"File type: {self.file_type}, "
+                    f"First 4 bytes (hex): {self.file_data[:4].hex()}, "
+                    f"First 100 bytes (hex): {self.file_data[:100].hex() if len(self.file_data) >= 100 else self.file_data.hex()}, "
+                    f"First 100 bytes (repr): {repr(self.file_data[:100]) if len(self.file_data) >= 100 else repr(self.file_data)}"
+                )
+                # Try to detect if it might be a different encoding
+                try:
+                    # Try latin-1 as a fallback (always succeeds, but might not be correct)
+                    latin1_decoded = self.file_data.decode('latin-1')
+                    _logger.debug(f"[TAGGING] File can be decoded as latin-1 (but may not be correct)")
+                    # Check if it looks like XML when decoded as latin-1
+                    if latin1_decoded.strip().startswith('<?xml') or latin1_decoded.strip().startswith('<'):
+                        _logger.warning(f"[TAGGING] File appears to be XML but failed UTF-8 decode - might be wrong encoding")
+                except Exception as decode_err:
+                    _logger.debug(f"[TAGGING] Even latin-1 decode failed: {decode_err}")
+                return None
         else:
             # Strip BOM from string if present
+            _logger.debug(f"[TAGGING] file_data is already a string ({len(self.file_data)} chars) for filename: {self.filename}")
             if self.file_data.startswith('\ufeff'):
+                _logger.debug(f"[TAGGING] Stripping BOM from string for filename: {self.filename}")
                 return self.file_data[1:]
             return self.file_data
 

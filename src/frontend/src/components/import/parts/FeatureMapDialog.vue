@@ -44,6 +44,7 @@ import {Vector as VectorSource} from 'ol/source'
 import {Style, Fill, Stroke, Circle, Text} from 'ol/style'
 import {GeoJSON} from 'ol/format'
 import {fromLonLat} from 'ol/proj'
+import {getCenter} from 'ol/extent'
 import BaseModal from '@/components/parts/BaseModal.vue'
 import Loader from '@/components/parts/Loader.vue'
 
@@ -119,6 +120,8 @@ export default {
           this.selectedFeature = features[this.selectedFeatureIndex]
           this.vectorLayer.changed() // Force style update
           this.labelLayer.changed() // Force label style update
+          // Zoom to the selected feature
+          this.zoomToSelectedFeature()
         }
       }
     },
@@ -454,15 +457,61 @@ export default {
         // Set the selected feature
         if (this.selectedFeatureIndex >= 0 && this.selectedFeatureIndex < features.length) {
           this.selectedFeature = features[this.selectedFeatureIndex]
+          // Zoom to the selected feature
+          this.zoomToSelectedFeature()
+        } else {
+          // Fit map to show all features if no feature is selected
+          this.fitMapToAllFeatures()
         }
-
-        // Fit map to show all features
-        this.fitMapToAllFeatures()
 
       } catch (error) {
         console.error('Error loading features for feature map view:', error)
       } finally {
         this.isLoading = false
+      }
+    },
+
+    zoomToSelectedFeature() {
+      if (!this.map || !this.selectedFeature) return
+
+      try {
+        const geometry = this.selectedFeature.getGeometry()
+        if (!geometry) return
+
+        // Get the extent of the selected feature
+        const extent = geometry.getExtent()
+        if (!extent || extent.length !== 4) return
+
+        // Check if this is a point feature (very small extent)
+        const width = extent[2] - extent[0]
+        const height = extent[3] - extent[1]
+        const isPoint = width < 100 && height < 100 // Less than ~100 meters
+
+        let fitExtent = extent
+
+        // For point features, add a buffer to ensure visibility
+        if (isPoint) {
+          const center = getCenter(extent)
+          // Add a 1km buffer (1000 meters) around the point
+          const bufferDistance = 1000
+          fitExtent = [
+            center[0] - bufferDistance,
+            center[1] - bufferDistance,
+            center[0] + bufferDistance,
+            center[1] + bufferDistance
+          ]
+        }
+
+        // Fit the map to show the selected feature with padding
+        this.map.getView().fit(fitExtent, {
+          padding: [50, 50, 50, 50],
+          maxZoom: 15,
+          duration: 500
+        })
+      } catch (error) {
+        console.error('Error zooming to selected feature:', error)
+        // Fallback to fitting all features if zoom fails
+        this.fitMapToAllFeatures()
       }
     },
 

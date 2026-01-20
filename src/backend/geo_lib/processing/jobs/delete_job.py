@@ -135,6 +135,7 @@ class DeleteJob(BaseJob):
 
             # Broadcast completion
             self._broadcast_job_completed(user_id, job_id, item_id=item_id)
+            self._broadcast_item_deleted(user_id, item_id)
 
             _logger.info(f"Successfully completed delete job {job_id} for item {item_id}")
 
@@ -145,6 +146,24 @@ class DeleteJob(BaseJob):
                 DELETE_JOB_FAILED, error_message=DELETE_JOB_FAILED
             )
             self._broadcast_job_failed(job_id, DELETE_JOB_FAILED, item_id=item_id)
+
+    def _broadcast_item_deleted(self, user_id: int, item_id: int):
+        """
+        Broadcast item_deleted event to the import_queue channel.
+        This ensures the frontend removes the item from the list.
+        """
+        from channels.layers import get_channel_layer
+        from asgiref.sync import async_to_sync
+
+        channel_layer = get_channel_layer()
+        if channel_layer:
+            async_to_sync(channel_layer.group_send)(
+                f"realtime_{user_id}",
+                {
+                    'type': 'import_queue_item_deleted',
+                    'data': {'id': item_id}
+                }
+            )
 
     def _cancel_active_processing_jobs(self, item_id: int, user_id: int, delete_job_id: str):
         """

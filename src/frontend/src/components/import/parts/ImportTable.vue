@@ -253,7 +253,7 @@ export default {
       // Filter out items that have been locally deleted and add deleting/importing state
       return this.importTable
         .slice()
-        .filter(item => !this.deletedItems.has(item.id))
+        .filter(item => !this.deletedItems.includes(item.id))
         .map(item => ({
           ...item,
           deleting: this.deletingItems.has(item.id),
@@ -300,7 +300,7 @@ export default {
       hasInitiallyLoaded: false,
       isRefreshing: false,
       hasRequestedInitialLoad: false, // Track if we've already requested initial data load
-      deletedItems: new Set(), // Track locally deleted items to prevent flicker
+      deletedItems: [], // Track locally deleted items to prevent flicker
       deletedItemTimeouts: new Map(), // Track how many refresh cycles each deleted item has been gone
       selectedItems: new Set(), // Track selected items for bulk import
       isBulkImporting: false, // Track bulk import state
@@ -535,11 +535,11 @@ export default {
 
           if (stillExistsOnServer && timeoutCount >= 2) { // 3 refresh cycles (0, 1, 2)
           // Item still exists on server after 3 refresh cycles, restore it
-          this.deletedItems.delete(itemId);
+          this.deletedItems = this.deletedItems.filter(id => id !== itemId);
           this.deletedItemTimeouts.delete(itemId);
         } else if (!stillExistsOnServer) {
           // Item was successfully deleted from server, clean up tracking
-          this.deletedItems.delete(itemId);
+          this.deletedItems = this.deletedItems.filter(id => id !== itemId);
           this.deletedItemTimeouts.delete(itemId);
         }
       }
@@ -589,6 +589,11 @@ export default {
       if (window.confirm(`Delete "${item.original_filename}" (#${item.id})`)) {
         // Mark item as deleting
         this.deletingItems.add(item.id);
+        // Optimistically hide the item immediately
+        if (!this.deletedItems.includes(item.id)) {
+          this.deletedItems.push(item.id);
+        }
+        this.deletedItemTimeouts.set(item.id, 0);
 
         // Force reactivity update
         this.$forceUpdate();
@@ -610,8 +615,10 @@ export default {
         } catch (error) {
           console.error(`Failed to start delete job for item ${item.id}:`, error);
           alert(`Failed to delete ${item.id}: ${error.message}`);
-          // Remove from deleting items set to restore the item if deletion failed
+          // Remove from deleting/deleted items set to restore the item if deletion failed
           this.deletingItems.delete(item.id);
+          this.deletedItems = this.deletedItems.filter(id => id !== item.id);
+          this.deletedItemTimeouts.delete(item.id);
           this.deleteJobIds.delete(item.id);
           this.$forceUpdate();
         }
@@ -619,7 +626,7 @@ export default {
     },
     clearDeletedItems() {
       // Clear the deleted items list when navigating away
-      this.deletedItems.clear();
+      this.deletedItems = [];
       this.deletedItemTimeouts.clear();
       this.deletingItems.clear();
       this.importingItems.clear();
@@ -813,6 +820,9 @@ export default {
           this.hasInitiallyLoaded = true;
           this.internalLoading = false;
           this.isRefreshing = false; // Clear refreshing flag when data arrives
+          
+          // Check if any deleted items should be restored
+          this.checkForRestoreItems(state.importTable);
         }
       });
     },
