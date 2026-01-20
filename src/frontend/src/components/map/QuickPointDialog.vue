@@ -68,14 +68,29 @@
             <label class="block text-xs font-bold text-gray-500 uppercase mb-1">
               Coordinates <span class="text-red-500">*</span>
             </label>
-            <input
-              v-model="coordinatesInput"
-              type="text"
-              :disabled="isSaving"
-              placeholder="37.7749, -122.4194"
-              class="w-full px-2 py-1.5 text-sm border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500 disabled:bg-gray-100 disabled:cursor-not-allowed"
-              @input="validateCoordinates"
-            />
+            <div class="flex gap-2">
+              <input
+                v-model="coordinatesInput"
+                type="text"
+                :disabled="isSaving || isGettingLocation"
+                placeholder="37.7749, -122.4194"
+                class="flex-1 px-2 py-1.5 text-sm border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500 disabled:bg-gray-100 disabled:cursor-not-allowed"
+                @input="validateCoordinates"
+              />
+              <button
+                type="button"
+                :disabled="isSaving || isGettingLocation"
+                :style="{ opacity: isSaving ? 0.5 : 1 }"
+                class="px-3 py-1.5 text-sm border border-gray-300 rounded-md shadow-sm bg-white hover:bg-gray-50 focus:outline-none focus:ring-blue-500 focus:border-blue-500 disabled:bg-gray-100 disabled:cursor-not-allowed transition-colors flex items-center justify-center min-w-[44px]"
+                title="Use current location"
+                @click="useCurrentLocation"
+              >
+                <LocationIcon v-if="!isGettingLocation" class="w-5 h-5 text-gray-700" />
+                <div v-else class="flex items-center justify-center w-5 h-5 loader-button-wrapper">
+                  <Loader size="sm" layout="inline" :show-message="false" />
+                </div>
+              </button>
+            </div>
             <p class="mt-1 text-xs text-gray-500">
               Enter as: <code class="bg-gray-100 px-1 rounded">latitude, longitude</code>
             </p>
@@ -121,7 +136,11 @@ import BaseButton from '@/components/parts/BaseButton.vue'
 import TagPicker from '@/components/parts/TagPicker.vue'
 import ColorPickerElement from '@/components/parts/ColorPickerElement.vue'
 import IconSelector from '@/components/parts/IconSelector.vue'
+import LocationIcon from '@/components/parts/LocationIcon.vue'
+import Loader from '@/components/parts/Loader.vue'
 import { parseCoordinates } from '@/utils/coordinateParser.js'
+import { geolocationManager } from '@/utils/map/geolocationManager'
+import { toast } from '@/utils/toast'
 
 // Helper functions for icon type checking
 function isSystemIcon(iconUrl) {
@@ -139,7 +158,9 @@ export default {
     BaseButton,
     TagPicker,
     ColorPicker: ColorPickerElement,
-    IconSelector
+    IconSelector,
+    LocationIcon,
+    Loader
   },
   props: {
     isOpen: {
@@ -164,7 +185,8 @@ export default {
       longitude: null,
       coordinateError: '',
       isSaving: false,
-      errorMessage: ''
+      errorMessage: '',
+      isGettingLocation: false
     }
   },
   computed: {
@@ -209,6 +231,7 @@ export default {
       this.coordinateError = ''
       this.isSaving = false
       this.errorMessage = ''
+      this.isGettingLocation = false
     },
     handleClose() {
       if (this.isSaving) {
@@ -251,6 +274,51 @@ export default {
     },
     handleIconRemoved() {
       this.iconUrl = null
+    },
+    async useCurrentLocation() {
+      if (this.isGettingLocation || this.isSaving) {
+        return
+      }
+      
+      // Prevent multiple simultaneous requests
+      if (this.isGettingLocation) {
+        return
+      }
+
+      this.isGettingLocation = true
+      this.coordinateError = ''
+
+      try {
+        // Check permission first
+        const permission = await geolocationManager.checkPermission()
+        if (permission === 'denied') {
+          toast.error('Location permission denied. Please enable it in your browser settings.')
+          this.isGettingLocation = false
+          return
+        }
+
+        // Get current position
+        const coords = await geolocationManager.getCurrentPosition()
+        
+        // Format coordinates as "latitude, longitude" with 5 decimal places
+        // 5 decimal places = ~1.1 meters accuracy, which is appropriate for high-accuracy GPS
+        const formattedLat = coords.latitude.toFixed(5)
+        const formattedLng = coords.longitude.toFixed(5)
+        this.coordinatesInput = `${formattedLat}, ${formattedLng}`
+        
+        // Trigger validation to update latitude/longitude
+        this.validateCoordinates()
+      } catch (error) {
+        console.error('Geolocation error:', error)
+        
+        if (error.code === 1) { // PERMISSION_DENIED
+          toast.error('Location permission denied.')
+        } else {
+          toast.error('Failed to get your location.')
+        }
+      } finally {
+        this.isGettingLocation = false
+      }
     },
     async handleSave() {
       if (!this.isValid) {
@@ -330,4 +398,12 @@ export default {
   }
 }
 </script>
+
+<style scoped>
+/* Override Loader's inline layout margins for centered button usage */
+.loader-button-wrapper :deep(div[class*="relative"]) {
+  margin-left: 0 !important;
+  margin-right: 0 !important;
+}
+</style>
 

@@ -12,17 +12,7 @@
         :title="locationButtonTitle"
         @click="$emit('toggle-location')"
       >
-        <svg class="w-5 h-5" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-          <!-- Crosshair Circle -->
-          <circle cx="12" cy="12" r="8" stroke="currentColor" stroke-width="2" />
-          <!-- Crosshair Lines -->
-          <path d="M12 2V5" stroke="currentColor" stroke-width="2" stroke-linecap="round" />
-          <path d="M12 19V22" stroke="currentColor" stroke-width="2" stroke-linecap="round" />
-          <path d="M2 12L5 12" stroke="currentColor" stroke-width="2" stroke-linecap="round" />
-          <path d="M19 12L22 12" stroke="currentColor" stroke-width="2" stroke-linecap="round" />
-          <!-- Center Dot (only for locked state) -->
-          <circle v-if="trackingState === 'locked'" cx="12" cy="12" r="2" fill="currentColor" />
-        </svg>
+        <LocationIcon :show-center-dot="trackingState === 'locked'" />
       </button>
 
       <!-- Home Button -->
@@ -39,6 +29,7 @@
 
 <script>
 import { HomeIcon } from '@heroicons/vue/24/outline'
+import LocationIcon from '@/components/parts/LocationIcon.vue'
 
 /**
  * Tracking State:
@@ -50,7 +41,8 @@ import { HomeIcon } from '@heroicons/vue/24/outline'
 export default {
   name: 'LocationControl',
   components: {
-    HomeIcon
+    HomeIcon,
+    LocationIcon
   },
   props: {
     trackingState: {

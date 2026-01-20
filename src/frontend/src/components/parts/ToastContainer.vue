@@ -2,7 +2,7 @@
   <TransitionGroup
     name="toast"
     tag="div"
-    class="fixed bottom-0 left-0 right-0 z-50 pointer-events-none flex flex-col items-center space-y-2 p-4"
+    class="fixed bottom-0 left-0 right-0 z-[9999] pointer-events-none flex flex-col items-center space-y-2 p-4"
   >
     <div
       v-for="toast in toasts"
@@ -147,9 +147,12 @@ export default {
 </script>
 
 <style scoped>
-.toast-enter-active,
-.toast-leave-active {
+.toast-enter-active {
   transition: all 0.3s ease;
+}
+
+.toast-leave-active {
+  transition: none;
 }
 
 .toast-enter-from {
@@ -159,7 +162,7 @@ export default {
 
 .toast-leave-to {
   opacity: 0;
-  transform: translateY(-20px);
+  transform: none;
 }
 
 .toast-move {
