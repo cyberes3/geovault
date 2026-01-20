@@ -11,37 +11,43 @@ def check_all_features_duplicate(
     duplicate_features: List[Dict[str, Any]]
 ) -> bool:
     """
-    Check if a file has exactly 1 feature and that feature is a duplicate.
+    Check if ALL features in a file are duplicates.
     
     Args:
         geofeatures: List of GeoJSON features in the file
         duplicate_features: List of duplicate feature info dicts
         
     Returns:
-        True if file has exactly 1 feature and that feature is a duplicate, False otherwise
+        True if the file has features and ALL of them are duplicates, False otherwise
     """
-    if not geofeatures or len(geofeatures) != 1:
+    if not geofeatures:
         return False
     
-    if not duplicate_features or len(duplicate_features) == 0:
+    if not duplicate_features:
         return False
     
-    # Get the single feature's hash
-    single_feature = geofeatures[0]
-    feature_hash = single_feature.get('properties', {}).get('geojson_hash')
-    if not feature_hash:
-        feature_hash = generate_geojson_hash(single_feature)
-    
-    # Check if this feature is in duplicate_features
+    # Create a set of hashes for faster lookup
+    dup_hashes = set()
     for dup_info in duplicate_features:
         dup_feature = dup_info.get('feature')
         if dup_feature:
-            dup_feature_hash = dup_feature.get('properties', {}).get('geojson_hash')
-            if not dup_feature_hash:
-                dup_feature_hash = generate_geojson_hash(dup_feature)
+            dup_hash = dup_feature.get('properties', {}).get('geojson_hash')
+            if not dup_hash:
+                dup_hash = generate_geojson_hash(dup_feature)
+            if dup_hash:
+                dup_hashes.add(dup_hash)
+                
+    if not dup_hashes:
+        return False
+        
+    # Check each feature in the file
+    for feature in geofeatures:
+        feature_hash = feature.get('properties', {}).get('geojson_hash')
+        if not feature_hash:
+            feature_hash = generate_geojson_hash(feature)
             
-            if dup_feature_hash == feature_hash:
-                return True
-    
-    return False
+        if feature_hash not in dup_hashes:
+            return False
+            
+    return True
 

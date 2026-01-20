@@ -274,7 +274,9 @@ export default {
       let count = 0;
       this.selectedItems.forEach(itemId => {
         const item = this.filteredImportTable.find(i => i.id === itemId);
-        if (item && !item.imported && !item.processing_failed && !(item.processing === true || (item.processing === false && item.feature_count === -1)) && item.file_duplicate?.status !== 'duplicate_in_queue') {
+        if (item && !item.imported && !item.processing_failed && !(item.processing === true || (item.processing === false && item.feature_count === -1)) && 
+            item.file_duplicate?.status !== 'duplicate_in_queue' && 
+            item.file_duplicate?.status !== 'all_features_duplicate') {
           count++;
         }
       });
@@ -543,7 +545,9 @@ export default {
       }
     },
     async importItem(item, index) {
-      if (item.imported || item.processing_failed || (item.processing === true || (item.processing === false && item.feature_count === -1)) || item.file_duplicate?.status === 'duplicate_in_queue') {
+      if (item.imported || item.processing_failed || (item.processing === true || (item.processing === false && item.feature_count === -1)) || 
+          item.file_duplicate?.status === 'duplicate_in_queue' || 
+          item.file_duplicate?.status === 'all_features_duplicate') {
         return;
       }
 
@@ -677,7 +681,9 @@ export default {
 
       this.selectedItems.forEach(itemId => {
         const item = this.filteredImportTable.find(i => i.id === itemId);
-        if (item && !item.imported && !item.processing_failed && !(item.processing === true || (item.processing === false && item.feature_count === -1)) && item.file_duplicate?.status !== 'duplicate_in_queue') {
+        if (item && !item.imported && !item.processing_failed && !(item.processing === true || (item.processing === false && item.feature_count === -1)) && 
+            item.file_duplicate?.status !== 'duplicate_in_queue' && 
+            item.file_duplicate?.status !== 'all_features_duplicate') {
           validItems.push(itemId);
         } else {
           invalidItems.push(itemId);
