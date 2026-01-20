@@ -39,10 +39,10 @@ def _normalize_query_for_cache(query: str, latitude: Optional[float] = None, lon
     """
     if latitude is None or longitude is None:
         return query
-    
+
     # Round coordinates to cache precision
     lat_rounded, lon_rounded = round_coordinate(latitude, longitude)
-    
+
     # Replace coordinates in the query string
     # Since queries are constructed with f-strings using the exact coordinates,
     # we can do simple string replacement. We replace both with and without spaces
@@ -51,11 +51,11 @@ def _normalize_query_for_cache(query: str, latitude: Optional[float] = None, lon
     lon_str = str(longitude)
     lat_rounded_str = str(lat_rounded)
     lon_rounded_str = str(lon_rounded)
-    
+
     # Replace coordinates (handle both with and without spaces around comma)
     query = query.replace(f'{lat_str},{lon_str}', f'{lat_rounded_str},{lon_rounded_str}')
     query = query.replace(f'{lat_str}, {lon_str}', f'{lat_rounded_str}, {lon_rounded_str}')
-    
+
     return query
 
 
@@ -153,7 +153,7 @@ def query_overpass(
     """
     # Normalize query string for cache key generation (rounds coordinates in query)
     normalized_query = _normalize_query_for_cache(query, latitude, longitude)
-    
+
     # Generate cache key from normalized query hash and coordinates (if provided)
     query_hash = hashlib.sha256(normalized_query.encode('utf-8')).hexdigest()[:16]
     if latitude is not None and longitude is not None:
@@ -169,7 +169,12 @@ def query_overpass(
     if cached_response is not None:
         return cached_response
 
+    retry_wait_time = 0
+
     for attempt in range(max_retries):
+        if attempt > 0:
+            time.sleep(retry_wait_time)
+
         try:
             response = requests.post(
                 settings.OVERPASS_API_URL,
@@ -180,103 +185,43 @@ def query_overpass(
 
             if response.status_code == 200:
                 # Check if response has content before trying to parse JSON
-                if not response.content or len(response.content) == 0:
-                    retries_left = max_retries - (attempt + 1)
-                    if attempt < max_retries - 1:
-                        _log_overpass_failure(
-                            response,
-                            "Empty Response",
-                            query,
-                            f"Attempt {attempt + 1}/{max_retries}, waiting 10s, {retries_left} retries left",
-                            latitude,
-                            longitude
-                        )
-                        time.sleep(10)
-                        continue
-                    else:
-                        _log_overpass_failure(
-                            response,
-                            "Empty Response",
-                            query,
-                            f"Attempt {attempt + 1}/{max_retries}, no retries left",
-                            latitude,
-                            longitude
-                        )
-                        return None
-
-                # Check if response is HTML/XML instead of JSON
                 content_type = response.headers.get('content-type', '').lower()
-                if 'html' in content_type or 'xml' in content_type:
-                    # Server returned an error page instead of JSON
-                    retries_left = max_retries - (attempt + 1)
-                    if attempt < max_retries - 1:
+                if not response.content or len(response.content) == 0:
+                    error_type = "Empty Response"
+                    retry_wait_time = 10
+                # Check if response is HTML/XML instead of JSON
+                elif 'html' in content_type or 'xml' in content_type:
+                    error_type = "HTML/XML Error Page"
+                    retry_wait_time = 10
+                else:
+                    try:
+                        json_response = response.json()
+
+                        # Only cache if response contains data (has elements)
+                        # Don't cache empty responses from API failures
+                        elements = json_response.get('elements', [])
+                        if elements:
+                            _REVERSE_GEOCODING_CACHE.set(cache_key, json_response, REVERSE_GEOCODING_CACHE_TTL)
+
+                        return json_response
+                    except json.JSONDecodeError as json_err:
+                        # Log the response content to help debug
                         _log_overpass_failure(
                             response,
-                            "HTML/XML Error Page",
+                            "Invalid JSON",
                             query,
-                            f"Attempt {attempt + 1}/{max_retries}, waiting 10s, {retries_left} retries left",
-                            latitude,
-                            longitude
-                        )
-                        time.sleep(10)
-                        continue
-                    else:
-                        _log_overpass_failure(
-                            response,
-                            "HTML/XML Error Page",
-                            query,
-                            f"Attempt {attempt + 1}/{max_retries}, no retries left",
+                            str(json_err),
                             latitude,
                             longitude
                         )
                         return None
-
-                try:
-                    json_response = response.json()
-
-                    # Only cache if response contains data (has elements)
-                    # Don't cache empty responses from API failures
-                    elements = json_response.get('elements', [])
-                    if elements:
-                        _REVERSE_GEOCODING_CACHE.set(cache_key, json_response, REVERSE_GEOCODING_CACHE_TTL)
-
-                    return json_response
-                except json.JSONDecodeError as json_err:
-                    # Log the response content to help debug
-                    _log_overpass_failure(
-                        response,
-                        "Invalid JSON",
-                        query,
-                        str(json_err),
-                        latitude,
-                        longitude
-                    )
-                    return None
 
             elif response.status_code == 429:  # Rate limited
-                retries_left = max_retries - (attempt + 1)
-                _log_overpass_failure(
-                    response,
-                    "Rate Limited",
-                    query,
-                    f"Attempt {attempt + 1}/{max_retries}, waiting 60s, {retries_left} retries left",
-                    latitude,
-                    longitude
-                )
-                time.sleep(60)  # Wait 1 minute
-                continue
+                error_type = "Rate Limited"
+                retry_wait_time = 60
             elif response.status_code == 504:  # Gateway timeout
-                retries_left = max_retries - (attempt + 1)
-                _log_overpass_failure(
-                    response,
-                    "Gateway Timeout",
-                    query,
-                    f"Attempt {attempt + 1}/{max_retries}, waiting 10s, {retries_left} retries left",
-                    latitude,
-                    longitude
-                )
-                time.sleep(10)
-                continue
+                error_type = "Gateway Timeout"
+                retry_wait_time = 10
             else:
                 _log_overpass_failure(
                     response,
@@ -288,6 +233,19 @@ def query_overpass(
                 )
                 return None
 
+            retries_left = max_retries - (attempt + 1)
+            wait_msg = f"waiting {retry_wait_time}s, " if retries_left > 0 else ""
+            retry_msg = f"{retries_left} retries left" if retries_left > 0 else "no retries left"
+
+            _log_overpass_failure(
+                response,
+                error_type,
+                query,
+                f"Attempt {attempt + 1}/{max_retries}, {wait_msg}{retry_msg}",
+                latitude,
+                longitude
+            )
+
         except requests.exceptions.Timeout:
             # Log query for timeout errors
             query_preview = query[:500].replace('\n', '\\n').replace('\r', '\\r')
@@ -296,22 +254,18 @@ def query_overpass(
             coord_info = ""
             if latitude is not None and longitude is not None:
                 coord_info = f" | Coordinates=({latitude},{longitude})"
-            if attempt < max_retries - 1:
-                wait_time = max(10, 2 ** attempt)
-                retries_left = max_retries - (attempt + 1)
-                _logger.warning(
-                    f"Overpass request timeout, attempt {attempt + 1}/{max_retries}, waiting {wait_time}s, {retries_left} retries left | "
-                    f"Query=[{query_preview}]{coord_info}"
-                )
-                time.sleep(wait_time)  # Exponential backoff with minimum 10 seconds
-            else:
-                _logger.warning(
-                    f"Overpass request timeout, attempt {attempt + 1}/{max_retries}, no retries left | "
-                    f"Query=[{query_preview}]{coord_info}"
-                )
-        except json.JSONDecodeError:
-            # Already handled above, but catch it here in case it happens elsewhere
-            pass
+
+            retry_wait_time = max(10, 2 ** attempt)
+            retries_left = max_retries - (attempt + 1)
+            wait_msg = f"waiting {retry_wait_time}s, " if retries_left > 0 else ""
+            retry_msg = f"{retries_left} retries left" if retries_left > 0 else "no retries left"
+
+            _logger.warning(
+                f"Overpass request timeout, attempt {attempt + 1}/{max_retries}, {wait_msg}{retry_msg} | "
+                f"Query=[{query_preview}]{coord_info}"
+            )
+            continue
+
         except Exception as e:
             # Log query for general exceptions
             query_preview = query[:500].replace('\n', '\\n').replace('\r', '\\r')
