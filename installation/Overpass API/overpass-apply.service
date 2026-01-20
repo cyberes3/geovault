@@ -1,0 +1,39 @@
+[Unit]
+Description=Overpass API Apply OSC Updates to Database
+Documentation=https://dev.overpass-api.de/
+After=network.target overpass-dispatcher.service
+Requires=overpass-dispatcher.service
+
+[Service]
+Type=simple
+User=overpass
+Group=overpass
+WorkingDirectory=/srv/overpass
+
+# Main execution
+ExecStart=/srv/overpass/bin/apply_osc_to_db.sh
+
+# Restart policy
+Restart=always
+RestartSec=10
+
+# Shutdown behavior
+KillMode=mixed
+KillSignal=SIGTERM
+TimeoutStartSec=90
+TimeoutStopSec=300
+
+# Resource protection
+OOMScoreAdjust=-500
+
+# Shared memory and IPC configuration
+RemoveIPC=no
+PrivateTmp=no
+
+# Logging
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=overpass-apply
+
+[Install]
+WantedBy=multi-user.target

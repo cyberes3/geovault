@@ -159,7 +159,7 @@ systemctl status geovault
 
 We use someone else's [Overpass API](https://wiki.openstreetmap.org/wiki/Overpass_API) to perform reverse geocoding but
 you could always try hosting it yourself,
-see [Reverse Geocoding.md](https://git.evulid.cc/cyberes/geovault/src/branch/master/installation/Reverse%20Geocoding.md)
+see the [Overpass API](https://git.evulid.cc/cyberes/geovault/src/branch/master/installation/Overpass%20API) directory for installation instructions.
 
 ## MapTiler
 

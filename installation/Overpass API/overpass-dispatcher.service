@@ -1,0 +1,42 @@
+[Unit]
+Description=Overpass API Dispatcher Daemon
+Documentation=https://dev.overpass-api.de/
+After=network.target
+
+[Service]
+Type=simple
+User=overpass
+Group=overpass
+WorkingDirectory=/srv/overpass
+
+# Main execution
+ExecStart=/srv/overpass/bin/dispatcher --osm-base --meta --db-dir=/srv/overpass/databases
+ExecReload=/bin/kill -HUP $MAINPID
+
+# Restart policy
+Restart=always
+RestartSec=10
+
+# Shutdown behavior (following PostgreSQL pattern)
+KillMode=mixed
+KillSignal=SIGINT
+TimeoutStartSec=0
+TimeoutStopSec=300
+
+# Resource protection (following PostgreSQL pattern)
+OOMScoreAdjust=-1000
+
+# Shared memory and IPC configuration
+# RemoveIPC=no prevents systemd from deleting shared memory when user logs out
+# This can be set here (systemd 232+) or globally in /etc/systemd/logind.conf
+# PrivateTmp=no is required to allow access to shared memory segments
+RemoveIPC=no
+PrivateTmp=no
+
+# Logging
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=overpass-dispatcher
+
+[Install]
+WantedBy=multi-user.target
