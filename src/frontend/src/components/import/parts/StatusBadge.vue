@@ -15,7 +15,7 @@
     <ExclamationCircleIcon class="w-3 h-3 mr-1" />
     Processing
   </span>
-  <span v-else-if="item.queued" class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-indigo-200 text-indigo-900">
+  <span v-else-if="item.queued" class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-gray-200 text-gray-900">
     <ClockIcon class="w-3 h-3 mr-1" />
     Waiting
   </span>
