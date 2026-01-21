@@ -11,7 +11,7 @@ Group=overpass
 WorkingDirectory=/srv/overpass
 
 # Main execution
-ExecStart=/usr/bin/apply_osc_to_db.sh /srv/overpass/replicates auto --meta=yes
+ExecStart=/usr/bin/apply_osc_to_db.sh /srv/overpass/replicates auto --meta=yes --augmented_diffs=no
 
 # Restart policy
 Restart=always
