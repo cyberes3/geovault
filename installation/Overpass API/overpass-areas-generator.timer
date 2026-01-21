@@ -1,0 +1,13 @@
+[Unit]
+Description=Overpass API Area Generator Timer
+Requires=overpass-areas-generator.service
+
+[Timer]
+# Run every 12 hours
+OnCalendar=*-*-* 00,12:00:00
+# Also run 5 minutes after boot (to catch up after restarts)
+OnBootSec=5min
+OnUnitActiveSec=12h
+
+[Install]
+WantedBy=timers.target
