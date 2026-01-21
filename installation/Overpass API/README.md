@@ -5,9 +5,10 @@ Official guide: <https://wiki.openstreetmap.org/wiki/Overpass_API/Installation>
 The Overpass API server is a beast and public instances tend to be slow and tend to time out. Setting up your own server
 is a complex and involved process but since it's yours you can avoid these issues.
 
-If you serve a lot of users or are uploading large files you should consider running your own server.  
+If you serve a lot of users or are uploading large files you should consider running your own server.
 
 System minimum requirements:
+
 - 6 CPU cores
 - 16 GB memory
 
@@ -73,7 +74,7 @@ systemd's `logind` will delete shared memory when a user logs out, which will cr
 Edit `/etc/systemd/logind.conf` and uncomment/modify:
 
 ```ini
-RemoveIPC=no
+RemoveIPC = no
 ```
 
 Then reboot the host.
@@ -92,15 +93,13 @@ sudo chown -R overpass:overpass /srv/overpass
 Copy the service files to systemd:
 
 ```shell
-sudo cp overpass-dispatcher.service /etc/systemd/system/
-sudo cp overpass-fetch.service /etc/systemd/system/
-sudo cp overpass-apply.service /etc/systemd/system/
+sudo cp *.service /etc/systemd/system/
+sudo systemctl daemon-reload
 ```
 
 Reload systemd and enable services:
 
 ```shell
-sudo systemctl daemon-reload
 sudo systemctl enable overpass-dispatcher.service
 sudo systemctl enable overpass-fetch.service
 sudo systemctl enable overpass-apply.service
@@ -122,4 +121,70 @@ sudo systemctl start overpass-apply.service
 sudo systemctl status overpass-dispatcher.service
 sudo systemctl status overpass-fetch.service
 sudo systemctl status overpass-apply.service
+```
+
+## Nginx Setup
+
+Quick and dirty nginx installation:
+
+```shell
+sudo apt update && sudo apt install -y nginx fcgiwrap
+
+sudo openssl req -x509 -nodes -days 99999 -newkey rsa:4096 \
+  -subj "/C=PE/ST=Lima/L=Lima/O=Acme Inc. /OU=IT Department/CN=acme.com" \
+  -keyout /etc/ssl/private/nginx-selfsigned.key -out /etc/ssl/certs/nginx-selfsigned.crt
+sudo openssl dhparam -out /etc/ssl/certs/dhparam.pem 2048
+
+echo """ssl_protocols TLSv1 TLSv1.1 TLSv1.2;
+ssl_prefer_server_ciphers on;
+ssl_ciphers \"EECDH+AESGCM:EDH+AESGCM:AES256+EECDH:AES256+EDH\";
+ssl_ecdh_curve secp384r1;
+ssl_session_cache shared:SSL:10m;
+ssl_session_tickets off;
+ssl_stapling on;
+ssl_stapling_verify on;
+resolver 1.1.1.1 1.0.0.1 valid=300s;
+resolver_timeout 5s;
+add_header Strict-Transport-Security \"max-age=63072000; includeSubdomains\";
+add_header X-Frame-Options DENY;
+add_header X-Content-Type-Options nosniff;
+ssl_dhparam /etc/ssl/certs/dhparam.pem;""" >/etc/nginx/snippets/ssl-params.conf
+```
+
+Copy and enable the Overpass API nginx config:
+
+```shell
+sudo cp overpass-nginx.conf /etc/nginx/sites-enabled/default
+```
+
+Edit the config and restart nginx.
+
+### Test the API
+
+Test that the API is working:
+
+```shell
+curl -k "https://127.0.0.1/api/interpreter?data=%3Cprint%20mode=%22body%22/%3E"
+```
+
+You should see an XML response with the database metadata. The `-k` flag is needed for self-signed certificates.
+
+Example queries:
+
+Simple test - check if data exists (returns count only):
+
+```
+curl -k --data-urlencode "data=[out:json];node(40.7,-74.0,40.8,-73.9);out count;" "https://127.0.0.1/api/interpreter"
+```
+
+Find a few restaurants in New York City:
+
+```
+curl -k --data-urlencode "data=[out:json];node[\"amenity\"=\"restaurant\"](40.75,-74.0,40.76,-73.99);out;" "https://127.0.0.1/api/interpreter"
+```
+
+Find a few restaurants in London:
+
+```
+curl -k --data-urlencode "data=[out:json];node[\"amenity\"=\"restaurant\"](51.507,-0.128,51.508,-0.127);out;" "https://127.0.0.1/api/interpreter"
 ```
