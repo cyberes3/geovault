@@ -5,6 +5,12 @@ Official guide: <https://wiki.openstreetmap.org/wiki/Overpass_API/Installation>
 The Overpass API server is a beast and public instances tend to be slow and tend to time out. Setting up your own server
 is a complex and involved process but since it's yours you can avoid these issues.
 
+If you serve a lot of users or are uploading large files you should consider running your own server.  
+
+System minimum requirements:
+- 6 CPU cores
+- 16 GB memory
+
 ## Paths
 
 `/srv/overpass/downloads`: where the planet databases are downloaded to
@@ -49,6 +55,8 @@ aria2c --continue=true --max-connection-per-server=16 --split=16 --dir=/srv/over
 
 ### Load
 
+This may take multiple days to complete!
+
 ```shell
 mkdir -p /srv/overpass/databases
 osmconvert /srv/overpass/downloads/north-america-latest.osm.pbf --out-osm | /usr/bin/update_database --db-dir=/srv/overpass/databases/ --meta
@@ -65,7 +73,7 @@ systemd's `logind` will delete shared memory when a user logs out, which will cr
 Edit `/etc/systemd/logind.conf` and uncomment/modify:
 
 ```ini
-RemoveIPC = no
+RemoveIPC=no
 ```
 
 Then reboot the host.
@@ -100,7 +108,7 @@ sudo systemctl enable overpass-apply.service
 
 ### Start Services
 
-Start services in order (dispatcher must start first):
+Start services in order (`dispatcher` must start first):
 
 ```shell
 sudo systemctl start overpass-dispatcher.service
