@@ -135,6 +135,10 @@ reverse_geocoding:
   # This is the timeout for the HTTP request itself
   overpass_request_timeout_seconds: 45
 
+  # Enable SSL certificate validation for Overpass API requests
+  # Set to false to disable SSL verification (useful for self-signed certificates)
+  overpass_api_verify_ssl: true
+
   # Distance thresholds for proximity tags (in miles)
   city_proximity_miles: 5.0
   lake_proximity_miles: 1.0

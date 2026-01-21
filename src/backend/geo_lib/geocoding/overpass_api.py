@@ -180,7 +180,8 @@ def query_overpass(
                 settings.OVERPASS_API_URL,
                 data=query,
                 timeout=settings.OVERPASS_API_TIMEOUT,
-                headers={'Content-Type': 'text/plain; charset=utf-8'}
+                headers={'Content-Type': 'text/plain; charset=utf-8'},
+                verify=settings.OVERPASS_API_VERIFY_SSL
             )
 
             if response.status_code == 200:

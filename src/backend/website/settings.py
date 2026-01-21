@@ -452,6 +452,9 @@ OVERPASS_API_URL = config.get_str('reverse_geocoding.overpass_api_url', 'https:/
 # Overpass API timeout settings (in seconds)
 OVERPASS_API_TIMEOUT = config.get_int('reverse_geocoding.overpass_request_timeout_seconds', 45)
 
+# Overpass API SSL verification setting (enabled by default)
+OVERPASS_API_VERIFY_SSL = config.get_bool('reverse_geocoding.overpass_api_verify_ssl', True)
+
 # Elevation API Configuration
 # Elevation API server URL (racemap's elevation service)
 ELEVATION_API_URL = config.get_str('elevation.api_url', 'https://elevation.racemap.com/api')

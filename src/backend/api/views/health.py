@@ -104,13 +104,15 @@ def check_overpass_api() -> bool:
     try:
         api_url = get_required_setting('OVERPASS_API_URL')
         api_timeout = get_required_setting('OVERPASS_API_TIMEOUT')
+        api_verify_ssl = get_required_setting('OVERPASS_API_VERIFY_SSL')
 
         # Query node 1 (a well-known OSM node) - direct ID lookup, no spatial search
         response = requests.post(
             api_url,
             data="[out:json];node(1);out;",
             timeout=api_timeout,
-            headers={'Content-Type': 'application/x-www-form-urlencoded'}
+            headers={'Content-Type': 'application/x-www-form-urlencoded'},
+            verify=api_verify_ssl
         )
 
         # API is healthy if we get a 200 response (even if no results)
