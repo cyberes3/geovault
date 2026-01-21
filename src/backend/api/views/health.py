@@ -4,6 +4,7 @@ import requests
 from django.http import JsonResponse
 from django.views.decorators.http import require_http_methods
 
+from geo_lib.website.auth import api_or_login_required_401
 from website.config_loader import get_config_loader
 from website.settings_utils import get_required_setting
 from website.startup_checks import (
@@ -13,6 +14,7 @@ from website.startup_checks import (
 )
 
 
+@api_or_login_required_401()
 @require_http_methods(["GET"])
 def health_check(request):
     """

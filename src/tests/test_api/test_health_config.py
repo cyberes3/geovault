@@ -4,10 +4,22 @@ Tests for health check and config API endpoints.
 import json
 from unittest.mock import patch
 from django.test import TestCase
+from django.contrib.auth import get_user_model
+
+User = get_user_model()
 
 
 class TestHealthConfigAPI(TestCase):
     """Test health check and config API endpoints."""
+
+    def setUp(self):
+        """Set up test fixtures."""
+        self.user = User.objects.create_user(
+            email='test@example.com',
+            password='testpass123',
+            username='testuser'
+        )
+        self.client.force_login(self.user)
 
     def test_health_check(self):
         """Test health check endpoint."""
@@ -100,9 +112,26 @@ class TestHealthConfigAPI(TestCase):
         self.assertIn('tagPriorities', data)
         self.assertIsInstance(data['tagPriorities'], dict)
 
-    def test_health_check_no_auth_required(self):
-        """Test that health check doesn't require authentication."""
-        # No login required
+    def test_health_check_auth_required(self):
+        """Test that health check requires authentication."""
+        # Logout to test unauthenticated access
+        self.client.logout()
+        
+        response = self.client.get('/api/health/')
+        self.assertEqual(response.status_code, 401)
+        data = json.loads(response.content)
+        self.assertEqual(data['error'], 'Unauthorized')
+
+    def test_health_check_with_api_key(self):
+        """Test that health check works with API key authentication."""
+        from users.api_keys import create_user_api_key
+        
+        # Logout to test API key auth
+        self.client.logout()
+        
+        # Create API key
+        key_obj, raw_key = create_user_api_key(self.user, 'Test Key')
+        
         with patch('api.views.health.check_database_connection', return_value=True), \
              patch('api.views.health.check_redis_connection', return_value=True), \
              patch('api.views.health.check_postgis_installation', return_value=True), \
@@ -124,8 +153,13 @@ class TestHealthConfigAPI(TestCase):
             mock_config.get_bool.return_value = False  # reverse_geocoding.enabled = False
             mock_config.get_maptiler_api_key.return_value = None  # No API key
             
-            response = self.client.get('/api/health/')
+            response = self.client.get(
+                '/api/health/',
+                HTTP_AUTHORIZATION=f'Bearer {raw_key}'
+            )
             self.assertEqual(response.status_code, 200)
+            data = json.loads(response.content)
+            self.assertEqual(data['status'], 'healthy')
 
     def test_get_config_no_auth_required(self):
         """Test that config endpoint doesn't require authentication."""
