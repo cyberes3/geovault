@@ -1,11 +1,13 @@
 # Overpass API Server Installation
 
-Official guide: <https://wiki.openstreetmap.org/wiki/Overpass_API/Installation>
+Official OSM guide: <https://wiki.openstreetmap.org/wiki/Overpass_API/Installation>
 
-The Overpass API server is a beast and public instances tend to be slow and tend to time out. Setting up your own server
-is a complex and involved process but since it's yours you can avoid these issues.
+The Overpass API server is a beast and public instances tend to be slow and can time out.
 
-If you serve a lot of users or are uploading large files you should consider running your own server.
+If you serve a lot of users or are uploading large files, you should consider running your own server.
+
+Setting up an Overpass API server is a very involved and complicated process. This guide tries to
+walk you through the process.
 
 System minimum requirements:
 
