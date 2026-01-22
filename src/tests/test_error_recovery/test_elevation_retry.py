@@ -11,6 +11,10 @@ import requests
 
 from geo_lib.processing.elevation_service import _fetch_elevation_batch_with_retry
 from geo_lib.processing.logging import ImportLog, DatabaseLogLevel
+from fixtures.elevation_responses import (
+    ELEVATION_TEST_SUCCESS_RESPONSE_SF,
+    ELEVATION_TEST_SUCCESS_RESPONSE_SINGLE
+)
 
 
 class TestElevationAPIRetry:
@@ -34,10 +38,10 @@ class TestElevationAPIRetry:
             call_count[0] += 1
             if call_count[0] <= 2:
                 raise requests.exceptions.Timeout("Read timed out")
-            # Success on third attempt
+            # Success on third attempt - use real response fixture
             mock_response = MagicMock()
             mock_response.status_code = 200
-            mock_response.json.return_value = [100.0, 200.0]
+            mock_response.json.return_value = ELEVATION_TEST_SUCCESS_RESPONSE_SF
             mock_response.raise_for_status = Mock()
             return mock_response
 
@@ -61,7 +65,7 @@ class TestElevationAPIRetry:
         # Second sleep should be 20s (max(10, 2^1) = 20)
         assert sleep_times[1] == 20
         # Should return successful result
-        assert result == [100.0, 200.0]
+        assert result == ELEVATION_TEST_SUCCESS_RESPONSE_SF
 
     def test_max_retries_exceeded_returns_none(self):
         """Test that exceeding max retries returns None."""
@@ -105,7 +109,7 @@ class TestElevationAPIRetry:
             call_count[0] += 1
             mock_response = MagicMock()
             mock_response.status_code = 200
-            mock_response.json.return_value = [150.0, 250.0]
+            mock_response.json.return_value = ELEVATION_TEST_SUCCESS_RESPONSE_SF
             mock_response.raise_for_status = Mock()
             return mock_response
 
@@ -122,7 +126,7 @@ class TestElevationAPIRetry:
         # Should only call once (no retries needed)
         assert call_count[0] == 1
         # Should return successful result
-        assert result == [150.0, 250.0]
+        assert result == ELEVATION_TEST_SUCCESS_RESPONSE_SF
 
     def test_non_timeout_exception_no_retry(self):
         """Test that non-timeout exceptions don't trigger retries."""
@@ -268,10 +272,10 @@ class TestElevationAPIRetry:
             call_count[0] += 1
             if call_count[0] == 1:
                 raise requests.exceptions.Timeout("Read timed out")
-            # Success on second attempt
+            # Success on second attempt - use real response fixture
             mock_response = MagicMock()
             mock_response.status_code = 200
-            mock_response.json.return_value = [300.0]
+            mock_response.json.return_value = ELEVATION_TEST_SUCCESS_RESPONSE_SINGLE
             mock_response.raise_for_status = Mock()
             return mock_response
 
@@ -293,7 +297,7 @@ class TestElevationAPIRetry:
         # Sleep should be 10s (max(10, 2^0) = 10)
         assert sleep_times[0] == 10
         # Should return successful result
-        assert result == [300.0]
+        assert result == ELEVATION_TEST_SUCCESS_RESPONSE_SINGLE
 
     def test_elevation_conversion_handles_none_values(self):
         """Test that None values in elevation response are handled correctly."""

@@ -1007,6 +1007,75 @@ COLORADO_JAMES_MANLEY_PARK_ADMIN_RESPONSE = {
     ]
 }
 
+# Real Overpass API response for retry tests
+# Captured from https://overpass.private.coffee/api/interpreter on January 22, 2026
+# Query: [out:json];node(around:1000,37.7749,-122.4194);out;
+# This is a simplified version with first few elements for test fixtures
+# REAL Overpass API response - subset of full response with 45,831 elements
+RETRY_TEST_SUCCESS_RESPONSE = {
+    "version": 0.6,
+    "generator": "Overpass API 0.7.61.8 b1080abd",
+    "osm3s": {
+        "timestamp_osm_base": "2026-01-22T03:16:22Z",
+        "copyright": "The data included in this document is from www.openstreetmap.org. The data is made available under ODbL."
+    },
+    "elements": [
+        {
+            "type": "node",
+            "id": 61675193,
+            "lat": 37.7721282,
+            "lon": -122.4227728,
+            "tags": {
+                "addr:city": "San Francisco",
+                "addr:housenumber": "4",
+                "addr:postcode": "94103",
+                "addr:state": "CA",
+                "addr:street": "Valencia Street",
+                "amenity": "bar",
+                "check_date": "2025-12-02",
+                "level": "0",
+                "name": "Martuni's",
+                "outdoor_seating": "no",
+                "phone": "+1-415-241-0205",
+                "smoking": "no",
+                "wikidata": "Q108821598"
+            }
+        },
+        {
+            "type": "node",
+            "id": 65280134,
+            "lat": 37.7749327,
+            "lon": -122.4084965
+        },
+        {
+            "type": "node",
+            "id": 65280136,
+            "lat": 37.7747987,
+            "lon": -122.4083293
+        },
+        {
+            "type": "node",
+            "id": 65281164,
+            "lat": 37.7746045,
+            "lon": -122.4259102,
+            "tags": {
+                "highway": "traffic_signals",
+                "turn_restrictions": "no"
+            }
+        },
+        {
+            "type": "node",
+            "id": 65281218,
+            "lat": 37.7718656,
+            "lon": -122.423325,
+            "tags": {
+                "highway": "traffic_signals",
+                "traffic_signals": "traffic_lights"
+            }
+        }
+    ]
+}
+
 # Empty response for coordinates with no data
 # NOTE: This should only be used for responses that have been verified as empty
 # by fetching actual Overpass API responses. If you're adding a new EMPTY_RESPONSE,
