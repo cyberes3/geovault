@@ -6,7 +6,7 @@ This ensures a clean database state for each test run.
 import os
 import sys
 from pathlib import Path
-import psycopg2
+import psycopg
 
 # Get paths
 script_dir = Path(__file__).parent
@@ -45,10 +45,10 @@ def drop_all_tables():
     
     try:
         # Connect to the test database
-        conn = psycopg2.connect(
+        conn = psycopg.connect(
             host=db_config['HOST'],
             port=db_config['PORT'],
-            database=db_config['NAME'],
+            dbname=db_config['NAME'],
             user=db_config['USER'],
             password=db_config['PASSWORD']
         )

@@ -1,5 +1,6 @@
 django==6.0a1
-psycopg2-binary==2.9.10
+psycopg-pool==3.3.0
+psycopg-binary==3.3.2
 fastkml==1.1.0
 lxml==6.0.2
 geojson==3.2.0

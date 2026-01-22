@@ -127,29 +127,49 @@ ASGI_APPLICATION = 'website.asgi.application'
 # Database
 # https://docs.djangoproject.com/en/5.0/ref/settings/#databases
 
-DATABASES = {
-    'default': {
-        'ENGINE': 'django.contrib.gis.db.backends.postgis',
-        'NAME': config.get_str('database.name', 'geovault'),
-        'USER': config.get_str('database.user', 'geovault'),
-        'PASSWORD': config.get_with_env_override('database.password', 'DB_PASSWORD', ''),
-        'HOST': config.get_str('database.host', 'localhost'),
-        'PORT': config.get_str('database.port', '5432'),
-        # Connection pooling: reuse connections for up to 600 seconds (10 minutes)
-        # This prevents connection exhaustion and improves performance
-        # Set to 0 to disable pooling (close connection after each request)
-        'CONN_MAX_AGE': config.get_int('database.conn_max_age', 600),
-        # Test database configuration - hardcoded for test environment
-        # Uses existing database (gv_tests) and drops all tables instead of creating new DB
-        # The --reuse-db flag in pytest ensures the database is not created/destroyed
-        'TEST': {
-            'NAME': 'gv_tests',
-            'USER': 'gv_tests',
-            'PASSWORD': 'bobjoe99',
-            'HOST': '172.0.3.105',
-            'PORT': '5432',
-        },
+# Build pool options from config
+pool_config = {}
+if config.get('database.pool'):
+    pool_min = config.get_int('database.pool.min_size', 2)
+    pool_max = config.get_int('database.pool.max_size', 8)
+    pool_timeout = config.get_int('database.pool.timeout', 10)
+    pool_config = {
+        'min_size': pool_min,
+        'max_size': pool_max,
+        'timeout': pool_timeout,
     }
+
+# Build database configuration
+db_config = {
+    'ENGINE': 'django.contrib.gis.db.backends.postgis',
+    'NAME': config.get_str('database.name', 'geovault'),
+    'USER': config.get_str('database.user', 'geovault'),
+    'PASSWORD': config.get_with_env_override('database.password', 'DB_PASSWORD', ''),
+    'HOST': config.get_str('database.host', 'localhost'),
+    'PORT': config.get_str('database.port', '5432'),
+    # Note: CONN_MAX_AGE may be ignored when using native pooling
+    # The pool manages connection lifetime instead
+    'CONN_MAX_AGE': config.get_int('database.conn_max_age', 600),
+    # Test database configuration - hardcoded for test environment
+    # Uses existing database (gv_tests) and drops all tables instead of creating new DB
+    # The --reuse-db flag in pytest ensures the database is not created/destroyed
+    'TEST': {
+        'NAME': 'gv_tests',
+        'USER': 'gv_tests',
+        'PASSWORD': 'bobjoe99',
+        'HOST': '172.0.3.105',
+        'PORT': '5432',
+    },
+}
+
+# Only add OPTIONS if pool is configured
+if pool_config:
+    db_config['OPTIONS'] = {
+        'pool': pool_config,
+    }
+
+DATABASES = {
+    'default': db_config,
 }
 # Password validation
 # https://docs.djangoproject.com/en/5.0/ref/settings/#auth-password-validators
