@@ -66,31 +66,40 @@ def get_location_tags(
             lakes_future = executor.submit(search_nearby_lakes, latitude, longitude)
 
             # Wait for results
-            admin_info = admin_future.result()
-            protected_areas = protected_future.result()
-            nearby_lakes = lakes_future.result()
+            # Each function now returns (data, errors)
+            admin_info, admin_errors = admin_future.result()
+            protected_areas, protected_errors = protected_future.result()
+            nearby_lakes, lake_errors = lakes_future.result()
 
-        # Check if we got any location data at all (indicates API failures)
+        # Collect errors from all sources
+        all_errors = admin_errors + protected_errors + lake_errors
+
+        # Add specific API errors to log
+        for error in all_errors:
+            _logger.warning(error)
+            log_messages.append(ReverseGeocodingLogMessage(
+                timestamp=datetime.now(),
+                message=error,
+                level='WARNING',
+                source='Reverse Geocoding'
+            ))
+
+        # Check if we got any location data at all
         has_any_data = (
             admin_info.get('country') or admin_info.get('state') or
             admin_info.get('county') or admin_info.get('city') or
             protected_areas or nearby_lakes
         )
 
-        if not has_any_data:
-            # No data returned from any query - likely API failures
-            error_msg = (
+        if not has_any_data and not all_errors:
+            # No data returned but also no explicit errors - generic warning
+            # If we represent explicit errors, we might skip this generic one to avoid noise
+            warning_msg = (
                 f"Reverse geocoding returned no data for coordinates "
-                f"({latitude}, {longitude}) - possible API failures (check console logs)"
+                f"({latitude}, {longitude}) - no matching features found"
             )
-            _logger.warning(error_msg)
-            log_messages.append(ReverseGeocodingLogMessage(
-                timestamp=datetime.now(),
-                message=error_msg,
-                level='WARNING',
-                source='Reverse Geocoding'
-            ))
-
+            _logger.info(warning_msg) # Downgrade to INFO if no error
+            
         # Add administrative tags
         if admin_info['country']:
             tags.append(f"country:{admin_info['country']}")
@@ -106,7 +115,18 @@ def get_location_tags(
 
         # If no city found in admin boundaries, search for nearby cities
         if not city_found:
-            nearby_cities = find_nearby_cities(latitude, longitude)
+            nearby_cities, city_errors = find_nearby_cities(latitude, longitude)
+            
+            # log city errors
+            for error in city_errors:
+                _logger.warning(error)
+                log_messages.append(ReverseGeocodingLogMessage(
+                    timestamp=datetime.now(),
+                    message=error,
+                    level='WARNING',
+                    source='Reverse Geocoding'
+                ))
+                
             if nearby_cities:
                 # Use closest city
                 closest_city = nearby_cities[0]

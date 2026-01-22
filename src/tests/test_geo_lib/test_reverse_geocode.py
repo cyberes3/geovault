@@ -123,7 +123,7 @@ class TestReverseGeocodingService(TestCase):
     def test_admin_hierarchy_query(self):
         """Test administrative hierarchy query."""
         # Aurora, CO coordinates - fixture in conftest.py
-        result = get_admin_hierarchy(39.746, -104.844)
+        result, errors = get_admin_hierarchy(39.746, -104.844)
         
         self.assertEqual(result['country'], 'United States of America')
         self.assertEqual(result['state'], 'Colorado')
@@ -133,7 +133,7 @@ class TestReverseGeocodingService(TestCase):
     def test_find_nearby_cities(self):
         """Test nearby city search."""
         # Fairplay, CO area - fixture in conftest.py
-        cities = find_nearby_cities(39.2216, -105.9327, 5.0)
+        cities, errors = find_nearby_cities(39.2216, -105.9327, 5.0)
         
         self.assertEqual(len(cities), 1)
         self.assertEqual(cities[0]['name'], 'Fairplay')
@@ -142,7 +142,7 @@ class TestReverseGeocodingService(TestCase):
     def test_protected_areas_query(self):
         """Test protected areas query."""
         # Rocky Mountain National Park - fixture in conftest.py
-        areas = get_protected_areas(40.3428, -105.6836)
+        areas, errors = get_protected_areas(40.3428, -105.6836)
         
         self.assertEqual(len(areas), 2)
         self.assertEqual(areas[0]['name'], 'Rocky Mountain National Park')
@@ -153,7 +153,7 @@ class TestReverseGeocodingService(TestCase):
         from geo_lib.geocoding.protected_areas import classify_protected_area
         
         # South Valley Park, Colorado - should be tagged as protected-area
-        areas = get_protected_areas(39.5626793, -105.1501089)
+        areas, errors = get_protected_areas(39.5626793, -105.1501089)
         self.assertEqual(len(areas), 1)
         self.assertEqual(areas[0]['name'], 'South Valley Park')
         self.assertEqual(areas[0]['boundary'], 'protected_area')
@@ -162,7 +162,7 @@ class TestReverseGeocodingService(TestCase):
         self.assertEqual(area_type, 'protected-area')
         
         # Blue Hills Reservation, Massachusetts - should be tagged as state-park
-        areas = get_protected_areas(42.22314472038681, -71.09840390005273)
+        areas, errors = get_protected_areas(42.22314472038681, -71.09840390005273)
         self.assertEqual(len(areas), 1)
         self.assertEqual(areas[0]['name'], 'Blue Hills Reservation')
         self.assertEqual(areas[0]['boundary'], 'protected_area')
@@ -171,7 +171,7 @@ class TestReverseGeocodingService(TestCase):
         self.assertEqual(area_type, 'state-park')
         
         # Bells Bend Park, Tennessee - should be tagged as protected-area
-        areas = get_protected_areas(36.15564975174452, -86.92466166278994)
+        areas, errors = get_protected_areas(36.15564975174452, -86.92466166278994)
         self.assertEqual(len(areas), 1)
         self.assertEqual(areas[0]['name'], 'Bells Bend Park')
         self.assertEqual(areas[0]['boundary'], 'protected_area')
@@ -183,7 +183,7 @@ class TestReverseGeocodingService(TestCase):
         from geo_lib.geocoding.protected_areas import classify_protected_area
         
         # James N. Manley Park, Colorado - city park with leisure=park but no boundary=protected_area
-        areas = get_protected_areas(39.72294740028117, -104.95773491586752)
+        areas, errors = get_protected_areas(39.72294740028117, -104.95773491586752)
         self.assertEqual(len(areas), 1)
         self.assertEqual(areas[0]['name'], 'James N. Manley Park')
         self.assertEqual(areas[0]['leisure'], 'park')
@@ -224,7 +224,7 @@ class TestReverseGeocodingService(TestCase):
     def test_search_nearby_lakes(self):
         """Test lake proximity search."""
         # Grand Lake, CO area - fixture in conftest.py
-        lakes = search_nearby_lakes(40.2514, -105.8239, 1.0)
+        lakes, errors = search_nearby_lakes(40.2514, -105.8239, 1.0)
         
         self.assertEqual(len(lakes), 1)
         self.assertEqual(lakes[0]['name'], 'Grand Lake')
@@ -232,7 +232,7 @@ class TestReverseGeocodingService(TestCase):
     def test_search_nearby_lakes_outside_range(self):
         """Test that lakes outside 1-mile range are not included."""
         # Point >1 mile from Grand Lake - fixture in conftest.py
-        lakes = search_nearby_lakes(40.211372, -105.768591, 1.0)
+        lakes, errors = search_nearby_lakes(40.211372, -105.768591, 1.0)
         
         # Should filter out lakes beyond 1 mile threshold
         self.assertEqual(len(lakes), 0)
@@ -271,12 +271,12 @@ class TestCaching(TestCase):
         overpass_api.query_overpass.reset_mock()
         
         # First call - fixture in conftest.py
-        result1 = get_admin_hierarchy(40.0, -105.0)
+        result1, errors1 = get_admin_hierarchy(40.0, -105.0)
         call_count_1 = overpass_api.query_overpass.call_count
         self.assertGreater(call_count_1, 0)
         
         # Second call should use cache
-        result2 = get_admin_hierarchy(40.0, -105.0)
+        result2, errors2 = get_admin_hierarchy(40.0, -105.0)
         call_count_2 = overpass_api.query_overpass.call_count
         
         # No additional calls should have been made
@@ -300,13 +300,13 @@ class TestCaching(TestCase):
         overpass_api.query_overpass.reset_mock()
         
         # First call - Rocky Mountain National Park - fixture in conftest.py
-        areas1 = get_protected_areas(40.3428, -105.6836)
+        areas1, errors1 = get_protected_areas(40.3428, -105.6836)
         call_count_1 = overpass_api.query_overpass.call_count
         self.assertGreater(call_count_1, 0)
         self.assertGreater(len(areas1), 0)
         
         # Second call should use cache
-        areas2 = get_protected_areas(40.3428, -105.6836)
+        areas2, errors2 = get_protected_areas(40.3428, -105.6836)
         call_count_2 = overpass_api.query_overpass.call_count
         
         # No additional calls should have been made
@@ -320,11 +320,11 @@ class TestCaching(TestCase):
         overpass_api.query_overpass.reset_mock()
         
         # First call
-        areas1 = get_protected_areas(40.3428, -105.6836)
+        areas1, errors1 = get_protected_areas(40.3428, -105.6836)
         call_count_1 = overpass_api.query_overpass.call_count
         
         # Second call with slightly different coordinates (should round to same cache key)
-        areas2 = get_protected_areas(40.3429, -105.6837)
+        areas2, errors2 = get_protected_areas(40.3429, -105.6837)
         call_count_2 = overpass_api.query_overpass.call_count
         
         # Should use cache (no additional calls)
@@ -338,12 +338,12 @@ class TestCaching(TestCase):
         overpass_api.query_overpass.reset_mock()
         
         # First call - Fairplay, CO area - fixture in conftest.py
-        cities1 = find_nearby_cities(39.2216, -105.9327, 5.0)
+        cities1, errors1 = find_nearby_cities(39.2216, -105.9327, 5.0)
         call_count_1 = overpass_api.query_overpass.call_count
         self.assertGreater(call_count_1, 0)
         
         # Second call should use cache
-        cities2 = find_nearby_cities(39.2216, -105.9327, 5.0)
+        cities2, errors2 = find_nearby_cities(39.2216, -105.9327, 5.0)
         call_count_2 = overpass_api.query_overpass.call_count
         
         # No additional calls should have been made
@@ -356,11 +356,11 @@ class TestCaching(TestCase):
         overpass_api.query_overpass.reset_mock()
         
         # First call with 5.0 mile threshold
-        cities1 = find_nearby_cities(39.2216, -105.9327, 5.0)
+        cities1, errors1 = find_nearby_cities(39.2216, -105.9327, 5.0)
         call_count_1 = overpass_api.query_overpass.call_count
         
         # Second call with different threshold should make new API call
-        cities2 = find_nearby_cities(39.2216, -105.9327, 10.0)
+        cities2, errors2 = find_nearby_cities(39.2216, -105.9327, 10.0)
         call_count_2 = overpass_api.query_overpass.call_count
         
         # Should have made additional calls for different threshold
@@ -373,12 +373,12 @@ class TestCaching(TestCase):
         overpass_api.query_overpass.reset_mock()
         
         # First call - Grand Lake, CO area - fixture in conftest.py
-        lakes1 = search_nearby_lakes(40.2514, -105.8239, 1.0)
+        lakes1, errors1 = search_nearby_lakes(40.2514, -105.8239, 1.0)
         call_count_1 = overpass_api.query_overpass.call_count
         self.assertGreater(call_count_1, 0)
         
         # Second call should use cache
-        lakes2 = search_nearby_lakes(40.2514, -105.8239, 1.0)
+        lakes2, errors2 = search_nearby_lakes(40.2514, -105.8239, 1.0)
         call_count_2 = overpass_api.query_overpass.call_count
         
         # No additional calls should have been made
@@ -391,11 +391,11 @@ class TestCaching(TestCase):
         overpass_api.query_overpass.reset_mock()
         
         # First call with 1.0 mile threshold
-        lakes1 = search_nearby_lakes(40.2514, -105.8239, 1.0)
+        lakes1, errors1 = search_nearby_lakes(40.2514, -105.8239, 1.0)
         call_count_1 = overpass_api.query_overpass.call_count
         
         # Second call with different threshold should make new API call
-        lakes2 = search_nearby_lakes(40.2514, -105.8239, 2.0)
+        lakes2, errors2 = search_nearby_lakes(40.2514, -105.8239, 2.0)
         call_count_2 = overpass_api.query_overpass.call_count
         
         # Should have made additional calls for different threshold
@@ -562,7 +562,7 @@ class TestErrorHandling(TestCase):
     def test_overpass_timeout_handling(self):
         """Test handling of Overpass API timeout/error."""
         # Coordinates without fixture data return None
-        result = get_admin_hierarchy(40.0, -105.0)
+        result, errors = get_admin_hierarchy(40.0, -105.0)
         
         # Should return default structure, not raise exception
         self.assertIsInstance(result, dict)
@@ -571,11 +571,13 @@ class TestErrorHandling(TestCase):
     def test_overpass_error_response(self):
         """Test handling of Overpass API error response."""
         # Coordinates without fixture data return None
-        result = get_admin_hierarchy(40.0, -105.0)
+        result, errors = get_admin_hierarchy(40.0, -105.0)
         
         # Should return default structure, not raise exception
         self.assertIsInstance(result, dict)
     
+
+
     def test_get_location_tags_exception_handling(self):
         """Test that get_location_tags handles exceptions gracefully."""
         # Invalid coordinates shouldn't crash

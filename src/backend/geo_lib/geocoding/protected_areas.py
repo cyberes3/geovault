@@ -5,13 +5,13 @@ This module queries OpenStreetMap data to find protected areas that
 contain a given coordinate, including national parks, state parks,
 wilderness areas, and other protected lands.
 """
-from typing import List, Dict
+from typing import List, Dict, Tuple
 
 from geo_lib.geocoding.overpass_api import query_overpass
 from geo_lib.geocoding.osm_tags import get_name_from_tags
 
 
-def get_protected_areas(latitude: float, longitude: float) -> List[Dict[str, str]]:
+def get_protected_areas(latitude: float, longitude: float) -> Tuple[List[Dict[str, str]], List[str]]:
     """
     Get all protected areas containing a point.
     
@@ -23,14 +23,7 @@ def get_protected_areas(latitude: float, longitude: float) -> List[Dict[str, str
         longitude: Longitude coordinate
     
     Returns:
-        List of protected area dicts with name and classification info:
-        - name: Name of the protected area
-        - protection_title: Official protection title
-        - protect_class: IUCN protection class
-        - designation: Official designation
-        - operator: Operating agency
-        - leisure: Leisure tag (e.g., nature_reserve)
-        - boundary: Boundary type (e.g., protected_area, national_park)
+        Tuple of (list_of_protected_area_dicts, list_of_error_messages)
     """
     # Query for protected areas
     # This query finds areas (ways/relations converted to areas) that contain the point
@@ -49,8 +42,9 @@ out tags;
 """
 
     protected_areas = []
+    errors = []
 
-    response = query_overpass(query, latitude=latitude, longitude=longitude)
+    response, error = query_overpass(query, latitude=latitude, longitude=longitude)
     if response:
         for element in response.get('elements', []):
             tags = element.get('tags', {})
@@ -83,8 +77,11 @@ out tags;
                     'boundary': boundary
                 }
                 protected_areas.append(area_info)
+    
+    if error:
+        errors.append(f"Protected areas lookup failed: {error}")
 
-    return protected_areas
+    return protected_areas, errors
 
 
 def classify_protected_area(area: Dict[str, str]) -> str:

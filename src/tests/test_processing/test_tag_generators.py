@@ -923,7 +923,8 @@ class TestReverseGeocodingTagGenerator:
             properties={'name': 'Test Point', 'geojson_hash': 'test'}
         )
         
-        tags = generator.process(feature)
+        import_log = ImportLog()
+        tags = generator.process(feature, import_log=import_log)
         
         assert tags == []
     

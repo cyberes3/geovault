@@ -81,7 +81,7 @@ class ReverseGeocodingTagGenerator(TagGenerator):
     def process_batch(
         self,
         features: List[GeoFeatureSupported],
-        import_log=None,
+        import_log,
         **kwargs
     ) -> Dict[int, List[str]]:
         """
@@ -90,7 +90,7 @@ class ReverseGeocodingTagGenerator(TagGenerator):
         
         Args:
             features: List of features to reverse geocode
-            import_log: Optional ImportLog for database logging
+            import_log: ImportLog for database logging
             
         Returns:
             Dict mapping feature index to list of tags
@@ -126,7 +126,7 @@ class ReverseGeocodingTagGenerator(TagGenerator):
                 all_location_tags.update(tags)
                 
                 # Add log messages to import log
-                if import_log and log_messages:
+                if log_messages:
                     for log_msg in log_messages:
                         # Map level string to DatabaseLogLevel
                         if log_msg.level == 'ERROR':
@@ -154,8 +154,7 @@ class ReverseGeocodingTagGenerator(TagGenerator):
         **kwargs
     ) -> List[str]:
         """
-        Process single feature (backwards compatibility).
-        Prefer using process_batch() for better performance when processing multiple features.
+        Process single feature.
         
         Args:
             feature: The feature to generate tags for

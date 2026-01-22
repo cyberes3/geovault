@@ -4,7 +4,7 @@ Nearby place searches (cities, lakes, water bodies).
 This module provides proximity-based searches for places near a coordinate,
 including cities, towns, villages, and water bodies like lakes and reservoirs.
 """
-from typing import List, Dict, Any
+from typing import List, Dict, Any, Tuple
 
 from django.conf import settings
 
@@ -17,7 +17,7 @@ def find_nearby_cities(
     latitude: float,
     longitude: float,
     threshold_miles: float = None
-) -> List[Dict[str, Any]]:
+) -> Tuple[List[Dict[str, Any]], List[str]]:
     """
     Find cities/towns within threshold_miles of a point.
     
@@ -27,7 +27,7 @@ def find_nearby_cities(
         threshold_miles: Search radius in miles (defaults to CITY_PROXIMITY_MILES setting)
     
     Returns:
-        List of dicts with 'name', 'distance_miles', 'place_type' keys, sorted by distance
+        Tuple of (list_of_city_dicts, list_of_error_messages)
     """
     if threshold_miles is None:
         threshold_miles = settings.CITY_PROXIMITY_MILES
@@ -44,7 +44,8 @@ out center;
 """
 
     cities = []
-    response = query_overpass(query, latitude=latitude, longitude=longitude)
+    errors = []
+    response, error = query_overpass(query, latitude=latitude, longitude=longitude)
     if response:
         for element in response.get('elements', []):
             tags = element.get('tags', {})
@@ -63,15 +64,18 @@ out center;
 
         # Sort by distance
         cities.sort(key=lambda x: x['distance_miles'])
+    
+    if error:
+        errors.append(f"Nearby cities search failed: {error}")
 
-    return cities
+    return cities, errors
 
 
 def search_nearby_lakes(
     latitude: float,
     longitude: float,
     proximity_miles: float = None
-) -> List[Dict[str, Any]]:
+) -> Tuple[List[Dict[str, Any]], List[str]]:
     """
     Search for lakes and water bodies within proximity_miles of a point.
     
@@ -81,7 +85,7 @@ def search_nearby_lakes(
         proximity_miles: Distance threshold in miles (defaults to LAKE_PROXIMITY_MILES setting)
     
     Returns:
-        List of lake dicts with name, distance, and water type, sorted by distance
+        Tuple of (list_of_lake_dicts, list_of_error_messages)
     """
     if proximity_miles is None:
         proximity_miles = settings.LAKE_PROXIMITY_MILES
@@ -101,7 +105,8 @@ out tags center;
 """
 
     lakes = []
-    response = query_overpass(query, latitude=latitude, longitude=longitude)
+    errors = []
+    response, error = query_overpass(query, latitude=latitude, longitude=longitude)
     if response:
         for element in response.get('elements', []):
             tags = element.get('tags', {})
@@ -129,5 +134,8 @@ out tags center;
 
         # Sort by distance
         lakes.sort(key=lambda x: x['distance_miles'])
+    
+    if error:
+        errors.append(f"Nearby lakes search failed: {error}")
 
-    return lakes
+    return lakes, errors

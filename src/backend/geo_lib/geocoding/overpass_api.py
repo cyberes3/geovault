@@ -8,7 +8,7 @@ import hashlib
 import json
 import re
 import time
-from typing import Optional, Dict, Any
+from typing import Optional, Dict, Any, Tuple
 
 import requests
 from django.conf import settings
@@ -135,7 +135,7 @@ def query_overpass(
         max_retries: int = 3,
         latitude: Optional[float] = None,
         longitude: Optional[float] = None
-) -> Optional[Dict[str, Any]]:
+) -> Tuple[Optional[Dict[str, Any]], Optional[str]]:
     """
     Query Overpass API with error handling and retry logic.
     
@@ -149,7 +149,9 @@ def query_overpass(
         longitude: Optional longitude coordinate being geocoded (for error logging and cache key)
     
     Returns:
-        JSON response dict or None on failure
+        Tuple of (JSON response dict or None, Error message string or None)
+        - If successful: (response_dict, None)
+        - If failed: (None, error_message)
     """
     # Normalize query string for cache key generation (rounds coordinates in query)
     normalized_query = _normalize_query_for_cache(query, latitude, longitude)
@@ -167,9 +169,10 @@ def query_overpass(
     # Check cache first
     cached_response = _REVERSE_GEOCODING_CACHE.get(cache_key)
     if cached_response is not None:
-        return cached_response
+        return cached_response, None
 
     retry_wait_time = 0
+    last_error = "Unknown error"
 
     for attempt in range(max_retries):
         if attempt > 0:
@@ -190,10 +193,12 @@ def query_overpass(
                 if not response.content or len(response.content) == 0:
                     error_type = "Empty Response"
                     retry_wait_time = 10
+                    last_error = f"Overpass API returned empty response (Status 200)"
                 # Check if response is HTML/XML instead of JSON
                 elif 'html' in content_type or 'xml' in content_type:
                     error_type = "HTML/XML Error Page"
                     retry_wait_time = 10
+                    last_error = f"Overpass API returned HTML/XML instead of JSON (Status 200)"
                 else:
                     try:
                         json_response = response.json()
@@ -204,7 +209,7 @@ def query_overpass(
                         if elements:
                             _REVERSE_GEOCODING_CACHE.set(cache_key, json_response, REVERSE_GEOCODING_CACHE_TTL)
 
-                        return json_response
+                        return json_response, None
                     except json.JSONDecodeError as json_err:
                         # Log the response content to help debug
                         _log_overpass_failure(
@@ -215,14 +220,17 @@ def query_overpass(
                             latitude,
                             longitude
                         )
-                        return None
+                        last_error = f"Overpass API returned invalid JSON: {json_err}"
+                        return None, last_error
 
             elif response.status_code == 429:  # Rate limited
                 error_type = "Rate Limited"
                 retry_wait_time = 60
+                last_error = "Overpass API rate limited (429)"
             elif response.status_code == 504:  # Gateway timeout
                 error_type = "Gateway Timeout"
                 retry_wait_time = 10
+                last_error = "Overpass API gateway timeout (504)"
             else:
                 _log_overpass_failure(
                     response,
@@ -232,7 +240,8 @@ def query_overpass(
                     latitude,
                     longitude
                 )
-                return None
+                last_error = f"Overpass API HTTP {response.status_code}"
+                return None, last_error
 
             retries_left = max_retries - (attempt + 1)
             wait_msg = f"waiting {retry_wait_time}s, " if retries_left > 0 else ""
@@ -265,6 +274,7 @@ def query_overpass(
                 f"Overpass request timeout, attempt {attempt + 1}/{max_retries}, {wait_msg}{retry_msg} | "
                 f"Query=[{query_preview}]{coord_info}"
             )
+            last_error = f"Overpass API request timeout (Attempt {attempt + 1})"
             continue
 
         except Exception as e:
@@ -276,6 +286,7 @@ def query_overpass(
             if latitude is not None and longitude is not None:
                 coord_info = f" | Coordinates=({latitude},{longitude})"
             _logger.error(f"Overpass query failed: {e} | Query=[{query_preview}]{coord_info}")
-            return None
+            last_error = f"Overpass API query failed: {str(e)}"
+            return None, last_error
 
-    return None
+    return None, last_error

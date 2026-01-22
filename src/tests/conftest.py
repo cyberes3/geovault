@@ -383,7 +383,7 @@ def conditional_external_api_mocking():
             # Check cache first
             cached_response = _REVERSE_GEOCODING_CACHE.get(cache_key)
             if cached_response is not None:
-                return cached_response
+                return cached_response, None
             
             # Cache miss - increment call count and get mock response
             self.call_count += 1
@@ -394,7 +394,7 @@ def conditional_external_api_mocking():
             if elements:
                 _REVERSE_GEOCODING_CACHE.set(cache_key, mock_response, REVERSE_GEOCODING_CACHE_TTL)
             
-            return mock_response
+            return mock_response, None
         
         def reset_mock(self):
             """Reset call count (cache remains intact)."""

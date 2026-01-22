@@ -4,13 +4,13 @@ Administrative boundary lookup (country, state, county, city).
 This module queries OpenStreetMap data via Overpass API to find
 administrative boundaries that contain a given coordinate.
 """
-from typing import Dict, Optional
+from typing import Dict, Optional, Tuple, List
 
 from geo_lib.geocoding.overpass_api import query_overpass
 from geo_lib.geocoding.osm_tags import get_name_from_tags
 
 
-def get_admin_hierarchy(latitude: float, longitude: float) -> Dict[str, Optional[str]]:
+def get_admin_hierarchy(latitude: float, longitude: float) -> Tuple[Dict[str, Optional[str]], List[str]]:
     """
     Get administrative hierarchy (country, state, county, city) for a coordinate.
     
@@ -25,7 +25,7 @@ def get_admin_hierarchy(latitude: float, longitude: float) -> Dict[str, Optional
         longitude: Longitude coordinate
     
     Returns:
-        Dict with 'country', 'state', 'county', 'city' keys (values may be None)
+        Tuple of (admin_hierarchy_dict, list_of_error_messages)
     """
     # Query for administrative boundaries at all levels
     query = f"""
@@ -46,8 +46,9 @@ out tags;
         'county': None,
         'city': None
     }
+    errors = []
 
-    response = query_overpass(query, latitude=latitude, longitude=longitude)
+    response, error = query_overpass(query, latitude=latitude, longitude=longitude)
     if response:
         for element in response.get('elements', []):
             tags = element.get('tags', {})
@@ -69,5 +70,8 @@ out tags;
                     result['county'] = name
                 elif admin_level == '8':
                     result['city'] = name
+    
+    if error:
+        errors.append(f"Admin hierarchy lookup failed: {error}")
 
-    return result
+    return result, errors
