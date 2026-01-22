@@ -1,4 +1,4 @@
-from concurrent.futures import ThreadPoolExecutor, as_completed
+from concurrent.futures import ThreadPoolExecutor, as_completed, TimeoutError as FutureTimeoutError
 
 import requests
 from django.http import JsonResponse
@@ -12,6 +12,11 @@ from website.startup_checks import (
     check_redis_connection,
     check_postgis_installation,
 )
+
+# Maximum timeout for health checks (in seconds)
+# Health checks should be fast - external APIs get shorter timeouts
+HEALTH_CHECK_OVERALL_TIMEOUT = 10
+HEALTH_CHECK_EXTERNAL_API_TIMEOUT = 5
 
 
 @api_or_login_required_401()
@@ -61,7 +66,7 @@ def health_check(request):
         else:
             components["maptiler_geocoding_api"] = "not_configured"
 
-        # Run all checks in parallel using ThreadPoolExecutor
+        # Run all checks in parallel using ThreadPoolExecutor with overall timeout
         with ThreadPoolExecutor(max_workers=len(checks_to_run)) as executor:
             # Submit all checks
             future_to_check = {
@@ -69,12 +74,19 @@ def health_check(request):
                 for name, check_func in checks_to_run
             }
 
-            # Collect results as they complete
-            for future in as_completed(future_to_check):
-                name, status, is_healthy = future.result()
-                components[name] = status
-                if not is_healthy:
-                    overall_healthy = False
+            # Collect results as they complete, with overall timeout
+            try:
+                for future in as_completed(future_to_check, timeout=HEALTH_CHECK_OVERALL_TIMEOUT):
+                    name, status, is_healthy = future.result()
+                    components[name] = status
+                    if not is_healthy:
+                        overall_healthy = False
+            except FutureTimeoutError:
+                # If overall timeout is reached, mark any incomplete checks as timeout
+                for future, name in future_to_check.items():
+                    if not future.done():
+                        components[name] = "timeout"
+                        overall_healthy = False
 
         status = "healthy" if overall_healthy else "unhealthy"
         status_code = 200 if overall_healthy else 500
@@ -94,36 +106,28 @@ def health_check(request):
 
 def check_overpass_api() -> bool:
     """
-    Check Overpass API health by making a minimal query.
-    
-    Uses a simple node ID lookup (node 1 exists in OSM) to avoid spatial indexing overhead.
+    Check Overpass API health with an empty query (fastest possible check).
     
     Returns:
         True if API is healthy, False otherwise
     """
     try:
-        api_url = get_required_setting('OVERPASS_API_URL')
-        api_timeout = get_required_setting('OVERPASS_API_TIMEOUT')
-        api_verify_ssl = get_required_setting('OVERPASS_API_VERIFY_SSL')
-
-        # Query node 1 (a well-known OSM node) - direct ID lookup, no spatial search
         response = requests.post(
-            api_url,
-            data="[out:json];node(1);out;",
-            timeout=api_timeout,
-            headers={'Content-Type': 'application/x-www-form-urlencoded'},
-            verify=api_verify_ssl
+            get_required_setting('OVERPASS_API_URL'),
+            data="[out:json];out;",
+            timeout=HEALTH_CHECK_EXTERNAL_API_TIMEOUT,
+            headers={'Content-Type': 'text/plain; charset=utf-8'},
+            verify=get_required_setting('OVERPASS_API_VERIFY_SSL')
         )
-
-        # API is healthy if we get a 200 response (even if no results)
         return response.status_code == 200
-    except:
+    except Exception:
         return False
 
 
 def check_elevation_api() -> bool:
     """
     Check Elevation API health by making a simple request.
+    Uses a shorter timeout for health checks to prevent hanging.
     
     Returns:
         True if API is healthy, False otherwise
@@ -133,13 +137,13 @@ def check_elevation_api() -> bool:
             # If disabled, consider it healthy (not a failure)
             return True
         api_url = get_required_setting('ELEVATION_API_URL')
-        api_timeout = get_required_setting('ELEVATION_API_TIMEOUT')
 
+        # Use shorter timeout for health checks (not the full configured timeout)
         response = requests.post(
             api_url,
             json=[[0.0, 0.0]],
             headers={'Content-Type': 'application/json'},
-            timeout=api_timeout
+            timeout=HEALTH_CHECK_EXTERNAL_API_TIMEOUT
         )
 
         if response.status_code == 200:
@@ -154,6 +158,7 @@ def check_elevation_api() -> bool:
 def check_maptiler_geocoding_api() -> bool:
     """
     Check MapTiler Geocoding API health by making a simple search request.
+    Uses a shorter timeout for health checks to prevent hanging.
     
     Returns:
         True if API is healthy, False otherwise
@@ -170,7 +175,7 @@ def check_maptiler_geocoding_api() -> bool:
             "https://api.maptiler.com/geocoding/test.json",
             params={'key': api_key, 'limit': 1},
             headers=headers,
-            timeout=5
+            timeout=HEALTH_CHECK_EXTERNAL_API_TIMEOUT
         )
         return response.status_code == 200
     except Exception:
