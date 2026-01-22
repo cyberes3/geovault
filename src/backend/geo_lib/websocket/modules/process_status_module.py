@@ -87,7 +87,7 @@ class ProcessStatusModule(BaseWebSocketModule):
                     file_duplicate['status'] = 'duplicate_imported'
                     file_duplicate['original_filename'] = duplicate_imported.original_filename
 
-        # Check if file has exactly 1 feature and that feature is a duplicate
+        # Check if all features in the file are duplicates
         # Only check if file_hash duplicate status hasn't been set (lower priority)
         if file_duplicate['status'] is None:
             geofeatures = self.import_item.geofeatures if self.import_item.geofeatures else []

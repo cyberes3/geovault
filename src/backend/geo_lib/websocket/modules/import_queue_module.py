@@ -139,7 +139,7 @@ class ImportQueueModule(BaseWebSocketModule):
                 elif file_hash in imported_hashes:
                     file_duplicate_status = 'duplicate_imported'
 
-            # Check if file has exactly 1 feature and that feature is a duplicate
+            # Check if all features in the file are duplicates
             # Only check if file_hash duplicate status hasn't been set (lower priority)
             if file_duplicate_status is None:
                 geofeatures = item.get('geofeatures', [])

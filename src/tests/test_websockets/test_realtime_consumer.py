@@ -350,7 +350,7 @@ class TestRealtimeConsumerChannelLayer(TransactionTestCase):
 
 
 class TestAllFeaturesDuplicateDetection(TransactionTestCase):
-    """Test that files with exactly 1 duplicate feature are marked as all_features_duplicate."""
+    """Test that files where all features are duplicates are marked as all_features_duplicate."""
 
     async def test_single_feature_duplicate_marked_in_import_queue(self):
         """Test that a file with 1 feature that is a duplicate gets marked as all_features_duplicate."""
@@ -460,8 +460,8 @@ class TestAllFeaturesDuplicateDetection(TransactionTestCase):
         self.assertIsNone(item_data['file_duplicate']['status'],
                          "Single non-duplicate feature should NOT mark file as duplicate")
 
-    async def test_multiple_features_not_marked_even_if_all_duplicates(self):
-        """Test that a file with multiple features does NOT get marked, even if all are duplicates."""
+    async def test_multiple_features_marked_when_all_duplicates(self):
+        """Test that a file with multiple features gets marked as all_features_duplicate when all are duplicates."""
         user = await database_sync_to_async(User.objects.create_user)(
             email='test_multi@example.com',
             password='testpass123',
@@ -525,10 +525,10 @@ class TestAllFeaturesDuplicateDetection(TransactionTestCase):
         item_data = next((item for item in queue_data if item['id'] == queue_item.id), None)
         self.assertIsNotNone(item_data, "Queue item should be in the data")
 
-        # Verify it's NOT marked as all_features_duplicate (only single feature files get marked)
+        # Verify it IS marked as all_features_duplicate (when all features are duplicates)
         self.assertIn('file_duplicate', item_data)
-        self.assertIsNone(item_data['file_duplicate']['status'],
-                         "Multiple features should NOT mark file as all_features_duplicate")
+        self.assertEqual(item_data['file_duplicate']['status'], 'all_features_duplicate',
+                         "Multiple features that are all duplicates should mark file as all_features_duplicate")
 
     async def test_file_hash_duplicate_takes_priority(self):
         """Test that duplicate_in_queue takes priority over all_features_duplicate."""
