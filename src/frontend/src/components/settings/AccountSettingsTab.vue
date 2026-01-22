@@ -212,7 +212,7 @@
         <!-- Display raw key after creation (shown only once) -->
         <div v-if="newKeyRawValue" class="mt-4 p-4 bg-gray-50 border border-gray-200 rounded-md shadow-sm">
           <p class="text-sm font-medium text-gray-900 mb-2">
-            Please copy this key now - you'll need it to use the API. For your security, we only show it once.
+            Please copy this key now - you'll need it to use the API. For your security, it will only be shown once.
           </p>
           <div class="flex items-center gap-2">
             <input
@@ -229,7 +229,10 @@
               color="blue"
               size="sm"
             >
-              Copy
+              <span v-if="copyButtonShowingIcon" class="inline-flex items-center justify-center w-12 h-5">
+                <ClipboardDocumentIcon class="w-4 h-4" />
+              </span>
+              <span v-else class="inline-block w-12 h-5 text-center leading-5">Copy</span>
             </BaseButton>
           </div>
         </div>
@@ -292,13 +295,15 @@ import SettingsInput from "./components/SettingsInput.vue";
 import Loader from "@/components/parts/Loader.vue";
 import BaseButton from "@/components/parts/BaseButton.vue";
 import { formatDate } from "@/utils/dateUtils.js";
+import { ClipboardDocumentIcon } from '@heroicons/vue/24/outline';
 
 export default {
   name: 'AccountSettingsTab',
   components: {
     SettingsInput,
     Loader,
-    BaseButton
+    BaseButton,
+    ClipboardDocumentIcon
   },
   mixins: [SettingsMixin],
   props: {
@@ -336,7 +341,8 @@ export default {
       createKeyLoading: false,
       deleteKeyLoading: null,
       apiKeyMessage: '',
-      apiKeyMessageType: ''
+      apiKeyMessageType: '',
+      copyButtonShowingIcon: false
     }
   },
   methods: {
@@ -598,8 +604,6 @@ export default {
         });
 
         if (response.status === 201) {
-          this.apiKeyMessage = 'API key created successfully';
-          this.apiKeyMessageType = 'success';
           this.newKeyRawValue = response.data.raw_key;
           this.newKeyName = '';
           // Reload the list
@@ -710,13 +714,10 @@ export default {
       }
     },
     showCopySuccess() {
-      const originalText = this.apiKeyMessage;
-      this.apiKeyMessage = 'API key copied to clipboard!';
-      this.apiKeyMessageType = 'success';
+      this.copyButtonShowingIcon = true;
       setTimeout(() => {
-        this.apiKeyMessage = originalText;
-        this.apiKeyMessageType = originalText ? 'success' : '';
-      }, 2000);
+        this.copyButtonShowingIcon = false;
+      }, 1000);
     },
     formatDate
   },
