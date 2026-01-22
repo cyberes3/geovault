@@ -361,7 +361,7 @@ export default {
         }
       }, 200)
     },
-    validateAndAddTag(tag) {
+    validateAndAddTag(tag, closeDropdown = true) {
       // Clear any previous error
       this.systemTagError = ''
 
@@ -384,7 +384,9 @@ export default {
         const newTags = [...this.localTags, lowerTag]
         this.localTags = newTags
         this.tagInput = ''
-        this.showTagSuggestions = false
+        if (closeDropdown) {
+          this.showTagSuggestions = false
+        }
         this.checkTagsOverflow()
         return true
       }
@@ -392,15 +394,19 @@ export default {
       return false
     },
     selectTagSuggestion(tag) {
-      if (this.validateAndAddTag(tag)) {
+      if (this.validateAndAddTag(tag, false)) {
         // Reset selected index
         this.selectedSuggestionIndex = -1
-        // Refocus the input after a short delay to allow the blur event to complete
+        // Keep dropdown open and refocus the input after a short delay to allow the blur event to complete
         setTimeout(() => {
           if (this.$refs.tagInputContainer) {
             const input = this.$refs.tagInputContainer.querySelector('input')
             if (input) {
               input.focus()
+              // Ensure suggestions remain visible
+              if (this.filteredTagSuggestions.length > 0) {
+                this.showTagSuggestions = true
+              }
             }
           }
         }, 100)
