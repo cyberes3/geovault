@@ -15,6 +15,7 @@ from api.views.features.payload import QuickPointCreatePayload
 from geo_lib.feature_id import generate_geojson_hash
 from geo_lib.geocoding.background_geocoding import reverse_geocode_feature_async
 from geo_lib.logging.console import get_tagged_logger
+from geo_lib.processing.elevation_service import _fetch_elevation_batch_with_retry
 from geo_lib.processing.tagging.generate import generate_auto_tags
 from geo_lib.tags.const_strings import filter_protected_tags, prepare_user_tags, CONST_INTERNAL_TAGS
 from geo_lib.types.feature import PointFeature
@@ -159,28 +160,20 @@ def _fetch_elevation_for_point(longitude: float, latitude: float) -> Optional[fl
     api_url = get_required_setting('ELEVATION_API_URL')
     api_timeout = get_required_setting('ELEVATION_API_TIMEOUT')
 
-    try:
-        # API expects [lat, lon] format
-        response = requests.post(
-            api_url,
-            json=[[latitude, longitude]],
-            headers={'Content-Type': 'application/json'},
-            timeout=api_timeout
-        )
-        response.raise_for_status()
+    # API expects [lat, lon] format
+    elevations = _fetch_elevation_batch_with_retry(
+        api_url,
+        [[latitude, longitude]],
+        api_timeout,
+        _logger,
+        f"point ({longitude}, {latitude})"
+    )
 
-        elevations = response.json()
-        if isinstance(elevations, list) and len(elevations) > 0:
-            elevation = elevations[0]
-            if isinstance(elevation, (int, float)):
-                return float(elevation)
-
-        _logger.warning(f"Unexpected elevation API response format")
+    if elevations is None or len(elevations) == 0:
         return None
 
-    except requests.Timeout:
-        _logger.error(f"Elevation API request timed out after {api_timeout}s")
-        return None
-    except:
-        _logger.error(f"Error fetching elevation data: {traceback.format_exc()}")
-        return None
+    elevation = elevations[0]
+    if elevation is not None:
+        return elevation
+
+    return None

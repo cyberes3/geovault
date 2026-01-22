@@ -14,8 +14,99 @@ from website.settings_utils import get_required_setting
 
 _logger = get_tagged_logger()
 
-# Maximum points per API request (API limit is ~10,000)
-MAX_POINTS_PER_REQUEST = 10000
+# Maximum points per API request (limited to 100 to prevent timeout issues)
+MAX_POINTS_PER_REQUEST = 100
+
+
+def _fetch_elevation_batch_with_retry(
+        api_url: str,
+        batch_coords: List[List[float]],
+        api_timeout: int,
+        logger,
+        context_info: str = ""
+) -> Optional[List[float]]:
+    """
+    Fetch elevation data for a batch of coordinates with automatic retry logic.
+    
+    Implements retry logic with exponential backoff similar to the Overpass API.
+    Retries on timeout exceptions up to 3 times with increasing wait times.
+    
+    Args:
+        api_url: Elevation API URL
+        batch_coords: List of coordinate pairs in [lat, lon] format
+        api_timeout: Request timeout in seconds
+        logger: Logger instance for error/warning messages
+        context_info: Optional context string for logging (e.g., "batch starting at index 0")
+    
+    Returns:
+        List of elevation values (floats) if successful, None on failure
+    """
+    max_retries = 3
+    retry_wait_time = 0
+
+    for attempt in range(max_retries):
+        if attempt > 0:
+            time.sleep(retry_wait_time)
+
+        try:
+            response = requests.post(
+                api_url,
+                json=batch_coords,
+                headers={'Content-Type': 'application/json'},
+                timeout=api_timeout
+            )
+            response.raise_for_status()
+
+            batch_elevations = response.json()
+            if not isinstance(batch_elevations, list):
+                logger.warning(f"Unexpected API response format{f' for {context_info}' if context_info else ''}")
+                return None
+
+            if len(batch_elevations) != len(batch_coords):
+                logger.warning(
+                    f"API returned {len(batch_elevations)} elevations for {len(batch_coords)} points"
+                    f"{f' ({context_info})' if context_info else ''}"
+                )
+                return None
+
+            # Convert elevations to float
+            elevations = []
+            for elevation in batch_elevations:
+                if isinstance(elevation, (int, float)):
+                    elevations.append(float(elevation))
+                else:
+                    elevations.append(None)
+
+            return elevations
+
+        except requests.exceptions.Timeout:
+            retry_wait_time = 10 * (2 ** attempt)
+            retries_left = max_retries - (attempt + 1)
+            wait_msg = f"waiting {retry_wait_time}s, " if retries_left > 0 else ""
+            retry_msg = f"{retries_left} retries left" if retries_left > 0 else "no retries left"
+
+            context_str = f" for {context_info}" if context_info else ""
+            logger.warning(
+                f"Elevation API request timeout{context_str}, "
+                f"attempt {attempt + 1}/{max_retries}, {wait_msg}{retry_msg}"
+            )
+
+            if retries_left == 0:
+                logger.error(f"Elevation API request timed out after {api_timeout}s{context_str}: {traceback.format_exc()}")
+                return None
+            continue
+
+        except requests.exceptions.RequestException as e:
+            context_str = f" for {context_info}" if context_info else ""
+            logger.error(f"Elevation API request failed{context_str}: {str(e)}")
+            return None
+
+        except:
+            context_str = f" for {context_info}" if context_info else ""
+            logger.error(f"Unexpected error fetching elevation data{context_str}: {traceback.format_exc()}")
+            return None
+
+    return None
 
 
 def fill_missing_elevations(geojson_data: Dict[str, Any], import_log: ImportLog) -> Dict[str, Any]:
@@ -228,43 +319,27 @@ def fill_missing_elevations(geojson_data: Dict[str, Any], import_log: ImportLog)
         batch_coords = api_coords[batch_start:batch_end]
         batch_num = batch_start // MAX_POINTS_PER_REQUEST + 1
 
-        try:
-            # Only log batch progress if there are multiple batches
-            if num_batches > 1:
-                import_log.add(f"Fetching elevation data: batch {batch_num}/{num_batches} ({len(batch_coords)} points)", "Elevation Service", DatabaseLogLevel.INFO)
+        # Only log batch progress if there are multiple batches
+        if num_batches > 1:
+            import_log.add(f"Fetching elevation data: batch {batch_num}/{num_batches} ({len(batch_coords)} points)", "Elevation Service", DatabaseLogLevel.INFO)
 
-            response = requests.post(
-                api_url,
-                json=batch_coords,
-                headers={'Content-Type': 'application/json'},
-                timeout=api_timeout
-            )
-            response.raise_for_status()
+        batch_elevations = _fetch_elevation_batch_with_retry(
+            api_url,
+            batch_coords,
+            api_timeout,
+            _logger,
+            f"batch starting at index {batch_start}"
+        )
 
-            batch_elevations = response.json()
-            if not isinstance(batch_elevations, list):
-                import_log.add(f"Unexpected API response format, skipping batch", "Elevation Service", DatabaseLogLevel.WARNING)
-                continue
-
-            if len(batch_elevations) != len(batch_coords):
-                import_log.add(f"API returned {len(batch_elevations)} elevations for {len(batch_coords)} points, skipping batch", "Elevation Service", DatabaseLogLevel.WARNING)
-                continue
-
-            # Store elevations for this batch
-            for i, elevation in enumerate(batch_elevations):
-                if isinstance(elevation, (int, float)):
-                    elevations[batch_start + i] = float(elevation)
-                    total_fetched += 1
-
-        except requests.exceptions.Timeout:
-            import_log.add(f'Elevation API request timed out after {api_timeout}s, skipping batch', "Elevation Service", DatabaseLogLevel.WARNING)
-            _logger.error(f"Elevation API timeout for batch starting at index {batch_start}: {traceback.format_exc()}")
-        except requests.exceptions.RequestException:
+        if batch_elevations is None:
             import_log.add(f'Elevation API request failed, skipping batch', "Elevation Service", DatabaseLogLevel.WARNING)
-            _logger.error(f"Elevation API error for batch starting at index {batch_start}: {traceback.format_exc()}")
-        except:
-            import_log.add(f'Unexpected error fetching elevation data, skipping batch', "Elevation Service", DatabaseLogLevel.WARNING)
-            _logger.error(f"Unexpected error fetching elevation data: {traceback.format_exc()}")
+            continue
+
+        # Store elevations for this batch
+        for i, elevation in enumerate(batch_elevations):
+            if elevation is not None:
+                elevations[batch_start + i] = elevation
+                total_fetched += 1
 
     if total_fetched == 0:
         import_log.add("No elevation data was successfully fetched from API", "Elevation Service", DatabaseLogLevel.WARNING)

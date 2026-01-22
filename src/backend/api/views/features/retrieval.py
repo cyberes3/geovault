@@ -9,13 +9,11 @@ from api.models import FeatureStore
 from api.utils.authorization import get_object_or_404_for_user
 from api.utils.responses import handle_404
 from geo_lib.logging.console import get_tagged_logger
+from geo_lib.processing.elevation_service import MAX_POINTS_PER_REQUEST, _fetch_elevation_batch_with_retry
 from geo_lib.website.auth import api_or_login_required_401
 from website.settings_utils import get_required_setting
 
 _logger = get_tagged_logger()
-
-# Maximum points per API request (API limit is ~10,000, we use 10,000 to be safe)
-MAX_POINTS_PER_REQUEST = 10000
 
 
 @api_or_login_required_401()
@@ -217,41 +215,17 @@ def _fetch_elevations_from_api(coordinates: List[Tuple[float, float]]) -> List[O
         batch_end = min(batch_start + MAX_POINTS_PER_REQUEST, len(api_coords))
         batch_coords = api_coords[batch_start:batch_end]
 
-        try:
-            response = requests.post(
-                api_url,
-                json=batch_coords,
-                headers={'Content-Type': 'application/json'},
-                timeout=api_timeout
-            )
-            response.raise_for_status()
+        batch_elevations = _fetch_elevation_batch_with_retry(
+            api_url,
+            batch_coords,
+            api_timeout,
+            _logger,
+            f"batch starting at {batch_start}"
+        )
 
-            batch_elevations = response.json()
-            if not isinstance(batch_elevations, list):
-                _logger.warning(f"Unexpected API response format for batch starting at {batch_start}")
-                elevations.extend([None] * len(batch_coords))
-                continue
-
-            if len(batch_elevations) != len(batch_coords):
-                _logger.warning(f"API returned {len(batch_elevations)} elevations for {len(batch_coords)} points")
-                elevations.extend([None] * len(batch_coords))
-                continue
-
-            # Convert elevations to float
-            for elevation in batch_elevations:
-                if isinstance(elevation, (int, float)):
-                    elevations.append(float(elevation))
-                else:
-                    elevations.append(None)
-
-        except requests.exceptions.Timeout:
-            _logger.error(f"Elevation API request timed out after {api_timeout}s for batch starting at {batch_start}")
+        if batch_elevations is None:
             elevations.extend([None] * len(batch_coords))
-        except requests.exceptions.RequestException as e:
-            _logger.error(f"Elevation API request failed for batch starting at {batch_start}: {str(e)}")
-            elevations.extend([None] * len(batch_coords))
-        except:
-            _logger.error(f"Unexpected error fetching elevation data for batch starting at {batch_start}: {traceback.format_exc()}")
-            elevations.extend([None] * len(batch_coords))
+        else:
+            elevations.extend(batch_elevations)
 
     return elevations
