@@ -22,7 +22,7 @@ def _fetch_elevation_batch_with_retry(
         api_url: str,
         batch_coords: List[List[float]],
         api_timeout: int,
-        logger,
+        import_log: ImportLog,
         context_info: str = ""
 ) -> Optional[List[float]]:
     """
@@ -35,7 +35,7 @@ def _fetch_elevation_batch_with_retry(
         api_url: Elevation API URL
         batch_coords: List of coordinate pairs in [lat, lon] format
         api_timeout: Request timeout in seconds
-        logger: Logger instance for error/warning messages
+        import_log: ImportLog instance for logging
         context_info: Optional context string for logging (e.g., "batch starting at index 0")
     
     Returns:
@@ -55,17 +55,38 @@ def _fetch_elevation_batch_with_retry(
                 headers={'Content-Type': 'application/json'},
                 timeout=api_timeout
             )
-            response.raise_for_status()
+            
+            # Check status code - treat non-200 as retryable
+            if response.status_code != 200:
+                retry_wait_time = 10 * (2 ** attempt)
+                retries_left = max_retries - (attempt + 1)
+                wait_msg = f"waiting {retry_wait_time}s, " if retries_left > 0 else ""
+                retry_msg = f"{retries_left} retries left" if retries_left > 0 else "no retries left"
+
+                context_str = f" for {context_info}" if context_info else ""
+                import_log.add(
+                    f"Elevation API returned status {response.status_code}{context_str}, "
+                    f"attempt {attempt + 1}/{max_retries}, {wait_msg}{retry_msg}",
+                    "Elevation Service",
+                    DatabaseLogLevel.WARNING
+                )
+
+                if retries_left == 0:
+                    import_log.add(f"Elevation API request failed with status {response.status_code} after {max_retries} attempts{context_str}", "Elevation Service", DatabaseLogLevel.ERROR)
+                    return None
+                continue
 
             batch_elevations = response.json()
             if not isinstance(batch_elevations, list):
-                logger.warning(f"Unexpected API response format{f' for {context_info}' if context_info else ''}")
+                import_log.add(f"Unexpected API response format{f' for {context_info}' if context_info else ''}", "Elevation Service", DatabaseLogLevel.WARNING)
                 return None
 
             if len(batch_elevations) != len(batch_coords):
-                logger.warning(
+                import_log.add(
                     f"API returned {len(batch_elevations)} elevations for {len(batch_coords)} points"
-                    f"{f' ({context_info})' if context_info else ''}"
+                    f"{f' ({context_info})' if context_info else ''}",
+                    "Elevation Service",
+                    DatabaseLogLevel.WARNING
                 )
                 return None
 
@@ -86,24 +107,26 @@ def _fetch_elevation_batch_with_retry(
             retry_msg = f"{retries_left} retries left" if retries_left > 0 else "no retries left"
 
             context_str = f" for {context_info}" if context_info else ""
-            logger.warning(
+            import_log.add(
                 f"Elevation API request timeout{context_str}, "
-                f"attempt {attempt + 1}/{max_retries}, {wait_msg}{retry_msg}"
+                f"attempt {attempt + 1}/{max_retries}, {wait_msg}{retry_msg}",
+                "Elevation Service",
+                DatabaseLogLevel.WARNING
             )
 
             if retries_left == 0:
-                logger.error(f"Elevation API request timed out after {api_timeout}s{context_str}: {traceback.format_exc()}")
+                import_log.add(f"Elevation API request timed out after {api_timeout}s{context_str}: {traceback.format_exc()}", "Elevation Service", DatabaseLogLevel.ERROR)
                 return None
             continue
 
         except requests.exceptions.RequestException as e:
             context_str = f" for {context_info}" if context_info else ""
-            logger.error(f"Elevation API request failed{context_str}: {str(e)}")
+            import_log.add(f"Elevation API request failed{context_str}: {str(e)}", "Elevation Service", DatabaseLogLevel.ERROR)
             return None
 
         except:
             context_str = f" for {context_info}" if context_info else ""
-            logger.error(f"Unexpected error fetching elevation data{context_str}: {traceback.format_exc()}")
+            import_log.add(f"Unexpected error fetching elevation data{context_str}: {traceback.format_exc()}", "Elevation Service", DatabaseLogLevel.ERROR)
             return None
 
     return None
@@ -327,7 +350,7 @@ def fill_missing_elevations(geojson_data: Dict[str, Any], import_log: ImportLog)
             api_url,
             batch_coords,
             api_timeout,
-            _logger,
+            import_log,
             f"batch starting at index {batch_start}"
         )
 

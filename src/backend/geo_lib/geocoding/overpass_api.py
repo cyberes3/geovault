@@ -232,16 +232,10 @@ def query_overpass(
                 retry_wait_time = 10
                 last_error = "Overpass API gateway timeout (504)"
             else:
-                _log_overpass_failure(
-                    response,
-                    f"HTTP {response.status_code}",
-                    query,
-                    "Unexpected status code",
-                    latitude,
-                    longitude
-                )
+                # Treat all other non-200 status codes as retryable
+                error_type = f"HTTP {response.status_code}"
+                retry_wait_time = 10 * (2 ** attempt)
                 last_error = f"Overpass API HTTP {response.status_code}"
-                return None, last_error
 
             retries_left = max_retries - (attempt + 1)
             wait_msg = f"waiting {retry_wait_time}s, " if retries_left > 0 else ""
@@ -255,6 +249,8 @@ def query_overpass(
                 latitude,
                 longitude
             )
+
+            continue
 
         except requests.exceptions.Timeout:
             # Log query for timeout errors

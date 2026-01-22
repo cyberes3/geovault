@@ -10,9 +10,7 @@ from unittest.mock import patch, MagicMock, Mock
 import requests
 
 from geo_lib.processing.elevation_service import _fetch_elevation_batch_with_retry
-from geo_lib.logging.console import get_tagged_logger
-
-_logger = get_tagged_logger()
+from geo_lib.processing.logging import ImportLog, DatabaseLogLevel
 
 
 class TestElevationAPIRetry:
@@ -38,17 +36,19 @@ class TestElevationAPIRetry:
                 raise requests.exceptions.Timeout("Read timed out")
             # Success on third attempt
             mock_response = MagicMock()
+            mock_response.status_code = 200
             mock_response.json.return_value = [100.0, 200.0]
             mock_response.raise_for_status = Mock()
             return mock_response
 
         with patch('geo_lib.processing.elevation_service.requests.post', side_effect=mock_post_timeout):
             with patch('geo_lib.processing.elevation_service.time.sleep', side_effect=mock_sleep):
+                import_log = MagicMock(spec=ImportLog)
                 result = _fetch_elevation_batch_with_retry(
                     api_url,
                     batch_coords,
                     api_timeout,
-                    _logger,
+                    import_log,
                     "test batch"
                 )
 
@@ -78,11 +78,12 @@ class TestElevationAPIRetry:
 
         with patch('geo_lib.processing.elevation_service.requests.post', side_effect=mock_post_always_timeout):
             with patch('geo_lib.processing.elevation_service.time.sleep'):
+                import_log = MagicMock(spec=ImportLog)
                 result = _fetch_elevation_batch_with_retry(
                     api_url,
                     batch_coords,
                     api_timeout,
-                    _logger,
+                    import_log,
                     "test batch"
                 )
 
@@ -103,16 +104,18 @@ class TestElevationAPIRetry:
             """Mock requests.post to succeed immediately."""
             call_count[0] += 1
             mock_response = MagicMock()
+            mock_response.status_code = 200
             mock_response.json.return_value = [150.0, 250.0]
             mock_response.raise_for_status = Mock()
             return mock_response
 
         with patch('geo_lib.processing.elevation_service.requests.post', side_effect=mock_post_success):
+            import_log = MagicMock(spec=ImportLog)
             result = _fetch_elevation_batch_with_retry(
                 api_url,
                 batch_coords,
                 api_timeout,
-                _logger,
+                import_log,
                 "test batch"
             )
 
@@ -135,11 +138,12 @@ class TestElevationAPIRetry:
             raise requests.exceptions.ConnectionError("Connection failed")
 
         with patch('geo_lib.processing.elevation_service.requests.post', side_effect=mock_post_connection_error):
+            import_log = MagicMock(spec=ImportLog)
             result = _fetch_elevation_batch_with_retry(
                 api_url,
                 batch_coords,
                 api_timeout,
-                _logger,
+                import_log,
                 "test batch"
             )
 
@@ -160,21 +164,25 @@ class TestElevationAPIRetry:
             """Mock requests.post to return HTTP 500 error."""
             call_count[0] += 1
             mock_response = MagicMock()
+            mock_response.status_code = 500
             mock_response.raise_for_status.side_effect = requests.exceptions.HTTPError("500 Server Error")
             return mock_response
 
         with patch('geo_lib.processing.elevation_service.requests.post', side_effect=mock_post_http_error):
-            result = _fetch_elevation_batch_with_retry(
-                api_url,
-                batch_coords,
-                api_timeout,
-                _logger,
-                "test batch"
-            )
+            # Mock sleep to avoid waiting during tests
+            with patch('geo_lib.processing.elevation_service.time.sleep'):
+                import_log = MagicMock(spec=ImportLog)
+                result = _fetch_elevation_batch_with_retry(
+                    api_url,
+                    batch_coords,
+                    api_timeout,
+                    import_log,
+                    "test batch"
+                )
 
-        # Should only call once (no retries for HTTP errors)
-        assert call_count[0] == 1
-        # Should return None immediately
+        # Should retry 3 times for HTTP 500 (as it's != 200)
+        assert call_count[0] == 3
+        # Should return None
         assert result is None
 
     def test_invalid_response_format_returns_none(self):
@@ -189,16 +197,18 @@ class TestElevationAPIRetry:
             """Mock requests.post to return invalid response (not a list)."""
             call_count[0] += 1
             mock_response = MagicMock()
+            mock_response.status_code = 200
             mock_response.json.return_value = {"error": "Invalid format"}
             mock_response.raise_for_status = Mock()
             return mock_response
 
         with patch('geo_lib.processing.elevation_service.requests.post', side_effect=mock_post_invalid_response):
+            import_log = MagicMock(spec=ImportLog)
             result = _fetch_elevation_batch_with_retry(
                 api_url,
                 batch_coords,
                 api_timeout,
-                _logger,
+                import_log,
                 "test batch"
             )
 
@@ -219,17 +229,19 @@ class TestElevationAPIRetry:
             """Mock requests.post to return wrong number of elevations."""
             call_count[0] += 1
             mock_response = MagicMock()
+            mock_response.status_code = 200
             # Return only 1 elevation for 2 coordinates
             mock_response.json.return_value = [100.0]
             mock_response.raise_for_status = Mock()
             return mock_response
 
         with patch('geo_lib.processing.elevation_service.requests.post', side_effect=mock_post_wrong_length):
+            import_log = MagicMock(spec=ImportLog)
             result = _fetch_elevation_batch_with_retry(
                 api_url,
                 batch_coords,
                 api_timeout,
-                _logger,
+                import_log,
                 "test batch"
             )
 
@@ -258,17 +270,19 @@ class TestElevationAPIRetry:
                 raise requests.exceptions.Timeout("Read timed out")
             # Success on second attempt
             mock_response = MagicMock()
+            mock_response.status_code = 200
             mock_response.json.return_value = [300.0]
             mock_response.raise_for_status = Mock()
             return mock_response
 
         with patch('geo_lib.processing.elevation_service.requests.post', side_effect=mock_post_timeout_then_success):
             with patch('geo_lib.processing.elevation_service.time.sleep', side_effect=mock_sleep):
+                import_log = MagicMock(spec=ImportLog)
                 result = _fetch_elevation_batch_with_retry(
                     api_url,
                     batch_coords,
                     api_timeout,
-                    _logger,
+                    import_log,
                     "test batch"
                 )
 
@@ -290,17 +304,19 @@ class TestElevationAPIRetry:
         def mock_post_success(*args, **kwargs):
             """Mock requests.post to return response with None values."""
             mock_response = MagicMock()
+            mock_response.status_code = 200
             # Return list with None and valid elevation
             mock_response.json.return_value = [100.0, None]
             mock_response.raise_for_status = Mock()
             return mock_response
 
         with patch('geo_lib.processing.elevation_service.requests.post', side_effect=mock_post_success):
+            import_log = MagicMock(spec=ImportLog)
             result = _fetch_elevation_batch_with_retry(
                 api_url,
                 batch_coords,
                 api_timeout,
-                _logger,
+                import_log,
                 "test batch"
             )
 
@@ -316,16 +332,18 @@ class TestElevationAPIRetry:
         def mock_post_success(*args, **kwargs):
             """Mock requests.post to return integer elevation."""
             mock_response = MagicMock()
+            mock_response.status_code = 200
             mock_response.json.return_value = [500]  # Integer, not float
             mock_response.raise_for_status = Mock()
             return mock_response
 
         with patch('geo_lib.processing.elevation_service.requests.post', side_effect=mock_post_success):
+            import_log = MagicMock(spec=ImportLog)
             result = _fetch_elevation_batch_with_retry(
                 api_url,
                 batch_coords,
                 api_timeout,
-                _logger,
+                import_log,
                 "test batch"
             )
 
