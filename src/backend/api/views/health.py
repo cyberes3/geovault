@@ -1,9 +1,11 @@
+import traceback
 from concurrent.futures import ThreadPoolExecutor, as_completed, TimeoutError as FutureTimeoutError
 
 import requests
 from django.http import JsonResponse
 from django.views.decorators.http import require_http_methods
 
+from geo_lib.logging.console import get_tagged_logger
 from geo_lib.website.auth import api_or_login_required_401
 from website.config_loader import get_config_loader
 from website.settings_utils import get_required_setting
@@ -12,6 +14,8 @@ from website.startup_checks import (
     check_redis_connection,
     check_postgis_installation,
 )
+
+_logger = get_tagged_logger()
 
 # Maximum timeout for health checks (in seconds)
 # Health checks should be fast - external APIs get shorter timeouts
@@ -98,6 +102,7 @@ def health_check(request):
 
     except Exception:
         # Any exception means unhealthy
+        _logger.error(f"Health check failed with exception:\n{traceback.format_exc()}")
         return JsonResponse({
             "status": "unhealthy",
             "components": components
@@ -120,7 +125,10 @@ def check_overpass_api() -> bool:
             verify=get_required_setting('OVERPASS_API_VERIFY_SSL')
         )
         return response.status_code == 200
-    except Exception:
+    except Exception as e:
+        # Log unexpected exceptions (network errors are expected, but bugs are not)
+        if not isinstance(e, (requests.exceptions.RequestException, requests.exceptions.Timeout)):
+            _logger.warning(f"Overpass API health check failed with unexpected exception:\n{traceback.format_exc()}")
         return False
 
 
@@ -151,7 +159,10 @@ def check_elevation_api() -> bool:
             return isinstance(data, list) and len(data) > 0
 
         return False
-    except:
+    except Exception as e:
+        # Log unexpected exceptions (network errors are expected, but bugs are not)
+        if not isinstance(e, (requests.exceptions.RequestException, requests.exceptions.Timeout)):
+            _logger.warning(f"Elevation API health check failed with unexpected exception:\n{traceback.format_exc()}")
         return False
 
 
@@ -178,7 +189,10 @@ def check_maptiler_geocoding_api() -> bool:
             timeout=HEALTH_CHECK_EXTERNAL_API_TIMEOUT
         )
         return response.status_code == 200
-    except Exception:
+    except Exception as e:
+        # Log unexpected exceptions (network errors are expected, but bugs are not)
+        if not isinstance(e, (requests.exceptions.RequestException, requests.exceptions.Timeout)):
+            _logger.warning(f"MapTiler Geocoding API health check failed with unexpected exception:\n{traceback.format_exc()}")
         return False
 
 
@@ -198,4 +212,6 @@ def _run_check_safely(name, check_func):
         status = "healthy" if result else "unhealthy"
         return name, status, result
     except Exception:
+        # Log exception from health check function
+        _logger.warning(f"Health check '{name}' failed with exception:\n{traceback.format_exc()}")
         return name, "unhealthy", False
