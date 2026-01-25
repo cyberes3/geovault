@@ -27,8 +27,8 @@ System minimum requirements:
 ## Server Install
 
 ```shell
-sudo apt-get update
-sudo apt-get install g++ make expat libexpat1-dev zlib1g-dev bzip2 osmctools
+apt-get update
+apt-get install g++ make expat libexpat1-dev zlib1g-dev bzip2 osmctools
 ```
 
 ```shell
@@ -86,8 +86,8 @@ Then reboot the host.
 Create a system user:
 
 ```shell
-sudo useradd -r -s /bin/bash -d /srv/overpass -m overpass
-sudo chown -R overpass:overpass /srv/overpass
+useradd -r -s /bin/bash -d /srv/overpass -m overpass
+chown -R overpass:overpass /srv/overpass
 ```
 
 ### Install Systemd Service Files
@@ -95,16 +95,16 @@ sudo chown -R overpass:overpass /srv/overpass
 Copy the service files to systemd:
 
 ```shell
-sudo cp *.service /etc/systemd/system/
-sudo systemctl daemon-reload
+cp *.service /etc/systemd/system/
+systemctl daemon-reload
 ```
 
 Reload systemd and enable services:
 
 ```shell
-sudo systemctl enable overpass-dispatcher.service
-sudo systemctl enable overpass-fetch.service
-sudo systemctl enable overpass-apply.service
+systemctl enable overpass-dispatcher.service
+systemctl enable overpass-fetch.service
+systemctl enable overpass-apply.service
 ```
 
 ### Start Services
@@ -112,17 +112,17 @@ sudo systemctl enable overpass-apply.service
 Start services in order (`dispatcher` must start first):
 
 ```shell
-sudo systemctl start overpass-dispatcher.service
-sudo systemctl start overpass-fetch.service
-sudo systemctl start overpass-apply.service
+systemctl start overpass-dispatcher.service
+systemctl start overpass-fetch.service
+systemctl start overpass-apply.service
 ```
 
 ### Check Status
 
 ```shell
-sudo systemctl status overpass-dispatcher.service
-sudo systemctl status overpass-fetch.service
-sudo systemctl status overpass-apply.service
+systemctl status overpass-dispatcher.service
+systemctl status overpass-fetch.service
+systemctl status overpass-apply.service
 ```
 
 ## Nginx Setup
@@ -130,12 +130,12 @@ sudo systemctl status overpass-apply.service
 Quick and dirty nginx installation:
 
 ```shell
-sudo apt update && sudo apt install -y nginx fcgiwrap
+apt update && apt install -y nginx fcgiwrap
 
-sudo openssl req -x509 -nodes -days 99999 -newkey rsa:4096 \
+openssl req -x509 -nodes -days 99999 -newkey rsa:4096 \
   -subj "/C=PE/ST=Lima/L=Lima/O=Acme Inc. /OU=IT Department/CN=acme.com" \
   -keyout /etc/ssl/private/nginx-selfsigned.key -out /etc/ssl/certs/nginx-selfsigned.crt
-sudo openssl dhparam -out /etc/ssl/certs/dhparam.pem 2048
+openssl dhparam -out /etc/ssl/certs/dhparam.pem 2048
 
 echo """ssl_protocols TLSv1 TLSv1.1 TLSv1.2;
 ssl_prefer_server_ciphers on;
@@ -156,7 +156,7 @@ ssl_dhparam /etc/ssl/certs/dhparam.pem;""" >/etc/nginx/snippets/ssl-params.conf
 Copy and enable the Overpass API nginx config:
 
 ```shell
-sudo cp overpass-nginx.conf /etc/nginx/sites-enabled/default
+cp overpass-nginx.conf /etc/nginx/sites-enabled/default
 ```
 
 Edit the config and restart nginx.
