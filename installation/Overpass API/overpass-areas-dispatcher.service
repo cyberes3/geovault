@@ -10,6 +10,9 @@ User=overpass
 Group=overpass
 WorkingDirectory=/srv/overpass
 
+# Clean up any leftover socket files before starting
+ExecStartPre=/bin/sh -c 'rm -f /srv/overpass/databases/osm3s_areas /dev/shm/osm3s_areas 2>/dev/null || true'
+
 # Areas dispatcher (separate from base dispatcher)
 ExecStart=/usr/bin/dispatcher --areas --db-dir=/srv/overpass/databases
 ExecReload=/bin/kill -HUP $MAINPID
