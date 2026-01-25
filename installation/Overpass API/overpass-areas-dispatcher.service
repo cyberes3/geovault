@@ -17,7 +17,8 @@ ExecReload=/bin/kill -HUP $MAINPID
 # Clean up socket files after process exits
 # Unix sockets can persist if the process doesn't close them cleanly
 # Only remove socket files (type s), NOT lock files (which must not be deleted externally per Overpass API docs)
-ExecStopPost=/bin/sh -c 'sleep 1; find /srv/overpass/databases -maxdepth 1 -name "osm3s_areas*" -type s -delete 2>/dev/null || true'
+# Clean up sockets in both database directory and shared memory
+ExecStopPost=/bin/sh -c 'sleep 1; find /srv/overpass/databases -maxdepth 1 -name "osm3s_areas*" -type s -delete 2>/dev/null || true; find /dev/shm -maxdepth 1 -name "osm3s_areas*" -type s -delete 2>/dev/null || true'
 
 # Restart policy
 Restart=always

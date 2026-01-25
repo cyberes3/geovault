@@ -14,8 +14,8 @@ Copy the rules directory to your database directory:
 
 ```bash
 cd /srv/overpass/osm-3s_v*
-sudo cp -r rules /srv/overpass/databases/
-sudo chown -R overpass:overpass /srv/overpass/databases/rules
+cp -r rules /srv/overpass/databases/
+chown -R overpass:overpass /srv/overpass/databases/rules
 ```
 
 ## Start Areas Dispatcher
@@ -28,9 +28,9 @@ sudo systemctl daemon-reload
 ```
 
 ```bash
-sudo systemctl enable overpass-areas-dispatcher.service
-sudo systemctl start overpass-areas-dispatcher.service
-sudo systemctl status overpass-areas-dispatcher.service
+systemctl enable overpass-areas-dispatcher.service
+systemctl start overpass-areas-dispatcher.service
+systemctl status overpass-areas-dispatcher.service
 ```
 
 ## Initial Area Generation
@@ -42,7 +42,7 @@ Make sure you copied the rules!
 
 ```shell
 cd /srv/overpass
-sudo -u overpass /usr/bin/rules_loop.sh databases
+-u overpass /usr/bin/rules_loop.sh databases
 ```
 
 You can monitor progress by checking for area files:
@@ -60,9 +60,9 @@ process has completed and you can `CTRL+C` the `rules_loop.sh` terminal.
 After initial generation completes, enable the automatic incremental update service:
 
 ```bash
-sudo systemctl enable overpass-areas-generator.timer
-sudo systemctl start overpass-areas-generator.timer
-sudo systemctl status overpass-areas-generator.timer
+systemctl enable overpass-areas-generator.timer
+systemctl start overpass-areas-generator.timer
+systemctl status overpass-areas-generator.timer
 ```
 
 ## Verify Areas Are Working
