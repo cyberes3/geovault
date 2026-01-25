@@ -42,17 +42,17 @@ Make sure you copied the rules!
 
 ```shell
 cd /srv/overpass
--u overpass /usr/bin/rules_loop.sh databases
+sudo -u overpass /usr/bin/rules_loop.sh databases
 ```
 
 You can monitor progress by checking for area files:
 
 ```bash
-# Watch for area files being created (in another terminal)
+# Watch for area files being created
 watch -n 30 'ls -lh /srv/overpass/databases/area_*.bin 2>/dev/null | tail -5'
 ```
 
-When the file `/srv/overpass/databases/area_version` is created, that means the generation
+When the file `/srv/overpass/databases/area_version` is created, the generation
 process has completed and you can `CTRL+C` the `rules_loop.sh` terminal.
 
 ## Set Up Automatic Area Updates

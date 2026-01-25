@@ -13,8 +13,8 @@ Group=overpass
 WorkingDirectory=/srv/overpass
 
 # Generate areas incrementally (delta updates - faster after initial generation)
-# Use absolute path to database directory
-ExecStart=/usr/bin/rules_delta_loop.sh /srv/overpass/databases
+# Use relative path from WorkingDirectory (/srv/overpass)
+ExecStart=/usr/bin/rules_delta_loop.sh databases
 
 # Resource limits - run with lower priority to not impact queries
 Nice=19
