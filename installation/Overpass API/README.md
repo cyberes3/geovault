@@ -193,7 +193,6 @@ curl -k --data-urlencode "data=[out:json];node[\"amenity\"=\"restaurant\"](51.50
 
 ## Area Data Setup
 
-If you need to use `is_in()` queries (required for reverse geocoding protected areas, administrative boundaries, etc.),
-you need to enable and generate area data. This is a separate step from the initial data load.
+We need to build the areas dataset to perform `is_in()` queries (required for reverse geocoding protected areas, administrative boundaries, etc.),
 
-See [Areas Setup.md](Areas%20Setup.md) for detailed instructions.
+See [Areas Setup.md](Areas%20Setup.md) for instructions.

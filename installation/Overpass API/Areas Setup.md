@@ -36,7 +36,7 @@ sudo systemctl status overpass-areas-dispatcher.service
 ## Initial Area Generation
 
 Before setting up the automatic service, you must run the initial full area generation. This creates the base area
-data and can take 4-12+ hours depending on your data size.
+data and can take days.
 
 Make sure you copied the rules!
 
@@ -45,12 +45,15 @@ cd /srv/overpass
 sudo -u overpass /usr/bin/rules_loop.sh databases
 ```
 
-This command will run until completion. You can monitor progress by checking for area files:
+You can monitor progress by checking for area files:
 
 ```bash
 # Watch for area files being created (in another terminal)
 watch -n 30 'ls -lh /srv/overpass/databases/area_*.bin 2>/dev/null | tail -5'
 ```
+
+When the file `/srv/overpass/databases/area_version` is created, that means the generation
+process has completed and you can `CTRL+C` the `rules_loop.sh` terminal.
 
 ## Set Up Automatic Area Updates
 
@@ -67,5 +70,7 @@ sudo systemctl status overpass-areas-generator.timer
 Once area generation completes, test with a simple query:
 
 ```bash
-curl -k --data-urlencode "data=[out:json];is_in(27.819,-82.675)->.a;area.a[\"boundary\"=\"protected_area\"];out tags;" "https://172.0.2.121/api/interpreter"
+curl -k --data-urlencode "data=[out:json];is_in(27.819,-82.675)->.a;area.a[\"boundary\"=\"protected_area\"];out tags;" "https://127.0.0.1/api/interpreter"
 ```
+
+You may have to restart the `overpass-areas-dispatcher` service for it to load the new database.

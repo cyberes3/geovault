@@ -13,13 +13,19 @@ WorkingDirectory=/srv/overpass
 ExecStart=/usr/bin/dispatcher --osm-base --meta --db-dir=/srv/overpass/databases
 ExecReload=/bin/kill -HUP $MAINPID
 
+# Clean up socket files after process exits
+# Unix sockets can persist if the process doesn't close them cleanly
+# Only remove socket files (type s), NOT lock files (which must not be deleted externally per Overpass API docs)
+# Exclude areas dispatcher sockets (handled by its own service)
+ExecStopPost=/bin/sh -c 'sleep 1; find /srv/overpass/databases -maxdepth 1 -name "osm3s_*" ! -name "osm3s_areas*" -type s -delete 2>/dev/null || true'
+
 # Restart policy
 Restart=always
 RestartSec=10
 
 # Shutdown behavior (following PostgreSQL pattern)
 KillMode=mixed
-KillSignal=SIGINT
+KillSignal=SIGTERM
 TimeoutStartSec=0
 TimeoutStopSec=300
 
