@@ -36,7 +36,7 @@ systemctl status overpass-areas-dispatcher.service
 ## Initial Area Generation
 
 Before setting up the automatic service, you must run the initial full area generation. This creates the base area
-data and can take days.
+data and can take 24 hours.
 
 Make sure you copied the rules!
 
@@ -74,3 +74,19 @@ curl -k --data-urlencode "data=[out:json];is_in(27.819,-82.675)->.a;area.a[\"bou
 ```
 
 You may have to restart the `overpass-areas-dispatcher` service for it to load the new database.
+
+## Monitoring the Areas Updater
+
+```shell
+journalctl -b -u overpass-areas-generator.service
+
+tail /srv/overpass/databases/rules_loop.log
+
+# List area files with timestamps
+ls -lht /srv/overpass/databases/area_*.bin 2>/dev/null | head -10
+
+cat /srv/overpass/databases/area_version
+
+# Check modification time
+ls -lh /srv/overpass/databases/area_version
+```

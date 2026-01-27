@@ -11,7 +11,7 @@ Group=overpass
 WorkingDirectory=/srv/overpass
 
 # Main execution
-ExecStart=/usr/bin/fetch_osc.sh auto https://planet.openstreetmap.org/replication/minute/ /srv/overpass/replicates
+ExecStart=/usr/bin/fetch_osc.sh auto https://planet.osm.org/replication/day/ /srv/overpass/replicates
 
 # Restart policy
 Restart=always

@@ -41,7 +41,7 @@ cd osm-3s_v*
 
 ```shell
 mkdir -p /srv/overpass/tmp
-TMPDIR=/srv/overpass/tmp ./configure CXXFLAGS="-march=native -mtune=native -O2" --prefix=$EXEC_DIR
+TMPDIR=/srv/overpass/tmp ./configure CXXFLAGS="-march=native -mtune=native -O2" --prefix=/usr
 TMPDIR=/srv/overpass/tmp make -j$(nproc) install
 rm -rf /srv/overpass/tmp
 ```
@@ -56,14 +56,24 @@ aria2c --continue=true --max-connection-per-server=16 --split=16 --dir=/srv/over
 aria2c --continue=true --max-connection-per-server=16 --split=16 --dir=/srv/overpass/downloads --out=europe-latest.osm.pbf https://download.geofabrik.de/europe-latest.osm.pbf
 ```
 
-### Load
+### Convert PBF to OSM XML Format
 
-This may take multiple days to complete!
+The `init_osm3s.sh` script requires bzip2-compressed OSM XML format:
+
+```shell
+mkdir -p /srv/overpass/converted
+osmconvert /srv/overpass/downloads/north-america-latest.osm.pbf --out-osm | bzip2 > /srv/overpass/converted/north-america-latest.osm.bz2
+osmconvert /srv/overpass/downloads/europe-latest.osm.pbf --out-osm | bzip2 > /srv/overpass/converted/europe-latest.osm.bz2
+```
+
+### Initialize Database
 
 ```shell
 mkdir -p /srv/overpass/databases
-osmconvert /srv/overpass/downloads/north-america-latest.osm.pbf --out-osm | /usr/bin/update_database --db-dir=/srv/overpass/databases/ --meta
-osmconvert /srv/overpass/downloads/europe-latest.osm.pbf --out-osm | /usr/bin/update_database --db-dir=/srv/overpass/databases/ --meta
+cd /srv/overpass
+/usr/bin/init_osm3s.sh /srv/overpass/converted/north-america-latest.osm.bz2 /srv/overpass/databases /usr --meta
+/usr/bin/init_osm3s.sh /srv/overpass/converted/europe-latest.osm.bz2 /srv/overpass/databases /usr --meta
+chown -R overpass:overpass /srv/overpass/databases
 ```
 
 ## Systemd Service Setup
@@ -106,6 +116,19 @@ systemctl enable overpass-dispatcher.service
 systemctl enable overpass-fetch.service
 systemctl enable overpass-apply.service
 ```
+
+### Applying Diffs
+
+To set up automatic diff application, you need to find replicate sequence number.
+
+Browse through the replicate directory at <https://planet.osm.org/replication/day/> hierarchy and find
+the diff that has a date before the starting point of the planet dump, like a day before or something.
+
+Verify you have the right file by checking the respective *.state.txt file. The timestamp should show a date (here
+always UTC) slightly before midnight. `sequenceNumber` in this file is your replicant sequence number.
+
+Edit `overpass-fetch.service` and `overpass-apply.service`. Replace `auto` on the `ExecStart` line in each file with
+your replicant sequence number.
 
 ### Start Services
 
@@ -153,13 +176,13 @@ add_header X-Content-Type-Options nosniff;
 ssl_dhparam /etc/ssl/certs/dhparam.pem;""" >/etc/nginx/snippets/ssl-params.conf
 ```
 
-Copy and enable the Overpass API nginx config:
+Copy the Overpass API nginx config:
 
 ```shell
 cp overpass-nginx.conf /etc/nginx/sites-enabled/default
 ```
 
-Edit the config and restart nginx.
+Edit the config to match your setup and restart nginx.
 
 ### Test the API
 
@@ -193,6 +216,7 @@ curl -k --data-urlencode "data=[out:json];node[\"amenity\"=\"restaurant\"](51.50
 
 ## Area Data Setup
 
-We need to build the areas dataset to perform `is_in()` queries (required for reverse geocoding protected areas, administrative boundaries, etc.),
+We need to build the areas dataset to perform `is_in()` queries (required for reverse geocoding protected areas,
+administrative boundaries, etc).
 
-See [Areas Setup.md](Areas%20Setup.md) for instructions.
+Areas is basically a completely different database. See [Areas Setup.md](Areas%20Setup.md) for instructions.
