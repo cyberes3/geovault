@@ -9,5 +9,5 @@ disclosure, and prioritize rapid remediation of vulnerabilities.
 
 If any security vulnerability is found in GeoVault:
 
-- Full dev team joins in a ritual mass suicide, broadcast on YouTube Live.
+- Full dev team commits ritualistic mass suicide, broadcast on YouTube Live.
 - Project forks to "GeoVault Secure Edition" to be run by survivors (if any).
