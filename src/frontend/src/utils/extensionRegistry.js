@@ -5,6 +5,7 @@ import { reactive, markRaw } from 'vue';
  */
 export const extensionRegistry = reactive({
   navLinks: [], // Array of { label, path, component }
+  tools: [], // Array of { label, fullPath, icon }
   settingsTabs: [], // Array of { label, id, component, icon }
   routes: [], // Array of raw routes (to be scoped)
 
@@ -14,6 +15,14 @@ export const extensionRegistry = reactive({
   registerNavLink(link) {
     if (link.component) link.component = markRaw(link.component);
     this.navLinks.push(link);
+  },
+
+  /**
+   * Register a tool for the "Tools" dropdown.
+   */
+  registerTool(tool) {
+    if (tool.icon) tool.icon = markRaw(tool.icon);
+    this.tools.push(tool);
   },
 
   /**

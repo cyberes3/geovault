@@ -3,7 +3,7 @@
 *.har
 failures.txt
 .cursor/plans
-.vscide
+.vscode
 
 # ---> Python
 # Byte-compiled / optimized / DLL files
@@ -19,7 +19,7 @@ __pycache__/
 build/
 develop-eggs/
 dist/
-!src/backend/extensions/**/dist/
+# !src/backend/extensions/**/dist/
 downloads/
 eggs/
 .eggs/

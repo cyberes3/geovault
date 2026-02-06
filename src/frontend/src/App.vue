@@ -109,6 +109,44 @@
               >
                 Map
               </router-link>
+
+              <!-- Tools Dropdown -->
+              <div v-if="sortedTools.length" class="relative md:h-full md:flex md:items-center" ref="toolsMenuRef">
+                <button
+                    @click="toggleToolsMenu"
+                    :class="[
+                      isToolActive 
+                        ? 'text-blue-600 border-blue-500 bg-blue-50 md:bg-transparent' 
+                        : 'text-gray-500 border-transparent hover:text-gray-700 hover:border-gray-300 hover:bg-gray-50 md:hover:bg-transparent',
+                      'w-full md:w-auto flex items-center justify-between md:inline-flex md:items-center px-3 md:px-1 py-2 md:py-0 md:h-full text-base md:text-sm font-medium border-l-4 md:border-l-0 md:border-b-2 transition-colors duration-200 rounded-r-md md:rounded-none whitespace-nowrap'
+                    ]"
+                >
+                  Tools
+                  <ChevronDownIcon class="ml-1 h-4 w-4" />
+                </button>
+
+                <!-- Tools Dropdown Menu -->
+                <div
+                    v-if="toolsMenuOpen"
+                    class="md:absolute md:left-1/2 md:-translate-x-1/2 md:top-full md:w-56 md:bg-white md:rounded-b-md md:shadow-lg md:py-1 md:border md:border-gray-200 z-50 mt-1 md:mt-0"
+                >
+                  <router-link
+                      v-for="tool in sortedTools"
+                      :key="tool.fullPath"
+                      :to="tool.fullPath"
+                      @click="() => { closeToolsMenu(); closeMobileMenu(); }"
+                      :class="[
+                        $route.path === tool.fullPath
+                          ? 'text-blue-600 font-bold'
+                          : 'text-gray-700 hover:bg-gray-50',
+                        'block px-4 py-2 text-base md:text-sm border-l-4 md:border-l-0 transition-colors'
+                      ]"
+                  >
+                    {{ tool.label }}
+                  </router-link>
+                </div>
+              </div>
+
               <router-link
                   v-for="link in extensionRegistryState.navLinks"
                   :key="link.path"
@@ -277,6 +315,7 @@ export default {
     return {
       realtimeListenersAdded: false,
       userMenuOpen: false,
+      toolsMenuOpen: false,
       mobileMenuOpen: false,
       userInfoLoading: true,
       loadingError: false,
@@ -287,6 +326,14 @@ export default {
     ...mapState(["userInfo"]),
     extensionRegistryState() {
       return extensionRegistry;
+    },
+    sortedTools() {
+      return [...this.extensionRegistryState.tools].sort((a, b) => 
+        a.label.localeCompare(b.label)
+      );
+    },
+    isToolActive() {
+      return this.sortedTools.some(tool => this.$route.path === tool.fullPath);
     },
     isMapRoute() {
       return this.$route.path === '/map' || this.$route.path === '/mapshare' || this.$route.path === '/maplibre'
@@ -486,9 +533,17 @@ export default {
     },
     toggleUserMenu() {
       this.userMenuOpen = !this.userMenuOpen;
+      if (this.userMenuOpen) this.toolsMenuOpen = false;
     },
     closeUserMenu() {
       this.userMenuOpen = false;
+    },
+    toggleToolsMenu() {
+      this.toolsMenuOpen = !this.toolsMenuOpen;
+      if (this.toolsMenuOpen) this.userMenuOpen = false;
+    },
+    closeToolsMenu() {
+      this.toolsMenuOpen = false;
     },
     toggleMobileMenu() {
       this.mobileMenuOpen = !this.mobileMenuOpen;
@@ -510,6 +565,9 @@ export default {
     handleClickOutside(event) {
       if (this.$refs.userMenuRef && !this.$refs.userMenuRef.contains(event.target)) {
         this.userMenuOpen = false;
+      }
+      if (this.$refs.toolsMenuRef && !this.$refs.toolsMenuRef.contains(event.target)) {
+        this.toolsMenuOpen = false;
       }
     },
     refreshPage() {

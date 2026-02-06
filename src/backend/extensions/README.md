@@ -133,6 +133,7 @@ window.MyExtension = { setup: function() { ... } };
 - `store` - Vuex store instance
 - `registry` - Complete UI registry:
   - `registerNavLink(link)` - Add navigation link
+  - `registerTool(tool)` - Add tool to the "Tools" dropdown
   - `registerSettingsTab(tab)` - Add settings tab
   - `registerRoutes(routes)` - Register multiple routes
 - `api` - ExtensionApi instance (see below)
@@ -191,13 +192,51 @@ export async function setup({ api, toast, ... }) {
 
 ### 3. Shared Utilities
 
-Never bundle redundant libraries. Use the provided utilities:
-
-- **`toast`**: Show success/error notifications (also available via `window.GeoVault.toast`)
-- **`utils.updateUserSetting`**: Save settings to the cloud
-- **`utils.loadSettingsFromStore`**: Load settings from Vuex store
-- **`utils.keyValueToNested`**: Format settings for the API
 - **`utils.getNestedValue`**: Get nested value from object
+
+### 4. Shared Libraries & Bundle Optimization
+
+GeoVault provides core libraries (OpenLayers, Heroicons, Vue, etc.) globally to prevent redundant bundling. Using these shared libraries can reduce your bundle size by up to 90%.
+
+**Available Globals:**
+- `window.ol` (OpenLayers with source, layer, proj, geom, style namespaces)
+- `window.HeroiconsOutline`
+- `window.HeroiconsSolid`
+- `window.Vue`
+- `window.VueRouter`
+- `window.axios`
+
+#### Configuring Vite to use Shared Libraries
+
+In your extension's `vite.config.js`, mark these libraries as external and map them to the platform's globals:
+
+```javascript
+export default defineConfig({
+  build: {
+    rollupOptions: {
+      external: [
+        'vue', 'vue-router', 'vuex', 'axios', 'ol', 
+        '@heroicons/vue/24/outline', '@heroicons/vue/24/solid'
+      ],
+      output: {
+        globals: {
+          vue: 'Vue',
+          'vue-router': 'VueRouter',
+          vuex: 'Vuex',
+          axios: 'axios',
+          ol: 'ol',
+          '@heroicons/vue/24/outline': 'HeroiconsOutline'
+        }
+      }
+    }
+  }
+})
+```
+
+#### Best Practices
+- Move `ol` and `@heroicons/vue` to `devDependencies` in your `package.json`.
+- Use `registry.registerTool()` for auxiliary features to keep the main navigation bar clean.
+- The "Tools" dropdown is automatically sorted alphabetically.
 
 **Example:**
 ```javascript

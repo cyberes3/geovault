@@ -20,6 +20,15 @@ import { ExtensionApi } from './utils/extensionApi.js';
 import * as HeroiconsOutline from '@heroicons/vue/24/outline';
 import * as HeroiconsSolid from '@heroicons/vue/24/solid';
 
+// OpenLayers imports for shared use
+import * as ol from 'ol';
+import * as olSource from 'ol/source';
+import * as olLayer from 'ol/layer';
+import * as olProj from 'ol/proj';
+import * as olGeom from 'ol/geom';
+import * as olStyle from 'ol/style';
+import Feature from 'ol/Feature';
+
 // Inject utils into registry
 extensionRegistry.utils.updateUserSetting = updateUserSetting;
 extensionRegistry.utils.loadSettingsFromStore = loadSettingsFromStore;
@@ -46,6 +55,15 @@ window.Vuex = VuexState;
 window.axios = axios;
 window.HeroiconsOutline = HeroiconsOutline;
 window.HeroiconsSolid = HeroiconsSolid;
+window.ol = {
+    ...ol,
+    source: olSource,
+    layer: olLayer,
+    proj: olProj,
+    geom: olGeom,
+    style: olStyle,
+    Feature: Feature
+};
 
 import BaseButton from '@/components/parts/BaseButton.vue';
 import ToggleButton from '@/components/parts/ToggleButton.vue';
@@ -78,13 +96,13 @@ function findSetupFunction(module, extensionName) {
     const globalName = words
         .map(word => word.charAt(0).toUpperCase() + word.slice(1))
         .join('') + (lastWord === 'extension' ? '' : 'Extension');
-    
+
     // UMD bundle sets the global to the setup function directly
     const setup = window[globalName];
     if (setup && typeof setup === 'function') {
         return setup;
     }
-    
+
     return null;
 }
 
@@ -129,6 +147,11 @@ function createScopedRegistry(registry, prefix) {
         registerSettingsTab: (tab) => {
             registry.registerSettingsTab(tab);
         },
+        registerTool: (tool) => {
+            const relPath = tool.path.startsWith('/') ? tool.path : `/${tool.path}`;
+            tool.fullPath = `${prefix}${relPath}`;
+            registry.registerTool(tool);
+        },
         registerRoutes: (routes) => {
             // Scope all route paths with extension prefix
             const scopedRoutes = routes.map(route => {
@@ -163,40 +186,40 @@ async function resolveExtensionIcon(icon, kebabName) {
             try {
                 // Ensure xmlns is present in the SVG string (critical for paths to render)
                 let processedSvg = trimmedIcon;
-            if (!processedSvg.includes('xmlns=')) {
-                processedSvg = processedSvg.replace('<svg', '<svg xmlns="http://www.w3.org/2000/svg"');
-            }
-            
-            // Store the SVG string in closure
-            const baseSvgString = processedSvg;
-            
-            // Create Vue component that renders the full SVG string with CSS styling
-            const SvgIconComponent = {
-                props: {
-                    class: String
-                },
-                mounted() {
-                    // Set innerHTML on the wrapper div to render the full SVG
-                    if (this.$el) {
-                        let svgWithClass = baseSvgString;
-                        if (this.class) {
-                            if (svgWithClass.includes('class=')) {
-                                svgWithClass = svgWithClass.replace(/class=["'][^"']*["']/g, `class="${this.class}"`);
-                            } else {
-                                svgWithClass = svgWithClass.replace('<svg', `<svg class="${this.class}"`);
+                if (!processedSvg.includes('xmlns=')) {
+                    processedSvg = processedSvg.replace('<svg', '<svg xmlns="http://www.w3.org/2000/svg"');
+                }
+
+                // Store the SVG string in closure
+                const baseSvgString = processedSvg;
+
+                // Create Vue component that renders the full SVG string with CSS styling
+                const SvgIconComponent = {
+                    props: {
+                        class: String
+                    },
+                    mounted() {
+                        // Set innerHTML on the wrapper div to render the full SVG
+                        if (this.$el) {
+                            let svgWithClass = baseSvgString;
+                            if (this.class) {
+                                if (svgWithClass.includes('class=')) {
+                                    svgWithClass = svgWithClass.replace(/class=["'][^"']*["']/g, `class="${this.class}"`);
+                                } else {
+                                    svgWithClass = svgWithClass.replace('<svg', `<svg class="${this.class}"`);
+                                }
                             }
-                        }
-                        this.$el.innerHTML = svgWithClass;
-                        
-                        // Apply CSS to make SVG elements use currentColor
-                        const svgElement = this.$el.querySelector('svg');
-                        if (svgElement) {
-                            const styleId = `svg-icon-style-${Date.now()}-${Math.random()}`;
-                            svgElement.setAttribute('data-icon-style-id', styleId);
-                            
-                            const style = document.createElement('style');
-                            style.id = styleId;
-                            style.textContent = `
+                            this.$el.innerHTML = svgWithClass;
+
+                            // Apply CSS to make SVG elements use currentColor
+                            const svgElement = this.$el.querySelector('svg');
+                            if (svgElement) {
+                                const styleId = `svg-icon-style-${Date.now()}-${Math.random()}`;
+                                svgElement.setAttribute('data-icon-style-id', styleId);
+
+                                const style = document.createElement('style');
+                                style.id = styleId;
+                                style.textContent = `
                                 svg[data-icon-style-id="${styleId}"] * {
                                     fill: currentColor !important;
                                     stroke: currentColor !important;
@@ -208,34 +231,34 @@ async function resolveExtensionIcon(icon, kebabName) {
                                     stroke: none !important;
                                 }
                             `;
-                            document.head.appendChild(style);
-                        }
-                    }
-                },
-                updated() {
-                    // Update class when prop changes
-                    if (this.$el) {
-                        let svgWithClass = baseSvgString;
-                        if (this.class) {
-                            if (svgWithClass.includes('class=')) {
-                                svgWithClass = svgWithClass.replace(/class=["'][^"']*["']/g, `class="${this.class}"`);
-                            } else {
-                                svgWithClass = svgWithClass.replace('<svg', `<svg class="${this.class}"`);
+                                document.head.appendChild(style);
                             }
                         }
-                        this.$el.innerHTML = svgWithClass;
-                        
-                        // Re-apply CSS
-                        const svgElement = this.$el.querySelector('svg');
-                        if (svgElement) {
-                            const styleId = svgElement.getAttribute('data-icon-style-id') || `svg-icon-style-${Date.now()}-${Math.random()}`;
-                            svgElement.setAttribute('data-icon-style-id', styleId);
-                            
-                            const existingStyle = document.getElementById(styleId);
-                            if (!existingStyle) {
-                                const style = document.createElement('style');
-                                style.id = styleId;
-                                style.textContent = `
+                    },
+                    updated() {
+                        // Update class when prop changes
+                        if (this.$el) {
+                            let svgWithClass = baseSvgString;
+                            if (this.class) {
+                                if (svgWithClass.includes('class=')) {
+                                    svgWithClass = svgWithClass.replace(/class=["'][^"']*["']/g, `class="${this.class}"`);
+                                } else {
+                                    svgWithClass = svgWithClass.replace('<svg', `<svg class="${this.class}"`);
+                                }
+                            }
+                            this.$el.innerHTML = svgWithClass;
+
+                            // Re-apply CSS
+                            const svgElement = this.$el.querySelector('svg');
+                            if (svgElement) {
+                                const styleId = svgElement.getAttribute('data-icon-style-id') || `svg-icon-style-${Date.now()}-${Math.random()}`;
+                                svgElement.setAttribute('data-icon-style-id', styleId);
+
+                                const existingStyle = document.getElementById(styleId);
+                                if (!existingStyle) {
+                                    const style = document.createElement('style');
+                                    style.id = styleId;
+                                    style.textContent = `
                                     svg[data-icon-style-id="${styleId}"] * {
                                         fill: currentColor !important;
                                         stroke: currentColor !important;
@@ -247,32 +270,32 @@ async function resolveExtensionIcon(icon, kebabName) {
                                         stroke: none !important;
                                     }
                                 `;
-                                document.head.appendChild(style);
+                                    document.head.appendChild(style);
+                                }
                             }
                         }
-                    }
-                },
-                beforeUnmount() {
-                    // Clean up style element
-                    const svgElement = this.$el?.querySelector('svg');
-                    if (svgElement) {
-                        const styleId = svgElement.getAttribute('data-icon-style-id');
-                        if (styleId) {
-                            const style = document.getElementById(styleId);
-                            if (style) {
-                                style.remove();
+                    },
+                    beforeUnmount() {
+                        // Clean up style element
+                        const svgElement = this.$el?.querySelector('svg');
+                        if (svgElement) {
+                            const styleId = svgElement.getAttribute('data-icon-style-id');
+                            if (styleId) {
+                                const style = document.getElementById(styleId);
+                                if (style) {
+                                    style.remove();
+                                }
                             }
                         }
+                    },
+                    render() {
+                        // Return a div wrapper - the SVG will be inserted via innerHTML in mounted
+                        return h('div', {
+                            class: 'inline-flex items-center'
+                        });
                     }
-                },
-                render() {
-                    // Return a div wrapper - the SVG will be inserted via innerHTML in mounted
-                    return h('div', {
-                        class: 'inline-flex items-center'
-                    });
-                }
-            };
-            
+                };
+
                 return markRaw(SvgIconComponent);
             } catch (err) {
                 console.error(`Failed to parse inline SVG icon for extension ${kebabName}:`, err);
@@ -287,7 +310,7 @@ async function resolveExtensionIcon(icon, kebabName) {
         // Check if it's a heroicon name
         const heroiconOutline = window.HeroiconsOutline?.[icon];
         const heroiconSolid = window.HeroiconsSolid?.[icon];
-        
+
         if (heroiconOutline) {
             return markRaw(heroiconOutline);
         }
@@ -300,23 +323,23 @@ async function resolveExtensionIcon(icon, kebabName) {
     if (typeof icon === 'string' && (icon.endsWith('.svg') || (icon.includes('/') && !icon.trim().startsWith('<svg')))) {
         try {
             // Construct static URL
-            const iconUrl = icon.startsWith('/') 
-                ? icon 
+            const iconUrl = icon.startsWith('/')
+                ? icon
                 : `/extensions/static/${kebabName}/${icon}`;
-            
+
             // Fetch SVG content
             const response = await axios.get(iconUrl, { responseType: 'text' });
             const svgContent = response.data;
-            
+
             // Ensure xmlns is present in the SVG string (critical for paths to render)
             let processedSvg = svgContent;
             if (!processedSvg.includes('xmlns=')) {
                 processedSvg = processedSvg.replace('<svg', '<svg xmlns="http://www.w3.org/2000/svg"');
             }
-            
+
             // Store the SVG string in closure
             const baseSvgString = processedSvg;
-            
+
             // Create Vue component that renders the full SVG string with CSS styling
             const SvgIconComponent = {
                 props: {
@@ -335,7 +358,7 @@ async function resolveExtensionIcon(icon, kebabName) {
                             }
                         }
                         this.$el.innerHTML = svgWithClass;
-                        
+
                         // Apply CSS to make SVG elements use currentColor
                         // Target all SVG child elements except those with fill="none"
                         const svgElement = this.$el.querySelector('svg');
@@ -343,7 +366,7 @@ async function resolveExtensionIcon(icon, kebabName) {
                             // Create a style element for this SVG
                             const styleId = `svg-icon-style-${Date.now()}-${Math.random()}`;
                             svgElement.setAttribute('data-icon-style-id', styleId);
-                            
+
                             // Add CSS that makes all fills and strokes use currentColor
                             // but preserve elements that explicitly have fill="none"
                             const style = document.createElement('style');
@@ -376,13 +399,13 @@ async function resolveExtensionIcon(icon, kebabName) {
                             }
                         }
                         this.$el.innerHTML = svgWithClass;
-                        
+
                         // Re-apply CSS
                         const svgElement = this.$el.querySelector('svg');
                         if (svgElement) {
                             const styleId = svgElement.getAttribute('data-icon-style-id') || `svg-icon-style-${Date.now()}-${Math.random()}`;
                             svgElement.setAttribute('data-icon-style-id', styleId);
-                            
+
                             const existingStyle = document.getElementById(styleId);
                             if (!existingStyle) {
                                 const style = document.createElement('style');
@@ -424,7 +447,7 @@ async function resolveExtensionIcon(icon, kebabName) {
                     });
                 }
             };
-            
+
             return markRaw(SvgIconComponent);
         } catch (err) {
             console.error(`Failed to load SVG file icon ${icon} for extension ${kebabName}:`, err);
