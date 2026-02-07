@@ -78,6 +78,7 @@ def geocoding_search(request):
         'key': api_key,
         'limit': 10,  # MapTiler API maximum limit
         'autocomplete': 'true',
+        'language': 'en',
         'types': 'region,subregion,municipality,joint_municipality'  # Major administrative divisions
     }
 
@@ -87,6 +88,7 @@ def geocoding_search(request):
         'key': api_key,
         'limit': 10,  # MapTiler API maximum limit
         'autocomplete': 'true',
+        'language': 'en',
         'types': 'poi,major_landform,place,region,subregion,county,municipality,joint_municipality,joint_submunicipality,municipal_district,locality,neighbourhood'  # Focus on geographic features
     }
 
@@ -94,7 +96,8 @@ def geocoding_search(request):
     params_all = {
         'key': api_key,
         'limit': 10,  # MapTiler API maximum limit
-        'autocomplete': 'true'
+        'autocomplete': 'true',
+        'language': 'en'
     }
 
     admin_features = []

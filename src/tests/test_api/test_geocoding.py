@@ -98,6 +98,45 @@ class TestGeocodingAPI(TestCase):
             ]
         }
 
+    def test_geocoding_search_live_edge_case(self):
+        """
+        Live API test for 'niggerhead rock' edge case.
+        Asserts that no non-English (non-ASCII) characters are present in the results.
+        """
+        import requests
+        from website.config_loader import get_config_loader
+        
+        config_loader = get_config_loader()
+        api_key = config_loader.get_maptiler_api_key()
+        
+        if not api_key:
+            self.skipTest("MapTiler API key not configured")
+
+        # Make a real request to our API endpoint
+        response = self.client.get('/api/geocoding/search/?q=niggerhead rock')
+        
+        self.assertEqual(response.status_code, 200)
+        data = json.loads(response.content)
+        features = data['data']['features']
+        
+        self.assertTrue(len(features) > 0, "Should return at least one feature for 'niggerhead rock'")
+        
+        for feature in features:
+            text = feature.get('text', '')
+            place_name = feature.get('place_name', '')
+            
+            # Assert that text and place_name do not contain Cyrillic characters
+            # (which was the reported issue). We use a regex to check for Cyrillic range.
+            import re
+            cyrillic_pattern = re.compile(r'[\u0400-\u04FF]')
+            
+            if text:
+                has_cyrillic = bool(cyrillic_pattern.search(text))
+                self.assertFalse(has_cyrillic, f"Feature text '{text}' contains Cyrillic characters")
+            if place_name:
+                has_cyrillic = bool(cyrillic_pattern.search(place_name))
+                self.assertFalse(has_cyrillic, f"Feature place_name '{place_name}' contains Cyrillic characters")
+
     @patch('api.views.services.geocoding.get_config_loader')
     @patch('api.views.services.geocoding.requests.get')
     def test_geocoding_search_rocky_mountain_national_park(self, mock_get, mock_config_loader):
