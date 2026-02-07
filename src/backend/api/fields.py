@@ -2,10 +2,11 @@
 Custom Django model fields with encryption support.
 """
 import base64
-import hashlib
 from django.conf import settings
 from django.db import models
 from cryptography.fernet import Fernet, InvalidToken
+from cryptography.hazmat.primitives import hashes
+from cryptography.hazmat.primitives.kdf.pbkdf2 import PBKDF2HMAC
 from geo_lib.logging.console import get_tagged_logger
 
 _logger = get_tagged_logger('EncryptedField')
@@ -13,29 +14,32 @@ _logger = get_tagged_logger('EncryptedField')
 # Module-level Fernet instance (initialized once, reused for all field instances)
 _fernet_instance = None
 
+# Fixed salt for key derivation (deterministic per SECRET_KEY; do not change or existing data won't decrypt)
+_FERNET_KDF_SALT = b"geovault-fernet-v1"
+_FERNET_KDF_ITERATIONS = 600000
+
 
 def _get_fernet_instance():
     """
     Get or create the module-level Fernet instance.
-    Derives encryption key from Django's SECRET_KEY setting.
-    
+    Derives encryption key from Django's SECRET_KEY using PBKDF2-HMAC-SHA256.
+
     Returns:
         Fernet instance for encryption/decryption
     """
     global _fernet_instance
-    
+
     if _fernet_instance is None:
-        # Derive 32-byte key from SECRET_KEY using SHA-256
         secret_key = settings.SECRET_KEY
-        key_bytes = hashlib.sha256(secret_key.encode()).digest()
-        
-        # Convert to URL-safe base64 format required by Fernet
+        kdf = PBKDF2HMAC(
+            algorithm=hashes.SHA256(),
+            length=32,
+            salt=_FERNET_KDF_SALT,
+            iterations=_FERNET_KDF_ITERATIONS,
+        )
+        key_bytes = kdf.derive(secret_key.encode())
         fernet_key = base64.urlsafe_b64encode(key_bytes)
-        
-        # Create Fernet instance
         _fernet_instance = Fernet(fernet_key)
-        _logger.debug("Initialized Fernet instance from SECRET_KEY")
-    
     return _fernet_instance
 
 

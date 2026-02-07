@@ -23,4 +23,5 @@ pytest-django==4.11.1
 coordinate-parser==0.1.1
 geobuf==2.0.0
 cryptography==46.0.3
+argon2-cffi==25.1.0
 caltopo_python==1.0.0

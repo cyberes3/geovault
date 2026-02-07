@@ -364,7 +364,7 @@ class TestApiKey(TestCase):
         self.assertIsNotNone(key_obj.key_prefix)
         self.assertIsNotNone(key_obj.key_hash)
         self.assertEqual(len(key_obj.key_prefix), 8)
-        self.assertEqual(len(key_obj.key_hash), 64)  # SHA-256
+        self.assertTrue(key_obj.key_hash.startswith('$argon2'))  # Argon2 hash
 
     def test_api_key_last_used_at(self):
         """Test updating last_used_at."""

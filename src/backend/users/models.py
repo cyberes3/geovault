@@ -54,8 +54,8 @@ class ApiKey(models.Model):
         help_text="First 8 characters of the key for display and lookup"
     )
     key_hash = models.CharField(
-        max_length=64,
-        help_text="SHA-256 hash of the full API key"
+        max_length=255,
+        help_text="Argon2 hash of the full API key"
     )
     created_at = models.DateTimeField(
         auto_now_add=True,

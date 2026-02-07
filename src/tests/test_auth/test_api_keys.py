@@ -47,6 +47,18 @@ class TestAPIKeys(TestCase):
         result = validate_api_key('invalid-key')
         self.assertIsNone(result)
 
+    def test_validate_api_key_incorrect(self):
+        """Test that an incorrect key (valid format, wrong secret) is rejected."""
+        key_obj, raw_key = create_user_api_key(self.user, 'Test Key')
+        # Same length and prefix-like format but wrong secret
+        wrong_key = raw_key[:-1] + ('X' if raw_key[-1] != 'X' else 'Y')
+        result = validate_api_key(wrong_key)
+        self.assertIsNone(result)
+        # Correct key still works
+        result = validate_api_key(raw_key)
+        self.assertIsNotNone(result)
+        self.assertEqual(result[0], self.user)
+
     def test_validate_api_key_inactive(self):
         """Test that inactive API keys are rejected."""
         key_obj, raw_key = create_user_api_key(self.user, 'Test Key')
@@ -170,13 +182,24 @@ class TestAPIKeys(TestCase):
         self.assertNotEqual(key_obj1.key_prefix, key_obj2.key_prefix)
 
     def test_api_key_hash_security(self):
-        """Test that API keys are hashed securely."""
+        """Test real API key crypto flow: create, store Argon2 hash, verify with raw key, reject wrong key."""
         key_obj, raw_key = create_user_api_key(self.user, 'Test Key')
 
-        # Hash should not be the same as the raw key
+        # Stored hash must not be the raw key and must be Argon2 format
         self.assertNotEqual(key_obj.key_hash, raw_key)
-        # Hash should be SHA-256 (64 hex characters)
-        self.assertEqual(len(key_obj.key_hash), 64)
+        self.assertTrue(
+            key_obj.key_hash.startswith('$argon2'),
+            f'key_hash should be Argon2 format, got: {key_obj.key_hash[:20]}...',
+        )
+        # Real verify: correct raw key must validate and return (user, api_key)
+        result = validate_api_key(raw_key)
+        self.assertIsNotNone(result)
+        user, api_key = result
+        self.assertEqual(user, self.user)
+        self.assertEqual(api_key, key_obj)
+        # Wrong key must be rejected
+        wrong_key = raw_key[:-1] + 'X' if len(raw_key) > 1 else 'x'
+        self.assertIsNone(validate_api_key(wrong_key))
 
     def test_api_key_constant_time_comparison(self):
         """Test that API key validation uses constant-time comparison."""
