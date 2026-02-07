@@ -2,6 +2,8 @@ import re
 from xml.etree import ElementTree as ET
 
 from geo_lib.processing.file_types import FileType
+from geo_lib.security.exceptions import FileValidationError
+from geo_lib.security.xml import parse_xml
 
 
 def normalize_content_for_comparison(content: str, file_type: FileType) -> str:
@@ -36,20 +38,9 @@ def _normalize_kml_for_comparison(kml_content: str) -> str:
     3. Removes whitespace differences
     4. Standardizes XML formatting
     """
-    # Parse the KML content with secure settings
     try:
-        # Use secure parser to prevent XXE attacks
-        parser = ET.XMLParser()
-
-        # Disable entity processing to prevent XXE attacks
-        try:
-            parser.entity = {}
-        except (AttributeError, TypeError):
-            pass
-
-        root = ET.fromstring(kml_content, parser=parser)
-    except ET.ParseError:
-        # If XML parsing fails, return the original content
+        root = parse_xml(kml_content)
+    except FileValidationError:
         return kml_content
 
     # Normalize document name - remove .kml/.kmz extensions
@@ -91,20 +82,9 @@ def _normalize_gpx_for_comparison(gpx_content: str) -> str:
     2. Standardizes XML formatting
     3. Removes metadata that doesn't affect the actual track data
     """
-    # Parse the GPX content with secure settings
     try:
-        # Use secure parser to prevent XXE attacks
-        parser = ET.XMLParser()
-
-        # Disable entity processing to prevent XXE attacks
-        try:
-            parser.entity = {}
-        except (AttributeError, TypeError):
-            pass
-
-        root = ET.fromstring(gpx_content, parser=parser)
-    except ET.ParseError:
-        # If XML parsing fails, return the original content
+        root = parse_xml(gpx_content)
+    except FileValidationError:
         return gpx_content
 
     # Convert back to string with consistent formatting

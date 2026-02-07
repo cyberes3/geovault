@@ -181,17 +181,6 @@ processing:
   show_detailed_error_messages: true
 
 
-validation:
-  # Enable secure XML parsing
-  secure_xml_parsing: true
-
-  # Enable file signature validation
-  enable_file_signature_validation: true
-
-  # Enable MIME type validation
-  enable_mime_type_validation: true
-
-
 maxmind:
   # Path to MaxMind GeoIP2 database file
   database_path: /var/lib/GeoIP/GeoLite2-City.mmdb

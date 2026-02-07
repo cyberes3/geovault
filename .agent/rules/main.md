@@ -8,7 +8,7 @@ Always use top-level imports in Python, not local/function level!
 
 The backend venv is at src/backend/venv
 
-Run tests with src/tests/run-tests.sh
+Run tests with src/tests/run-tests.sh. We have like 2000+ tests so do not blindly run this script. Instead, run specific tests.
 
 Do not re-export modules or use __all__. Instead, do direct imports
 

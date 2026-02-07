@@ -8,7 +8,7 @@ from django.core.files.uploadedfile import UploadedFile
 from geo_lib.processing.file_types import get_max_file_size, FileType, get_file_type_by_extension
 from geo_lib.security.exceptions import SecurityError, FileValidationError
 from geo_lib.security.filetype_checkers import _is_valid_kml, _is_valid_gpx
-from geo_lib.security.xml import _secure_xml_parse, _check_dangerous_elements, _check_dangerous_attributes
+from geo_lib.security.xml import parse_xml, _check_dangerous_elements, _check_dangerous_attributes
 
 
 def _validate_kmz_content(uploaded_file: UploadedFile):
@@ -102,7 +102,7 @@ def _validate_kml_structure(kml_content: str):
     """Validate KML XML structure and check for dangerous content."""
     try:
         # Parse XML with secure settings
-        root = _secure_xml_parse(kml_content)
+        root = parse_xml(kml_content)
 
         # Check for dangerous elements
         _check_dangerous_elements(root, FileType.KML)
@@ -126,7 +126,7 @@ def _validate_gpx_structure(gpx_content: str):
     """Validate GPX XML structure and check for dangerous content."""
     try:
         # Parse XML with secure settings
-        root = _secure_xml_parse(gpx_content)
+        root = parse_xml(gpx_content)
 
         # Check for dangerous elements
         _check_dangerous_elements(root, FileType.GPX)

@@ -3,11 +3,12 @@ Source device tag generator.
 Generates source-device:* tags from GPX file creator attribute.
 """
 import traceback
-import xml.etree.ElementTree as ET
 from typing import List, Optional, Union
 
 from geo_lib.logging.console import get_tagged_logger
 from geo_lib.processing.tagging.base import TagGenerator
+from geo_lib.security.exceptions import FileValidationError
+from geo_lib.security.xml import parse_xml
 from geo_lib.types.feature import GeoFeatureSupported
 
 _logger = get_tagged_logger('SOURCEDEVICE')
@@ -53,8 +54,7 @@ class SourceDeviceTagGenerator(TagGenerator):
             return tags
 
         try:
-            # Parse the XML
-            root = ET.fromstring(file_content)
+            root = parse_xml(file_content)
 
             # Check if root element is gpx (handle namespaces - tag might be '{namespace}gpx')
             tag_name = root.tag
@@ -69,10 +69,10 @@ class SourceDeviceTagGenerator(TagGenerator):
             creator = root.get('creator')
             if creator and creator.strip():
                 tags.append(f'source-device:{creator.strip()}')
-        except ET.ParseError:
+        except FileValidationError:
             # Invalid XML, silently return empty list
             pass
-        except:
+        except Exception:
             # General error, log and ignore
             _logger.warning(f"Error extracting device from GPX: {traceback.format_exc()}")
 

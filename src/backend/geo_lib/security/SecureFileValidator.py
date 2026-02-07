@@ -9,7 +9,7 @@ from geo_lib.processing.file_types import get_file_type_by_extension, validate_f
 from geo_lib.security.exceptions import FileValidationError, SecurityError
 from geo_lib.security.filetype_validators import _validate_content
 from geo_lib.security.validation_helpers import _validate_basic_properties, _validate_file_signature, _validate_mime_type, _validate_file_size
-from geo_lib.security.xml import _secure_xml_parse, DANGEROUS_ELEMENTS, HTML_DANGEROUS_ELEMENTS, DANGEROUS_ATTRIBUTES
+from geo_lib.security.xml import parse_xml, DANGEROUS_ELEMENTS, HTML_DANGEROUS_ELEMENTS, DANGEROUS_ATTRIBUTES
 
 
 def validate_file(uploaded_file: UploadedFile) -> Tuple[bool, str]:
@@ -62,7 +62,7 @@ def validate_kml_content(kml_content: str) -> bool:
     """
     try:
         # Parse with secure settings
-        root = _secure_xml_parse(kml_content)
+        root = parse_xml(kml_content)
 
         # Check for dangerous elements
         for elem in root.iter():

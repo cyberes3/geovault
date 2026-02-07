@@ -393,11 +393,6 @@ SESSION_SAVE_EVERY_REQUEST = True
 FILE_UPLOAD_MAX_MEMORY_SIZE = 5 * 1024 * 1024  # 5MB
 DATA_UPLOAD_MAX_MEMORY_SIZE = 5 * 1024 * 1024  # 5MB
 
-# Security validation settings
-SECURE_XML_PARSING = config.get_bool('validation.secure_xml_parsing', True)
-ENABLE_FILE_SIGNATURE_VALIDATION = config.get_bool('validation.enable_file_signature_validation', True)
-ENABLE_MIME_TYPE_VALIDATION = config.get_bool('validation.enable_mime_type_validation', True)
-
 # GeoJSON API Configuration
 # Maximum number of features to return in a single API request
 # Set to -1 for no limit (default), or any positive integer to limit features

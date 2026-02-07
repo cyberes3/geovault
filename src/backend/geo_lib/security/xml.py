@@ -1,4 +1,8 @@
-import re
+"""
+Parse XML via parse_xml() in this module. Do not use xml.etree or defusedxml
+directly for user or upload-derived content.
+"""
+from defusedxml import ElementTree as DefusedET
 from xml.etree import ElementTree as ET
 
 from geo_lib.processing.file_types import FileType, get_allowed_elements
@@ -17,31 +21,11 @@ DANGEROUS_ATTRIBUTES = [
 ]
 
 
-def _secure_xml_parse(xml_content: str) -> ET.Element:
-    """Parse XML with security measures against XXE attacks."""
-    # Create a secure parser that disables external entities
-    # Use defusedxml approach: remove DOCTYPE declarations to prevent XXE
-    
-    # Remove DOCTYPE declarations to prevent XXE attacks
-    # This is a simple but effective approach
-    xml_content_no_doctype = re.sub(r'<!DOCTYPE[^>]*>', '', xml_content, flags=re.IGNORECASE | re.DOTALL)
-    
-    parser = ET.XMLParser()
-
-    # Disable entity processing to prevent XXE attacks
-    # Note: In newer Python versions, parser.entity is readonly, so we use a different approach
+def parse_xml(xml_content: str) -> ET.Element:
+    """Parse XML with security measures against XXE attacks (defusedxml)."""
     try:
-        # Try to disable entity processing (works in older Python versions)
-        parser.entity = {}
-    except (AttributeError, TypeError):
-        # In newer versions, we rely on removing DOCTYPE and the default secure behavior
-        pass
-
-    # Parse the XML
-    try:
-        root = ET.fromstring(xml_content_no_doctype, parser=parser)
-        return root
-    except ET.ParseError:
+        return DefusedET.fromstring(xml_content)
+    except Exception:
         raise FileValidationError("The file contains invalid XML structure. Please check the file format and try again.")
 
 
