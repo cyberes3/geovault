@@ -12,6 +12,7 @@ from django.http import HttpResponse, Http404
 from django.views.decorators.http import require_http_methods
 
 from geo_lib.logging.console import get_tagged_logger
+from geo_lib.utils.secure_path import secure_filename
 
 _logger = get_tagged_logger()
 
@@ -53,6 +54,10 @@ def serve_font_glyph(request, fontstack, range_str):
     if len(parts) != 2 or not all(part.isdigit() for part in parts):
         raise Http404("Invalid range format")
 
+    range_str = secure_filename(range_str)
+    if not range_str:
+        raise Http404("Invalid range")
+
     # Get assets fonts directory path
     assets_fonts_dir = Path(settings.BASE_DIR) / 'assets' / 'fonts'
 
@@ -66,6 +71,10 @@ def serve_font_glyph(request, fontstack, range_str):
     for font_name in font_names:
         # Security: Prevent directory traversal for each font name
         if '..' in font_name or font_name.startswith('/'):
+            continue
+
+        font_name = secure_filename(font_name)
+        if not font_name:
             continue
 
         # Build the full file path for this font

@@ -19,6 +19,7 @@ from django.db import transaction
 from api.models import ImportQueue
 from geo_lib.logging.console import get_tagged_logger
 from geo_lib.processing.jobs.base_job import BaseJob
+from geo_lib.utils.secure_path import secure_filename
 from geo_lib.processing.jobs.helpers.status_tracker import ProcessingStatus
 from geo_lib.processing.logging import RealTimeImportLog, DatabaseLogLevel
 from geo_lib.processing.messages import (
@@ -567,10 +568,14 @@ class ProcessJob(BaseJob):
             # This will be re-encoded later in _finalize_and_save_processed_features, but that's okay
             # as it ensures we have the data available for recovery
             raw_file_content, _ = encode_raw_file_data(file_data)
-            
+
+            safe_filename = secure_filename(filename)
+            if not safe_filename:
+                safe_filename = "import"
+
             import_queue = ImportQueue.objects.create(
                 raw_file=raw_file_content,  # Save actual file content for recovery
-                original_filename=filename,
+                original_filename=safe_filename,
                 user=user,
                 geofeatures=[],  # Empty array during processing
                 replacement=replacement_feature_id  # Set replacement feature ID if provided

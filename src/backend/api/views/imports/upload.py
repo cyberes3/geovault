@@ -7,6 +7,7 @@ from geo_lib.logging.console import get_tagged_logger
 from geo_lib.processing.jobs.helpers.status_tracker import status_tracker
 from geo_lib.processing.jobs.process_job import ProcessJob
 from geo_lib.security.SecureFileValidator import basic_file_security_check
+from geo_lib.utils.secure_path import secure_filename
 from geo_lib.website.auth import api_or_login_required_401
 
 _logger = get_tagged_logger()
@@ -28,7 +29,10 @@ def upload_item(request):
     form = DocumentForm(request.POST, request.FILES)
     if form.is_valid():
         uploaded_file = request.FILES['file']
-        file_name = uploaded_file.name
+        file_name = secure_filename(uploaded_file.name)
+        if not file_name:
+            ext = uploaded_file.name.rsplit(".", 1)[-1].lower() if "." in uploaded_file.name else ""
+            file_name = f"upload.{ext}" if ext else "upload"
 
         # Basic security checks for quick rejection (full validation happens in async processing)
         is_valid, validation_message = basic_file_security_check(uploaded_file)
@@ -69,7 +73,7 @@ def upload_item(request):
         # Try to get filename even if form validation failed
         filename = "unknown file"
         if 'file' in request.FILES:
-            filename = request.FILES['file'].name
+            filename = secure_filename(request.FILES['file'].name) or "unknown file"
         return error_response(
             f'Invalid upload structure for file "{filename}"',
             code=400,

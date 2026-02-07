@@ -17,6 +17,7 @@ from geo_lib.export.geojson_to_kmz import geojson_to_kmz_bytes
 from geo_lib.export.share_export import build_share_feature_collection, prepare_kmz_options_for_share
 from geo_lib.export.single_feature_export import prepare_kmz_options_for_feature
 from geo_lib.logging.console import get_tagged_logger
+from geo_lib.utils.secure_path import secure_filename
 
 _logger = get_tagged_logger()
 
@@ -122,38 +123,6 @@ def _lookup_and_validate_share(share_id: str):
     return tag_share, collection_share, feature_share, share, None
 
 
-def _sanitize_filename(filename: str, max_length: int = 255) -> str:
-    """
-    Sanitize and validate filename for safe download.
-
-    Args:
-        filename: Original filename
-        max_length: Maximum allowed filename length (default 255 for most filesystems)
-
-    Returns:
-        Sanitized filename, truncated if necessary
-    """
-    # Remove any path separators and control characters
-    sanitized = filename.replace("/", "_").replace("\\", "_")
-    # Remove any null bytes
-    sanitized = sanitized.replace("\x00", "")
-
-    # Truncate if too long (leave room for extension)
-    if len(sanitized) > max_length:
-        # Try to preserve extension
-        if "." in sanitized:
-            name, ext = sanitized.rsplit(".", 1)
-            max_name_len = max_length - len(ext) - 1
-            if max_name_len > 0:
-                sanitized = name[:max_name_len] + "." + ext
-            else:
-                sanitized = sanitized[:max_length]
-        else:
-            sanitized = sanitized[:max_length]
-
-    return sanitized
-
-
 def _create_kmz_response(kmz_bytes: bytes, filename: str) -> HttpResponse:
     """
     Create an HttpResponse for KMZ file download.
@@ -165,7 +134,14 @@ def _create_kmz_response(kmz_bytes: bytes, filename: str) -> HttpResponse:
     Returns:
         HttpResponse with appropriate headers for KMZ download
     """
-    safe_filename = _sanitize_filename(filename)
+    safe_filename = secure_filename(filename)
+    if len(safe_filename) > 255:
+        if "." in safe_filename:
+            name, ext = safe_filename.rsplit(".", 1)
+            max_name_len = 255 - len(ext) - 1
+            safe_filename = (name[:max_name_len] + "." + ext) if max_name_len > 0 else safe_filename[:255]
+        else:
+            safe_filename = safe_filename[:255]
     response = HttpResponse(
         kmz_bytes,
         content_type="application/vnd.google-earth.kmz",

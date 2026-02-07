@@ -5,6 +5,8 @@ Icon path resolution utilities for export functionality.
 from pathlib import Path
 from typing import Optional
 
+from geo_lib.utils.secure_path import secure_path
+
 
 def _is_safe_path(path: Path, base: Path) -> bool:
     """
@@ -64,8 +66,7 @@ def resolve_icon_path(icon_url: str, base_dir: str, icon_storage_dir: str) -> Op
         if ".." in relative_path or Path(relative_path).is_absolute():
             return None
 
-        # Normalize the path to resolve any remaining issues
-        normalized = Path(relative_path).resolve()
+        relative_path = secure_path(relative_path)
         full_path = base_path / relative_path
 
         # Ensure the resolved path is within base_dir/assets/icons/

@@ -13,6 +13,7 @@ from django.views.decorators.http import require_http_methods
 from geo_lib.logging.console import get_tagged_logger
 from geo_lib.processing.icons.icon_manager import store_icon
 from geo_lib.processing.logging import ImportLog
+from geo_lib.utils.secure_path import secure_filename, secure_path
 from geo_lib.website.auth import api_or_login_required_401
 
 _logger = get_tagged_logger()
@@ -58,7 +59,9 @@ def upload_icon(request):
         }, status=400)
 
     uploaded_file = request.FILES['file']
-    file_name = uploaded_file.name
+    file_name = secure_filename(uploaded_file.name)
+    if not file_name:
+        file_name = "upload.png"
 
     # Validate file extension (only PNG, JPG, ICO allowed for uploads)
     file_ext = os.path.splitext(file_name)[1].lower()
@@ -167,6 +170,8 @@ def serve_system_icon(request, path):
     if '..' in path or path.startswith('/'):
         raise Http404("Invalid icon path")
 
+    path = secure_path(path)
+
     # Get assets icons directory path
     assets_icons_dir = Path(settings.BASE_DIR) / 'assets' / 'icons'
 
@@ -233,6 +238,8 @@ def recolor_icon(request):
             'error': 'Invalid icon path',
             'code': 400
         }, status=400)
+
+    icon_path_param = secure_path(icon_path_param)
 
     # Get icon path from assets directory
     assets_icons_dir = Path(settings.BASE_DIR) / 'assets' / 'icons'

@@ -11,6 +11,7 @@ from django.http import HttpResponse, JsonResponse
 
 from geo_lib.logging.console import get_tagged_logger
 from geo_lib.tile_sources.registry import get_tile_source, get_tile_sources_for_client
+from geo_lib.utils.secure_path import secure_filename
 from website.config_loader import get_config_loader
 
 _logger = get_tagged_logger()
@@ -264,8 +265,9 @@ def get_tile_cache_path(service, z, x, y, extension='tile'):
         Path object for the cache file
     """
     cache_dir = Path(settings.TILE_CACHE_DIR)
-    # Validate service name to prevent directory traversal
-    service = service.replace('/', '_').replace('..', '_')
+    service = secure_filename(service)
+    if not service:
+        service = "tile_service"
     return cache_dir / service / str(z) / str(x) / f"{y}.{extension}"
 
 

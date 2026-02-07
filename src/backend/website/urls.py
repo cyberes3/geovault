@@ -25,9 +25,12 @@ from website.views import index
 # Set custom exception handler
 handler500 = custom_exception_handler
 
-from django.views.static import serve
-from website.settings import EXTENSIONS_DIR
 import os
+
+from django.views.static import serve
+
+from geo_lib.utils.secure_path import secure_path
+from website.settings import EXTENSIONS_DIR
 
 def serve_extension_static(request, path, **kwargs):
     """
@@ -44,6 +47,8 @@ def serve_extension_static(request, path, **kwargs):
             path = os.path.join(ext_folder, parts[1])
         else:
             path = ext_folder
+
+    path = secure_path(path)
     
     logger.debug(f"Extension static serving: {path} (root: {EXTENSIONS_DIR})")
     kwargs['document_root'] = EXTENSIONS_DIR
