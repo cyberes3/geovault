@@ -5,13 +5,14 @@ import zipfile
 from pathlib import Path
 from typing import Optional
 from urllib.error import HTTPError, URLError
-from urllib.parse import urlparse
-from urllib.request import Request, urlopen
+from urllib.parse import urljoin, urlparse
+from urllib.request import HTTPRedirectHandler, Request, build_opener, urlopen
 
 from django.conf import settings
 
 from geo_lib.logging.console import get_tagged_logger
 from geo_lib.processing.logging import ImportLog, DatabaseLogLevel
+from geo_lib.security.ssrf import is_url_safe_for_fetch
 
 _logger = get_tagged_logger()
 
@@ -131,24 +132,44 @@ def extract_icon_from_kmz(kmz_data: bytes, icon_path: str, import_log: ImportLog
         return None
 
 
+_MAX_REDIRECTS = 5
+
+
+class _SafeRedirectHandler(HTTPRedirectHandler):
+    """Validates redirect targets with SSRF check and enforces redirect limit."""
+
+    def __init__(self, max_redirects: int = _MAX_REDIRECTS):
+        self.max_redirects = max_redirects
+        self.redirect_count = 0
+
+    def redirect_request(self, req, fp, code, msg, headers, newurl):
+        if self.redirect_count >= self.max_redirects:
+            raise URLError("Too many redirects")
+        redirect_url = urljoin(req.full_url, newurl)
+        if not is_url_safe_for_fetch(redirect_url):
+            raise URLError("Redirect target not allowed (SSRF)")
+        self.redirect_count += 1
+        return super().redirect_request(req, fp, code, msg, headers, newurl)
+
+
 def fetch_remote_icon(url: str, timeout: float, import_log: ImportLog) -> Optional[bytes]:
     """
     Fetch icon from remote URL with timeout.
-
-    Args:
-        url: Remote icon URL
-        timeout: Timeout in seconds
-        import_log: Optional ImportLog for recording user-visible warnings
-
-    Returns:
-        Icon data as bytes, or None if fetch fails
+    SSRF-safe: only http/https, blocks private/loopback/link-local IPs; redirects validated.
     """
-    try:
-        # Create request with user agent
-        req = Request(url, headers={'User-Agent': 'GeoVault/1.0'})
+    if not is_url_safe_for_fetch(url):
+        _logger.warning(f"Icon URL not allowed for fetch (SSRF): {url[:80]!r}")
+        import_log.add(
+            "Icon URL not allowed for security reasons",
+            "Icon Processing",
+            DatabaseLogLevel.WARNING,
+        )
+        return None
 
-        # Fetch with timeout
-        with urlopen(req, timeout=timeout) as response:
+    try:
+        req = Request(url, headers={"User-Agent": "GeoVault/1.0"})
+        opener = build_opener(_SafeRedirectHandler())
+        with opener.open(req, timeout=timeout) as response:
             # Check content length if available
             content_length = response.headers.get('Content-Length')
             if content_length:

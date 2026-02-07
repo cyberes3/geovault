@@ -17,6 +17,16 @@ from geo_lib.processing.icons.get import extract_icon_from_kmz, fetch_remote_ico
 from geo_lib.processing.logging import ImportLog, DatabaseLogLevel
 
 
+def _mock_opener_for_fetch(open_side_effect=None, open_return_value=None):
+    """Build a mock opener for fetch_remote_icon (replaces urlopen with build_opener().open())."""
+    mock_opener = MagicMock()
+    if open_side_effect is not None:
+        mock_opener.open.side_effect = open_side_effect
+    elif open_return_value is not None:
+        mock_opener.open.return_value = open_return_value
+    return mock_opener
+
+
 class TestIconLoggingBehavior:
     """Test that icon processing errors and warnings are logged to import_log."""
 
@@ -148,21 +158,17 @@ class TestIconLoggingBehavior:
     def test_fetch_remote_icon_size_limit_logs_warning(self):
         """Test that remote icon size limit logs warning."""
         import_log = ImportLog()
-        
-        with patch('geo_lib.processing.icons.get.urlopen') as mock_urlopen:
-            mock_response = MagicMock()
-            mock_response.__enter__.return_value = mock_response
-            mock_response.headers.get.return_value = '10485760'  # 10MB
-            mock_urlopen.return_value = mock_response
-            
+        mock_response = MagicMock()
+        mock_response.__enter__ = lambda self: self
+        mock_response.__exit__ = lambda self, *a: None
+        mock_response.headers.get.return_value = '10485760'  # 10MB
+        mock_response.read.side_effect = [b'\x89PNG\r\n\x1a\n', b'']
+        mock_opener = _mock_opener_for_fetch(open_return_value=mock_response)
+        with patch('geo_lib.processing.icons.get.build_opener', return_value=mock_opener):
             with patch('geo_lib.processing.icons.get.settings') as mock_settings:
                 mock_settings.ICON_MAX_SIZE_BYTES = 1024 * 1024  # 1MB limit
-                
                 result = fetch_remote_icon('http://example.com/icon.png', 5.0, import_log)
-        
         assert result is None
-        
-        # Check that warning was logged
         logs = import_log.get()
         assert len(logs) > 0
         assert any('exceeds size limit' in log.msg.lower() for log in logs)
@@ -171,15 +177,12 @@ class TestIconLoggingBehavior:
     def test_fetch_remote_icon_http_error_logs_warning(self):
         """Test that HTTP error logs warning."""
         import_log = ImportLog()
-        
-        with patch('geo_lib.processing.icons.get.urlopen') as mock_urlopen:
-            mock_urlopen.side_effect = HTTPError('http://example.com/icon.png', 404, 'Not Found', {}, None)
-            
+        mock_opener = _mock_opener_for_fetch(
+            open_side_effect=HTTPError('http://example.com/icon.png', 404, 'Not Found', {}, None)
+        )
+        with patch('geo_lib.processing.icons.get.build_opener', return_value=mock_opener):
             result = fetch_remote_icon('http://example.com/icon.png', 5.0, import_log)
-        
         assert result is None
-        
-        # Check that warning was logged
         logs = import_log.get()
         assert len(logs) > 0
         assert any('http error' in log.msg.lower() for log in logs)
@@ -188,15 +191,10 @@ class TestIconLoggingBehavior:
     def test_fetch_remote_icon_url_error_logs_warning(self):
         """Test that URL error logs warning."""
         import_log = ImportLog()
-        
-        with patch('geo_lib.processing.icons.get.urlopen') as mock_urlopen:
-            mock_urlopen.side_effect = URLError('Connection refused')
-            
+        mock_opener = _mock_opener_for_fetch(open_side_effect=URLError('Connection refused'))
+        with patch('geo_lib.processing.icons.get.build_opener', return_value=mock_opener):
             result = fetch_remote_icon('http://example.com/icon.png', 5.0, import_log)
-        
         assert result is None
-        
-        # Check that warning was logged
         logs = import_log.get()
         assert len(logs) > 0
         assert any('url error' in log.msg.lower() for log in logs)
@@ -205,15 +203,10 @@ class TestIconLoggingBehavior:
     def test_fetch_remote_icon_timeout_logs_warning(self):
         """Test that timeout logs warning."""
         import_log = ImportLog()
-        
-        with patch('geo_lib.processing.icons.get.urlopen') as mock_urlopen:
-            mock_urlopen.side_effect = TimeoutError('Connection timed out')
-            
+        mock_opener = _mock_opener_for_fetch(open_side_effect=TimeoutError('Connection timed out'))
+        with patch('geo_lib.processing.icons.get.build_opener', return_value=mock_opener):
             result = fetch_remote_icon('http://example.com/icon.png', 5.0, import_log)
-        
         assert result is None
-        
-        # Check that warning was logged
         logs = import_log.get()
         assert len(logs) > 0
         assert any('timeout' in log.msg.lower() for log in logs)
@@ -608,12 +601,11 @@ class TestFailureMessageContent:
     def test_http_error_message_includes_status_code(self):
         """Test that HTTP error messages include the status code."""
         import_log = ImportLog()
-        
-        with patch('geo_lib.processing.icons.get.urlopen') as mock_urlopen:
-            mock_urlopen.side_effect = HTTPError('http://example.com/icon.png', 404, 'Not Found', {}, None)
-            
+        mock_opener = _mock_opener_for_fetch(
+            open_side_effect=HTTPError('http://example.com/icon.png', 404, 'Not Found', {}, None)
+        )
+        with patch('geo_lib.processing.icons.get.build_opener', return_value=mock_opener):
             fetch_remote_icon('http://example.com/icon.png', 5.0, import_log)
-        
         logs = import_log.get()
         http_logs = [log for log in logs if 'http error' in log.msg.lower()]
         assert len(http_logs) > 0
@@ -622,13 +614,12 @@ class TestFailureMessageContent:
     def test_http_error_message_includes_url(self):
         """Test that HTTP error messages include the URL."""
         import_log = ImportLog()
-        
         url = 'http://example.com/missing_icon.png'
-        with patch('geo_lib.processing.icons.get.urlopen') as mock_urlopen:
-            mock_urlopen.side_effect = HTTPError(url, 500, 'Server Error', {}, None)
-            
+        mock_opener = _mock_opener_for_fetch(
+            open_side_effect=HTTPError(url, 500, 'Server Error', {}, None)
+        )
+        with patch('geo_lib.processing.icons.get.build_opener', return_value=mock_opener):
             fetch_remote_icon(url, 5.0, import_log)
-        
         logs = import_log.get()
         http_logs = [log for log in logs if 'http error' in log.msg.lower()]
         assert len(http_logs) > 0
@@ -637,14 +628,10 @@ class TestFailureMessageContent:
     def test_timeout_message_includes_url(self):
         """Test that timeout messages include the URL."""
         import_log = ImportLog()
-        
-        url = 'http://slow.example.com/icon.png'
-        
-        with patch('geo_lib.processing.icons.get.urlopen') as mock_urlopen:
-            mock_urlopen.side_effect = TimeoutError('Connection timed out')
-            
+        url = 'http://example.com/slow_icon.png'
+        mock_opener = _mock_opener_for_fetch(open_side_effect=TimeoutError('Connection timed out'))
+        with patch('geo_lib.processing.icons.get.build_opener', return_value=mock_opener):
             fetch_remote_icon(url, 5.0, import_log)
-        
         logs = import_log.get()
         timeout_logs = [log for log in logs if 'timeout' in log.msg.lower()]
         assert len(timeout_logs) > 0
@@ -708,11 +695,11 @@ class TestFailureMessageContent:
         
         # Generate various errors
         store_icon(b'data', 'test.txt', import_log, stats)  # Invalid extension
-        
-        with patch('geo_lib.processing.icons.get.urlopen') as mock_urlopen:
-            mock_urlopen.side_effect = HTTPError('http://example.com/icon.png', 404, 'Not Found', {}, None)
+        mock_opener = _mock_opener_for_fetch(
+            open_side_effect=HTTPError('http://example.com/icon.png', 404, 'Not Found', {}, None)
+        )
+        with patch('geo_lib.processing.icons.get.build_opener', return_value=mock_opener):
             fetch_remote_icon('http://example.com/icon.png', 5.0, import_log)
-        
         logs = import_log.get()
         assert len(logs) > 0
         
@@ -731,10 +718,11 @@ class TestFailureMessageContent:
             store_icon(b'x' * 10000, 'large.png', import_log, stats)
         
         # WARNING: HTTP error
-        with patch('geo_lib.processing.icons.get.urlopen') as mock_urlopen:
-            mock_urlopen.side_effect = HTTPError('http://example.com/icon.png', 404, 'Not Found', {}, None)
+        mock_opener = _mock_opener_for_fetch(
+            open_side_effect=HTTPError('http://example.com/icon.png', 404, 'Not Found', {}, None)
+        )
+        with patch('geo_lib.processing.icons.get.build_opener', return_value=mock_opener):
             fetch_remote_icon('http://example.com/icon.png', 5.0, import_log)
-        
         # ERROR: Storage failure
         with patch('geo_lib.processing.icons.icon_manager._get_icon_extension') as mock_ext:
             mock_ext.return_value = '.png'
