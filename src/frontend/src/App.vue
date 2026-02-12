@@ -110,7 +110,22 @@
                 Map
               </router-link>
 
-              <!-- Tools Dropdown -->
+              <router-link
+                  v-for="link in extensionRegistryState.navLinks"
+                  :key="link.path"
+                  :class="[
+                    $route.path.startsWith(link.fullPath)
+                      ? 'text-blue-600 border-blue-500 bg-blue-50 md:bg-transparent' 
+                      : 'text-gray-500 border-transparent hover:text-gray-700 hover:border-gray-300 hover:bg-gray-50 md:hover:bg-transparent',
+                    'block md:inline-flex md:items-center px-3 md:px-1 py-2 md:py-0 md:h-full text-base md:text-sm font-medium border-l-4 md:border-l-0 md:border-b-2 transition-colors duration-200 rounded-r-md md:rounded-none whitespace-nowrap'
+                  ]"
+                  :to="link.fullPath"
+                  @click="closeMobileMenu"
+              >
+                {{ link.label }}
+              </router-link>
+
+              <!-- Tools Dropdown (last in menu; only shown when there are tools) -->
               <div v-if="sortedTools.length" class="relative md:h-full md:flex md:items-center" ref="toolsMenuRef">
                 <button
                     @click="toggleToolsMenu"
@@ -146,21 +161,6 @@
                   </router-link>
                 </div>
               </div>
-
-              <router-link
-                  v-for="link in extensionRegistryState.navLinks"
-                  :key="link.path"
-                  :class="[
-                    $route.path.startsWith(link.fullPath)
-                      ? 'text-blue-600 border-blue-500 bg-blue-50 md:bg-transparent' 
-                      : 'text-gray-500 border-transparent hover:text-gray-700 hover:border-gray-300 hover:bg-gray-50 md:hover:bg-transparent',
-                    'block md:inline-flex md:items-center px-3 md:px-1 py-2 md:py-0 md:h-full text-base md:text-sm font-medium border-l-4 md:border-l-0 md:border-b-2 transition-colors duration-200 rounded-r-md md:rounded-none whitespace-nowrap'
-                  ]"
-                  :to="link.fullPath"
-                  @click="closeMobileMenu"
-              >
-                {{ link.label }}
-              </router-link>
             </div>
 
             <!-- Account Section -->
