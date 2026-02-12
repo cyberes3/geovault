@@ -549,3 +549,52 @@ class TestBboxResponseStructure(TestCase):
         self.assertIn('features', geojson)
         self.assertIsInstance(geojson['features'], list)
 
+    def test_bbox_scope_filtering(self):
+        """Test that features with non-null scope are excluded from standard bbox queries."""
+        # Create a feature with scope='places'
+        scoped_feature_data = {
+            'type': 'Feature',
+            'geometry': {
+                'type': 'Point',
+                'coordinates': [-122.4194, 37.7749, 0.0]
+            },
+            'properties': {'name': 'Scoped Feature'}
+        }
+        FeatureStore.objects.create(
+            user=self.user,
+            geojson=scoped_feature_data,
+            geometry=Point(-122.4194, 37.7749, 0.0),
+            geojson_hash=generate_geojson_hash(scoped_feature_data),
+            scope='places'
+        )
+
+        # Create a standard feature (scope=None)
+        standard_feature_data = {
+            'type': 'Feature',
+            'geometry': {
+                'type': 'Point',
+                'coordinates': [-122.4194, 37.7749, 0.0]
+            },
+            'properties': {'name': 'Standard Feature'}
+        }
+        FeatureStore.objects.create(
+            user=self.user,
+            geojson=standard_feature_data,
+            geometry=Point(-122.4194, 37.7749, 0.0),
+            geojson_hash=generate_geojson_hash(standard_feature_data),
+            scope=None
+        )
+        
+        # Standard query in that location
+        response = self.client.get(
+            '/api/geojson/',
+            {'bbox': '-123,37,-122,38', 'zoom': '10'}
+        )
+        self.assertEqual(response.status_code, 200)
+        data = json.loads(response.content)
+        
+        # Should verify we have the standard feature from setUp but NOT the scoped one
+        # setUp created 1 standard feature. We created 1 scoped feature.
+        # Total in DB: 2. Expected in response: 1.
+        self.assertEqual(data['feature_count'], 1)
+        self.assertEqual(data['data']['features'][0]['properties']['name'], 'Standard Feature')

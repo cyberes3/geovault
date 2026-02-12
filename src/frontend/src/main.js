@@ -64,6 +64,7 @@ window.ol = {
     style: olStyle,
     Feature: Feature
 };
+window.Loader = Loader;
 
 import BaseButton from '@/components/parts/BaseButton.vue';
 import ToggleButton from '@/components/parts/ToggleButton.vue';

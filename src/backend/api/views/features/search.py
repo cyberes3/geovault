@@ -66,6 +66,7 @@ def get_features_by_tag(request):
                   AND f.geojson->'properties'->'tags' IS NOT NULL
                   AND jsonb_typeof(f.geojson->'properties'->'tags') = 'array'
                   AND t.tag_value != ''
+                  AND f.scope IS NULL
                   {search_condition}
 
                 UNION ALL
@@ -87,6 +88,7 @@ def get_features_by_tag(request):
                   AND f.geojson->'properties'->'system_tags' IS NOT NULL
                   AND jsonb_typeof(f.geojson->'properties'->'system_tags') = 'array'
                   AND t.tag_value != ''
+                  AND f.scope IS NULL
                   {search_condition}
             )
             SELECT 
@@ -168,6 +170,7 @@ def get_user_tags(request):
                 WHERE f.user_id = %s
                   AND jsonb_typeof(f.geojson->'properties'->'tags') = 'array'
                   AND t.tag <> ''
+                  AND f.scope IS NULL
             ) AS distinct_tags
             ORDER BY LOWER(tag)
         """
@@ -215,6 +218,7 @@ def search_features(request):
         FROM {table_name}
         WHERE user_id = %s
           AND geometry IS NOT NULL
+          AND scope IS NULL
           AND (
             geojson->'properties'->>'name' ILIKE %s OR
             geojson->'properties'->>'description' ILIKE %s OR
@@ -336,8 +340,8 @@ def get_all_features(request):
     API endpoint to get all features for the user.
     Returns a list of all features with their basic information for selection purposes.
     """
-    # Get all features for the user
-    features = FeatureStore.objects.filter(user=request.user).exclude(geometry__isnull=True).order_by('id')
+    # Get all features for the user (default scope only)
+    features = FeatureStore.objects.filter(user=request.user, scope__isnull=True).exclude(geometry__isnull=True).order_by('id')
 
     # Convert to GeoJSON format
     geojson_features = []

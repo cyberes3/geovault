@@ -188,24 +188,31 @@ def _build_collection_query(user_id: int, collection_id: uuid.UUID) -> QuerySet:
         return FeatureStore.objects.none()
 
 
-def _build_base_query(user_id: int, tag: str | None = None, collection_id: uuid.UUID | None = None) -> QuerySet:
+def _build_base_query(user_id: int, tag: str | None = None, collection_id: uuid.UUID | None = None, scope: str | None = None) -> QuerySet:
     """
     Build base query for features with user filter, geometry exclusion, optional tag filter, 
-    optional collection filter, and ordering.
+    optional collection filter, optional scope filter, and ordering.
     
     Args:
         user_id: User ID to filter features by
         tag: Optional tag to filter features by (if None, no tag filter is applied)
         collection_id: Optional collection ID to filter features by (if None, no collection filter is applied)
+        scope: Optional scope to filter features by (if None, defaults to filtering for scope__isnull=True)
     
     Returns:
         QuerySet ready for further filtering
     """
-    # Collection filter takes precedence if provided
+    # Collection filter takes precedence if provided. Collections can contain features from any scope.
     if collection_id is not None:
         return _build_collection_query(user_id, collection_id)
 
     base_query = FeatureStore.objects.filter(user_id=user_id).exclude(geometry__isnull=True)
+
+    # Filter by scope (default to main map scope which is null)
+    if scope is None:
+        base_query = base_query.filter(scope__isnull=True)
+    else:
+        base_query = base_query.filter(scope=scope)
 
     # Add tag filter if provided (search in both tags and system_tags)
     if tag:
@@ -316,7 +323,8 @@ def _build_bbox_sql_query(
         tags: List[str] | None = None,
         match_mode: str = 'AND',
         collection_id: uuid.UUID | None = None,
-        max_features: int = 0
+        max_features: int = 0,
+        scope: str | None = None
 ) -> tuple[str, list]:
     """
     Build AGGRESSIVELY optimized SQL query for bbox queries.
@@ -361,6 +369,22 @@ def _build_bbox_sql_query(
         except Collection.DoesNotExist:
             return ("SELECT 1 WHERE FALSE", [])
 
+            return ("SELECT 1 WHERE FALSE", [])
+        except Collection.DoesNotExist:
+            return ("SELECT 1 WHERE FALSE", [])
+
+    # Scope filter
+    # If collection_id is present, we ignore scope (collections can contain features from any scope)
+    # Otherwise, if scope is None, we filter for NULL scope (main map)
+    # If scope is provided, we filter for that specific scope
+    scope_filter = ""
+    if collection_id is None:
+        if scope is None:
+            scope_filter = " AND scope IS NULL"
+        else:
+            scope_filter = " AND scope = %s"
+            params.append(scope)
+
     params.insert(0, user_id)
 
     # AGGRESSIVE: Single simple query, no count, no CTE, no window functions
@@ -369,7 +393,7 @@ def _build_bbox_sql_query(
         sql_query = f"""
             SELECT id, geojson, geojson_hash
             FROM {table_name}
-            WHERE user_id = %s AND geometry IS NOT NULL{spatial_filter}{tag_filter}{collection_filter}
+            WHERE user_id = %s AND geometry IS NOT NULL{spatial_filter}{tag_filter}{collection_filter}{scope_filter}
             ORDER BY id
             LIMIT {max_features}
         """
@@ -378,7 +402,7 @@ def _build_bbox_sql_query(
         sql_query = f"""
             SELECT id, geojson, geojson_hash
             FROM {table_name}
-            WHERE user_id = %s AND geometry IS NOT NULL{spatial_filter}{tag_filter}{collection_filter}
+            WHERE user_id = %s AND geometry IS NOT NULL{spatial_filter}{tag_filter}{collection_filter}{scope_filter}
         """
 
     return sql_query, params
@@ -467,7 +491,7 @@ def _execute_bbox_query_and_parse(
     return geojson_features, total_count
 
 
-def get_features_in_bbox(bbox: Tuple[float, float, float, float], user_id: int, tags: List[str] | None = None, match_mode: str = 'AND', collection_id: uuid.UUID | None = None, public_safe: bool = False, include_tags: bool = False, allow_downloads: bool = False) -> BboxQueryResult:
+def get_features_in_bbox(bbox: Tuple[float, float, float, float], user_id: int, tags: List[str] | None = None, match_mode: str = 'AND', collection_id: uuid.UUID | None = None, public_safe: bool = False, include_tags: bool = False, allow_downloads: bool = False, scope: str | None = None) -> BboxQueryResult:
     """
     Get features within bounding box from database using optimized raw SQL query.
     Returns both the features and the total count (using len() - no database COUNT query).
@@ -486,6 +510,7 @@ def get_features_in_bbox(bbox: Tuple[float, float, float, float], user_id: int, 
         collection_id: Optional collection ID to filter features by
         public_safe: If True, excludes _id from properties (for public shares)
         include_tags: If True and public_safe=True, includes tags in properties (otherwise tags are excluded for public shares)
+        scope: Optional scope to filter features by (if None, defaults to filtering for scope__isnull=True)
     
     Returns:
         BboxQueryResult with features, total_count, and fallback_used flag
@@ -508,7 +533,7 @@ def get_features_in_bbox(bbox: Tuple[float, float, float, float], user_id: int, 
     # Build and execute initial query
     bbox_for_query = bbox if use_spatial_filter else None
     sql_query, params = _build_bbox_sql_query(
-        table_name, user_id, bbox_for_query, tags, match_mode, collection_id, max_features
+        table_name, user_id, bbox_for_query, tags, match_mode, collection_id, max_features, scope
     )
 
     # Check if query is empty (collection with no features)
@@ -541,7 +566,7 @@ def get_features_in_bbox(bbox: Tuple[float, float, float, float], user_id: int, 
 
             # Rebuild query without spatial filter
             sql_query, params = _build_bbox_sql_query(
-                table_name, user_id, None, tags, match_mode, collection_id, max_features
+                table_name, user_id, None, tags, match_mode, collection_id, max_features, scope
             )
 
             # Check if query is empty

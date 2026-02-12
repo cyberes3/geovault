@@ -94,6 +94,10 @@ export default defineConfig({
                     if (id.includes('/utils/map/')) {
                         return 'map-utils'
                     }
+                    // Split shared components
+                    if (id.includes('src/components/parts/Loader.vue')) {
+                        return 'shared-components'
+                    }
                     // Split other node_modules into vendor chunk (smaller utilities)
                     if (id.includes('node_modules')) {
                         return 'vendor'

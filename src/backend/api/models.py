@@ -41,6 +41,7 @@ class FeatureStore(models.Model):
     geojson = models.JSONField(null=False)
     geojson_hash = models.CharField(max_length=64, null=True, blank=True, help_text="SHA-256 hash of this individual feature's GeoJSON content")
     geometry = models.GeometryField(null=True, blank=True, dim=3)  # Spatial field for efficient queries, supports 3D
+    scope = models.CharField(max_length=255, null=True, blank=True, default=None, db_index=True, help_text="Scope of the feature (e.g., 'places'). Null means global/standard feature.")
     timestamp = models.DateTimeField(auto_now_add=True)
 
     class Meta:
