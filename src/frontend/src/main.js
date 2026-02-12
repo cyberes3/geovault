@@ -107,11 +107,11 @@ function findSetupFunction(module, extensionName) {
 }
 
 /**
- * Helper to create a scoped router wrapper with navigation helpers.
- * 
+ * Helper to create a scoped router wrapper for extensions.
+ *
  * @param {any} router - Vue Router instance
  * @param {string} prefix - URL prefix for scoping (e.g., '/extensions/my-extension')
- * @returns {Object} Scoped router object with navigation methods
+ * @returns {Object} Scoped router with addRoute and navigate
  */
 function createScopedRouter(router, prefix) {
     return {
@@ -123,10 +123,7 @@ function createScopedRouter(router, prefix) {
         navigate: (path) => {
             const relPath = path.startsWith('/') ? path : `/${path}`;
             return router.push(`${prefix}${relPath}`);
-        },
-        go: (n) => router.go(n),
-        back: () => router.back(),
-        forward: () => router.forward()
+        }
     };
 }
 

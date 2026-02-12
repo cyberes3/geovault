@@ -1,455 +1,137 @@
-# GeoVault Extension Developer Guide
+# Building a GeoVault Extension
 
-This guide and the accompanying `example_extension` example code provides everything you need to build your own features
-into the GeoVault platform.
+This guide gives a high-level overview of how to build your own extension. Use the **`example_extension`** in this folder as the reference implementation; **caltopo** and **exif_geotagger** show other patterns (hooks, tools, settings).
 
-## Architecture Overview
+## What an extension is
 
-GeoVault extensions contain both backend (Django) and frontend (Vue.js) code.
+Extensions add backend (Django) and/or frontend (Vue.js) features to GeoVault. A few things the platform handles for you:
 
-### Key Concepts
+- **Scoping** — Your API paths and frontend routes are prefixed (e.g. `/api/extensions/my_extension/`, `/extensions/my-extension/`) so they don’t clash with others.
+- **Settings** — Configuration lives in the user’s profile under a dedicated JSON section (`extensions.<name>.*`). No migrations for new settings.
+- **Custom tables** — You can define Django models and run your own migrations; tables are namespaced to your extension.
+- **Shared UI** — You use the same Vue app, router, store, and core components as the main app.
 
-- **Scoping**: All your URLs, tables, and routes are automatically prefixed to prevent collisions.
-- **Unified Settings**: Extensions store their configuration in a dedicated JSON section of the user's primary profile.
-  No migrations required for new settings.
-- **Custom Tables**: Extensions can define their own Django models and generate independent migrations. These tables are
-  fully managed by the extension, allowing for complex data storage needs beyond simple settings.
-- **Shared UI**: Extensions can use the platform's core components to maintain a premium, consistent look.
+## Project layout
 
----
-
-## Project Structure
-
-```text
+```
 my_extension/
-├── manifest.py           # Metadata (name, version, description)
+├── manifest.py              # name, version, description, icon, enabled_by_default
 └── src/
-    ├── backend/          # Django code
-    │   ├── models.py     # Database schemas
-    │   ├── views.py      # API logic
-    │   └── urls.py       # Scoped routing
-    └── frontend/         # Vue.js code
+    ├── backend/             # Django
+    │   ├── apps.py          # ExtensionAppConfig + extension_ready()
+    │   ├── models.py        # optional
+    │   ├── urls.py          # your API routes (auto-prefixed)
+    │   └── views.py
+    └── frontend/            # Vue + Vite
         ├── src/
-        │   ├── main.js   # Frontend entry point (setup function)
-        │   ├── assets/   # Custom CSS/images
-        │   └── ...       # Vue components
-        └── vite.config.js # Library-mode build config
+        │   ├── main.js      # must export default setup
+        │   └── ...          # components, assets
+        └── vite.config.js  # library build + externals
 ```
 
----
+## Backend
 
-## Backend Implementation
+### Manifest (`manifest.py`)
 
-### 1. The Manifest
+The platform discovers extensions by scanning for `manifest.py`. Required: `name` (snake_case), `version`. Optional: `description`, `icon` (Heroicon name, `"icon.svg"`, or inline SVG), `enabled_by_default`.
 
-The platform discovers your extension via `manifest.py`.
+### API routes (`urls.py`)
 
-```python
-name = "my_extension"
-version = "1.0.0"
-description = "Adds revolutionary spatial analysis tools."
+Paths you define are prefixed with `/api/extensions/<name>/`. Example: `path('items/', views.item_list)` → `/api/extensions/my_extension/items/`.
+
+### AppConfig and `extension_ready()` (`apps.py`)
+
+Create an `apps.py` that subclasses `ExtensionAppConfig` and set `name`, `label`, `verbose_name`. Implement **`extension_ready()`** — it runs after Django is up and is where you should:
+
+- Register hooks (e.g. import hooks)
+- Validate config or run startup checks
+
+Do not rely on DB or start threads here; use signals or Celery for background work.
+
+### Models
+
+Define models as usual; set `app_label` to your extension’s label. Run migrations from your extension app (e.g. `python manage.py migrate` with the app in `INSTALLED_APPS` via the extension loader).
+
+### Views
+
+Normal Django views. Use `@api_or_login_required_401()` (from `geo_lib.website.auth`) for auth. Use `api.utils.responses.success_response` / `error_response` and `api.utils.authorization.get_object_or_404_for_user` when working with platform features (e.g. `FeatureStore`). The example_extension views show simple CRUD and feature create/modify/delete.
+
+## Frontend
+
+### Setup function (`main.js`)
+
+Your frontend entry **must** export a single **default** async function named `setup`:
+
+```javascript
+async function setup({ app, router, store, registry, api, utils, toast, metadata }) {
+  // register routes, nav, tools, settings; call api; etc.
+}
+export default setup;
 ```
 
-### 2. API Routing
+The platform calls it and passes:
 
-URLs in `urls.py` are automatically prefixed with `/api/extensions/<name>/`.
+- **`app`** — Vue 3 app (e.g. for `app.provide()`).
+- **`router`** — `addRoute(route)`, `navigate(path)`; paths are scoped under `/extensions/<kebab-name>/`.
+- **`store`** — Vuex store.
+- **`registry`** — `registerNavLink(link)`, `registerTool(tool)`, `registerSettingsTab(tab)`, `registerRoutes(routes)`. Use **nav links** for main nav; use **registerTool** for items in the Tools dropdown (e.g. exif_geotagger).
+- **`api`** — `ExtensionApi`: `get/post/put/patch/delete(url, data?)` with CSRF and URL scoping. Use `api.handleError(error)` for user-facing messages.
+- **`utils`** — `updateUserSetting(key, value)`, `loadSettingsFromStore()`, `keyValueToNested`, `getNestedValue`. Settings keys must start with `extensions.<name>.`.
+- **`toast`** — `toast.success()`, `toast.error()`, etc.
+- **`metadata`** — `name`, `version`, `description`, `kebabName`, `icon`.
 
-```python
-urlpatterns = [
-    path('data/', views.get_data),  # Accessible at /api/extensions/my_extension/data/
-]
+### Calling your API
+
+Use the injected `api` so the platform can add CSRF and scope URLs:
+
+```javascript
+const res = await api.get('/items/');
+await api.post('/items/', { name: 'New' });
+// On error: toast.error(api.handleError(err).message);
 ```
 
-### 3. AppConfig and Extension Lifecycle
+### Settings tab
 
-Extensions should create an `apps.py` file that inherits from `ExtensionAppConfig`:
+Register a tab with `registry.registerSettingsTab({ id, label, component, icon })`. In the component, use `utils.loadSettingsFromStore(config, store)` and `utils.updateUserSetting(key, value)` with keys like `extensions.my_extension.setting_key`. The example_extension’s **ExampleSettings.vue** uses `SettingsInput` and the shared `keyValueToNested` / store pattern.
+
+### Vite and shared libraries
+
+Build as a library (see `example_extension`’s `vite.config.js`). Mark Vue, Vue Router, Vuex, axios (and if you use them: `ol`, `@heroicons/vue/24/outline`, `@heroicons/vue/24/solid`) as **externals** and map them to the globals the platform provides (`Vue`, `VueRouter`, `Vuex`, `axios`, etc.). Otherwise you get duplicate instances and broken reactivity. You can put `ol` and Heroicons in devDependencies.
+
+## Hooks (backend)
+
+You can plug into platform lifecycle via hooks. Register them **only** inside `extension_ready()`:
 
 ```python
-from website.extensions.extension_base import ExtensionAppConfig
+from website.extensions.extension_hooks import register_hook
 
+def extension_ready(self):
+    register_hook('import', 'my_handler', self.on_import)
 
-class MyExtensionConfig(ExtensionAppConfig):
-  default_auto_field = 'django.db.models.BigAutoField'
-  name = 'my_extension.src.backend'
-  label = 'my_extension'
-  verbose_name = 'My Extension'
-
-  def extension_ready(self):
-    # Initialize your extension here
-    # Register hooks, validate config, etc.
+def on_import(self, import_item, user_id, created_features):
+    # import_item: ImportQueue; created_features: list of FeatureStore
     pass
 ```
 
-The `extension_ready()` method is called after Django is fully initialized and is the recommended place to:
-- Register hooks
-- Validate configuration
-- Initialize logging
-- Perform startup checks
+Hook IDs are prefixed with your extension name. **Import** hooks run after a successful import; use them to update extension tables or trigger follow-up work (see caltopo’s `handle_import`).
 
-See the [Extension Lifecycle](#extension-lifecycle) section for more details.
+## Quick reference
 
-### 4. Dynamic Settings
-
-You can store arbitrary data in the user's profile without writing Python code for the database. Simply use the
-`extensions` section in the settings API:
-`extensions.my_extension.my_key` maps directly to your extension's private JSON storage.
-
----
-
-## Frontend Implementation
-
-### 1. The Setup Function
-
-Your `main.js` **must** export the setup function as the default export. This is the only supported method.
-
-```javascript
-// ✅ CORRECT - Default export
-async function setup({ app, router, store, registry, api, utils, toast, metadata }) {
-    // Your extension initialization
-}
-export default setup;
-
-// ❌ INCORRECT - Named export (not supported)
-export async function setup() { ... }
-
-// ❌ INCORRECT - Window-based exports are not supported
-window.MyExtension = { setup: function() { ... } };
-```
-
-**Required Export Format:**
-- Must use `export default setup` (the function must be exported as default)
-- Must be an ES module (not a script tag or IIFE)
-- The function receives an object with all platform services
-
-**Setup Function Parameters:**
-
-- `app` - Vue 3 application instance
-- `router` - Enhanced scoped router with navigation helpers:
-  - `addRoute(route)` - Register a route (automatically scoped)
-  - `navigate(path)` - Navigate to a scoped path
-  - `go(n)` - Navigate in history
-  - `back()` - Go back
-  - `forward()` - Go forward
-- `store` - Vuex store instance
-- `registry` - Complete UI registry:
-  - `registerNavLink(link)` - Add navigation link
-  - `registerTool(tool)` - Add tool to the "Tools" dropdown
-  - `registerSettingsTab(tab)` - Add settings tab
-  - `registerRoutes(routes)` - Register multiple routes
-- `api` - ExtensionApi instance (see below)
-- `utils` - Utility functions:
-  - `updateUserSetting(key, value)` - Save settings
-  - `loadSettingsFromStore()` - Load settings from store
-  - `keyValueToNested(key, value)` - Format settings
-  - `getNestedValue(obj, key)` - Get nested value
-- `toast` - Toast notification function
-- `metadata` - Extension metadata:
-  - `name` - Extension name (snake_case)
-  - `version` - Extension version
-  - `description` - Extension description
-  - `kebabName` - URL-friendly name
-
-### 2. ExtensionApi Class
-
-The `api` parameter is an `ExtensionApi` instance that provides convenient HTTP methods with automatic CSRF token handling:
-
-```javascript
-export async function setup({ api, toast, ... }) {
-    try {
-        // GET request
-        const response = await api.get('/items/');
-        const items = response.data;
-        
-        // POST request
-        await api.post('/items/', { name: 'New Item' });
-        toast.success('Item created!');
-        
-        // PUT request
-        await api.put('/items/1/', { name: 'Updated' });
-        
-        // PATCH request
-        await api.patch('/items/1/', { description: 'New desc' });
-        
-        // DELETE request
-        await api.delete('/items/1/');
-        toast.success('Item deleted!');
-    } catch (error) {
-        // Handle errors explicitly
-        const errorInfo = api.handleError(error);
-        toast.error(errorInfo.message);
-    }
-    
-    // Build URL manually (if needed)
-    const url = api.url('/items/'); // Returns /api/extensions/my-extension/items/
-}
-```
-
-**Features:**
-- Automatic CSRF token handling
-- Automatic URL scoping (`/api/extensions/<name>/`)
-- Standard axios response format
-- `handleError()` method for extracting error information (toasts are up to you)
-
-### 3. Shared Utilities
-
-- **`utils.getNestedValue`**: Get nested value from object
-
-### 4. Shared Libraries & Bundle Optimization
-
-GeoVault provides core libraries (OpenLayers, Heroicons, Vue, etc.) globally to prevent redundant bundling. Using these shared libraries can reduce your bundle size by up to 90%.
-
-**Available Globals:**
-- `window.ol` (OpenLayers with source, layer, proj, geom, style namespaces)
-- `window.HeroiconsOutline`
-- `window.HeroiconsSolid`
-- `window.Vue`
-- `window.VueRouter`
-- `window.axios`
-
-#### Configuring Vite to use Shared Libraries
-
-In your extension's `vite.config.js`, mark these libraries as external and map them to the platform's globals:
-
-```javascript
-export default defineConfig({
-  build: {
-    rollupOptions: {
-      external: [
-        'vue', 'vue-router', 'vuex', 'axios', 'ol', 
-        '@heroicons/vue/24/outline', '@heroicons/vue/24/solid'
-      ],
-      output: {
-        globals: {
-          vue: 'Vue',
-          'vue-router': 'VueRouter',
-          vuex: 'Vuex',
-          axios: 'axios',
-          ol: 'ol',
-          '@heroicons/vue/24/outline': 'HeroiconsOutline'
-        }
-      }
-    }
-  }
-})
-```
-
-#### Best Practices
-- Move `ol` and `@heroicons/vue` to `devDependencies` in your `package.json`.
-- Use `registry.registerTool()` for auxiliary features to keep the main navigation bar clean.
-- The "Tools" dropdown is automatically sorted alphabetically.
-
-**Example:**
-```javascript
-export async function setup({ utils, toast }) {
-    // Save a setting
-    await utils.updateUserSetting('extensions.my_extension.my_key', 'value');
-    
-    // Show notification
-    toast.success('Setting saved!');
-}
-```
-
----
-
-## Hooks System
-
-Extensions can register hooks to be called at specific points in the platform's lifecycle. Currently supported hook types:
-
-- **`import`** - Called after successful feature imports
-- **`processing`** - (Future) Called during file processing
-- **`export`** - (Future) Called during feature export
-
-### Registering Hooks
-
-Hooks must be registered in your `extension_ready()` method:
-
-```python
-from website.extensions.extension_base import ExtensionAppConfig
-from website.extensions.extension_hooks import register_hook
-
-
-class MyExtensionConfig(ExtensionAppConfig):
-  name = 'my_extension.src.backend'
-  label = 'my_extension'
-
-  def extension_ready(self):
-    # Register an import hook
-    register_hook('import', 'my_import_handler', self.handle_import)
-
-  def handle_import(self, import_item, user_id, created_features):
-    """
-    Called after a successful import.
-    
-    Args:
-        import_item: ImportQueue instance that was imported
-        user_id: Integer ID of the user who imported
-        created_features: List of FeatureStore instances that were created
-    """
-    # Process the imported features
-    for feature in created_features:
-      # Do something with each feature
-      pass
-```
-
-**Important Notes:**
-- Hook IDs are automatically prefixed with your extension name (e.g., `my_extension.my_import_handler`)
-- Hooks registered outside of `extension_ready()` will raise an error
-- Hook callbacks should not raise exceptions - errors are logged but don't fail the operation
-- Multiple hooks of the same type can be registered
-
-### Import Hooks
-
-Import hooks are called after features are successfully imported into the database. They receive:
-
-- `import_item` - The `ImportQueue` object that was imported
-- `user_id` - Integer ID of the user who performed the import
-- `created_features` - List of `FeatureStore` objects that were created (may be empty)
-
-**Example Use Cases:**
-- Update extension-specific tables with imported feature references
-- Send notifications about new imports
-- Trigger background processing
-- Update analytics or statistics
-
----
-
-## Extension Lifecycle
-
-Extensions follow a specific initialization lifecycle:
-
-### 1. Discovery Phase
-
-During Django startup, the platform:
-1. Scans the `extensions/` directory
-2. Reads `manifest.py` files
-3. Validates extension metadata
-4. Checks if extension is enabled in config
-
-### 2. AppConfig Initialization
-
-If enabled, the extension's AppConfig is loaded:
-
-```python
-# If you have apps.py:
-class MyExtensionConfig(ExtensionAppConfig):
-    # Your config
-
-# If you don't have apps.py:
-# The platform automatically creates one inheriting from ExtensionAppConfig
-```
-
-### 3. ready() Method
-
-Django calls `AppConfig.ready()` after all apps are loaded. The `ExtensionAppConfig` base class:
-
-1. Handles RUN_MAIN check (prevents duplicate initialization in dev mode)
-2. Sets extension context for hook registration
-3. Calls `extension_ready()` if implemented
-4. Clears extension context
-
-### 4. extension_ready() Method
-
-This is where you should perform initialization:
-
-```python
-def extension_ready(self):
-    # ✅ DO: Register hooks
-    register_hook('import', 'my_hook', self.my_callback)
-    
-    # ✅ DO: Validate configuration
-    if not self.validate_config():
-        logger.warning("Invalid configuration")
-    
-    # ✅ DO: Initialize logging
-    logger.info("Extension initialized")
-    
-    # ❌ DON'T: Access database models (may not be ready)
-    # ❌ DON'T: Start background threads (use proper Django signals)
-    # ❌ DON'T: Make external API calls (use Celery tasks)
-```
-
-### 5. Frontend Loading
-
-After the backend is ready, the frontend:
-1. Fetches extension metadata from `/api/extensions/`
-2. Dynamically imports extension JavaScript bundles
-3. Calls the `setup()` function with platform services
-
----
+| Topic | Where to look |
+|-------|----------------|
+| Manifest options | `example_extension/manifest.py`, `caltopo/manifest.py` |
+| Backend URLs, views, models | `example_extension/src/backend/` |
+| AppConfig + import hook | `example_extension/src/backend/apps.py`, `caltopo/src/backend/apps.py` |
+| Frontend setup, nav, settings, API | `example_extension/src/frontend/src/main.js`, ExampleSettings.vue |
+| Tool instead of nav link | `exif_geotagger/src/frontend/src/main.js` |
+| Vite library + externals | `example_extension/src/frontend/vite.config.js` |
 
 ## Troubleshooting
 
-### Extension Not Loading
+- **Extension not loading** — Check `extensions.<name>.enabled` in config; ensure `manifest.py` has `name` and `version` and `src/backend/` exists.
+- **“No valid setup function”** — Use `export default setup` (default export); build must output a format the platform can load (e.g. UMD with externals).
+- **Hook error “outside of extension context”** — Register hooks only inside `extension_ready()` on an `ExtensionAppConfig` subclass.
+- **API 403 / wrong URL** — Use the injected `api` (e.g. `api.get('/path/')`); don’t build extension API URLs by hand. Ensure the route exists in your backend `urls.py`.
+- **Settings not saving** — Use keys starting with `extensions.<name>.` and `utils.updateUserSetting`; ensure the user is authenticated and the backend profile/settings API is used.
 
-**Check:**
-1. Extension is enabled in config: `extensions.<name>.enabled = true`
-2. `manifest.py` exists and has valid `name` and `version`
-3. `src/backend/` directory exists
-4. Check server logs for errors during discovery
-
-### Frontend Setup Function Not Found
-
-**Error:** `Extension <name> has no valid setup function`
-
-**Solution:**
-- Ensure you're using default export: `export default setup` (where `setup` is your async function)
-- Check that your build outputs ES modules (not IIFE or UMD)
-- Verify the `frontend_entry` path in extension metadata is correct
-
-### Hook Registration Errors
-
-**Error:** `Cannot register hook outside of extension context`
-
-**Solution:**
-- Hooks must be registered in `extension_ready()` method
-- Ensure your AppConfig inherits from `ExtensionAppConfig`
-- Don't register hooks at module level or in views
-
-### API Requests Failing
-
-**Check:**
-1. CSRF token is being sent (ExtensionApi handles this automatically)
-2. URL is correctly scoped (use `api.get('/path/')` not full URLs)
-3. Backend endpoint exists and is properly registered in `urls.py`
-4. Check browser console and network tab for detailed errors
-
-### Extension Not Appearing in Navigation
-
-**Check:**
-1. `registry.registerNavLink()` was called in setup function
-2. Route was registered with `router.addRoute()`
-3. Component is properly imported and exported
-4. Check browser console for JavaScript errors
-
-### Settings Not Saving
-
-**Check:**
-1. Using `utils.updateUserSetting()` with correct key format
-2. Key starts with `extensions.<name>.`
-3. User is authenticated
-4. Check network requests for API errors
-
----
-
-## Import Process
-
-Extensions can hook into the import process flow using import hooks (see [Hooks System](#hooks-system) section).
-
-**When Import Hooks Are Called:**
-- After features are successfully imported into the database
-- Before WebSocket notifications are sent
-- After all processing is complete
-
-**Hook Signature:**
-```python
-def my_import_hook(import_item, user_id, created_features):
-    # import_item: ImportQueue instance
-    # user_id: Integer user ID
-    # created_features: List[FeatureStore] instances
-    pass
-```
-
-**Future Hook Types:**
-- Custom taggers (during processing)
-- Background process triggers
-- External source importers
+For more detail, read the code in **example_extension** and the other extensions in this directory.

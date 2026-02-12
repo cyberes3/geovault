@@ -32,10 +32,11 @@ to [GitHub](https://github.com/Cyberes/geovault). Security practices are describ
 - Heavy data processing behind the scenes
 - API key authentication for programmatic access
 - Android app for quick file uploads via share intent
-- CalTopo account linking to quickly import data directly
-- Extension system to add custom features and integrations 
+- CalTopo account linking to quickly import your data directly from their website
+- Extension system to add custom features and integrations
+- A collection of useful GIS tools that utilize the existing platform R&D work
 
-**This platform does not support editing.** Use your own preferred tool and then upload your data to the server.
+**This platform does not support editing your tracks or whatever.** Use your own preferred tool and then upload your data to the server.
 
 ## Installation
 

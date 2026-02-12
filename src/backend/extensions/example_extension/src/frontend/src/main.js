@@ -48,11 +48,6 @@ async function setup({ app, router, store, registry, api, utils, toast, metadata
         component: ExamplePage
     });
 
-    // Example: Using router navigation helpers
-    // router.navigate('/page') - Navigate to a scoped path
-    // router.back() - Go back in history
-    // router.forward() - Go forward in history
-
     // Example: Using the enhanced API
     // api.get('/items/') - GET request with automatic CSRF token
     // api.post('/items/', { name: 'Test' }) - POST request
