@@ -84,16 +84,56 @@
             android:maxLines="2"
             android:ellipsize="end" />
 
-        <Button
-            android:id="@+id/viewInListButton"
+        <LinearLayout
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:text="View in List"
+            android:orientation="horizontal">
+
+            <Button
+                android:id="@+id/viewInListButton"
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:text="View in List"
+                android:textColor="@color/white"
+                android:backgroundTint="@color/primary_blue"
+                android:textAllCaps="false"
+                android:enabled="false"
+                android:alpha="0.5" />
+
+            <Space
+                android:layout_width="8dp"
+                android:layout_height="wrap_content" />
+
+            <Button
+                android:id="@+id/editPlaceButton"
+                style="@style/Widget.MaterialComponents.Button.OutlinedButton"
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:text="Edit"
+                android:textColor="@color/primary_blue"
+                android:textAllCaps="false"
+                android:enabled="false"
+                android:alpha="0.5" />
+
+        </LinearLayout>
+
+        <Button
+            android:id="@+id/navigateButton"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="8dp"
+            android:text="Navigate"
             android:textColor="@color/white"
             android:backgroundTint="@color/primary_blue"
+            android:drawableStart="@android:drawable/ic_menu_directions"
+            android:drawableTint="@color/white"
+            android:drawablePadding="8dp"
             android:textAllCaps="false"
             android:enabled="false"
             android:alpha="0.5" />
+
 
     </LinearLayout>
 

@@ -25,7 +25,7 @@ data class Geometry(
 
 @Parcelize
 data class Properties(
-    val database_id: Int,
+    val database_id: Int? = null,
     val name: String?,
     val description: String?,
     val created_at: String?

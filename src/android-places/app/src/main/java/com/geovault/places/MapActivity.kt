@@ -29,13 +29,14 @@ class MapActivity : AppCompatActivity() {
 
         // Load OSMDroid configuration
         val ctx = applicationContext
-        // Use standard SharedPreferences name instead of deprecated PreferenceManager
-        val prefsName = packageName + "_preferences"
-        Configuration.getInstance().load(ctx, ctx.getSharedPreferences(prefsName, Context.MODE_PRIVATE))
-        Configuration.getInstance().userAgentValue = BuildConfig.APPLICATION_ID
+        Configuration.getInstance().load(ctx, androidx.preference.PreferenceManager.getDefaultSharedPreferences(ctx))
+        // Standard browser UA to avoid being blocked by OSM servers
+        Configuration.getInstance().userAgentValue = "Mozilla/5.0 (Android; Mobile; rv:123.0) Gecko/123.0 Firefox/123.0"
+        // Set internal cache directory to avoid permission issues
+        Configuration.getInstance().osmdroidTileCache = java.io.File(ctx.cacheDir, "osmdroid")
 
         // Get API Key and URL from settings
-        val sharedPreferences = getSharedPreferences("com.geovault.uploader_preferences", Context.MODE_PRIVATE)
+        val sharedPreferences = getSharedPreferences("geovault_prefs", Context.MODE_PRIVATE)
         val apiKey = sharedPreferences.getString("api_key", "") ?: ""
         val serverUrl = sharedPreferences.getString("server_url", "") ?: ""
 
@@ -73,11 +74,37 @@ class MapActivity : AppCompatActivity() {
         val placeName = findViewById<android.widget.TextView>(R.id.placeName)
         val placeDescription = findViewById<android.widget.TextView>(R.id.placeDescription)
         val viewInListButton = findViewById<android.widget.Button>(R.id.viewInListButton)
+        val editPlaceButton = findViewById<android.widget.Button>(R.id.editPlaceButton)
+        val navigateButton = findViewById<android.widget.Button>(R.id.navigateButton)
         
-        var selectedFeatureId: Int? = null
+        var selectedFeature: Feature? = null
+        val editLauncher = registerForActivityResult(androidx.activity.result.contract.ActivityResultContracts.StartActivityForResult()) { result ->
+            if (result.resultCode == RESULT_OK) {
+                // Refresh map content or just close and let main refresh
+                setResult(RESULT_OK)
+                finish()
+            }
+        }
+        
+        editPlaceButton.setOnClickListener {
+            selectedFeature?.let { feature ->
+                val intent = android.content.Intent(this, PlaceEditActivity::class.java)
+                intent.putExtra("feature", feature)
+                editLauncher.launch(intent)
+                safeNoAnimation()
+            }
+        }
+
+        navigateButton.setOnClickListener {
+            selectedFeature?.let { feature ->
+                val serverUrl = sharedPreferences.getString("server_url", "") ?: ""
+                val apiKey = sharedPreferences.getString("api_key", "") ?: ""
+                NavigationHelper.navigateToPlace(this, feature, apiKey, serverUrl)
+            }
+        }
         
         viewInListButton.setOnClickListener {
-            selectedFeatureId?.let { id ->
+            selectedFeature?.properties?.database_id?.let { id ->
                 val resultIntent = android.content.Intent()
                 resultIntent.putExtra("selected_id", id)
                 setResult(RESULT_OK, resultIntent)
@@ -90,22 +117,9 @@ class MapActivity : AppCompatActivity() {
         // For a simple implementation, tapping the map doesn't inherently clear selection in osmdroid without an overlay.
         // We will just let the user tap another marker or use the button.
 
-        // Set custom tile source
-        if (serverUrl.isNotEmpty()) {
-            val baseUrl = if (serverUrl.endsWith("/")) serverUrl else "$serverUrl/"
-            val tileUrl = "${baseUrl}api/tiles/osm/"
-            
-            // Standard OSM tile source but with our custom base URL
-            val tileSource = XYTileSource(
-                "GeovaultOSM",
-                0,
-                19,
-                256,
-                ".png",
-                arrayOf(tileUrl)
-            )
-            map.setTileSource(tileSource)
-        }
+        // Set standard OSM tile source
+        map.setTileSource(org.osmdroid.tileprovider.tilesource.TileSourceFactory.MAPNIK)
+        map.invalidate()
 
         // Get features from intent handling deprecation
         features = if (Build.VERSION.SDK_INT >= 33) {
@@ -157,10 +171,14 @@ class MapActivity : AppCompatActivity() {
                         map.post {
                             placeName.text = name
                             placeDescription.text = desc
-                            selectedFeatureId = dbId
+                            selectedFeature = feature
                             
                             viewInListButton.isEnabled = true
                             viewInListButton.alpha = 1.0f
+                            editPlaceButton.isEnabled = true
+                            editPlaceButton.alpha = 1.0f
+                            navigateButton.isEnabled = true
+                            navigateButton.alpha = 1.0f
                         }
                         
                         true

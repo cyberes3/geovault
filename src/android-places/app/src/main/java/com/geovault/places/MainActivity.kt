@@ -50,6 +50,12 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
+    private val editLauncher = registerForActivityResult(ActivityResultContracts.StartActivityForResult()) { result ->
+        if (result.resultCode == RESULT_OK) {
+            loadPlaces()
+        }
+    }
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         setContentView(R.layout.activity_main)
@@ -74,14 +80,25 @@ class MainActivity : AppCompatActivity() {
         emptyText = findViewById(R.id.emptyText)
         swipeRefresh = findViewById(R.id.swipeRefresh)
 
-        adapter = PlacesAdapter(placesList) { feature ->
+        adapter = PlacesAdapter(placesList, { feature ->
             navigateToPlace(feature)
-        }
+        }, { feature ->
+            val intent = Intent(this, PlaceEditActivity::class.java)
+            intent.putExtra("feature", feature)
+            editLauncher.launch(intent)
+            safeNoAnimation()
+        })
         recyclerView.layoutManager = LinearLayoutManager(this)
         recyclerView.adapter = adapter
 
         swipeRefresh.setOnRefreshListener {
             loadPlaces()
+        }
+
+        findViewById<View>(R.id.fab_add).setOnClickListener {
+            val intent = Intent(this, PlaceEditActivity::class.java)
+            editLauncher.launch(intent)
+            safeNoAnimation()
         }
 
         findViewById<View>(R.id.fab_map).setOnClickListener {
@@ -158,24 +175,8 @@ class MainActivity : AppCompatActivity() {
     }
     
     private fun navigateToPlace(feature: Feature) {
-        val coords = feature.geometry.coordinates
-        if (coords.size >= 2) {
-            val lon = coords[0]
-            val lat = coords[1]
-            val label = feature.properties.name ?: "Place"
-            val uri = Uri.parse("geo:$lat,$lon?q=$lat,$lon($label)")
-            val intent = Intent(Intent.ACTION_VIEW, uri)
-            startActivity(intent)
-            
-            // Track navigation
-            val serverUrl = prefs.getString("server_url", "") ?: ""
-            val apiKey = prefs.getString("api_key", "") ?: ""
-            val baseUrl = if (serverUrl.endsWith("/")) serverUrl else "$serverUrl/"
-            val api = RetrofitClient.getClient(baseUrl, apiKey).create(GeovaultApi::class.java)
-            api.trackNavigation(feature.properties.database_id).enqueue(object : Callback<Void> {
-                override fun onResponse(call: Call<Void>, response: Response<Void>) {}
-                override fun onFailure(call: Call<Void>, t: Throwable) {}
-            })
-        }
+        val serverUrl = prefs.getString("server_url", "") ?: ""
+        val apiKey = prefs.getString("api_key", "") ?: ""
+        NavigationHelper.navigateToPlace(this, feature, apiKey, serverUrl)
     }
 }

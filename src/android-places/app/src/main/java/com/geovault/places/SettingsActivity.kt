@@ -50,12 +50,17 @@ class SettingsActivity : AppCompatActivity() {
         val headerView = findViewById<View>(R.id.headerLayout)
         
         ViewCompat.setOnApplyWindowInsetsListener(rootView) { view, windowInsets ->
-            val insets = windowInsets.getInsets(WindowInsetsCompat.Type.systemBars())
+            val systemBars = windowInsets.getInsets(WindowInsetsCompat.Type.systemBars())
+            val ime = windowInsets.getInsets(WindowInsetsCompat.Type.ime())
+            
             // Apply top padding to header
-            headerView.updatePadding(top = insets.top + 20)
-            // Apply bottom padding to avoid navigation bar overlap
-            view.updatePadding(bottom = insets.bottom)
-            WindowInsetsCompat.CONSUMED
+            headerView.updatePadding(top = systemBars.top + 20)
+            
+            // Apply the larger of the two bottom insets (navigation bar or keyboard)
+            val bottomInset = if (ime.bottom > systemBars.bottom) ime.bottom else systemBars.bottom
+            view.updatePadding(bottom = bottomInset)
+            
+            windowInsets
         }
         
         // Load current settings

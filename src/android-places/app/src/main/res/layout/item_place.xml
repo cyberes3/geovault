@@ -8,7 +8,8 @@
     android:layout_marginEnd="4dp"
     app:cardCornerRadius="12dp"
     app:cardElevation="2dp"
-    app:cardBackgroundColor="@color/white">
+    app:cardBackgroundColor="@color/white"
+    android:descendantFocusability="afterDescendants">
 
     <LinearLayout
         android:id="@+id/cardContent"
@@ -39,7 +40,45 @@
                 android:text="Place Name"
                 android:textSize="18sp"
                 android:textStyle="bold"
-                android:textColor="@color/text_primary" />
+                android:textColor="@color/text_primary"
+                android:textIsSelectable="true"
+                android:focusable="true"
+                android:focusableInTouchMode="true" />
+
+        </LinearLayout>
+
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="horizontal"
+            android:layout_marginBottom="8dp">
+
+            <TextView
+                android:id="@+id/placeDate"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="2024-01-01"
+                android:textSize="12sp"
+                android:textColor="@color/text_secondary" />
+
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text=" • "
+                android:textSize="12sp"
+                android:textColor="@color/text_secondary" />
+
+            <TextView
+                android:id="@+id/placeCoordinates"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="37.7749, -122.4194"
+                android:textSize="12sp"
+                android:textColor="@color/text_secondary"
+                android:background="?attr/selectableItemBackground"
+                android:padding="2dp"
+                android:clickable="true"
+                android:focusable="true" />
 
         </LinearLayout>
 
@@ -51,19 +90,46 @@
             android:textSize="14sp"
             android:textColor="@color/text_secondary"
             android:layout_marginBottom="12dp"
-            android:maxLines="2"
-            android:ellipsize="end" />
+            android:textIsSelectable="true"
+            android:focusable="true"
+            android:focusableInTouchMode="true" />
 
-        <Button
-            android:id="@+id/navigateButton"
+        <LinearLayout
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:text="@string/navigate"
-            android:textColor="@color/white"
-            android:backgroundTint="@color/primary_blue"
-            android:drawableStart="@android:drawable/ic_menu_directions"
-            android:drawableTint="@color/white"
-            android:drawablePadding="8dp" />
+            android:orientation="horizontal">
+
+            <Button
+                android:id="@+id/navigateButton"
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:text="@string/navigate"
+                android:textColor="@color/white"
+                android:backgroundTint="@color/primary_blue"
+                android:drawableStart="@android:drawable/ic_menu_directions"
+                android:drawableTint="@color/white"
+                android:drawablePadding="8dp"
+                android:textAllCaps="false" />
+
+            <Space
+                android:layout_width="8dp"
+                android:layout_height="wrap_content" />
+
+            <Button
+                android:id="@+id/editButton"
+                style="@style/Widget.MaterialComponents.Button.OutlinedButton"
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:text="Edit"
+                android:textColor="@color/primary_blue"
+                android:drawableStart="@android:drawable/ic_menu_edit"
+                android:drawableTint="@color/primary_blue"
+                android:drawablePadding="8dp"
+                android:textAllCaps="false" />
+
+        </LinearLayout>
 
     </LinearLayout>
 

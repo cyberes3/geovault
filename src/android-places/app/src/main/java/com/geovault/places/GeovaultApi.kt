@@ -10,6 +10,12 @@ interface GeovaultApi {
     @GET("api/extensions/places/features/")
     fun getPlaces(@Query("sort") sort: String = "composite"): Call<FeatureCollection>
 
+    @POST("api/extensions/places/features/")
+    fun createPlace(@retrofit2.http.Body feature: Feature): Call<Feature>
+
+    @retrofit2.http.PUT("api/extensions/places/features/{id}/")
+    fun updatePlace(@Path("id") id: Int, @retrofit2.http.Body feature: Feature): Call<Feature>
+
     @POST("api/extensions/places/features/{id}/navigate/")
     fun trackNavigation(@Path("id") id: Int): Call<Void>
 }
