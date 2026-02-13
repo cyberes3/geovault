@@ -1,8 +1,8 @@
 <template>
   <div class="h-full flex flex-col bg-gray-50">
-    <!-- Full-page map with search overlay -->
-    <div class="flex-1 min-h-0 relative">
-      <div ref="mapContainer" class="absolute inset-0 bg-gray-100"></div>
+    <!-- Map: 50% on mobile; flex-1 on desktop so form can fit-content -->
+    <div class="h-1/2 min-h-[200px] sm:h-auto sm:flex-1 sm:min-h-0 flex-shrink-0 relative border-b border-gray-300">
+      <div ref="mapContainer" class="absolute inset-0 bg-gray-100 touch-pan-y"></div>
 
       <!-- Map loading overlay (edit place) -->
       <div
@@ -53,9 +53,10 @@
       </div>
     </div>
 
-    <!-- Bottom form (card style) -->
-    <div class="flex-shrink-0 w-full bg-white p-4 sm:p-6 rounded-t-xl border border-gray-200 shadow-md">
-      <div class="max-w-4xl mx-auto space-y-4">
+    <!-- Form: 50% scrollable on mobile; fit-content on desktop -->
+    <div class="h-1/2 min-h-0 sm:h-auto sm:flex-shrink-0 flex flex-col bg-white border-t-2 border-gray-300 shadow-[0_-2px_10px_rgba(0,0,0,0.05)]">
+      <div class="flex-1 min-h-0 sm:flex-none sm:min-h-0 overflow-y-auto overscroll-contain">
+        <div class="max-w-4xl mx-auto p-4 sm:p-6 space-y-4">
         <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
           <div>
             <label class="block text-sm font-medium text-gray-700 mb-1">Name <span class="text-red-500">*</span></label>
@@ -80,7 +81,7 @@
         </div>
         <div class="flex flex-col sm:flex-row gap-4 items-end">
           <div class="flex-1 w-full space-y-1.5">
-            <label class="block text-xs font-semibold text-gray-500 uppercase tracking-wide">Latitude</label>
+            <label class="block text-xs font-semibold text-gray-500 uppercase tracking-wide">Latitude <span class="text-red-500">*</span></label>
             <input
               v-model.number="latitude"
               type="number"
@@ -92,7 +93,7 @@
             />
           </div>
           <div class="flex-1 w-full space-y-1.5">
-            <label class="block text-xs font-semibold text-gray-500 uppercase tracking-wide">Longitude</label>
+            <label class="block text-xs font-semibold text-gray-500 uppercase tracking-wide">Longitude <span class="text-red-500">*</span></label>
             <input
               v-model.number="longitude"
               type="number"
@@ -103,18 +104,19 @@
               @input="updateMarkerFromInputs"
             />
           </div>
-          <div class="flex items-center gap-2">
+          <div class="w-full sm:w-auto flex items-center gap-2">
             <BaseButton
               type="button"
               variant="white"
               size="sm"
+              class="w-full justify-center"
               :disabled="isGettingLocation || loadingEdit"
               title="Use current location"
               @click="useCurrentLocation"
             >
               <Loader v-if="isGettingLocation" size="sm" layout="inline" :show-message="false" />
               <MapPinIcon v-else class="w-5 h-5 text-gray-700" />
-              <span class="ml-1.5 hidden sm:inline">Use my location</span>
+              <span class="ml-1.5">Use my location</span>
             </BaseButton>
           </div>
         </div>
@@ -133,6 +135,7 @@
           <BaseButton type="button" variant="white" size="sm" :disabled="loadingEdit" @click="goToList">
             Cancel
           </BaseButton>
+        </div>
         </div>
       </div>
     </div>
