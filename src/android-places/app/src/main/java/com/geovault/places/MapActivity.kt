@@ -173,12 +173,12 @@ class MapActivity : AppCompatActivity() {
                             placeDescription.text = desc
                             selectedFeature = feature
                             
-                            viewInListButton.isEnabled = true
-                            viewInListButton.alpha = 1.0f
-                            editPlaceButton.isEnabled = true
-                            editPlaceButton.alpha = 1.0f
-                            navigateButton.isEnabled = true
-                            navigateButton.alpha = 1.0f
+                            viewInListButton.isEnabled = dbId != null
+                            viewInListButton.alpha = if (dbId != null) 1.0f else 0.5f
+                            editPlaceButton.isEnabled = dbId != null
+                            editPlaceButton.alpha = if (dbId != null) 1.0f else 0.5f
+                            navigateButton.isEnabled = dbId != null
+                            navigateButton.alpha = if (dbId != null) 1.0f else 0.5f
                         }
                         
                         true

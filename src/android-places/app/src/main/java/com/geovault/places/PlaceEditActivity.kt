@@ -43,10 +43,18 @@ class PlaceEditActivity : AppCompatActivity() {
     private lateinit var latInput: EditText
     private lateinit var lonInput: EditText
     private lateinit var saveButton: MaterialButton
+    private lateinit var locationProgress: android.widget.ProgressBar
     private lateinit var titleText: TextView
+    private lateinit var savingOverlay: View
+    private lateinit var savingText: TextView
+    private lateinit var savingTapHint: TextView
     
     private var marker: Marker? = null
     private var editFeature: Feature? = null
+    private var originalFeature: Feature? = null
+    private var isOfflineEdit: Boolean = false
+    private var saveCall: Call<Feature>? = null
+    private var pendingFeature: Feature? = null
     private lateinit var fusedLocationClient: FusedLocationProviderClient
 
     private val prefs: SharedPreferences by lazy {
@@ -79,9 +87,23 @@ class PlaceEditActivity : AppCompatActivity() {
             @Suppress("DEPRECATION")
             intent.getParcelableExtra("feature")
         }
+        
+        originalFeature = if (android.os.Build.VERSION.SDK_INT >= 33) {
+            intent.getParcelableExtra("original_feature", Feature::class.java)
+        } else {
+            @Suppress("DEPRECATION")
+            intent.getParcelableExtra("original_feature")
+        }
+        
+        isOfflineEdit = intent.getBooleanExtra("is_offline_edit", false)
+        
         if (editFeature != null) {
             populateFields(editFeature!!)
-            titleText.text = "Edit Place"
+            if (isOfflineEdit) {
+                titleText.text = "Edit Place (Offline)"
+            } else {
+                titleText.text = "Edit Place"
+            }
         }
 
         setupListeners()
@@ -95,7 +117,11 @@ class PlaceEditActivity : AppCompatActivity() {
         latInput = findViewById(R.id.latitudeInput)
         lonInput = findViewById(R.id.longitudeInput)
         saveButton = findViewById(R.id.saveButton)
+        locationProgress = findViewById(R.id.locationProgress)
         titleText = findViewById(R.id.titleText)
+        savingOverlay = findViewById(R.id.savingOverlay)
+        savingText = findViewById(R.id.savingText)
+        savingTapHint = findViewById(R.id.savingTapHint)
 
         findViewById<View>(R.id.closeButton).setOnClickListener { finish() }
         findViewById<View>(R.id.cancelButton).setOnClickListener { finish() }
@@ -222,16 +248,23 @@ class PlaceEditActivity : AppCompatActivity() {
             return
         }
         
+        locationProgress.visibility = View.VISIBLE
+        findViewById<View>(R.id.useMyLocationButton).isEnabled = false
+        
         val cts = CancellationTokenSource()
         fusedLocationClient.getCurrentLocation(Priority.PRIORITY_HIGH_ACCURACY, cts.token)
             .addOnSuccessListener { location: Location? ->
                 location?.let {
+                    locationProgress.visibility = View.GONE
+                    findViewById<View>(R.id.useMyLocationButton).isEnabled = true
                     updateCoords(it.latitude, it.longitude)
                     map.controller.animateTo(GeoPoint(it.latitude, it.longitude))
                     map.controller.setZoom(15.0)
                 } ?: run {
                     // Fallback to last location if fresh one fails
                     fusedLocationClient.lastLocation.addOnSuccessListener { lastLoc ->
+                        locationProgress.visibility = View.GONE
+                        findViewById<View>(R.id.useMyLocationButton).isEnabled = true
                         lastLoc?.let {
                             updateCoords(it.latitude, it.longitude)
                             map.controller.animateTo(GeoPoint(it.latitude, it.longitude))
@@ -243,6 +276,8 @@ class PlaceEditActivity : AppCompatActivity() {
                 }
             }
             .addOnFailureListener {
+                locationProgress.visibility = View.GONE
+                findViewById<View>(R.id.useMyLocationButton).isEnabled = true
                 Toast.makeText(this, "Location request failed: ${it.message}", Toast.LENGTH_SHORT).show()
             }
     }
@@ -254,8 +289,38 @@ class PlaceEditActivity : AppCompatActivity() {
         
         val isValid = name.isNotEmpty() && lat.isNotEmpty() && lon.isNotEmpty()
         saveButton.isEnabled = isValid
-        // Visual feedback for disabled state
         saveButton.alpha = if (isValid) 1.0f else 0.5f
+    }
+
+    private fun showSavingOverlay(message: String = "Saving...") {
+        savingText.text = message
+        savingOverlay.visibility = View.VISIBLE
+        saveButton.isEnabled = false
+
+        val isSavingOffline = message == "Saving offline..."
+        if (isSavingOffline) {
+            savingOverlay.setOnClickListener(null)
+            savingOverlay.isClickable = false
+            savingTapHint.visibility = View.GONE
+        } else {
+            savingOverlay.isClickable = true
+            savingTapHint.visibility = View.VISIBLE
+            savingOverlay.setOnClickListener {
+                saveCall?.cancel()
+                saveCall = null
+                if (pendingFeature != null) {
+                    showSavingOverlay("Saving offline...")
+                    android.os.Handler(android.os.Looper.getMainLooper()).postDelayed({
+                        saveOffline(pendingFeature!!)
+                    }, 300)
+                }
+            }
+        }
+    }
+
+    private fun hideSavingOverlay() {
+        savingOverlay.visibility = View.GONE
+        validateForm() // Re-validate to restore button state
     }
 
     private fun savePlace() {
@@ -291,30 +356,79 @@ class PlaceEditActivity : AppCompatActivity() {
         val baseUrl = if (serverUrl.endsWith("/")) serverUrl else "$serverUrl/"
         val api = RetrofitClient.getClient(baseUrl, apiKey).create(GeovaultApi::class.java)
 
-        saveButton.isEnabled = false
-        val call = if (editFeature != null) {
-            api.updatePlace(editFeature!!.properties.database_id!!, feature)
-        } else {
-            api.createPlace(feature)
+        pendingFeature = feature
+        
+        // Offline edits must never call updatePlace here — they go back to MainActivity
+        // so sync (with conflict detection) can run. Otherwise we'd overwrite server changes.
+        if (isOfflineEdit) {
+            saveOffline(feature)
+            return
         }
-
-        call.enqueue(object : Callback<Feature> {
-            override fun onResponse(call: Call<Feature>, response: Response<Feature>) {
-                saveButton.isEnabled = true
-                if (response.isSuccessful) {
-                    Toast.makeText(this@PlaceEditActivity, "Place saved", Toast.LENGTH_SHORT).show()
-                    setResult(RESULT_OK)
-                    finish()
-                } else {
-                    Toast.makeText(this@PlaceEditActivity, "Error: ${response.code()}", Toast.LENGTH_SHORT).show()
+        
+        showSavingOverlay()
+        if (editFeature != null) {
+            saveCall = api.updatePlace(editFeature!!.properties.database_id!!, feature)
+            saveCall?.enqueue(object : Callback<Feature> {
+                override fun onResponse(call: Call<Feature>, response: Response<Feature>) {
+                    saveCall = null
+                    pendingFeature = null
+                    hideSavingOverlay()
+                    if (response.isSuccessful) {
+                        Toast.makeText(this@PlaceEditActivity, "Place saved", Toast.LENGTH_SHORT).show()
+                        setResult(RESULT_OK)
+                        finish()
+                    } else {
+                        showSavingOverlay("Saving offline...")
+                        android.os.Handler(android.os.Looper.getMainLooper()).postDelayed({
+                            saveOffline(feature)
+                        }, 300)
+                    }
                 }
-            }
 
-            override fun onFailure(call: Call<Feature>, t: Throwable) {
-                saveButton.isEnabled = true
-                Toast.makeText(this@PlaceEditActivity, "Failed: ${t.message}", Toast.LENGTH_SHORT).show()
-            }
-        })
+                override fun onFailure(call: Call<Feature>, t: Throwable) {
+                    showSavingOverlay("Saving offline...")
+                    android.os.Handler(android.os.Looper.getMainLooper()).postDelayed({
+                        saveOffline(feature)
+                    }, 300)
+                }
+            })
+        } else {
+            // New place - try online first, fallback to offline
+            saveCall = api.createPlace(feature)
+            saveCall?.enqueue(object : Callback<Feature> {
+                override fun onResponse(call: Call<Feature>, response: Response<Feature>) {
+                    saveCall = null
+                    pendingFeature = null
+                    hideSavingOverlay()
+                    if (response.isSuccessful) {
+                        Toast.makeText(this@PlaceEditActivity, "Place saved online", Toast.LENGTH_SHORT).show()
+                        setResult(RESULT_OK)
+                        finish()
+                    } else {
+                        showSavingOverlay("Saving offline...")
+                        android.os.Handler(android.os.Looper.getMainLooper()).postDelayed({
+                            saveOffline(feature)
+                        }, 300)
+                    }
+                }
+
+                override fun onFailure(call: Call<Feature>, t: Throwable) {
+                    showSavingOverlay("Saving offline...")
+                    android.os.Handler(android.os.Looper.getMainLooper()).postDelayed({
+                        saveOffline(feature)
+                    }, 300)
+                }
+            })
+        }
+    }
+
+    private fun saveOffline(feature: Feature) {
+        val intent = android.content.Intent()
+        intent.putExtra("offline_feature", feature)
+        // Use the existing originalFeature if we're editing an offline item, otherwise use editFeature
+        intent.putExtra("original_feature", originalFeature ?: editFeature)
+        setResult(RESULT_OK, intent)
+        finish()
     }
 
     override fun onRequestPermissionsResult(requestCode: Int, permissions: Array<out String>, grantResults: IntArray) {

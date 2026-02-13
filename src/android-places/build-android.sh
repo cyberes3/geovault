@@ -117,14 +117,12 @@ if [ -n "$APK_PATH" ]; then
     # Extract and display version information
     if command -v aapt &> /dev/null; then
         VERSION_NAME=$(aapt dump badging "$APK_PATH" 2>/dev/null | grep -oP "versionName='\K[^']*" || echo "unknown")
-        VERSION_CODE=$(aapt dump badging "$APK_PATH" 2>/dev/null | grep -oP "versionCode='\K[^']*" || echo "unknown")
         PACKAGE_NAME=$(aapt dump badging "$APK_PATH" 2>/dev/null | grep -oP "package: name='\K[^']*" || echo "unknown")
         
         echo ""
         echo "Version Information:"
         echo "  Package: $PACKAGE_NAME"
         echo "  Version Name: $VERSION_NAME"
-        echo "  Version Code: $VERSION_CODE"
     else
         # Fallback: try to get from build output or gradle
         echo ""

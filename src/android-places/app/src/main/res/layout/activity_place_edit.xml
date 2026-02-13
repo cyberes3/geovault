@@ -180,20 +180,37 @@
                 </LinearLayout>
             </LinearLayout>
 
-            <com.google.android.material.button.MaterialButton
-                android:id="@+id/useMyLocationButton"
-                style="@style/Widget.MaterialComponents.Button.TextButton"
-                android:layout_width="wrap_content"
+            <LinearLayout
+                android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:text="Use my location"
-                app:icon="@drawable/ic_location"
-                app:iconSize="20dp"
-                app:iconTint="@color/primary_blue"
-                app:iconPadding="8dp"
-                android:textColor="@color/primary_blue"
-                android:textAllCaps="false"
+                android:orientation="horizontal"
+                android:gravity="center_vertical"
                 android:layout_marginTop="8dp"
-                android:layout_marginBottom="24dp" />
+                android:layout_marginBottom="24dp">
+
+                <com.google.android.material.button.MaterialButton
+                    android:id="@+id/useMyLocationButton"
+                    style="@style/Widget.MaterialComponents.Button.TextButton"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="Use my location"
+                    app:icon="@drawable/ic_location"
+                    app:iconSize="20dp"
+                    app:iconTint="@color/primary_blue"
+                    app:iconPadding="8dp"
+                    android:textColor="@color/primary_blue"
+                    android:textAllCaps="false" />
+
+                <ProgressBar
+                    android:id="@+id/locationProgress"
+                    style="?android:attr/progressBarStyleSmall"
+                    android:layout_width="24dp"
+                    android:layout_height="24dp"
+                    android:layout_marginStart="8dp"
+                    android:visibility="gone"
+                    android:indeterminateTint="@color/primary_blue" />
+
+            </LinearLayout>
 
             <LinearLayout
                 android:layout_width="match_parent"
@@ -230,5 +247,57 @@
 
         </LinearLayout>
     </androidx.core.widget.NestedScrollView>
+
+    <!-- Saving overlay with spinner -->
+    <FrameLayout
+        android:id="@+id/savingOverlay"
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
+        android:background="#80000000"
+        android:visibility="gone"
+        android:clickable="true"
+        android:focusable="true"
+        android:elevation="16dp"
+        app:layout_constraintTop_toTopOf="parent"
+        app:layout_constraintBottom_toBottomOf="parent">
+
+        <LinearLayout
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_gravity="center"
+            android:orientation="vertical"
+            android:padding="32dp"
+            android:background="@drawable/bg_place_item_selected"
+            android:elevation="8dp">
+
+            <ProgressBar
+                android:id="@+id/savingProgress"
+                android:layout_width="48dp"
+                android:layout_height="48dp"
+                android:layout_gravity="center"
+                android:indeterminateTint="@color/primary_blue" />
+
+            <TextView
+                android:id="@+id/savingText"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="16dp"
+                android:text="Saving..."
+                android:textSize="16sp"
+                android:textColor="@color/text_primary"
+                android:textStyle="bold" />
+
+            <TextView
+                android:id="@+id/savingTapHint"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="8dp"
+                android:text="Tap to save offline"
+                android:textSize="12sp"
+                android:textColor="@color/text_secondary" />
+
+        </LinearLayout>
+
+    </FrameLayout>
 
 </androidx.constraintlayout.widget.ConstraintLayout>

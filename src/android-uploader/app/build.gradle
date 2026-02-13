@@ -76,17 +76,6 @@ def getGitCommitDate() {
     return project.ext.gitCommitDate ?: new Date().format('yyyy-MM-dd')
 }
 
-// Helper function to get version code based on timestamp (increases automatically)
-def getVersionCode() {
-    try {
-        // Use timestamp as version code (seconds since epoch / 100)
-        // This ensures it always increases and fits in an int (max ~2.1 billion)
-        return (System.currentTimeMillis() / 100).toInteger()
-    } catch (Exception e) {
-        return 1
-    }
-}
-
 android {
     namespace = 'com.geovault.uploader'
     compileSdk = 36
@@ -95,7 +84,6 @@ android {
         applicationId = "com.geovault.uploader"
         minSdk = 24
         targetSdk = 36
-        versionCode = getVersionCode()
         versionName = "${getGitCommitDate()}-${getGitCommitHash()}"
     }
 
