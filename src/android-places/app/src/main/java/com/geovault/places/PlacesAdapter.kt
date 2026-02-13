@@ -19,7 +19,8 @@ class PlacesAdapter(
     private val onEdit: (Feature) -> Unit,
     private val onEditOffline: (OfflineFeature) -> Unit,
     private val onDelete: (Feature) -> Unit,
-    private val onRevertOffline: (OfflineFeature) -> Unit
+    private val onRevertOffline: (OfflineFeature) -> Unit,
+    private val onViewDescription: (placeName: String, description: String) -> Unit
 ) : RecyclerView.Adapter<RecyclerView.ViewHolder>() {
 
     var selectedId: Int? = null
@@ -119,9 +120,12 @@ class PlacesAdapter(
             holder.coordinatesText.text = ""
         }
         
-        holder.descriptionText.text = place.properties.description ?: "No description"
-        holder.descriptionText.setTextIsSelectable(true)
-        
+        val description = place.properties.description ?: "No description"
+        holder.descriptionText.text = description
+        holder.descriptionText.setOnClickListener {
+            onViewDescription(place.properties.name ?: "Unnamed Place", description)
+        }
+
         // Highlight selection or offline status
         val hasPendingOfflineEdit = !isOffline && place.properties.database_id != null && 
             offlinePlaces.any { it.properties.database_id == place.properties.database_id }

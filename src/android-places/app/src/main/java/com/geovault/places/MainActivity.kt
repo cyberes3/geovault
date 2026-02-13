@@ -36,6 +36,7 @@ class MainActivity : AppCompatActivity() {
     private val placesList = mutableListOf<Feature>()
     private val offlinePlacesList = mutableListOf<OfflineFeature>()
     private var refreshCall: Call<FeatureCollection>? = null
+    private var initialLoadDone = false
     private val handler = Handler(Looper.getMainLooper())
     private val timeoutRunnable = Runnable {
         if (swipeRefresh.isRefreshing) {
@@ -143,6 +144,11 @@ class MainActivity : AppCompatActivity() {
             },
             { offlineFeature: OfflineFeature ->
                 revertOfflineChanges(offlineFeature)
+            },
+            { placeName: String, description: String ->
+                val intent = DescriptionViewActivity.intent(this, placeName, description)
+                startActivity(intent)
+                safeNoAnimation()
             }
         )
         recyclerView.layoutManager = LinearLayoutManager(this)
@@ -189,10 +195,14 @@ class MainActivity : AppCompatActivity() {
             startActivity(Intent(this, SettingsActivity::class.java))
             safeNoAnimation()
         } else {
-            // Load from cache first for immediate display
+            // Always load from cache/offline for immediate display when resuming
             loadOfflinePlaces()
             loadFromCache()
-            loadPlaces()
+            // Sync from server only on first load; returning from edit/new triggers sync via editLauncher
+            if (!initialLoadDone) {
+                initialLoadDone = true
+                loadPlaces()
+            }
         }
     }
 

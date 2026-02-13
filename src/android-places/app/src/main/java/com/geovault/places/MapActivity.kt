@@ -206,7 +206,15 @@ class MapActivity : AppCompatActivity() {
                      maxLon += 0.01
                  }
 
-                 val boundingBox = BoundingBox(maxLat, maxLon, minLat, minLon)
+                 // Expand bounds by a fraction so icons aren't flush against the edge
+                 val latPadding = (maxLat - minLat) * 0.15
+                 val lonPadding = (maxLon - minLon) * 0.15
+                 val paddedMinLat = minLat - latPadding
+                 val paddedMaxLat = maxLat + latPadding
+                 val paddedMinLon = minLon - lonPadding
+                 val paddedMaxLon = maxLon + lonPadding
+
+                 val boundingBox = BoundingBox(paddedMaxLat, paddedMaxLon, paddedMinLat, paddedMinLon)
                  
                  // Run on UI thread with delay to ensure map has size
                  map.post {

@@ -31,5 +31,8 @@
     <string name="api_key_valid_msg">✓ API key \'%1$s\' is valid!\n\nShare a file to upload it.</string>
 
     <string name="settings_help_text">Get your API key from Settings → API Keys in the web interface.</string>
+    <string name="close">Close</string>
+    <string name="description">Description</string>
+    <string name="no_description">No description</string>
 </resources>
 
