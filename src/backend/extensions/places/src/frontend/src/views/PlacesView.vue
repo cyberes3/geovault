@@ -94,17 +94,20 @@
                   : 'border-gray-200 bg-white hover:bg-gray-50'
               ]"
             >
-              <!-- Row 1: title + icon actions inline -->
-              <div class="flex items-center gap-1.5 min-w-0">
-                <span class="font-bold text-gray-900 text-base truncate min-w-0 flex-1">
+              <!-- Mobile: stacked (Title, Buttons, Coords+date, Description). Desktop: grid row1 title|buttons, row2 desc|coords+date -->
+              <div class="flex flex-col gap-2 sm:grid sm:grid-cols-[1fr_auto] sm:grid-rows-[auto_auto] sm:gap-x-2 sm:gap-y-1.5 sm:items-start">
+                <!-- 1. Title -->
+                <span class="font-bold text-gray-900 text-base truncate min-w-0 sm:min-w-0 sm:row-start-1 sm:col-start-1">
                   {{ place.properties.name || 'Unnamed Place' }}
                 </span>
+                <!-- 2. Buttons (always visible on mobile, hover on desktop) -->
                 <div
                   :class="[
-                    'flex items-center gap-0.5 flex-shrink-0 transition-opacity',
-                    selectedPlace?.properties?.database_id === place.properties.database_id ? 'opacity-100' : 'opacity-0 group-hover:opacity-100'
+                    'flex items-center justify-center sm:justify-end gap-0.5 flex-shrink-0 transition-opacity',
+                    selectedPlace?.properties?.database_id === place.properties.database_id ? 'opacity-100' : 'opacity-100 sm:opacity-0 sm:group-hover:opacity-100'
                   ]"
                   @click.stop
+                  class="sm:row-start-1 sm:col-start-2"
                 >
                   <button
                     type="button"
@@ -142,17 +145,9 @@
                     </span>
                   </button>
                 </div>
-              </div>
-              <!-- Row 2: two columns - left: description, right: coords + date -->
-              <div class="grid grid-cols-[1fr_auto] gap-2 mt-1.5 items-start">
-                <p
-                  class="text-sm text-gray-600 min-w-0 overflow-hidden"
-                  style="display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 3;"
-                >
-                  {{ place.properties.description || 'No description' }}
-                </p>
-                <div class="flex flex-col items-end gap-0.5 flex-shrink-0">
-                  <span class="inline-flex items-center gap-0.5 rounded text-xs font-medium bg-gray-100 text-gray-800 px-2 py-0.5">
+                <!-- 3. Coords + Date (mobile: same line centered; desktop: row 2 col 2, stacked) -->
+                <div class="flex flex-row flex-wrap items-center justify-center gap-2 sm:flex-col sm:items-end sm:gap-1 sm:col-start-2 sm:row-start-2">
+                  <span class="inline-flex items-center gap-0.5 rounded text-xs font-medium bg-gray-100 text-gray-800 px-2 py-0.5 w-fit">
                     {{ formatCoords(place.geometry.coordinates) }}
                     <button
                       type="button"
@@ -165,10 +160,17 @@
                       <ClipboardDocumentIcon v-else class="w-3.5 h-3.5" />
                     </button>
                   </span>
-                  <p v-if="place.properties.created_at" class="text-xs text-gray-600 whitespace-nowrap">
+                  <span v-if="place.properties.created_at" class="inline-flex items-center rounded text-xs font-medium bg-gray-100 text-gray-800 px-2 py-0.5 whitespace-nowrap">
                     {{ formatCreatedDate(place.properties.created_at) }}
-                  </p>
+                  </span>
                 </div>
+                <!-- 4. Description (desktop: row 2 col 1) -->
+                <p
+                  class="text-sm text-gray-600 min-w-0 overflow-hidden sm:row-start-2 sm:col-start-1"
+                  style="display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 3;"
+                >
+                  {{ place.properties.description || 'No description' }}
+                </p>
               </div>
             </div>
           </div>

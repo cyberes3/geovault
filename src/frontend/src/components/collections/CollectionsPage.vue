@@ -2,21 +2,23 @@
   <div class="space-y-6">
     <!-- Page Header -->
     <div class="bg-white rounded-lg shadow-sm border border-gray-200 p-4 sm:p-6">
-      <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 mb-4">
-        <div>
+      <div class="flex flex-col md:flex-row md:items-center md:justify-between gap-3 mb-4">
+        <div class="order-1">
           <h1 class="text-xl sm:text-2xl font-bold text-gray-900 mb-1 sm:mb-2">Collections</h1>
         </div>
-        <BaseButton
-            @click="openCreateDialog"
-            class="w-full sm:w-auto"
-            variant="primary"
-            color="blue"
-            size="md"
-            title="Create a new collection"
-        >
-          <PlusIcon class="w-5 h-5 mr-2" />
-          Create New Collection
-        </BaseButton>
+        <div class="order-2 w-full text-center md:w-auto md:text-left">
+          <BaseButton
+              @click="openCreateDialog"
+              class="inline-flex"
+              variant="primary"
+              color="blue"
+              size="md"
+              title="Create a new collection"
+          >
+            <PlusIcon class="w-5 h-5 mr-2" />
+            Create New Collection
+          </BaseButton>
+        </div>
       </div>
 
       <!-- Explanatory Text -->
@@ -68,9 +70,12 @@
           class="bg-white rounded-lg shadow-sm border border-gray-200 overflow-hidden hover:shadow-md transition-shadow"
       >
         <div class="p-4 sm:p-6 h-full flex flex-col">
-          <div class="flex items-start justify-between mb-3">
-            <h3 class="text-base sm:text-lg font-semibold text-gray-900 truncate flex-1">{{ collection.name }}</h3>
-            <div class="flex items-center space-x-1 ml-2">
+          <div class="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between mb-3">
+            <ScrollNameWithTooltip
+                :name="collection.name"
+                root-class="text-base sm:text-lg font-semibold text-gray-900 sm:flex-1 order-1"
+            />
+            <div class="flex items-center justify-center sm:justify-end sm:ml-2 space-x-1 order-2">
               <button
                   class="p-2 sm:p-1.5 min-w-[44px] min-h-[44px] sm:min-w-0 sm:min-h-0 text-blue-600 hover:text-blue-500 hover:bg-blue-50 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-1 rounded transition-colors"
                   title="Share collection"
@@ -130,10 +135,10 @@
             </span>
           </div>
 
-          <div class="mt-auto flex flex-col sm:flex-row gap-2">
+          <div class="mt-auto flex justify-center sm:justify-start">
             <BaseButton
                 @click="viewOnMap(collection.id)"
-                class="flex-1"
+                class="sm:flex-1"
                 variant="primary"
                 color="blue"
                 size="sm"
@@ -182,6 +187,7 @@ import CollectionDialog from "./CollectionDialog.vue";
 import ShareDialog from "@/components/parts/ShareDialog.vue";
 import Loader from "../parts/Loader.vue";
 import BaseButton from "../parts/BaseButton.vue";
+import ScrollNameWithTooltip from "../parts/ScrollNameWithTooltip.vue";
 import BulkStylingModal from "@/components/import/parts/BulkStylingModal.vue";
 import { createEmptyBulkOperations, cloneBulkOperations } from "@/utils/bulkOperations.js";
 import { PlusIcon, ExclamationCircleIcon, FolderIcon, ShareIcon, ArrowDownTrayIcon, PencilIcon, TrashIcon, TagIcon, MapIcon, RectangleStackIcon } from '@heroicons/vue/24/outline';
@@ -193,6 +199,7 @@ export default {
     ShareDialog,
     Loader,
     BaseButton,
+    ScrollNameWithTooltip,
     PlusIcon,
     ExclamationCircleIcon,
     FolderIcon,
