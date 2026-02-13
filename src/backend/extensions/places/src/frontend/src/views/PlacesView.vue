@@ -42,9 +42,9 @@
             <Loader size="sm" layout="inline" :show-message="true" message="Loading places..." />
           </div>
         </div>
-        <!-- Search + Sort -->
-        <div class="p-4 border-b border-gray-200 space-y-3">
-          <div class="relative">
+        <!-- Search + Sort (inline) -->
+        <div class="p-4 border-b border-gray-200 flex items-center gap-2">
+          <div class="relative flex-1 min-w-0">
             <div class="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
               <MagnifyingGlassIcon class="h-5 w-5 text-gray-500" aria-hidden="true" />
             </div>
@@ -55,23 +55,21 @@
               placeholder="Search places..."
             />
           </div>
-          <div class="flex items-center gap-2">
-            <label for="places-sort" class="text-xs font-medium text-gray-600 whitespace-nowrap">Sort by</label>
-            <select
-              id="places-sort"
-              v-model="sortBy"
-              class="select-custom w-auto min-w-0 px-3 py-1.5 text-sm border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500"
-            >
-              <option value="composite">Default</option>
-              <option value="created">Last created</option>
-              <option value="modified">Last modified</option>
-              <option value="navigated">Last navigated to</option>
-            </select>
-          </div>
+          <select
+            id="places-sort"
+            v-model="sortBy"
+            class="select-custom w-auto min-w-0 px-3 py-2 text-sm border border-gray-300 rounded-lg shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500 flex-shrink-0"
+            aria-label="Sort places"
+          >
+            <option value="composite">Default sort</option>
+            <option value="created">Last created</option>
+            <option value="modified">Last modified</option>
+            <option value="navigated">Last navigated to</option>
+          </select>
         </div>
 
         <!-- List -->
-        <div class="flex-1 overflow-y-auto p-4">
+        <div ref="listScrollContainer" class="flex-1 overflow-y-auto p-4">
           <div v-if="filteredPlaces.length === 0 && !loading" class="text-center py-12">
             <div class="mx-auto w-12 h-12 text-gray-500 mb-4">
               <MapPinIcon class="w-12 h-12 mx-auto" />
@@ -83,6 +81,8 @@
             <div
               v-for="place in filteredPlaces"
               :key="place.properties.database_id"
+              :ref="(el) => setPlaceItemRef(place.properties.database_id, el)"
+              :data-place-id="place.properties.database_id"
               @click="selectPlace(place)"
               @mouseenter="setHoveredPlace(place.properties.database_id)"
               @mouseleave="clearHoveredPlace()"
@@ -288,6 +288,8 @@ export default {
     const selectedPlace = ref(null);
     const hoveredPlaceId = ref(null);
     const mapContainer = ref(null);
+    const listScrollContainer = ref(null);
+    const placeItemRefs = {};
     const map = shallowRef(null);
     const vectorSource = shallowRef(null);
     const vectorLayer = shallowRef(null);
@@ -399,6 +401,12 @@ export default {
             selectedPlace.value = null;
             hoveredPlaceId.value = null;
         });
+
+        // Pointer cursor when hovering over a point
+        map.value.on('pointermove', (e) => {
+            const hit = map.value.hasFeatureAtPixel(e.pixel);
+            mapContainer.value.style.cursor = hit ? 'pointer' : '';
+        });
     };
 
     const updateMapFeatures = () => {
@@ -422,7 +430,7 @@ export default {
         // Fit view to extent
         if (features.length > 0) {
            const extent = vectorSource.value.getExtent();
-           map.value.getView().fit(extent, { padding: [50, 50, 50, 50], maxZoom: 15 });
+           map.value.getView().fit(extent, { padding: [100, 100, 100, 100], maxZoom: 15 });
         }
     };
 
@@ -433,7 +441,7 @@ export default {
         const view = map.value.getView();
         if (places.value.length > 0 && vectorSource.value) {
             const extent = vectorSource.value.getExtent();
-            view.fit(extent, { padding: [50, 50, 50, 50], maxZoom: 15, duration: 500 });
+            view.fit(extent, { padding: [100, 100, 100, 100], maxZoom: 15, duration: 500 });
         } else {
             view.animate({
                 center: window.ol.proj.fromLonLat([0, 0]),
@@ -443,8 +451,27 @@ export default {
         }
     };
 
+    const setPlaceItemRef = (id, el) => {
+        if (el) placeItemRefs[id] = el;
+        else delete placeItemRefs[id];
+    };
+
+    const scrollListToPlace = (place) => {
+        if (!place) return;
+        const id = place.properties.database_id;
+        const filtered = filteredPlaces.value.some(p => p.properties.database_id === id);
+        if (!filtered) searchQuery.value = '';
+        const runScroll = () => {
+            const container = listScrollContainer.value;
+            const el = container?.querySelector(`[data-place-id="${String(id)}"]`) ?? placeItemRefs[id];
+            if (el) el.scrollIntoView({ block: 'center', behavior: 'smooth' });
+        };
+        nextTick(() => nextTick(runScroll));
+    };
+
     const selectPlace = (place) => {
         selectedPlace.value = place;
+        scrollListToPlace(place);
         if (map.value && place.geometry.coordinates) {
              programmaticMapMove.value = true;
              const coords = window.ol.proj.fromLonLat([place.geometry.coordinates[0], place.geometry.coordinates[1]]);
@@ -639,6 +666,7 @@ export default {
       copiedPlaceId,
 
       goToNewPlace,
+      setPlaceItemRef,
       setHoveredPlace,
       clearHoveredPlace,
       selectPlace,
