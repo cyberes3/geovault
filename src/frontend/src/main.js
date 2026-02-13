@@ -16,6 +16,7 @@ import axios from 'axios';
 import { toast } from '@/utils/toast';
 import { updateUserSetting, loadSettingsFromStore } from '@/utils/userSettingsService.js';
 import { keyValueToNested, getNestedValue } from '@/utils/settingsUtils.js';
+import { geolocationManager } from '@/utils/map/geolocationManager.js';
 import { ExtensionApi } from './utils/extensionApi.js';
 import * as HeroiconsOutline from '@heroicons/vue/24/outline';
 import * as HeroiconsSolid from '@heroicons/vue/24/solid';
@@ -117,12 +118,14 @@ function findSetupFunction(module, extensionName) {
 function createScopedRouter(router, prefix) {
     return {
         addRoute: (route) => {
-            const relPath = route.path.startsWith('/') ? route.path : `/${route.path}`;
+            const raw = route.path;
+            const relPath = (raw === '' || raw === '/') ? '' : (raw.startsWith('/') ? raw : `/${raw}`);
             route.path = `${prefix}${relPath}`;
             router.addRoute(route);
         },
         navigate: (path) => {
-            const relPath = path.startsWith('/') ? path : `/${path}`;
+            const raw = path;
+            const relPath = (raw === '' || raw === '/') ? '' : (raw.startsWith('/') ? raw : `/${raw}`);
             return router.push(`${prefix}${relPath}`);
         }
     };
@@ -138,7 +141,8 @@ function createScopedRouter(router, prefix) {
 function createScopedRegistry(registry, prefix) {
     return {
         registerNavLink: (link) => {
-            const relPath = link.path.startsWith('/') ? link.path : `/${link.path}`;
+            const raw = link.path;
+            const relPath = (raw === '' || raw === '/') ? '' : (raw.startsWith('/') ? raw : `/${raw}`);
             link.fullPath = `${prefix}${relPath}`;
             registry.registerNavLink(link);
         },
@@ -146,14 +150,16 @@ function createScopedRegistry(registry, prefix) {
             registry.registerSettingsTab(tab);
         },
         registerTool: (tool) => {
-            const relPath = tool.path.startsWith('/') ? tool.path : `/${tool.path}`;
+            const raw = tool.path;
+            const relPath = (raw === '' || raw === '/') ? '' : (raw.startsWith('/') ? raw : `/${raw}`);
             tool.fullPath = `${prefix}${relPath}`;
             registry.registerTool(tool);
         },
         registerRoutes: (routes) => {
             // Scope all route paths with extension prefix
             const scopedRoutes = routes.map(route => {
-                const relPath = route.path.startsWith('/') ? route.path : `/${route.path}`;
+                const raw = route.path;
+                const relPath = (raw === '' || raw === '/') ? '' : (raw.startsWith('/') ? raw : `/${raw}`);
                 return {
                     ...route,
                     path: `${prefix}${relPath}`
@@ -530,7 +536,9 @@ async function loadExtensions() {
                             updateUserSetting,
                             loadSettingsFromStore,
                             keyValueToNested,
-                            getNestedValue
+                            getNestedValue,
+                            getCurrentPosition: () => geolocationManager.getCurrentPosition(),
+                            checkGeolocationPermission: () => geolocationManager.checkPermission()
                         },
                         toast,
                         metadata

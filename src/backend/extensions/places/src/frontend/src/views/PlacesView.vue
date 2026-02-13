@@ -1,198 +1,150 @@
 <template>
-  <div class="h-full flex flex-col bg-gray-50">
-    <!-- Header -->
-    <header class="bg-white shadow z-10">
-      <div class="max-w-7xl mx-auto py-4 px-4 sm:px-6 lg:px-8 flex justify-between items-center">
-        <h1 class="text-2xl font-bold text-gray-900 flex items-center">
-          <MapPinIcon class="h-8 w-8 text-blue-600 mr-2" />
-          Places
-        </h1>
-        <button
-          @click="showCreateModal = true"
-          class="inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md shadow-sm text-white bg-blue-600 hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500"
+  <div class="space-y-6 px-4 sm:px-6 lg:px-8 pt-6">
+    <!-- Page Header (matches Collections page) -->
+    <div class="bg-white rounded-lg shadow-sm border border-gray-200 p-4 sm:p-6">
+      <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 mb-4">
+        <div>
+          <h1 class="text-xl sm:text-2xl font-bold text-gray-900 mb-1 sm:mb-2">Places</h1>
+        </div>
+        <BaseButton
+          @click="goToNewPlace"
+          class="w-full sm:w-auto"
+          variant="primary"
+          color="blue"
+          size="md"
+          title="Add a new place"
         >
           <PlusIcon class="h-5 w-5 mr-2" />
           Add Place
-        </button>
+        </BaseButton>
       </div>
-    </header>
 
-    <!-- Content -->
-    <main class="flex-1 overflow-hidden flex">
-      <!-- List Sidebar -->
-      <div class="w-96 flex flex-col border-r border-gray-200 bg-white overflow-hidden">
+      <!-- Explanatory Text -->
+      <div class="mt-2 sm:mt-4 p-4 bg-blue-50 border border-blue-200 rounded-lg">
+        <p class="text-sm text-gray-700">
+          Places are saved point locations you can name, describe, and view on the map. Create places to bookmark locations, plan trips, or keep a list of spots you want to remember. You can edit or delete places anytime and open any place in Google Maps.
+        </p>
+      </div>
+    </div>
+
+    <!-- List + Map row -->
+    <div class="flex gap-3 flex-1 min-h-0" style="min-height: 480px;">
+      <!-- List panel (50% width, card style) -->
+      <div class="w-1/2 min-w-0 flex flex-col bg-white rounded-lg shadow-sm border border-gray-200 overflow-hidden relative">
+        <!-- Loading overlay: grey out and disable list while refreshing -->
+        <div
+          v-if="loading"
+          class="absolute inset-0 z-10 flex flex-col items-center justify-center bg-white/50 pointer-events-auto cursor-wait rounded-lg"
+          aria-busy="true"
+          aria-live="polite"
+        >
+          <div class="inline-flex bg-white rounded-lg shadow-lg border border-gray-200 px-4 py-3">
+            <Loader size="sm" layout="inline" :show-message="true" message="Loading places..." />
+          </div>
+        </div>
         <!-- Search -->
         <div class="p-4 border-b border-gray-200">
-          <div class="relative rounded-md shadow-sm">
+          <div class="relative">
             <div class="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
               <MagnifyingGlassIcon class="h-5 w-5 text-gray-400" aria-hidden="true" />
             </div>
             <input
               type="text"
               v-model="searchQuery"
-              class="focus:ring-blue-500 focus:border-blue-500 block w-full pl-10 sm:text-sm border-gray-300 rounded-md"
+              class="block w-full pl-10 pr-3 py-2 border border-gray-300 rounded-lg shadow-sm focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none transition-all sm:text-sm"
               placeholder="Search places..."
             />
           </div>
         </div>
 
         <!-- List -->
-        <div class="flex-1 overflow-y-auto">
-          <div v-if="loading" class="p-4 text-center text-gray-500">
-            <Loader class="mx-auto h-8 w-8 text-blue-500" />
-            <p class="mt-2 text-sm">Loading...</p>
+        <div class="flex-1 overflow-y-auto p-4">
+          <div v-if="filteredPlaces.length === 0 && !loading" class="text-center py-12">
+            <div class="mx-auto w-12 h-12 text-gray-400 mb-4">
+              <MapPinIcon class="w-12 h-12 mx-auto" />
+            </div>
+            <h3 class="text-sm font-medium text-gray-900">No places found</h3>
+            <p class="mt-1 text-sm text-gray-500">Get started by creating a new place.</p>
           </div>
-          <div v-else-if="filteredPlaces.length === 0" class="p-8 text-center text-gray-500">
-            <MapPinIcon class="mx-auto h-12 w-12 text-gray-300" />
-            <p class="mt-2 text-lg font-medium">No places found</p>
-            <p class="text-sm">Get started by creating a new place.</p>
-          </div>
-          <ul v-else class="divide-y divide-gray-200">
-            <li
+          <div v-else class="space-y-4">
+            <div
               v-for="place in filteredPlaces"
               :key="place.properties.database_id"
               @click="selectPlace(place)"
               :class="[
-                'cursor-pointer hover:bg-gray-50 transition-colors duration-150',
-                selectedPlace?.properties?.database_id === place.properties.database_id ? 'bg-blue-50 border-l-4 border-blue-500' : 'pl-4'
+                'group cursor-pointer p-4 sm:p-5 border rounded-lg transition-all',
+                selectedPlace?.properties?.database_id === place.properties.database_id
+                  ? 'border-blue-500 bg-blue-50'
+                  : 'border-gray-200 bg-white hover:bg-gray-50'
               ]"
             >
-              <div class="px-4 py-4 sm:px-6">
-                <div class="flex items-center justify-between">
-                  <p class="text-sm font-medium text-blue-600 truncate">
-                    {{ place.properties.name || 'Unnamed Place' }}
-                  </p>
-                  <div class="ml-2 flex-shrink-0 flex">
-                    <span
-                      class="px-2 inline-flex text-xs leading-5 font-semibold rounded-full bg-green-100 text-green-800"
-                    >
-                      {{ formatCoords(place.geometry.coordinates) }}
-                    </span>
-                  </div>
-                </div>
-                <div class="mt-2 sm:flex sm:justify-between">
-                  <div class="sm:flex">
-                    <p class="flex items-center text-sm text-gray-500">
-                      {{ truncate(place.properties.description, 50) }}
-                    </p>
-                  </div>
-                </div>
+              <div class="flex items-center justify-between gap-2">
+                <span class="font-bold text-gray-900 text-lg block truncate min-w-0">
+                  {{ place.properties.name || 'Unnamed Place' }}
+                </span>
+                <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-gray-100 text-gray-800 flex-shrink-0">
+                  {{ formatCoords(place.geometry.coordinates) }}
+                </span>
               </div>
-            </li>
-          </ul>
-        </div>
-      </div>
-
-      <!-- Map Area -->
-      <div class="flex-1 relative bg-gray-100">
-        <div ref="mapContainer" class="absolute inset-0"></div>
-        
-        <!-- Place Detail Overlay -->
-        <div 
-            v-if="selectedPlace"
-            class="absolute top-4 right-4 w-80 bg-white rounded-lg shadow-lg p-4 z-10 transition-all transform duration-300"
-        >
-             <button @click="selectedPlace = null" class="absolute top-2 right-2 text-gray-400 hover:text-gray-600">
-                <XMarkIcon class="h-5 w-5" />
-             </button>
-             <h3 class="text-lg font-bold text-gray-900 mb-2">{{ selectedPlace.properties.name }}</h3>
-             <p class="text-sm text-gray-600 mb-4">{{ selectedPlace.properties.description || 'No description' }}</p>
-             
-             <div class="flex justify-between mt-4">
-                 <button 
-                    @click="editPlace(selectedPlace)" 
-                    class="text-sm text-blue-600 hover:text-blue-800 font-medium"
-                 >
-                     Edit
-                 </button>
-                 <button 
-                    @click="deletePlace(selectedPlace)" 
-                    class="text-sm text-red-600 hover:text-red-800 font-medium"
-                 >
-                     Delete
-                 </button>
-                 <a 
-                    :href="googleMapsUrl(selectedPlace)" 
-                    target="_blank" 
-                    class="text-sm text-gray-600 hover:text-gray-900 flex items-center"
-                 >
-                     Open in Maps <ArrowTopRightOnSquareIcon class="h-3 w-3 ml-1"/>
-                 </a>
-             </div>
-        </div>
-      </div>
-    </main>
-
-    <!-- Create/Edit Modal -->
-    <div v-if="showCreateModal" class="fixed z-50 inset-0 overflow-y-auto" aria-labelledby="modal-title" role="dialog" aria-modal="true">
-      <div class="flex items-end justify-center min-h-screen pt-4 px-4 pb-20 text-center sm:block sm:p-0">
-        <div class="fixed inset-0 bg-gray-500 bg-opacity-75 transition-opacity" aria-hidden="true" @click="showCreateModal = false"></div>
-
-        <span class="hidden sm:inline-block sm:align-middle sm:h-screen" aria-hidden="true">&#8203;</span>
-
-        <div class="inline-block align-bottom bg-white rounded-lg text-left overflow-hidden shadow-xl transform transition-all sm:my-8 sm:align-middle sm:max-w-lg sm:w-full">
-          <div class="bg-white px-4 pt-5 pb-4 sm:p-6 sm:pb-4">
-            <h3 class="text-lg leading-6 font-medium text-gray-900" id="modal-title">
-              {{ isEditing ? 'Edit Place' : 'Create New Place' }}
-            </h3>
-            <div class="mt-4 space-y-4">
-              <div>
-                <label class="block text-sm font-medium text-gray-700">Name</label>
-                <input type="text" v-model="form.name" class="mt-1 focus:ring-blue-500 focus:border-blue-500 block w-full shadow-sm sm:text-sm border-gray-300 rounded-md" />
-              </div>
-              <div>
-                <label class="block text-sm font-medium text-gray-700">Description</label>
-                <textarea v-model="form.description" rows="3" class="mt-1 focus:ring-blue-500 focus:border-blue-500 block w-full shadow-sm sm:text-sm border-gray-300 rounded-md"></textarea>
-              </div>
-              <div class="grid grid-cols-2 gap-4">
-                  <div>
-                    <label class="block text-sm font-medium text-gray-700">Latitude</label>
-                    <input type="number" step="any" v-model.number="form.latitude" class="mt-1 focus:ring-blue-500 focus:border-blue-500 block w-full shadow-sm sm:text-sm border-gray-300 rounded-md" />
-                  </div>
-                  <div>
-                    <label class="block text-sm font-medium text-gray-700">Longitude</label>
-                    <input type="number" step="any" v-model.number="form.longitude" class="mt-1 focus:ring-blue-500 focus:border-blue-500 block w-full shadow-sm sm:text-sm border-gray-300 rounded-md" />
-                  </div>
+              <p class="text-sm text-gray-500 mt-1 line-clamp-1">
+                {{ truncate(place.properties.description, 50) || 'No description' }}
+              </p>
+              <div
+                :class="[
+                  'flex flex-wrap items-center gap-2 mt-3 transition-opacity',
+                  selectedPlace?.properties?.database_id === place.properties.database_id ? 'opacity-100' : 'opacity-0 group-hover:opacity-100'
+                ]"
+                @click.stop
+              >
+                <BaseButton variant="primary" color="blue" size="sm" @click.stop="editPlace(place)">
+                  Edit
+                </BaseButton>
+                <BaseButton variant="secondary" color="red" size="sm" @click.stop="deletePlace(place)">
+                  Delete
+                </BaseButton>
+                <a
+                  :href="googleMapsUrl(place)"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  title="Open in Google Maps"
+                  class="group/maps inline-flex items-center relative"
+                >
+                  <span class="relative inline-block w-5 h-5">
+                    <img :src="googleMapsIconUrl" alt="" class="absolute inset-0 w-5 h-5 opacity-0 group-hover/maps:opacity-100 transition-opacity" aria-hidden="true" />
+                    <img :src="googleMapsIconBwUrl" alt="Open in Google Maps" class="w-5 h-5 opacity-100 group-hover/maps:opacity-0 transition-opacity" />
+                  </span>
+                </a>
               </div>
             </div>
           </div>
-          <div class="bg-gray-50 px-4 py-3 sm:px-6 sm:flex sm:flex-row-reverse">
-            <button
-              type="button"
-              @click="savePlace"
-              class="w-full inline-flex justify-center rounded-md border border-transparent shadow-sm px-4 py-2 bg-blue-600 text-base font-medium text-white hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 sm:ml-3 sm:w-auto sm:text-sm"
-            >
-              Save
-            </button>
-            <button
-              type="button"
-              @click="showCreateModal = false"
-              class="mt-3 w-full inline-flex justify-center rounded-md border border-gray-300 shadow-sm px-4 py-2 bg-white text-base font-medium text-gray-700 hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500 sm:mt-0 sm:ml-3 sm:w-auto sm:text-sm"
-            >
-              Cancel
-            </button>
-          </div>
         </div>
       </div>
+
+      <!-- Map (50% width, card style) -->
+      <div class="w-1/2 min-w-0 relative bg-gray-100 rounded-lg border border-gray-200 overflow-hidden">
+        <div ref="mapContainer" class="absolute inset-0"></div>
+      </div>
     </div>
+
   </div>
 </template>
 
 <script>
-import { ref, onMounted, inject, computed, watch, shallowRef } from 'vue';
-import { MapPinIcon, PlusIcon, MagnifyingGlassIcon, XMarkIcon, ArrowTopRightOnSquareIcon } from '@heroicons/vue/24/outline';
+import { ref, onMounted, onActivated, inject, computed, shallowRef } from 'vue';
+import { MapPinIcon, PlusIcon, MagnifyingGlassIcon } from '@heroicons/vue/24/outline';
+import googleMapsIconUrl from '@/assets/google-maps-icon.svg';
+import googleMapsIconBwUrl from '@/assets/google-maps-icon-bw.svg';
 
 export default {
   components: {
     MapPinIcon,
     PlusIcon,
-    MagnifyingGlassIcon,
-    XMarkIcon,
-    ArrowTopRightOnSquareIcon
+    MagnifyingGlassIcon
   },
   setup() {
     const api = inject('placesExtensionApi');
-    const toast = inject('toast'); // Assuming global toast injection or verify availability
+    const placesRouter = inject('placesExtensionRouter');
+    const toast = inject('toast');
 
     const places = ref([]);
     const loading = ref(true);
@@ -201,17 +153,6 @@ export default {
     const mapContainer = ref(null);
     const map = shallowRef(null);
     const vectorSource = shallowRef(null);
-
-    const showCreateModal = ref(false);
-    const isEditing = ref(false);
-    
-    const form = ref({
-        id: null,
-        name: '',
-        description: '',
-        latitude: 0,
-        longitude: 0
-    });
 
     const filteredPlaces = computed(() => {
       if (!searchQuery.value) return places.value;
@@ -224,6 +165,7 @@ export default {
 
     const fetchPlaces = async () => {
       loading.value = true;
+      // Keep existing list visible under overlay; only replace when new data arrives
       try {
         const res = await api.get('/features/');
         places.value = res.data.features || [];
@@ -254,9 +196,10 @@ export default {
 
         map.value = new window.ol.Map({
             target: mapContainer.value,
+            controls: [],
             layers: [
                 new window.ol.layer.Tile({
-                    source: new window.ol.source.OSM()
+                    source: new window.ol.source.OSM({ attributions: [] })
                 }),
                 vectorLayer
             ],
@@ -320,47 +263,10 @@ export default {
         }
     };
 
-    const savePlace = async () => {
-        const payload = {
-            type: 'Feature',
-            geometry: {
-                type: 'Point',
-                coordinates: [form.value.longitude, form.value.latitude]
-            },
-            properties: {
-                name: form.value.name,
-                description: form.value.description
-            }
-        };
-
-        try {
-            if (isEditing.value && form.value.id) {
-                await api.put(`/features/${form.value.id}/`, payload);
-            } else {
-                await api.post('/features/', payload);
-            }
-            
-            showCreateModal.value = false;
-            fetchPlaces();
-            resetForm();
-        } catch (err) {
-            console.error("Failed to save place", err);
-            // toast error
-        }
-    };
-
     const editPlace = (place) => {
-        isEditing.value = true;
-        form.value = {
-            id: place.properties.database_id,
-            name: place.properties.name,
-            description: place.properties.description,
-            latitude: place.geometry.coordinates[1],
-            longitude: place.geometry.coordinates[0]
-        };
-        showCreateModal.value = true;
+        if (placesRouter) placesRouter.navigate('/new?edit=' + place.properties.database_id);
     };
-    
+
     const deletePlace = async (place) => {
         if (!confirm(`Are you sure you want to delete "${place.properties.name}"?`)) return;
         try {
@@ -372,11 +278,6 @@ export default {
         }
     };
 
-    const resetForm = () => {
-        isEditing.value = false;
-        form.value = { id: null, name: '', description: '', latitude: 0, longitude: 0 };
-    };
-    
     const formatCoords = (coords) => {
         if (!coords || coords.length < 2) return '';
         return `${coords[1].toFixed(4)}, ${coords[0].toFixed(4)}`;
@@ -392,13 +293,16 @@ export default {
         return `https://www.google.com/maps/search/?api=1&query=${lat},${lon}`;
     };
 
-    watch(showCreateModal, (val) => {
-        if (!val) resetForm();
+    const goToNewPlace = () => {
+        if (placesRouter) placesRouter.navigate('/new');
+    };
+
+    onMounted(() => {
+        initMap();
     });
 
-    onMounted(async () => {
-        initMap();
-        await fetchPlaces();
+    onActivated(() => {
+        fetchPlaces();
     });
 
     return {
@@ -408,17 +312,16 @@ export default {
       filteredPlaces,
       selectedPlace,
       mapContainer,
-      showCreateModal,
-      form,
-      isEditing,
-      
+
+      goToNewPlace,
       selectPlace,
-      savePlace,
       editPlace,
       deletePlace,
       formatCoords,
       truncate,
-      googleMapsUrl
+      googleMapsUrl,
+      googleMapsIconUrl,
+      googleMapsIconBwUrl
     };
   }
 }

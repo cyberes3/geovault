@@ -1,5 +1,5 @@
 <template>
-  <div class="max-w-7xl mx-auto">
+  <div class="max-w-7xl mx-auto pt-6">
     <div class="bg-white rounded-lg shadow-sm border border-gray-200 p-8 md:p-12">
       <div class="text-center">
         <!-- 404 Heading -->

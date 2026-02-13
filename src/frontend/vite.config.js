@@ -1,8 +1,34 @@
 import { fileURLToPath, URL } from 'node:url'
 import path from 'path'
+import fs from 'node:fs'
 
 import { defineConfig } from 'vite'
 import vue from '@vitejs/plugin-vue'
+
+// Plugin to trigger full reload when an extension's frontend dist changes (dev only)
+const extensionReloadPlugin = () => {
+    const frontendDir = fileURLToPath(new URL('.', import.meta.url))
+    const extensionsDir = path.resolve(frontendDir, '../backend/extensions')
+    return {
+        name: 'extension-reload',
+        configureServer(server) {
+            if (!fs.existsSync(extensionsDir)) return
+            const dirs = fs.readdirSync(extensionsDir, { withFileTypes: true })
+            for (const d of dirs) {
+                if (!d.isDirectory()) continue
+                const distPath = path.join(extensionsDir, d.name, 'src', 'frontend', 'dist')
+                if (fs.existsSync(distPath)) {
+                    server.watcher.add(distPath)
+                }
+            }
+            server.watcher.on('change', (file) => {
+                if (file.includes('/extensions/') && file.includes('/src/frontend/dist/')) {
+                    server.ws.send({ type: 'full-reload', path: '*' })
+                }
+            })
+        }
+    }
+}
 
 // Plugin to replace highlight.js with JSON-only build
 // This reduces bundle size from ~970KB to ~30KB
@@ -29,7 +55,7 @@ const highlightJsOptimizer = () => {
 
 // https://vitejs.dev/config/
 export default defineConfig({
-    plugins: [vue(), highlightJsOptimizer()],
+    plugins: [vue(), highlightJsOptimizer(), extensionReloadPlugin()],
     resolve: {
         alias: {
             '@': fileURLToPath(new URL('./src', import.meta.url))

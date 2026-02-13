@@ -1,15 +1,17 @@
 import json
-from django.http import JsonResponse
+
 from django.views.decorators.http import require_http_methods
-from django.views.decorators.csrf import csrf_exempt
-from django.contrib.gis.geos import Point
+from pydantic import ValidationError as PydanticValidationError
+
 from api.models import FeatureStore
-from geo_lib.website.auth import api_or_login_required_401
-from api.utils.responses import success_response, error_response
 from api.utils.authorization import get_object_or_404_for_user
-from geo_lib.validation.geojson.geojson_whitelist import validate_and_normalize_geojson_feature
+from api.utils.responses import error_response, success_response
 from geo_lib.feature_id import generate_geojson_hash
+from geo_lib.validation.geojson.geojson_whitelist import validate_and_normalize_geojson_feature
 from geo_lib.validation.geometry_validation import GeometryValidationError
+from geo_lib.website.auth import api_or_login_required_401
+
+from .validation import PlaceFeaturePayload
 
 @api_or_login_required_401()
 @require_http_methods(["GET", "POST"])
@@ -39,10 +41,15 @@ def places_list(request):
     elif request.method == "POST":
         try:
             data = json.loads(request.body)
-            # Ensure it's a Feature
-            if data.get('type') != 'Feature':
-                return error_response('Invalid GeoJSON: must be a Feature', 400)
-            
+            try:
+                PlaceFeaturePayload.model_validate(data)
+            except PydanticValidationError as e:
+                err_msgs = [f"{'.'.join(str(loc) for loc in err['loc'])}: {err['msg']}" for err in e.errors()]
+                return error_response(
+                    'Invalid payload: only Point features are allowed' + (f' — {"; ".join(err_msgs)}' if err_msgs else ''),
+                    400,
+                )
+
             # Normalize and validate
             try:
                 normalized_feature = validate_and_normalize_geojson_feature(
@@ -55,11 +62,10 @@ def places_list(request):
             geom_dict = normalized_feature.get('geometry')
             if not geom_dict:
                  return error_response('Geometry is required', 400)
-            
-            # For this simple extension, we handle Points. 
-            # If complex geometries are needed, we'd use GEOSGeometry(json.dumps(geom_dict))
-            # But let's stick to what creation.py does or similar.
-            # actually better to use GEOSGeometry to be safe for all types
+            # FeatureStore.geometry is dim=3; ensure Point has Z (use 0 if 2D)
+            coords = geom_dict.get('coordinates')
+            if geom_dict.get('type') == 'Point' and coords is not None and len(coords) == 2:
+                geom_dict = {**geom_dict, 'coordinates': [*coords, 0]}
             from django.contrib.gis.geos import GEOSGeometry
             geometry = GEOSGeometry(json.dumps(geom_dict))
             
@@ -104,9 +110,14 @@ def place_detail(request, feature_id):
     elif request.method == "PUT":
         try:
             data = json.loads(request.body)
-             # Ensure it's a Feature
-            if data.get('type') != 'Feature':
-                return error_response('Invalid GeoJSON: must be a Feature', 400)
+            try:
+                PlaceFeaturePayload.model_validate(data)
+            except PydanticValidationError as e:
+                err_msgs = [f"{'.'.join(str(loc) for loc in err['loc'])}: {err['msg']}" for err in e.errors()]
+                return error_response(
+                    'Invalid payload: only Point features are allowed' + (f' — {"; ".join(err_msgs)}' if err_msgs else ''),
+                    400,
+                )
 
             # Normalize and validate
             try:
@@ -120,13 +131,16 @@ def place_detail(request, feature_id):
             geom_dict = normalized_feature.get('geometry')
             if not geom_dict:
                  return error_response('Geometry is required', 400)
-
+            # FeatureStore.geometry is dim=3; ensure Point has Z (use 0 if 2D)
+            coords = geom_dict.get('coordinates')
+            if geom_dict.get('type') == 'Point' and coords is not None and len(coords) == 2:
+                geom_dict = {**geom_dict, 'coordinates': [*coords, 0]}
             from django.contrib.gis.geos import GEOSGeometry
             geometry = GEOSGeometry(json.dumps(geom_dict))
-            
+
             # Generate Hash
             geojson_hash = generate_geojson_hash(normalized_feature)
-            
+
             # Update
             feature.geojson = normalized_feature
             feature.geometry = geometry

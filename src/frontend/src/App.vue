@@ -336,7 +336,10 @@ export default {
       return this.sortedTools.some(tool => this.$route.path === tool.fullPath);
     },
     isMapRoute() {
-      return this.$route.path === '/map' || this.$route.path === '/mapshare' || this.$route.path === '/maplibre'
+      return this.$route.path === '/map' || 
+             this.$route.path === '/mapshare' || 
+             this.$route.path === '/maplibre' ||
+             this.$route.path.startsWith('/extensions/places')
     },
     isPublicShareRoute() {
       return this.$route.path === '/mapshare'

@@ -1,26 +1,30 @@
 import PlacesView from './views/PlacesView.vue';
-import PlaceDetailView from './views/PlaceDetailView.vue';
+import PlaceNewView from './views/PlaceNewView.vue';
 
 async function setup({ app, router, store, registry, api, utils, toast, metadata }) {
     app.provide('placesExtensionApi', api);
+    app.provide('placesExtensionRouter', router);
+    if (utils) {
+        app.provide('placesExtensionUtils', utils);
+    }
 
-    // Register Nav Link
+    // Register Nav Link (path '' so fullPath is /extensions/places)
     registry.registerNavLink({
         label: 'Places',
-        path: '/places'
+        path: ''
     });
 
     // Register Routes
     router.addRoute({
-        path: '/places',
+        path: '',
         component: PlacesView,
         name: 'places-list'
     });
 
     router.addRoute({
-        path: '/places/:id',
-        component: PlaceDetailView,
-        name: 'place-detail'
+        path: '/new',
+        component: PlaceNewView,
+        name: 'place-new'
     });
 }
 
