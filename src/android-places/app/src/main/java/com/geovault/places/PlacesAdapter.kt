@@ -4,6 +4,7 @@ import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
 import android.widget.Button
+import android.widget.ImageView
 import android.widget.TextView
 import android.widget.Toast
 import android.content.Context
@@ -20,7 +21,8 @@ class PlacesAdapter(
     private val onEditOffline: (OfflineFeature) -> Unit,
     private val onDelete: (Feature) -> Unit,
     private val onRevertOffline: (OfflineFeature) -> Unit,
-    private val onViewDescription: (placeName: String, description: String) -> Unit
+    private val onViewDescription: (placeName: String, description: String) -> Unit,
+    private val onOpenMapToPlace: (Feature) -> Unit
 ) : RecyclerView.Adapter<RecyclerView.ViewHolder>() {
 
     var selectedId: Int? = null
@@ -46,6 +48,7 @@ class PlacesAdapter(
 
     class PlaceViewHolder(itemView: View) : RecyclerView.ViewHolder(itemView) {
         val cardContent: View = itemView.findViewById(R.id.cardContent)
+        val mapIcon: ImageView = itemView.findViewById(R.id.placeMapIcon)
         val nameText: TextView = itemView.findViewById(R.id.placeName)
         val dateText: TextView = itemView.findViewById(R.id.placeDate)
         val coordinatesText: TextView = itemView.findViewById(R.id.placeCoordinates)
@@ -124,6 +127,10 @@ class PlacesAdapter(
         holder.descriptionText.text = description
         holder.descriptionText.setOnClickListener {
             onViewDescription(place.properties.name ?: "Unnamed Place", description)
+        }
+
+        holder.mapIcon.setOnClickListener {
+            onOpenMapToPlace(place)
         }
 
         // Highlight selection or offline status

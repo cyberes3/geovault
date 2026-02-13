@@ -149,6 +149,9 @@ class MainActivity : AppCompatActivity() {
                 val intent = DescriptionViewActivity.intent(this, placeName, description)
                 startActivity(intent)
                 safeNoAnimation()
+            },
+            { feature: Feature ->
+                openMapToPlace(feature)
             }
         )
         recyclerView.layoutManager = LinearLayoutManager(this)
@@ -488,6 +491,22 @@ class MainActivity : AppCompatActivity() {
         val serverUrl = prefs.getString("server_url", "") ?: ""
         val apiKey = prefs.getString("api_key", "") ?: ""
         NavigationHelper.navigateToPlace(this, feature, apiKey, serverUrl)
+    }
+
+    private fun openMapToPlace(feature: Feature) {
+        val intent = Intent(this, MapActivity::class.java)
+        val allFeatures = ArrayList<Feature>()
+        allFeatures.addAll(offlinePlacesList.map { it.feature })
+        allFeatures.addAll(placesList)
+        intent.putParcelableArrayListExtra("features", allFeatures)
+        val coords = feature.geometry.coordinates
+        if (coords.size >= 2) {
+            intent.putExtra("zoom_to_lat", coords[1])
+            intent.putExtra("zoom_to_lon", coords[0])
+            intent.putExtra("zoom_to_id", feature.properties.database_id ?: -1)
+        }
+        mapLauncher.launch(intent)
+        safeNoAnimation()
     }
 
     fun handleOfflineSave(feature: Feature, original: Feature? = null) {

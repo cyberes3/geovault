@@ -14,6 +14,7 @@ import java.util.ArrayList
 import android.os.Build
 
 import android.view.View
+import android.view.ViewTreeObserver
 import androidx.core.view.ViewCompat
 import androidx.core.view.WindowInsetsCompat
 import androidx.core.view.updatePadding
@@ -141,6 +142,24 @@ class MapActivity : AppCompatActivity() {
             // Create shared instances outside the loop for performance
             val defaultIcon = getBitmapDrawable(R.drawable.ic_marker_default)
             val selectedIcon = getBitmapDrawable(R.drawable.ic_marker_selected)
+            val markerByDatabaseId = mutableMapOf<Int, Pair<Marker, Feature>>()
+
+            fun selectMarkerAndUpdateUi(m: Marker, f: Feature) {
+                lastSelectedMarker?.icon = defaultIcon
+                m.icon = selectedIcon
+                lastSelectedMarker = m
+                map.invalidate()
+                placeName.text = f.properties.name ?: "Unknown Place"
+                placeDescription.text = f.properties.description ?: ""
+                selectedFeature = f
+                val dbId = f.properties.database_id
+                viewInListButton.isEnabled = dbId != null
+                viewInListButton.alpha = if (dbId != null) 1.0f else 0.5f
+                editPlaceButton.isEnabled = dbId != null
+                editPlaceButton.alpha = if (dbId != null) 1.0f else 0.5f
+                navigateButton.isEnabled = dbId != null
+                navigateButton.alpha = if (dbId != null) 1.0f else 0.5f
+            }
 
             for (feature in features) {
                 val coords = feature.geometry.coordinates
@@ -154,6 +173,7 @@ class MapActivity : AppCompatActivity() {
                     marker.icon = defaultIcon
                     marker.setAnchor(Marker.ANCHOR_CENTER, Marker.ANCHOR_CENTER)
                     marker.infoWindow = null // Disable bubble logic
+                    feature.properties.database_id?.let { id -> markerByDatabaseId[id] = Pair(marker, feature) }
                     
                     // Store data directly
                     val name = feature.properties.name ?: "Unknown Place"
@@ -161,26 +181,7 @@ class MapActivity : AppCompatActivity() {
                     val dbId = feature.properties.database_id
                     
                     marker.setOnMarkerClickListener { m, _ ->
-                        // 1. Immediate Visual Feedback
-                        lastSelectedMarker?.icon = defaultIcon
-                        m.icon = selectedIcon
-                        lastSelectedMarker = m as Marker
-                        map.invalidate()
-                        
-                        // 2. Update metadata UI (deferred slightly to keep map responsive)
-                        map.post {
-                            placeName.text = name
-                            placeDescription.text = desc
-                            selectedFeature = feature
-                            
-                            viewInListButton.isEnabled = dbId != null
-                            viewInListButton.alpha = if (dbId != null) 1.0f else 0.5f
-                            editPlaceButton.isEnabled = dbId != null
-                            editPlaceButton.alpha = if (dbId != null) 1.0f else 0.5f
-                            navigateButton.isEnabled = dbId != null
-                            navigateButton.alpha = if (dbId != null) 1.0f else 0.5f
-                        }
-                        
+                        map.post { selectMarkerAndUpdateUi(m as Marker, feature) }
                         true
                     }
                     
@@ -215,11 +216,58 @@ class MapActivity : AppCompatActivity() {
                  val paddedMaxLon = maxLon + lonPadding
 
                  val boundingBox = BoundingBox(paddedMaxLat, paddedMaxLon, paddedMinLat, paddedMinLon)
-                 
-                 // Run on UI thread with delay to ensure map has size
-                 map.post {
-                     map.zoomToBoundingBox(boundingBox, true)
+                 val zoomToId = intent.getIntExtra("zoom_to_id", -1)
+
+                 // setCenter() needs map width/height; run after layout (post() can run before onLayout)
+                 fun applyZoomAndCenter() {
+                     if (intent.hasExtra("zoom_to_lat") && intent.hasExtra("zoom_to_lon")) {
+                         val centerLat: Double
+                         val centerLon: Double
+                         if (zoomToId >= 0) {
+                             val pair = markerByDatabaseId[zoomToId]
+                             if (pair != null) {
+                                 val (m, f) = pair
+                                 val c = f.geometry.coordinates
+                                 if (c.size >= 2) {
+                                     centerLon = c[0] // GeoJSON: [lon, lat]
+                                     centerLat = c[1]
+                                     map.controller.setZoom(16.0)
+                                     map.controller.setCenter(GeoPoint(centerLat, centerLon))
+                                     selectMarkerAndUpdateUi(m, f)
+                                 } else {
+                                     centerLat = intent.getDoubleExtra("zoom_to_lat", 0.0)
+                                     centerLon = intent.getDoubleExtra("zoom_to_lon", 0.0)
+                                     map.controller.setZoom(16.0)
+                                     map.controller.setCenter(GeoPoint(centerLat, centerLon))
+                                 }
+                             } else {
+                                 centerLat = intent.getDoubleExtra("zoom_to_lat", 0.0)
+                                 centerLon = intent.getDoubleExtra("zoom_to_lon", 0.0)
+                                 map.controller.setZoom(16.0)
+                                 map.controller.setCenter(GeoPoint(centerLat, centerLon))
+                             }
+                         } else {
+                             centerLat = intent.getDoubleExtra("zoom_to_lat", 0.0)
+                             centerLon = intent.getDoubleExtra("zoom_to_lon", 0.0)
+                             map.controller.setZoom(16.0)
+                             map.controller.setCenter(GeoPoint(centerLat, centerLon))
+                         }
+                     } else {
+                         map.zoomToBoundingBox(boundingBox, true)
+                     }
                  }
+
+                 map.viewTreeObserver.addOnGlobalLayoutListener(object : ViewTreeObserver.OnGlobalLayoutListener {
+                     override fun onGlobalLayout() {
+                         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.JELLY_BEAN) {
+                             map.viewTreeObserver.removeOnGlobalLayoutListener(this)
+                         } else {
+                             @Suppress("DEPRECATION")
+                             map.viewTreeObserver.removeGlobalOnLayoutListener(this)
+                         }
+                         applyZoomAndCenter()
+                     }
+                 })
             } else {
                 map.controller.setZoom(2.0)
                 map.controller.setCenter(GeoPoint(0.0, 0.0))
