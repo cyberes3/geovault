@@ -108,7 +108,7 @@ if [ -n "$APK_PATH" ]; then
 
         BUILD_DATE=$(date +%Y-%m-%d)
         COMMIT_HASH=$(git rev-parse --short=10 HEAD 2>/dev/null || echo "norepo")
-        DATED_NAME="GeoVault Uploader ${BUILD_DATE} ${COMMIT_HASH}.apk"
+        DATED_NAME="GeoVault Places ${BUILD_DATE} ${COMMIT_HASH}.apk"
         DATED_DEST="$SCRIPT_DIR/$DATED_NAME"
         cp "$APK_PATH" "$DATED_DEST"
         echo "Copied to: $DATED_DEST"

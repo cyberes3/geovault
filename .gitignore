@@ -4,6 +4,8 @@
 failures.txt
 .cursor/plans
 .vscode
+.gradle
+*.apk
 
 # ---> Python
 # Byte-compiled / optimized / DLL files

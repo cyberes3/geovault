@@ -500,13 +500,12 @@ export default {
             }
         });
 
-        // Clear selection when user pans/zooms (not when we zoom to a selected place)
+        // Clear only hover when user pans/zooms; keep selection so the highlighted point stays visible
         map.value.on('moveend', () => {
             if (programmaticMapMove.value) {
                 programmaticMapMove.value = false;
                 return;
             }
-            selectedPlace.value = null;
             hoveredPlaceId.value = null;
         });
 
