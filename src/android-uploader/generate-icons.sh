@@ -82,23 +82,15 @@ echo "Verifying adaptive icon XML files..."
 ADAPTIVE_ICON_DIR="$RES_DIR/mipmap-anydpi-v26"
 mkdir -p "$ADAPTIVE_ICON_DIR"
 
-# Update or create ic_launcher.xml
-if [ -f "$ADAPTIVE_ICON_DIR/ic_launcher.xml" ]; then
-    # Update existing file to use correct drawable references
-    sed -i 's|android:drawable="@drawable/ic_launcher_foreground"|android:drawable="@drawable/ic_launcher_foreground"|g' "$ADAPTIVE_ICON_DIR/ic_launcher.xml"
-    sed -i 's|android:drawable="@drawable/ic_launcher_foreground_png"|android:drawable="@drawable/ic_launcher_foreground"|g' "$ADAPTIVE_ICON_DIR/ic_launcher.xml"
-    sed -i 's|android:drawable="@mipmap/ic_launcher_foreground"|android:drawable="@drawable/ic_launcher_foreground"|g' "$ADAPTIVE_ICON_DIR/ic_launcher.xml"
-else
-    # Create new file
-    cat > "$ADAPTIVE_ICON_DIR/ic_launcher.xml" << 'EOF'
+# Main adaptive icon: use circle foreground so icon looks correct on Samsung (circle) and all launchers
+cat > "$ADAPTIVE_ICON_DIR/ic_launcher.xml" << 'EOF'
 <?xml version="1.0" encoding="utf-8"?>
 <adaptive-icon xmlns:android="http://schemas.android.com/apk/res/android">
     <background android:drawable="@drawable/ic_launcher_background" />
-    <foreground android:drawable="@drawable/ic_launcher_foreground" />
-    <monochrome android:drawable="@drawable/ic_launcher_foreground" />
+    <foreground android:drawable="@drawable/ic_launcher_foreground_round" />
+    <monochrome android:drawable="@drawable/ic_launcher_foreground_round" />
 </adaptive-icon>
 EOF
-fi
 
 # Create ic_launcher_round.xml with round-specific foreground (for Pixel and other circular launchers)
 cat > "$ADAPTIVE_ICON_DIR/ic_launcher_round.xml" << 'EOF'
