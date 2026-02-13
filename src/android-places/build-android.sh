@@ -99,13 +99,8 @@ if [ -n "$APK_PATH" ]; then
     echo "Build successful!"
     echo "APK location: $SCRIPT_DIR/$APK_PATH"
 
-    # Copy release builds to script directory
+    # Copy release builds to script directory (dated name only)
     if [ "$BUILD_TYPE" = "release" ]; then
-        APK_NAME=$(basename "$APK_PATH")
-        COPY_DEST="$SCRIPT_DIR/$APK_NAME"
-        cp "$APK_PATH" "$COPY_DEST"
-        echo "Copied to: $COPY_DEST"
-
         BUILD_DATE=$(date +%Y-%m-%d)
         COMMIT_HASH=$(git rev-parse --short=10 HEAD 2>/dev/null || echo "norepo")
         DATED_NAME="GeoVault Places ${BUILD_DATE} ${COMMIT_HASH}.apk"

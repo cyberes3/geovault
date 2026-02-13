@@ -6,6 +6,7 @@ failures.txt
 .vscode
 .gradle
 *.apk
+.kotlin
 
 # ---> Python
 # Byte-compiled / optimized / DLL files
