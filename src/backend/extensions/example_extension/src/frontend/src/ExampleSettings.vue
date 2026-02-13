@@ -71,14 +71,13 @@ import { onMounted, onBeforeUnmount, reactive, watch } from 'vue';
  * - Visual feedback (checkmarks) confirm successful saves
  */
 
-// Access shared utilities from the platform
-// These are injected via window.GeoVault by the extension loader
-const { updateUserSetting, loadSettingsFromStore, keyValueToNested } = window.GeoVault.utils;
-const toast = window.GeoVault.toast;
+// Access shared utilities from the platform (injected via window.gv_core by the extension loader)
+const { updateUserSetting, loadSettingsFromStore, keyValueToNested } = window.gv_core.GeoVault.utils;
+const toast = window.gv_core.GeoVault.toast;
 
 // Access the main Vuex store
 const getStore = () => {
-    return window.store || (window.Vuex && window.Vuex.useStore ? window.Vuex.useStore() : null);
+    return window.gv_core.store || (window.gv_core.Vuex && window.gv_core.Vuex.useStore ? window.gv_core.Vuex.useStore() : null);
 };
 const store = getStore();
 

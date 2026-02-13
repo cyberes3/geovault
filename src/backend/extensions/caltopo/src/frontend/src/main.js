@@ -1,8 +1,7 @@
 import CaltopoSettings from './CaltopoSettings.vue'
 
-async function setup({app, router, mainRouter, store, registry, api, utils, toast, metadata}) {
+async function setup({app, router, mainRouter, store, registry, api, metadata}) {
     app.provide('caltopoExtensionApi', api)
-    app.provide('caltopoExtensionToast', toast)
     app.provide('caltopoExtensionRouter', router)
     app.provide('caltopoExtensionMainRouter', mainRouter)
 

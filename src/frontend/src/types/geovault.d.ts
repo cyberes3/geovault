@@ -66,3 +66,25 @@ export interface ExtensionSetupContext {
  * The setup function that every extension must export.
  */
 export type ExtensionSetup = (context: ExtensionSetupContext) => Promise<void>;
+
+/**
+ * Shared platform APIs exposed to extensions. All core-provided globals live under window.gv_core.
+ */
+declare global {
+    interface Window {
+        gv_core: {
+            GeoVault: { registry: ExtensionRegistry; utils: ExtensionUtils; toast: ToastService };
+            Vue: unknown;
+            VueRouter: unknown;
+            Vuex: unknown;
+            axios: unknown;
+            HeroiconsOutline: unknown;
+            HeroiconsSolid: unknown;
+            ol: unknown;
+            Loader: unknown;
+            store: unknown;
+        };
+    }
+}
+
+export {};

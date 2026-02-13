@@ -94,9 +94,22 @@ await api.post('/items/', { name: 'New' });
 
 Register a tab with `registry.registerSettingsTab({ id, label, component, icon })`. In the component, use `utils.loadSettingsFromStore(config, store)` and `utils.updateUserSetting(key, value)` with keys like `extensions.my_extension.setting_key`. The example_extension’s **ExampleSettings.vue** uses `SettingsInput` and the shared `keyValueToNested` / store pattern.
 
+### Shared platform APIs (`window.gv_core`)
+
+All shared platform resources live on **`window.gv_core`** only. Use `window.gv_core.*` in your extension code; do not use Vue provide/inject for platform store, toast, or utils.
+
+- **`window.gv_core.GeoVault`** — `registry`, `utils` (e.g. `updateUserSetting`, `loadSettingsFromStore`, `keyValueToNested`, `getNestedValue`, `getCurrentPosition`, `checkGeolocationPermission`), `toast`
+- **`window.gv_core.store`** — Vuex store (set after the app mounts)
+- **`window.gv_core.Vue`**, **`window.gv_core.VueRouter`**, **`window.gv_core.Vuex`**, **`window.gv_core.axios`** — Vue ecosystem
+- **`window.gv_core.HeroiconsOutline`**, **`window.gv_core.HeroiconsSolid`** — Heroicons
+- **`window.gv_core.ol`** — OpenLayers (map, source, layer, proj, geom, style, interaction, Feature)
+- **`window.gv_core.Loader`** — shared Loader component
+
+The same values are also exposed at top level (`window.Vue`, `window.ol`, etc.) so UMD builds that externalize these dependencies keep working. Prefer `window.gv_core.*` in your source.
+
 ### Vite and shared libraries
 
-Build as a library (see `example_extension`’s `vite.config.js`). Mark Vue, Vue Router, Vuex, axios (and if you use them: `ol`, `@heroicons/vue/24/outline`, `@heroicons/vue/24/solid`) as **externals** and map them to the globals the platform provides (`Vue`, `VueRouter`, `Vuex`, `axios`, etc.). Otherwise you get duplicate instances and broken reactivity. You can put `ol` and Heroicons in devDependencies.
+Build as a library (see `example_extension`’s `vite.config.js`). Mark Vue, Vue Router, Vuex, axios (and if you use them: `ol`, `@heroicons/vue/24/outline`, `@heroicons/vue/24/solid`) as **externals** and map them to the global names the platform provides at top level (`Vue`, `VueRouter`, `Vuex`, `axios`, etc.). Otherwise you get duplicate instances and broken reactivity. You can put `ol` and Heroicons in devDependencies.
 
 ## Hooks (backend)
 

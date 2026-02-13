@@ -284,7 +284,7 @@ export default {
   setup() {
     const api = inject('placesExtensionApi');
     const placesRouter = inject('placesExtensionRouter');
-    const toast = inject('toast');
+    const toast = window.gv_core.GeoVault.toast;
 
     const sortBy = ref('composite');
     const places = ref([]);
@@ -353,27 +353,27 @@ export default {
     });
 
     const initMap = () => {
-        if (!window.ol) return;
+        if (!window.gv_core.ol) return;
         
-        vectorSource.value = new window.ol.source.Vector();
+        vectorSource.value = new window.gv_core.ol.source.Vector();
 
-        const defaultStyle = new window.ol.style.Style({
-            image: new window.ol.style.Circle({
+        const defaultStyle = new window.gv_core.ol.style.Style({
+            image: new window.gv_core.ol.style.Circle({
                 radius: 7,
-                fill: new window.ol.style.Fill({ color: '#2563EB' }),
-                stroke: new window.ol.style.Stroke({ color: 'white', width: 2 })
+                fill: new window.gv_core.ol.style.Fill({ color: '#2563EB' }),
+                stroke: new window.gv_core.ol.style.Stroke({ color: 'white', width: 2 })
             })
         });
-        const hoveredStyle = new window.ol.style.Style({
-            image: new window.ol.style.Circle({
+        const hoveredStyle = new window.gv_core.ol.style.Style({
+            image: new window.gv_core.ol.style.Circle({
                 radius: 9,
-                fill: new window.ol.style.Fill({ color: '#FBBF24' }),
-                stroke: new window.ol.style.Stroke({ color: '#000', width: 2 })
+                fill: new window.gv_core.ol.style.Fill({ color: '#FBBF24' }),
+                stroke: new window.gv_core.ol.style.Stroke({ color: '#000', width: 2 })
             }),
             zIndex: 100
         });
 
-        const layer = new window.ol.layer.Vector({
+        const layer = new window.gv_core.ol.layer.Vector({
             source: vectorSource.value,
             style: (feature) => {
                 const id = feature.get('database_id');
@@ -384,11 +384,11 @@ export default {
         });
         vectorLayer.value = layer;
 
-        map.value = new window.ol.Map({
+        map.value = new window.gv_core.ol.Map({
             target: mapContainer.value,
             controls: [],
-            interactions: window.ol.interaction.defaults({ dragPan: false }).extend([
-                new window.ol.interaction.DragPan({
+            interactions: window.gv_core.ol.interaction.defaults({ dragPan: false }).extend([
+                new window.gv_core.ol.interaction.DragPan({
                     condition: function(e) {
                          // Return TRUE if it's a mouse, or if it's a multi-touch (2+ fingers)
                          return e.originalEvent.pointerType === 'mouse' || (e.originalEvent.pointerType === 'touch' && isMultiTouchGesture);
@@ -396,13 +396,13 @@ export default {
                 })
             ]),
             layers: [
-                new window.ol.layer.Tile({
-                    source: new window.ol.source.OSM({ attributions: [] })
+                new window.gv_core.ol.layer.Tile({
+                    source: new window.gv_core.ol.source.OSM({ attributions: [] })
                 }),
                 layer
             ],
-            view: new window.ol.View({
-                center: window.ol.proj.fromLonLat([0, 0]),
+            view: new window.gv_core.ol.View({
+                center: window.gv_core.ol.proj.fromLonLat([0, 0]),
                 zoom: 2
             })
         });
@@ -518,7 +518,7 @@ export default {
     };
 
     const updateMapFeatures = () => {
-        if (!vectorSource.value || !window.ol) return;
+        if (!vectorSource.value || !window.gv_core.ol) return;
         
         vectorSource.value.clear();
         
@@ -526,8 +526,8 @@ export default {
 
         const features = places.value.map(place => {
             const coords = place.geometry.coordinates; // [lon, lat, elev]
-            const feature = new window.ol.Feature({
-                geometry: new window.ol.geom.Point(window.ol.proj.fromLonLat([coords[0], coords[1]])),
+            const feature = new window.gv_core.ol.Feature({
+                geometry: new window.gv_core.ol.geom.Point(window.gv_core.ol.proj.fromLonLat([coords[0], coords[1]])),
                 database_id: place.properties.database_id
             });
             return feature;
@@ -543,7 +543,7 @@ export default {
     };
 
     const resetMapToDefaultExtent = () => {
-        if (!map.value || !window.ol) return;
+        if (!map.value || !window.gv_core.ol) return;
         selectedPlace.value = null;
         hoveredPlaceId.value = null;
         const view = map.value.getView();
@@ -557,7 +557,7 @@ export default {
             view.animate({ rotation: 0, duration: 500 });
         } else {
             view.animate({
-                center: window.ol.proj.fromLonLat([0, 0]),
+                center: window.gv_core.ol.proj.fromLonLat([0, 0]),
                 zoom: 2,
                 duration: 500,
                 rotation: 0
@@ -600,7 +600,7 @@ export default {
         
         if (zoom && map.value && place.geometry.coordinates) {
              programmaticMapMove.value = true;
-             const coords = window.ol.proj.fromLonLat([place.geometry.coordinates[0], place.geometry.coordinates[1]]);
+             const coords = window.gv_core.ol.proj.fromLonLat([place.geometry.coordinates[0], place.geometry.coordinates[1]]);
              
              // Tiny delay to ensure the browser has a chance to render the new marker style
              // before the heavy animation loop begins.

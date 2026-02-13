@@ -280,7 +280,7 @@ const api = inject('exampleExtensionApi');
   Use toast for success messages, error messages, and custom notifications.
   ExtensionApi does NOT automatically show toasts - you handle errors explicitly.
 */
-const toast = window.GeoVault.toast;
+const toast = window.gv_core.GeoVault.toast;
 
 // Local component state for items
 const items = ref([]);

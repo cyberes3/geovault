@@ -38,26 +38,20 @@ extensionRegistry.utils.keyValueToNested = keyValueToNested;
 extensionRegistry.utils.getNestedValue = getNestedValue;
 extensionRegistry.toast = toast;
 
-// Expose GeoVault global for extensions to access shared state and utils without bundling
-window.GeoVault = {
+// Shared platform APIs: single namespace for clarity. Top-level aliases kept for extension UMD builds.
+const GeoVault = {
     registry: extensionRegistry,
     utils: {
         updateUserSetting,
         loadSettingsFromStore,
         keyValueToNested,
-        getNestedValue
+        getNestedValue,
+        getCurrentPosition: () => geolocationManager.getCurrentPosition(),
+        checkGeolocationPermission: () => geolocationManager.checkPermission()
     },
     toast
 };
-
-// Expose shared libraries for extensions
-window.Vue = VueState;
-window.VueRouter = VueRouterState;
-window.Vuex = VuexState;
-window.axios = axios;
-window.HeroiconsOutline = HeroiconsOutline;
-window.HeroiconsSolid = HeroiconsSolid;
-window.ol = {
+const olNamespace = {
     ...ol,
     source: olSource,
     layer: olLayer,
@@ -67,7 +61,30 @@ window.ol = {
     interaction: olInteraction,
     Feature: Feature
 };
-window.Loader = Loader;
+window.gv_core = {
+    GeoVault,
+    Vue: VueState,
+    VueRouter: VueRouterState,
+    Vuex: VuexState,
+    axios,
+    HeroiconsOutline,
+    HeroiconsSolid,
+    ol: olNamespace,
+    Loader: null, // set below after import
+    store: null
+};
+window.gv_core.Loader = Loader;
+
+// Top-level aliases so extension UMD bundles (external vue, ol, etc.) keep working
+window.GeoVault = window.gv_core.GeoVault;
+window.Vue = window.gv_core.Vue;
+window.VueRouter = window.gv_core.VueRouter;
+window.Vuex = window.gv_core.Vuex;
+window.axios = window.gv_core.axios;
+window.HeroiconsOutline = window.gv_core.HeroiconsOutline;
+window.HeroiconsSolid = window.gv_core.HeroiconsSolid;
+window.ol = window.gv_core.ol;
+window.Loader = window.gv_core.Loader;
 
 import BaseButton from '@/components/parts/BaseButton.vue';
 import ToggleButton from '@/components/parts/ToggleButton.vue';
@@ -316,8 +333,8 @@ async function resolveExtensionIcon(icon, kebabName) {
     // Check this after inline SVG to avoid false matches
     if (typeof icon === 'string' && !icon.includes('/') && !icon.trim().startsWith('<')) {
         // Check if it's a heroicon name
-        const heroiconOutline = window.HeroiconsOutline?.[icon];
-        const heroiconSolid = window.HeroiconsSolid?.[icon];
+        const heroiconOutline = window.gv_core.HeroiconsOutline?.[icon];
+        const heroiconSolid = window.gv_core.HeroiconsSolid?.[icon];
 
         if (heroiconOutline) {
             return markRaw(heroiconOutline);
@@ -571,5 +588,6 @@ loadExtensions().then(() => {
     app.use(router)
         .use(store)
         .mount('#app');
-    window.store = store;
+    window.gv_core.store = store;
+    window.store = window.gv_core.store;
 });

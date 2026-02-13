@@ -323,7 +323,7 @@ export default {
     BaseButton,
     Loader
   },
-  inject: ['caltopoExtensionApi', 'caltopoExtensionToast', 'caltopoExtensionRouter', 'caltopoExtensionMainRouter'],
+  inject: ['caltopoExtensionApi', 'caltopoExtensionRouter', 'caltopoExtensionMainRouter'],
   data() {
     return {
       connectionStatus: {
@@ -363,7 +363,7 @@ export default {
       return this.caltopoExtensionApi
     },
     toast() {
-      return this.caltopoExtensionToast || window.GeoVault?.toast
+      return window.gv_core.GeoVault?.toast
     },
     router() {
       return this.caltopoExtensionRouter || this.$router

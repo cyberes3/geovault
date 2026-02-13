@@ -154,8 +154,8 @@ export default {
     const route = useRoute();
     const api = inject('placesExtensionApi');
     const router = inject('placesExtensionRouter');
-    const utils = inject('placesExtensionUtils', null);
-    const toast = inject('toast', null) || (typeof window !== 'undefined' && window.GeoVault && window.GeoVault.toast) || { success: () => {}, error: () => {} };
+    const utils = window.gv_core?.GeoVault?.utils ?? null;
+    const toast = window.gv_core?.GeoVault?.toast ?? { success: () => {}, error: () => {} };
 
     const mapContainer = ref(null);
     const map = ref(null);
@@ -190,11 +190,11 @@ export default {
     }
 
     function updateMarkerFromCoords() {
-      if (!vectorSource.value || !window.ol) return;
+      if (!vectorSource.value || !window.gv_core.ol) return;
       vectorSource.value.clear();
       if (latitude.value != null && longitude.value != null && isFinite(latitude.value) && isFinite(longitude.value)) {
-        const feature = new window.ol.Feature({
-          geometry: new window.ol.geom.Point(window.ol.proj.fromLonLat([longitude.value, latitude.value]))
+        const feature = new window.gv_core.ol.Feature({
+          geometry: new window.gv_core.ol.geom.Point(window.gv_core.ol.proj.fromLonLat([longitude.value, latitude.value]))
         });
         vectorSource.value.addFeatures([feature]);
       }
@@ -205,34 +205,34 @@ export default {
     }
 
     function initMap() {
-      if (!window.ol || !mapContainer.value) return;
-      vectorSource.value = new window.ol.source.Vector();
-      const vectorLayer = new window.ol.layer.Vector({
+      if (!window.gv_core.ol || !mapContainer.value) return;
+      vectorSource.value = new window.gv_core.ol.source.Vector();
+      const vectorLayer = new window.gv_core.ol.layer.Vector({
         source: vectorSource.value,
-        style: new window.ol.style.Style({
-          image: new window.ol.style.Circle({
+        style: new window.gv_core.ol.style.Style({
+          image: new window.gv_core.ol.style.Circle({
             radius: 7,
-            fill: new window.ol.style.Fill({ color: '#2563EB' }),
-            stroke: new window.ol.style.Stroke({ color: 'white', width: 2 })
+            fill: new window.gv_core.ol.style.Fill({ color: '#2563EB' }),
+            stroke: new window.gv_core.ol.style.Stroke({ color: 'white', width: 2 })
           })
         })
       });
-      map.value = new window.ol.Map({
+      map.value = new window.gv_core.ol.Map({
         target: mapContainer.value,
         controls: [],
         layers: [
-          new window.ol.layer.Tile({
-            source: new window.ol.source.OSM({ attributions: [] })
+          new window.gv_core.ol.layer.Tile({
+            source: new window.gv_core.ol.source.OSM({ attributions: [] })
           }),
           vectorLayer
         ],
-        view: new window.ol.View({
-          center: window.ol.proj.fromLonLat([0, 0]),
+        view: new window.gv_core.ol.View({
+          center: window.gv_core.ol.proj.fromLonLat([0, 0]),
           zoom: 2
         })
       });
       map.value.on('click', (e) => {
-        const lonLat = window.ol.proj.toLonLat(e.coordinate);
+        const lonLat = window.gv_core.ol.proj.toLonLat(e.coordinate);
         setCoords(lonLat[1], lonLat[0]);
       });
     }
@@ -251,7 +251,7 @@ export default {
           setCoords(coords[1], coords[0]);
           if (map.value) {
             map.value.getView().animate({
-              center: window.ol.proj.fromLonLat([coords[0], coords[1]]),
+              center: window.gv_core.ol.proj.fromLonLat([coords[0], coords[1]]),
               zoom: 12,
               duration: 500
             });
@@ -315,7 +315,7 @@ export default {
       if (coords && coords.length >= 2 && map.value) {
         const [lon, lat] = coords;
         map.value.getView().animate({
-          center: window.ol.proj.fromLonLat([lon, lat]),
+          center: window.gv_core.ol.proj.fromLonLat([lon, lat]),
           zoom: 12,
           duration: 500
         });
@@ -350,7 +350,7 @@ export default {
         setCoords(coords.latitude, coords.longitude);
         if (map.value) {
           map.value.getView().animate({
-            center: window.ol.proj.fromLonLat([coords.longitude, coords.latitude]),
+            center: window.gv_core.ol.proj.fromLonLat([coords.longitude, coords.latitude]),
             zoom: 14,
             duration: 500
           });
@@ -420,7 +420,7 @@ export default {
       }
       if (map.value) {
         const view = map.value.getView();
-        view.setCenter(window.ol.proj.fromLonLat([0, 0]));
+        view.setCenter(window.gv_core.ol.proj.fromLonLat([0, 0]));
         view.setZoom(2);
       }
     }
