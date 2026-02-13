@@ -79,8 +79,8 @@
             />
           </div>
         </div>
-        <div class="flex flex-col sm:flex-row gap-4 items-end">
-          <div class="flex-1 w-full space-y-1.5">
+        <div class="flex flex-row flex-wrap gap-4 items-end">
+          <div class="flex-1 min-w-[120px] space-y-1.5">
             <label class="block text-xs font-semibold text-gray-500 uppercase tracking-wide">Latitude <span class="text-red-500">*</span></label>
             <input
               v-model.number="latitude"
@@ -92,7 +92,7 @@
               @input="updateMarkerFromInputs"
             />
           </div>
-          <div class="flex-1 w-full space-y-1.5">
+          <div class="flex-1 min-w-[120px] space-y-1.5">
             <label class="block text-xs font-semibold text-gray-500 uppercase tracking-wide">Longitude <span class="text-red-500">*</span></label>
             <input
               v-model.number="longitude"
