@@ -104,6 +104,13 @@ class ToastManager {
   info(message, options = {}) {
     return this.show(message, 'info', { duration: 3000, dismissible: false, ...options })
   }
+
+  /**
+   * Clear all active toasts
+   */
+  clearAll() {
+    this.listeners.forEach(callback => callback({ action: 'clearAll' }))
+  }
 }
 
 // Create singleton instance

@@ -1,5 +1,5 @@
 <template>
-  <div class="space-y-6 px-4 sm:px-6 lg:px-8 pt-6">
+  <div class="space-y-6">
     <!-- Page Header (matches Collections page) -->
     <div class="bg-white rounded-lg shadow-sm border border-gray-200 p-4 sm:p-6">
       <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 mb-4">
@@ -27,10 +27,11 @@
       </div>
     </div>
 
-    <!-- List + Map row: fixed height so list scrolls instead of growing the page -->
-    <div class="flex gap-3 min-h-0 shrink-0" style="height: 60vh; min-height: 400px;">
+    <!-- List + Map row: fixed height on desktop so list scrolls internally -->
+    <!-- Mobile: Map top, List bottom, no fixed height so page scrolls -->
+    <div class="flex flex-col-reverse sm:flex-row gap-3 min-h-0 sm:h-[60vh] sm:min-h-[400px]">
       <!-- List panel (50% width, card style) -->
-      <div class="w-1/2 min-w-0 min-h-0 flex flex-col bg-white rounded-lg shadow-sm border border-gray-200 overflow-hidden relative">
+      <div class="w-full sm:w-1/2 min-w-0 min-h-0 flex-1 flex flex-col bg-white rounded-lg shadow-sm border border-gray-200 sm:overflow-hidden relative">
         <!-- Loading overlay: grey out and disable list while refreshing -->
         <div
           v-if="loading"
@@ -43,7 +44,7 @@
           </div>
         </div>
         <!-- Search + Sort (inline) -->
-        <div class="p-4 border-b border-gray-200 flex items-center gap-2">
+        <div class="p-4 border-b border-gray-200 flex flex-col sm:flex-row items-stretch sm:items-center gap-2">
           <div class="relative flex-1 min-w-0">
             <div class="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
               <MagnifyingGlassIcon class="h-5 w-5 text-gray-500" aria-hidden="true" />
@@ -58,7 +59,7 @@
           <select
             id="places-sort"
             v-model="sortBy"
-            class="select-custom w-auto min-w-0 px-3 py-2 text-sm border border-gray-300 rounded-lg shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500 flex-shrink-0"
+            class="select-custom w-full sm:w-auto min-w-0 px-3 py-2 text-sm border border-gray-300 rounded-lg shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500 flex-shrink-0"
             aria-label="Sort places"
           >
             <option value="composite">Default sort</option>
@@ -69,7 +70,7 @@
         </div>
 
         <!-- List -->
-        <div ref="listScrollContainer" class="flex-1 overflow-y-auto p-4">
+        <div ref="listScrollContainer" class="flex-1 sm:overflow-y-auto p-4">
           <div v-if="filteredPlaces.length === 0 && !loading" class="text-center py-12">
             <div class="mx-auto w-12 h-12 text-gray-500 mb-4">
               <MapPinIcon class="w-12 h-12 mx-auto" />
@@ -83,7 +84,7 @@
               :key="place.properties.database_id"
               :ref="(el) => setPlaceItemRef(place.properties.database_id, el)"
               :data-place-id="place.properties.database_id"
-              @click="selectPlace(place)"
+              @click="selectPlace(place, { scroll: false })"
               @mouseenter="setHoveredPlace(place.properties.database_id)"
               @mouseleave="clearHoveredPlace()"
               :class="[
@@ -175,8 +176,20 @@
       </div>
 
       <!-- Map (50% width, card style) -->
-      <div class="w-1/2 min-w-0 relative bg-gray-100 rounded-lg border border-gray-200 overflow-hidden">
-        <div ref="mapContainer" class="absolute inset-0"></div>
+      <div class="w-full sm:w-1/2 min-w-0 flex-shrink-0 relative bg-gray-100 rounded-lg border border-gray-200 overflow-hidden h-[250px] sm:h-auto">
+        <div ref="mapContainer" class="absolute inset-0 touch-pan-y"></div>
+        
+        <!-- Cooperative Gesture Overlay -->
+        <div 
+          v-if="showGestureOverlay"
+          class="absolute inset-0 z-20 flex items-center justify-center bg-black/40 pointer-events-none transition-opacity duration-300"
+          :class="gestureOverlayVisible ? 'opacity-100' : 'opacity-0'"
+        >
+          <div class="bg-black/70 text-white px-4 py-3 rounded-lg text-center font-medium shadow-lg backdrop-blur-sm">
+            <p class="text-sm sm:text-base">Use two fingers to move the map</p>
+          </div>
+        </div>
+
         <div class="absolute z-10 bottom-4 left-4 flex flex-col bg-white border border-gray-200 rounded shadow-md overflow-hidden">
           <button
             type="button"
@@ -191,69 +204,61 @@
     </div>
 
     <!-- Description modal -->
-    <div
-      v-if="descriptionModalPlace"
-      class="fixed inset-0 z-50 flex items-center justify-center p-4"
-      role="dialog"
-      aria-modal="true"
-      aria-labelledby="description-modal-title"
+    <BaseModal
+      :is-open="!!descriptionModalPlace"
+      :title="descriptionModalPlace?.properties?.name || 'Unnamed Place'"
+      :full-screen-mobile="true"
+      max-width="2xl"
+      @close="closeDescriptionModal"
     >
-      <div class="absolute inset-0 bg-black/50" @click="handleDescriptionModalBackdropClick"></div>
-      <div
-        class="relative bg-white rounded-lg shadow-xl flex flex-col w-[50%] h-[75%] min-w-[280px] min-h-[200px]"
-        @click.stop
-      >
-        <div class="flex items-center justify-between px-4 py-3 border-b border-gray-200 flex-shrink-0">
-          <h2 id="description-modal-title" class="text-lg font-medium text-gray-900 truncate pr-2">
-            {{ descriptionModalPlace.properties.name || 'Unnamed Place' }}
-          </h2>
-          <button
-            v-if="!descriptionModalEditing"
-            type="button"
-            class="p-1.5 text-gray-400 hover:text-gray-600 focus:outline-none rounded"
-            title="Close"
-            @click="closeDescriptionModal"
-          >
-            <XMarkIcon class="h-5 w-5" />
-          </button>
-          <span v-else class="w-9"></span>
-        </div>
-        <div class="flex-1 overflow-y-auto px-4 py-3 min-h-0 flex flex-col">
+      <div class="flex flex-col h-full">
+        <div class="flex-1 p-4 sm:p-6 space-y-4">
           <template v-if="descriptionModalEditing">
-            <label for="description-edit" class="block text-sm font-medium text-gray-700 mb-1 flex-shrink-0">Description</label>
-            <textarea
-              id="description-edit"
-              ref="descriptionEditTextarea"
-              v-model="descriptionEditDraft"
-              class="block w-full flex-1 min-h-[120px] px-3 py-2 border border-gray-300 rounded-lg shadow-sm focus:ring-2 focus:ring-blue-500 focus:border-transparent text-sm resize-none"
-              placeholder="Add a description..."
-            />
+            <div>
+              <label for="description-edit" class="block text-sm font-medium text-gray-700 mb-1">Description</label>
+              <textarea
+                id="description-edit"
+                ref="descriptionEditTextarea"
+                v-model="descriptionEditDraft"
+                class="block w-full min-h-[200px] px-3 py-2 border border-gray-300 rounded-lg shadow-sm focus:ring-2 focus:ring-blue-500 focus:border-transparent text-sm resize-none"
+                placeholder="Add a description..."
+              />
+            </div>
           </template>
           <template v-else>
-            <p class="text-sm text-gray-700 whitespace-pre-wrap">{{ descriptionModalPlace.properties.description || 'No description' }}</p>
-          </template>
-        </div>
-        <div class="flex items-center justify-end gap-2 px-4 py-3 border-t border-gray-200 flex-shrink-0">
-          <template v-if="descriptionModalEditing">
-            <BaseButton type="button" variant="white" size="sm" @click="cancelDescriptionEdit">
-              Cancel
-            </BaseButton>
-            <BaseButton type="button" variant="primary" color="blue" size="sm" :disabled="descriptionSaving" @click="saveDescriptionEdit">
-              {{ descriptionSaving ? 'Saving...' : 'Save' }}
-            </BaseButton>
-          </template>
-          <template v-else>
-            <BaseButton type="button" variant="white" size="sm" @click="closeDescriptionModal">
-              Close
-            </BaseButton>
-            <BaseButton type="button" variant="primary" color="blue" size="sm" @click="startDescriptionEdit">
-              <PencilSquareIcon class="h-4 w-4 mr-1.5 inline" />
-              Edit description
-            </BaseButton>
+            <div class="prose prose-sm max-w-none text-gray-700">
+               <p class="whitespace-pre-wrap">{{ descriptionModalPlace?.properties?.description || 'No description provided for this place.' }}</p>
+            </div>
           </template>
         </div>
       </div>
-    </div>
+
+      <template #footer>
+        <template v-if="descriptionModalEditing">
+          <BaseButton type="button" variant="white" @click="cancelDescriptionEdit">
+            Cancel
+          </BaseButton>
+          <BaseButton
+            type="button"
+            variant="primary"
+            color="blue"
+            :disabled="descriptionSaving"
+            @click="saveDescriptionEdit"
+          >
+            {{ descriptionSaving ? 'Saving...' : 'Save Changes' }}
+          </BaseButton>
+        </template>
+        <template v-else>
+          <BaseButton type="button" variant="white" @click="closeDescriptionModal">
+            Close
+          </BaseButton>
+          <BaseButton type="button" variant="primary" color="blue" @click="startDescriptionEdit">
+            <PencilSquareIcon class="h-4 w-4 mr-1.5 inline" />
+            Edit description
+          </BaseButton>
+        </template>
+      </template>
+    </BaseModal>
   </div>
 </template>
 
@@ -302,6 +307,14 @@ export default {
     const descriptionEditTextarea = ref(null);
     const copiedPlaceId = ref(null);
     let copiedPlaceIdTimeout = null;
+    
+    // Cooperative gestures state
+    const showGestureOverlay = ref(false);
+    const gestureOverlayVisible = ref(false);
+    let gestureOverlayTimeout = null;
+    const isMobile = computed(() => {
+        return window.innerWidth < 1024;
+    });
 
     const filteredPlaces = computed(() => {
       if (!searchQuery.value) return places.value;
@@ -332,6 +345,13 @@ export default {
     // Refetch when sort dropdown changes (watcher ensures we use updated sortBy)
     watch(sortBy, () => fetchPlaces());
 
+    // Force map re-render when selection or hover state changes
+    watch([selectedPlace, hoveredPlaceId], () => {
+        if (vectorLayer.value) {
+            vectorLayer.value.changed();
+        }
+    });
+
     const initMap = () => {
         if (!window.ol) return;
         
@@ -346,17 +366,20 @@ export default {
         });
         const hoveredStyle = new window.ol.style.Style({
             image: new window.ol.style.Circle({
-                radius: 7,
+                radius: 9,
                 fill: new window.ol.style.Fill({ color: '#FBBF24' }),
                 stroke: new window.ol.style.Stroke({ color: '#000', width: 2 })
-            })
+            }),
+            zIndex: 100
         });
 
         const layer = new window.ol.layer.Vector({
             source: vectorSource.value,
             style: (feature) => {
                 const id = feature.get('database_id');
-                return hoveredPlaceId.value != null && id === hoveredPlaceId.value ? hoveredStyle : defaultStyle;
+                const isSelected = selectedPlace.value?.properties?.database_id === id;
+                const isHovered = hoveredPlaceId.value != null && id === hoveredPlaceId.value;
+                return (isSelected || isHovered) ? hoveredStyle : defaultStyle;
             }
         });
         vectorLayer.value = layer;
@@ -364,6 +387,14 @@ export default {
         map.value = new window.ol.Map({
             target: mapContainer.value,
             controls: [],
+            interactions: window.ol.interaction.defaults({ dragPan: false }).extend([
+                new window.ol.interaction.DragPan({
+                    condition: function(e) {
+                         // Return TRUE if it's a mouse, or if it's a multi-touch (2+ fingers)
+                         return e.originalEvent.pointerType === 'mouse' || (e.originalEvent.pointerType === 'touch' && isMultiTouchGesture);
+                    }
+                })
+            ]),
             layers: [
                 new window.ol.layer.Tile({
                     source: new window.ol.source.OSM({ attributions: [] })
@@ -375,15 +406,92 @@ export default {
                 zoom: 2
             })
         });
+        
+        // Add gesture handling for overlay
+        const container = mapContainer.value;
+        let isMultiTouchGesture = false;
+
+        const handleTouchStart = (e) => {
+            if (e.touches.length >= 2) {
+                isMultiTouchGesture = true;
+                hideGestureMessage();
+            } else if (e.touches.length === 1) {
+                isMultiTouchGesture = false;
+            }
+        };
+
+        const handleTouchMove = (e) => {
+             if (e.touches && e.touches.length >= 2) {
+                 isMultiTouchGesture = true;
+                 hideGestureMessage();
+             } else if (e.touches && e.touches.length === 1 && !isMultiTouchGesture) {
+                 // Only show message if we haven't seen 2+ fingers in this touch sequence
+                 showGestureMessage();
+             }
+        };
+
+        container.addEventListener('touchstart', handleTouchStart, { passive: true });
+        container.addEventListener('touchmove', handleTouchMove, { passive: true });
+
+        // Helper for mobile toast to scroll down
+        window._placesScrollTo = (id) => {
+            const place = places.value.find(p => p.properties.database_id === id);
+            if (!place) return;
+            
+            // Clear any active toasts when scrolling
+            toast?.clearAll?.();
+            
+            // On mobile, we DO want to scroll and zoom when they click the toast link
+            selectPlace(place, { scroll: true, zoom: true });
+            
+            if (isMobile.value) {
+                nextTick(() => {
+                    const el = listScrollContainer.value?.querySelector(`[data-place-id="${String(id)}"]`);
+                    if (el) {
+                        el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                    }
+                });
+            }
+        };
+        
+        // Return cleanup function for watcher/hooks if needed, or just cleanup in onBeforeUnmount
+        onBeforeUnmount(() => {
+             container.removeEventListener('touchstart', handleTouchStart);
+             container.removeEventListener('touchmove', handleTouchMove);
+             delete window._placesScrollTo;
+        });
 
         // Click handler
         map.value.on('click', (e) => {
-            const feature = map.value.forEachFeatureAtPixel(e.pixel, feature => feature);
+            const feature = map.value.forEachFeatureAtPixel(e.pixel, feature => feature, { hitTolerance: 10 });
             if (feature) {
                 const placeId = feature.get('database_id');
                 const place = places.value.find(p => p.properties.database_id === placeId);
                 if (place) {
-                    selectPlace(place);
+                    // Clear existing toasts before showing a new one
+                    toast?.clearAll?.();
+
+                    // Scroll list on desktop, but stay on map on mobile (using toast)
+                    // Zoom is always disabled for map-clicks
+                    selectPlace(place, { scroll: !isMobile.value, zoom: false });
+
+                    // On mobile, show a toast with a link to scroll to the list item
+                    if (isMobile.value) {
+                        toast?.info('', {
+                            html: `
+                                <div class="flex items-center justify-between gap-3 min-w-[200px]">
+                                    <span class="font-medium truncate">${place.properties.name || 'Selected Place'}</span>
+                                    <button 
+                                        onclick="window._placesScrollTo(${place.properties.database_id})"
+                                        class="flex-shrink-0 text-blue-600 font-bold hover:underline"
+                                    >
+                                        Scroll to item
+                                    </button>
+                                </div>
+                            `,
+                            duration: 4000
+                        });
+                    }
                 }
             } else {
                 // Determine coords for new place?
@@ -441,12 +549,18 @@ export default {
         const view = map.value.getView();
         if (places.value.length > 0 && vectorSource.value) {
             const extent = vectorSource.value.getExtent();
-            view.fit(extent, { padding: [100, 100, 100, 100], maxZoom: 15, duration: 500 });
+            view.fit(extent, { 
+                padding: [100, 100, 100, 100], 
+                maxZoom: 15, 
+                duration: 500
+            });
+            view.animate({ rotation: 0, duration: 500 });
         } else {
             view.animate({
                 center: window.ol.proj.fromLonLat([0, 0]),
                 zoom: 2,
-                duration: 500
+                duration: 500,
+                rotation: 0
             });
         }
     };
@@ -469,17 +583,34 @@ export default {
         nextTick(() => nextTick(runScroll));
     };
 
-    const selectPlace = (place) => {
+    const selectPlace = (place, options = { scroll: true, zoom: true }) => {
         selectedPlace.value = place;
-        scrollListToPlace(place);
-        if (map.value && place.geometry.coordinates) {
+        
+        // Force an immediate style update so the marker turns yellow before animation
+        if (vectorLayer.value) {
+            vectorLayer.value.changed();
+        }
+
+        const scroll = options.scroll ?? true;
+        const zoom = options.zoom ?? true;
+
+        if (scroll) {
+            scrollListToPlace(place);
+        }
+        
+        if (zoom && map.value && place.geometry.coordinates) {
              programmaticMapMove.value = true;
              const coords = window.ol.proj.fromLonLat([place.geometry.coordinates[0], place.geometry.coordinates[1]]);
-             map.value.getView().animate({
-                 center: coords,
-                 zoom: 12,
-                 duration: 1000
-             });
+             
+             // Tiny delay to ensure the browser has a chance to render the new marker style
+             // before the heavy animation loop begins.
+             setTimeout(() => {
+                 map.value.getView().animate({
+                     center: coords,
+                     zoom: 12,
+                     duration: 1000
+                 });
+             }, 50);
         }
     };
 
@@ -503,13 +634,64 @@ export default {
         return `${coords[1].toFixed(4)}, ${coords[0].toFixed(4)}`;
     };
 
+    const copyToClipboard = async (text) => {
+        // Try modern API first if in secure context
+        if (navigator.clipboard && navigator.clipboard.writeText && window.isSecureContext) {
+            try {
+                await navigator.clipboard.writeText(text);
+                return true;
+            } catch (err) {
+                console.error('Modern clipboard API failed, trying fallback', err);
+            }
+        }
+        
+        // Fallback for non-secure context or if modern API fails
+        return fallbackCopy(text);
+    };
+
+    const fallbackCopy = (text) => {
+        try {
+            const textArea = document.createElement("textarea");
+            textArea.value = text;
+            
+            // Mobile compatibility settings
+            textArea.readOnly = false;
+            textArea.contentEditable = "true";
+            
+            // Ensure textarea is technically visible but not seen by user
+            textArea.style.position = "absolute";
+            textArea.style.left = "-9999px";
+            textArea.style.top = (window.pageYOffset || document.documentElement.scrollTop) + "px";
+            textArea.style.opacity = "0";
+            textArea.style.height = "1px";
+            textArea.style.width = "1px";
+            
+            document.body.appendChild(textArea);
+            
+            // Selection logic for mobile and desktop
+            textArea.focus();
+            textArea.select();
+            // Critical for iOS and some Android browsers
+            textArea.setSelectionRange(0, 99999);
+            
+            const successful = document.execCommand('copy');
+            document.body.removeChild(textArea);
+            return successful;
+        } catch (err) {
+            console.error('Fallback copy failed', err);
+            return false;
+        }
+    };
+
     const copyCoordinates = async (place) => {
         const coords = place?.geometry?.coordinates;
         const text = formatCoords(coords);
         if (!text) return;
         if (copiedPlaceIdTimeout) clearTimeout(copiedPlaceIdTimeout);
         try {
-            await navigator.clipboard.writeText(text);
+            const success = await copyToClipboard(text);
+            if (!success) throw new Error('Copy failed');
+            
             copiedPlaceId.value = place.properties.database_id;
             copiedPlaceIdTimeout = setTimeout(() => {
                 copiedPlaceId.value = null;
@@ -587,7 +769,6 @@ export default {
             if (idx !== -1) places.value[idx] = updated;
             descriptionModalPlace.value = updated;
             descriptionModalEditing.value = false;
-            toast?.success?.('Description updated');
         } catch (err) {
             console.error(err);
             toast?.error?.('Failed to update description');
@@ -603,9 +784,30 @@ export default {
     };
 
     const openInGoogleMaps = (place) => {
+        const lat = place.geometry.coordinates[1];
+        const lon = place.geometry.coordinates[0];
+        const name = encodeURIComponent(place.properties.name || 'Place');
         const url = googleMapsUrl(place);
+        
         api.post(`/features/${place.properties.database_id}/navigate/`).catch(() => {});
-        window.open(url, '_blank');
+        
+        if (isMobile.value) {
+            const userAgent = navigator.userAgent || navigator.vendor || window.opera;
+            const isAndroid = /android/i.test(userAgent);
+            const isIOS = /iPad|iPhone|iPod/.test(userAgent) && !window.MSStream;
+
+            if (isAndroid) {
+                // geo: intent for Android (allows user to choose app)
+                window.location.href = `geo:${lat},${lon}?q=${lat},${lon}(${name})`;
+            } else if (isIOS) {
+                // maps: scheme for iOS (Apple Maps or system default)
+                window.location.href = `maps://?ll=${lat},${lon}&q=${name}`;
+            } else {
+                window.location.href = url;
+            }
+        } else {
+            window.open(url, '_blank');
+        }
     };
 
     const goToNewPlace = () => {
@@ -622,6 +824,36 @@ export default {
     watch(hoveredPlaceId, () => {
         if (vectorLayer.value) vectorLayer.value.changed();
     });
+    
+    const showGestureMessage = () => {
+         if (gestureOverlayVisible.value) return; // Already showing
+         
+         showGestureOverlay.value = true;
+         // Small delay to allow v-if render, then fade in
+         requestAnimationFrame(() => {
+              gestureOverlayVisible.value = true;
+         });
+         
+         if (gestureOverlayTimeout) clearTimeout(gestureOverlayTimeout);
+         gestureOverlayTimeout = setTimeout(() => {
+              hideGestureMessage();
+         }, 2000);
+    };
+
+    const hideGestureMessage = () => {
+        if (!gestureOverlayVisible.value) return;
+        
+        gestureOverlayVisible.value = false;
+        if (gestureOverlayTimeout) {
+            clearTimeout(gestureOverlayTimeout);
+            gestureOverlayTimeout = null;
+        }
+        
+        // Wait for fade out to finish before removing from DOM
+        setTimeout(() => {
+            if (!gestureOverlayVisible.value) showGestureOverlay.value = false;
+        }, 300);
+    };
 
     const onDescriptionModalKeydown = (e) => {
         if (e.key === 'Escape') handleDescriptionModalEscape();
@@ -687,7 +919,10 @@ export default {
       truncate,
       googleMapsUrl,
       googleMapsIconUrl,
-      googleMapsIconBwUrl
+      googleMapsIconBwUrl,
+      
+      showGestureOverlay,
+      gestureOverlayVisible
     };
   }
 }

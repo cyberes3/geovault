@@ -39,8 +39,8 @@ for ext_dir in "$SCRIPT_DIR/src/backend/extensions"/*/; do
 done
 
 echo "Starting Django and Vite dev servers..."
-echo "Django will run on: http://127.0.0.1:8000"
-echo "Vite will run on: http://localhost:5173 (or next available port)"
+echo "Django will run on: http://0.0.0.0:8000"
+echo "Vite will run on: http://0.0.0.0:5173 (or next available port)"
 if [ ${#EXT_NAMES[@]} -gt 2 ]; then
     echo "Extension frontends: build --watch enabled (changes will trigger full reload)"
 fi

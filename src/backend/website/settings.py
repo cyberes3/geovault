@@ -373,6 +373,9 @@ USE_X_FORWARDED_PROTO = True
 # Use https:// protocol for production (when not DEBUG), http:// for development
 protocol = 'https' if not DEBUG else 'http'
 CSRF_TRUSTED_ORIGINS = [f"{protocol}://{host}" for host in ALLOWED_HOSTS if host != '*']
+# In DEBUG, also trust Vite dev server origin (host:5173) so accessing via http://HOST:5173 works
+if DEBUG:
+    CSRF_TRUSTED_ORIGINS += [f"http://{host}:5173" for host in ALLOWED_HOSTS if host != '*']
 
 # Cookie Security Settings (for production with HTTPS)
 # In production (when DEBUG=False), cookies should only be sent over HTTPS

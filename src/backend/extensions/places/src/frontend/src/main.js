@@ -4,6 +4,7 @@ import PlaceNewView from './views/PlaceNewView.vue';
 async function setup({ app, router, store, registry, api, utils, toast, metadata }) {
     app.provide('placesExtensionApi', api);
     app.provide('placesExtensionRouter', router);
+    app.provide('toast', toast);
     if (utils) {
         app.provide('placesExtensionUtils', utils);
     }

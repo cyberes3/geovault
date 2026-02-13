@@ -73,6 +73,10 @@ export default {
   mounted() {
     // Subscribe to toast events
     this.unsubscribe = toast.subscribe((toastData) => {
+      if (toastData.action === 'clearAll') {
+        this.toasts = [];
+        return;
+      }
       this.addToast(toastData)
     })
   },

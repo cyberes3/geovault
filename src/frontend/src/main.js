@@ -28,6 +28,7 @@ import * as olLayer from 'ol/layer';
 import * as olProj from 'ol/proj';
 import * as olGeom from 'ol/geom';
 import * as olStyle from 'ol/style';
+import * as olInteraction from 'ol/interaction';
 import Feature from 'ol/Feature';
 
 // Inject utils into registry
@@ -63,6 +64,7 @@ window.ol = {
     proj: olProj,
     geom: olGeom,
     style: olStyle,
+    interaction: olInteraction,
     Feature: Feature
 };
 window.Loader = Loader;
@@ -71,6 +73,7 @@ import BaseButton from '@/components/parts/BaseButton.vue';
 import ToggleButton from '@/components/parts/ToggleButton.vue';
 import Loader from '@/components/parts/Loader.vue';
 import SettingsInput from '@/components/settings/components/SettingsInput.vue';
+import BaseModal from '@/components/parts/BaseModal.vue';
 
 const app = createApp(App);
 
@@ -79,6 +82,7 @@ app.component('BaseButton', BaseButton);
 app.component('ToggleButton', ToggleButton);
 app.component('Loader', Loader);
 app.component('SettingsInput', SettingsInput);
+app.component('BaseModal', BaseModal);
 
 /**
  * Helper to find setup function from extension module.

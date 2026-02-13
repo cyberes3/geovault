@@ -134,6 +134,7 @@ export default defineConfig({
         chunkSizeWarningLimit: 1050, // Increase limit to 1MB for map libraries
     },
     server: {
+        host: '0.0.0.0',
         fs: {
             allow: ['..', '../backend/extensions']
         },

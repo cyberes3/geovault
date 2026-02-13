@@ -337,9 +337,8 @@ export default {
     },
     isMapRoute() {
       return this.$route.path === '/map' || 
-             this.$route.path === '/mapshare' || 
-             this.$route.path === '/maplibre' ||
-             this.$route.path.startsWith('/extensions/places')
+             this.$route.path === '/mapshare' ||
+             this.$route.path.startsWith('/extensions/places/new')
     },
     isPublicShareRoute() {
       return this.$route.path === '/mapshare'
