@@ -152,8 +152,8 @@ export default {
   },
   setup() {
     const route = useRoute();
-    const api = inject('placesExtensionApi');
-    const router = inject('placesExtensionRouter');
+    const api = inject('extensionApi');
+    const router = inject('extensionRouter');
     const utils = window.gv_core?.GeoVault?.utils ?? null;
     const toast = window.gv_core?.GeoVault?.toast ?? { success: () => {}, error: () => {} };
 
@@ -240,8 +240,6 @@ export default {
     async function loadPlaceForEdit(id) {
       loadingEdit.value = true;
       try {
-        // Delay for testing the loading spinner (remove or reduce for production)
-        await new Promise((r) => setTimeout(r, 2000));
         const res = await api.get('/features/' + id + '/');
         const f = res.data;
         name.value = (f.properties && f.properties.name) ? String(f.properties.name) : '';
@@ -287,15 +285,7 @@ export default {
         const response = await fetch(`/api/geocoding/search/?q=${encodeURIComponent(query)}`, { credentials: 'include' });
         const data = await response.json();
         if (currentSearchQuery.value !== query) return;
-        if (data.data && data.data.features) {
-          searchResults.value = data.data.features;
-        } else if (data.features) {
-          searchResults.value = data.features;
-        } else if (Array.isArray(data)) {
-          searchResults.value = data;
-        } else {
-          searchResults.value = [];
-        }
+        searchResults.value = data.data?.features ?? [];
       } catch (e) {
         console.error('Search failed', e);
         if (currentSearchQuery.value === query) searchResults.value = [];
@@ -312,13 +302,16 @@ export default {
       searchResults.value = [];
       searchQuery.value = '';
       const coords = result.coordinates || result.center;
-      if (coords && coords.length >= 2 && map.value) {
+      if (coords && coords.length >= 2) {
         const [lon, lat] = coords;
-        map.value.getView().animate({
-          center: window.gv_core.ol.proj.fromLonLat([lon, lat]),
-          zoom: 12,
-          duration: 500
-        });
+        setCoords(lat, lon);
+        if (map.value) {
+          map.value.getView().animate({
+            center: window.gv_core.ol.proj.fromLonLat([lon, lat]),
+            zoom: 12,
+            duration: 500
+          });
+        }
       }
     }
 

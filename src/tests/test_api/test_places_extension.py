@@ -4,21 +4,27 @@ Tests for the Places extension API.
 import json
 from datetime import timedelta
 from unittest.mock import patch, MagicMock
-from django.test import TestCase, override_settings
+
 from django.contrib.auth import get_user_model
 from django.contrib.gis.geos import Point
+from django.test import TestCase
 from django.utils import timezone
+
 from api.models import FeatureStore
-from geo_lib.feature_id import generate_geojson_hash
-from website.extensions.extension_loader import ExtensionRegistry
-
 from extensions.places.src.backend.models import PlaceMetadata
+from geo_lib.feature_id import generate_geojson_hash
 
-# Helper to ensure extension is loaded
-def mock_get_bool(key, default=False):
-    if key == 'extensions.places.enabled':
-        return True
-    return default
+
+def _patch_places_enabled():
+    """Return a context manager that mocks config so the places extension is considered enabled."""
+    def mock_get_bool(key, default=False):
+        if key == 'extensions.places.enabled':
+            return True
+        return default
+
+    mock_config = MagicMock()
+    mock_config.get_bool.side_effect = mock_get_bool
+    return patch('website.extensions.extension_loader.get_config_loader', return_value=mock_config)
 
 class TestPlacesAPI(TestCase):
     """Test Places extension API endpoints."""
@@ -67,38 +73,16 @@ class TestPlacesAPI(TestCase):
             scope='places'
         )
         
-        # Ensure regex pattern for places extension is loaded in URLconf
-        # This is tricky because URLs are loaded at startup.
-        # However, we can mock the ExtensionRegistry to ensure it discovers 'places'
-        # and then we can rely on the fact that existing tests show extensions are loaded if enabled.
-
     def test_list_places(self):
         """Test listing places."""
-        # We need to ensure the extension is considered 'enabled'
-        with patch('website.extensions.extension_loader.get_config_loader') as mock_loader_get:
-            mock_config = MagicMock()
-            mock_config.get_bool.side_effect = mock_get_bool
-            mock_loader_get.return_value = mock_config
-            
+        with _patch_places_enabled():
             response = self.client.get('/api/extensions/places/features/')
-            
-            # If 404, it means URL pattern isn't loaded. 
-            # In a real test environment, we might need to force reload URLs or rely on 
-            # the fact that 'places' is enabled by default in its manifest.
-            
-            if response.status_code == 404:
-                # If URLs aren't picking up the extension, we verify the feature exists in DB directly
-                # ensuring the model/migration part works. 
-                # Integrating dynamic URLs in tests is complex without reloading ROOT_URLCONF.
-                # But let's check if we can verify strict scope filtering which is the core logic.
-                pass
-            else:
-                self.assertEqual(response.status_code, 200)
-                data = json.loads(response.content)
-                self.assertEqual(data['type'], 'FeatureCollection')
-                features = data['features']
-                self.assertEqual(len(features), 1)
-                self.assertEqual(features[0]['properties']['name'], 'My Place')
+        self.assertEqual(response.status_code, 200)
+        data = json.loads(response.content)
+        self.assertEqual(data['type'], 'FeatureCollection')
+        features = data['features']
+        self.assertEqual(len(features), 1)
+        self.assertEqual(features[0]['properties']['name'], 'My Place')
 
     def test_create_place(self):
         """Test creating a new place."""
@@ -113,23 +97,17 @@ class TestPlacesAPI(TestCase):
                 'description': 'A new place'
             }
         }
-        
-        # Use valid endpoint if available, or test logic via model if URL routing is flaky in tests
-        response = self.client.post(
-            '/api/extensions/places/features/',
-            data=json.dumps(new_place_data),
-            content_type='application/json'
-        )
-        
-        if response.status_code != 404:
-            self.assertEqual(response.status_code, 201)
-            data = json.loads(response.content)
-            place_id = data['properties']['database_id']
-            place = FeatureStore.objects.get(id=place_id)
-            self.assertEqual(place.scope, 'places')
-        else:
-            # Fallback test: manually create and verify scope constraint
-            pass
+        with _patch_places_enabled():
+            response = self.client.post(
+                '/api/extensions/places/features/',
+                data=json.dumps(new_place_data),
+                content_type='application/json'
+            )
+        self.assertEqual(response.status_code, 201)
+        data = json.loads(response.content)
+        place_id = data['properties']['database_id']
+        place = FeatureStore.objects.get(id=place_id)
+        self.assertEqual(place.scope, 'places')
 
     def test_scope_isolation(self):
         """
@@ -209,25 +187,131 @@ class TestPlacesAPI(TestCase):
         # Delete the default place from setUp so we only have A and B
         self.place_feature.delete()
 
-        with patch('website.extensions.extension_loader.get_config_loader') as mock_loader_get:
-            mock_config = MagicMock()
-            mock_config.get_bool.side_effect = mock_get_bool
-            mock_loader_get.return_value = mock_config
-
+        with _patch_places_enabled():
             # sort=created: newest timestamp first -> B (2 days ago) then A (5 days ago)
             response_created = self.client.get('/api/extensions/places/features/', {'sort': 'created'})
-            if response_created.status_code == 404:
-                return
-            self.assertEqual(response_created.status_code, 200)
-            data_created = json.loads(response_created.content)
-            ids_created = [f['properties']['database_id'] for f in data_created['features']]
-            self.assertEqual(ids_created[0], place_b.id)
-            self.assertEqual(ids_created[1], place_a.id)
+        self.assertEqual(response_created.status_code, 200)
+        data_created = json.loads(response_created.content)
+        ids_created = [f['properties']['database_id'] for f in data_created['features']]
+        self.assertEqual(ids_created[0], place_b.id)
+        self.assertEqual(ids_created[1], place_a.id)
 
-            # sort=modified: newest updated_at first -> A (1 day ago) then B (4 days ago)
+        with _patch_places_enabled():
             response_modified = self.client.get('/api/extensions/places/features/', {'sort': 'modified'})
-            self.assertEqual(response_modified.status_code, 200)
-            data_modified = json.loads(response_modified.content)
-            ids_modified = [f['properties']['database_id'] for f in data_modified['features']]
-            self.assertEqual(ids_modified[0], place_a.id)
-            self.assertEqual(ids_modified[1], place_b.id)
+        self.assertEqual(response_modified.status_code, 200)
+        data_modified = json.loads(response_modified.content)
+        ids_modified = [f['properties']['database_id'] for f in data_modified['features']]
+        self.assertEqual(ids_modified[0], place_a.id)
+        self.assertEqual(ids_modified[1], place_b.id)
+
+    def test_get_place_detail(self):
+        """Test retrieving a single place."""
+        with _patch_places_enabled():
+            response = self.client.get(
+                f'/api/extensions/places/features/{self.place_feature.id}/'
+            )
+        self.assertEqual(response.status_code, 200)
+        data = json.loads(response.content)
+        self.assertEqual(data['type'], 'Feature')
+        self.assertEqual(data['properties']['name'], 'My Place')
+        self.assertEqual(data['properties']['database_id'], self.place_feature.id)
+
+    def test_get_place_detail_wrong_scope_404(self):
+        """Requesting a non-place feature via places endpoint returns 404."""
+        with _patch_places_enabled():
+            response = self.client.get(
+                f'/api/extensions/places/features/{self.standard_feature.id}/'
+            )
+        self.assertEqual(response.status_code, 404)
+
+    def test_update_place_detail(self):
+        """Test updating a place (PUT)."""
+        updated_data = {
+            'type': 'Feature',
+            'geometry': {
+                'type': 'Point',
+                'coordinates': [-122.41, 37.78, 0.0]
+            },
+            'properties': {
+                'name': 'Updated Place',
+                'description': 'Updated description'
+            }
+        }
+        with _patch_places_enabled():
+            response = self.client.put(
+                f'/api/extensions/places/features/{self.place_feature.id}/',
+                data=json.dumps(updated_data),
+                content_type='application/json'
+            )
+        self.assertEqual(response.status_code, 200)
+        data = json.loads(response.content)
+        self.assertEqual(data['properties']['name'], 'Updated Place')
+        self.assertEqual(data['properties']['description'], 'Updated description')
+        self.place_feature.refresh_from_db()
+        self.assertEqual(self.place_feature.geojson['properties']['name'], 'Updated Place')
+        meta = PlaceMetadata.objects.get(feature=self.place_feature)
+        self.assertIsNotNone(meta.updated_at)
+
+    def test_delete_place_detail(self):
+        """Test deleting a place."""
+        place_id = self.place_feature.id
+        with _patch_places_enabled():
+            response = self.client.delete(
+                f'/api/extensions/places/features/{place_id}/'
+            )
+        self.assertEqual(response.status_code, 200)
+        self.assertFalse(FeatureStore.objects.filter(id=place_id).exists())
+        with _patch_places_enabled():
+            get_response = self.client.get(
+                f'/api/extensions/places/features/{place_id}/'
+            )
+        self.assertEqual(get_response.status_code, 404)
+
+    def test_place_navigate(self):
+        """POST navigate updates last_navigated_at."""
+        meta, _ = PlaceMetadata.objects.get_or_create(
+            feature=self.place_feature,
+            defaults={'updated_at': None, 'last_navigated_at': None}
+        )
+        self.assertIsNone(meta.last_navigated_at)
+        with _patch_places_enabled():
+            response = self.client.post(
+                f'/api/extensions/places/features/{self.place_feature.id}/navigate/'
+            )
+        self.assertEqual(response.status_code, 204)
+        meta.refresh_from_db()
+        self.assertIsNotNone(meta.last_navigated_at)
+
+    def test_list_places_invalid_sort_fallback(self):
+        """Invalid sort param falls back to composite; returns 200."""
+        with _patch_places_enabled():
+            response = self.client.get(
+                '/api/extensions/places/features/',
+                {'sort': 'invalid'}
+            )
+        self.assertEqual(response.status_code, 200)
+        data = json.loads(response.content)
+        self.assertEqual(data['type'], 'FeatureCollection')
+        self.assertIn('features', data)
+        self.assertEqual(len(data['features']), 1)
+
+    def test_create_place_invalid_payload(self):
+        """POST with invalid payload returns 400."""
+        invalid_payloads = [
+            ('invalid json', None),
+            ('missing geometry', {'type': 'Feature', 'properties': {'name': 'X'}}),
+            ('non-Point geometry', {
+                'type': 'Feature',
+                'geometry': {'type': 'LineString', 'coordinates': [[0, 0], [1, 1]]},
+                'properties': {'name': 'X'}
+            }),
+        ]
+        with _patch_places_enabled():
+            for label, payload in invalid_payloads:
+                body = json.dumps(payload) if payload is not None else 'not json'
+                response = self.client.post(
+                    '/api/extensions/places/features/',
+                    data=body,
+                    content_type='application/json'
+                )
+                self.assertEqual(response.status_code, 400, msg=label)

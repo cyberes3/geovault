@@ -2,8 +2,8 @@ import PlacesView from './views/PlacesView.vue';
 import PlaceNewView from './views/PlaceNewView.vue';
 
 async function setup({ app, router, store, registry, api, metadata }) {
-    app.provide('placesExtensionApi', api);
-    app.provide('placesExtensionRouter', router);
+    app.provide('extensionApi', api);
+    app.provide('extensionRouter', router);
 
     // Register Nav Link (path '' so fullPath is /extensions/places)
     registry.registerNavLink({

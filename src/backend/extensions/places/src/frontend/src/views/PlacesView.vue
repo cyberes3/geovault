@@ -282,8 +282,8 @@ export default {
     CheckIcon
   },
   setup() {
-    const api = inject('placesExtensionApi');
-    const placesRouter = inject('placesExtensionRouter');
+    const api = inject('extensionApi');
+    const placesRouter = inject('extensionRouter');
     const toast = window.gv_core.GeoVault.toast;
 
     const sortBy = ref('composite');
@@ -713,10 +713,6 @@ export default {
         }
     };
 
-    const truncate = (str, n) => {
-        return (str && str.length > n) ? str.substr(0, n-1) + '...' : str;
-    };
-
     const openDescriptionModal = (place) => {
         descriptionModalPlace.value = place;
         descriptionModalEditing.value = false;
@@ -728,14 +724,6 @@ export default {
         descriptionModalPlace.value = null;
         descriptionModalEditing.value = false;
         descriptionEditDraft.value = '';
-    };
-
-    const handleDescriptionModalEscape = () => {
-        if (!descriptionModalEditing.value) closeDescriptionModal();
-    };
-
-    const handleDescriptionModalBackdropClick = () => {
-        if (!descriptionModalEditing.value) closeDescriptionModal();
     };
 
     const startDescriptionEdit = () => {
@@ -821,10 +809,6 @@ export default {
         hoveredPlaceId.value = null;
     };
 
-    watch(hoveredPlaceId, () => {
-        if (vectorLayer.value) vectorLayer.value.changed();
-    });
-    
     const showGestureMessage = () => {
          if (gestureOverlayVisible.value) return; // Already showing
          
@@ -856,7 +840,14 @@ export default {
     };
 
     const onDescriptionModalKeydown = (e) => {
-        if (e.key === 'Escape') handleDescriptionModalEscape();
+        if (e.key === 'Escape') {
+            if (descriptionModalEditing.value) {
+                e.stopPropagation();
+                e.preventDefault();
+            } else {
+                closeDescriptionModal();
+            }
+        }
     };
 
     watch(descriptionModalPlace, (isOpen) => {
@@ -910,13 +901,10 @@ export default {
       startDescriptionEdit,
       cancelDescriptionEdit,
       saveDescriptionEdit,
-      handleDescriptionModalEscape,
-      handleDescriptionModalBackdropClick,
       resetMapToDefaultExtent,
       formatCoords,
       copyCoordinates,
       formatCreatedDate,
-      truncate,
       googleMapsUrl,
       googleMapsIconUrl,
       googleMapsIconBwUrl,

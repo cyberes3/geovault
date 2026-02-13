@@ -1,5 +1,6 @@
 import json
 
+from django.contrib.gis.geos import GEOSGeometry
 from django.db.models import F
 from django.db.models.functions import Coalesce, Greatest
 from django.http import HttpResponse
@@ -19,6 +20,19 @@ from .models import PlaceMetadata
 from .validation import PlaceFeaturePayload
 
 VALID_SORT = {'created', 'modified', 'navigated', 'composite'}
+
+
+def _feature_to_geometry_and_hash(normalized_feature):
+    """Build GEOSGeometry and geojson_hash from a normalized GeoJSON feature. Returns (geometry, geojson_hash) or (None, None) if no geometry."""
+    geom_dict = normalized_feature.get('geometry')
+    if not geom_dict:
+        return None, None
+    coords = geom_dict.get('coordinates')
+    if geom_dict.get('type') == 'Point' and coords is not None and len(coords) == 2:
+        geom_dict = {**geom_dict, 'coordinates': [*coords, 0]}
+    geometry = GEOSGeometry(json.dumps(geom_dict))
+    geojson_hash = generate_geojson_hash(normalized_feature)
+    return geometry, geojson_hash
 
 @api_or_login_required_401()
 @require_http_methods(["GET", "POST"])
@@ -87,21 +101,11 @@ def places_list(request):
                 )
             except GeometryValidationError:
                 return error_response('Invalid geometry', 400)
-                
-            # Extract geometry for DB field
-            geom_dict = normalized_feature.get('geometry')
-            if not geom_dict:
-                 return error_response('Geometry is required', 400)
-            # FeatureStore.geometry is dim=3; ensure Point has Z (use 0 if 2D)
-            coords = geom_dict.get('coordinates')
-            if geom_dict.get('type') == 'Point' and coords is not None and len(coords) == 2:
-                geom_dict = {**geom_dict, 'coordinates': [*coords, 0]}
-            from django.contrib.gis.geos import GEOSGeometry
-            geometry = GEOSGeometry(json.dumps(geom_dict))
-            
-            # Generate Hash
-            geojson_hash = generate_geojson_hash(normalized_feature)
-            
+
+            geometry, geojson_hash = _feature_to_geometry_and_hash(normalized_feature)
+            if geometry is None:
+                return error_response('Geometry is required', 400)
+
             # Create
             feature = FeatureStore.objects.create(
                 user=request.user,
@@ -130,7 +134,7 @@ def place_detail(request, feature_id):
     
     # Ensure it's a place
     if feature.scope != 'places':
-         return error_response('Feature is not a place', 404)
+        return error_response('Feature is not a place', 404)
 
     if request.method == "GET":
         geojson = feature.geojson
@@ -158,19 +162,9 @@ def place_detail(request, feature_id):
             except GeometryValidationError:
                 return error_response('Invalid geometry', 400)
 
-            # Extract geometry
-            geom_dict = normalized_feature.get('geometry')
-            if not geom_dict:
-                 return error_response('Geometry is required', 400)
-            # FeatureStore.geometry is dim=3; ensure Point has Z (use 0 if 2D)
-            coords = geom_dict.get('coordinates')
-            if geom_dict.get('type') == 'Point' and coords is not None and len(coords) == 2:
-                geom_dict = {**geom_dict, 'coordinates': [*coords, 0]}
-            from django.contrib.gis.geos import GEOSGeometry
-            geometry = GEOSGeometry(json.dumps(geom_dict))
-
-            # Generate Hash
-            geojson_hash = generate_geojson_hash(normalized_feature)
+            geometry, geojson_hash = _feature_to_geometry_and_hash(normalized_feature)
+            if geometry is None:
+                return error_response('Geometry is required', 400)
 
             # Update
             feature.geojson = normalized_feature
