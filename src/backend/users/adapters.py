@@ -29,23 +29,26 @@ class NoUsernameAccountAdapter(DefaultAccountAdapter):
     3. Ensures correct domain URLs for email confirmation links
     """
 
-    def save_user(self, request, user, form, commit=True):
+    def populate_username(self, request, user):
         """
-        Override save_user to set username to a unique UUID.
-        This satisfies Django's requirement for a username field while
-        ensuring we never actually use it (we only use email).
-        Also sets the first registered user as a superuser/admin.
+        Set username to a UUID. The parent would derive it from email (e.g.
+        bob.joe@example.com -> "bob.joe"); we never use username
+        and want an opaque value.
         """
-        # Set it BEFORE calling parent to ensure it's not overwritten
         user.username = str(uuid.uuid4())
 
+    def save_user(self, request, user, form, commit=True):
+        """
+        Set username to a unique UUID (via populate_username) and optionally
+        make the first registered user a superuser/admin.
+        """
         # Set first registered user to admin
         user_model = get_user_model()
         if not user_model.objects.exists():
             user.is_superuser = True
             user.is_staff = True
 
-        # Call parent method to continue with the registration
+        # Parent calls populate_username(); our override sets username to UUID
         user = super().save_user(request, user, form, commit=commit)
         return user
 

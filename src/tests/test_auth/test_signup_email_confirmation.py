@@ -90,6 +90,38 @@ class TestSignupEmailConfirmation(TestCase):
         self.assertIn('/accounts/confirm-email/', email.body or '',
                       "Email must contain confirmation link")
 
+    def test_signup_via_api_sets_username_to_uuid(self):
+        """Sign up via the real account_signup API and assert username is a UUID.
+
+        Previously the adapter set a UUID in save_user, but allauth's
+        DefaultAccountAdapter overwrote it (user_username from form, then
+        populate_username from email), so username became the email local part.
+        This test ensures the fix: username is a UUID.
+        """
+        signup_data = {
+            'email': 'test.user.name@example.com',
+            'password1': 'SecurePass123!',
+            'password2': 'SecurePass123!',
+        }
+        response = self.client.post(
+            reverse('account_signup'),
+            signup_data,
+            follow=True,
+        )
+        self.assertIn(response.status_code, [200, 302], "Signup should succeed")
+        user = User.objects.get(email='test.user.name@example.com')
+        self.assertIsNotNone(user)
+        # Username must be a UUID (e.g. from uuid.uuid4(): 8-4-4-4-12 hex with hyphens)
+        uuid_re = re.compile(
+            r"^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\Z",
+            re.IGNORECASE,
+        )
+        self.assertRegex(
+            user.username,
+            uuid_re,
+            f"Username must be a UUID, got {user.username!r}",
+        )
+
     def test_resend_api_sends_single_email_with_confirmation_link(self):
         """Test that requesting verification via resend API sends exactly one email with a valid link.
         
