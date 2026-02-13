@@ -115,26 +115,99 @@
         </router-link>
       </div>
     </div>
+
+    <!-- Android Apps -->
+    <div class="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
+      <h2 class="text-lg font-semibold text-gray-900 mb-4">Android Apps</h2>
+      <p class="text-sm text-gray-500 mb-4">
+        Install our Android apps to upload files and manage places on the go. Get the latest APKs from our releases.
+      </p>
+      <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+        <a
+          :href="uploaderApkUrl"
+          target="_blank"
+          rel="noopener noreferrer"
+          class="flex items-center p-4 border border-gray-200 rounded-lg hover:bg-gray-50 transition-colors duration-200 group"
+        >
+          <div class="flex-shrink-0">
+            <div class="w-10 h-10 bg-green-100 rounded-lg flex items-center justify-center group-hover:bg-green-200 transition-colors duration-200">
+              <DevicePhoneMobileIcon class="w-6 h-6 text-green-600" />
+            </div>
+          </div>
+          <div class="ml-4 flex-1 min-w-0">
+            <h3 class="text-sm font-medium text-gray-900 group-hover:text-green-600">GeoVault Uploader</h3>
+            <p class="text-sm text-gray-500">Upload KML/KMZ/GPX files</p>
+          </div>
+          <ArrowDownTrayIcon class="w-5 h-5 text-gray-400 flex-shrink-0" />
+        </a>
+        <a
+          :href="placesApkUrl"
+          target="_blank"
+          rel="noopener noreferrer"
+          class="flex items-center p-4 border border-gray-200 rounded-lg hover:bg-gray-50 transition-colors duration-200 group"
+        >
+          <div class="flex-shrink-0">
+            <div class="w-10 h-10 bg-yellow-100 rounded-lg flex items-center justify-center group-hover:bg-yellow-200 transition-colors duration-200">
+              <MapPinIcon class="w-6 h-6 text-yellow-600" />
+            </div>
+          </div>
+          <div class="ml-4 flex-1 min-w-0">
+            <h3 class="text-sm font-medium text-gray-900 group-hover:text-yellow-600">GeoVault Places</h3>
+            <p class="text-sm text-gray-500">Manage and view your places</p>
+          </div>
+          <ArrowDownTrayIcon class="w-5 h-5 text-gray-400 flex-shrink-0" />
+        </a>
+      </div>
+      <a
+        :href="releasesPageUrl"
+        target="_blank"
+        rel="noopener noreferrer"
+        class="inline-flex items-center mt-4 text-sm text-gray-500 hover:text-gray-700"
+      >
+        View all releases
+        <ArrowTopRightOnSquareIcon class="w-4 h-4 ml-1" />
+      </a>
+    </div>
   </div>
 </template>
 
 <script>
-import {mapState} from "vuex";
+import { mapState } from "vuex";
 import BaseButton from "../parts/BaseButton.vue";
+import {
+  DevicePhoneMobileIcon,
+  ArrowDownTrayIcon,
+  ArrowTopRightOnSquareIcon,
+  MapPinIcon,
+} from "@heroicons/vue/24/outline";
 
 export default {
   computed: {
     ...mapState(["userInfo"]),
+    uploaderApkUrl() {
+      return this.appReleases?.uploader_url ?? this.releasesPageUrl;
+    },
+    placesApkUrl() {
+      return this.appReleases?.places_url ?? this.releasesPageUrl;
+    },
+    releasesPageUrl() {
+      return this.appReleases?.releases_page_url ?? "https://git.evulid.cc/cyberes/geovault-app-release/releases";
+    },
   },
   components: {
-    BaseButton
+    BaseButton,
+    DevicePhoneMobileIcon,
+    ArrowDownTrayIcon,
+    ArrowTopRightOnSquareIcon,
+    MapPinIcon,
   },
   data() {
     return {
       storageBytes: null,
       storageLoading: false,
       storageError: false,
-    }
+      appReleases: null,
+    };
   },
   methods: {
     formatStorage(bytes) {
@@ -196,12 +269,22 @@ export default {
         this.storageLoading = false
       }
     },
+    async fetchAppReleases() {
+      try {
+        const response = await fetch("/api/app-releases/");
+        if (!response.ok) return;
+        const data = await response.json();
+        this.appReleases = data;
+      } catch (_) {
+        // Keep appReleases null; computed URLs fall back to releases page
+      }
+    },
   },
   async created() {
   },
   async mounted() {
-    // Fetch storage usage when component mounts
-    await this.fetchStorageUsage()
+    await this.fetchStorageUsage();
+    await this.fetchAppReleases();
   },
   watch: {},
 }
