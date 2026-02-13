@@ -27,10 +27,10 @@
       </div>
     </div>
 
-    <!-- List + Map row -->
-    <div class="flex gap-3 flex-1 min-h-0" style="min-height: 480px;">
+    <!-- List + Map row: fixed height so list scrolls instead of growing the page -->
+    <div class="flex gap-3 min-h-0 shrink-0" style="height: 60vh; min-height: 400px;">
       <!-- List panel (50% width, card style) -->
-      <div class="w-1/2 min-w-0 flex flex-col bg-white rounded-lg shadow-sm border border-gray-200 overflow-hidden relative">
+      <div class="w-1/2 min-w-0 min-h-0 flex flex-col bg-white rounded-lg shadow-sm border border-gray-200 overflow-hidden relative">
         <!-- Loading overlay: grey out and disable list while refreshing -->
         <div
           v-if="loading"
@@ -60,8 +60,7 @@
             <select
               id="places-sort"
               v-model="sortBy"
-              class="select-custom flex-1 min-w-0 px-3 py-1.5 text-sm border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-              @change="fetchPlaces"
+              class="select-custom w-auto min-w-0 px-3 py-1.5 text-sm border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500"
             >
               <option value="composite">Default</option>
               <option value="created">Last created</option>
@@ -314,7 +313,11 @@ export default {
     const fetchPlaces = async () => {
       loading.value = true;
       try {
-        const res = await api.get('/features/', { params: { sort: sortBy.value } });
+        const sort = sortBy.value;
+        const res = await api.get('/features/', {
+          params: { sort },
+          headers: { 'Cache-Control': 'no-cache', Pragma: 'no-cache' }
+        });
         places.value = res.data.features || [];
         updateMapFeatures();
       } catch (err) {
@@ -323,6 +326,9 @@ export default {
         loading.value = false;
       }
     };
+
+    // Refetch when sort dropdown changes (watcher ensures we use updated sortBy)
+    watch(sortBy, () => fetchPlaces());
 
     const initMap = () => {
         if (!window.ol) return;

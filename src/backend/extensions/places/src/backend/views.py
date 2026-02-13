@@ -1,6 +1,7 @@
 import json
 
 from django.db.models import F
+from django.db.models.functions import Coalesce, Greatest
 from django.http import HttpResponse
 from django.utils import timezone
 from django.views.decorators.http import require_http_methods
@@ -27,7 +28,8 @@ def places_list(request):
     POST: Create a new place (feature with scope='places')
     """
     if request.method == "GET":
-        sort = request.GET.get('sort', 'composite').strip().lower()
+        # Read sort from query string (frontend sends ?sort=created|modified|navigated|composite)
+        sort = (request.GET.get('sort') or 'composite').strip().lower()
         if sort not in VALID_SORT:
             sort = 'composite'
 
@@ -39,12 +41,16 @@ def places_list(request):
         elif sort == 'navigated':
             qs = qs.order_by(F('place_metadata__last_navigated_at').desc(nulls_last=True))
         else:
-            qs = qs.order_by(
-                '-timestamp',
-                F('place_metadata__updated_at').desc(nulls_last=True),
-                F('place_metadata__last_navigated_at').desc(nulls_last=True),
+            # composite: sort by "most recently touched" = latest of (created, modified, navigated)
+            # Coalesce so NULL updated_at/last_navigated_at is treated as timestamp (no activity)
+            most_recent = Greatest(
+                F('timestamp'),
+                Coalesce(F('place_metadata__updated_at'), F('timestamp')),
+                Coalesce(F('place_metadata__last_navigated_at'), F('timestamp')),
             )
+            qs = qs.order_by(most_recent.desc(nulls_last=True))
 
+        # Build list from ordered queryset (iteration preserves order)
         data = []
         for f in qs:
             geojson = f.geojson
@@ -54,10 +60,13 @@ def places_list(request):
                     geojson['properties']['created_at'] = f.timestamp.isoformat()
             data.append(geojson)
             
-        return success_response({
+        response = success_response({
             'type': 'FeatureCollection',
             'features': data
         })
+        # Prevent caching so changing sort in the UI always gets fresh order
+        response['Cache-Control'] = 'no-store, no-cache, must-revalidate'
+        return response
         
     elif request.method == "POST":
         try:

@@ -2,13 +2,17 @@
 Tests for the Places extension API.
 """
 import json
+from datetime import timedelta
 from unittest.mock import patch, MagicMock
 from django.test import TestCase, override_settings
 from django.contrib.auth import get_user_model
 from django.contrib.gis.geos import Point
+from django.utils import timezone
 from api.models import FeatureStore
 from geo_lib.feature_id import generate_geojson_hash
 from website.extensions.extension_loader import ExtensionRegistry
+
+from extensions.places.src.backend.models import PlaceMetadata
 
 # Helper to ensure extension is loaded
 def mock_get_bool(key, default=False):
@@ -160,3 +164,70 @@ class TestPlacesAPI(TestCase):
         
         # Should be 0 because "My Place" is scoped to 'places'
         self.assertEqual(data['feature_count'], 0)
+
+    def test_list_places_sort_param(self):
+        """Verify sort query param changes order (created vs modified)."""
+        now = timezone.now()
+        # Place A: created earlier, modified later
+        place_a_data = {
+            'type': 'Feature',
+            'geometry': {'type': 'Point', 'coordinates': [-122.5, 37.7, 0.0]},
+            'properties': {'name': 'Place A'}
+        }
+        place_a = FeatureStore.objects.create(
+            user=self.user,
+            scope='places',
+            geojson=place_a_data,
+            geometry=Point(-122.5, 37.7, 0.0),
+            geojson_hash=generate_geojson_hash(place_a_data),
+            timestamp=now - timedelta(days=5),
+        )
+        PlaceMetadata.objects.create(
+            feature=place_a,
+            updated_at=now - timedelta(days=1),
+            last_navigated_at=None,
+        )
+        # Place B: created later, modified earlier
+        place_b_data = {
+            'type': 'Feature',
+            'geometry': {'type': 'Point', 'coordinates': [-122.4, 37.7, 0.0]},
+            'properties': {'name': 'Place B'}
+        }
+        place_b = FeatureStore.objects.create(
+            user=self.user,
+            scope='places',
+            geojson=place_b_data,
+            geometry=Point(-122.4, 37.7, 0.0),
+            geojson_hash=generate_geojson_hash(place_b_data),
+            timestamp=now - timedelta(days=2),
+        )
+        PlaceMetadata.objects.create(
+            feature=place_b,
+            updated_at=now - timedelta(days=4),
+            last_navigated_at=None,
+        )
+        # Delete the default place from setUp so we only have A and B
+        self.place_feature.delete()
+
+        with patch('website.extensions.extension_loader.get_config_loader') as mock_loader_get:
+            mock_config = MagicMock()
+            mock_config.get_bool.side_effect = mock_get_bool
+            mock_loader_get.return_value = mock_config
+
+            # sort=created: newest timestamp first -> B (2 days ago) then A (5 days ago)
+            response_created = self.client.get('/api/extensions/places/features/', {'sort': 'created'})
+            if response_created.status_code == 404:
+                return
+            self.assertEqual(response_created.status_code, 200)
+            data_created = json.loads(response_created.content)
+            ids_created = [f['properties']['database_id'] for f in data_created['features']]
+            self.assertEqual(ids_created[0], place_b.id)
+            self.assertEqual(ids_created[1], place_a.id)
+
+            # sort=modified: newest updated_at first -> A (1 day ago) then B (4 days ago)
+            response_modified = self.client.get('/api/extensions/places/features/', {'sort': 'modified'})
+            self.assertEqual(response_modified.status_code, 200)
+            data_modified = json.loads(response_modified.content)
+            ids_modified = [f['properties']['database_id'] for f in data_modified['features']]
+            self.assertEqual(ids_modified[0], place_a.id)
+            self.assertEqual(ids_modified[1], place_b.id)
