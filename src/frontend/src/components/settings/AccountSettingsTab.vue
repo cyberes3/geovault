@@ -7,31 +7,31 @@
         <div>
           <label class="block text-sm font-medium text-gray-700 mb-1">Current Password</label>
           <input
-            v-model="passwordForm.currentPassword"
-            type="password"
-            required
-            :disabled="passwordLoading"
-            class="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500 disabled:bg-gray-100 disabled:cursor-not-allowed"
+              v-model="passwordForm.currentPassword"
+              type="password"
+              required
+              :disabled="passwordLoading"
+              class="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500 disabled:bg-gray-100 disabled:cursor-not-allowed"
           />
         </div>
         <div>
           <label class="block text-sm font-medium text-gray-700 mb-1">New Password</label>
           <input
-            v-model="passwordForm.newPassword"
-            type="password"
-            required
-            :disabled="passwordLoading"
-            class="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500 disabled:bg-gray-100 disabled:cursor-not-allowed"
+              v-model="passwordForm.newPassword"
+              type="password"
+              required
+              :disabled="passwordLoading"
+              class="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500 disabled:bg-gray-100 disabled:cursor-not-allowed"
           />
         </div>
         <div>
           <label class="block text-sm font-medium text-gray-700 mb-1">Confirm New Password</label>
           <input
-            v-model="passwordForm.confirmPassword"
-            type="password"
-            required
-            :disabled="passwordLoading"
-            class="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500 disabled:bg-gray-100 disabled:cursor-not-allowed"
+              v-model="passwordForm.confirmPassword"
+              type="password"
+              required
+              :disabled="passwordLoading"
+              class="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500 disabled:bg-gray-100 disabled:cursor-not-allowed"
           />
         </div>
         <div v-if="passwordMessage" :class="[
@@ -41,12 +41,12 @@
           {{ passwordMessage }}
         </div>
         <BaseButton
-          type="submit"
-          :disabled="passwordLoading"
-          variant="primary"
-          color="blue"
-          size="sm"
-          title="Change password"
+            type="submit"
+            :disabled="passwordLoading"
+            variant="primary"
+            color="blue"
+            size="sm"
+            title="Change password"
         >
           <span v-if="passwordLoading">Changing...</span>
           <span v-else>Change Password</span>
@@ -64,15 +64,17 @@
           <div>
             <p class="text-sm font-medium text-gray-700">Current Email</p>
             <div v-if="emailStatusLoading" class="mt-1 flex items-center gap-2 min-h-[1.5rem]">
-              <Loader size="sm" layout="inline" message="Loading email status..." :showMessage="true" />
+              <Loader size="sm" layout="inline" message="Loading email status..." :showMessage="true"/>
             </div>
             <template v-else>
               <div class="mt-1 flex items-center gap-2 min-h-[1.5rem]">
                 <p class="text-sm text-gray-900">{{ currentEmail || 'Not set' }}</p>
-                <span v-if="emailStatus && emailStatus.verified" class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-800">
+                <span v-if="emailStatus && emailStatus.verified"
+                      class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-800">
                   Verified
                 </span>
-                <span v-else-if="emailStatus && !emailStatus.verified" class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-yellow-100 text-yellow-800">
+                <span v-else-if="emailStatus && !emailStatus.verified"
+                      class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-yellow-100 text-yellow-800">
                   Unverified
                 </span>
               </div>
@@ -80,19 +82,19 @@
           </div>
           <div class="relative group" v-if="!emailStatusLoading && emailStatus && !emailStatus.verified">
             <BaseButton
-              @click="handleResendVerification"
-              :disabled="resendLoading || resendCooldown > 0"
-              :title="resendCooldown > 0 ? `Please wait ${resendCooldown} second${resendCooldown !== 1 ? 's' : ''} before resending` : 'Resend verification email'"
-              variant="white"
-              size="sm"
+                @click="handleResendVerification"
+                :disabled="resendLoading || resendCooldown > 0"
+                :title="resendCooldown > 0 ? `Please wait ${resendCooldown} second${resendCooldown !== 1 ? 's' : ''} before resending` : 'Resend verification email'"
+                variant="white"
+                size="sm"
             >
               <span v-if="resendLoading">Sending...</span>
               <span v-else-if="resendCooldown > 0">Resend ({{ resendCooldown }}s)</span>
               <span v-else>Resend Verification</span>
             </BaseButton>
             <div
-              v-if="resendCooldown > 0"
-              class="absolute z-10 px-2 py-1 text-xs text-white bg-gray-900 rounded shadow-lg bottom-full mb-2 left-1/2 transform -translate-x-1/2 whitespace-nowrap pointer-events-none opacity-0 group-hover:opacity-100 transition-opacity duration-200"
+                v-if="resendCooldown > 0"
+                class="absolute z-10 px-2 py-1 text-xs text-white bg-gray-900 rounded shadow-lg bottom-full mb-2 left-1/2 transform -translate-x-1/2 whitespace-nowrap pointer-events-none opacity-0 group-hover:opacity-100 transition-opacity duration-200"
             >
               Please wait {{ resendCooldown }} second{{ resendCooldown !== 1 ? 's' : '' }} before resending
               <div class="absolute top-full left-1/2 transform -translate-x-1/2 -mt-1">
@@ -113,7 +115,8 @@
           {{ resendMessage }}
         </p>
         <p v-else class="text-sm text-yellow-800">
-          <strong>Email Verification Required:</strong> Your email address is not yet verified. Please check your inbox and click the verification link to complete the process.
+          <strong>Email Verification Required:</strong> Your email address is not yet verified. Please check your inbox
+          and click the verification link to complete the process.
         </p>
       </div>
     </div>
@@ -122,7 +125,8 @@
     <div class="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
       <h2 class="text-lg font-semibold text-gray-900 mb-4">Data Export</h2>
       <p class="text-sm text-gray-600 mb-4">
-        Download all your features and associated data as a single KMZ file. This file can be opened in Google Earth or other GIS software.
+        Download all your features and associated data as a single KMZ file. This file can be opened in Google Earth or
+        other GIS software.
       </p>
 
       <div v-if="downloadMessage" :class="[
@@ -133,12 +137,12 @@
       </div>
 
       <BaseButton
-        @click="handleDownloadFeatures"
-        :disabled="downloadLoading"
-        variant="primary"
-        color="blue"
-        size="sm"
-        title="Download all features as KMZ"
+          @click="handleDownloadFeatures"
+          :disabled="downloadLoading"
+          variant="primary"
+          color="blue"
+          size="sm"
+          title="Download all features as KMZ"
       >
         <span v-if="downloadLoading">Preparing Download...</span>
         <span v-else>Download All Features (KMZ)</span>
@@ -152,12 +156,12 @@
       <!-- Dynamically generated settings -->
       <div class="space-y-6">
         <SettingsInput
-          v-for="setting in getSettingsForSection('account')"
-          :key="setting.key"
-          :setting="setting"
-          :model-value="settingsValues[setting.key]"
-          :show-success="successCheckmarks[setting.key]"
-          @update:model-value="handleSettingChange(setting.key, $event)"
+            v-for="setting in getSettingsForSection('account')"
+            :key="setting.key"
+            :setting="setting"
+            :model-value="settingsValues[setting.key]"
+            :show-success="successCheckmarks[setting.key]"
+            @update:model-value="handleSettingChange(setting.key, $event)"
         />
       </div>
     </div>
@@ -166,14 +170,8 @@
     <div class="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
       <h2 class="text-lg font-semibold text-gray-900 mb-4">API Keys</h2>
       <p class="text-sm text-gray-600 mb-4">
-        Create API keys to connect apps and services to your account. Keys can be used to upload files and access your data.
-      </p>
-      <p class="text-sm text-gray-600 mb-4">
-        API keys can also be used with the
-        <a href="https://git.evulid.cc/cyberes/geovault-app-release/releases" target="_blank" class="text-blue-600 hover:text-blue-800 underline">
-          GeoVault Uploader app for Android
-        </a>
-        to easily upload your tracks on the go.
+        Create API keys to programmatically connect external services to your account. Keys can be used to upload files
+        and access your data.
       </p>
 
       <!-- Create New API Key Form -->
@@ -183,11 +181,11 @@
           <div>
             <label class="block text-sm font-medium text-gray-700 mb-1">Key Name (optional)</label>
             <input
-              v-model="newKeyName"
-              type="text"
-              :disabled="createKeyLoading"
-              placeholder="e.g., My Phone, Desktop App (optional)"
-              class="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500 disabled:bg-gray-100 disabled:cursor-not-allowed"
+                v-model="newKeyName"
+                type="text"
+                :disabled="createKeyLoading"
+                placeholder="e.g., My Phone, Desktop App (optional)"
+                class="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500 disabled:bg-gray-100 disabled:cursor-not-allowed"
             />
           </div>
           <div v-if="apiKeyMessage" :class="[
@@ -197,12 +195,12 @@
             {{ apiKeyMessage }}
           </div>
           <BaseButton
-            type="submit"
-            :disabled="createKeyLoading"
-            variant="primary"
-            color="blue"
-            size="sm"
-            title="Create new API key"
+              type="submit"
+              :disabled="createKeyLoading"
+              variant="primary"
+              color="blue"
+              size="sm"
+              title="Create new API key"
           >
             <span v-if="createKeyLoading">Creating...</span>
             <span v-else>Create API Key</span>
@@ -216,21 +214,21 @@
           </p>
           <div class="flex items-center gap-2">
             <input
-              :value="newKeyRawValue"
-              type="text"
-              readonly
-              class="flex-1 px-3 py-2 bg-white border border-gray-300 rounded-md text-sm font-mono text-gray-700"
-              ref="newKeyInput"
-              @focus="$event.target.select()"
+                :value="newKeyRawValue"
+                type="text"
+                readonly
+                class="flex-1 px-3 py-2 bg-white border border-gray-300 rounded-md text-sm font-mono text-gray-700"
+                ref="newKeyInput"
+                @focus="$event.target.select()"
             />
             <BaseButton
-              @click="copyApiKey"
-              variant="primary"
-              color="blue"
-              size="sm"
+                @click="copyApiKey"
+                variant="primary"
+                color="blue"
+                size="sm"
             >
               <span v-if="copyButtonShowingIcon" class="inline-flex items-center justify-center w-12 h-5">
-                <ClipboardDocumentIcon class="w-4 h-4" />
+                <ClipboardDocumentIcon class="w-4 h-4"/>
               </span>
               <span v-else class="inline-block w-12 h-5 text-center leading-5">Copy</span>
             </BaseButton>
@@ -249,9 +247,9 @@
         </div>
         <div v-else class="space-y-3">
           <div
-            v-for="key in apiKeys"
-            :key="key.id"
-            class="p-4 bg-gray-50 border border-gray-200 rounded-md hover:bg-gray-100"
+              v-for="key in apiKeys"
+              :key="key.id"
+              class="p-4 bg-gray-50 border border-gray-200 rounded-md hover:bg-gray-100"
           >
             <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
               <div class="flex-1 min-w-0">
@@ -268,12 +266,12 @@
                 </div>
               </div>
               <BaseButton
-                @click="handleDeleteApiKey(key.id)"
-                :disabled="deleteKeyLoading === key.id"
-                variant="secondary"
-                color="red"
-                size="sm"
-                title="Delete this API key"
+                  @click="handleDeleteApiKey(key.id)"
+                  :disabled="deleteKeyLoading === key.id"
+                  variant="secondary"
+                  color="red"
+                  size="sm"
+                  title="Delete this API key"
               >
                 <span v-if="deleteKeyLoading === key.id">Deleting...</span>
                 <span v-else>Delete</span>
@@ -288,14 +286,14 @@
 
 <script>
 import axios from "axios";
-import { getCookie } from "@/assets/js/auth.js";
+import {getCookie} from "@/assets/js/auth.js";
 import settingsConfig from "@/components/settings-data.json";
 import SettingsMixin from "./mixins/SettingsMixin.js";
 import SettingsInput from "./components/SettingsInput.vue";
 import Loader from "@/components/parts/Loader.vue";
 import BaseButton from "@/components/parts/BaseButton.vue";
-import { formatDate } from "@/utils/dateUtils.js";
-import { ClipboardDocumentIcon } from '@heroicons/vue/24/outline';
+import {formatDate} from "@/utils/dateUtils.js";
+import {ClipboardDocumentIcon} from '@heroicons/vue/24/outline';
 
 export default {
   name: 'AccountSettingsTab',
@@ -306,8 +304,7 @@ export default {
     ClipboardDocumentIcon
   },
   mixins: [SettingsMixin],
-  props: {
-  },
+  props: {},
   data() {
     return {
       // Settings configuration - loaded from external JSON file
@@ -549,18 +546,18 @@ export default {
       } catch (error) {
         console.error('Error downloading features:', error);
         if (error.response && error.response.data) {
-           // Try to parse JSON error from blob
-           if (error.response.data instanceof Blob && error.response.data.type === 'application/json') {
-              try {
-                const text = await error.response.data.text();
-                const json = JSON.parse(text);
-                this.downloadMessage = json.error || 'An error occurred during download.';
-              } catch (e) {
-                this.downloadMessage = 'An error occurred during download.';
-              }
-           } else {
-             this.downloadMessage = error.response.data.error || 'An error occurred during download.';
-           }
+          // Try to parse JSON error from blob
+          if (error.response.data instanceof Blob && error.response.data.type === 'application/json') {
+            try {
+              const text = await error.response.data.text();
+              const json = JSON.parse(text);
+              this.downloadMessage = json.error || 'An error occurred during download.';
+            } catch (e) {
+              this.downloadMessage = 'An error occurred during download.';
+            }
+          } else {
+            this.downloadMessage = error.response.data.error || 'An error occurred during download.';
+          }
         } else {
           this.downloadMessage = 'An error occurred during download.';
         }
@@ -611,7 +608,7 @@ export default {
           // Scroll to the new key display
           this.$nextTick(() => {
             if (this.$refs.newKeyInput) {
-              this.$refs.newKeyInput.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+              this.$refs.newKeyInput.scrollIntoView({behavior: 'smooth', block: 'nearest'});
             }
           });
         } else {

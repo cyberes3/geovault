@@ -1,7 +1,7 @@
 import PlacesView from './views/PlacesView.vue';
 import PlaceNewView from './views/PlaceNewView.vue';
 
-async function setup({ app, router, store, registry, api, metadata }) {
+async function setup({app, router, store, registry, api, metadata}) {
     app.provide('extensionApi', api);
     app.provide('extensionRouter', router);
 

@@ -15,7 +15,6 @@ from geo_lib.feature_id import generate_geojson_hash
 from geo_lib.validation.geojson.geojson_whitelist import validate_and_normalize_geojson_feature
 from geo_lib.validation.geometry_validation import GeometryValidationError
 from geo_lib.website.auth import api_or_login_required_401
-
 from .models import PlaceMetadata
 from .validation import PlaceFeaturePayload
 
@@ -33,6 +32,7 @@ def _feature_to_geometry_and_hash(normalized_feature):
     geometry = GEOSGeometry(json.dumps(geom_dict))
     geojson_hash = generate_geojson_hash(normalized_feature)
     return geometry, geojson_hash
+
 
 @api_or_login_required_401()
 @require_http_methods(["GET", "POST"])
@@ -73,7 +73,7 @@ def places_list(request):
                 if f.timestamp:
                     geojson['properties']['created_at'] = f.timestamp.isoformat()
             data.append(geojson)
-            
+
         response = success_response({
             'type': 'FeatureCollection',
             'features': data
@@ -81,7 +81,7 @@ def places_list(request):
         # Prevent caching so changing sort in the UI always gets fresh order
         response['Cache-Control'] = 'no-store, no-cache, must-revalidate'
         return response
-        
+
     elif request.method == "POST":
         try:
             data = json.loads(request.body)
@@ -118,9 +118,10 @@ def places_list(request):
 
             normalized_feature['properties']['database_id'] = feature.id
             return success_response(normalized_feature, status=201)
-            
+
         except json.JSONDecodeError:
             return error_response('Invalid JSON', 400)
+
 
 @api_or_login_required_401()
 @require_http_methods(["GET", "PUT", "DELETE"])
@@ -131,7 +132,7 @@ def place_detail(request, feature_id):
     DELETE: Delete a place
     """
     feature = get_object_or_404_for_user(FeatureStore, request.user, id=feature_id)
-    
+
     # Ensure it's a place
     if feature.scope != 'places':
         return error_response('Feature is not a place', 404)
@@ -141,7 +142,7 @@ def place_detail(request, feature_id):
         if geojson and 'properties' in geojson:
             geojson['properties']['database_id'] = feature.id
         return success_response(geojson)
-        
+
     elif request.method == "PUT":
         try:
             data = json.loads(request.body)
@@ -178,13 +179,14 @@ def place_detail(request, feature_id):
 
             normalized_feature['properties']['database_id'] = feature.id
             return success_response(normalized_feature)
-            
+
         except json.JSONDecodeError:
             return error_response('Invalid JSON', 400)
-            
+
     elif request.method == "DELETE":
         feature.delete()
         return success_response({'deleted': True})
+    return None
 
 
 @api_or_login_required_401()
