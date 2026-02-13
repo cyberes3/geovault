@@ -15,6 +15,7 @@
     
     <!-- Places strings -->
     <string name="no_places">No places found</string>
+    <string name="search_places_hint">Search by name</string>
     <string name="navigate">Navigate</string>
     <string name="refresh">Refresh</string>
     <!-- Messages -->

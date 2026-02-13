@@ -90,6 +90,7 @@
               class="w-full h-10 px-3 border border-gray-300 rounded-lg shadow-sm focus:border-blue-500 focus:ring-1 focus:ring-blue-500 outline-none transition-all sm:text-sm disabled:opacity-60 disabled:cursor-not-allowed"
               :disabled="loadingEdit"
               @input="updateMarkerFromInputs"
+              @change="updateMarkerFromInputs"
             />
           </div>
           <div class="flex-1 min-w-[120px] space-y-1.5">
@@ -102,6 +103,7 @@
               class="w-full h-10 px-3 border border-gray-300 rounded-lg shadow-sm focus:border-blue-500 focus:ring-1 focus:ring-blue-500 outline-none transition-all sm:text-sm disabled:opacity-60 disabled:cursor-not-allowed"
               :disabled="loadingEdit"
               @input="updateMarkerFromInputs"
+              @change="updateMarkerFromInputs"
             />
           </div>
           <div class="w-full sm:w-auto flex items-center gap-2">
@@ -143,7 +145,7 @@
 </template>
 
 <script>
-import { ref, computed, onMounted, onDeactivated, inject, watch } from 'vue';
+import { ref, computed, onMounted, onDeactivated, inject, watch, nextTick } from 'vue';
 import { useRoute } from 'vue-router';
 import { MagnifyingGlassIcon, MapPinIcon } from '@heroicons/vue/24/outline';
 
@@ -192,19 +194,30 @@ export default {
       updateMarkerFromCoords();
     }
 
-    function updateMarkerFromCoords() {
+    function updateMarkerFromCoords(panMap = false) {
       if (!vectorSource.value || !window.gv_core.ol) return;
+      const lat = latitude.value;
+      const lon = longitude.value;
+      const valid = lat != null && lon != null && isFinite(lat) && isFinite(lon);
       vectorSource.value.clear();
-      if (latitude.value != null && longitude.value != null && isFinite(latitude.value) && isFinite(longitude.value)) {
+      if (valid) {
         const feature = new window.gv_core.ol.Feature({
-          geometry: new window.gv_core.ol.geom.Point(window.gv_core.ol.proj.fromLonLat([longitude.value, latitude.value]))
+          geometry: new window.gv_core.ol.geom.Point(window.gv_core.ol.proj.fromLonLat([lon, lat]))
         });
         vectorSource.value.addFeatures([feature]);
+        if (panMap && map.value) {
+          map.value.getView().animate({
+            center: window.gv_core.ol.proj.fromLonLat([lon, lat]),
+            duration: 300
+          });
+        }
       }
     }
 
     function updateMarkerFromInputs() {
-      updateMarkerFromCoords();
+      nextTick(() => {
+        updateMarkerFromCoords(true);
+      });
     }
 
     function initMap() {

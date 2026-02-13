@@ -6,12 +6,15 @@ import android.content.SharedPreferences
 import android.net.Uri
 import android.os.Bundle
 import android.view.View
+import android.view.inputmethod.InputMethodManager
+import android.widget.EditText
 import android.widget.TextView
 import android.widget.Toast
 import androidx.appcompat.app.AppCompatActivity
 import androidx.core.view.ViewCompat
 import androidx.core.view.WindowInsetsCompat
 import androidx.core.view.updatePadding
+import androidx.core.widget.addTextChangedListener
 import androidx.recyclerview.widget.LinearLayoutManager
 import androidx.recyclerview.widget.RecyclerView
 import androidx.swiperefreshlayout.widget.SwipeRefreshLayout
@@ -30,6 +33,8 @@ class MainActivity : AppCompatActivity() {
     private lateinit var swipeRefresh: SwipeRefreshLayout
     private lateinit var refreshOverlay: View
     private lateinit var syncText: TextView
+    private lateinit var searchInput: EditText
+    private lateinit var searchClear: View
     private lateinit var fabAdd: View
     private lateinit var fabMap: View
     private lateinit var adapter: PlacesAdapter
@@ -37,6 +42,7 @@ class MainActivity : AppCompatActivity() {
     private val offlinePlacesList = mutableListOf<OfflineFeature>()
     private var refreshCall: Call<FeatureCollection>? = null
     private var initialLoadDone = false
+    private var searchQuery: String = ""
     private val handler = Handler(Looper.getMainLooper())
     private val timeoutRunnable = Runnable {
         if (swipeRefresh.isRefreshing) {
@@ -115,6 +121,8 @@ class MainActivity : AppCompatActivity() {
         swipeRefresh = findViewById(R.id.swipeRefresh)
         refreshOverlay = findViewById(R.id.refreshOverlay)
         syncText = findViewById(R.id.syncText)
+        searchInput = findViewById(R.id.searchInput)
+        searchClear = findViewById(R.id.searchClear)
         fabAdd = findViewById(R.id.fab_add)
         fabMap = findViewById(R.id.fab_map)
 
@@ -156,6 +164,18 @@ class MainActivity : AppCompatActivity() {
         )
         recyclerView.layoutManager = LinearLayoutManager(this)
         recyclerView.adapter = adapter
+
+        searchInput.addTextChangedListener { text ->
+            searchQuery = text?.toString()?.trim() ?: ""
+            updateList()
+            searchClear.visibility = if (searchQuery.isEmpty()) View.GONE else View.VISIBLE
+        }
+
+        searchClear.setOnClickListener {
+            searchInput.text.clear()
+            val imm = getSystemService(Context.INPUT_METHOD_SERVICE) as InputMethodManager
+            imm.hideSoftInputFromWindow(searchInput.windowToken, 0)
+        }
 
         swipeRefresh.setOnRefreshListener {
             loadPlaces()
@@ -289,9 +309,31 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun updateList() {
-        adapter.updateData(placesList, offlinePlacesList.map { it.feature }, offlinePlacesList)
+        val query = searchQuery
+
+        val filteredOfflineFeatures: List<OfflineFeature>
+        val filteredPlaces: List<Feature>
+
+        if (query.isBlank()) {
+            filteredOfflineFeatures = offlinePlacesList
+            filteredPlaces = placesList
+        } else {
+            fun matches(feature: Feature): Boolean {
+                val name = feature.properties.name ?: "Unnamed Place"
+                return name.contains(query, ignoreCase = true)
+            }
+
+            filteredOfflineFeatures = offlinePlacesList.filter { matches(it.feature) }
+            filteredPlaces = placesList.filter { matches(it) }
+        }
+
+        adapter.updateData(
+            filteredPlaces,
+            filteredOfflineFeatures.map { it.feature },
+            filteredOfflineFeatures
+        )
         
-        if (placesList.isEmpty() && offlinePlacesList.isEmpty()) {
+        if (filteredPlaces.isEmpty() && filteredOfflineFeatures.isEmpty()) {
             emptyText.visibility = View.VISIBLE
             recyclerView.visibility = View.GONE
         } else {

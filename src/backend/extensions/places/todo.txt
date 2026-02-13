@@ -1,0 +1,1 @@
+instead of seperate lat/lon input boxes do one unified coord input box and parse the coords so we can support multiple formats
