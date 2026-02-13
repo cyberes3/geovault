@@ -71,7 +71,10 @@ def get_app_releases(request):
     places_url = None
 
     try:
-        resp = requests.get(RELEASES_API_URL, params={"limit": 1}, timeout=RELEASES_REQUEST_TIMEOUT)
+        # Fetch multiple releases: Uploader and Places are separate releases on git.evulid.cc
+        resp = requests.get(
+            RELEASES_API_URL, params={"limit": 20}, timeout=RELEASES_REQUEST_TIMEOUT
+        )
         resp.raise_for_status()
         releases = resp.json()
     except requests.RequestException as e:
@@ -91,11 +94,15 @@ def get_app_releases(request):
         response["Cache-Control"] = f"public, max-age={CACHE_MAX_AGE_SECONDS}"
         return response
 
-    if isinstance(releases, list) and len(releases) > 0:
-        release = releases[0]
-        assets = release.get("assets") or []
-        uploader_url = _find_uploader_asset(assets)
-        places_url = _find_places_asset(assets)
+    if isinstance(releases, list):
+        for release in releases:
+            assets = release.get("assets") or []
+            if uploader_url is None:
+                uploader_url = _find_uploader_asset(assets)
+            if places_url is None:
+                places_url = _find_places_asset(assets)
+            if uploader_url and places_url:
+                break
 
     body = AppReleasesResponse(
         uploader_url=uploader_url,
