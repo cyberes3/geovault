@@ -1,5 +1,8 @@
 import json
 
+from django.db.models import F
+from django.http import HttpResponse
+from django.utils import timezone
 from django.views.decorators.http import require_http_methods
 from pydantic import ValidationError as PydanticValidationError
 
@@ -11,7 +14,10 @@ from geo_lib.validation.geojson.geojson_whitelist import validate_and_normalize_
 from geo_lib.validation.geometry_validation import GeometryValidationError
 from geo_lib.website.auth import api_or_login_required_401
 
+from .models import PlaceMetadata
 from .validation import PlaceFeaturePayload
+
+VALID_SORT = {'created', 'modified', 'navigated', 'composite'}
 
 @api_or_login_required_401()
 @require_http_methods(["GET", "POST"])
@@ -21,16 +27,31 @@ def places_list(request):
     POST: Create a new place (feature with scope='places')
     """
     if request.method == "GET":
-        features = FeatureStore.objects.filter(
-            user=request.user, 
-            scope='places'
-        ).order_by('-timestamp')
-        
+        sort = request.GET.get('sort', 'composite').strip().lower()
+        if sort not in VALID_SORT:
+            sort = 'composite'
+
+        qs = FeatureStore.objects.filter(user=request.user, scope='places')
+        if sort == 'created':
+            qs = qs.order_by('-timestamp')
+        elif sort == 'modified':
+            qs = qs.order_by(F('place_metadata__updated_at').desc(nulls_last=True))
+        elif sort == 'navigated':
+            qs = qs.order_by(F('place_metadata__last_navigated_at').desc(nulls_last=True))
+        else:
+            qs = qs.order_by(
+                '-timestamp',
+                F('place_metadata__updated_at').desc(nulls_last=True),
+                F('place_metadata__last_navigated_at').desc(nulls_last=True),
+            )
+
         data = []
-        for f in features:
+        for f in qs:
             geojson = f.geojson
             if geojson and 'properties' in geojson:
                 geojson['properties']['database_id'] = f.id
+                if f.timestamp:
+                    geojson['properties']['created_at'] = f.timestamp.isoformat()
             data.append(geojson)
             
         return success_response({
@@ -80,7 +101,8 @@ def places_list(request):
                 geometry=geometry,
                 geojson_hash=geojson_hash
             )
-            
+            PlaceMetadata.objects.create(feature=feature, updated_at=timezone.now())
+
             normalized_feature['properties']['database_id'] = feature.id
             return success_response(normalized_feature, status=201)
             
@@ -146,7 +168,11 @@ def place_detail(request, feature_id):
             feature.geometry = geometry
             feature.geojson_hash = geojson_hash
             feature.save()
-            
+
+            meta, _ = PlaceMetadata.objects.get_or_create(feature=feature, defaults={})
+            meta.updated_at = timezone.now()
+            meta.save(update_fields=['updated_at'])
+
             normalized_feature['properties']['database_id'] = feature.id
             return success_response(normalized_feature)
             
@@ -156,3 +182,16 @@ def place_detail(request, feature_id):
     elif request.method == "DELETE":
         feature.delete()
         return success_response({'deleted': True})
+
+
+@api_or_login_required_401()
+@require_http_methods(["POST"])
+def place_navigate(request, feature_id):
+    """Record that the user opened this place in Google Maps (for sort by last navigated)."""
+    feature = get_object_or_404_for_user(FeatureStore, request.user, id=feature_id)
+    if feature.scope != 'places':
+        return error_response('Feature is not a place', 404)
+    meta, _ = PlaceMetadata.objects.get_or_create(feature=feature, defaults={})
+    meta.last_navigated_at = timezone.now()
+    meta.save(update_fields=['last_navigated_at'])
+    return HttpResponse(status=204)
