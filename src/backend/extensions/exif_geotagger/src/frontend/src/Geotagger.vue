@@ -1,11 +1,17 @@
 <template>
   <div class="h-full flex flex-col p-6 bg-gray-50 overflow-y-auto font-sans">
     <div class="max-w-5xl mx-auto w-full space-y-6">
-      
-        <div class="space-y-1">
-            <h1 class="text-2xl font-bold text-gray-800">Photo Geotagger</h1>
-            <p class="text-gray-600 text-sm">Add or update GPS location data in your photos.</p>
+      <!-- Page Header (matches Collections) -->
+      <div class="bg-white rounded-lg shadow-sm border border-gray-200 p-4 sm:p-6">
+        <div class="order-1">
+          <h1 class="text-xl sm:text-2xl font-bold text-gray-900 mb-1 sm:mb-2">Photo Geotagger</h1>
         </div>
+        <div class="mt-2 sm:mt-4 p-4 bg-blue-50 border border-blue-200 rounded-lg">
+          <p class="text-sm text-gray-700">
+            Add or update GPS location data in your photos.
+          </p>
+        </div>
+      </div>
 
       <!-- Dropzone -->
       <div 

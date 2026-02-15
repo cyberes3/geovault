@@ -29,15 +29,6 @@ for ext_dir in "$SCRIPT_DIR/src/backend/extensions"/*/; do
     fi
 done
 
-# One-time build for each extension so dist/ exists (then watch will keep it updated)
-for ext_dir in "$SCRIPT_DIR/src/backend/extensions"/*/; do
-    if [ -f "${ext_dir}src/frontend/package.json" ]; then
-        ext_name=$(basename "$ext_dir")
-        echo "Building extension frontend: $ext_name..."
-        (cd "${ext_dir}src/frontend" && npm run build) || true
-    fi
-done
-
 echo "Starting Django and Vite dev servers..."
 echo "Django will run on: http://0.0.0.0:8000"
 echo "Vite will run on: http://0.0.0.0:5173 (or next available port)"
