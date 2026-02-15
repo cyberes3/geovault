@@ -98,12 +98,18 @@
       <!-- Controls -->
       <div class="bg-white p-6 rounded-xl border border-gray-200 shadow-sm flex flex-col md:flex-row gap-6 items-end">
          <div class="flex-1 w-full space-y-1.5">
-            <label class="text-xs font-semibold text-gray-500 uppercase tracking-wide">Latitude</label>
-            <input v-model.number="lat" type="number" step="any" :disabled="!imageFile" class="w-full h-10 px-3 border border-gray-300 rounded-lg shadow-sm focus:border-blue-500 focus:ring-1 focus:ring-blue-500 outline-none transition-all disabled:opacity-50 disabled:bg-gray-50 disabled:cursor-not-allowed" @input="updateMarkerFromInputs" placeholder="0.000000" />
-         </div>
-         <div class="flex-1 w-full space-y-1.5">
-            <label class="text-xs font-semibold text-gray-500 uppercase tracking-wide">Longitude</label>
-            <input v-model.number="lon" type="number" step="any" :disabled="!imageFile" class="w-full h-10 px-3 border border-gray-300 rounded-lg shadow-sm focus:border-blue-500 focus:ring-1 focus:ring-blue-500 outline-none transition-all disabled:opacity-50 disabled:bg-gray-50 disabled:cursor-not-allowed" @input="updateMarkerFromInputs" placeholder="0.000000" />
+            <div class="flex items-center gap-2">
+              <label class="text-xs font-semibold text-gray-500 uppercase tracking-wide">Coordinates <span class="text-red-500">*</span></label>
+              <span v-if="coordinateError" class="text-xs text-red-600">{{ coordinateError }}</span>
+            </div>
+            <input
+                v-model="coordinatesInput"
+                type="text"
+                :placeholder="imageFile ? '37.7749, -122.4194' : ''"
+                :disabled="!imageFile"
+                class="w-full h-10 px-3 border border-gray-300 rounded-lg shadow-sm focus:border-blue-500 focus:ring-1 focus:ring-blue-500 outline-none transition-all disabled:opacity-50 disabled:bg-gray-50 disabled:cursor-not-allowed"
+                @input="validateCoordinates"
+            />
          </div>
          <div class="flex-none w-full md:w-auto">
             <button 
@@ -158,6 +164,8 @@ export default {
             // Coords
             lat: null,
             lon: null,
+            coordinatesInput: '',
+            coordinateError: '',
             // Search
             searchQuery: '',
             searchResults: [],
@@ -224,22 +232,40 @@ export default {
             });
         },
         updateCoords(lat, lon) {
-            this.lat = parseFloat(lat.toFixed(6));
-            this.lon = parseFloat(lon.toFixed(6));
-            
+            this.lat = parseFloat(Number(lat).toFixed(6));
+            this.lon = parseFloat(Number(lon).toFixed(6));
+            this.coordinatesInput = `${this.lat}, ${this.lon}`;
+            this.coordinateError = '';
             this.markerSource.clear();
             const feature = new Feature({
                 geometry: new Point(fromLonLat([this.lon, this.lat]))
             });
             this.markerSource.addFeature(feature);
         },
-        updateMarkerFromInputs() {
-            if (this.lat !== null && this.lon !== null && this.markerSource) {
-                this.markerSource.clear();
-                const feature = new Feature({
-                    geometry: new Point(fromLonLat([this.lon, this.lat]))
-                });
-                this.markerSource.addFeature(feature);
+        validateCoordinates() {
+            this.coordinateError = '';
+            this.lat = null;
+            this.lon = null;
+            const input = (this.coordinatesInput || '').trim();
+            if (!input) {
+                if (this.markerSource) this.markerSource.clear();
+                return;
+            }
+            const parseCoordinates = window.gv_core?.GeoVault?.utils?.parseCoordinates;
+            if (!parseCoordinates) return;
+            const coordinates = parseCoordinates(input);
+            if (coordinates) {
+                this.lat = coordinates.lat;
+                this.lon = coordinates.lng;
+                if (this.markerSource) {
+                    this.markerSource.clear();
+                    const feature = new Feature({
+                        geometry: new Point(fromLonLat([this.lon, this.lat]))
+                    });
+                    this.markerSource.addFeature(feature);
+                }
+            } else {
+                this.coordinateError = 'Invalid coordinate format';
             }
         },
         formatSize(bytes) {
@@ -266,6 +292,8 @@ export default {
             // Reset state for new upload
             this.lat = null;
             this.lon = null;
+            this.coordinatesInput = '';
+            this.coordinateError = '';
             this.searchQuery = '';
             this.searchResults = [];
             if (this.markerSource) this.markerSource.clear();
@@ -279,6 +307,8 @@ export default {
             this.previewUrl = null;
             this.lat = null;
             this.lon = null;
+            this.coordinatesInput = '';
+            this.coordinateError = '';
             this.searchQuery = '';
             this.searchResults = [];
             if (this.markerSource) this.markerSource.clear();
@@ -344,11 +374,10 @@ export default {
             this.showResults = false;
             this.searchResults = [];
             this.searchQuery = '';
-            
-            // Backend returns 'coordinates' ([lon, lat])
             const coords = result.coordinates || result.center;
-            if (coords) {
+            if (coords && coords.length >= 2) {
                 const [lon, lat] = coords;
+                this.updateCoords(lat, lon);
                 this.map.getView().animate({
                     center: fromLonLat([lon, lat]),
                     zoom: 12,

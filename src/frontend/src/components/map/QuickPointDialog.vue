@@ -65,9 +65,12 @@
 
           <!-- Coordinates Input -->
           <div>
-            <label class="block text-xs font-bold text-gray-500 uppercase mb-1">
-              Coordinates <span class="text-red-500">*</span>
-            </label>
+            <div class="flex items-center gap-2 mb-1">
+              <label class="text-xs font-bold text-gray-500 uppercase">
+                Coordinates <span class="text-red-500">*</span>
+              </label>
+              <span v-if="coordinateError" class="text-xs text-red-600">{{ coordinateError }}</span>
+            </div>
             <div class="flex gap-2">
               <input
                 v-model="coordinatesInput"
@@ -91,10 +94,6 @@
                 </div>
               </button>
             </div>
-            <p class="mt-1 text-xs text-gray-500">
-              Enter as: <code class="bg-gray-100 px-1 rounded">latitude, longitude</code>
-            </p>
-            <p v-if="coordinateError" class="mt-1 text-xs text-red-600">{{ coordinateError }}</p>
           </div>
 
       <!-- Error Message -->

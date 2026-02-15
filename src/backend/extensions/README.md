@@ -98,7 +98,7 @@ Register a tab with `registry.registerSettingsTab({ id, label, component, icon }
 
 All shared platform resources live on **`window.gv_core`** only. Use `window.gv_core.*` in your extension code; do not use Vue provide/inject for platform store, toast, or utils.
 
-- **`window.gv_core.GeoVault`** — `registry`, `utils` (e.g. `updateUserSetting`, `loadSettingsFromStore`, `keyValueToNested`, `getNestedValue`, `getCurrentPosition`, `checkGeolocationPermission`), `toast`
+- **`window.gv_core.GeoVault`** — `registry`, `utils` (e.g. `updateUserSetting`, `loadSettingsFromStore`, `keyValueToNested`, `getNestedValue`, `getCurrentPosition`, `checkGeolocationPermission`, `parseCoordinates`), `toast`
 - **`window.gv_core.store`** — Vuex store (set after the app mounts)
 - **`window.gv_core.Vue`**, **`window.gv_core.VueRouter`**, **`window.gv_core.Vuex`**, **`window.gv_core.axios`** — Vue ecosystem
 - **`window.gv_core.HeroiconsOutline`**, **`window.gv_core.HeroiconsSolid`** — Heroicons

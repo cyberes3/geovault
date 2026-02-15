@@ -85,41 +85,26 @@
               />
             </div>
           </div>
-          <div class="flex flex-row flex-wrap gap-4 items-end">
-            <div class="flex-1 min-w-[120px] space-y-1.5">
-              <label class="block text-xs font-semibold text-gray-500 uppercase tracking-wide">Latitude <span
+          <div class="space-y-1.5">
+            <div class="flex items-center gap-2">
+              <label class="text-xs font-semibold text-gray-500 uppercase tracking-wide">Coordinates <span
                   class="text-red-500">*</span></label>
-              <input
-                  v-model.number="latitude"
-                  type="number"
-                  step="any"
-                  placeholder="e.g. 37.7749"
-                  class="w-full h-10 px-3 border border-gray-300 rounded-lg shadow-sm focus:border-blue-500 focus:ring-1 focus:ring-blue-500 outline-none transition-all sm:text-sm disabled:opacity-60 disabled:cursor-not-allowed"
-                  :disabled="loadingEdit"
-                  @input="updateMarkerFromInputs"
-                  @change="updateMarkerFromInputs"
-              />
+              <span v-if="coordinateError" class="text-xs text-red-600">{{ coordinateError }}</span>
             </div>
-            <div class="flex-1 min-w-[120px] space-y-1.5">
-              <label class="block text-xs font-semibold text-gray-500 uppercase tracking-wide">Longitude <span
-                  class="text-red-500">*</span></label>
+            <div class="flex flex-row flex-wrap gap-2 items-center">
               <input
-                  v-model.number="longitude"
-                  type="number"
-                  step="any"
-                  placeholder="e.g. -122.4194"
-                  class="w-full h-10 px-3 border border-gray-300 rounded-lg shadow-sm focus:border-blue-500 focus:ring-1 focus:ring-blue-500 outline-none transition-all sm:text-sm disabled:opacity-60 disabled:cursor-not-allowed"
+                  v-model="coordinatesInput"
+                  type="text"
+                  placeholder="37.7749, -122.4194"
+                  class="flex-1 min-w-[120px] h-10 px-3 border border-gray-300 rounded-lg shadow-sm focus:border-blue-500 focus:ring-1 focus:ring-blue-500 outline-none transition-all sm:text-sm disabled:opacity-60 disabled:cursor-not-allowed"
                   :disabled="loadingEdit"
-                  @input="updateMarkerFromInputs"
-                  @change="updateMarkerFromInputs"
+                  @input="validateCoordinates"
               />
-            </div>
-            <div class="w-full sm:w-auto flex items-center gap-2">
               <BaseButton
                   type="button"
                   variant="white"
                   size="sm"
-                  class="w-full justify-center"
+                  class="w-full sm:w-auto justify-center"
                   :disabled="isGettingLocation || loadingEdit"
                   title="Use current location"
                   @click="useCurrentLocation"
@@ -189,6 +174,8 @@ export default {
     const description = ref('');
     const latitude = ref(null);
     const longitude = ref(null);
+    const coordinatesInput = ref('');
+    const coordinateError = ref('');
     const saving = ref(false);
     const loadingEdit = ref(false);
     const isGettingLocation = ref(false);
@@ -203,7 +190,31 @@ export default {
     function setCoords(lat, lon) {
       latitude.value = lat == null ? null : parseFloat(Number(lat).toFixed(6));
       longitude.value = lon == null ? null : parseFloat(Number(lon).toFixed(6));
+      coordinatesInput.value = latitude.value != null && longitude.value != null
+        ? `${latitude.value}, ${longitude.value}`
+        : '';
+      coordinateError.value = '';
       updateMarkerFromCoords();
+    }
+
+    function validateCoordinates() {
+      coordinateError.value = '';
+      latitude.value = null;
+      longitude.value = null;
+      const input = coordinatesInput.value.trim();
+      if (!input) {
+        return;
+      }
+      const parseCoordinates = window.gv_core?.GeoVault?.utils?.parseCoordinates;
+      if (!parseCoordinates) return;
+      const coordinates = parseCoordinates(input);
+      if (coordinates) {
+        latitude.value = coordinates.lat;
+        longitude.value = coordinates.lng;
+        updateMarkerFromCoords(true);
+      } else {
+        coordinateError.value = 'Invalid coordinate format';
+      }
     }
 
     function updateMarkerFromCoords(panMap = false) {
@@ -226,11 +237,6 @@ export default {
       }
     }
 
-    function updateMarkerFromInputs() {
-      nextTick(() => {
-        updateMarkerFromCoords(true);
-      });
-    }
 
     function initMap() {
       if (!window.gv_core.ol || !mapContainer.value) return;
@@ -428,6 +434,8 @@ export default {
       description.value = '';
       latitude.value = null;
       longitude.value = null;
+      coordinatesInput.value = '';
+      coordinateError.value = '';
       searchQuery.value = '';
       searchResults.value = [];
       showResults.value = false;
@@ -468,10 +476,6 @@ export default {
       }
     });
 
-    watch([latitude, longitude], () => {
-      updateMarkerFromCoords();
-    });
-
     return {
       mapContainer,
       editId,
@@ -479,6 +483,8 @@ export default {
       description,
       latitude,
       longitude,
+      coordinatesInput,
+      coordinateError,
       saving,
       loadingEdit,
       isGettingLocation,
@@ -491,7 +497,7 @@ export default {
       handleSearchInput,
       performSearch,
       selectSearchResult,
-      updateMarkerFromInputs,
+      validateCoordinates,
       useCurrentLocation,
       savePlace,
       goToList
