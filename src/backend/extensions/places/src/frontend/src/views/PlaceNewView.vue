@@ -19,7 +19,7 @@
       <!-- Search bar (like Geotagger) -->
       <div class="absolute top-4 left-4 right-4 z-10 max-w-md">
         <div class="bg-white ring-1 ring-black/5 flex items-center p-1"
-             :class="searchResults.length ? 'rounded-t-lg' : 'rounded-lg'">
+             :class="(showResults && (searchResults.length > 0 || (searchQuery && !isSearching && searchTimeout === null))) ? 'rounded-t-lg' : 'rounded-lg'">
           <input
               v-model="searchQuery"
               @input="handleSearchInput"
@@ -38,7 +38,7 @@
 
         <!-- Search results dropdown -->
         <div v-if="showResults && (searchResults.length > 0 || (searchQuery && !isSearching && searchTimeout === null))"
-             class="bg-white ring-1 ring-black/5 max-h-60 overflow-y-auto w-full absolute top-full left-0 z-50 rounded-b-lg">
+             class="bg-white ring-1 ring-black/5 max-h-60 overflow-y-auto w-full absolute top-full left-0 z-50 rounded-t-none rounded-b-lg">
           <div v-if="searchResults.length === 0" class="px-4 py-3 text-gray-500 text-sm italic">
             No results found
           </div>
@@ -87,7 +87,7 @@
           </div>
           <div class="space-y-1.5">
             <div class="flex items-center gap-2">
-              <label class="text-xs font-semibold text-gray-500 uppercase tracking-wide">Coordinates <span
+              <label class="text-xs font-semibold text-gray-500 uppercase tracking-wide">Coordinates or Address <span
                   class="text-red-500">*</span></label>
               <Loader v-if="isGeocoding" size="sm" :show-message="false" class="!py-0 !mt-0"/>
               <span v-if="coordinateError" class="text-xs text-red-600">{{ coordinateError }}</span>

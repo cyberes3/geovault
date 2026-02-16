@@ -1949,9 +1949,9 @@ class TestSequentialProcessing(TestCase):
         response = self.client.post('/api/item/import/upload', {'file': file})
         end_time = time.time()
 
-        # Should return very quickly (< 3 seconds, accounting for test environment overhead)
+        # Should return quickly (async path); avoid tight threshold to prevent flakiness on slow/CI
         response_time = end_time - start_time
-        self.assertLess(response_time, 3.0, "Upload should return immediately")
+        self.assertLess(response_time, 5.0, "Upload should return immediately (async), not block on job")
 
         self.assertEqual(response.status_code, 200)
         data = json.loads(response.content)

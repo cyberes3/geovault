@@ -107,8 +107,8 @@ class TestGeocodingAPI(TestCase):
         from website.config_loader import get_config_loader
 
         config_loader = get_config_loader()
-        if config_loader.get_geocoding_search_mode() is None:
-            self.skipTest("geocoding_search_mode not configured")
+        if config_loader.get_geocoding_search_mode() != 'maptiler':
+            self.skipTest("MapTiler geocoding backend not enabled (run only when geocoding_search_mode is maptiler)")
         api_key = config_loader.get_maptiler_api_key()
         if not api_key:
             self.skipTest("MapTiler API key not configured")
@@ -528,6 +528,27 @@ class TestGeocodingAPI(TestCase):
         self.assertIn(response.status_code, (400, 502), "Invalid key should yield client or server error")
         data = json.loads(response.content)
         self.assertIn('error', data)
+
+    @patch('api.views.services.geocoding.requests.get')
+    @patch('api.views.services.geocoding.get_config_loader')
+    def test_address_search_google_invalid_request_returns_200_with_error_type(self, mock_config_loader, mock_get):
+        """When Google returns INVALID_REQUEST we return 200 with data=[] and error_type so clients get no results without masking the issue."""
+        mock_config = MagicMock()
+        mock_config.get_google_api_key.return_value = 'fake_key'
+        mock_config_loader.return_value = mock_config
+
+        mock_response = MagicMock()
+        mock_response.status_code = 200
+        mock_response.json.return_value = {'results': [], 'status': 'INVALID_REQUEST'}
+        mock_response.text = '{"results": [], "status": "INVALID_REQUEST"}'
+        mock_get.return_value = mock_response
+
+        response = self.client.get('/api/geocoding/address-search/?q=45%C2%B0+46.8666%27+N+108%C2%B0+30.2333%27+W')
+        self.assertEqual(response.status_code, 200)
+        data = json.loads(response.content)
+        self.assertIn('data', data)
+        self.assertEqual(data['data'], [])
+        self.assertEqual(data.get('error_type'), 'INVALID_REQUEST')
 
     def test_address_search_success_when_api_key_configured(self):
         """When Google API key is set, address search succeeds via real request."""

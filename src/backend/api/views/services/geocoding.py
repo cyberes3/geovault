@@ -103,6 +103,7 @@ def geocoding_address_search(request):
 
     Returns:
         JSON response: { "data": [ { "coordinates": [lng, lat], "place_name": "...", "text": "..."? }, ... ] }
+        When Google returns INVALID_REQUEST, responds 200 with data=[] and "error_type": "INVALID_REQUEST" so clients get no results while still seeing the underlying status.
     """
     query = request.GET.get('q', '').strip()
 
@@ -148,6 +149,13 @@ def geocoding_address_search(request):
         minimal_list = []
         cache.set(cache_key, minimal_list, GEOCODING_CACHE_TTL)
         response = success_response(data=minimal_list)
+        response['Cache-Control'] = 'public, max-age=604800'
+        return response
+    if status == 'INVALID_REQUEST':
+        _logger.error(f"Google Geocoding API status={status}, body={api_response.text}")
+        payload = {"data": [], "error_type": status}
+        cache.set(cache_key, payload, GEOCODING_CACHE_TTL)
+        response = success_response(data=payload)
         response['Cache-Control'] = 'public, max-age=604800'
         return response
     if status != 'OK':
