@@ -6,6 +6,8 @@ import android.content.SharedPreferences
 import android.net.Uri
 import android.os.Bundle
 import android.view.View
+import android.view.MotionEvent
+import android.graphics.Rect
 import android.view.inputmethod.InputMethodManager
 import android.widget.EditText
 import android.widget.TextView
@@ -204,7 +206,7 @@ class MainActivity : AppCompatActivity() {
             }
         }
     }
-
+    
     override fun onResume() {
         super.onResume()
         checkConfigAndLoad()
@@ -227,6 +229,22 @@ class MainActivity : AppCompatActivity() {
                 loadPlaces()
             }
         }
+    }
+
+    override fun dispatchTouchEvent(ev: MotionEvent): Boolean {
+        if (ev.action == MotionEvent.ACTION_DOWN) {
+            val v = currentFocus
+            if (v is EditText) {
+                val outRect = Rect()
+                v.getGlobalVisibleRect(outRect)
+                if (!outRect.contains(ev.rawX.toInt(), ev.rawY.toInt())) {
+                    v.clearFocus()
+                    val imm = getSystemService(Context.INPUT_METHOD_SERVICE) as InputMethodManager
+                    imm.hideSoftInputFromWindow(v.windowToken, 0)
+                }
+            }
+        }
+        return super.dispatchTouchEvent(ev)
     }
 
     fun safeNoAnimation() {
