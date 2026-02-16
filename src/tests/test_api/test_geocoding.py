@@ -424,3 +424,116 @@ class TestGeocodingAPI(TestCase):
             self.assertLess(rmnp_index, address_index, 
                           "Geographic features should appear before addresses")
 
+    # --- Address search endpoint tests (real Google Geocoding API requests) ---
+
+    def test_address_search_missing_query(self):
+        """Test address search without query parameter (no request made)."""
+        response = self.client.get('/api/geocoding/address-search/')
+        self.assertEqual(response.status_code, 400)
+        data = json.loads(response.content)
+        self.assertIn('error', data)
+        self.assertIn('required', data['error'].lower())
+
+    @patch('api.views.services.geocoding.get_config_loader')
+    def test_address_search_no_api_key_configured(self, mock_config_loader):
+        """Test address search when API key is not configured: returns 503, no request made."""
+        mock_config = MagicMock()
+        mock_config.get_google_api_key.return_value = None
+        mock_config_loader.return_value = mock_config
+
+        response = self.client.get('/api/geocoding/address-search/?q=123+main')
+        self.assertEqual(response.status_code, 503)
+        data = json.loads(response.content)
+        self.assertIn('error', data)
+        self.assertIn('not available', data['error'].lower())
+
+    def test_address_search_success_minimal_shape(self):
+        """Test address search returns 200 and minimal array; uses real Google Geocoding API."""
+        from website.config_loader import get_config_loader
+
+        config = get_config_loader()
+        if not config.get_google_api_key():
+            self.skipTest("Google API key not configured")
+
+        response = self.client.get(
+            '/api/geocoding/address-search/',
+            {'q': '1600 Amphitheatre Parkway, Mountain View, CA'}
+        )
+        self.assertEqual(response.status_code, 200)
+        data = json.loads(response.content)
+        self.assertIn('data', data)
+        results = data['data']
+        self.assertIsInstance(results, list)
+        self.assertLessEqual(len(results), 5)
+        self.assertGreater(len(results), 0, "Expected at least one result for known address")
+
+        for item in results:
+            self.assertIn('coordinates', item)
+            self.assertIn('place_name', item)
+            self.assertNotIn('id', item)
+            self.assertNotIn('bbox', item)
+            self.assertNotIn('type', item)
+            self.assertNotIn('geometry', item)
+            self.assertEqual(len(item['coordinates']), 2, "coordinates must be [lng, lat]")
+
+    def test_address_search_limit_5(self):
+        """Test address search returns at most 5 results; uses real Google Geocoding API."""
+        from website.config_loader import get_config_loader
+
+        config = get_config_loader()
+        if not config.get_google_api_key():
+            self.skipTest("Google API key not configured")
+
+        response = self.client.get('/api/geocoding/address-search/', {'q': 'Main Street, USA'})
+        self.assertEqual(response.status_code, 200)
+        data = json.loads(response.content)
+        results = data['data']
+        self.assertIsInstance(results, list)
+        self.assertLessEqual(len(results), 5)
+
+    def test_address_search_caching(self):
+        """Test that address search results are cached; uses real Google Geocoding API."""
+        from website.config_loader import get_config_loader
+
+        config = get_config_loader()
+        if not config.get_google_api_key():
+            self.skipTest("Google API key not configured")
+
+        query = '5209 Montview Blvd, Denver, CO 80207'
+        response1 = self.client.get('/api/geocoding/address-search/', {'q': query})
+        self.assertEqual(response1.status_code, 200)
+        response2 = self.client.get('/api/geocoding/address-search/', {'q': query})
+        self.assertEqual(response2.status_code, 200)
+        data1 = json.loads(response1.content)
+        data2 = json.loads(response2.content)
+        self.assertEqual(data1, data2)
+
+    def test_address_search_invalid_api_key_returns_auth_error(self):
+        """Invalid API key: real request to Google returns auth error; we return 4xx/5xx with error."""
+        with patch('api.views.services.geocoding.get_config_loader') as mock_config_loader:
+            mock_config = MagicMock()
+            mock_config.get_google_api_key.return_value = 'invalid_key_that_will_deny'
+            mock_config_loader.return_value = mock_config
+
+            response = self.client.get('/api/geocoding/address-search/?q=denver')
+        self.assertIn(response.status_code, (400, 502), "Invalid key should yield client or server error")
+        data = json.loads(response.content)
+        self.assertIn('error', data)
+
+    def test_address_search_success_when_api_key_configured(self):
+        """When Google API key is set, address search succeeds via real request."""
+        from website.config_loader import get_config_loader
+
+        config = get_config_loader()
+        if not config.get_google_api_key():
+            self.skipTest("Google API key not configured")
+
+        response = self.client.get(
+            '/api/geocoding/address-search/',
+            {'q': '1600 Amphitheatre Parkway, Mountain View, CA'}
+        )
+        self.assertEqual(response.status_code, 200)
+        data = json.loads(response.content)
+        self.assertIn('data', data)
+        self.assertIsInstance(data['data'], list)
+

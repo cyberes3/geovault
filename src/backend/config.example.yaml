@@ -108,6 +108,14 @@ maptiler:
     - streets
 
 
+# Google API services
+google:
+  # Instructions are available at `installation/Google APIs.md`
+  geocoding:
+    # Can be overridden with GOOGLE_API_KEY environment variable
+    api_key:
+
+
 icons:
   # Enable or disable icon processing for KML/KMZ files
   processing_enabled: true

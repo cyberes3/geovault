@@ -1,9 +1,10 @@
 """
 Forward geocoding API view for MapTiler geocoding service.
 Provides place search functionality (forward geocoding) with server-side caching.
+Address search uses Google Geocoding API (API key only).
 """
 import hashlib
-from urllib.parse import quote
+from urllib.parse import quote, urlencode
 
 import requests
 from django.core.cache import cache
@@ -18,6 +19,9 @@ _logger = get_tagged_logger()
 
 # Cache TTL: 7 days in seconds
 GEOCODING_CACHE_TTL = 604800
+
+# Google Geocoding API base URL
+_GOOGLE_GEOCODE_BASE_URL = "https://maps.googleapis.com/maps/api/geocode/json"
 
 
 @require_http_methods(["GET"])
@@ -194,6 +198,81 @@ def geocoding_search(request):
     return response
 
 
+@require_http_methods(["GET"])
+@api_or_login_required_401()
+def geocoding_address_search(request):
+    """
+    Search for addresses using Google Geocoding API.
+    Returns a minimal array of at most 5 results (coordinates + place_name, no full response).
+
+    Query parameters:
+        q: Search query string (required)
+
+    Returns:
+        JSON response: { "data": [ { "coordinates": [lng, lat], "place_name": "...", "text": "..."? }, ... ] }
+    """
+    query = request.GET.get('q', '').strip()
+
+    if not query:
+        return error_response("Query parameter 'q' is required", code=400)
+
+    config_loader = get_config_loader()
+    api_key = config_loader.get_google_api_key()
+
+    if not api_key:
+        return error_response(
+            "Address search is not available. Google API key is not configured.",
+            code=503
+        )
+
+    cache_key = _get_address_cache_key(query)
+    cached_result = cache.get(cache_key)
+    if cached_result is not None:
+        response = success_response(data=cached_result)
+        response['Cache-Control'] = 'public, max-age=604800'
+        return response
+
+    params = {
+        'address': query,
+        'key': api_key,
+        'language': 'en',
+    }
+    request_url = _GOOGLE_GEOCODE_BASE_URL + "?" + urlencode(params)
+    try:
+        api_response = requests.get(request_url, timeout=10)
+    except requests.exceptions.Timeout:
+        return error_response("Geocoding API request timed out", code=504)
+
+    if api_response.status_code != 200:
+        _logger.error(
+            f"Google Geocoding API error: status={api_response.status_code}, body={api_response.text}"
+        )
+        return error_response("Geocoding API request failed", code=400)
+
+    api_data = api_response.json()
+    status = api_data.get('status')
+    if status == 'ZERO_RESULTS':
+        minimal_list = []
+        cache.set(cache_key, minimal_list, GEOCODING_CACHE_TTL)
+        response = success_response(data=minimal_list)
+        response['Cache-Control'] = 'public, max-age=604800'
+        return response
+    if status != 'OK':
+        _logger.error(f"Google Geocoding API status={status}, body={api_response.text}")
+        return error_response(
+            api_data.get('error_message', f"Geocoding API error: {status}"),
+            code=400 if status in ('INVALID_REQUEST', 'REQUEST_DENIED') else 502
+        )
+
+    results = api_data.get('results', [])
+    minimal_list = [_clean_google_address_result(r) for r in results[:5]]
+    cache.set(cache_key, minimal_list, GEOCODING_CACHE_TTL)
+
+    response = success_response(data=minimal_list)
+    response['Cache-Control'] = 'public, max-age=604800'
+    return response
+
+
 def _get_cache_key(query: str) -> str:
     """
     Generate cache key for forward geocoding query.
@@ -210,6 +289,54 @@ def _get_cache_key(query: str) -> str:
     # Use hash to create a safe cache key (memcached doesn't like spaces/special chars)
     query_hash = hashlib.md5(normalized.encode('utf-8')).hexdigest()
     return f"geocoding:{query_hash}"
+
+
+def _get_address_cache_key(query: str) -> str:
+    """Cache key for address-only search (separate from place search)."""
+    normalized = query.strip().lower()
+    query_hash = hashlib.md5(normalized.encode('utf-8')).hexdigest()
+    return f"geocoding_address:{query_hash}"
+
+
+def _clean_google_address_result(result: dict) -> dict:
+    """
+    Reduce a Google Geocoding API result to a minimal object: coordinates and place_name.
+    geometry.location is lat/lng; we return [lng, lat] for consistency with GeoJSON.
+    """
+    place_name = (result.get('formatted_address') or '').strip() or None
+    coordinates = None
+    geometry = result.get('geometry')
+    if geometry and isinstance(geometry, dict):
+        loc = geometry.get('location')
+        if loc and isinstance(loc, dict):
+            lat = loc.get('lat')
+            lng = loc.get('lng')
+            if lat is not None and lng is not None:
+                coordinates = [float(lng), float(lat)]
+
+    out = {
+        'coordinates': coordinates,
+        'place_name': place_name,
+    }
+    # Optional short label from address_components (e.g. street_number + route)
+    text = _google_address_short_label(result.get('address_components') or [])
+    if text:
+        out['text'] = text
+    return out
+
+
+def _google_address_short_label(address_components: list) -> str | None:
+    """Build a short label from Google address_components (e.g. '1600 Amphitheatre Pkwy')."""
+    parts = []
+    for comp in address_components:
+        types = comp.get('types') or []
+        if 'street_number' in types:
+            parts.append((comp.get('short_name') or comp.get('long_name') or '').strip())
+        elif 'route' in types:
+            parts.append((comp.get('long_name') or comp.get('short_name') or '').strip())
+    if not parts:
+        return None
+    return ' '.join(p for p in parts if p)
 
 
 def _clean_feature(feature: dict) -> dict:

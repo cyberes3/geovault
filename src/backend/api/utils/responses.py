@@ -89,6 +89,10 @@ def success_response(
     if data is None:
         data = {}
 
+    # JsonResponse(safe=True) only accepts dict; wrap lists (e.g. address-search payload) as {"data": ...}
+    if not isinstance(data, dict):
+        data = {"data": data}
+
     # If message is provided, include it in the response
     if message:
         data = {"msg": message, **data}

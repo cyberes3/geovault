@@ -186,6 +186,22 @@ class ConfigLoader:
             return api_key.strip()
         return None
 
+    def get_google_api_key(self) -> Optional[str]:
+        """
+        Get Google Geocoding API key with environment variable override.
+
+        Returns:
+            Google Geocoding API key from environment variable or config file, or None if not configured
+        """
+        api_key = self.get_with_env_override(
+            'google.geocoding.api_key',
+            'GOOGLE_API_KEY',
+            None
+        )
+        if api_key and isinstance(api_key, str) and api_key.strip():
+            return api_key.strip()
+        return None
+
 
 # Global config loader instance
 _config_loader: Optional[ConfigLoader] = None
