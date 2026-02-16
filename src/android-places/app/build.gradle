@@ -190,9 +190,6 @@ dependencies {
     implementation 'org.osmdroid:osmdroid-android:6.1.18'
     implementation 'com.google.android.gms:play-services-location:21.0.1'
 
-    // Geographic coordinate parsing (decimal + DMS)
-    implementation 'com.synerset:unitility-core:3.0.1'
-
     testImplementation libs.junit
     androidTestImplementation libs.ext.junit
     androidTestImplementation libs.espresso.core
