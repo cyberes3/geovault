@@ -14,6 +14,4 @@ The base URL for the Google Maps API console is <https://console.cloud.google.co
 After setting up your project in Google Cloud, go to <https://console.cloud.google.com/google/maps-apis/credentials> and
 generate a new API key. Enter it into your `config.yaml`.
 
-After creation, edit your API key and restrict it to only your website and the geocoding API.
-
 Learn how to set quotas at <https://developers.google.com/maps/documentation/geocoding/usage-and-billing>

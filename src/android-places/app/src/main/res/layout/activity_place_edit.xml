@@ -122,63 +122,34 @@
                 android:textSize="16sp"
                 android:layout_marginBottom="16dp" />
 
-            <LinearLayout
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="Coordinates or Address *"
+                android:textSize="12sp"
+                android:textStyle="bold"
+                android:textColor="@color/text_secondary"
+                android:layout_marginBottom="4dp" />
+
+            <EditText
+                android:id="@+id/coordinatesInput"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:orientation="horizontal">
+                android:hint="37.7749, -122.4194"
+                android:inputType="text"
+                android:padding="12dp"
+                android:background="@drawable/edit_text_background"
+                android:textSize="14sp"
+                android:layout_marginBottom="4dp" />
 
-                <LinearLayout
-                    android:layout_width="0dp"
-                    android:layout_height="wrap_content"
-                    android:layout_weight="1"
-                    android:orientation="vertical">
-                    <TextView
-                        android:layout_width="wrap_content"
-                        android:layout_height="wrap_content"
-                        android:text="Latitude *"
-                        android:textSize="12sp"
-                        android:textStyle="bold"
-                        android:textColor="@color/text_secondary"
-                        android:layout_marginBottom="4dp" />
-                    <EditText
-                        android:id="@+id/latitudeInput"
-                        android:layout_width="match_parent"
-                        android:layout_height="wrap_content"
-                        android:hint="37.7749"
-                        android:inputType="numberDecimal|numberSigned"
-                        android:padding="12dp"
-                        android:background="@drawable/edit_text_background"
-                        android:textSize="14sp" />
-                </LinearLayout>
-
-                <Space
-                    android:layout_width="12dp"
-                    android:layout_height="wrap_content" />
-
-                <LinearLayout
-                    android:layout_width="0dp"
-                    android:layout_height="wrap_content"
-                    android:layout_weight="1"
-                    android:orientation="vertical">
-                    <TextView
-                        android:layout_width="wrap_content"
-                        android:layout_height="wrap_content"
-                        android:text="Longitude *"
-                        android:textSize="12sp"
-                        android:textStyle="bold"
-                        android:textColor="@color/text_secondary"
-                        android:layout_marginBottom="4dp" />
-                    <EditText
-                        android:id="@+id/longitudeInput"
-                        android:layout_width="match_parent"
-                        android:layout_height="wrap_content"
-                        android:hint="-122.4194"
-                        android:inputType="numberDecimal|numberSigned"
-                        android:padding="12dp"
-                        android:background="@drawable/edit_text_background"
-                        android:textSize="14sp" />
-                </LinearLayout>
-            </LinearLayout>
+            <TextView
+                android:id="@+id/coordinatesError"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:textSize="12sp"
+                android:textColor="@android:color/holo_red_dark"
+                android:visibility="gone"
+                android:layout_marginBottom="8dp" />
 
             <LinearLayout
                 android:layout_width="match_parent"

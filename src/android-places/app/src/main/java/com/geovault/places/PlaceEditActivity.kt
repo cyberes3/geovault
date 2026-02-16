@@ -42,27 +42,36 @@ class PlaceEditActivity : AppCompatActivity() {
     private lateinit var map: MapView
     private lateinit var nameInput: EditText
     private lateinit var descriptionInput: EditText
-    private lateinit var latInput: EditText
-    private lateinit var lonInput: EditText
+    private lateinit var coordinatesInput: EditText
+    private lateinit var coordinatesError: TextView
     private lateinit var saveButton: MaterialButton
     private lateinit var locationProgress: android.widget.ProgressBar
     private lateinit var titleText: TextView
     private lateinit var savingOverlay: View
     private lateinit var savingText: TextView
     private lateinit var savingTapHint: TextView
+
+    private var latitude: Double? = null
+    private var longitude: Double? = null
+    private var storedAddress: String? = null
     
     private var marker: Marker? = null
     private var editFeature: Feature? = null
     private var originalFeature: Feature? = null
     private var isOfflineEdit: Boolean = false
     private var saveCall: Call<Feature>? = null
+    private var addressSearchCall: Call<AddressSearchResponse>? = null
     private var pendingFeature: Feature? = null
     private lateinit var fusedLocationClient: FusedLocationProviderClient
 
+    private var addressSearchRunnable: Runnable? = null
+    private val handler = android.os.Handler(android.os.Looper.getMainLooper())
+    private var skipNextCoordinatesValidation = false
+
     private var initialName: String = ""
     private var initialDescription: String = ""
-    private var initialLat: String = ""
-    private var initialLon: String = ""
+    private var initialCoordsText: String = ""
+    private var initialStoredAddress: String? = null
 
     private val prefs: SharedPreferences by lazy {
         getSharedPreferences("geovault_prefs", Context.MODE_PRIVATE)
@@ -115,8 +124,8 @@ class PlaceEditActivity : AppCompatActivity() {
 
         initialName = nameInput.text.toString().trim()
         initialDescription = descriptionInput.text.toString().trim()
-        initialLat = latInput.text.toString().trim()
-        initialLon = lonInput.text.toString().trim()
+        initialCoordsText = coordinatesInput.text.toString().trim()
+        initialStoredAddress = storedAddress
 
         onBackPressedDispatcher.addCallback(this, object : OnBackPressedCallback(true) {
             override fun handleOnBackPressed() {
@@ -132,8 +141,8 @@ class PlaceEditActivity : AppCompatActivity() {
         map = findViewById(R.id.map)
         nameInput = findViewById(R.id.placeNameInput)
         descriptionInput = findViewById(R.id.placeDescriptionInput)
-        latInput = findViewById(R.id.latitudeInput)
-        lonInput = findViewById(R.id.longitudeInput)
+        coordinatesInput = findViewById(R.id.coordinatesInput)
+        coordinatesError = findViewById(R.id.coordinatesError)
         saveButton = findViewById(R.id.saveButton)
         locationProgress = findViewById(R.id.locationProgress)
         titleText = findViewById(R.id.titleText)
@@ -176,7 +185,7 @@ class PlaceEditActivity : AppCompatActivity() {
         // Click listener for map
         val eventsReceiver = object : MapEventsReceiver {
             override fun singleTapConfirmedHelper(p: GeoPoint): Boolean {
-                updateCoords(p.latitude, p.longitude)
+                updateCoords(p.latitude, p.longitude, null)
                 return true
             }
             override fun longPressHelper(p: GeoPoint): Boolean = false
@@ -189,25 +198,151 @@ class PlaceEditActivity : AppCompatActivity() {
     }
 
     private fun setupListeners() {
-        val watcher = object : TextWatcher {
+        nameInput.addTextChangedListener(object : TextWatcher {
+            override fun beforeTextChanged(s: CharSequence?, start: Int, count: Int, after: Int) {}
+            override fun onTextChanged(s: CharSequence?, start: Int, before: Int, count: Int) {}
+            override fun afterTextChanged(s: Editable?) { validateForm() }
+        })
+        coordinatesInput.addTextChangedListener(object : TextWatcher {
             override fun beforeTextChanged(s: CharSequence?, start: Int, count: Int, after: Int) {}
             override fun onTextChanged(s: CharSequence?, start: Int, before: Int, count: Int) {}
             override fun afterTextChanged(s: Editable?) {
-                updateMarkerFromInputs()
-                validateForm()
+                if (addressSearchCall != null) {
+                    addressSearchCall?.cancel()
+                    addressSearchCall = null
+                    locationProgress.visibility = View.GONE
+                    findViewById<View>(R.id.useMyLocationButton).isEnabled = true
+                }
+                addressSearchRunnable?.let { handler.removeCallbacks(it) }
+                addressSearchRunnable = null
+                if (skipNextCoordinatesValidation) {
+                    skipNextCoordinatesValidation = false
+                    return
+                }
+                addressSearchRunnable = Runnable { validateCoordinatesFromInput() }
+                handler.postDelayed(addressSearchRunnable!!, 400)
             }
-        }
-        nameInput.addTextChangedListener(watcher)
-        latInput.addTextChangedListener(watcher)
-        lonInput.addTextChangedListener(watcher)
-        // Use the ID directly or cast to View if needed, but MaterialButton is a Button
+        })
         findViewById<View>(R.id.useMyLocationButton).setOnClickListener {
             checkLocationPermissionAndGet()
         }
+        saveButton.setOnClickListener { savePlace() }
+    }
 
-        saveButton.setOnClickListener {
-            savePlace()
+    private fun validateCoordinatesFromInput() {
+        addressSearchRunnable = null
+        coordinatesError.visibility = View.GONE
+        coordinatesError.text = ""
+        val input = coordinatesInput.text.toString().trim()
+        if (input.isEmpty()) {
+            latitude = null
+            longitude = null
+            storedAddress = null
+            if (marker != null) {
+                map.overlays.remove(marker)
+                marker = null
+                map.invalidate()
+            }
+            validateForm()
+            return
         }
+        val parsed = CoordinateParser.parse(input)
+        if (parsed != null) {
+            latitude = parsed.first
+            longitude = parsed.second
+            storedAddress = null
+            skipNextCoordinatesValidation = true
+            coordinatesInput.setText(String.format("%.6f, %.6f", parsed.first, parsed.second))
+            coordinatesInput.setSelection(coordinatesInput.text?.length ?: 0)
+            updateMarker(parsed.first, parsed.second)
+            map.controller.animateTo(GeoPoint(parsed.first, parsed.second))
+            validateForm()
+            return
+        }
+        if (CoordinateParser.looksLikeCoordinates(input)) {
+            showCoordinatesErrorAndClear()
+            return
+        }
+        if (input.any { it.isLetter() }) {
+            performAddressSearch(input)
+            return
+        }
+        showCoordinatesErrorAndClear()
+    }
+
+    private fun showCoordinatesErrorAndClear() {
+        coordinatesError.text = "Invalid coordinate format"
+        coordinatesError.visibility = View.VISIBLE
+        latitude = null
+        longitude = null
+        storedAddress = null
+        validateForm()
+    }
+
+    private fun performAddressSearch(query: String) {
+        addressSearchCall?.cancel()
+        val serverUrl = prefs.getString("server_url", "") ?: ""
+        val apiKey = prefs.getString("api_key", "") ?: ""
+        if (serverUrl.isEmpty()) {
+            coordinatesError.text = "Geocoding failed"
+            coordinatesError.visibility = View.VISIBLE
+            validateForm()
+            return
+        }
+        val baseUrl = if (serverUrl.endsWith("/")) serverUrl else "$serverUrl/"
+        val api = RetrofitClient.getClient(baseUrl, apiKey).create(GeovaultApi::class.java)
+        locationProgress.visibility = View.VISIBLE
+        findViewById<View>(R.id.useMyLocationButton).isEnabled = false
+        addressSearchCall = api.addressSearch(query)
+        addressSearchCall!!.enqueue(object : Callback<AddressSearchResponse> {
+            override fun onResponse(call: Call<AddressSearchResponse>, response: Response<AddressSearchResponse>) {
+                addressSearchCall = null
+                locationProgress.visibility = View.GONE
+                findViewById<View>(R.id.useMyLocationButton).isEnabled = true
+                if (call.isCanceled) return
+                if (!response.isSuccessful) {
+                    coordinatesError.text = response.message() ?: "Geocoding failed"
+                    coordinatesError.visibility = View.VISIBLE
+                    validateForm()
+                    return
+                }
+                val data = response.body()?.data
+                if (!data.isNullOrEmpty()) {
+                    val first = data[0]
+                    val coords = first.coordinates
+                    if (coords != null && coords.size >= 2) {
+                        val lat = coords[1]
+                        val lon = coords[0]
+                        latitude = lat
+                        longitude = lon
+                        storedAddress = first.place_name ?: first.text ?: query
+                        skipNextCoordinatesValidation = true
+                        coordinatesInput.setText(storedAddress)
+                        coordinatesInput.setSelection(coordinatesInput.text?.length ?: 0)
+                        coordinatesError.visibility = View.GONE
+                        updateMarker(lat, lon)
+                        map.controller.animateTo(GeoPoint(lat, lon))
+                        map.controller.setZoom(15.0)
+                    } else {
+                        coordinatesError.text = "Address not found"
+                        coordinatesError.visibility = View.VISIBLE
+                    }
+                } else {
+                    coordinatesError.text = "Address not found"
+                    coordinatesError.visibility = View.VISIBLE
+                }
+                validateForm()
+            }
+            override fun onFailure(call: Call<AddressSearchResponse>, t: Throwable) {
+                addressSearchCall = null
+                locationProgress.visibility = View.GONE
+                findViewById<View>(R.id.useMyLocationButton).isEnabled = true
+                if (call.isCanceled) return
+                coordinatesError.text = t.message ?: "Geocoding failed"
+                coordinatesError.visibility = View.VISIBLE
+                validateForm()
+            }
+        })
     }
 
     private fun populateFields(feature: Feature) {
@@ -215,7 +350,9 @@ class PlaceEditActivity : AppCompatActivity() {
         descriptionInput.setText(feature.properties.description)
         val coords = feature.geometry.coordinates
         if (coords.size >= 2) {
-            updateCoords(coords[1], coords[0])
+            val address = feature.properties.address
+            val displayText = if (!address.isNullOrBlank()) address else null
+            updateCoords(coords[1], coords[0], displayText)
             map.post {
                 map.controller.setZoom(14.0)
                 map.controller.setCenter(GeoPoint(coords[1], coords[0]))
@@ -223,23 +360,16 @@ class PlaceEditActivity : AppCompatActivity() {
         }
     }
 
-    private fun updateCoords(lat: Double, lon: Double) {
-        latInput.setText(String.format("%.6f", lat))
-        lonInput.setText(String.format("%.6f", lon))
+    private fun updateCoords(lat: Double, lon: Double, displayText: String?) {
+        latitude = lat
+        longitude = lon
+        storedAddress = if (displayText.isNullOrBlank()) null else displayText
+        skipNextCoordinatesValidation = true
+        coordinatesInput.setText(displayText ?: String.format("%.6f, %.6f", lat, lon))
+        coordinatesError.visibility = View.GONE
+        coordinatesError.text = ""
         updateMarker(lat, lon)
         validateForm()
-    }
-
-    private fun updateMarkerFromInputs() {
-        val latStr = latInput.text.toString()
-        val lonStr = lonInput.text.toString()
-        if (latStr.isNotEmpty() && lonStr.isNotEmpty()) {
-            try {
-                val lat = latStr.toDouble()
-                val lon = lonStr.toDouble()
-                updateMarker(lat, lon)
-            } catch (e: Exception) {}
-        }
     }
 
     private fun updateMarker(lat: Double, lon: Double) {
@@ -275,7 +405,7 @@ class PlaceEditActivity : AppCompatActivity() {
                 location?.let {
                     locationProgress.visibility = View.GONE
                     findViewById<View>(R.id.useMyLocationButton).isEnabled = true
-                    updateCoords(it.latitude, it.longitude)
+                    updateCoords(it.latitude, it.longitude, null)
                     map.controller.animateTo(GeoPoint(it.latitude, it.longitude))
                     map.controller.setZoom(15.0)
                 } ?: run {
@@ -284,7 +414,7 @@ class PlaceEditActivity : AppCompatActivity() {
                         locationProgress.visibility = View.GONE
                         findViewById<View>(R.id.useMyLocationButton).isEnabled = true
                         lastLoc?.let {
-                            updateCoords(it.latitude, it.longitude)
+                            updateCoords(it.latitude, it.longitude, null)
                             map.controller.animateTo(GeoPoint(it.latitude, it.longitude))
                             map.controller.setZoom(15.0)
                         } ?: run {
@@ -302,10 +432,7 @@ class PlaceEditActivity : AppCompatActivity() {
 
     private fun validateForm() {
         val name = nameInput.text.toString().trim()
-        val lat = latInput.text.toString().trim()
-        val lon = lonInput.text.toString().trim()
-        
-        val isValid = name.isNotEmpty() && lat.isNotEmpty() && lon.isNotEmpty()
+        val isValid = name.isNotEmpty() && latitude != null && longitude != null
         saveButton.isEnabled = isValid
         saveButton.alpha = if (isValid) 1.0f else 0.5f
     }
@@ -344,12 +471,11 @@ class PlaceEditActivity : AppCompatActivity() {
     private fun hasUnsavedChanges(): Boolean {
         val currentName = nameInput.text.toString().trim()
         val currentDescription = descriptionInput.text.toString().trim()
-        val currentLat = latInput.text.toString().trim()
-        val currentLon = lonInput.text.toString().trim()
+        val currentCoordsText = coordinatesInput.text.toString().trim()
         return currentName != initialName ||
             currentDescription != initialDescription ||
-            currentLat != initialLat ||
-            currentLon != initialLon
+            currentCoordsText != initialCoordsText ||
+            storedAddress != initialStoredAddress
     }
 
     private fun tryFinish() {
@@ -367,20 +493,17 @@ class PlaceEditActivity : AppCompatActivity() {
 
     private fun savePlace() {
         val name = nameInput.text.toString().trim()
-        val latStr = latInput.text.toString()
-        val lonStr = lonInput.text.toString()
+        val lat = latitude
+        val lon = longitude
 
         if (name.isEmpty()) {
             nameInput.error = "Name is required"
             return
         }
-        if (latStr.isEmpty() || lonStr.isEmpty()) {
+        if (lat == null || lon == null) {
             Toast.makeText(this, "Coordinates are required", Toast.LENGTH_SHORT).show()
             return
         }
-
-        val lat = latStr.toDouble()
-        val lon = lonStr.toDouble()
 
         val feature = Feature(
             type = "Feature",
@@ -389,7 +512,8 @@ class PlaceEditActivity : AppCompatActivity() {
                 database_id = editFeature?.properties?.database_id,
                 name = name,
                 description = descriptionInput.text.toString().trim(),
-                created_at = editFeature?.properties?.created_at
+                created_at = editFeature?.properties?.created_at,
+                address = storedAddress
             )
         )
 
@@ -491,6 +615,10 @@ class PlaceEditActivity : AppCompatActivity() {
 
     override fun onPause() {
         super.onPause()
+        addressSearchRunnable?.let { handler.removeCallbacks(it) }
+        addressSearchRunnable = null
+        addressSearchCall?.cancel()
+        addressSearchCall = null
         map.onPause()
     }
 }

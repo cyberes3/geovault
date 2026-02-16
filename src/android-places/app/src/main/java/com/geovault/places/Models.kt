@@ -28,5 +28,15 @@ data class Properties(
     val database_id: Int? = null,
     val name: String?,
     val description: String?,
-    val created_at: String?
+    val created_at: String?,
+    val address: String? = null
 ) : Parcelable
+
+/** Backend returns { "data": [ { "coordinates": [lng, lat], "place_name": "...", "text": "..."? }, ... ] } */
+data class AddressSearchResponse(val data: List<AddressSearchResult>?)
+
+data class AddressSearchResult(
+    val coordinates: List<Double>?,
+    val place_name: String?,
+    val text: String?
+)

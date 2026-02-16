@@ -24,4 +24,7 @@ interface GeovaultApi {
 
     @retrofit2.http.DELETE("api/extensions/places/features/{id}/")
     fun deletePlace(@Path("id") id: Int): Call<Void>
+
+    @GET("api/geocoding/address-search/")
+    fun addressSearch(@Query("q") query: String): Call<AddressSearchResponse>
 }

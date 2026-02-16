@@ -143,12 +143,13 @@ android {
     }
     
     compileOptions {
-        sourceCompatibility = JavaVersion.VERSION_11
-        targetCompatibility = JavaVersion.VERSION_11
+        coreLibraryDesugaringEnabled = true
+        sourceCompatibility = JavaVersion.VERSION_17
+        targetCompatibility = JavaVersion.VERSION_17
     }
     
     kotlinOptions {
-        jvmTarget = '11'
+        jvmTarget = '17'
     }
     
     // Ensure no source file paths are embedded in release builds
@@ -162,6 +163,7 @@ android {
 
 
 dependencies {
+    coreLibraryDesugaring 'com.android.tools:desugar_jdk_libs:2.1.4'
     implementation libs.core.ktx
     implementation libs.appcompat
     implementation libs.material
@@ -187,6 +189,9 @@ dependencies {
     // Map
     implementation 'org.osmdroid:osmdroid-android:6.1.18'
     implementation 'com.google.android.gms:play-services-location:21.0.1'
+
+    // Geographic coordinate parsing (decimal + DMS)
+    implementation 'com.synerset:unitility-core:3.0.1'
 
     testImplementation libs.junit
     androidTestImplementation libs.ext.junit
